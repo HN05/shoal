@@ -546,6 +546,11 @@ stop() {
 }
 case "$1" in
   print) test -f "$FAKE_PID" ;;
+  show)
+    if [ "${FAKE_ACTIVE_STATE+x}" = x ]; then echo "$FAKE_ACTIVE_STATE"
+    elif [ -f "$FAKE_PID" ]; then echo active
+    else echo inactive
+    fi ;;
   bootstrap|kickstart|start) start ;;
   kill) if [ -f "$FAKE_PID" ]; then kill "$(cat "$FAKE_PID")"; fi ;;
   bootout|stop) stop ;;
@@ -663,6 +668,80 @@ fn install_only_shows_shell_hint_without_startup_initialization() {
     fs::remove_file(zdotdir.join(".zshrc")).unwrap();
     fs::create_dir(zdotdir.join(".zshrc")).unwrap();
     check_hint(true, &zdotdir);
+}
+
+#[test]
+fn install_preserves_a_loaded_service_with_another_state_directory() {
+    let manager = FakeServiceManager::new();
+    let installed = manager
+        .command()
+        .args(["--json", "daemon", "install"])
+        .output()
+        .unwrap();
+    assert!(installed.status.success(), "{installed:?}");
+    let installed: Value = serde_json::from_slice(&installed.stdout).unwrap();
+    let definition = Path::new(installed["service_file"].as_str().unwrap());
+    let original = fs::read_to_string(definition).unwrap();
+    let pid = fs::read_to_string(&manager.pid).unwrap();
+    let other_state = manager.root.path().join("other-state");
+    let install_other = |active_state: Option<&str>| {
+        let mut command = manager.command();
+        if let Some(state) = active_state {
+            command.env("FAKE_ACTIVE_STATE", state);
+        }
+        command
+            .arg("--state-dir")
+            .arg(&other_state)
+            .env("SHOAL_TEST_STATE", &other_state)
+            .args(["daemon", "install"])
+            .output()
+            .unwrap()
+    };
+    // Even non-active systemd states may have a drain or another job pending.
+    // Only a confirmed inactive service may switch state directories.
+    for state in [
+        None,
+        Some("activating"),
+        Some("deactivating"),
+        Some("reloading"),
+        Some("failed"),
+        Some(""),
+    ] {
+        let refused = install_other(state);
+        assert!(!refused.status.success(), "{state:?}: {refused:?}");
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("stop the existing service"),
+            "{refused:?}"
+        );
+        assert_eq!(fs::read_to_string(definition).unwrap(), original);
+        assert_eq!(fs::read_to_string(&manager.pid).unwrap(), pid);
+    }
+    let status = manager
+        .command()
+        .args(["daemon", "status"])
+        .output()
+        .unwrap();
+    assert!(status.status.success(), "{status:?}");
+    let stopped = manager.command().args(["daemon", "stop"]).output().unwrap();
+    assert!(stopped.status.success(), "{stopped:?}");
+    let replaced = install_other(None);
+    assert!(replaced.status.success(), "{replaced:?}");
+    let status = manager
+        .command()
+        .arg("--state-dir")
+        .arg(&other_state)
+        .args(["daemon", "status"])
+        .output()
+        .unwrap();
+    assert!(status.status.success(), "{status:?}");
+    let stopped = manager
+        .command()
+        .arg("--state-dir")
+        .arg(&other_state)
+        .args(["daemon", "stop"])
+        .output()
+        .unwrap();
+    assert!(stopped.status.success(), "{stopped:?}");
 }
 
 #[test]

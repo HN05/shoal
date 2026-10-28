@@ -1,7 +1,7 @@
 //! Subprocess calls to the per-user service manager.
 use crate::{protocol::timing, tools::Tool};
 use anyhow::{Context, Result, bail};
-use std::time::Duration;
+use std::{process::Output, time::Duration};
 use tokio::process::Command;
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
@@ -12,14 +12,25 @@ pub(super) const SERVICE_STOP_TIMEOUT: Duration =
 const STOP_COMMAND_TIMEOUT: Duration = SERVICE_STOP_TIMEOUT.saturating_add(COMMAND_TIMEOUT);
 
 pub(super) async fn command(tool: Tool, args: &[&str], check: bool) -> Result<bool> {
-    run(tool, args, check, COMMAND_TIMEOUT).await
+    Ok(run(tool, args, check, COMMAND_TIMEOUT)
+        .await?
+        .status
+        .success())
 }
 
 pub(super) async fn stop_command(tool: Tool, args: &[&str]) -> Result<bool> {
-    run(tool, args, true, STOP_COMMAND_TIMEOUT).await
+    Ok(run(tool, args, true, STOP_COMMAND_TIMEOUT)
+        .await?
+        .status
+        .success())
 }
 
-async fn run(tool: Tool, args: &[&str], check: bool, limit: Duration) -> Result<bool> {
+pub(super) async fn query(tool: Tool, args: &[&str]) -> Result<String> {
+    let output = run(tool, args, true, COMMAND_TIMEOUT).await?;
+    String::from_utf8(output.stdout).context("service manager returned non-UTF-8 output")
+}
+
+async fn run(tool: Tool, args: &[&str], check: bool, limit: Duration) -> Result<Output> {
     let program = tool.program();
     let mut command = Command::new(program);
     command.args(args);
@@ -35,7 +46,7 @@ async fn run(tool: Tool, args: &[&str], check: bool, limit: Duration) -> Result<
             crate::subprocess::diagnostic(&output.stderr).trim()
         );
     }
-    Ok(output.status.success())
+    Ok(output)
 }
 
 pub(super) fn domain() -> String {

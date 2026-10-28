@@ -477,7 +477,8 @@ configured command for another agent, plus proven child
   unfamiliar strings and native spellings; only confirmed shutdown frees running
   capacity. Schema and state-file changes need a compatibility
   story for existing daemons. `install` preserves compatible daemons and commands,
-  deferring service changes until restart; incompatible daemons restart.
+  deferring service changes until restart; incompatible daemons restart. Service
+  installation refuses state-directory changes until the existing service stops.
   The shell initialization hint is omitted when a startup file already initializes Shoal.
   Config key edits preserve unrelated settings and comments and validate one command's
   changes together before saving;

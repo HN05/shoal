@@ -127,6 +127,14 @@ pub fn definition(paths: &Paths, executable: &Path, platform: Platform) -> Resul
 }
 
 pub(super) fn check_state_dir(paths: &Paths, path: &Path, platform: Platform) -> Result<()> {
+    ensure!(
+        state_dir_matches(paths, path, platform)?,
+        "installed service uses another state directory; use its --state-dir or rerun `shoal daemon install`"
+    );
+    Ok(())
+}
+
+pub(super) fn state_dir_matches(paths: &Paths, path: &Path, platform: Platform) -> Result<bool> {
     let content = fs::read_to_string(path)?;
     let expected = match platform {
         Platform::Mac => format!(
@@ -138,11 +146,7 @@ pub(super) fn check_state_dir(paths: &Paths, path: &Path, platform: Platform) ->
             systemd_quote(text(&paths.state)?, true)?
         ),
     };
-    ensure!(
-        content.contains(&expected),
-        "installed service uses another state directory; use its --state-dir or rerun `shoal daemon install`"
-    );
-    Ok(())
+    Ok(content.contains(&expected))
 }
 
 pub(super) fn write_definition(definition: &Definition) -> Result<bool> {

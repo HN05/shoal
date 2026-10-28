@@ -222,7 +222,8 @@ only confirmed branch deletion sets the response deletion flag. Invoke external
 tools with argument arrays. Captured subprocesses share optional deadlines and a
 single diagnostic limit, terminate on cancellation, and drain output while sending
 input. Keep writable state outside the binary's directory.
-Service setup manages one per-user launchd/systemd service; foreground mode covers
+Service setup manages one per-user launchd/systemd service and refuses to change
+its state directory until the existing service is stopped; foreground mode covers
 environments without a service manager. The service captures the installing shell's
 `PATH`.
 Managed daemons record their stable executable path before startup work and restart

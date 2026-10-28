@@ -5,6 +5,7 @@ use std::path::Path;
 
 mod control;
 mod definition;
+mod replacement;
 mod shutdown;
 use control::{command, domain};
 use definition::{check_state_dir, text, write_definition};
@@ -34,6 +35,7 @@ impl Platform {
 pub async fn setup(paths: &Paths, executable: &Path, preserve_running: bool) -> Result<()> {
     let platform = Platform::current()?;
     let definition = definition(paths, executable, platform)?;
+    replacement::check(paths, &definition.path, platform).await?;
     paths.prepare()?;
     let changed = write_definition(&definition)?;
     match platform {
