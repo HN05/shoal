@@ -646,9 +646,10 @@ impl Manager {
         exit_code: Option<i32>,
         scan: Option<Result<process::Scan>>,
     ) -> Result<bool> {
+        let scanned = scan.as_ref().and_then(|scan| scan.as_ref().ok());
+        self.keep_stopped_turn(&id, scanned).await;
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
-        self.keep_stopped_turn(&id).await;
         let connections = self.executions.connections().await;
         let demo = self
             .record_execution_completion(&id, kind, exit_code, issue)
@@ -1098,7 +1099,7 @@ impl Manager {
 
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &str) -> Result<()> {
-        self.keep_stopped_turn(id).await;
+        self.keep_stopped_turn(id, None).await;
         let demo = self.delete_execution_record(id).await?;
         self.close_demo_session(demo).await;
         Ok(())

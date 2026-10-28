@@ -6,7 +6,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::{
     execution::recovery,
-    model::AgentStatus,
+    model::{AgentStatus, Execution},
+    process::{execution::Processes, identity::Scan},
     state::{AgentState, ExecutionState, TurnFailure},
 };
 
@@ -51,29 +52,63 @@ pub(crate) fn all(db: &Connection) -> Result<Vec<(String, AgentState)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The workspace and state execution `id` last reported, while its record lasts.
-fn reported_by(db: &Connection, id: &str) -> Result<Option<(String, AgentState)>> {
-    Ok(db
+/// The turn a stopped execution last reported, while its record lasts.
+struct StoppedTurn {
+    workspace: String,
+    state: AgentState,
+    execution: Option<Execution>,
+}
+
+impl StoppedTurn {
+    /// The turn to keep: an idle one counts as working while `scan` finds
+    /// work of the execution outside its process group, as protection counts
+    /// it, since that work may start its next turn.
+    fn kept(&self, scan: Option<&Scan>) -> AgentState {
+        let in_flight = || {
+            self.execution
+                .as_ref()
+                .zip(scan)
+                .is_some_and(|(execution, scan)| Processes::runs_outside_group(execution, scan))
+        };
+        if self.state == AgentState::Idle && in_flight() {
+            AgentState::Working
+        } else {
+            self.state
+        }
+    }
+}
+
+fn reported_by(db: &Connection, id: &str) -> Result<Option<StoppedTurn>> {
+    let reported: Option<(String, AgentState)> = db
         .query_row(
             "SELECT workspace_id,state FROM workspace_agent_state WHERE execution_id=?1",
             [id],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .optional()?)
+        .optional()?;
+    let Some((workspace, state)) = reported else {
+        return Ok(None);
+    };
+    Ok(Some(StoppedTurn {
+        workspace,
+        state,
+        execution: crate::daemon::store::find_execution(db, id)?,
+    }))
 }
 
 impl Manager {
     /// Keep the state execution `id` last reported in the recovery record it
-    /// saved, before the state goes with the execution's record. A failure
-    /// leaves the turn unknown, as in records saved before turns were kept.
-    pub(crate) async fn keep_stopped_turn(&self, id: &str) {
+    /// saved, before the state goes with the execution's record, judged by
+    /// `scan` when its processes were scanned. A failure leaves the turn
+    /// unknown, as in records saved before turns were kept.
+    pub(crate) async fn keep_stopped_turn(&self, id: &str, scan: Option<&Scan>) {
         let query = id.to_owned();
         let kept = async {
             let reported = self.store.run(move |db| reported_by(db, &query)).await?;
-            let Some((workspace, state)) = reported else {
+            let Some(turn) = reported else {
                 return Ok(());
             };
-            recovery::save_turn(&self.paths, &workspace, id, state)
+            recovery::save_turn(&self.paths, &turn.workspace, id, turn.kept(scan))
         }
         .await;
         if let Err(error) = kept {

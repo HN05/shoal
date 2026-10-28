@@ -807,3 +807,67 @@ async fn setup_executions_cannot_reattach() {
         .unwrap_err();
     assert!(error.to_string().contains("scope token"), "{error:#}");
 }
+
+#[tokio::test]
+async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
+    use crate::{
+        execution::recovery::{Record, record_path, save_record},
+        state::AgentState,
+    };
+    for background in [false, true] {
+        let (_root, manager, workspace) = fixture("exit 0").await;
+        fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
+        let started = manager
+            .begin_execution(
+                &workspace.id,
+                process::capture(std::process::id()).unwrap(),
+                ExecutionKind::Command,
+                None,
+            )
+            .await
+            .unwrap();
+        let id = started.plan.id;
+        manager
+            .set_agent_state(&workspace.name, AgentState::Idle, Some(id.clone()), None)
+            .await
+            .unwrap();
+        // A signal stop saved the agent.
+        save_record(&manager.paths, &workspace.id, &id, "claude", None, None).unwrap();
+        let mut command = waiting_process();
+        let identity = process::capture(command.id().unwrap()).unwrap().unwrap();
+        let processes = background
+            .then(|| process::OwnedProcess {
+                execution_id: id.clone(),
+                identity,
+            })
+            .into_iter()
+            .collect();
+        let scan = process::Scan {
+            processes,
+            ..Default::default()
+        };
+        manager
+            .finish_execution_after_scan(
+                id.clone(),
+                ExecutionKind::Command,
+                Some(0),
+                Some(Ok(scan)),
+            )
+            .await
+            .unwrap();
+        command.kill().await.unwrap();
+        command.wait().await.unwrap();
+        // Reconciliation forgets the execution once its work has ended.
+        manager.forget_execution(&id).await.unwrap();
+
+        let record = Record::load(&record_path(&manager.paths, &workspace.id, &id))
+            .unwrap()
+            .unwrap();
+        let expected = if background {
+            AgentState::Working
+        } else {
+            AgentState::Idle
+        };
+        assert_eq!(record.turn, Some(expected), "background work: {background}");
+    }
+}
