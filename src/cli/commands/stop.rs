@@ -123,23 +123,30 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
 }
 
 /// Stop every settled workspace with a running execution or an agent whose
-/// restore is queued or requested, which stopping cancels.
+/// restore is queued or requested, which stopping cancels. Executions are
+/// read first: an agent a signal stops saves its restore request before its
+/// execution ends, so it is seen running or as a pending restore.
 async fn stop_all(ctx: &Context) -> Result<i32> {
     let mut report = ui::Report::new("stopped", "stop");
     let mut running = Vec::new();
+    let mut idle = Vec::new();
     let mut unknown = false;
     let workspaces = client::workspaces(&ctx.paths).await?;
-    let pending = pending_restores(ctx, &workspaces).await?;
-    for workspace in workspaces {
-        match needs_stop(ctx, &workspace, &pending).await {
-            Ok(true) => running.push(workspace),
-            Ok(false) => {}
+    for workspace in workspaces.iter().filter(|workspace| settled(workspace)) {
+        match is_running(ctx, workspace).await {
+            Ok(true) => running.push(workspace.clone()),
+            Ok(false) => idle.push(workspace.clone()),
             Err(error) => {
                 report.failed(ctx, &workspace.name, &error);
                 unknown = true;
             }
         }
     }
+    let pending = pending_restores(ctx, &workspaces).await?;
+    running.extend(
+        idle.into_iter()
+            .filter(|workspace| pending.contains(&workspace.id)),
+    );
     if running.is_empty() && !unknown {
         ctx.emit(
             "No running agents or commands",
@@ -211,24 +218,18 @@ async fn pending_restores(ctx: &Context, workspaces: &[Workspace]) -> Result<Has
     Ok(pending)
 }
 
-/// Whether `--all` stops `workspace`: a settled one with a running execution
-/// or a `pending` restore. Disconnected executions are left for
-/// `shoal stop <workspace>` rather than failing every bulk stop, and preparing
-/// or removing workspaces keep their lifecycle.
-async fn needs_stop(
-    ctx: &Context,
-    workspace: &Workspace,
-    pending: &HashSet<String>,
-) -> Result<bool> {
-    if !matches!(
+/// Whether `workspace` is ready or failed, which stopping it leaves as is;
+/// preparing or removing workspaces keep their lifecycle.
+fn settled(workspace: &Workspace) -> bool {
+    matches!(
         workspace.state,
         WorkspaceState::Ready | WorkspaceState::Failed
-    ) {
-        return Ok(false);
-    }
-    if pending.contains(&workspace.id) {
-        return Ok(true);
-    }
+    )
+}
+
+/// Whether `workspace` has a running execution. Disconnected executions are
+/// left for `shoal stop <workspace>` rather than failing every bulk stop.
+async fn is_running(ctx: &Context, workspace: &Workspace) -> Result<bool> {
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     Ok(inspection
         .executions
