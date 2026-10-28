@@ -26,6 +26,10 @@ impl Server {
         }
     }
 
+    pub async fn create_session(&self, body: &Value) -> Result<Value> {
+        self.request("POST", "/v1/sessions", Some(body)).await
+    }
+
     pub async fn request(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value> {
         let mut curl = Command::new(Tool::Curl.program());
         curl.args([

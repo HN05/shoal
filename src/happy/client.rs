@@ -7,70 +7,24 @@
 //! variables its daemon uses for resume-in-place, waits for the session to
 //! report alive, and posts the prompt. HTTP goes through `curl` with the
 //! token on stdin, never on the command line.
-use std::{
-    path::Path,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{path::Path, time::Duration};
 
-use anyhow::{Context, Result, ensure};
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use serde_json::{Value, json};
+use anyhow::{Result, ensure};
+use serde_json::json;
 use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
 use super::Agent;
-use super::crypto::{self, Variant};
 use crate::paths::Paths;
 
 mod account;
 mod server;
+mod session;
 
-use account::{Account, Encryption};
+use account::Account;
 use server::Server;
-
-/// Variables happy-cli reads to attach to an existing session instead of
-/// creating one; its daemon sets them to resume a session in place.
-pub const RECONNECT_ENV: [&str; 6] = [
-    "HAPPY_RECONNECT_SESSION_ID",
-    "HAPPY_RECONNECT_ENCRYPTION_KEY",
-    "HAPPY_RECONNECT_ENCRYPTION_VARIANT",
-    "HAPPY_RECONNECT_SEQ",
-    "HAPPY_RECONNECT_METADATA_VERSION",
-    "HAPPY_RECONNECT_AGENT_STATE_VERSION",
-];
-
-/// A session Shoal created for the agent to attach to.
-pub struct Session {
-    pub id: String,
-    key: [u8; 32],
-    variant: Variant,
-    seq: i64,
-    metadata_version: i64,
-    agent_state_version: i64,
-}
-
-impl Session {
-    /// Environment that makes `happy <agent>` attach to this session.
-    pub fn env(&self) -> Vec<(&'static str, String)> {
-        let values = [
-            self.id.clone(),
-            BASE64.encode(self.key),
-            self.variant.name().to_owned(),
-            self.seq.to_string(),
-            self.metadata_version.to_string(),
-            self.agent_state_version.to_string(),
-        ];
-        RECONNECT_ENV.into_iter().zip(values).collect()
-    }
-
-    fn encrypt(&self, value: &Value) -> Result<String> {
-        Ok(BASE64.encode(crypto::encrypt(
-            &self.key,
-            self.variant,
-            value.to_string().as_bytes(),
-        )?))
-    }
-}
+use session::PreparedSession;
+pub use session::{RECONNECT_ENV, Session};
 
 /// A seeded session and the server that holds it.
 pub struct Seeded {
@@ -88,62 +42,19 @@ pub async fn seed(
     agent: Agent,
 ) -> Result<Seeded> {
     let account = Account::load(paths)?;
-    let (key, variant, sealed_key) = match &account.encryption {
-        Encryption::Legacy(secret) => {
-            let key: [u8; 32] = secret.as_slice().try_into()?;
-            (key, Variant::Legacy, None)
-        }
-        Encryption::DataKey { public_key } => {
-            let key = crypto::random_key();
-            let sealed = crypto::seal_for_account(&key, public_key)?;
-            (key, Variant::DataKey, Some(BASE64.encode(sealed)))
-        }
-    };
-    let mut session = Session {
-        id: String::new(),
-        key,
-        variant,
-        seq: 0,
-        metadata_version: 0,
-        agent_state_version: 0,
-    };
-    // Mirrors happy-cli's createSessionMetadata; the CLI replaces it with its
-    // own record once it connects.
-    let now_millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|elapsed| elapsed.as_millis() as u64)
-        .unwrap_or_default();
-    let metadata = json!({
-        "path": directory,
-        "host": hostname(),
-        "version": "unknown",
-        "os": platform(),
-        "machineId": account.machine_id,
-        "homeDir": paths.home,
-        "happyHomeDir": account.home,
-        "startedFromDaemon": true,
-        "startedBy": "daemon",
-        "lifecycleState": "running",
-        "lifecycleStateSince": now_millis,
-        "flavor": agent.as_str(),
-        "gitBranch": branch,
-    });
-    let body = json!({
-        "tag": Uuid::new_v4().to_string(),
-        "metadata": session.encrypt(&metadata)?,
-        "agentState": session.encrypt(&json!({"controlledByUser": false}))?,
-        "dataEncryptionKey": sealed_key,
-    });
+    let prepared = PreparedSession::prepare(&account.encryption)?;
+    let metadata = session::creation_metadata(
+        paths,
+        &account.home,
+        &account.machine_id,
+        directory,
+        branch,
+        agent,
+    );
+    let body = prepared.creation_payload(&metadata)?;
     let server = account.server;
-    let created = server.request("POST", "/v1/sessions", Some(&body)).await?;
-    let raw = &created["session"];
-    session.id = raw["id"]
-        .as_str()
-        .context("Happy server returned no session ID")?
-        .to_owned();
-    session.seq = raw["seq"].as_i64().unwrap_or(0);
-    session.metadata_version = raw["metadataVersion"].as_i64().unwrap_or(0);
-    session.agent_state_version = raw["agentStateVersion"].as_i64().unwrap_or(0);
+    let created = server.create_session(&body).await?;
+    let session = prepared.decode_response(&created)?;
     Ok(Seeded { server, session })
 }
 
@@ -210,25 +121,3 @@ impl Seeded {
         }
     }
 }
-
-fn hostname() -> String {
-    let mut buffer = [0u8; 256];
-    // SAFETY: gethostname writes at most `len` bytes into the provided buffer.
-    let result = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
-    if result != 0 {
-        return "unknown".into();
-    }
-    let end = buffer.iter().position(|b| *b == 0).unwrap_or(buffer.len());
-    String::from_utf8_lossy(&buffer[..end]).into_owned()
-}
-
-/// Node's `os.platform()` spelling, which Happy's app expects.
-fn platform() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "darwin",
-        other => other,
-    }
-}
-
-#[cfg(test)]
-mod tests;
