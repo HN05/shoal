@@ -434,13 +434,25 @@ pub(super) async fn prepare_root(
     repositories: &[Repository],
     checkout: Option<&Path>,
 ) -> Result<PathBuf> {
+    let plan = plan_root(root, state, repositories, checkout).await?;
+    plan.apply()?;
+    plan.destination()
+}
+
+/// What [`prepare_root`] would change, refused as it would refuse, without
+/// changing anything.
+pub(super) async fn plan_root(
+    root: &ConfiguredRoot,
+    state: &Path,
+    repositories: &[Repository],
+    checkout: Option<&Path>,
+) -> Result<spotlight::Plan> {
     let plan = spotlight::plan(&root.path, root.layout)?;
     for location in plan.locations()? {
         ensure_outside(&location, state, repositories, checkout)?;
         crate::daemon::access::ensure_writable(&location).await?;
     }
-    plan.apply()?;
-    plan.destination()
+    Ok(plan)
 }
 
 /// Refuse a root `location` inside Shoal's state, a checkout or a repository

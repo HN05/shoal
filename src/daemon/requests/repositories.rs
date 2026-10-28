@@ -8,7 +8,10 @@ use super::super::{
     scope::{Caller, Scoped, denied},
     workspace::Manager,
 };
-use crate::protocol::{Body, RepositoryMethod};
+use crate::{
+    daemon::workspace::spotlight::Layout,
+    protocol::{Body, RepositoryMethod},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -49,12 +52,16 @@ pub(super) async fn handle(
         RepositoryMethod::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
-        RepositoryMethod::PlanRepositoryMoves { root } => {
-            Body::Repositories(manager.plan_repository_moves(root.as_deref()).await?)
-        }
-        RepositoryMethod::MoveRepositories => {
-            Body::MovedRepositories(manager.move_repositories().await?)
-        }
+        RepositoryMethod::PlanRepositoryMoves { root, regular_dir } => Body::RepositoryMoves(
+            manager
+                .plan_repository_moves(root.as_deref(), Layout::migration(regular_dir))
+                .await?,
+        ),
+        RepositoryMethod::MoveRepositories { regular_dir } => Body::MovedRepositories(
+            manager
+                .move_repositories(Layout::migration(regular_dir))
+                .await?,
+        ),
         RepositoryMethod::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)
         }
@@ -99,7 +106,7 @@ impl Scoped for RepositoryMethod {
             | RepositoryMethod::EditRepositoryConfig { .. }
             | RepositoryMethod::RemoveRepository { .. }
             | RepositoryMethod::PlanRepositoryMoves { .. }
-            | RepositoryMethod::MoveRepositories
+            | RepositoryMethod::MoveRepositories { .. }
             | RepositoryMethod::ListBranches { .. }
             | RepositoryMethod::KeptBranches { .. }
             | RepositoryMethod::DeleteKeptBranches { .. }

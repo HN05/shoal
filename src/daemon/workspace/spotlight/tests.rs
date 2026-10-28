@@ -63,19 +63,36 @@ fn an_excluded_root_links_a_missing_or_empty_directory() {
 }
 
 #[test]
-fn an_excluded_root_holding_files_stays_a_directory_until_it_is_empty() {
+fn an_excluded_root_holding_files_is_linked_once_they_leave() {
     let parent = parent();
     let root = parent.join("shoal");
     let repo = root.join("repo");
     fs::create_dir_all(&repo).unwrap();
-    assert_eq!(
-        prepare(&root, Layout::Excluded),
-        parent.join(".shoal.noindex")
-    );
+    let plan = plan(&root, Layout::Excluded).unwrap();
+    plan.ensure_linkable(&[&repo]).unwrap();
+    let error = plan.ensure_linkable(&[]).unwrap_err().to_string();
+    assert!(error.contains(&repo.display().to_string()), "{error}");
+    assert!(error.contains("--regular-dir"), "{error}");
+
+    plan.apply().unwrap();
+    assert_eq!(plan.destination().unwrap(), parent.join(".shoal.noindex"));
     assert!(repo.is_dir());
     fs::remove_dir(&repo).unwrap();
     prepare(&root, Layout::Excluded);
     assert_eq!(fs::read_link(&root).unwrap(), Path::new(".shoal.noindex"));
+}
+
+#[test]
+fn a_regular_root_replaces_the_link_to_its_excluded_directory() {
+    let parent = parent();
+    let root = parent.join("shoal");
+    prepare(&root, Layout::Excluded);
+    let plan = plan(&root, Layout::Regular).unwrap();
+    assert_eq!(plan.destination().unwrap(), root);
+    // Planning changes nothing.
+    assert!(fs::symlink_metadata(&root).unwrap().is_symlink());
+    plan.apply().unwrap();
+    assert!(fs::symlink_metadata(&root).unwrap().is_dir());
 }
 
 #[test]

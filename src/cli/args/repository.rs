@@ -205,6 +205,9 @@ pub enum RepoCommand {
         /// New root directory, saved as root_dir first; omit to use the configured one.
         #[arg(value_hint = clap::ValueHint::DirPath)]
         root: Option<PathBuf>,
+        /// Keep root_dir a regular directory instead of a link to one Spotlight skips (macOS).
+        #[arg(long)]
+        regular_dir: bool,
         #[command(flatten)]
         confirmation: ConfirmationArgs,
     },

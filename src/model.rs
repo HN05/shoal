@@ -38,6 +38,14 @@ pub struct RepositoryRemoval {
     pub workspace_paths: Vec<PathBuf>,
 }
 
+/// The repository directories a move would take into `directory`, the
+/// canonical directory that holds `root_dir`'s repositories.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RepositoryMoves {
+    pub directory: PathBuf,
+    pub repositories: Vec<Repository>,
+}
+
 /// A repository directory moved into the configured `root_dir`.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MovedRepository {

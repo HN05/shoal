@@ -5,11 +5,12 @@ use super::{
     identity::{directory_identity, has_directory_identity},
     paths::{is_real_directory, real_directory_identity},
     registry,
+    spotlight::{self, Layout},
 };
 use crate::{
     daemon::{log, store},
     fsutil, git,
-    model::{MovedRepository, Repository, Workspace},
+    model::{MovedRepository, Repository, RepositoryMoves, Workspace},
     process, repository, seed,
     state::WorkspaceState,
 };
@@ -39,35 +40,59 @@ struct Intent {
 
 impl Manager {
     /// The repositories [`Self::move_repositories`] would move into `root`, or
-    /// the configured `root_dir`, refusing as it would before anything moves.
-    pub async fn plan_repository_moves(&self, root: Option<&Path>) -> Result<Vec<Repository>> {
+    /// the configured `root_dir`, in `layout`, refusing as it would before
+    /// anything moves or changes.
+    pub async fn plan_repository_moves(
+        &self,
+        root: Option<&Path>,
+        layout: Layout,
+    ) -> Result<RepositoryMoves> {
         let _registry = self.registry_gate.lock().await;
-        Ok(self.movable_repositories(root).await?.1)
+        let mut target = self.configured_root()?;
+        target.layout = layout;
+        if let Some(root) = root {
+            target.path = root.to_owned();
+        }
+        let (plan, repositories) = self.movable_repositories(&target).await?;
+        Ok(RepositoryMoves {
+            directory: plan.destination()?,
+            repositories,
+        })
     }
 
-    /// Move every repository directory outside the configured `root_dir` into
-    /// it, with the workspaces and clone inside. Each repository must be idle;
-    /// all are checked before the first moves.
-    pub async fn move_repositories(&self) -> Result<Vec<MovedRepository>> {
+    /// Move every repository directory outside the configured `root_dir` in
+    /// `layout` into it, with the workspaces and clone inside, then link a
+    /// root these moves emptied to the directory Spotlight skips. Each
+    /// repository must be idle; all are checked before the first moves.
+    pub async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
         let _registry = self.registry_gate.lock().await;
-        let (root, moving) = self.movable_repositories(None).await?;
+        let mut target = self.configured_root()?;
+        target.layout = layout;
+        let (plan, moving) = self.movable_repositories(&target).await?;
+        plan.apply()?;
+        let root = plan.destination()?;
         let mut moved = Vec::with_capacity(moving.len());
         for repo in moving {
             moved.push(self.move_repository(&repo, &root).await?);
         }
+        self.root_plan(&target, &self.repositories().await?)
+            .await?
+            .apply()?;
         Ok(moved)
     }
 
-    /// The root and the repositories outside it, after finishing interrupted
-    /// moves; refused unless every one of them can move. Callers hold the
-    /// registry gate.
+    /// What preparing `target` changes and the repositories outside its
+    /// destination, after finishing interrupted moves; refused unless every
+    /// one of them can move and a root to link would be empty once they
+    /// have. Callers hold the registry gate.
     async fn movable_repositories(
         &self,
-        root: Option<&Path>,
-    ) -> Result<(PathBuf, Vec<Repository>)> {
+        target: &registry::ConfiguredRoot,
+    ) -> Result<(spotlight::Plan, Vec<Repository>)> {
         self.finish_repository_moves().await?;
         let repositories = self.repositories().await?;
-        let root = self.move_root(root, &repositories).await?;
+        let plan = self.root_plan(target, &repositories).await?;
+        let root = plan.destination()?;
         let moving: Vec<_> = repositories
             .into_iter()
             .filter(|repo| outside(repo, &root))
@@ -75,7 +100,12 @@ impl Manager {
         for repo in &moving {
             self.check_movable(repo).await?;
         }
-        Ok((root, moving))
+        let directories: Vec<_> = moving
+            .iter()
+            .filter_map(|repo| repo.workspaces_dir.as_deref())
+            .collect();
+        plan.ensure_linkable(&directories)?;
+        Ok((plan, moving))
     }
 
     /// Finish or roll back every move a stopped daemon or failed attempt left.
@@ -98,20 +128,21 @@ impl Manager {
         Ok(())
     }
 
-    /// `root`, or the configured one, refused inside a directory that would
-    /// move into it or a workspace placed elsewhere.
-    async fn move_root(&self, root: Option<&Path>, repositories: &[Repository]) -> Result<PathBuf> {
-        let mut target = self.configured_root()?;
-        if let Some(root) = root {
-            target.path = root.to_owned();
-        }
-        let root = registry::prepare_root(
-            &target,
+    /// What preparing `target` changes, refused inside a directory that
+    /// would move into it or a workspace placed elsewhere.
+    async fn root_plan(
+        &self,
+        target: &registry::ConfiguredRoot,
+        repositories: &[Repository],
+    ) -> Result<spotlight::Plan> {
+        let plan = registry::plan_root(
+            target,
             &fs::canonicalize(&self.paths.state)?,
             repositories,
             None,
         )
         .await?;
+        let root = plan.destination()?;
         for workspace in self.list_workspaces().await? {
             ensure!(
                 !root.starts_with(&workspace.path),
@@ -120,7 +151,7 @@ impl Manager {
                 workspace.name
             );
         }
-        Ok(root)
+        Ok(plan)
     }
 
     /// Refuse a repository whose directory is missing or in use, or whose

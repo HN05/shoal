@@ -4,7 +4,7 @@
 //! and the configured root is a symlink to it, keeping its path the same on
 //! every system.
 use super::paths::canonical_with_missing_tail;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use std::{
     ffi::OsString,
     fs, io,
@@ -16,7 +16,8 @@ use std::{
 pub(crate) enum Layout {
     /// An existing root as it is, a missing one in the default layout.
     AsFound,
-    /// The configured directory itself.
+    /// The configured directory itself, replacing a link to the excluded
+    /// directory.
     Regular,
     /// The excluded directory, which the configured root becomes a link to
     /// once it is empty.
@@ -24,13 +25,24 @@ pub(crate) enum Layout {
 }
 
 impl Layout {
-    /// What a new root gets: excluded on macOS, where development builds
-    /// leave the user's root to the installed Shoal.
+    /// What a new root gets and `repo migrate` applies unless told otherwise:
+    /// excluded on macOS, where development builds leave the user's root to
+    /// the installed Shoal.
     pub(crate) fn default_layout() -> Self {
         if cfg!(target_os = "macos") && crate::build::changes_user_files() {
             Self::Excluded
         } else {
             Self::Regular
+        }
+    }
+
+    /// What `repo migrate` applies: a regular directory when `regular_dir`
+    /// asks for one, otherwise the default.
+    pub(crate) fn migration(regular_dir: bool) -> Self {
+        if regular_dir {
+            Self::Regular
+        } else {
+            Self::default_layout()
         }
     }
 }
@@ -43,6 +55,8 @@ pub(super) struct Plan {
     directory: PathBuf,
     /// The root that becomes a link to `directory` once it is empty.
     link: Option<PathBuf>,
+    /// A link to the excluded directory that `directory` replaces.
+    unlink: bool,
 }
 
 impl Plan {
@@ -50,12 +64,17 @@ impl Plan {
         Self {
             directory,
             link: None,
+            unlink: false,
         }
     }
 
     /// The canonical directory that holds repository directories once the
     /// plan is applied.
     pub(super) fn destination(&self) -> Result<PathBuf> {
+        if self.unlink {
+            // Resolving the link would name the directory it replaces.
+            return Ok(self.directory.clone());
+        }
         canonical_with_missing_tail(&self.directory)
     }
 
@@ -69,8 +88,34 @@ impl Plan {
         Ok(locations)
     }
 
-    /// Make the changes, linking the root only once it is empty.
+    /// Refuse a root that would still hold files once the repository
+    /// directories `moving` leave it, since it could not become the link.
+    pub(super) fn ensure_linkable(&self, moving: &[&Path]) -> Result<()> {
+        let Some(root) = &self.link else {
+            return Ok(());
+        };
+        let left: Vec<_> = entries(root)?
+            .into_iter()
+            .filter(|path| !moving.contains(&path.as_path()) && !is_finder_metadata(path))
+            .map(|path| path.display().to_string())
+            .collect();
+        ensure!(
+            left.is_empty(),
+            "{} holds {}, which would keep Spotlight indexing it; move them out, or pass \
+             --regular-dir",
+            root.display(),
+            left.join(", ")
+        );
+        Ok(())
+    }
+
+    /// Make the changes, linking the root only once it is empty: what it holds
+    /// moves with `shoal repo migrate`, which links it afterwards.
     pub(super) fn apply(&self) -> Result<()> {
+        if self.unlink {
+            fs::remove_file(&self.directory)
+                .with_context(|| format!("remove the link {}", self.directory.display()))?;
+        }
         fs::create_dir_all(&self.directory).with_context(|| {
             format!(
                 "create repository root directory {}",
@@ -94,9 +139,15 @@ pub(super) fn plan(root: &Path, layout: Layout) -> Result<Plan> {
         layout => layout,
     };
     Ok(match layout {
+        Layout::Regular if resolved != *root && resolved == excluded_directory(root)? => Plan {
+            directory: root.to_owned(),
+            link: None,
+            unlink: true,
+        },
         Layout::Excluded if !skips(&resolved) => Plan {
             directory: excluded_directory(&resolved)?,
             link: Some(resolved),
+            unlink: false,
         },
         _ => Plan::at(resolved),
     })

@@ -1473,7 +1473,8 @@ it would write within 30 seconds, as on a volume macOS has not given it access t
 On macOS, Spotlight does not index a `root_dir` Shoal creates: it is a symlink
 to `<parent>/.<name>.noindex`, a directory Spotlight skips by name, so `~/shoal`
 still leads to every workspace while Shoal and Git show the real paths. An
-existing `root_dir` is used as it is.
+existing `root_dir` is used as it is; [`repo migrate`](#move-repositories-to-a-new-root)
+moves it out of Spotlight, or back with `--regular-dir`.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
@@ -1620,11 +1621,15 @@ workspace creation is blocked until the same command is retried.
 ```sh
 shoal repo migrate /Volumes/Work/shoal -y  # Save root_dir, then move
 shoal repo migrate -y                      # Move into the configured root_dir
+shoal repo migrate --regular-dir -y        # Keep root_dir a regular directory
 ```
 
 Moves each repository directory outside `root_dir` into it whole, with its URL
 clone, workspaces, seed and shared caches, keeping its name or suffixing it when
-taken. A root on another filesystem is copied, then the original is deleted. A
+taken. On macOS it moves them into the [directory Spotlight skips](#repositories)
+and then makes `root_dir` the link to it, refusing when `root_dir` holds other
+files; `--regular-dir` keeps `root_dir` a regular directory, replacing that link
+and moving the repositories back. A root on another filesystem is copied, then the original is deleted. A
 checkout or workspace placed outside the repository directory stays where it is.
 A path argument is saved as the global `root_dir` and the daemon reloads it first.
 Interactive calls run the checks below, then list the directories to move and

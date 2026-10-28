@@ -453,6 +453,7 @@ response_bodies! {
     Repository(Repository),
     RepositoryConfig(LocalConfig),
     RepositoryRemoved(RepositoryRemoval),
+    RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),
     Workspace(Workspace),
     Hold(crate::model::WorkspaceHold),
