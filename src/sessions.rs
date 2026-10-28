@@ -2,6 +2,7 @@
 //! user opened stay theirs, even when Shoal runs an agent in them.
 mod locking;
 mod origin;
+pub(crate) mod rex;
 pub(crate) mod zmx;
 
 pub(crate) use origin::{HostName, Origin};

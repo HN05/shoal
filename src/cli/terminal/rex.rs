@@ -1,0 +1,353 @@
+//! Rex windows and blocks: Shoal opens a shell window per place and types
+//! its command into the shell, since Rex sets no environment for a new
+//! terminal. Rex keeps sessions running without a connected app, so agents
+//! run in place in their block and outlive the Mac app or the phone.
+use std::{ffi::OsStr, ffi::OsString, path::Path};
+
+use anyhow::{Context as _, Result};
+use futures_util::future::BoxFuture;
+
+use super::{ChatStart, Demo, Host, PlaceState, Start, Watched, typed::Typed};
+use crate::sessions::{
+    HostName, Origin,
+    rex::{Block, Rex as Server, Window},
+};
+
+/// Rex serves the blocks it runs Shoal in, and runs windows for a terminal
+/// no host serves when it is the default host.
+pub(super) struct Rex;
+
+impl Host for Rex {
+    fn name(&self) -> HostName {
+        HostName::Rex
+    }
+
+    /// A Rex block, which names its session and itself.
+    fn serves(&self) -> bool {
+        in_rex()
+    }
+
+    fn ensure_installed(&self) -> Result<()> {
+        Server::here().map(drop)
+    }
+
+    /// A background window in the session the start was queued from.
+    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
+        origin.is_some_and(|origin| origin.host == HostName::Rex)
+    }
+
+    fn group<'a>(
+        &'a self,
+        near: Option<&'a Origin>,
+        label: &'a str,
+        cwd: &'a Path,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move { session(near, label, cwd).await.map(Some) })
+    }
+
+    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move {
+            open_window(start).await?;
+            Ok(true)
+        })
+    }
+
+    /// A background window.
+    fn runs_in_background(&self) -> bool {
+        true
+    }
+
+    fn run_in_background<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move { open_window(start).await.map(Some) })
+    }
+
+    /// A block back at its shell prompt, as it is after the wrapper exits.
+    fn run_in_place<'a>(
+        &'a self,
+        place: &'a Origin,
+        argv: &'a [OsString],
+        env: &'a [(&'a str, String)],
+    ) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(run_at_prompt(place, argv, env))
+    }
+
+    /// Outside Rex, a focused window in the default session; inside it the
+    /// agent runs in place in its block.
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        _owner: super::Owner<'a>,
+        _agent: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move {
+            if in_rex() {
+                return Ok(None);
+            }
+            let opened = open_window(start).await?;
+            Ok(Some(opened.id().to_owned()))
+        })
+    }
+
+    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
+        Box::pin(async move {
+            open_window(start).await?;
+            Ok(ChatStart::Tab)
+        })
+    }
+
+    fn background_places(&self) -> &'static str {
+        "Rex windows"
+    }
+
+    fn background_note(&self, name: &str) -> String {
+        format!("Started {name} in a background Rex window")
+    }
+
+    fn origin(&self) -> Option<Origin> {
+        origin()
+    }
+
+    fn this_place(&self) -> Option<String> {
+        var("REX_BLOCK")
+    }
+
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { Server::here()?.close(place).await })
+    }
+
+    /// Rex reads no agent state, so a block is only open or gone.
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(async move {
+            Ok(match Server::here()?.block(&place.id).await? {
+                Some(_) => PlaceState::Open(None),
+                None => PlaceState::Gone,
+            })
+        })
+    }
+
+    fn names_places(&self) -> bool {
+        true
+    }
+
+    fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if let Err(error) = rename_window(place, label).await {
+                eprintln!("warning: cannot rename the Rex window of {place}: {error:#}");
+            }
+        })
+    }
+
+    fn prompt_session(&self) -> Option<OsString> {
+        in_rex()
+            .then(|| var("REX_BLOCK").map(OsString::from))
+            .flatten()
+    }
+
+    /// Paste `text` as one prompt and submit it with Enter.
+    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let block = session.to_str().context("the Rex block ID is not UTF-8")?;
+            Server::here()?
+                .send(block, &format!("\x1b[200~{text}\x1b[201~\r"))
+                .await
+                .context("type into the Rex block")
+        })
+    }
+
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move { start_demo(demo).await.map(Some) })
+    }
+
+    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let server = Server::recorded(&place.data)?;
+            let block = server
+                .block(place.id())
+                .await?
+                .context("the demo's Rex block is gone")?;
+            reveal(&server, &block, place.id(), "the demo").await
+        })
+    }
+
+    fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async move { Server::recorded(&place.data)?.capture(place.id()).await })
+    }
+
+    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { Server::recorded(&place.data)?.send(place.id(), keys).await })
+    }
+}
+
+/// What Rex's section sets: `rex.enabled`, whether it opens windows
+/// (`rex.new_window`), their names (`rex.window_name`), the session for a
+/// terminal outside Rex (`rex.session_name`), and `rex.close_when_done`,
+/// which overrides the top-level option.
+pub(super) fn options(config: &crate::config::Rex) -> super::Options {
+    super::Options {
+        enabled: config.enabled,
+        opens_places: config.new_window,
+        name_template: config.window_name.clone(),
+        group_template: Some(config.session_name.clone()),
+        close_when_done: config.close_when_done,
+    }
+}
+
+/// The value of variable `name`, when set and not empty.
+fn var(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|value| !value.is_empty())
+}
+
+/// Whether this process runs in a Rex block.
+fn in_rex() -> bool {
+    var("REX_SESSION").is_some() && var("REX_BLOCK").is_some()
+}
+
+/// The block this process runs in, in its session, with how to reach its
+/// server.
+fn origin() -> Option<Origin> {
+    if !in_rex() {
+        return None;
+    }
+    let server = Server::here().ok()?;
+    Some(Origin {
+        host: HostName::Rex,
+        group: var("REX_SESSION"),
+        place: var("REX_BLOCK"),
+        data: server.data(),
+        owned: false,
+    })
+}
+
+/// The server of `origin`, or the one this process reaches.
+fn server_of(origin: Option<&Origin>) -> Result<Server> {
+    match origin {
+        Some(origin) => Server::recorded(&origin.data),
+        None => Server::here(),
+    }
+}
+
+/// The session labelled `label` on the server of `near`, created at `cwd`
+/// when there is none.
+async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origin> {
+    let server = server_of(near)?;
+    server.ensure_supported().await?;
+    let session = server.session(label, cwd).await?;
+    Ok(Origin {
+        host: HostName::Rex,
+        group: Some(session),
+        place: None,
+        data: server.data(),
+        owned: false,
+    })
+}
+
+/// Open a window for `start` in its origin's session and type its command
+/// there. A focused window outside Rex shows in the Mac app.
+async fn open_window(start: &Start<'_>) -> Result<Origin> {
+    let origin = start
+        .origin
+        .context("Shoal has no Rex session to open a window in")?;
+    let server = Server::recorded(&origin.data)?;
+    server.ensure_supported().await?;
+    let session = origin
+        .group
+        .as_deref()
+        .context("the Rex origin names no session")?;
+    let typed = Typed::new(start.argv, start.env)?;
+    let opened = server
+        .open(&Window {
+            session,
+            label: start.label,
+            cwd: start.cwd,
+            focus: start.focus,
+            input: Some(typed.text()),
+        })
+        .await?;
+    typed.hand_over()?;
+    let place = Origin {
+        place: Some(opened.block.clone()),
+        owned: true,
+        ..origin.clone()
+    };
+    if start.focus && !in_rex() {
+        let block = Block {
+            session: session.to_owned(),
+            window: Some(opened.window),
+        };
+        reveal(&server, &block, &opened.block, start.label).await?;
+    }
+    Ok(place)
+}
+
+/// Bring `id`, `name`'s block, forward: in Rex, its window becomes the
+/// active one where this terminal shows it; elsewhere the Mac app selects
+/// it, since Rex has no terminal client to attach.
+async fn reveal(server: &Server, block: &Block, id: &str, name: &str) -> Result<()> {
+    server.focus(&block.session, id).await?;
+    if in_rex() {
+        return Ok(());
+    }
+    if server.show_in_app(block).await? {
+        outln!("Opened {name} in the Rex app");
+    } else {
+        outln!("Opened {name} in a Rex window; open Rex to see it");
+    }
+    Ok(())
+}
+
+/// Type `argv` into the block of `place` once its shell is back at its
+/// prompt.
+async fn run_at_prompt(place: &Origin, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
+    let server = Server::recorded(&place.data)?;
+    if !server.at_prompt(place.id()).await? {
+        return Ok(false);
+    }
+    let typed = Typed::new(argv, env)?;
+    server.send(place.id(), typed.text()).await?;
+    typed.hand_over()?;
+    Ok(true)
+}
+
+/// Open a background window for the demo and type its worker there, which
+/// needs the block it runs in.
+async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
+    let origin = demo
+        .origin
+        .context("Shoal has no Rex session to open a window in")?;
+    let server = Server::recorded(&origin.data)?;
+    server.ensure_supported().await?;
+    let session = origin
+        .group
+        .as_deref()
+        .context("the Rex origin names no session")?;
+    let opened = server
+        .open(&Window {
+            session,
+            label: demo.label,
+            cwd: demo.cwd,
+            focus: false,
+            input: None,
+        })
+        .await?;
+    let place = Origin {
+        place: Some(opened.block),
+        owned: true,
+        ..origin.clone()
+    };
+    let typed = Typed::new(&(demo.worker)(&place)?, demo.env)?;
+    server.send(place.id(), typed.text()).await?;
+    typed.hand_over()?;
+    Ok(place)
+}
+
+async fn rename_window(place: &str, label: &str) -> Result<()> {
+    let server = Server::here()?;
+    let block = server.block(place).await?.context("the block is gone")?;
+    server.rename_window(&block, label).await
+}
+
+#[cfg(test)]
+mod tests;

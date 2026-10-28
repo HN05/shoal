@@ -18,6 +18,7 @@ pub const DEMO: &str = "demo";
 pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
 pub const ADD: &str = "add";
+pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
 pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";

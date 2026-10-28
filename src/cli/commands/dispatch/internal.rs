@@ -72,6 +72,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
+        InternalCommand::Launch { file } => terminal::run_launch(&file),
         InternalCommand::Add {
             host,
             close_when_done,

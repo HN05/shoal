@@ -8,6 +8,8 @@ mod closing;
 mod groups;
 mod herdr;
 mod naming;
+mod rex;
+mod typed;
 mod zmx;
 
 use std::{
@@ -37,6 +39,7 @@ use crate::{
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
+pub(in crate::cli) use typed::run as run_launch;
 
 /// Hosts in the order they claim a terminal, each with the options its own
 /// config section gives; a terminal none of them serves runs everything in
@@ -45,6 +48,10 @@ const HOSTS: &[Registered] = &[
     Registered {
         host: &herdr::Herdr,
         options: |settings| herdr::options(&settings.herdr),
+    },
+    Registered {
+        host: &rex::Rex,
+        options: |settings| rex::options(&settings.rex),
     },
     Registered {
         host: &zmx::Zmx,

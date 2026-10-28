@@ -146,6 +146,10 @@ pub enum InternalCommand {
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
+    /// Run the command a launch file carries, deleting the file first; hosts
+    /// that cannot set a place's environment type it into the place.
+    #[command(name = internal::LAUNCH)]
+    Launch { file: PathBuf },
     /// Copy the main checkout's ignored files inside tracked setup, then run setup.
     #[command(name = internal::COPY_IGNORED)]
     CopyIgnored {
