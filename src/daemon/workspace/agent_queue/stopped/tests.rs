@@ -353,7 +353,7 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
             agent: "claude".into(),
             session: None,
             moved: false,
-            place: None,
+            origin: None,
         }
         .write(&manager.paths, &workspace.id)
         .unwrap();

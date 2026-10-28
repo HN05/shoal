@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{created, shell_command, tab_command};
+use super::{created, herdr, shell_command, tab_command};
 use crate::{cli::terminal::Demo, subprocess::Run};
 
 /// Lines of recent output a screen read returns.
@@ -13,11 +13,12 @@ const SCREEN_LINES: &str = "500";
 /// Open a background tab for the demo and run its worker in the tab's pane,
 /// returning the pane.
 pub(super) async fn start(demo: &Demo<'_>) -> Result<String> {
-    let pane = created(tab_command(demo.cwd, demo.label, false, demo.env)?)
+    let origin = demo.origin.context("Shoal does not run in a Herdr pane")?;
+    let pane = created(tab_command(origin, demo.cwd, demo.label, false, demo.env)?)
         .await?
         .root_pane
         .pane_id;
-    let mut run = Command::new("herdr");
+    let mut run = herdr(origin);
     run.args(["pane", "run", &pane]).arg(format!(
         "{} && exit",
         shell_command(&(demo.worker)(&pane)?)?

@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{collections::BTreeMap, ffi::OsString, path::Path};
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
 use serde::Deserialize;
@@ -10,7 +10,12 @@ use futures_util::future::BoxFuture;
 use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
 
 mod demo;
-use crate::{config, sessions::HostName, state::AgentState, subprocess::Run};
+use crate::{
+    config,
+    sessions::{HostName, Origin},
+    state::AgentState,
+    subprocess::Run,
+};
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place.
@@ -26,9 +31,9 @@ impl Host for Herdr {
         in_herdr()
     }
 
-    /// A tab, from the Herdr variables the daemon gave the worker.
-    fn takes_queued(&self) -> bool {
-        in_herdr()
+    /// A tab in the Herdr workspace the start was queued from.
+    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
+        origin.is_some_and(|origin| origin.host == HostName::Herdr)
     }
 
     fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
@@ -50,7 +55,7 @@ impl Host for Herdr {
     /// A pane back at its shell prompt, as it is after the wrapper exits.
     fn run_in_place<'a>(
         &'a self,
-        place: &'a str,
+        place: &'a Origin,
         argv: &'a [OsString],
         env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
@@ -72,12 +77,8 @@ impl Host for Herdr {
         format!("Started {name} in a background Herdr tab")
     }
 
-    fn environment(&self) -> BTreeMap<String, String> {
-        environment()
-    }
-
-    fn current_place(&self) -> Option<String> {
-        current_pane()
+    fn origin(&self) -> Option<Origin> {
+        origin()
     }
 
     fn this_place(&self) -> Option<String> {
@@ -129,14 +130,36 @@ pub(super) fn options(config: &config::Herdr) -> Options {
     }
 }
 
-/// Herdr's variables, so a later start opens its tab in the same Herdr
-/// workspace; the launching pane and tab are left out.
-fn environment() -> BTreeMap<String, String> {
-    std::env::vars()
-        .filter(|(name, _)| {
-            name.starts_with("HERDR_") && !matches!(name.as_str(), "HERDR_PANE_ID" | "HERDR_TAB_ID")
-        })
-        .collect()
+/// The pane this process runs in, in its Herdr workspace, with the
+/// variables that reach Herdr's server, so a later start opens its tab in the
+/// same workspace.
+fn origin() -> Option<Origin> {
+    in_herdr().then(|| Origin {
+        host: HostName::Herdr,
+        group: std::env::var(WORKSPACE_VAR)
+            .ok()
+            .filter(|id| !id.is_empty()),
+        place: current_pane(),
+        data: std::env::vars()
+            .filter(|(name, _)| {
+                name.starts_with("HERDR_")
+                    && !matches!(
+                        name.as_str(),
+                        "HERDR_PANE_ID" | "HERDR_TAB_ID" | WORKSPACE_VAR
+                    )
+            })
+            .collect(),
+        owned: false,
+    })
+}
+
+const WORKSPACE_VAR: &str = "HERDR_WORKSPACE_ID";
+
+/// A `herdr` command reaching the server of `origin`.
+fn herdr(origin: &Origin) -> Command {
+    let mut command = Command::new("herdr");
+    command.envs(&origin.data);
+    command
 }
 
 /// Whether this process runs in Herdr, so new tabs can open beside it.
@@ -146,8 +169,11 @@ fn in_herdr() -> bool {
 
 /// Run `argv` in `pane` once it is back at its shell prompt. The pane's shell
 /// keeps its own environment, so `env` goes along on the command.
-async fn run_at_prompt(pane: &str, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
-    if !at_prompt(pane).await {
+async fn run_at_prompt(pane: &Origin, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
+    let Some(id) = pane.place.as_deref() else {
+        return Ok(false);
+    };
+    if !at_prompt(pane, id).await {
         return Ok(false);
     }
     let mut command = vec!["env".into()];
@@ -156,13 +182,13 @@ async fn run_at_prompt(pane: &str, argv: &[OsString], env: &[(&str, String)]) ->
             .map(|(name, value)| format!("{name}={value}").into()),
     );
     command.extend_from_slice(argv);
-    run_in_pane(pane, &command).await?;
+    run_in_pane(pane, id, &command).await?;
     Ok(true)
 }
 
 /// A pane that is gone, unreadable or running a program is not at its prompt.
-async fn at_prompt(pane: &str) -> bool {
-    let mut info = Command::new("herdr");
+async fn at_prompt(origin: &Origin, pane: &str) -> bool {
+    let mut info = herdr(origin);
     info.args(["pane", "process-info", "--pane"]).arg(pane);
     let Ok(output) = Run::new(info).checked().await else {
         return false;
@@ -183,18 +209,33 @@ fn current_pane() -> Option<String> {
 
 /// Run `start` in a new tab.
 async fn open_tab(start: &Start<'_>) -> Result<()> {
-    let created = created(tab_command(start.cwd, start.label, start.focus, start.env)?).await?;
-    run_in_pane(&created.root_pane.pane_id, start.argv).await
+    let origin = start.origin.context("Shoal does not run in a Herdr pane")?;
+    let created = created(tab_command(
+        origin,
+        start.cwd,
+        start.label,
+        start.focus,
+        start.env,
+    )?)
+    .await?;
+    run_in_pane(origin, &created.root_pane.pane_id, start.argv).await
 }
 
-/// The command that creates a tab at `cwd` with `env`. Herdr starts it in
-/// its server's environment, so `env` carries what the tab needs from the
-/// caller's.
-fn tab_command(cwd: &Path, label: &str, focus: bool, env: &[(&str, String)]) -> Result<Command> {
-    let workspace = std::env::var_os("HERDR_WORKSPACE_ID")
-        .filter(|id| !id.is_empty())
+/// The command that creates a tab at `cwd` with `env` in the Herdr
+/// workspace of `origin`. Herdr starts it in its server's environment, so
+/// `env` carries what the tab needs from the caller's.
+fn tab_command(
+    origin: &Origin,
+    cwd: &Path,
+    label: &str,
+    focus: bool,
+    env: &[(&str, String)],
+) -> Result<Command> {
+    let workspace = origin
+        .group
+        .as_deref()
         .context("Herdr did not provide HERDR_WORKSPACE_ID")?;
-    let mut create = Command::new("herdr");
+    let mut create = herdr(origin);
     create
         .args(["tab", "create", "--workspace"])
         .arg(workspace)
@@ -216,8 +257,8 @@ async fn created(create: Command) -> Result<CreatedResult> {
     Ok(created.result)
 }
 
-async fn run_in_pane(pane: &str, argv: &[OsString]) -> Result<()> {
-    let mut run = Command::new("herdr");
+async fn run_in_pane(origin: &Origin, pane: &str, argv: &[OsString]) -> Result<()> {
+    let mut run = herdr(origin);
     run.args(["pane", "run"])
         .arg(pane)
         .arg(shell_command(argv)?);

@@ -31,7 +31,7 @@ use crate::{
     demos::Launch,
     env,
     model::{Repository, Workspace},
-    sessions::HostName,
+    sessions::{HostName, Origin},
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
@@ -125,10 +125,10 @@ impl Configured {
         self.options.enabled && self.host.serves()
     }
 
-    /// Whether a queued start runs here, judged from the environment the
-    /// daemon gave its worker, which has no terminal.
-    fn takes_queued(&self) -> bool {
-        self.options.enabled && self.options.opens_places && self.host.takes_queued()
+    /// Whether a queued start from `origin` runs here; the daemon's worker
+    /// has no terminal.
+    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
+        self.options.enabled && self.options.opens_places && self.host.takes_queued(origin)
     }
 
     /// Whether the host runs Shoal for a workspace in the background.
@@ -147,10 +147,9 @@ pub(in crate::cli) trait Host: Sync {
     /// config enables it.
     fn serves(&self) -> bool;
 
-    /// Whether a queued start runs here, where config lets it open places,
-    /// judged from the environment the daemon gave its worker, which has no
-    /// terminal.
-    fn takes_queued(&self) -> bool {
+    /// Whether a queued start from `origin`, the place that queued it, runs
+    /// here, where config lets the host open places.
+    fn takes_queued(&self, _origin: Option<&Origin>) -> bool {
         false
     }
 
@@ -181,7 +180,7 @@ pub(in crate::cli) trait Host: Sync {
     /// it is idle. Returns whether it ran.
     fn run_in_place<'a>(
         &'a self,
-        _place: &'a str,
+        _place: &'a Origin,
         _argv: &'a [OsString],
         _env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
@@ -216,13 +215,9 @@ pub(in crate::cli) trait Host: Sync {
     // The capabilities below belong to the host this process runs in,
     // whichever host serves its terminal.
 
-    /// Variables a later start needs to reach this host.
-    fn environment(&self) -> BTreeMap<String, String> {
-        BTreeMap::new()
-    }
-
-    /// Where an agent running in this process sits, as this host names it.
-    fn current_place(&self) -> Option<String> {
+    /// The place this process runs in, with what a later start needs to
+    /// open a place beside it.
+    fn origin(&self) -> Option<Origin> {
         None
     }
 
@@ -350,6 +345,8 @@ pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&str) -> Result<Vec<OsString>> +
 pub(in crate::cli) struct Start<'a> {
     /// The daemon state directory that owns the place.
     pub state: &'a Path,
+    /// The place the start comes from, whose group the new place joins.
+    pub origin: Option<&'a Origin>,
     /// The directory the place opens at.
     pub cwd: &'a Path,
     /// What the place is called: a tab's label, a session's name.
@@ -368,6 +365,7 @@ pub(in crate::cli) struct Start<'a> {
 pub(in crate::cli) struct Demo<'a> {
     pub launch: &'a str,
     pub state: &'a Path,
+    pub origin: Option<&'a Origin>,
     pub workspace: &'a str,
     pub cwd: &'a Path,
     pub label: &'a str,
@@ -518,7 +516,9 @@ pub(in crate::cli) async fn start_add(
     let focus = focus.then_some(true).or(settings.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
-    let started = host.options.opens_places && run_add(ctx, &host, plan, name, placement).await?;
+    let origin = host.host.origin();
+    let started = host.options.opens_places
+        && run_add(ctx, &host, origin.as_ref(), plan, name, placement).await?;
     if started && placement == Placement::Background {
         outln!("{}", host.host.background_note(name));
     }
@@ -533,20 +533,30 @@ pub(in crate::cli) async fn start_queued(
     plan: &mut AddPlan,
     name: &str,
 ) -> Result<()> {
-    let host = queued(settings)?;
+    let origin = queued_origin()?;
+    let host = queued(settings, origin.as_ref())?;
     naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
-    run_add(ctx, &host, plan, name, Placement::Background).await?;
+    run_add(
+        ctx,
+        &host,
+        origin.as_ref(),
+        plan,
+        name,
+        Placement::Background,
+    )
+    .await?;
     Ok(())
 }
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
-/// in a new place as `placement` asks, returning whether it left this
-/// process. The worker reads the plan from the place's environment, and a
-/// place that keeps a shell gets the directive through which the worker has
-/// it enter the workspace.
+/// in a new place beside `origin` as `placement` asks, returning whether it
+/// left this process. The worker reads the plan from the place's
+/// environment, and a place that keeps a shell gets the directive through
+/// which the worker has it enter the workspace.
 async fn run_add(
     ctx: &Context,
     host: &Configured,
+    origin: Option<&Origin>,
     plan: &AddPlan,
     name: &str,
     placement: Placement,
@@ -559,6 +569,7 @@ async fn run_add(
         .transpose()?;
     let start = Start {
         state: &ctx.paths.state,
+        origin,
         cwd: &std::env::current_dir()?,
         label: &add_label(host.host, plan, name),
         focus: placement == Placement::Focus,
@@ -645,38 +656,52 @@ fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
     Ok(argv)
 }
 
-/// The host that runs a queued start from this terminal under `settings`.
-fn queued(settings: &Effective) -> Result<Configured> {
+/// The host that runs a queued start from `origin` under `settings`.
+fn queued(settings: &Effective, origin: Option<&Origin>) -> Result<Configured> {
     Configured::all(settings)
-        .find(Configured::takes_queued)
+        .find(|host| host.takes_queued(origin))
         .context("no terminal host can start queued agents")
 }
 
 /// Refuse a background start that the daemon's worker could not run from
 /// this terminal under `settings`, such as one whose host is not installed.
 pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
-    queued(settings)?.host.ensure_installed()
+    queued(settings, current_origin().as_ref())?
+        .host
+        .ensure_installed()
 }
 
 /// What a start the daemon runs later for this process needs, without a
-/// terminal: the variables that reach this terminal's host and the output
-/// setting.
+/// terminal: the place it comes from and the output setting.
 pub(crate) fn start_environment() -> BTreeMap<String, String> {
-    let mut env: BTreeMap<_, _> = hosts().flat_map(|host| host.environment()).collect();
-    env.extend([env::output_setting()]);
+    let mut env = BTreeMap::from([env::output_setting()]);
+    if let Some(origin) = current_origin().and_then(|origin| serde_json::to_string(&origin).ok()) {
+        env.insert(env::ORIGIN.to_owned(), origin);
+    }
     env
+}
+
+/// The place a start the daemon runs for this worker comes from: the one
+/// recorded with it, or for a start recorded before origins, the place its
+/// host's variables name.
+fn queued_origin() -> Result<Option<Origin>> {
+    match std::env::var(env::ORIGIN) {
+        Ok(origin) => Ok(Some(
+            serde_json::from_str(&origin).context("invalid queued start origin")?,
+        )),
+        Err(_) => Ok(current_origin()),
+    }
+}
+
+/// The place this process runs in, as the host serving it names it.
+pub(crate) fn current_origin() -> Option<Origin> {
+    hosts().find_map(|host| host.origin())
 }
 
 /// Whether the place this process runs in closes once `workspace` is
 /// removed, ending anything it streams.
 pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
     closing::closes_with(paths, workspace)
-}
-
-/// Where an agent running in this process sits, as its host names it, so
-/// a later resume can restore it there.
-pub(crate) fn current_place() -> Option<String> {
-    hosts().find_map(|host| host.current_place())
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that
@@ -700,7 +725,7 @@ async fn rerun_in_host(
     record: &Path,
     args: &[OsString],
 ) -> Result<bool> {
-    let Some(place) = stopped_place(host, record) else {
+    let Some(place) = stopped_place(record).filter(|place| place.host == host.name()) else {
         return Ok(false);
     };
     let argv = shoal_command(ctx, args)?;
@@ -709,9 +734,17 @@ async fn rerun_in_host(
 
 /// Where the agent of `record` stopped, unless that is where this process
 /// runs, which is never reused.
-fn stopped_place(host: &dyn Host, record: &Path) -> Option<String> {
+fn stopped_place(record: &Path) -> Option<Origin> {
+    let here = current_origin().and_then(|origin| origin.place);
     crate::execution::recovery::saved_place(record)
-        .filter(|place| host.current_place().as_ref() != Some(place))
+        .filter(|origin| origin.place.is_some() && origin.place != here)
+}
+
+/// The host named `name`, where config enables it.
+fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
+    Configured::all(settings)
+        .find(|host| host.options.enabled && host.host.name() == name)
+        .map(|host| host.host)
 }
 
 /// Run Shoal with `args`, which restore the agent of `record` in
@@ -725,12 +758,15 @@ pub(in crate::cli) async fn restore_queued(
     record: &Path,
     args: &[OsString],
 ) -> Result<()> {
-    if rerun_in_host(ctx, current(settings).host, record, args).await? {
+    if let Some(host) = stopped_place(record).and_then(|place| enabled_host(settings, place.host))
+        && rerun_in_host(ctx, host, record, args).await?
+    {
         return Ok(());
     }
+    let origin = queued_origin()?;
     let mut failure = None;
-    for host in Configured::all(settings).filter(Configured::takes_queued) {
-        match start_in_background(ctx, &host, workspace, args).await {
+    for host in Configured::all(settings).filter(|host| host.takes_queued(origin.as_ref())) {
+        match start_in_background(ctx, &host, origin.as_ref(), workspace, args).await {
             Ok(()) => return Ok(()),
             // Herdr may be gone, as after a reboot.
             Err(error) => failure = Some(error),
@@ -751,16 +787,18 @@ pub(in crate::cli) async fn run_in_background(
     if !host.runs_in_background() {
         return Ok(None);
     }
-    start_in_background(ctx, &host, workspace, args).await?;
+    let origin = host.host.origin();
+    start_in_background(ctx, &host, origin.as_ref(), workspace, args).await?;
     Ok(Some(host.host.background_places()))
 }
 
 /// Run Shoal with `args`, a restore of `workspace`, in a new background
-/// place of `host`, telling the restore to close the place with the
-/// workspace when config says so.
+/// place of `host` beside `origin`, telling the restore to close the place
+/// with the workspace when config says so.
 async fn start_in_background(
     ctx: &Context,
     host: &Configured,
+    origin: Option<&Origin>,
     workspace: &Workspace,
     args: &[OsString],
 ) -> Result<()> {
@@ -772,6 +810,7 @@ async fn start_in_background(
     }
     let start = Start {
         state: &ctx.paths.state,
+        origin,
         cwd: &workspace.path,
         label: &label,
         focus: false,
@@ -798,6 +837,7 @@ pub(in crate::cli) async fn run_agent(
         closes_when_done,
         ..
     } = current(settings);
+    let origin = host.origin();
     let worker = crate::cli::internal::internal_command(
         &ctx.paths,
         false,
@@ -815,6 +855,7 @@ pub(in crate::cli) async fn run_agent(
     }
     let start = Start {
         state: &ctx.paths.state,
+        origin: origin.as_ref(),
         cwd: &workspace.path,
         label: &workspace.name,
         focus: true,
@@ -882,8 +923,10 @@ pub(in crate::cli) async fn start_chat(
     if !host.options.opens_places {
         return Ok(false);
     }
+    let origin = host.host.origin();
     let start = Start {
         state: &ctx.paths.state,
+        origin: origin.as_ref(),
         cwd: &repository.path,
         label: name,
         focus: true,
@@ -956,14 +999,16 @@ pub(in crate::cli) async fn start_demo(
     launch: &str,
     worker: &(dyn Fn(&str, &str) -> Result<Vec<OsString>> + Send + Sync),
 ) -> Result<(&'static str, String)> {
+    let origin = current_origin();
     let hosts = Configured::all(settings)
-        .filter(|host| host.takes_queued() && host.host.ensure_installed().is_ok())
+        .filter(|host| host.takes_queued(origin.as_ref()) && host.host.ensure_installed().is_ok())
         .map(|host| host.host);
     let env = place_env(ctx)?;
     for host in hosts {
         let demo = Demo {
             launch,
             state: &ctx.paths.state,
+            origin: origin.as_ref(),
             workspace: &workspace.id,
             cwd: &workspace.path,
             label: &demo_label(host, workspace, name),

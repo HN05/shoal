@@ -149,7 +149,7 @@ impl Manifest {
                 last
             } else {
                 LastSession {
-                    place: None,
+                    origin: None,
                     ..last
                 }
             }

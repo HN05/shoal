@@ -289,7 +289,9 @@ fn manifest_with_sessions() -> Manifest {
         agent: "codex".into(),
         session: Some("s2".into()),
         moved: false,
-        place: Some("tab".into()),
+        origin: Some(
+            serde_json::from_value(serde_json::json!({"host": "herdr", "place": "tab"})).unwrap(),
+        ),
     };
     let workspace: RemovedWorkspace = serde_json::from_value(serde_json::json!({
         "workspace_id": "w1",
@@ -337,13 +339,18 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     let here = manifest.workspace_on(Some("m1"), None);
     assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
     assert!(!here.agents[0].record.moved);
-    assert_eq!(here.agents[0].record.place.as_deref(), Some("tab"));
+    let place =
+        |origin: Option<&crate::sessions::Origin>| origin.and_then(|origin| origin.place.clone());
+    assert_eq!(
+        place(here.agents[0].record.origin.as_ref()).as_deref(),
+        Some("tab")
+    );
     let [last] = here.last_sessions.as_slice() else {
         panic!("one last session: {:?}", here.last_sessions);
     };
     assert_eq!(last.execution, "quit");
     assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
-    assert_eq!(last.place.as_deref(), Some("tab"));
+    assert_eq!(place(last.origin.as_ref()).as_deref(), Some("tab"));
 
     for new in [
         manifest.workspace_on(Some("m2"), None),
@@ -360,16 +367,16 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     let kept = manifest.workspace_on(Some("m2"), Some(true));
     assert!(!kept.agents[0].record.moved);
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
-    assert_eq!(kept.agents[0].record.place, None);
+    assert_eq!(kept.agents[0].record.origin, None);
     assert!(!kept.last_sessions[0].moved);
-    assert_eq!(kept.last_sessions[0].place, None);
+    assert_eq!(kept.last_sessions[0].origin, None);
 
     // So does an export from a machine without an ID.
     manifest.sessions.as_mut().unwrap().machine = None;
     assert!(manifest.workspace_on(None, None).agents[0].record.moved);
     let kept = manifest.workspace_on(None, Some(true));
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
-    assert_eq!(kept.agents[0].record.place, None);
+    assert_eq!(kept.agents[0].record.origin, None);
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();
@@ -391,7 +398,7 @@ fn moved_records_keep_no_session_place_or_wrapper() {
     let moved = record.moved();
     assert!(moved.moved);
     assert_eq!(
-        (moved.session, moved.place, moved.waiting),
+        (moved.session, moved.origin, moved.waiting),
         (None, None, None)
     );
 }

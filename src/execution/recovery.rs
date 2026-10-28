@@ -19,6 +19,7 @@ use crate::{
     paths::Paths,
     process::identity::{self, Identity},
     protocol::ConfigTarget,
+    sessions::{HostName, Origin},
     state::{AgentState, states},
 };
 
@@ -55,10 +56,15 @@ pub struct Record {
     /// either side of the stop.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stage: Option<Stage>,
-    /// Where the agent ran, as its terminal backend names it, so `shoal
+    /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume --all` can restore it there.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub place: Option<String>,
+    #[serde(
+        default,
+        alias = "place",
+        deserialize_with = "earlier_place",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin: Option<Origin>,
     /// The wrapper that restores the agent automatically while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub waiting: Option<Identity>,
@@ -216,7 +222,7 @@ impl Recovery {
         workspace_id: &str,
         id: &str,
         reason: Option<&str>,
-        place: Option<String>,
+        place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
         let mut record = Record::new(&self.agent, reason, Stage::Stopped, place);
@@ -243,13 +249,36 @@ pub(crate) enum Restorer {
     Queue(BTreeMap<String, String>),
 }
 
+/// A record's place: an origin, or the bare pane ID records kept before
+/// origins, which only Herdr recorded.
+fn earlier_place<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> std::result::Result<Option<Origin>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Place {
+        Origin(Origin),
+        Pane(String),
+    }
+    Ok(Some(match Place::deserialize(deserializer)? {
+        Place::Origin(origin) => origin,
+        Place::Pane(pane) => Origin {
+            host: HostName::Herdr,
+            group: None,
+            place: Some(pane),
+            data: BTreeMap::new(),
+            owned: false,
+        },
+    }))
+}
+
 impl Record {
-    fn new(agent: &str, reason: Option<&str>, stage: Stage, place: Option<String>) -> Self {
+    fn new(agent: &str, reason: Option<&str>, stage: Stage, origin: Option<Origin>) -> Self {
         Self {
             agent: agent.replace(' ', "-"),
             stop_reason: reason.map(str::to_owned),
             stage: Some(stage),
-            place,
+            origin,
             waiting: None,
             session: None,
             moved: false,
@@ -265,7 +294,7 @@ impl Record {
             agent: self.agent,
             session: self.session,
             moved: self.moved,
-            place: self.place,
+            origin: self.origin,
         }
     }
 
@@ -289,7 +318,7 @@ impl Record {
     /// wrapper waits to restore it, but its session may.
     pub(crate) fn elsewhere(self) -> Self {
         Self {
-            place: None,
+            origin: None,
             waiting: None,
             ..self
         }
@@ -363,7 +392,7 @@ fn write_record(
     // and never moves the stage back.
     if let Ok(Some(saved)) = Record::load(&path) {
         record.stop_reason = record.stop_reason.or(saved.stop_reason);
-        record.place = record.place.or(saved.place);
+        record.origin = record.origin.or(saved.origin);
         record.waiting = record.waiting.or(saved.waiting);
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
@@ -537,13 +566,14 @@ pub(crate) fn saved_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf
 
 /// Where the agent a recovery record or last session at `path` keeps ran,
 /// when known.
-pub(crate) fn saved_place(path: &Path) -> Option<String> {
+pub(crate) fn saved_place(path: &Path) -> Option<Origin> {
     #[derive(Deserialize)]
     struct Placed {
-        place: Option<String>,
+        #[serde(default, alias = "place", deserialize_with = "earlier_place")]
+        origin: Option<Origin>,
     }
     let bytes = std::fs::read(path).ok()?;
-    serde_json::from_slice::<Placed>(&bytes).ok()?.place
+    serde_json::from_slice::<Placed>(&bytes).ok()?.origin
 }
 
 pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
@@ -626,10 +656,15 @@ pub struct LastSession {
     /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
-    /// Where the agent ran, as its terminal backend names it, so `shoal
+    /// Where the agent ran, as its terminal host records it, so `shoal
     /// resume` can restore it there; unknown for one that exited on its own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub place: Option<String>,
+    #[serde(
+        default,
+        alias = "place",
+        deserialize_with = "earlier_place",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub origin: Option<Origin>,
 }
 
 /// The key of a last session saved without its execution.
@@ -643,7 +678,7 @@ impl LastSession {
         Self {
             session: None,
             moved: true,
-            place: None,
+            origin: None,
             ..self
         }
     }
@@ -661,7 +696,7 @@ impl LastSession {
             agent: agent.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
             moved: false,
-            place: None,
+            origin: None,
         }
         .write(paths, workspace_id)
     }

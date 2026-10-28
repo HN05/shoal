@@ -143,7 +143,7 @@ fn save_paused_agent(
 ) -> Result<PathBuf> {
     // A detached agent never ran in the launching terminal.
     let place = (!matches!(mode, Mode::Detached { .. }))
-        .then(crate::cli::terminal::current_place)
+        .then(crate::cli::terminal::current_origin)
         .flatten();
     recovery.save(
         paths,

@@ -43,7 +43,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
             "workspace",
             "execution",
             None,
-            Some("w1:p2".into()),
+            Some(herdr_pane("w1:p2")),
             Restorer::User,
         )
         .unwrap();
@@ -53,7 +53,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
         record.stop_reason.as_deref(),
         Some("critical memory pressure")
     );
-    assert_eq!(record.place.as_deref(), Some("w1:p2"));
+    assert_eq!(record.origin, Some(herdr_pane("w1:p2")));
     // The daemon's late handoff cannot undo the wrapper's stop.
     assert_eq!(record.stage, Some(Stage::Stopped));
 }
@@ -246,7 +246,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
                 "claude",
                 Some("its terminal closed"),
                 Stage::Stopped,
-                Some("w1:p2".into()),
+                Some(herdr_pane("w1:p2")),
             )
         },
     )
@@ -261,10 +261,29 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
             agent: "claude".into(),
             session: Some("stopped".into()),
             moved: false,
-            place: Some("w1:p2".into()),
+            origin: Some(herdr_pane("w1:p2")),
         }]
     );
     let kept = LastSession::path(&paths, "workspace", "execution");
-    assert_eq!(saved_place(&kept).as_deref(), Some("w1:p2"));
+    assert_eq!(saved_place(&kept), Some(herdr_pane("w1:p2")));
     assert_eq!(saved_path(&paths, "workspace", "execution"), kept);
+}
+
+fn herdr_pane(pane: &str) -> Origin {
+    serde_json::from_value(serde_json::json!({"host": "herdr", "place": pane})).unwrap()
+}
+
+#[test]
+fn a_pane_recorded_before_origins_is_a_herdr_place() {
+    let record: Record =
+        serde_json::from_value(serde_json::json!({"agent": "codex", "place": "w1:p2"})).unwrap();
+    assert_eq!(record.origin, Some(herdr_pane("w1:p2")));
+    let saved = serde_json::to_value(&record).unwrap();
+    assert_eq!(
+        saved["origin"],
+        serde_json::json!({"host": "herdr", "place": "w1:p2"})
+    );
+    assert_eq!(serde_json::from_value::<Record>(saved).unwrap(), record);
+    let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "tmux"}});
+    assert!(serde_json::from_value::<Record>(unknown).is_err());
 }

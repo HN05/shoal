@@ -788,8 +788,8 @@ starting entry keeps its slot through setup while the launching CLI holds a
 connection open, with a short grace period for Herdr handoffs and daemon
 restarts, until its agent registers; setup begins once the daemon holds the slot; a dead launch cannot hold a slot, and setup
 time stays unbounded. The daemon starts admitted entries through a detached CLI
-worker carrying the queuing terminal's Herdr variables, since terminal launch
-logic stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
+worker carrying the queuing terminal's origin, since terminal launch logic
+stays in the CLI: a background Herdr tab when queued from Herdr, otherwise
 a detached zmx session whose shell is given the worker, because zmx gives
 commands it runs itself no terminal input. That shell is zmx's bash, so the
 session ends once its agent or workspace shell has run, whatever the exit

@@ -4,7 +4,7 @@ mod locking;
 mod origin;
 pub(crate) mod zmx;
 
-pub(crate) use origin::HostName;
+pub(crate) use origin::{HostName, Origin};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;

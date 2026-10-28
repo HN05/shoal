@@ -20,7 +20,7 @@ use crate::{
     cli::agents::ensure_program,
     env,
     sessions::{
-        HostName,
+        HostName, Origin,
         zmx::{CHAT_LABEL, CREATED, Fields, WORKSPACE_LABEL, field, kill, list},
     },
     subprocess::Run,
@@ -51,7 +51,7 @@ impl Host for Zmx {
     }
 
     /// A detached session needs no terminal, so it takes any queued start.
-    fn takes_queued(&self) -> bool {
+    fn takes_queued(&self, _origin: Option<&Origin>) -> bool {
         true
     }
 
