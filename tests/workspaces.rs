@@ -6256,7 +6256,7 @@ fn execution_scope_limits_management_and_expires() {
     let post_setup = fixture.repo.join("post-setup.sh");
     install_test_script(
         &post_setup,
-        "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\ntest -z \"$SHOAL_OUTPUT\" || exit 85\nprintf hook >> hook-runs\nsleep 30 < /dev/null > /dev/null 2>&1 &\n",
+        "#!/bin/sh\ntest -z \"$SHOAL_SCOPE_TOKEN\" || exit 81\ntest -z \"$SHOAL_EXECUTION_ID\" || exit 82\ntest -z \"$SHOAL_RESERVED_PORT_ENV\" || exit 83\ntest -z \"$SHOAL_PORT_WEB\" || exit 84\ntest -z \"$SHOAL_OUTPUT\" || exit 85\nprintf hook >> hook-runs\npython3 -c 'import time; time.sleep(30)' < /dev/null > /dev/null 2>&1 &\n",
     );
     commit_resource_config(
         &fixture.repo,
@@ -12457,7 +12457,8 @@ test "$SHOAL_HOOK" = post_setup || exit 84
 test -f setup-done || exit 85
 test -z "$SHOAL_TEST_FAIL_HOOK" || exit 5
 printf '%s\n%s\n' "$PWD" "$SHOAL_WORKSPACE" > "$HOME/post-setup-ran"
-sleep 30 < /dev/null > /dev/null 2>&1 &
+# macOS hides an orphaned sleep's environment from concurrent setup checks.
+python3 -c 'import time; time.sleep(30)' < /dev/null > /dev/null 2>&1 &
 "#,
         ),
         (
