@@ -5,7 +5,6 @@ use std::path::Path;
 use anyhow::{Context, Result, ensure};
 
 use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
-use crate::subprocess;
 
 const REFS: &str = "refs/shoal/checkpoints/";
 /// Where removals kept their snapshots before checkpoints replaced them.
@@ -163,7 +162,7 @@ async fn snapshot_commit(
             .env("GIT_COMMITTER_NAME", "Shoal")
             .env("GIT_COMMITTER_EMAIL", "shoal@localhost")
             .args(args);
-        subprocess::output(command).await
+        super::output(command).await
     };
     // The worktree's own index keeps paths staged despite ignore rules.
     let own = run_isolated(
@@ -205,7 +204,7 @@ pub async fn apply(worktree: &Path, snapshot: &str) -> Result<()> {
         "--",
         ":/",
     ]);
-    subprocess::output(command).await?;
+    super::output(command).await?;
     Ok(())
 }
 

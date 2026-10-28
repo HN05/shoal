@@ -4,7 +4,6 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::FETCH_SAFE_ARGS;
-use crate::subprocess;
 
 /// Write the objects `reference` reaches and `exclude` does not to `file`,
 /// under the same ref.
@@ -22,7 +21,7 @@ pub async fn create(
     if let Some(exclude) = exclude {
         command.arg(format!("^{exclude}"));
     }
-    subprocess::output(command).await?;
+    super::output(command).await?;
     Ok(())
 }
 

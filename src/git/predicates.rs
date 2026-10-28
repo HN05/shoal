@@ -52,7 +52,7 @@ async fn predicate(command: Command, negative: i32) -> Result<bool> {
         command.as_std().get_program().to_string_lossy(),
         command.as_std().get_args().collect::<Vec<_>>()
     );
-    let output = subprocess::Run::new(command).capture().await;
+    let output = super::bounded(command).capture().await;
     match output.as_ref().ok().and_then(|output| output.status.code()) {
         Some(0) => Ok(true),
         Some(code) if code == negative => Ok(false),

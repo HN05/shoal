@@ -124,7 +124,7 @@ async fn deadline_kills_child_even_when_stdin_is_blocked() {
     let root = tempfile::tempdir().unwrap();
     let pid_file = root.path().join("pid");
     let mut command = shell("echo $$ > \"$1\"; exec tail -f /dev/null");
-    command.arg("--").arg(&pid_file);
+    command.arg("--").arg(&pid_file).current_dir(root.path());
     let exchange = tokio::spawn(
         Run::new(command)
             .input(vec![0; 1024 * 1024])
@@ -149,6 +149,14 @@ async fn deadline_kills_child_even_when_stdin_is_blocked() {
     let error = exchange.await.unwrap().unwrap_err();
     tokio::time::resume();
     assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    // The error names what hung and where.
+    let message = error.to_string();
+    assert!(message.starts_with("`/bin/sh -c echo"), "{message}");
+    assert!(
+        message.contains(&format!("in {}", root.path().display())),
+        "{message}"
+    );
+    assert!(message.contains("within 60 seconds"), "{message}");
     tokio::time::timeout(Duration::from_secs(60), async {
         while unsafe { libc::kill(pid, 0) } == 0 {
             tokio::time::sleep(Duration::from_millis(10)).await;

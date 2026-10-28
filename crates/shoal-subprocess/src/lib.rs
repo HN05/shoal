@@ -74,12 +74,7 @@ impl Run {
     }
 
     async fn run(mut self) -> io::Result<Output> {
-        let program = self
-            .command
-            .as_std()
-            .get_program()
-            .to_string_lossy()
-            .into_owned();
+        let described = describe(self.command.as_std());
         let capture = async {
             let mut child = self
                 .command
@@ -113,7 +108,7 @@ impl Run {
                 io::Error::new(
                     io::ErrorKind::TimedOut,
                     format!(
-                        "{program} timed out after {} seconds",
+                        "{described} did not finish within {} seconds and was stopped",
                         duration.as_secs_f64()
                     ),
                 )
@@ -135,6 +130,20 @@ impl Run {
 
     pub async fn output(self) -> Result<String> {
         String::from_utf8(self.checked().await?.stdout).context("tool output is not UTF-8")
+    }
+}
+
+/// The whole command line, and the directory it runs in when it sets one, so
+/// an error names what hung and where.
+fn describe(command: &std::process::Command) -> String {
+    let line = std::iter::once(command.get_program())
+        .chain(command.get_args())
+        .map(|part| part.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ");
+    match command.get_current_dir() {
+        Some(dir) => format!("`{line}` in {}", dir.display()),
+        None => format!("`{line}`"),
     }
 }
 
@@ -203,9 +212,13 @@ pub fn checked_output(program: &str, output: io::Result<Output>) -> Result<Strin
 }
 
 fn check(program: &str, output: io::Result<Output>) -> Result<Output> {
-    let output = output.with_context(|| {
-        format!("run {program}; ensure it is installed and on the daemon's PATH")
-    })?;
+    let output = match output {
+        // The error names the command; it was found and ran.
+        Err(error) if error.kind() == io::ErrorKind::TimedOut => return Err(error.into()),
+        output => output.with_context(|| {
+            format!("run {program}; ensure it is installed and on the daemon's PATH")
+        })?,
+    };
     if !output.status.success() {
         bail!(
             "{program} failed ({}): {}",

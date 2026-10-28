@@ -267,7 +267,7 @@ async fn target_has_changes(repo: &Path, head: &str, target: &str) -> Result<boo
 async fn trial_merge_tree(repo: &Path, head: &str, target: &str) -> Result<Option<String>> {
     let mut command = super::isolated_command_without_submodules(repo);
     command.args(["merge-tree", "--write-tree", "--no-messages", target, head]);
-    let output = crate::subprocess::Run::new(command).capture().await;
+    let output = super::bounded(command).capture().await;
     if output.as_ref().ok().and_then(|output| output.status.code()) == Some(1) {
         return Ok(None);
     }

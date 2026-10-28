@@ -19,7 +19,7 @@ pub(crate) async fn merge_conflicts(repo: &Path, head: &str, target: &str) -> Re
         head,
         target,
     ]);
-    let output = subprocess::Run::new(command).capture().await;
+    let output = git::bounded(command).capture().await;
     if output.as_ref().ok().and_then(|output| output.status.code()) != Some(1) {
         subprocess::checked_output("git merge-tree", output)
             .context("check merge conflicts; Git 2.38 or newer is required")?;

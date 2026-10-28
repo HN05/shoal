@@ -239,7 +239,8 @@ verified stopped before replacing their service.
 Worktrunk creates and removes worktrees through Shoal's adapter with isolated
 configuration and hooks disabled. Typed adapter outcomes preserve unfamiliar strings;
 only confirmed branch deletion sets the response deletion flag. Invoke external
-tools with argument arrays. Captured subprocesses share optional deadlines and a
+tools with argument arrays. Captured subprocesses share optional deadlines, whose
+error names the command line and directory, and a
 single diagnostic limit, terminate on cancellation, and drain output while sending
 input. Keep writable state outside the binary's directory.
 Service setup manages one per-user launchd/systemd service and refuses to change
@@ -347,7 +348,8 @@ commit ref without refreshing, except when it names the local default branch or 
 configured remote's branch, which is fetched first and must succeed.
 Creation, default-branch refresh, setup, repository removal, and recovery share
 a per-repository Git gate. Shoal's own Git commands skip optional locks, so
-background status checks never hold a worktree's index lock. Daemon ref updates
+background status checks never hold a worktree's index lock, and except clones
+are stopped after ten minutes, so a hung volume fails the request that waits on it. Daemon ref updates
 disable hooks, Git credential prompts, and SSH askpass while preserving the user's
 SSH transport configuration;
 interactive Git commands retain normal prompting. Ancestry and exact-ref checks

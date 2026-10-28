@@ -26,12 +26,28 @@ use crate::tools::Tool;
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::{Context, Result, ensure};
 use tokio::process::Command;
 
 use crate::subprocess;
+
+/// A Git command still running after this long is presumed hung, as on a
+/// volume that stopped answering, and is stopped. Clones, whose time grows
+/// with the repository, have no limit.
+const TIMEOUT: Duration = Duration::from_secs(600);
+
+/// A run of the Git command `command`, stopped after [`TIMEOUT`].
+pub(crate) fn bounded(command: Command) -> subprocess::Run {
+    subprocess::Run::new(command).timeout(TIMEOUT)
+}
+
+/// The stdout of [`bounded`] `command`, which must succeed.
+async fn output(command: Command) -> Result<String> {
+    bounded(command).output().await
+}
 
 pub const LOCAL_REFS: &str = "refs/heads/";
 pub const REMOTE_REFS: &str = "refs/remotes/";
@@ -209,7 +225,7 @@ pub fn isolated_command_without_submodules(repo: &Path) -> Command {
 pub async fn run_without_submodules(repo: &Path, args: &[&str]) -> Result<String> {
     let mut command = isolated_command_without_submodules(repo);
     command.args(args);
-    subprocess::output(command).await
+    output(command).await
 }
 
 /// Merge a resolved source, allowing a fast-forward or a named merge commit.
@@ -244,13 +260,13 @@ pub async fn fast_forward_local(repo: &Path, commit: &str, reference: &str) -> R
 pub async fn run(repo: &Path, args: &[&str]) -> Result<String> {
     let mut command = command(repo);
     command.args(args);
-    subprocess::output(command).await
+    output(command).await
 }
 
 pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
     let mut command = isolated_command(repo);
     command.args(args);
-    subprocess::output(command).await
+    output(command).await
 }
 
 /// Build the tracked command used by `shoal diff`, preserving the caller's
@@ -351,9 +367,7 @@ pub async fn check_branch_name(repo: Option<&Path>, name: &str) -> Result<()> {
         None => Command::new(Tool::Git.program()),
     };
     command.args(["check-ref-format", "--branch", checked]);
-    let validated = subprocess::output(command)
-        .await
-        .context("invalid Git branch name")?;
+    let validated = output(command).await.context("invalid Git branch name")?;
     ensure!(
         validated == format!("{checked}\n"),
         "use a literal Git branch name, not previous-checkout syntax"
@@ -401,7 +415,7 @@ pub async fn worktrees(
 pub async fn repair_worktrees(checkout: &Path, moved: &[PathBuf]) -> Result<()> {
     let mut command = isolated_command(checkout);
     command.args(["worktree", "repair", "--"]).args(moved);
-    subprocess::output(command).await?;
+    output(command).await?;
     Ok(())
 }
 

@@ -192,8 +192,8 @@ async fn merge_land(plan: LandPlan) -> Result<LandedBranch> {
     match checkout {
         Some(checkout) => {
             clean_branch(&checkout, &default).await?;
-            let output = git::merge_commit(&checkout, branch, &source)
-                .output()
+            let output = git::bounded(git::merge_commit(&checkout, branch, &source))
+                .capture()
                 .await
                 .context("merge into default branch")?;
             if !output.status.success() {
