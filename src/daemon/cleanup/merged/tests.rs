@@ -2,6 +2,7 @@ use std::{fs, path::Path, sync::Arc};
 
 use super::*;
 use crate::test_support::{commit, git, manager, repository};
+use crate::{execution::recovery, model::CleanupReason};
 
 const HOUR: u64 = 3600;
 
@@ -56,6 +57,18 @@ impl Fixture {
         git(&self.checkout, &["commit", "-q", "-m", "squash"]);
     }
 
+    async fn unlink_issue(&self) {
+        let id = self.workspace.id.clone();
+        self.manager
+            .store
+            .run(move |db| {
+                db.execute("DELETE FROM workspace_issue WHERE workspace_id=?1", [id])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+
     /// Run a pass `hours` from now and report whether the workspace remains.
     async fn kept_after(&self, hours: u64) -> bool {
         let mut state = State::default();
@@ -98,6 +111,157 @@ async fn merged_workspace_is_removed_once_idle_whatever_its_assignment() {
         notification.kind == NotificationKind::WorkspaceRemoved
             && notification.message.contains("merged cleanup")
     }));
+}
+
+#[tokio::test]
+async fn saved_work_keeps_idle_and_unmerged_workspaces_only() {
+    for agent in [false, true] {
+        let f = Fixture::new().await;
+        f.unlink_issue().await;
+        let directory = f.manager.paths.workspace_state(&f.workspace.id);
+        fs::create_dir_all(&directory).unwrap();
+        let (name, record) = if agent {
+            (
+                "saved.recovery.json",
+                r#"{"agent":"claude","stage":"stopped"}"#,
+            )
+        } else {
+            ("saved.command.json", r#"{"argv":["cargo","test"]}"#)
+        };
+        fs::write(directory.join(name), record).unwrap();
+        assert_eq!(
+            f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
+            Err(CleanupReason::Recovering)
+        );
+        assert!(f.kept_after(24).await, "unmerged saved work stays");
+        f.squash_merge();
+        assert_eq!(
+            f.manager.cleanup_candidacy(&f.workspace.id).await.unwrap(),
+            Err(CleanupReason::Recovering),
+            "idle cleanup still keeps saved work after merging"
+        );
+        let report = super::super::on_request(
+            &f.manager,
+            true,
+            &super::super::Selection {
+                workspaces: super::super::Pick::All,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(report.removed, std::slice::from_ref(&f.workspace.name));
+        assert!(report.kept.is_empty());
+        assert!(!f.kept_after(5).await);
+    }
+}
+
+#[tokio::test]
+async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
+    let f = Fixture::new().await;
+    f.unlink_issue().await;
+    f.squash_merge();
+    f.manager
+        .set_repository_config(
+            &f.workspace.repository_id,
+            Some("[cleanup]\ngrace_minutes = 600\n".into()),
+        )
+        .await
+        .unwrap();
+    let path = recovery::record_path(&f.manager.paths, &f.workspace.id, "saved");
+    fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
+    let record = r#"{"agent":"claude","stage":"stopped","session":"kept-session","stop_reason":"memory pressure"}"#;
+    fs::write(&path, record).unwrap();
+    let saved = recovery::Record::load(&path).unwrap().unwrap();
+    let queued = f
+        .manager
+        .queue_stopped_restore(&f.workspace.id, "saved", Default::default())
+        .await
+        .unwrap();
+
+    assert!(f.kept_after(5).await);
+    assert!(
+        f.manager
+            .cleanup_at(&f.workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(path.exists());
+    assert!(
+        f.manager
+            .queue_entries()
+            .await
+            .unwrap()
+            .iter()
+            .any(|entry| entry.id == queued.id)
+    );
+    let id = f.workspace.id.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE cleanup_grace SET cleanup_at=0 WHERE workspace_id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(!f.kept_after(5).await);
+    assert!(!path.exists());
+    assert!(f.manager.queue_entries().await.unwrap().is_empty());
+    let removed = f.manager.removed_workspaces().await.unwrap();
+    let removed = removed.first().unwrap();
+    assert_eq!(removed.cause, EventCause::Merged);
+    assert_eq!(removed.agents.len(), 1);
+    let agent = removed.agents.first().unwrap();
+    assert_eq!(agent.execution, "saved");
+    assert_eq!(agent.record, saved);
+
+    let restored = f.manager.restore_workspace("topic").await.unwrap();
+    assert!(restored.warnings.is_empty(), "{:?}", restored.warnings);
+    let workspace = restored.opened.workspace;
+    assert_eq!(
+        recovery::Record::load(&recovery::record_path(
+            &f.manager.paths,
+            &workspace.id,
+            "saved"
+        ))
+        .unwrap(),
+        Some(saved)
+    );
+    assert!(f.manager.queue_entries().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
+    let f = Fixture::new().await;
+    f.squash_merge();
+    let path = recovery::record_path(&f.manager.paths, &f.workspace.id, "saved");
+    fs::create_dir_all(f.manager.paths.workspace_state(&f.workspace.id)).unwrap();
+    fs::write(path, r#"{"agent":"claude","stage":"stopped"}"#).unwrap();
+    let id = f.workspace.id.clone();
+    f.manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(f.kept_after(5).await);
+    assert!(
+        f.manager
+            .merged_snapshot(&f.workspace.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(f.manager.cleanup_at(&f.workspace.id).await.unwrap(), None);
 }
 
 #[tokio::test]

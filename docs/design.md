@@ -1606,12 +1606,14 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 (`[cleanup.merged]`, default 240 idle minutes) decides from the workspace's state
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
-way, no open question, nothing running or saved for resume, no leases, permits, directory users,
+way, no open question, nothing running, no leases, permits, directory users,
 stacked or child workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
 minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
-workspace. `shoal cleanup` is the one command for what Shoal left behind: the
+workspace. Idle cleanup retains saved agents and stopped commands; merged cleanup
+drops queued restores and keeps the agents in removal's record for restore.
+`shoal cleanup` is the one command for what Shoal left behind: the
 candidates of both rules, without their idle periods and including where they are
 disabled, kept branches, and shared caches. It lists them with nothing selected,
 since deleting a kept branch loses its commits, and removes what the user picks;

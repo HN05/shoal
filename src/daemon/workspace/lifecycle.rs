@@ -456,6 +456,9 @@ impl Manager {
         if let Some(reason) = self.assignment_reason(id).await? {
             return Ok(Some(reason));
         }
+        if crate::execution::recovery::pending(&self.paths, id)? {
+            return Ok(Some(CleanupReason::Recovering));
+        }
         self.usage_reason(id).await
     }
 
@@ -494,11 +497,8 @@ impl Manager {
         Ok(None)
     }
 
-    /// Commands, saved stopped work and leases.
+    /// Active commands and leases; saved stopped work does not imply use.
     async fn usage_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
-        if crate::execution::recovery::pending(&self.paths, id)? {
-            return Ok(Some(CleanupReason::Recovering));
-        }
         if self.workspace_has_executions(id).await? {
             return Ok(Some(CleanupReason::RunningCommands));
         }

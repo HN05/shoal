@@ -291,8 +291,9 @@ instead of the PR delivery guidance below.
   cleanup; only holds, open questions, child workspaces and queued agent launches keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
-  Merged cleanup ignores links, watches and completion but never holds, open
-  questions, commands, saved stopped work, leases, directory users or a Git
+  Merged cleanup ignores links, watches, completion and saved stopped work,
+  dropping queued restores and keeping agents in removal's record for restore,
+  but never holds, open questions, running/unknown commands, leases, directory users or a Git
   operation under way; its idle period is persisted so restarts cannot shorten
   or reset it, and removal rechecks its snapshot through the shared path.
   Every unattended removal except for disk space waits `[cleanup] grace_minutes`,

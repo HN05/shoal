@@ -2726,7 +2726,8 @@ Deleted directories are forgotten even when disabled, releasing resources and
 retaining branches; moved worktrees or recorded commands need manual recovery.
 HEAD and commands reset the timer; file changes, including ignored files, restart
 it when it expires.
-Running/unknown commands, directory users (including shells), dirty/unpushed work,
+Running/unknown commands, saved stopped work, directory users (including shells),
+dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and failed checks block cleanup. Pushed means reachable
 from locally known remote branches, or merged into the default branch as removal
 decides; no fetch.
@@ -2758,12 +2759,14 @@ gives it, against the default branch's remote-tracking branch, fetched at most
 every ten minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
-Git operation under way, open [questions](#questions), commands, agents saved for
-`shoal resume`, directory users, leases, permits, holds and
+Git operation under way, open [questions](#questions), running/unknown commands,
+directory users, leases, permits, holds and
 workspaces stacked on it keep it too; PR cleanup moves stacked workspaces once the base's PR merges. Shoal records the
 time of each command start and exit, lease and hold change, and takes the newest
 change time of the worktree's files, including ignored ones, and of its HEAD,
 index and reflog; the period runs from the latest of those and survives restarts.
+Saved agents and stopped commands do not keep a merged workspace; removal drops
+queued restores and keeps the agents for `shoal work restore`.
 Removals record the `merged` event cause.
 
 ```toml
