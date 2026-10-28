@@ -745,45 +745,29 @@ impl Manager {
         let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
         let expired = self
             .store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                let stale = tx
-                    .prepare(
-                        "SELECT id,name,kind,workspace_id IS NULL FROM agent_queue
-                         WHERE state=?1 AND env IS NOT NULL AND seen_at<?2",
-                    )?
-                    .query_map(params![QueueState::Starting, cutoff], |row| {
-                        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
-                    })?
-                    .collect::<rusqlite::Result<Vec<(String, String, QueueKind, bool)>>>()?;
-                let mut expired = Vec::new();
-                for (id, name, kind, unopened) in stale {
-                    if held.contains(&id) {
-                        continue;
-                    }
-                    tx.execute("DELETE FROM agent_queue WHERE id=?1", [&id])?;
-                    let failure = match kind {
-                        QueueKind::Launch if unopened => {
-                            "its launch ended without opening the workspace"
-                        }
-                        QueueKind::Launch => continue,
-                        QueueKind::Restore => "its restore ended before the agent started",
-                    };
-                    expired.push((name, failure));
-                }
-                tx.commit()?;
-                Ok(expired)
-            })
+            .run(move |db| expiry::expire_starts(db, &held, cutoff))
             .await?;
-        for (name, failure) in expired {
-            self.notify(
-                Some(&name),
-                NotificationKind::QueueFailed,
-                format!("{name} did not start from the agent queue: {failure}"),
-            )
-            .await;
+        for failure in expired {
+            self.report_expired_start(failure).await;
         }
         Ok(())
+    }
+
+    async fn report_expired_start(&self, failure: expiry::FailedStart) {
+        let (name, reason) = match failure {
+            expiry::FailedStart::UnopenedLaunch(name) => {
+                (name, "its launch ended without opening the workspace")
+            }
+            expiry::FailedStart::UnstartedRestore(name) => {
+                (name, "its restore ended before the agent started")
+            }
+        };
+        self.notify(
+            Some(&name),
+            NotificationKind::QueueFailed,
+            format!("{name} did not start from the agent queue: {reason}"),
+        )
+        .await;
     }
 
     /// Forget restores whose wrapper has been gone for the grace period, such
@@ -1241,6 +1225,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
 }
 
 mod dependencies;
+mod expiry;
 mod state;
 mod stopped;
 mod wake;
