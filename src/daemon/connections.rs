@@ -24,7 +24,8 @@ mod running;
 
 /// Most request/response operations running at once. A request past it is
 /// refused at once with the requests that hold the capacity, so a few that
-/// hang cannot keep the daemon from accepting the rest.
+/// hang cannot keep the daemon from accepting the rest. Daemon administration
+/// needs no slot, so status and shutdown answer even at the limit.
 const MAX_REQUESTS: usize = 128;
 /// Descriptors kept for the daemon's own files and the commands it runs.
 const RESERVED_DESCRIPTORS: usize = 512;
@@ -51,7 +52,7 @@ struct Limit {
 
 /// Capacity a connection holds until it closes.
 pub(super) struct Slot {
-    _permit: OwnedSemaphorePermit,
+    _permit: Option<OwnedSemaphorePermit>,
     _running: Option<running::Entry>,
 }
 
@@ -87,7 +88,13 @@ impl Capacity {
                 );
             };
             return Ok(Slot {
-                _permit: permit,
+                _permit: Some(permit),
+                _running: None,
+            });
+        }
+        if method.controls_daemon() {
+            return Ok(Slot {
+                _permit: None,
                 _running: None,
             });
         }
@@ -101,7 +108,7 @@ impl Capacity {
             );
         };
         Ok(Slot {
-            _permit: permit,
+            _permit: Some(permit),
             _running: Some(self.running.start(method.name())),
         })
     }

@@ -6,6 +6,7 @@ use tokio::{
 };
 
 use super::*;
+use crate::protocol::RepositoryMethod::ListRepositories;
 use crate::{
     daemon::{Server, questions::Ask, serve},
     protocol::{
@@ -64,12 +65,13 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     let socket = &manager.paths.socket.clone();
     let listener = UnixListener::bind(socket).unwrap();
     // One long-lived slot, which the first wait takes.
+    let capacity = Arc::new(Capacity::new(1, 1));
     let server = Server {
         manager: manager.clone(),
         started: Instant::now(),
         managed: false,
         shutdown: watch::channel(false).0,
-        capacity: Arc::new(Capacity::new(1, 1)),
+        capacity: capacity.clone(),
     };
     let serving = tokio::spawn(async move {
         loop {
@@ -85,6 +87,12 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         ask: ask.clone(),
     };
     let mut waiting = send(socket, await_answer()).await;
+    bounded(async {
+        while capacity.long_lived.permits.available_permits() > 0 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
 
     let wrapper = crate::process::identity::capture(std::process::id())
         .unwrap()
@@ -157,23 +165,25 @@ fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
     };
     let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.
-    capacity.admit(&DaemonMethod::Status.into()).unwrap();
+    capacity.admit(&ListRepositories.into()).unwrap();
 }
 
 #[tokio::test]
 async fn a_request_past_the_limit_is_refused_with_what_holds_the_capacity() {
     let capacity = Capacity::new(1, 1);
-    let status = Method::from(DaemonMethod::Status);
-    let held = capacity.admit(&status).unwrap();
-    let Err(error) = capacity.admit(&status) else {
+    let list = Method::from(ListRepositories);
+    let held = capacity.admit(&list).unwrap();
+    let Err(error) = capacity.admit(&list) else {
         panic!("a request past the limit was admitted");
     };
     let message = format!("{error:#}");
     assert!(message.contains("busy"), "{message}");
     assert!(message.contains("all 1 request slots"), "{message}");
-    assert!(message.contains("1 status (oldest"), "{message}");
+    assert!(message.contains("1 list_repositories (oldest"), "{message}");
+    // Daemon administration needs no slot.
+    capacity.admit(&DaemonMethod::Status.into()).unwrap();
     drop(held);
-    capacity.admit(&status).unwrap();
+    capacity.admit(&list).unwrap();
 }
 
 #[tokio::test]
@@ -188,7 +198,7 @@ async fn connections_are_accepted_and_answered_while_requests_hold_every_slot() 
         shutdown: watch::channel(false).0,
         capacity: Arc::new(Capacity::new(1, 1)),
     };
-    let _held = server.capacity.admit(&DaemonMethod::Status.into()).unwrap();
+    let _held = server.capacity.admit(&ListRepositories.into()).unwrap();
     let serving = tokio::spawn(async move {
         loop {
             let stream = accept(&listener).await.unwrap();
@@ -198,13 +208,15 @@ async fn connections_are_accepted_and_answered_while_requests_hold_every_slot() 
     });
     // More clients than the slots, each answered rather than left queued.
     for _ in 0..3 {
-        let Body::Error { message, .. } =
-            reply(&mut send(socket, DaemonMethod::Status).await).await
+        let Body::Error { message, .. } = reply(&mut send(socket, ListRepositories).await).await
         else {
             panic!("expected the daemon to refuse the request as busy");
         };
         assert!(message.contains("busy"), "{message}");
     }
+    // Status still answers, so recovery commands can act on the daemon.
+    let status = reply(&mut send(socket, DaemonMethod::Status).await).await;
+    assert!(matches!(status, Body::Status(_)), "{status:?}");
     serving.abort();
 }
 

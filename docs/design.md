@@ -58,7 +58,7 @@ features; the manifest and CI toolchain advance together, with locked dependenci
 The daemon raises its open file limit at startup and accepts every connection,
 whatever its requests hold. Request/response operations share a fixed limit;
 executions, waits and streams take a separate share of the remaining descriptors,
-so neither can block the other. A request past the limit is refused at once with
+so neither can block the other, and daemon administration takes neither. A request past the limit is refused at once with
 the requests that hold it, and a request that runs past a minute is logged, again
 when it ends. A request that only reads state is cancelled when its client hangs
 up; one that changes state finishes, so a hangup never leaves it half done. When the long-lived share is full, a request whose client sends it
