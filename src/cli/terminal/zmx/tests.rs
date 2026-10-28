@@ -47,3 +47,21 @@ fn a_watch_follows_only_the_session_it_began_with() {
     assert!(!hosts(&sessions, &watched("bare", None)));
     assert!(!hosts(&sessions, &watched("gone", None)));
 }
+
+#[test]
+fn a_failed_demo_worker_ends_its_shell() -> Result<()> {
+    let command = session_command(&["false"], &NewSession::default());
+    let root = tempfile::tempdir()?;
+    let marker = root.path().join("shell-survived");
+    let status = std::process::Command::new("sh")
+        .args([
+            "-c",
+            &format!("{}\ntouch \"$1\"", command.trim_end_matches('\r')),
+            "sh",
+        ])
+        .arg(&marker)
+        .status()?;
+    assert!(!status.success());
+    assert!(!marker.exists());
+    Ok(())
+}

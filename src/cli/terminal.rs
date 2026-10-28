@@ -366,6 +366,8 @@ pub(in crate::cli) struct Start<'a> {
 /// A demo a host starts in a new background place, as [`Start`] describes
 /// other work; its command depends on the place's handle.
 pub(in crate::cli) struct Demo<'a> {
+    pub state: &'a Path,
+    pub workspace: &'a str,
     pub cwd: &'a Path,
     pub label: &'a str,
     pub env: &'a [(&'a str, String)],
@@ -934,6 +936,8 @@ pub(in crate::cli) async fn start_demo(
     let env = place_env(ctx)?;
     for host in hosts {
         let demo = Demo {
+            state: &ctx.paths.state,
+            workspace: &workspace.id,
             cwd: &workspace.path,
             label: &demo_label(host, workspace, name),
             env: &env,

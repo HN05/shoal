@@ -251,7 +251,17 @@ async fn unused_name(label: &str) -> Result<String> {
 async fn start_detached(start: &Start<'_>) -> Result<()> {
     ensure_program("background launch", Tool::Zmx.program())?;
     let name = unused_name(start.label).await?;
-    run_in_new_session(&name, start.cwd, start.argv, start.env, &[]).await
+    run_in_new_session(
+        &name,
+        start.cwd,
+        start.argv,
+        &NewSession {
+            environment: start.env,
+            keep_failed_shell: true,
+            ..Default::default()
+        },
+    )
+    .await
 }
 
 /// Start `demo` in a new detached session, whose worker ends the session
@@ -263,56 +273,116 @@ async fn start_demo(demo: &Demo<'_>) -> Result<String> {
         &session,
         demo.cwd,
         &(demo.worker)(&session)?,
-        demo.env,
-        super::NOT_INHERITED_BY_DEMOS,
+        &NewSession {
+            environment: demo.env,
+            clear: super::NOT_INHERITED_BY_DEMOS,
+            labels: vec![
+                labels(Owner::Workspace(demo.workspace), ""),
+                crate::sessions::zmx::state_label(demo.state),
+            ],
+            ..Default::default()
+        },
     )
     .await?;
     Ok(session)
 }
 
-/// Create the session `name` at `cwd` and run `argv` there as
-/// `start_detached` describes, without the variables `clear` names.
+/// A detached session's shell setup and ownership labels.
+#[derive(Default)]
+struct NewSession<'a> {
+    environment: &'a [(&'a str, String)],
+    clear: &'a [&'a str],
+    labels: Vec<String>,
+    keep_failed_shell: bool,
+}
+
+/// Create a session, then hand its shell the worker. A failed handoff closes
+/// the session so it cannot leave an idle shell behind.
 async fn run_in_new_session(
     name: &str,
     cwd: &Path,
     argv: &[OsString],
-    env: &[(&str, String)],
-    clear: &[&str],
+    launch: &NewSession<'_>,
 ) -> Result<()> {
-    let words = argv
-        .iter()
+    let words = worker_words(argv)?;
+    create_session(name, cwd, launch).await?;
+    let result = start_session_worker(name, &words, launch).await;
+    if result.is_err() {
+        let _ = kill(name).await;
+    }
+    result
+}
+
+fn worker_words(argv: &[OsString]) -> Result<Vec<&str>> {
+    argv.iter()
         .map(|arg| arg.to_str().context("Shoal command path is not UTF-8"))
-        .collect::<Result<Vec<_>>>()?;
+        .collect()
+}
+
+async fn create_session(name: &str, cwd: &Path, launch: &NewSession<'_>) -> Result<()> {
     let mut create = Command::new(Tool::Zmx.program());
     create
         .args(["run", name, "-d", "true"])
         .current_dir(cwd)
-        .envs(env.iter().map(|(name, value)| (name, value)))
+        .envs(launch.environment.iter().map(|(name, value)| (name, value)))
         .stdin(std::process::Stdio::null());
-    for name in clear {
+    for name in launch.clear {
         create.env_remove(name);
     }
     Run::new(create)
         .checked()
         .await
         .context("create a zmx session")?;
+    Ok(())
+}
+
+async fn start_session_worker(name: &str, words: &[&str], launch: &NewSession<'_>) -> Result<()> {
+    label_session(name, &launch.labels).await?;
+    send_session_worker(name, words, launch).await
+}
+
+async fn label_session(name: &str, labels: &[String]) -> Result<()> {
+    if labels.is_empty() {
+        return Ok(());
+    }
+    let mut set = Command::new(Tool::Zmx.program());
+    set.args(["set", name]).args(labels);
+    Run::new(set)
+        .checked()
+        .await
+        .context("label the zmx session")?;
+    Ok(())
+}
+
+async fn send_session_worker(name: &str, words: &[&str], launch: &NewSession<'_>) -> Result<()> {
     let mut send = Command::new(Tool::Zmx.program());
-    // A session zmx started elsewhere may carry them anyway.
-    let unset = if clear.is_empty() {
-        String::new()
-    } else {
-        format!("unset {}; ", clear.join(" "))
-    };
-    send.args(["send", name]).arg(format!(
-        "{unset}{}=1 {} && exit; exec \"$SHELL\" -l\r",
-        env::ENDS_SESSION,
-        crate::shell::quote(&words)
-    ));
+    send.args(["send", name])
+        .arg(session_command(words, launch));
     Run::new(send)
         .checked()
         .await
         .context("start Shoal in its zmx session")?;
     Ok(())
+}
+
+/// A demo always ends its shell; other launches keep failures visible there.
+fn session_command(words: &[&str], launch: &NewSession<'_>) -> String {
+    // A session zmx started elsewhere may carry these variables anyway.
+    let unset = if launch.clear.is_empty() {
+        String::new()
+    } else {
+        format!("unset {}; ", launch.clear.join(" "))
+    };
+    let finish = if launch.keep_failed_shell {
+        " && exit; exec \"$SHELL\" -l"
+    } else {
+        "; exit"
+    };
+    format!(
+        "{unset}{}=1 {}{finish}\r",
+        env::ENDS_SESSION,
+        crate::shell::quote(words)
+    )
 }
 
 /// Attach this terminal to the demo's session until the user detaches.
