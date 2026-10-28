@@ -3,6 +3,7 @@ use anyhow::Result;
 
 use super::{
     AddOptions,
+    agent::AddSettings,
     plan::{AddPlan, planned_workspace_name},
     target::AddTarget,
 };
@@ -54,6 +55,7 @@ pub(super) async fn after_dependencies(
 pub(super) async fn admit(
     ctx: &Context,
     target: &AddTarget,
+    settings: &AddSettings<'_>,
     plan: &mut AddPlan,
     issue: Option<&issues::Issue>,
     options: &AddOptions,
@@ -62,12 +64,13 @@ pub(super) async fn admit(
     let Some(agent) = plan.agent_name() else {
         return Ok(None);
     };
+    let now = options.starts_now(plan, settings.get().await?.focus);
     let launch = agent_queue::Launch {
         agent,
         name: planned_workspace_name(ctx, target, &plan.creation).await?,
         issue_title: issue.map(|issue| issue.title.clone()),
-        now: options.starts_now(),
-        after: launch_dependencies(ctx, target, issue, options, after).await?,
+        now,
+        after: launch_dependencies(ctx, target, issue, now, after).await?,
     };
     match agent_queue::admit(ctx, plan, launch).await? {
         agent_queue::Admission::Start { entry, base } => {
@@ -94,15 +97,15 @@ pub(super) async fn failing_entry<T>(
 }
 
 /// The work a launch waits for: `after`, and the open issues the forge
-/// records as blocking its issue. A launch that starts now waits for nothing.
+/// records as blocking its issue. A launch that starts `now` waits for nothing.
 async fn launch_dependencies(
     ctx: &Context,
     target: &AddTarget,
     issue: Option<&issues::Issue>,
-    options: &AddOptions,
+    now: bool,
     mut after: Vec<Dependency>,
 ) -> Result<Vec<Dependency>> {
-    if options.starts_now() {
+    if now {
         return Ok(Vec::new());
     }
     if let Some(issue) = issue {

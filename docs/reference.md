@@ -1173,8 +1173,10 @@ session labelled for `shoal attach`. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the
 workspace for two minutes, records a `queue_failed` notification with the reason
 and frees the slot. Deleting the workspace during setup frees it without one.
-`--now` starts at once and still takes a slot, and so does `--focus`, since the
-user waits for a focused launch.
+`--now` starts at once and still takes a slot, and so does a launch the user
+waits for: one `--focus` focuses, or an agent without an issue or arguments that
+the `focus` setting does not send to the background, unless `--after` makes it
+wait for work.
 
 An agent's automatic restore after a protection stop waits in the same queue,
 in order with launches, from when its processes stop. A restore of an agent

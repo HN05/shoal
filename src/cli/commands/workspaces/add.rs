@@ -40,10 +40,15 @@ pub(in crate::cli::commands) struct AddOptions {
 }
 
 impl AddOptions {
-    /// Whether the agent skips the queue: a focused launch is one the user
-    /// waits for, so it starts at once as `--now` does.
-    fn starts_now(&self) -> bool {
-        self.now || self.focus
+    /// Whether `plan`'s agent skips the queue: the user waits for a focused
+    /// launch, so it starts at once as `--now` does. That is a launch `--focus`
+    /// focuses, or one waiting for the user's input that the `focus` setting
+    /// does not send to the background; the setting alone does not, so it
+    /// cannot switch the limit off. A launch that waits for work queues.
+    fn starts_now(&self, plan: &AddPlan, focus_setting: Option<bool>) -> bool {
+        self.now
+            || self.focus
+            || (self.after.is_empty() && !plan.runs_unattended() && focus_setting != Some(false))
     }
 }
 
@@ -77,7 +82,17 @@ pub(in crate::cli::commands) async fn add(
         options.after.is_empty() || plan.agent_name().is_some(),
         "--after queues an agent; name one with --agent"
     );
-    if let Some(queued) = admit(ctx, &target, &mut plan, issue.as_ref(), &options, after).await? {
+    if let Some(queued) = admit(
+        ctx,
+        &target,
+        &settings,
+        &mut plan,
+        issue.as_ref(),
+        &options,
+        after,
+    )
+    .await?
+    {
         return Ok(queued);
     }
     let handoff = start_beside(ctx, &target, &settings, &mut plan, issue.as_ref(), options).await;
@@ -86,3 +101,6 @@ pub(in crate::cli::commands) async fn add(
     }
     execute_add_with_target(ctx, plan, target, issue).await
 }
+
+#[cfg(test)]
+mod tests;
