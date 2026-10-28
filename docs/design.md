@@ -193,7 +193,12 @@ the daemon holds, so the inhibitor cannot outlive a daemon that crashes or is
 killed. A failed inhibitor notifies and waits for the work to end or the config
 to reload instead of retrying in a loop.
 Manual stop ends connected tracked executions through their wrappers, preserving
-work and leases. Agents save session recovery for explicit resume; user commands
+work and leases, and means the user wants its agents down until they resume
+them: each stopped agent of the workspace whose execution ended, including one
+a signal or protection stopped before, becomes a last session, as an agent that
+exits on its own leaves one. The wrapper saves its recovery record as for any
+stop and the daemon converts it once the stop finishes, so wrappers of earlier
+releases stop the same way. Taking agents down briefly is `shoal restart`. User commands
 save their arguments, which resume reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers cannot stop executions. A hangup
@@ -209,9 +214,9 @@ agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
 quit it on purpose, so it takes no agent slot, keeps nothing from cleanup and
 comes back only when `shoal resume` names it or `--all` queues it. A workspace
-keeps one per agent; a new agent replaces them, since the user
-moved on, while a restored one consumes only its own, which the wrapper says
-when it registers.
+keeps one per agent, so resuming several stopped together restores each; a new
+agent replaces them, since the user moved on, while a restored one consumes
+only its own, which the wrapper says when it registers.
 Built-in agents resume the session ID their hooks report, since the workspace's
 latest session may belong to another agent.
 

@@ -840,10 +840,11 @@ impl Manager {
         .await
     }
 
-    /// Stop as [`Manager::stop_workspace`] does at the user's request. With
-    /// `acknowledge_unproven`, executions whose launch identity was never
-    /// recorded count as ended once nothing of them is visible, because the
-    /// user checked.
+    /// Stop as [`Manager::stop_workspace`] does at the user's request, then
+    /// keep the stopped agents as last sessions, which stay down until the
+    /// user resumes them. With `acknowledge_unproven`, executions whose launch
+    /// identity was never recorded count as ended once nothing of them is
+    /// visible, because the user checked.
     pub async fn stop_workspace_manually(
         &self,
         selector: &str,
@@ -855,7 +856,8 @@ impl Manager {
             StopPolicy::RequireCompleteProof
         };
         self.stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
-            .await
+            .await?;
+        self.keep_stopped_as_last_sessions(selector).await
     }
 
     /// Stop executions other than agents that protection already stopped,

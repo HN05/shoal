@@ -493,6 +493,24 @@ pub(crate) fn save_stopped_agents(
     Ok(())
 }
 
+/// Keep the agent stopped as `id`, whose recovery record is at `path`, as a
+/// last session instead.
+pub(crate) fn keep_as_last_session(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    path: &Path,
+) -> Result<()> {
+    let _claim = claim(path)?;
+    let Some(record) = Record::load(path)? else {
+        return Ok(());
+    };
+    record
+        .into_last_session(id.to_owned())
+        .write(paths, workspace_id)?;
+    consume(path)
+}
+
 /// Remove a record whose stop never reached the agent, returning whether it
 /// did. A record the wrapper saved after stopping the agent is kept.
 pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -> Result<bool> {

@@ -5411,8 +5411,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         .path()
         .join("state/workspaces")
         .join(workspace["id"].as_str().unwrap());
+    // The agents stay down as last sessions; the command is stopped work.
     for id in &ids {
-        assert!(state.join(format!("{id}.recovery.json")).exists());
+        assert!(state.join(format!("{id}.last-session.json")).exists());
+        assert!(!state.join(format!("{id}.recovery.json")).exists());
     }
     let commands = fs::read_dir(&state)
         .unwrap()
@@ -5442,7 +5444,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
                 .status
                 .success()
         );
-        assert!(!state.join(format!("{id}.recovery.json")).exists());
+        assert!(!state.join(format!("{id}.last-session.json")).exists());
     }
     // The stopped command reaches the first restored session only.
     let restored = fs::read_to_string(path.join("restored")).unwrap();

@@ -160,12 +160,13 @@ shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal messages send "Stop the dev server" --workspace fix-login  # Message the workspace's agents
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
-shoal stop fix-login          # Stop agents and commands; save them for shoal resume
+shoal stop fix-login          # Stop agents and commands; they stay down until shoal resume
 shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Queue the restore of stopped agents; report stopped commands
+shoal resume fix-login        # Continue its stopped agent
 shoal resume fix-login --now  # Restore its stopped agent at once
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
@@ -264,11 +265,13 @@ workspaces and leases; before that, Shoal messages running agents to reduce load
 false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
-executions. Agents restore once space returns; `shoal resume` restores the rest. Stop agents manually with `shoal stop`, then restore
-a stopped session with `shoal resume`, which queues the restore to start as
-`max_agents` allows; `--now` starts it at once. Agents whose terminal closed, or
-that a logout or reboot stopped, come back through the same queue on their own.
-`shoal resume` also continues an agent that exited on its own, such as one you quit. Codex and Claude automatically continue
+executions. Agents restore once space returns; `shoal resume` restores the rest. Stop agents manually with `shoal stop`:
+they stay down, holding no agent slot and no workspace from cleanup, until
+`shoal resume` continues them, as it continues an agent that exited on its own,
+such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
+resume --all` queues the restores to start as `max_agents` allows; `--now`
+starts them at once. Agents whose terminal closed, or that a logout or reboot
+stopped, come back through the same queue on their own. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.
 

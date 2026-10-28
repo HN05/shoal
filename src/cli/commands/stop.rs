@@ -1,4 +1,5 @@
-//! Stopping saves agent sessions and commands for `shoal resume`.
+//! Stopping keeps agent sessions and commands for `shoal resume`; agents
+//! stay down until it continues them.
 use anyhow::{Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
@@ -43,11 +44,11 @@ pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> 
 async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     stop(ctx, &workspace, yes).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
-    let saved = recovery::pending(&ctx.paths, &workspace.id)?;
+    let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let message = if saved {
         format!(
-            "Workspace processes stopped; restore with shoal resume {}",
-            workspace.name
+            "Workspace processes stopped. {}",
+            continue_hint(&workspace.name)
         )
     } else {
         "Workspace processes stopped".into()
@@ -133,13 +134,13 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
         )?;
         return Ok(0);
     }
-    stop_each(ctx, report, &running, " --all", false).await
+    stop_each(ctx, report, &running, "--all", false).await
 }
 
 /// Stop `workspaces` in parallel, adding to `report`; one failure does not
 /// keep the others running, and an execution Shoal cannot prove ended fails
-/// its workspace unless `acknowledge_unproven`. `resume` follows `shoal
-/// resume` in the hint to restore them, which otherwise names each one.
+/// its workspace unless `acknowledge_unproven`. `resume` is what the hint
+/// to continue them passes `shoal resume`; empty, it names each one.
 async fn stop_each(
     ctx: &Context,
     mut report: ui::Report,
@@ -170,8 +171,16 @@ async fn stop_each(
     }
     let summary = match (stopped.is_empty(), resume.is_empty()) {
         (true, _) => String::new(),
-        (false, true) => format!("Restore with shoal resume {}", stopped.join(" ")),
-        (false, false) => format!("Restore with shoal resume{resume}"),
+        (false, true) => continue_hint(&stopped.join(" ")),
+        (false, false) => continue_hint(resume),
     };
     report.finish(ctx, &summary)
+}
+
+/// How to continue what `shoal stop` stopped in `targets`, the arguments of
+/// `shoal resume`, and how to take agents down only briefly instead.
+fn continue_hint(targets: &str) -> String {
+    format!(
+        "Continue with shoal resume {targets}. To restart agents without stopping them, use shoal restart"
+    )
 }

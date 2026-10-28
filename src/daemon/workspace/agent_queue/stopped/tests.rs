@@ -239,6 +239,33 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
 }
 
 #[tokio::test]
+async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "work").await;
+    signal_stop(&manager, &workspace, "signalled");
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await.len(), 1);
+    manager
+        .stop_workspace_manually("work", false)
+        .await
+        .unwrap();
+    // Nothing restores it, and it holds no slot or cleanup back.
+    assert!(queue(&manager).await.is_empty());
+    assert!(!record_path(&manager.paths, &workspace.id, "signalled").exists());
+    assert!(!recovery::pending(&manager.paths, &workspace.id).unwrap());
+    let [last] = recovery::LastSession::all(&manager.paths, &workspace.id)
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(
+        (last.execution.as_str(), last.agent.as_str()),
+        ("signalled", "claude")
+    );
+}
+
+#[tokio::test]
 async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

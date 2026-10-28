@@ -767,7 +767,8 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     use crate::execution::recovery::{LastSession, Saved};
     let (_root, manager, workspace, serving) = fixture().await;
     let last = || LastSession::all(&manager.paths, &workspace.id).unwrap();
-    // An agent Shoal stops is stopped work that keeps its session.
+    // An agent `shoal stop` stops leaves its session as one that exits on its
+    // own does, which uses no slot and keeps nothing from cleanup.
     let agent = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     report_session(&manager, &workspace, "stopped-session").await;
@@ -776,22 +777,18 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
         0
     );
     bounded(agent).await.unwrap().unwrap();
-    assert_eq!(last(), []);
-    let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
-    let record = crate::execution::recovery::Record::load(&saved.agents[0].1)
-        .unwrap()
-        .unwrap();
-    assert_eq!(record.session.as_deref(), Some("stopped-session"));
-    assert_eq!(
-        bounded(resume_isolated(&manager, &workspace, true))
-            .await
+    let [stopped] = last().try_into().unwrap();
+    assert_eq!(stopped.session.as_deref(), Some("stopped-session"));
+    assert!(
+        Saved::load(&manager.paths, &workspace.id)
             .unwrap()
-            .unwrap(),
-        0
+            .agents
+            .is_empty()
     );
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
 
-    // One that exits on its own leaves its session to resume, which uses no
-    // slot and keeps nothing from cleanup.
+    // A new agent replaces it, and leaves its own session when it exits on
+    // its own.
     fs::remove_file(workspace.path.join("started")).unwrap();
     let agent = launch_child(
         &manager,

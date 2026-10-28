@@ -231,3 +231,31 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
     LastSession::forget_all(&paths, "workspace").unwrap();
     assert!(Saved::load(&paths, "workspace").unwrap().is_empty());
 }
+
+#[test]
+fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let record = write_record(
+        &paths,
+        "workspace",
+        "execution",
+        Record {
+            session: Some("stopped".into()),
+            ..Record::new("claude", Some("its terminal closed"), Stage::Stopped, None)
+        },
+    )
+    .unwrap();
+    keep_as_last_session(&paths, "workspace", "execution", &record).unwrap();
+    assert!(!record.exists());
+    assert!(!pending(&paths, "workspace").unwrap());
+    assert_eq!(
+        LastSession::all(&paths, "workspace").unwrap(),
+        [LastSession {
+            execution: "execution".into(),
+            agent: "claude".into(),
+            session: Some("stopped".into()),
+            moved: false,
+        }]
+    );
+}

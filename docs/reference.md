@@ -265,7 +265,11 @@ waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace...]` stops tracked agents and commands through their wrappers,
-which print what stopped them and how to restore them, retaining work and resource leases. Agents save recovery records; commands started
+which print what stopped them and how to restore them, retaining work and resource leases. Its agents, and those
+stopped there before, stay down until `shoal resume` continues them: each
+becomes a last session, as an agent that exits on its own leaves, which holds
+no agent slot, keeps nothing from cleanup and nothing restores on its own. To
+take agents down briefly, use `shoal restart` instead. Commands started
 with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 Several workspaces, or `--all` for every ready or failed workspace with a running
@@ -273,8 +277,8 @@ execution or a pending restore, stop in parallel, reporting each failure without
 A stop whose wrappers do not finish in time fails naming each execution it
 waited on and its step: not started, still running, or verifying after exit.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
-closing its terminal, logging out or shutting down sends, is saved the same way,
-with the signal as its stop reason, and its restore waits in the
+closing its terminal, logging out or shutting down sends, is saved as stopped
+work with the signal as its stop reason, and its restore waits in the
 [agent queue](#agent-queue) once its execution has ended, so it comes back after
 a reboot without a command; run `shoal stop --all` first to keep agents down. An
 agent whose restore needs a session picker, or whose assignment is done, waits
@@ -286,7 +290,8 @@ for you to check and stop yourself. An execution Shoal never recorded the launch
 of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking. Stopping several workspaces does not ask: without
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting
-restore and requires explicit resume even with `[agent_resume]` configured.
+restore and requires explicit resume even with `[agent_resume]` configured;
+a stop that fails keeps the agents it stopped as stopped work.
 Run stop, restart and resume outside scoped executions, except that a workspace
 process may discard the stopped work of a workspace below its own with
 `shoal resume <workspace> --discard`.
@@ -315,10 +320,10 @@ otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
 A workspace without stopped agents continues one of its last sessions at once
-when resumed by itself, left by an agent that exited on its own, such as one
-the user quit, picked as stopped agents are, or the `--execution` one. A
-workspace keeps one per agent; the next new agent started there or `shoal done`
-replaces them. Unlike stopped work they use no agent slot and never delay
+when resumed by itself, left by `shoal stop` or by an agent that exited on its
+own, such as one the user quit, picked as stopped agents are, or the
+`--execution` one. A workspace keeps one per agent; the next new agent started
+there or `shoal done` replaces them. Unlike stopped work they use no agent slot and never delay
 cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
@@ -449,7 +454,7 @@ shoal t3 fix-login                       # Running T3 Code desktop app
 shoal status fix-login                   # Activity, changes, held resources, issue and PR state
 shoal status pr 12                       # Workspaces that link PR 12
 shoal status resource devices            # Workspaces that hold a devices lease
-shoal stop fix-login                     # Stop agents and commands for shoal resume
+shoal stop fix-login                     # Stop agents and commands until shoal resume
 shoal rm fix-login                       # Remove; choose what to keep if work differs
 shoal rm fix-login old-spike             # Remove several, confirming once for all
 ```
@@ -474,7 +479,7 @@ processes have waited for, then memory, resident on Linux and the physical
 footprint on macOS. `shoal status` adds the process count, and `--json` gives
 `usage` in bytes and percent. The status is the
 state unless ready; for a ready workspace it is, in order of precedence,
-`stopped` when `shoal stop` saved agents or commands for `shoal resume`,
+`stopped` when stopped agents or commands wait for `shoal resume`,
 `needs input`, `finished` after `shoal done` until `shoal done --undo`, `ready`, the other [agent states](#agent-state),
 `process running` while an agent without a reported state or a command runs,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
