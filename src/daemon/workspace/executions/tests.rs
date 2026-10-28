@@ -455,6 +455,10 @@ async fn stopping_allows_the_child_stop_and_completion_budgets() -> Result<()> {
         result = &mut stopping => bail!("stop ended during valid completion work: {result:?}"),
         changed = running.stop.changed() => { changed?; }
     }
+    let id = running.plan.id.clone();
+    manager
+        .executions
+        .set_completing(&id, Completing::Verifying);
     manager
         .finish_execution_after_scan(
             running.plan.id,
@@ -464,15 +468,36 @@ async fn stopping_allows_the_child_stop_and_completion_budgets() -> Result<()> {
         )
         .await?;
     stopping.await?;
+    // The recorded step goes with the connection.
+    assert_eq!(manager.executions.completing(&id), None);
     Ok(())
 }
 
 #[tokio::test]
 async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
     let (_root, manager, workspace) = fixture("true").await;
-    let _running = manager
+    // Connected receivers keep the daemon from signalling the recorded child,
+    // which is this test process.
+    let unstarted = manager
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await?;
+    let child = process::capture(std::process::id())?.context("test process identity")?;
+    let mut running = Vec::new();
+    for _ in 0..2 {
+        let started = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await?;
+        manager
+            .record_execution_child(started.plan.id.clone(), Some(child.clone()), child.pid)
+            .await?;
+        running.push(started);
+    }
+    let [still_running, verifying] = running.as_slice() else {
+        bail!("expected two running executions");
+    };
+    manager
+        .executions
+        .set_completing(&verifying.plan.id, Completing::Verifying);
     tokio::time::pause();
     let started = Instant::now();
     let error = manager
@@ -483,16 +508,28 @@ async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
         )
         .await
         .expect_err("a wrapper that never completes must time out");
-    assert_eq!(
-        error.to_string(),
-        "timed out waiting for workspace processes to stop"
+    // Each execution the stop waited on is named with the step it was on.
+    let message = error.to_string();
+    assert!(
+        message.starts_with("timed out waiting for workspace processes to stop: "),
+        "{message}"
     );
+    for expected in [
+        format!("execution {}: command not started", unstarted.plan.id),
+        format!("execution {}: command still running", still_running.plan.id),
+        format!(
+            "execution {}: command exited, verifying that its processes stopped",
+            verifying.plan.id
+        ),
+    ] {
+        assert!(message.contains(&expected), "{message}");
+    }
     assert!(
         (timing::WORKSPACE_STOP_TIMEOUT
             ..=timing::WORKSPACE_STOP_TIMEOUT + timing::WORKSPACE_STOP_POLL_INTERVAL)
             .contains(&started.elapsed())
     );
-    assert_eq!(manager.workspace_executions(&workspace.id).await?.len(), 1);
+    assert_eq!(manager.workspace_executions(&workspace.id).await?.len(), 3);
     Ok(())
 }
 

@@ -270,6 +270,8 @@ with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
 Several workspaces, or `--all` for every ready or failed workspace with a running
 execution or a pending restore, stop in parallel, reporting each failure without keeping the others running.
+A stop whose wrappers do not finish in time fails naming each execution it
+waited on and its step: not started, still running, or verifying after exit.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
 closing its terminal, logging out or shutting down sends, is saved the same way,
 with the signal as its stop reason, and its restore waits in the

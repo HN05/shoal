@@ -41,7 +41,7 @@ fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests;
 
-pub(crate) use state::Executions;
+pub(crate) use state::{Completing, Executions};
 
 states!(
     /// What a tracked execution runs, which decides its lifecycle rules.
@@ -1073,7 +1073,7 @@ impl Manager {
             if executions.is_empty() {
                 return Ok(());
             }
-            let mut connected = 0;
+            let mut waiting = Vec::new();
             let mut disconnected = Vec::new();
             for execution in executions {
                 if !connections.is_connected(&execution.id) {
@@ -1082,7 +1082,7 @@ impl Manager {
                     .stop(&execution.id, request, protected == Protected::Keep)
                     .await?
                 {
-                    connected += 1;
+                    waiting.push(execution);
                 }
             }
             // Registration and notifications are coordinated under the map lock.
@@ -1093,15 +1093,31 @@ impl Manager {
             for execution in disconnected {
                 self.stop_disconnected(&execution, policy).await?;
             }
-            if connected == 0 {
+            if waiting.is_empty() {
                 return Ok(());
             }
             ensure!(
                 Instant::now() < deadline,
-                "timed out waiting for workspace processes to stop"
+                "timed out waiting for workspace processes to stop: {}",
+                waiting
+                    .iter()
+                    .map(|execution| self.stop_progress(execution))
+                    .collect::<Vec<_>>()
+                    .join("; ")
             );
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
+    }
+
+    /// How far a connected execution got towards stopping, so a stop that
+    /// timed out names the step it waited on.
+    fn stop_progress(&self, execution: &Execution) -> String {
+        let step = match self.executions.completing(&execution.id) {
+            Some(step) => step.to_string(),
+            None if execution.child.is_none() => "command not started".to_owned(),
+            None => "command still running".to_owned(),
+        };
+        format!("execution {}: {step}", execution.id)
     }
 
     /// Delete an execution record whose processes the caller proved stopped.

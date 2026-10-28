@@ -14,7 +14,10 @@ use super::{
     approvals::Undecided,
     execution_recovery,
     scope::Caller,
-    workspace::{ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution, StopRequest},
+    workspace::{
+        Completing, ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution,
+        StopRequest,
+    },
 };
 use crate::{
     model::Workspace,
@@ -238,7 +241,12 @@ async fn serve(
             manager.detach_execution(&execution.id).await;
             return Ok(());
         }
-        Ok(Ended::Finished(exit_code)) => Ok(exit_code),
+        Ok(Ended::Finished(exit_code)) => {
+            manager
+                .executions
+                .set_completing(&execution.id, Completing::Reported);
+            Ok(exit_code)
+        }
         Err(error) => Err(error),
     };
     // A restore ends when its wrapper finishes. One that lost its connection
@@ -575,6 +583,9 @@ async fn finish(
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
     if agent.is_some() && result.is_ok() {
+        manager
+            .executions
+            .set_completing(&execution_id, Completing::StoppingSurvivors);
         manager.stop_exited_agent_processes(&execution_id).await;
     }
     // The record goes with the execution, so a start waiting on it learns
@@ -583,6 +594,9 @@ async fn finish(
         .unrun_demo_launch(&execution_id)
         .await
         .unwrap_or_default();
+    manager
+        .executions
+        .set_completing(&execution_id, Completing::Verifying);
     let complete = manager
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;

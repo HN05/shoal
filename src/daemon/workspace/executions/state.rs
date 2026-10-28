@@ -1,6 +1,7 @@
 //! What the daemon keeps in memory about executions while their wrappers are
 //! connected: the channel that stops each, the agents they run, why the
-//! daemon asked them to stop, and the scope tokens that act for them.
+//! daemon asked them to stop, how far each reported exit has been recorded,
+//! and the scope tokens that act for them.
 //!
 //! Locks are taken in the order connections, agents, stop requests. Agents
 //! and stop requests are reached only through closures, which cannot await
@@ -26,6 +27,28 @@ use crate::daemon::{
 /// own within moments.
 const UNRUN_LAUNCHES: usize = 64;
 
+/// The step a connected execution's completion is on after its wrapper
+/// reported the exit, named when a stop times out waiting for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Completing {
+    /// Waiting for the daemon to start recording the completion.
+    Reported,
+    /// Stopping the processes an exited agent left behind.
+    StoppingSurvivors,
+    /// Scanning for processes the execution left behind.
+    Verifying,
+}
+
+impl std::fmt::Display for Completing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Reported => "command exited, completion not recorded yet",
+            Self::StoppingSurvivors => "command exited, stopping its remaining processes",
+            Self::Verifying => "command exited, verifying that its processes stopped",
+        })
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct Executions {
     /// Connected executions and the channel that asks their wrapper to stop.
@@ -36,6 +59,9 @@ pub(crate) struct Executions {
     /// Connected executions whose wrapper stops instead of reattaching when
     /// the daemon shuts down.
     unattachable: StdMutex<HashSet<String>>,
+    /// Connected executions whose wrapper reported its exit, by the
+    /// completion step the daemon is on.
+    completing: StdMutex<HashMap<String, Completing>>,
     /// Recent demo launches whose execution ended before their command ran,
     /// for the start waiting on each.
     unrun_demo_launches: StdMutex<VecDeque<String>>,
@@ -129,6 +155,24 @@ impl Executions {
             .lock()
             .expect("unattachable executions lock")
             .is_empty()
+    }
+
+    /// Record the completion step a connected execution is on.
+    pub(crate) fn set_completing(&self, id: &str, step: Completing) {
+        self.completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(id.to_owned(), step);
+    }
+
+    /// The completion step of a connected execution whose wrapper reported
+    /// its exit.
+    pub(crate) fn completing(&self, id: &str) -> Option<Completing> {
+        self.completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(id)
+            .copied()
     }
 
     /// Remember that `launch` ended before its command ran.
@@ -292,6 +336,11 @@ impl Connections<'_> {
             .unattachable
             .lock()
             .expect("unattachable executions lock")
+            .remove(id);
+        executions
+            .completing
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
             .remove(id);
         let agent = executions.agents.lock().await.remove(id).is_some();
         executions.stop_requests.lock().await.remove(id);
