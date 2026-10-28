@@ -135,11 +135,14 @@ impl Manager {
         let entry = self
             .waiting_entry(selector, caller, "; remove its workspace instead")
             .await?;
-        if let Some(execution) = self.waiting_wrapper(&entry).await? {
-            self.stop_waiting_wrapper(&execution).await?;
+        let wrapper = self.waiting_wrapper(&entry).await?;
+        if let Some(execution) = &wrapper {
+            self.stop_waiting_wrapper(execution).await?;
         }
+        // A stopped wrapper removes its entry as it finishes, which may come first.
+        let deleted = self.delete_waiting_entry(entry.id.clone()).await?;
         ensure!(
-            self.delete_waiting_entry(entry.id.clone()).await?,
+            deleted || wrapper.is_some(),
             "{} is no longer waiting",
             entry.name
         );

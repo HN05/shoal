@@ -133,6 +133,28 @@ async fn cancelling_a_restore_leaves_its_agent_stopped() {
 }
 
 #[tokio::test]
+async fn cancelling_succeeds_when_the_stopped_wrapper_removes_its_entry_first() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "stopped").await;
+    let mut agents = stopped_agents(&manager, &[&workspace]).await;
+    let (execution, mut stop) = agents.remove(0);
+    stop.borrow_and_update();
+    // The wrapper finishes as soon as it is stopped, as its connection does.
+    let finished = {
+        let manager = manager.clone();
+        tokio::spawn(async move {
+            stop.changed().await.unwrap();
+            manager.remove_restore(&execution).await;
+        })
+    };
+    manager.queue_remove("stopped", None).await.unwrap();
+    bounded(finished).await.unwrap();
+    assert!(manager.queue_entries().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
