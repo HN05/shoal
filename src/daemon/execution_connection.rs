@@ -490,14 +490,16 @@ async fn prepare_stop(manager: &Manager, stopping: Stopping<'_>) -> PreparedStop
 }
 
 /// Stop an overloaded agent, recovering it when the execution and current
-/// policy allow. A stop without recovery releases protection's update hold.
+/// policy allow; an agent `shoal queue move` stopped recovers whatever the
+/// policy. A stop without recovery releases protection's update hold.
 async fn prepare_overload_stop(
     manager: &Manager,
     stopping: Stopping<'_>,
     protection: Protection,
 ) -> PreparedStop {
     // Read the policy now, so a reload applies to running agents.
-    let recovering = stopping.recover && manager.config().overload.recovery.enabled;
+    let recovering = stopping.recover
+        && (protection.is_queue_move() || manager.config().overload.recovery.enabled);
     let update_hold = manager
         .take_update_hold(stopping.execution_id)
         .await

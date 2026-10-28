@@ -46,26 +46,35 @@ fn restore_rows(db: &Connection) -> Result<Vec<RestoreRow>> {
 }
 
 impl Manager {
-    /// The IDs of the restore entries whose agent stopped between turns.
+    /// The IDs of the restore entries that wait for an update, whose agent
+    /// stopped between turns.
     pub(super) async fn restores_waiting_for_updates(&self) -> Result<HashSet<String>> {
         let restores = self.store.run(|db| restore_rows(db)).await?;
-        Ok(restores
-            .into_iter()
-            .filter(|row| self.restore_waits_for_update(&row.workspace, &row.execution))
-            .map(|row| row.id)
-            .collect())
+        let mut waiting = HashSet::new();
+        for row in restores {
+            if self.restore_waits_for_update(&row.workspace, &row.execution)
+                && !self.moved_in_queue(&row.execution).await
+            {
+                waiting.insert(row.id);
+            }
+        }
+        Ok(waiting)
     }
 
-    /// What the queued restore of `execution` in `workspace_id` waits for,
-    /// by its recovery record. Whether an update is due only matters once
-    /// its agent `waits`, and free disk space must have recovered as for any
-    /// other restore, since disk protection stops agents that start below it.
+    /// What the queued restore of `execution` in `workspace_id` waits for:
+    /// a slot after `shoal queue move`, otherwise what its recovery record
+    /// says. Whether an update is due only matters once its agent `waits`,
+    /// and free disk space must have recovered as for any other restore,
+    /// since disk protection stops agents that start below it.
     pub(super) async fn restore_wake(
         &self,
         workspace_id: &str,
         execution: &str,
         waits: bool,
     ) -> Result<Wake> {
+        if self.moved_in_queue(execution).await {
+            return Ok(Wake::Slot);
+        }
         if !self.restore_waits_for_update(workspace_id, execution) {
             return Ok(Wake::Recovery);
         }
@@ -77,6 +86,13 @@ impl Manager {
     /// protection on, the latest reading found the cleanup threshold free.
     fn restore_disk_ready(&self) -> bool {
         !self.config().overload.disk.enabled || self.config_state.disk_space_recovered()
+    }
+
+    /// Whether `shoal queue move` stopped the agent of `execution`.
+    async fn moved_in_queue(&self, execution: &str) -> bool {
+        self.agent_overload(execution)
+            .await
+            .is_some_and(|protection| protection.is_queue_move())
     }
 
     /// Whether the recovery record of `execution` says it stopped between

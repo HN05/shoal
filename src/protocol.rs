@@ -468,6 +468,7 @@ response_bodies! {
     QueueEntries(Vec<crate::model::QueueEntry>),
     RunningAgents(Vec<crate::model::RunningAgent>),
     QueueEntry(crate::model::QueueEntry),
+    MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
     Demos(Vec<crate::demos::Running>),
@@ -672,10 +673,27 @@ impl Protection {
     pub(crate) fn is_restart(&self) -> bool {
         self.reason == RESTART_REASON
     }
+
+    /// `shoal queue move` of a running agent, whose wrapper waits for the
+    /// agent queue to start its restore. Wrappers handle it as any
+    /// protection stop they restore.
+    pub(crate) fn queue_move() -> Self {
+        Self {
+            reason: MOVE_REASON.into(),
+            resumes_when: "the agent queue starts it".into(),
+        }
+    }
+
+    pub(crate) fn is_queue_move(&self) -> bool {
+        self.reason == MOVE_REASON
+    }
 }
 
 /// The stop reason a restarted agent's wrapper shows and saves.
 const RESTART_REASON: &str = "restarted by shoal restart";
+
+/// The stop reason of an agent `shoal queue move` sent to the queue.
+const MOVE_REASON: &str = "moved in the agent queue by shoal queue move";
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]

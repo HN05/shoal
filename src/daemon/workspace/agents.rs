@@ -16,6 +16,7 @@ use crate::{
     state::{AgentState, WorkspaceState},
 };
 
+mod queue_move;
 mod restart;
 
 pub(crate) struct Agent {

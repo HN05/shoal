@@ -36,9 +36,12 @@ pub(super) async fn pause(
     if manager.restart_requested(execution_id).await {
         return restart(manager, execution_id, workspace_id, incoming, stop).await;
     }
-    if !manager.agent_was_overloaded(execution_id).await {
+    let Some(protection) = manager.agent_overload(execution_id).await else {
         return Ok(Action::Stop(requested_reason(manager, execution_id).await));
-    }
+    };
+    // The user sent the agent to the queue, so the overload policy does not
+    // apply to its restore.
+    let moved = protection.is_queue_move();
     // Stop survivors before anything can cancel the restore, so every outcome
     // leaves only processes Shoal cannot stop. The wrapper finishes on each,
     // and the daemon's completion scan decides whether they leave it unknown.
@@ -62,20 +65,20 @@ pub(super) async fn pause(
     let ready = tokio::select! {
         biased;
         action = interrupted(manager, execution_id, incoming, stop) => return action,
-        () = recovery_disabled(manager) => {
+        () = recovery_disabled(manager), if !moved => {
             return Ok(Action::Stop(Some("automatic recovery was disabled".into())));
         }
         ready = async {
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
             // Every process the agent left has stopped writing.
             manager.checkpoint_after_agent(workspace_id).await;
-            admit_restore(manager, execution_id, workspace_id, hold).await
+            admit_restore(manager, execution_id, workspace_id, moved, hold).await
         } => ready,
     };
     let resume = async {
         let grant = ready?;
         ensure!(
-            manager.config().overload.recovery.enabled,
+            moved || manager.config().overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
         prepare_resume(manager, execution_id, workspace_id, grant).await
@@ -155,17 +158,18 @@ async fn interrupted(
     }
 }
 
-/// Wait until the agent queue admits the restore. A wait for an update may
-/// last indefinitely, so it lets a daemon update through, which hands the
-/// wait to the next daemon as other shutdowns do, and takes `hold` back
-/// before the agent resumes.
+/// Wait until the agent queue admits the restore. A wait for an update, or
+/// for its turn in the queue after `moved`, may last indefinitely, so it lets
+/// a daemon update through, which hands the wait to the next daemon as other
+/// shutdowns do, and takes `hold` back before the agent resumes.
 async fn admit_restore(
     manager: &Manager,
     execution_id: &str,
     workspace_id: &str,
+    moved: bool,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Grant> {
-    if !manager.restore_waits_for_update(workspace_id, execution_id) {
+    if !moved && !manager.restore_waits_for_update(workspace_id, execution_id) {
         return manager
             .admit_agent_restore(execution_id, workspace_id)
             .await;

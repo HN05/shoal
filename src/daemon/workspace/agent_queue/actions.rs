@@ -6,31 +6,40 @@ use std::collections::HashMap;
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::params;
 
-use super::{Grant, dependencies::Readiness, order};
+use super::{Grant, WaitingRestore, dependencies::Readiness, order, record_waiting_restore};
 use crate::{
     daemon::{
         scope::Caller,
         workspace::{Manager, StopRequest},
     },
-    model::{QueueEntry, QueuePlace},
+    model::{MovedEntry, QueueEntry, QueuePlace},
     state::{QueueKind, QueueState},
 };
 
 impl Manager {
-    /// The entry `selector` names by ID or name among those `caller` may see.
-    async fn selected_entry(&self, selector: &str, caller: Option<&Caller>) -> Result<QueueEntry> {
+    /// The entry `selector` names by ID or name among those `caller` may
+    /// see, if one does.
+    async fn find_entry(
+        &self,
+        selector: &str,
+        caller: Option<&Caller>,
+    ) -> Result<Option<QueueEntry>> {
         let entries = self.visible_queue(caller).await?;
         let mut matches = entries
             .into_iter()
             .filter(|entry| entry.id == selector || entry.name == selector);
-        let entry = matches
-            .next()
-            .with_context(|| format!("{selector} is not in the agent queue"))?;
+        let entry = matches.next();
         ensure!(
             matches.next().is_none(),
             "several queue entries are named {selector}; pass the entry ID"
         );
         Ok(entry)
+    }
+
+    async fn selected_entry(&self, selector: &str, caller: Option<&Caller>) -> Result<QueueEntry> {
+        self.find_entry(selector, caller)
+            .await?
+            .with_context(|| format!("{selector} is not in the agent queue"))
     }
 
     /// The waiting entry `selector` names; `starting` says what to do with
@@ -146,33 +155,96 @@ impl Manager {
         Ok(entry)
     }
 
-    /// Move the waiting entry `selector` names to `place`. Scoped callers
-    /// may only move an entry back, never ahead of others.
+    /// Move the waiting entry `selector` names to `place`, or stop the
+    /// agent running in the workspace it names and place its restore there.
+    /// Scoped callers may only move an entry back, never ahead of others or
+    /// a running agent.
     pub async fn queue_move(
         &self,
         selector: &str,
         place: QueuePlace,
         caller: Option<&Caller>,
-    ) -> Result<QueueEntry> {
+    ) -> Result<MovedEntry> {
         let _gate = self.agent_queue.lock_admission().await;
-        let mut entry = self.waiting_entry(selector, caller, "").await?;
-        let (id, scoped) = (entry.id.clone(), caller.is_some());
+        let entry = match self.find_entry(selector, caller).await? {
+            Some(entry) => entry,
+            None if caller.is_some() => bail!("{selector} is not in the agent queue"),
+            None => return self.move_running_agent(selector, place).await,
+        };
+        ensure!(
+            entry.state == QueueState::Queued,
+            "{} is already starting",
+            entry.name
+        );
         let position = self
-            .store
+            .place_entry(entry.id.clone(), place, caller.is_some())
+            .await?;
+        self.agent_queue.wake();
+        Ok(MovedEntry {
+            entry: QueueEntry {
+                position: Some(position),
+                ..entry
+            },
+            stopped: false,
+        })
+    }
+
+    /// Place the waiting entry `id` at `place`, only further back when
+    /// `back_only`, returning its new position.
+    async fn place_entry(&self, id: String, place: QueuePlace, back_only: bool) -> Result<usize> {
+        self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 let moved = order::place(&tx, &id, &place)?;
                 ensure!(
-                    !scoped || moved.to >= moved.from,
+                    !back_only || moved.to >= moved.from,
                     "workspace processes can only move queue entries back"
                 );
                 tx.commit()?;
                 Ok(moved.to)
             })
+            .await
+    }
+
+    /// Stop the agent running in the workspace `selector` names and place
+    /// its restore, which its wrapper waits for, at `place`. The wrapper may
+    /// already have queued it, which keeps its entry.
+    async fn move_running_agent(&self, selector: &str, place: QueuePlace) -> Result<MovedEntry> {
+        let workspace = self
+            .workspace(selector)
+            .await
+            .with_context(|| format!("{selector} is not in the agent queue"))?;
+        let execution = self.movable_agent(&workspace).await?;
+        let agent = self
+            .agent_name(&execution)
+            .await
+            .context("the agent disconnected")?;
+        self.stop_for_queue_move(&execution).await?;
+        let restore = WaitingRestore {
+            workspace,
+            execution,
+            agent,
+        };
+        let id = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let id = record_waiting_restore(&tx, &restore)?;
+                order::place(&tx, &id, &place)?;
+                tx.commit()?;
+                Ok(id)
+            })
             .await?;
-        self.agent_queue.wake();
-        entry.position = Some(position);
-        Ok(entry)
+        let entry = self
+            .queue_entries()
+            .await?
+            .into_iter()
+            .find(|entry| entry.id == id)
+            .context("the restore already left the agent queue")?;
+        Ok(MovedEntry {
+            entry,
+            stopped: true,
+        })
     }
 }
 

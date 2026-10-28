@@ -33,7 +33,7 @@ pub(super) async fn handle(
         }
         QueueMethod::QueueStart { entry } => Body::QueueEntry(manager.queue_start(&entry).await?),
         QueueMethod::QueueMove { entry, place } => {
-            Body::QueueEntry(manager.queue_move(&entry, place, caller).await?)
+            Body::MovedEntry(manager.queue_move(&entry, place, caller).await?)
         }
         QueueMethod::QueueAttach { entry, workspace } => {
             manager.queue_attach(&entry, &workspace).await?;

@@ -70,6 +70,21 @@ pub(crate) enum Wake {
     /// An update for an agent stopped between turns, which holds no slot
     /// meanwhile; `due` once one waits.
     Update { due: bool },
+    /// Only a free slot, for an agent `shoal queue move` stopped, which
+    /// holds none meanwhile.
+    Slot,
+}
+
+impl Wake {
+    /// What admits a restore with this wake, unless it needs the healthy
+    /// readings of a recovery epoch.
+    fn grant(self) -> Option<Grant> {
+        match self {
+            Wake::Recovery => None,
+            Wake::Update { .. } => Some(Grant::Update),
+            Wake::Slot => Some(Grant::Queue),
+        }
+    }
 }
 
 /// A queued entry and the repository it starts an agent in.
@@ -106,12 +121,13 @@ pub(crate) fn admit(
         let own = match entry.work {
             Work::Launch => 0,
             Work::Restore {
-                waiting,
-                wake: Wake::Update { due },
-            } => match waiting && due {
-                true => 0,
-                false => continue,
-            },
+                waiting: true,
+                wake: Wake::Slot | Wake::Update { due: true },
+            } => 0,
+            Work::Restore {
+                wake: Wake::Slot | Wake::Update { .. },
+                ..
+            } => continue,
             Work::Restore { .. } if !recovered => continue,
             Work::Restore { waiting: false, .. } => continue,
             Work::Restore { waiting: true, .. } => 1,
@@ -159,9 +175,9 @@ struct WaitingWork {
     stopped: HashSet<String>,
 }
 
-/// The executions of the `waiting` restores that wait for an update with
-/// every process of their agent proven stopped, which hold no slot. One whose
-/// processes may still run keeps its slot until they stop.
+/// The executions of the `waiting` restores that wait for an update or only
+/// a slot with every process of their agent proven stopped, which hold no
+/// slot. One whose processes may still run keeps its slot until they stop.
 fn dormant_restores(
     waiting: &[Waiting],
     restores: &HashMap<String, (String, Wake)>,
@@ -173,7 +189,7 @@ fn dormant_restores(
                 entry.work,
                 Work::Restore {
                     waiting: true,
-                    wake: Wake::Update { .. },
+                    wake: Wake::Update { .. } | Wake::Slot,
                 }
             )
         })
@@ -258,6 +274,41 @@ fn insert_launch(db: &mut rusqlite::Connection, launch: &Launch) -> Result<()> {
     dependencies::record(&tx, &launch.id, &launch.repository, &request.after)?;
     tx.commit()?;
     Ok(())
+}
+
+/// The restore of a stopped agent whose wrapper waits for it.
+struct WaitingRestore {
+    workspace: crate::model::Workspace,
+    execution: String,
+    agent: String,
+}
+
+/// Record `restore` behind the work already waiting, returning its entry's
+/// ID. One already recorded keeps its place and waits again.
+fn record_waiting_restore(db: &rusqlite::Connection, restore: &WaitingRestore) -> Result<String> {
+    let now = crate::time::unix_seconds() as i64;
+    let workspace = &restore.workspace;
+    db.execute(
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9)
+         ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
+        params![
+            uuid::Uuid::new_v4().to_string(),
+            QueueKind::Restore,
+            workspace.repository_id,
+            workspace.name,
+            restore.agent,
+            QueueState::Queued,
+            now,
+            workspace.id,
+            restore.execution,
+        ],
+    )?;
+    Ok(db.query_row(
+        "SELECT id FROM agent_queue WHERE execution_id=?1",
+        [&restore.execution],
+        |row| row.get(0),
+    )?)
 }
 
 /// What the store records toward used slots, read in one pass.
@@ -442,10 +493,10 @@ impl Manager {
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
         let published = self.overload_recovery.published();
         let admitted = admit(&occupied, &waiting, &limits, published.is_some());
-        let (woken, recovered): (Vec<_>, Vec<_>) = admitted
+        let (recovered, woken): (Vec<_>, Vec<_>) = admitted
             .iter()
             .filter_map(|id| restores.get(id))
-            .partition(|(_, wake)| matches!(wake, Wake::Update { .. }));
+            .partition(|(_, wake)| *wake == Wake::Recovery);
         if !recovered.is_empty() {
             // A stop, reload or unsafe reading since the check withdrew the
             // readings; the pass it wakes decides again.
@@ -455,7 +506,11 @@ impl Manager {
             };
             self.grant_restores(&recovered, Grant::Recovery(epoch));
         }
-        self.grant_restores(&woken, Grant::Update);
+        for (execution, wake) in woken {
+            if let Some(grant) = wake.grant() {
+                self.agent_queue.grant_restore(execution, grant);
+            }
+        }
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
     }
@@ -1022,33 +1077,13 @@ impl Manager {
         agent: &str,
         workspace_id: &str,
     ) -> Result<()> {
-        let workspace = self.workspace(workspace_id).await?;
-        let (id, execution, agent) = (
-            uuid::Uuid::new_v4().to_string(),
-            execution.to_owned(),
-            agent.to_owned(),
-        );
+        let restore = WaitingRestore {
+            workspace: self.workspace(workspace_id).await?,
+            execution: execution.to_owned(),
+            agent: agent.to_owned(),
+        };
         self.store
-            .run(move |db| {
-                let now = crate::time::unix_seconds() as i64;
-                db.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,seen_at,workspace_id,execution_id)
-                     VALUES (?1,?2,?3,?4,?5,?6,?7,?7,?8,?9)
-                     ON CONFLICT(execution_id) DO UPDATE SET state=excluded.state,seen_at=excluded.seen_at",
-                    params![
-                        id,
-                        QueueKind::Restore,
-                        workspace.repository_id,
-                        workspace.name,
-                        agent,
-                        QueueState::Queued,
-                        now,
-                        workspace.id,
-                        execution,
-                    ],
-                )?;
-                Ok(())
-            })
+            .run(move |db| record_waiting_restore(db, &restore).map(|_| ()))
             .await
     }
 

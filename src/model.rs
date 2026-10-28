@@ -742,6 +742,14 @@ impl QueueEntry {
     }
 }
 
+/// An entry `shoal queue move` placed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MovedEntry {
+    pub entry: QueueEntry,
+    /// The entry is the restore of a running agent the move stopped.
+    pub stopped: bool,
+}
+
 /// Where `shoal queue move` places an entry among the waiting ones.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

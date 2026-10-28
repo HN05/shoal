@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     daemon::workspace::agent_queue::tests::{
-        add, await_restore, bounded, create, limit_globally, register, request, started,
-        stopped_agents,
+        add, await_restore, bounded, connected_agent, create, limit_globally, register, request,
+        started, stopped_agents,
     },
     model::{Dependency, QueueRequest},
     test_support::manager,
@@ -33,7 +33,7 @@ async fn moved_entries_keep_their_new_place_and_start_in_it() {
         .queue_move("c", QueuePlace::Position(1), None)
         .await
         .unwrap();
-    assert_eq!(moved.position, Some(1));
+    assert_eq!((moved.entry.position, moved.stopped), (Some(1), false));
     assert_eq!(waiting(&manager).await, ["c", "a", "b"]);
     manager
         .queue_move("c", QueuePlace::Last, None)
@@ -45,7 +45,7 @@ async fn moved_entries_keep_their_new_place_and_start_in_it() {
         .queue_move("b", QueuePlace::Before(c.id), None)
         .await
         .unwrap();
-    assert_eq!(moved.position, Some(2));
+    assert_eq!(moved.entry.position, Some(2));
     manager
         .queue_move("a", QueuePlace::Position(3), None)
         .await
@@ -198,4 +198,81 @@ async fn workspace_processes_cancel_and_move_back_only_entries_below_theirs() {
             .await
             .is_err()
     );
+}
+
+#[tokio::test]
+async fn a_moved_running_agent_restores_after_the_entries_ahead_of_it() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let api = create(&manager, &repo, "api").await;
+    let (execution, mut stop) = connected_agent(&manager, &api).await;
+    let next = add(&manager, &repo, "next").await.entry.unwrap();
+
+    let moved = manager
+        .queue_move("api", QueuePlace::Last, None)
+        .await
+        .unwrap();
+    assert!(moved.stopped);
+    assert_eq!(
+        (moved.entry.kind, moved.entry.position),
+        (QueueKind::Restore, Some(2))
+    );
+    assert!(stop.has_changed().unwrap() && *stop.borrow_and_update());
+    assert_eq!(waiting(&manager).await, ["next", "api"]);
+    // Until its processes are proven stopped the agent keeps its slot.
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&next.id));
+
+    // Its wrapper queues the restore again as it waits, which keeps its place.
+    manager.queue_agent_restore(&execution).await.unwrap();
+    let restoring = await_restore(&manager, &execution).await;
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&next.id));
+    assert_eq!(waiting(&manager).await, ["api"]);
+    assert!(!manager.queue_entries().await.unwrap()[1].waits_for_update);
+    // It needs only a free slot, without healthy readings.
+    manager.fail_queue_entry(&next.id, "gone").await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Queue);
+}
+
+#[tokio::test]
+async fn only_restorable_agents_move_and_only_for_unscoped_callers() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let api = create(&manager, &repo, "api").await;
+    let (execution, _stop) = connected_agent(&manager, &api).await;
+    let caller = Caller {
+        workspace_id: create(&manager, &repo, "parent").await.id,
+        execution: None,
+    };
+    let error = manager
+        .queue_move("api", QueuePlace::Last, Some(&caller))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("not in the agent queue"));
+    let error = manager
+        .queue_move("parent", QueuePlace::Last, None)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("runs no agent"));
+
+    manager
+        .track_agent(
+            &execution,
+            "custom",
+            &api.id,
+            &api.name,
+            false,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    let error = manager
+        .queue_move("api", QueuePlace::Last, None)
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("no command to resume"));
+    assert!(manager.queue_entries().await.unwrap().is_empty());
 }

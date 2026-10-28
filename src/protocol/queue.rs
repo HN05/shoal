@@ -23,7 +23,8 @@ pub enum QueueMethod {
     QueueStart {
         entry: String,
     },
-    /// Move a waiting entry to `place`.
+    /// Move a waiting entry to `place`, or stop a running agent and place
+    /// its restore there.
     QueueMove {
         entry: String,
         place: crate::model::QueuePlace,
