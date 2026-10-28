@@ -21275,6 +21275,10 @@ import fcntl, json, os, subprocess, sys, time
 from pathlib import Path
 root = Path(os.environ.get('ZMX_TEST_ROOT', os.environ['HOME']))
 args = sys.argv[1:]
+if args[:1] == ['worker']:
+    # Keep a readable parent for macOS's hidden shell environment, so other
+    # fixtures can attribute it while verifying their setup processes.
+    sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)
 parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
     capture_output=True, text=True).stdout
 log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
@@ -21319,7 +21323,10 @@ elif args[:1] == ['send']:
     env = json.loads((root / f'zmx-{args[1]}.env').read_text())
     env['ZMX_SESSION'] = args[1]
     with (root / f'zmx-{args[1]}.log').open('a') as log:
-        subprocess.run(['sh', '-c', args[2].rstrip('\r')], env=env,
+        # Native send returns after writing input, before the worker labels
+        # its session. Waiting here would deadlock on the handoff's lock.
+        subprocess.Popen([sys.executable, __file__, 'worker', args[2].rstrip('\r')], env=env,
+            start_new_session=True,
             stdin=subprocess.DEVNULL, stdout=log, stderr=log)
 elif args[:1] == ['version']:
     (root / 'zmx-version-called').touch()
@@ -23615,6 +23622,9 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         ),
         "{transcript}"
     );
+    wait_until("the detached agent's result", || {
+        runs() == "background tracked go\n"
+    });
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[1], ["run", "background", "-d", "true"]);
     assert_eq!(calls[2], ["list"]);
@@ -23777,6 +23787,9 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert!(transcript.contains("detached zmx session"), "{transcript}");
+    wait_until("the detached workspace shell", || {
+        fs::read_to_string(home.join("shell-cwd")).is_ok_and(|cwd| !cwd.is_empty())
+    });
     let workspace = fixture.ok(&["status", "shell-only"]);
     let log = fs::read_to_string(home.join("zmx-shell-only.log")).unwrap_or_default();
     assert_eq!(
@@ -23859,6 +23872,10 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         );
     }
     // Each failed start leaves the user's own login shell to show why.
+    wait_until("the failed restores' login shells", || {
+        fs::read_to_string(fixture.root.path().join("login-shells"))
+            .is_ok_and(|shells| shells == "-l\n-l\n")
+    });
     assert_eq!(
         fs::read_to_string(fixture.root.path().join("login-shells")).unwrap_or_default(),
         "-l\n-l\n"
@@ -23950,6 +23967,9 @@ fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
+    wait_until("the detached agent environment", || {
+        fs::read_to_string(home.join("agent-env")).is_ok_and(|env| env == "unset\n")
+    });
     let log = fs::read_to_string(home.join("zmx-failing.log")).unwrap_or_default();
     assert_eq!(
         fs::read_to_string(home.join("agent-env")).unwrap_or_default(),

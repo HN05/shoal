@@ -301,7 +301,8 @@ struct NewSession<'a> {
 }
 
 /// Create a session, then hand its shell the worker. A failed handoff closes
-/// the session so it cannot leave an idle shell behind.
+/// the session so it cannot leave an idle shell behind. Keep reassignment out
+/// until the handoff and any verified error cleanup finish.
 async fn run_in_new_session(
     name: &str,
     cwd: &Path,
@@ -309,6 +310,7 @@ async fn run_in_new_session(
     launch: &NewSession<'_>,
 ) -> Result<()> {
     let words = worker_words(argv)?;
+    let _server = crate::sessions::zmx::ownership_lock().await?;
     create_session(name, cwd, launch).await?;
     let created = cleanup_instance(name).await?;
     let result = start_session_worker(name, &words, launch).await;

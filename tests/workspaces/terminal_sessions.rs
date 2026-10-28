@@ -562,17 +562,89 @@ fn failed_herdr_labelling_refuses_the_add_worker_before_starting_its_agent() -> 
     Ok(())
 }
 
-/// Always release the fixture's native query before reaping our removal CLI.
-struct PausedRemoval {
+/// Always release the fixture's native query before reaping our CLI.
+struct PausedTerminalCall {
     child: Child,
     release: PathBuf,
 }
 
-impl Drop for PausedRemoval {
+impl Drop for PausedTerminalCall {
     fn drop(&mut self) {
         let _ = fs::write(&self.release, "");
         let _ = self.child.wait();
     }
+}
+
+#[test]
+fn failed_zmx_handoffs_exclude_cross_state_reassignment() -> anyhow::Result<()> {
+    for stage in ["set", "send"] {
+        let original = Fixture::new();
+        original.add("failed");
+        let other = Fixture::new();
+        other.add("new-owner");
+        let home = original.root.path();
+        for fixture in [&original, &other] {
+            install_test_script(
+                fixture.root.path().join("bin/zmx"),
+                include_str!("../fixtures/zmx_handoff.py"),
+            );
+        }
+        install_test_script(
+            other.root.path().join("bin/claude"),
+            "#!/bin/sh\ntouch \"$HOME/new-agent-started\"\n",
+        );
+        fs::write(home.join("handoff-pause-cleanup"), "")?;
+        let mut handoff = PausedTerminalCall {
+            child: original
+                .command()
+                .env("HANDOFF_FAIL", stage)
+                .env("HANDOFF_AFTER", "same")
+                .args(["demo", "start", "--workspace", "failed", "--", "true"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?,
+            release: home.join("handoff-cleanup-release"),
+        };
+        wait_until("failed handoff verification paused", || {
+            home.join("handoff-cleanup-paused").exists()
+        });
+        let shared = fs::File::open(home.join("zmx.shoal-ownership.lock"))?;
+        assert_eq!(
+            fs2::FileExt::try_lock_exclusive(&shared)
+                .expect_err("failed handoff must exclude reassignment")
+                .kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+        let fields: Value = serde_json::from_slice(&fs::read(home.join("handoff-session.json"))?)?;
+        let session = fields["name"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("session name"))?;
+        let mut agent = Shortcut {
+            fixture: &other,
+            child: other
+                .command()
+                .env("ZMX_SESSION", session)
+                .env("HANDOFF_TEST_ROOT", home)
+                .env_remove("ZMX_DIR")
+                .args(["claude", "new-owner"])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?,
+        };
+        wait_until("shortcut resolves the shared native namespace", || {
+            home.join("handoff-version-called").exists()
+        });
+        assert!(!other.root.path().join("new-agent-started").exists());
+        fs::write(&handoff.release, "")?;
+        assert!(!handoff.child.wait()?.success());
+        let status = wait_for("shortcut observes the closed session", || {
+            agent.child.try_wait().expect("query own shortcut")
+        });
+        assert!(!status.success());
+        assert!(!other.root.path().join("new-agent-started").exists());
+        assert!(!home.join("handoff-session.json").exists());
+    }
+    Ok(())
 }
 
 #[test]
@@ -588,7 +660,7 @@ fn herdr_reassignment_waits_for_another_states_verified_close() -> anyhow::Resul
     );
     fs::write(home.join("herdr-pause-owner-check"), "")?;
     fs::write(home.join("herdr-close-removes-pane"), "")?;
-    let mut removal = PausedRemoval {
+    let mut removal = PausedTerminalCall {
         child: original
             .command()
             .args(["rm", "owned", "--yes"])
@@ -679,7 +751,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
     );
     fs::write(home.join("zmx-pause-owner-check"), "")?;
     fs::write(home.join("zmx-close-removes-session"), "")?;
-    let mut removal = PausedRemoval {
+    let mut removal = PausedTerminalCall {
         child: original
             .command()
             .args(["rm", "old-owner", "--yes"])
