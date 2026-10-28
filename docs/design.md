@@ -647,8 +647,9 @@ own terminal state on attach, so terminal protocols such as images keep working;
 multiplexers that re-render output through their own emulator, like tmux, were
 rejected for breaking them. zmx is a required dependency. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
-unchanged and the daemon still never touches terminal I/O. When zmx returns
-control to the caller, the CLI resets emulator input modes on the caller's
+unchanged and the daemon still never touches terminal I/O. A failed detached
+handoff closes its session only while its process and creation time still match.
+When zmx returns control to the caller, the CLI resets emulator input modes on the caller's
 terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named

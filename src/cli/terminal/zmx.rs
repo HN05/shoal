@@ -306,11 +306,35 @@ async fn run_in_new_session(
 ) -> Result<()> {
     let words = worker_words(argv)?;
     create_session(name, cwd, launch).await?;
+    let created = cleanup_instance(name).await?;
     let result = start_session_worker(name, &words, launch).await;
     if result.is_err() {
-        let _ = kill(name).await;
+        let _ = close_failed_session(name, created.as_deref()).await;
     }
     result
+}
+
+/// A failed handoff may outlive its session. Unknown or replaced instances do
+/// not authorize closing whatever now has the name.
+async fn close_failed_session(name: &str, created: Option<&str>) -> Result<()> {
+    if let Some(created) = created
+        && cleanup_instance(name).await?.as_deref() == Some(created)
+    {
+        kill(name).await?;
+    }
+    Ok(())
+}
+
+async fn cleanup_instance(name: &str) -> Result<Option<String>> {
+    Ok(list()
+        .await?
+        .iter()
+        .find(|(session, _)| session == name)
+        .and_then(|(_, fields)| {
+            field(fields, "pid").filter(|value| !value.is_empty())?;
+            field(fields, "created").filter(|value| !value.is_empty())?;
+            Some(instance(fields))
+        }))
 }
 
 fn worker_words(argv: &[OsString]) -> Result<Vec<&str>> {

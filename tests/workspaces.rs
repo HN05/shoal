@@ -23551,10 +23551,11 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     );
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[1], ["run", "background", "-d", "true"]);
-    assert_eq!(calls[2][..2], ["send", "background"]);
+    assert_eq!(calls[2], ["list"]);
+    assert_eq!(calls[3][..2], ["send", "background"]);
     assert!(
-        calls[2][2].starts_with("SHOAL_ENDS_SESSION=1 ")
-            && calls[2][2].ends_with(
+        calls[3][2].starts_with("SHOAL_ENDS_SESSION=1 ")
+            && calls[3][2].ends_with(
                 " internal add --host zmx --close-when-done && exit; exec \"$SHELL\" -l\r"
             ),
         "{calls:?}"
@@ -23855,7 +23856,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert!(
-        calls[2][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
+        calls[3][2].ends_with(" internal add --host zmx && exit; exec \"$SHELL\" -l\r"),
         "{calls:?}"
     );
     assert!(!fixture.root.path().join("zmx-watch-calls").exists());
@@ -24514,6 +24515,45 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
         .map(|event| event["name"].as_str().unwrap())
         .collect();
     assert_eq!(created, ["before", "after"]);
+}
+
+#[test]
+fn failed_demo_handoffs_only_close_the_original_known_session() -> anyhow::Result<()> {
+    for stage in ["set", "send"] {
+        for after in ["same", "pid", "created", "gone", "unknown"] {
+            let fixture = Fixture::new();
+            fixture.add("failed");
+            let home = fixture.root.path();
+            install_test_script(
+                home.join("bin/zmx"),
+                include_str!("fixtures/zmx_handoff.py"),
+            );
+            let output = fixture
+                .command()
+                .env("HANDOFF_FAIL", stage)
+                .env("HANDOFF_AFTER", after)
+                .args(["demo", "start", "--workspace", "failed", "--", "true"])
+                .output()?;
+            assert!(!output.status.success(), "{stage}/{after}: {output:?}");
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains("handoff failed"),
+                "{output:?}"
+            );
+            let calls: Vec<Vec<String>> = fs::read_to_string(home.join("handoff-calls.jsonl"))?
+                .lines()
+                .map(serde_json::from_str)
+                .collect::<serde_json::Result<_>>()?;
+            let killed = calls
+                .iter()
+                .any(|call| call.first().is_some_and(|command| command == "kill"));
+            assert_eq!(killed, after == "same", "{stage}/{after}: {calls:?}");
+            assert_eq!(
+                home.join("handoff-session.json").exists(),
+                !matches!(after, "same" | "gone")
+            );
+        }
+    }
+    Ok(())
 }
 
 #[test]
