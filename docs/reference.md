@@ -307,23 +307,24 @@ skipped, for `shoal stop` and `shoal resume`. An agent that does not start again
 stays stopped for `shoal resume`, and the exit status is 1.
 
 `shoal resume [workspace...]` queues the restore of each agent a saved recovery
-record keeps after its wrapper exits, or only the `--execution <id>` one, and
+record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and
 reports how many it queued; the [agent queue](#agent-queue) starts them as
 `max_agents` allows. Without a
 workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
-A workspace without stopped agents continues one of its last sessions, left by
-an agent that exited on its own, such as one the user quit, picked as stopped
-agents are, or the `--execution` one. A workspace keeps one per agent; the next
-new agent started there or `shoal done` replaces them. Unlike stopped work they
-use no agent slot, never delay cleanup and are not part of `--all`.
+A workspace without stopped agents continues one of its last sessions at once
+when resumed by itself, left by an agent that exited on its own, such as one
+the user quit, picked as stopped agents are, or the `--execution` one. A
+workspace keeps one per agent; the next new agent started there or `shoal done`
+replaces them. Unlike stopped work they use no agent slot and never delay
+cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
 and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
-Several workspaces, which each need stopped work, or `--all` for every workspace whose
+Several workspaces, which each need stopped work or a last session, or `--all` for every workspace whose
 assignment is not done, resume together and report commands without an agent,
 skipping agents whose wrapper still waits to restore them; a done workspace's
 agent restores only when its workspace is named.

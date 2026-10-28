@@ -1,10 +1,13 @@
-//! Restores of stopped agents that the daemon starts, as it starts launches
-//! in existing workspaces: `shoal resume` queues them, and so does a signal
-//! that ended an agent's session, through a request beside its record. Each
-//! is admitted like a launch and leaves the queue once its agent registers,
-//! or while waiting once its record is gone, as after `shoal resume --now` or
-//! a discard.
-use std::collections::{BTreeMap, HashSet};
+//! Restores of stopped agents and last sessions that the daemon starts, as
+//! it starts launches in existing workspaces: `shoal resume` queues them, and
+//! so does a signal that ended an agent's session, through a request beside
+//! its record. Each is admitted like a launch and leaves the queue once its
+//! agent registers, or while waiting once what it restores is gone, as after
+//! `shoal resume --now` or a discard.
+use std::{
+    collections::{BTreeMap, HashSet},
+    path::PathBuf,
+};
 
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
@@ -145,17 +148,29 @@ fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The IDs of the `waiting` restores whose recovery record is gone. A record
-/// whose existence cannot be read counts as kept.
+/// The IDs of the `waiting` restores whose recovery record or last session
+/// is gone. A file whose existence cannot be read counts as kept.
 fn resolved_restores(paths: &Paths, waiting: Vec<(String, String, String)>) -> Vec<String> {
     waiting
         .into_iter()
         .filter(|(_, workspace, execution)| {
-            let path = recovery::record_path(paths, workspace, execution);
-            !path.try_exists().unwrap_or(true)
+            let gone = |path: PathBuf| !path.try_exists().unwrap_or(true);
+            gone(recovery::record_path(paths, workspace, execution))
+                && gone(recovery::LastSession::path(paths, workspace, execution))
         })
         .map(|(id, _, _)| id)
         .collect()
+}
+
+/// The agent stopped as `execution` in `workspace_id`, from its recovery
+/// record or else its last session.
+fn stopped_agent(paths: &Paths, workspace_id: &str, execution: &str) -> Result<Option<String>> {
+    let record = recovery::Record::load(&recovery::record_path(paths, workspace_id, execution))?;
+    if let Some(record) = record {
+        return Ok(Some(record.agent));
+    }
+    let path = recovery::LastSession::path(paths, workspace_id, execution);
+    Ok(recovery::LastSession::load(&path)?.map(|last| last.agent))
 }
 
 /// Delete the restores the daemon starts of `workspace_id`'s stopped agents.
@@ -180,8 +195,8 @@ fn delete_waiting(db: &Connection, ids: &[String]) -> Result<()> {
 
 impl Manager {
     /// Queue the restore of the agent stopped as `execution` in `workspace`,
-    /// which the daemon starts with `env` once admitted, and return its
-    /// entry. Queueing it again keeps its place.
+    /// or of its last session, which the daemon starts with `env` once
+    /// admitted, and return its entry. Queueing it again keeps its place.
     pub async fn queue_stopped_restore(
         &self,
         workspace: &str,
@@ -189,15 +204,14 @@ impl Manager {
         env: BTreeMap<String, String>,
     ) -> Result<QueueEntry> {
         let workspace = self.workspace(workspace).await?;
-        let path = recovery::record_path(&self.paths, &workspace.id, execution);
-        let record = recovery::Record::load(&path)?
+        let agent = stopped_agent(&self.paths, &workspace.id, execution)?
             .with_context(|| format!("{} has no stopped agent {execution}", workspace.name))?;
         let target = Target {
             id: workspace.id,
             repository: workspace.repository_id,
             name: workspace.name,
         };
-        let restore = Restore::new(target, execution, &record.agent, &env)?;
+        let restore = Restore::new(target, execution, &agent, &env)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
         self.store.run(move |db| insert(db, &restore)).await?;

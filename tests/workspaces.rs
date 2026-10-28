@@ -24630,8 +24630,14 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
             .join("state/workspaces")
             .join(workspace["id"].as_str().unwrap());
         fs::create_dir_all(&state).unwrap();
+        // The third agent is a last session, which `--all` queues too.
+        let kind = if name == "third" {
+            "last-session"
+        } else {
+            "recovery"
+        };
         fs::write(
-            state.join(format!("{name}-agent.recovery.json")),
+            state.join(format!("{name}-agent.{kind}.json")),
             r#"{"agent":"waiter"}"#,
         )
         .unwrap();

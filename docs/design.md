@@ -207,8 +207,9 @@ The request is its own file so that forgetting it, as a stop does, never
 replaces a record a resume holds. An
 agent that exits on its own before its assignment is done leaves its workspace
 a last session for `shoal resume` instead of stopped work: the user may have
-quit it on purpose, so it takes no agent slot and keeps nothing from cleanup.
-A workspace keeps one per agent; a new agent replaces them, since the user
+quit it on purpose, so it takes no agent slot, keeps nothing from cleanup and
+comes back only when `shoal resume` names it or `--all` queues it. A workspace
+keeps one per agent; a new agent replaces them, since the user
 moved on, while a restored one consumes only its own, which the wrapper says
 when it registers.
 Built-in agents resume the session ID their hooks report, since the workspace's
@@ -746,7 +747,8 @@ start worker as it starts a launch in an existing workspace, and admits it like
 a launch: its stopped agent holds no slot while it waits, so stopped agents past
 a limit cannot keep each other from restoring. Its entry names the execution
 without referencing its row, which ended with the agent, and leaves the queue
-once the recovery record is gone.
+once the recovery record or last session is gone. A last session's admitted
+restore counts as a launch, having no slot to take over.
 `shoal queue` starts, moves and cancels entries, and the daemon owns their
 order, `agent_queue.seq`: a move gives the waiting entries' numbers to them in
 their new order in one transaction, so it lasts across restarts, and positions

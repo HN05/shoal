@@ -501,7 +501,7 @@ async fn run_all(
     let mut commands = Vec::new();
     let mut sessions = Vec::new();
     for (workspace, mut saved) in stopped {
-        if saved.agents.is_empty() {
+        if saved.agents.is_empty() && saved.sessions.is_empty() {
             let _claims = claim_commands(&mut saved.commands);
             match report_commands(ctx, &workspace, &saved.commands) {
                 Ok(report) => commands.push(report),
@@ -512,6 +512,7 @@ async fn run_all(
                 saved
                     .agents
                     .into_iter()
+                    .chain(saved.sessions)
                     .map(|(id, path)| (workspace.clone(), id, path)),
             );
         }
@@ -645,8 +646,8 @@ async fn discard_saved(ctx: &Context, workspace: &Workspace, saved: &Saved) -> R
     Ok(ids)
 }
 
-/// The stopped work of the workspaces `selectors` name, refusing one with
-/// nothing stopped: only resuming it by itself continues its last session.
+/// The stopped work and last sessions of the workspaces `selectors` name,
+/// refusing one with nothing to resume.
 async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for selector in selectors {
@@ -656,8 +657,8 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain_unattended();
         ensure!(
-            saved.is_unfinished(),
-            "{} has no stopped agents or commands to resume; resume it by itself to continue its last session",
+            !saved.is_empty(),
+            "{} has no stopped agents or commands to resume",
             workspace.name
         );
         stopped.push((workspace, saved));
@@ -665,9 +666,9 @@ async fn stopped_in(ctx: &Context, selectors: &[String]) -> Result<Vec<(Workspac
     Ok(stopped)
 }
 
-/// The workspaces with stopped work that no waiting wrapper restores, or
-/// with last sessions to `discard`. A done assignment needs no agent, so its
-/// workspace is included only to `discard`.
+/// The workspaces with stopped work or last sessions that no waiting wrapper
+/// restores. A done assignment needs no agent, so its workspace is included
+/// only to `discard`.
 async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Saved)>> {
     let mut stopped = Vec::new();
     for workspace in client::workspaces(&ctx.paths).await? {
@@ -676,7 +677,7 @@ async fn stopped_work(ctx: &Context, discard: bool) -> Result<Vec<(Workspace, Sa
         }
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain_unattended();
-        if saved.is_unfinished() || discard && !saved.is_empty() {
+        if !saved.is_empty() {
             stopped.push((workspace, saved));
         }
     }

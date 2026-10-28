@@ -239,6 +239,36 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
 }
 
 #[tokio::test]
+async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let mut entries = Vec::new();
+    for name in ["one", "two"] {
+        let workspace = create(&manager, &repo, name).await;
+        let execution = format!("{name}-agent");
+        recovery::LastSession {
+            execution: execution.clone(),
+            agent: "claude".into(),
+            session: None,
+            moved: false,
+        }
+        .write(&manager.paths, &workspace.id)
+        .unwrap();
+        let entry = manager
+            .queue_stopped_restore(name, &execution, herdr())
+            .await
+            .unwrap();
+        entries.push(entry);
+    }
+    // The admitted restore counts as a launch until its agent registers.
+    manager.dispatch_queue().await.unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&entries[0].id));
+    assert!(!started(&entries[1].id));
+}
+
+#[tokio::test]
 async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

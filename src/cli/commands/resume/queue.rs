@@ -11,8 +11,8 @@ use crate::{
     protocol::QueueMethod,
 };
 
-/// Queue the restore of every agent `stopped` saves, and report the commands
-/// of workspaces without one, going on after one fails.
+/// Queue the restore of every agent and last session `stopped` saves, and
+/// report the commands of workspaces without one, going on after one fails.
 pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -> Result<i32> {
     if stopped.is_empty() {
         ctx.emit(
@@ -25,14 +25,14 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
     let mut commands = Vec::new();
     let mut failed = Vec::new();
     for (workspace, mut saved) in stopped {
-        if saved.agents.is_empty() {
+        if saved.agents.is_empty() && saved.sessions.is_empty() {
             let _claims = claim_commands(&mut saved.commands);
             match report_commands(ctx, &workspace, &saved.commands) {
                 Ok(report) => commands.push(report),
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),
             }
         }
-        for (execution, _) in &saved.agents {
+        for (execution, _) in saved.agents.iter().chain(&saved.sessions) {
             match queue(ctx, &workspace, execution).await {
                 Ok(entry) => queued.push(entry),
                 Err(error) => failed.push(ui::failure(ctx, "resume", &workspace.name, &error)),

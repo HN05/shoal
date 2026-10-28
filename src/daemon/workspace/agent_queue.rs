@@ -732,7 +732,8 @@ impl Manager {
     /// while it runs, awaits reattachment or waits for resume, counted once by
     /// its execution, except the `dormant` ones whose restore waits for an
     /// update; so does each starting launch until its agent registers. An
-    /// admitted restore starts in its agent's slot.
+    /// admitted restore starts in its agent's slot, and one of a last
+    /// session, which holds none, as a launch.
     async fn occupied_slots(&self, dormant: &HashSet<String>) -> Result<Vec<Slot>> {
         let mut agents = self.agent_executions().await;
         let PersistedSlots {
@@ -759,12 +760,8 @@ impl Manager {
         agents.retain(|execution, _| !dormant.contains(execution));
         let mut launches = Vec::new();
         for entry in starting {
-            match &entry.execution {
-                Some(execution) => {
-                    if let Some((_, activity)) = agents.get_mut(execution) {
-                        *activity = starting_since(entry.seen_at);
-                    }
-                }
+            match entry.execution.as_ref().and_then(|id| agents.get_mut(id)) {
+                Some((_, activity)) => *activity = starting_since(entry.seen_at),
                 None => launches.push(entry),
             }
         }
