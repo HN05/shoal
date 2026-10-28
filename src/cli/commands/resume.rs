@@ -350,6 +350,7 @@ async fn launch(
     }
     if let Err(error) = terminal::label_current(
         &ctx.paths,
+        &settings,
         terminal::Owner::Workspace(&workspace.id),
         &recovery.agent,
     )

@@ -152,8 +152,13 @@ pub(super) async fn begin(
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
     let chat = client::start_chat(&ctx.paths, &repo, &name, agent.name()).await?;
-    if let Err(error) =
-        terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id), agent.name()).await
+    if let Err(error) = terminal::label_current(
+        &ctx.paths,
+        &settings,
+        terminal::Owner::Chat(&chat.id),
+        agent.name(),
+    )
+    .await
     {
         eprintln!("warning: {error:#}");
     }

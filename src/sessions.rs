@@ -1,5 +1,6 @@
 //! Terminal session integrations shared by the CLI and daemon.
 //! The registry wires launch and cleanup capabilities together.
+pub(crate) mod herdr;
 pub(crate) mod zmx;
 
 use anyhow::Result;
@@ -38,13 +39,13 @@ pub(crate) trait Host: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-// Each terminal host declares its cleanup adapter in this inventory. `None`
-// is reserved for hosts without persistent places; policy never names a host.
+// Every registered terminal host supplies both launch and cleanup adapters.
+// Adding a host cannot silently omit its lifecycle operations.
 macro_rules! registered_hosts {
     ($registry:ident) => {
         $registry! {
-            (herdr, Herdr, None),
-            (zmx, Zmx, Some(Arc::new(crate::sessions::zmx::Zmx) as Arc<dyn crate::sessions::Host>)),
+            (herdr, Herdr, crate::sessions::herdr::Herdr),
+            (zmx, Zmx, crate::sessions::zmx::Zmx),
         }
     };
 }
@@ -56,8 +57,8 @@ pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
         Vec::new()
     } else {
         macro_rules! cleanup_hosts {
-            ($(($module:ident, $host:ident, $cleanup:expr)),* $(,)?) => {
-                [$($cleanup),*].into_iter().flatten().collect()
+            ($(($module:ident, $host:ident, $cleanup:path)),* $(,)?) => {
+                vec![$(Arc::new($cleanup) as Arc<dyn Host>),*]
             };
         }
         registered_hosts!(cleanup_hosts)

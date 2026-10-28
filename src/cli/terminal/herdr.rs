@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
+use super::{ChatStart, Demo, Host, Options, Owner, PlaceState, Start, Watched};
 
 mod demo;
 use crate::{config, state::AgentState, subprocess::Run};
@@ -98,6 +98,23 @@ impl Host for Herdr {
 
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(rename_tab(place, label))
+    }
+
+    fn label_current<'a>(
+        &'a self,
+        state: &'a Path,
+        owner: Owner<'a>,
+        _: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        let workspace = match owner {
+            Owner::Workspace(id) => Some(id),
+            Owner::Chat(_) => None,
+        };
+        Box::pin(crate::sessions::herdr::label_current(state, workspace))
+    }
+
+    fn clear_current_ownership<'a>(&'a self, state: &'a Path) -> BoxFuture<'a, Result<()>> {
+        Box::pin(crate::sessions::herdr::label_current(state, None))
     }
 
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {

@@ -593,8 +593,9 @@ numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
 hide the decision being made.
 
-`herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
-plain terminal; `new_tab` only governs opening new tabs.
+`herdr.enabled = false` makes new work in a Herdr pane behave as a plain
+terminal; `new_tab` only governs opening new tabs. Existing owned panes still
+close when their ownership ends.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
 allocated workspace branch by default. An optional `herdr.tab_name` template
@@ -640,6 +641,15 @@ from the installation path Shoal was started through, never a resolved versioned
 binary, once another binary is installed there, so tabs opened before an upgrade
 still close.
 
+Terminal hosts register launch and cleanup adapters together; lifecycle policy
+uses their ownership, discovery and verified-close operations. Removal closes
+owned places, and startup and cleanup sweeps close those whose workspace record
+is gone, retrying failures without restoring ownership. Relabelling replaces
+obsolete ownership, so reusing a workspace place for a chat preserves it.
+Herdr ownership persists in the owning state directory with its server socket,
+pane and terminal identity; cleanup closes only the matching pane, preserving
+other panes in the tab and replacements at the same pane ID.
+
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx
 passes output through unchanged while attached and restores the screen from its
@@ -654,11 +664,9 @@ terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
-so daemons sharing zmx can distinguish their sessions. Relabelling replaces Shoal
-ownership; `attach` and `status` look sessions up through `zmx list`. Removal
-closes sessions labelled with its workspace ID unless chat ownership conflicts;
-startup and cleanup sweeps close sessions whose workspace record is gone, retrying failures without restoring ownership. Only the default daemon
-cleans up legacy sessions without a state label. A detached session that Shoal
+so daemons sharing zmx can distinguish their sessions. `attach` and `status`
+look sessions up through `zmx list`. Only the default daemon cleans up legacy
+sessions without a state label. A detached session that Shoal
 starts labels itself once its workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
@@ -669,8 +677,8 @@ usually over SSH. A demo is a named command the repository configures or the
 agent gives, and a workspace runs several. Its wrapper is an ordinary tracked
 command that records the demo with its execution, so stopping, removal and
 recovery use that execution. Its verified end closes the demo session, including
-a disconnected wrapper stopped by the daemon, only while its unique launch label
-still matches the session. Pending closes persist with execution deletion and retry
+a disconnected wrapper stopped by the daemon, only while the host still verifies
+its launch ownership. Pending closes persist with execution deletion and retry
 at startup or cleanup, even while the workspace remains. The wrapper
 restarts the command, backing off after quick exits so a failing command keeps
 its error on screen. The CLI places the wrapper where queued agents start,

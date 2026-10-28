@@ -445,13 +445,16 @@ configured command for another agent, plus proven child
   give the entire command process group a shared grace period, even after its leader exits.
   Terminal agent launches put the tracked wrapper inside a zmx session, never a
   terminal emulator between agent and terminal; launches without a terminal, inside
-  zmx, or in an enabled Herdr pane run in place. Removal closes labelled workspace
-  sessions; startup and cleanup sweeps close orphan sessions only in their state
-  namespace, with legacy labels claimed only by the default daemon. Relabelling
+  zmx, or in an enabled Herdr pane run in place. Hosts register launch and cleanup
+  adapters together. Removal closes owned terminal places, including Herdr panes;
+  startup and cleanup sweeps close orphan sessions only in their state namespace, with legacy labels claimed only by the default daemon. Relabelling
   replaces obsolete ownership; conflicting chat labels prevent workspace cleanup.
+  Herdr ownership persists with the server socket, pane and terminal identity;
+  cleanup verifies the terminal and closes only that pane. Disabling handoffs
+  preserves cleanup of already owned places.
   Failed detached handoffs close only the originally observed process and creation time.
   A demo session closes after verified execution completion, including a disconnected stop, only
-  while its unique launch label still matches the session. Failed demo closes persist
+  while its host still verifies the launch ownership. Failed demo closes persist
   beyond execution deletion and retry at startup or cleanup. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. Reported exits clear executions and permit setup readiness only after

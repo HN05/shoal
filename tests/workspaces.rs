@@ -1,3 +1,6 @@
+#[path = "workspaces/terminal_sessions.rs"]
+mod terminal_sessions;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]
