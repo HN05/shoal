@@ -8,8 +8,10 @@ fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
         open: None,
         scheme: None,
         environment: BTreeMap::from([(variable.to_owned(), value.to_owned())]),
-        host: "zmx".into(),
-        place: "first-app".into(),
+        origin: crate::sessions::Origin::created(
+            crate::sessions::HostName::Zmx,
+            "first-app".into(),
+        ),
     }
 }
 

@@ -216,7 +216,7 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
 async fn demos_close_their_session_after_completion_or_verified_forgetting() -> Result<()> {
     use crate::{daemon::workspace::ExecutionKind, demos::Launch};
 
-    for host_name in ["zmx", "future-host"] {
+    for host_name in ["zmx", "rex"] {
         let (_root, manager, workspace, host) = fixture_for(host_name).await?;
         for disconnected in [false, true] {
             let name = if disconnected {
@@ -233,8 +233,7 @@ async fn demos_close_their_session_after_completion_or_verified_forgetting() -> 
                 open: None,
                 scheme: None,
                 environment: Default::default(),
-                host: host_name.into(),
-                place: name.into(),
+                origin: crate::sessions::Origin::created(host_name.parse()?, name.into()),
             };
             let started = manager
                 .begin_execution_running(
@@ -286,8 +285,7 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
         open: None,
         scheme: None,
         environment: Default::default(),
-        host: "zmx".into(),
-        place: "reused".into(),
+        origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "reused".into()),
     };
     let started = manager
         .begin_execution_running(
@@ -321,8 +319,7 @@ async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_works
             open: None,
             scheme: None,
             environment: Default::default(),
-            host: "zmx".into(),
-            place: "bad".into(),
+            origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "bad".into()),
         };
         let started = manager
             .begin_execution_running(
@@ -401,8 +398,7 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
         open: None,
         scheme: None,
         environment: Default::default(),
-        host: "zmx".into(),
-        place: "session".into(),
+        origin: crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "session".into()),
     };
     let started = manager
         .begin_execution_running(

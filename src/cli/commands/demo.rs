@@ -19,6 +19,7 @@ use crate::{
     demos::{Demo, Launch, Preset, Progress, Running},
     model::Workspace,
     protocol::{ConfigTarget, DemoMethod, NotificationMethod, WorkspaceMethod},
+    sessions::Origin,
 };
 
 mod presets;
@@ -253,18 +254,17 @@ async fn place(
     // Places can repeat, such as a background demo's log, so the start finds
     // its own record by this launch's ID.
     let id = uuid::Uuid::new_v4().to_string();
-    let launch = |host: &str, place: &str| Launch {
+    let launch = |place: &Origin| Launch {
         id: id.clone(),
         name: chosen.name.clone(),
         preset: chosen.demo.preset,
         open: chosen.demo.open.clone(),
         scheme: chosen.demo.scheme,
         environment: provided.environment.clone(),
-        host: host.to_owned(),
-        place: place.to_owned(),
+        origin: place.clone(),
     };
-    let worker = |host: &str, place: &str| {
-        let launch = serde_json::to_string(&launch(host, place))?;
+    let worker = |place: &Origin| {
+        let launch = serde_json::to_string(&launch(place))?;
         internal_command(
             &ctx.paths,
             false,
@@ -275,9 +275,8 @@ async fn place(
             },
         )
     };
-    let (host, place) =
-        terminal::start_demo(ctx, settings, workspace, &chosen.name, &id, &worker).await?;
-    Ok(launch(host, &place))
+    let place = terminal::start_demo(ctx, settings, workspace, &chosen.name, &id, &worker).await?;
+    Ok(launch(&place))
 }
 
 /// Wait until the worker has recorded `launch`, which shows its command runs.

@@ -11,7 +11,11 @@ use std::{
 use anyhow::{Context as _, Result};
 
 use super::DemoWorker;
-use crate::{model::Workspace, paths::Paths};
+use crate::{
+    model::Workspace,
+    paths::Paths,
+    sessions::{HostName, Origin},
+};
 
 /// Start the worker in its own process group, writing to a new log, and
 /// return the log's path as the demo's place.
@@ -20,10 +24,11 @@ pub(super) fn start_demo(
     workspace: &Workspace,
     name: &str,
     worker: &DemoWorker<'_>,
-) -> Result<String> {
+) -> Result<Origin> {
     let log = log_path(paths, &workspace.id, name);
     let place = log.to_str().context("Shoal state path is not UTF-8")?;
-    let argv = worker(place)?;
+    let place = Origin::created(HostName::Terminal, place.to_owned());
+    let argv = worker(&place)?;
     if let Some(directory) = log.parent() {
         fs::create_dir_all(directory).with_context(|| format!("create {}", directory.display()))?;
     }
@@ -42,7 +47,7 @@ pub(super) fn start_demo(
     command
         .spawn()
         .context("start the demo in the background")?;
-    Ok(place.to_owned())
+    Ok(place)
 }
 
 /// Follow the demo's log until the user interrupts it.

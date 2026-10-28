@@ -48,5 +48,23 @@ pub struct Origin {
     pub owned: bool,
 }
 
+impl Origin {
+    /// A place Shoal created in `host`, known by its ID alone.
+    pub fn created(host: HostName, place: String) -> Self {
+        Self {
+            host,
+            group: None,
+            place: Some(place),
+            data: BTreeMap::new(),
+            owned: true,
+        }
+    }
+
+    /// The place's ID; empty for a group alone.
+    pub fn id(&self) -> &str {
+        self.place.as_deref().unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod tests;

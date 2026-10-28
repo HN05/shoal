@@ -101,20 +101,20 @@ impl Host for Herdr {
         Box::pin(rename_tab(place, label))
     }
 
-    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
         Box::pin(async move { demo::start(demo).await.map(Some) })
     }
 
-    fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(demo::open(place))
+    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
+        Box::pin(demo::open(place.id()))
     }
 
-    fn demo_screen<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<String>> {
-        Box::pin(demo::screen(place))
+    fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
+        Box::pin(demo::screen(place.id()))
     }
 
-    fn send_demo_keys<'a>(&'a self, place: &'a str, keys: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(demo::send(place, keys))
+    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(demo::send(place.id(), keys))
     }
 }
 

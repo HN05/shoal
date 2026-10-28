@@ -19,8 +19,10 @@ fn launch(name: &str) -> Launch {
         open: None,
         scheme: None,
         environment: BTreeMap::new(),
-        host: "zmx".into(),
-        place: format!("session-{name}"),
+        origin: crate::sessions::Origin::created(
+            crate::sessions::HostName::Zmx,
+            format!("session-{name}"),
+        ),
     }
 }
 

@@ -86,8 +86,10 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
         open: None,
         scheme: None,
         environment: BTreeMap::new(),
-        host: "zmx".into(),
-        place: "first-web".into(),
+        origin: crate::sessions::Origin::created(
+            crate::sessions::HostName::Zmx,
+            "first-web".into(),
+        ),
     };
     let listing = Listing {
         workspace: Some("first".into()),

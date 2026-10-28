@@ -21,15 +21,15 @@ pub(in crate::daemon::workspace) fn record_demo(
     let Some(launch) = super::super::demos::execution_launch(tx, execution)? else {
         return Ok(None);
     };
-    if !hosts.contains(&launch.host.as_str()) {
+    if !hosts.contains(&launch.origin.host.as_str()) {
         return Ok(None);
     }
     tx.execute(
         "INSERT OR IGNORE INTO session_cleanup(id,host,name,owner) VALUES (?1,?2,?3,?4)",
         params![
             launch.id,
-            launch.host,
-            launch.place,
+            launch.origin.host,
+            launch.origin.id(),
             serde_json::to_string(&Owner::Demo(launch.id.clone()))?
         ],
     )?;

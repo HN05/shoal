@@ -173,20 +173,20 @@ impl Host for Zmx {
         Box::pin(attach(session))
     }
 
-    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<String>>> {
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
         Box::pin(async move { start_demo(demo).await.map(Some) })
     }
 
-    fn open_demo<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(open_demo(place))
+    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
+        Box::pin(open_demo(place.id()))
     }
 
-    fn demo_screen<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<String>> {
-        Box::pin(demo_screen(place))
+    fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
+        Box::pin(demo_screen(place.id()))
     }
 
-    fn send_demo_keys<'a>(&'a self, place: &'a str, keys: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(send_keys(place, keys))
+    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(send_keys(place.id(), keys))
     }
 }
 
@@ -270,13 +270,14 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
 
 /// Start `demo` in a new detached session, whose worker ends the session
 /// once the demo stops.
-async fn start_demo(demo: &Demo<'_>) -> Result<String> {
+async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
     ensure_program("demo", Tool::Zmx.program())?;
     let session = unused_name(demo.label).await?;
+    let place = Origin::created(HostName::Zmx, session.clone());
     run_in_new_session(
         &session,
         demo.cwd,
-        &(demo.worker)(&session)?,
+        &(demo.worker)(&place)?,
         &NewSession {
             environment: demo.env,
             clear: super::NOT_INHERITED_BY_DEMOS,
@@ -290,7 +291,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<String> {
         },
     )
     .await?;
-    Ok(session)
+    Ok(place)
 }
 
 /// A detached session's shell setup and ownership labels.

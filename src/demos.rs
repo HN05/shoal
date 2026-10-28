@@ -73,10 +73,9 @@ pub struct Launch {
     /// demo receives them too.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub environment: BTreeMap<String, String>,
-    /// The terminal host the demo runs in, and its name for the demo's place
-    /// there, such as a zmx session.
-    pub host: String,
-    pub place: String,
+    /// The place the demo runs in, such as a zmx session.
+    #[serde(flatten)]
+    pub origin: crate::sessions::Origin,
 }
 
 /// A running demo as listings show it.
