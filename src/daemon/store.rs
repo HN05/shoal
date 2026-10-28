@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 76;
+const SCHEMA_VERSION: i64 = 77;
 
 #[cfg(test)]
 mod benchmark;
@@ -418,6 +418,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (74, include_str!("store/execution_upstream_resets.sql"), None),
     (75, AUTOMATIC_RESTORES, None),
     (76, include_str!("store/places.sql"), None),
+    (77, include_str!("store/owned_places.sql"), None),
 ];
 
 /// Restores Shoal queued on its own, as after a signal stop, rather than

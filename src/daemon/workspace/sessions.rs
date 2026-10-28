@@ -1,12 +1,18 @@
 //! End terminal sessions Shoal created once their owner ends, including
 //! leftovers from failed closes. Hosts supply discovery and close operations,
-//! not lifecycle policy.
+//! not lifecycle policy. Sessions a host labels as Shoal's are found there;
+//! places a host does not label are closed from the daemon's records of the
+//! places Shoal created.
 pub(super) mod pending;
 
 use anyhow::{Context as _, Result};
 
 use super::Manager;
-use crate::{daemon::notifications::NotificationKind, model::Workspace};
+use crate::{
+    daemon::notifications::NotificationKind,
+    model::Workspace,
+    sessions::{Origin, Owner},
+};
 
 impl Manager {
     /// Removal is already committed; failures are visible and the next orphan
@@ -21,6 +27,7 @@ impl Manager {
                     .await;
             }
         }
+        self.close_owned_places(Some(workspace.id.clone())).await;
     }
 
     async fn close_host_workspace_sessions(
@@ -30,12 +37,8 @@ impl Manager {
     ) -> Result<()> {
         for session in host.sessions(&self.paths.state).await? {
             if session.workspace == workspace {
-                self.close_session(
-                    host,
-                    &session.name,
-                    &crate::sessions::Owner::Workspace(session.workspace),
-                )
-                .await;
+                self.close_session(host, &session.name, Owner::Workspace(session.workspace))
+                    .await;
             }
         }
         Ok(())
@@ -50,20 +53,47 @@ impl Manager {
                 self.session_cleanup_failed(None, &error).await;
             }
         }
+        self.close_owned_places(None).await;
     }
 
     async fn cleanup_host_sessions(&self, host: &dyn crate::sessions::Host) -> Result<()> {
         for session in host.sessions(&self.paths.state).await? {
             if self.find_workspace(&session.workspace).await?.is_none() {
-                self.close_session(
-                    host,
-                    &session.name,
-                    &crate::sessions::Owner::Workspace(session.workspace),
-                )
-                .await;
+                self.close_session(host, &session.name, Owner::Workspace(session.workspace))
+                    .await;
             }
         }
         Ok(())
+    }
+
+    /// Close the places Shoal created for `workspace`, which removal ended,
+    /// or for every workspace whose record is gone.
+    async fn close_owned_places(&self, workspace: Option<String>) {
+        let sweep = workspace.is_none();
+        let places = match self.owned_places(workspace).await {
+            Ok(places) => places,
+            Err(error) => return self.session_cleanup_failed(None, &error).await,
+        };
+        for (owner, place) in places {
+            let removed = !sweep || matches!(self.find_workspace(&owner).await, Ok(None));
+            if removed && let Err(error) = self.close_owned_place(owner, place).await {
+                self.session_cleanup_failed(None, &error).await;
+            }
+        }
+    }
+
+    /// Close `place` and forget it; a host that cannot close places leaves
+    /// that to the place itself.
+    async fn close_owned_place(&self, workspace: String, place: Origin) -> Result<()> {
+        if let Some(host) = self
+            .session_hosts
+            .iter()
+            .find(|host| host.name() == place.host)
+        {
+            host.close(&self.paths.state, &place, &Owner::Workspace(workspace))
+                .await?;
+        }
+        self.forget_owned_place(place).await
     }
 
     /// The close was queued atomically with deleting the verified execution.
@@ -94,22 +124,19 @@ impl Manager {
         let host = self
             .session_hosts
             .iter()
-            .find(|host| host.name() == close.host)
-            .with_context(|| format!("terminal host {} is unavailable", close.host))?;
-        host.close(&self.paths.state, &close.name, &close.owner)
+            .find(|host| host.name() == close.place.host)
+            .with_context(|| format!("terminal host {} is unavailable", close.place.host))?;
+        host.close(&self.paths.state, &close.place, &close.owner)
             .await?;
         self.store
             .run(move |db| pending::forget(db, &close.id))
             .await
     }
 
-    async fn close_session(
-        &self,
-        host: &dyn crate::sessions::Host,
-        name: &str,
-        owner: &crate::sessions::Owner,
-    ) {
-        if let Err(error) = host.close(&self.paths.state, name, owner).await {
+    /// Close the session a host labelled as `owner`'s.
+    async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str, owner: Owner) {
+        let place = Origin::created(host.name(), name.to_owned());
+        if let Err(error) = host.close(&self.paths.state, &place, &owner).await {
             self.session_cleanup_failed(None, &error).await;
         }
     }

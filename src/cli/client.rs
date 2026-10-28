@@ -317,6 +317,24 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
     request(paths, RepositoryMethod::ListRepositories).await
 }
 
+/// Record `origin`, a place Shoal created for `workspace`, so the daemon
+/// closes it once the workspace is removed.
+pub async fn record_owned_place(
+    paths: &Paths,
+    workspace: &str,
+    origin: crate::sessions::Origin,
+) -> Result<()> {
+    call(
+        paths,
+        WorkspaceMethod::RecordOwnedPlace {
+            workspace: workspace.to_owned(),
+            origin,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 /// Keep where an agent of `workspace` keeps its configuration for the
 /// repository's removal.
 pub async fn keep_agent_environment(

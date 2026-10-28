@@ -148,6 +148,10 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
+        WorkspaceMethod::RecordOwnedPlace { workspace, origin } => {
+            manager.record_owned_place(&workspace, origin).await?;
+            Body::Ok
+        }
         WorkspaceMethod::KeepAgentEnvironment {
             workspace,
             environment,
@@ -181,6 +185,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::Conflicts { workspace, .. }
             | WorkspaceMethod::WorkspaceHook { workspace, .. }
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
+            | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Workspace(workspace),
             } => Some(workspace),

@@ -30,12 +30,15 @@ pub(crate) enum Owner {
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
 /// Verified closes must exclude ownership replacement in the native namespace.
 pub(crate) trait Host: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> HostName;
+    /// The sessions this host labels as Shoal's; a host without labels has
+    /// only the places the daemon recorded.
     fn sessions<'a>(&'a self, state: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>>;
+    /// Close `place` while `owner` still owns it.
     fn close<'a>(
         &'a self,
         state: &'a Path,
-        session: &'a str,
+        place: &'a Origin,
         owner: &'a Owner,
     ) -> BoxFuture<'a, Result<()>>;
 }
@@ -45,6 +48,6 @@ pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
     if cfg!(test) {
         Vec::new()
     } else {
-        vec![Arc::new(zmx::Zmx)]
+        vec![Arc::new(zmx::Zmx), Arc::new(rex::Cleanup)]
     }
 }

@@ -115,6 +115,12 @@ pub enum WorkspaceMethod {
         workspace: String,
         environment: std::collections::BTreeMap<String, String>,
     },
+    /// Record a place Shoal created for the workspace, which it closes once
+    /// the workspace is removed.
+    RecordOwnedPlace {
+        workspace: String,
+        origin: crate::sessions::Origin,
+    },
     /// One effective hook, resolved against the directory where it runs.
     WorkspaceHook {
         workspace: String,

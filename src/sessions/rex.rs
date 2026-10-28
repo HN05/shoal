@@ -339,6 +339,37 @@ impl Rex {
     }
 }
 
+/// Rex blocks carry no Shoal labels, so the daemon's records of the blocks
+/// Shoal created are the only proof of ownership: discovery finds none, and
+/// a close needs a recorded block. Rex never reuses IDs, so a recorded block
+/// that still exists is the one Shoal created.
+pub(super) struct Cleanup;
+
+impl super::Host for Cleanup {
+    fn name(&self) -> super::HostName {
+        super::HostName::Rex
+    }
+
+    fn sessions<'a>(
+        &'a self,
+        _state: &'a Path,
+    ) -> futures_util::future::BoxFuture<'a, Result<Vec<super::Session>>> {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+
+    fn close<'a>(
+        &'a self,
+        _state: &'a Path,
+        place: &'a super::Origin,
+        _owner: &'a super::Owner,
+    ) -> futures_util::future::BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            anyhow::ensure!(place.owned, "Shoal did not create Rex block {}", place.id());
+            Rex::recorded(&place.data)?.close(place.id()).await
+        })
+    }
+}
+
 /// The value of variable `name`, when set and not empty.
 fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())

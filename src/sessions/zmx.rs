@@ -127,8 +127,8 @@ fn created(fields: &Fields) -> bool {
 pub(super) struct Zmx;
 
 impl super::Host for Zmx {
-    fn name(&self) -> &'static str {
-        "zmx"
+    fn name(&self) -> super::HostName {
+        super::HostName::Zmx
     }
     fn sessions<'a>(
         &'a self,
@@ -151,10 +151,11 @@ impl super::Host for Zmx {
     fn close<'a>(
         &'a self,
         _state: &'a Path,
-        session: &'a str,
+        place: &'a super::Origin,
         owner: &'a super::Owner,
     ) -> futures_util::future::BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            let session = place.id();
             let _server = ownership_lock().await?;
             if list()
                 .await?

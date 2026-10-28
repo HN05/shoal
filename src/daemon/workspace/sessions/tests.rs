@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     removal::{InspectionPolicy, UnsavedWork},
-    sessions::{Host, Session},
+    sessions::{Host, HostName, Origin, Session},
     test_support::{manager, repository},
 };
 use futures_util::future::BoxFuture;
@@ -15,7 +15,7 @@ use std::{
 
 #[derive(Default)]
 struct FakeHost {
-    name: Option<&'static str>,
+    name: Option<HostName>,
     remaining: Mutex<Vec<(String, String)>>,
     demos: Mutex<std::collections::HashMap<String, String>>,
     closed: Mutex<Vec<String>>,
@@ -49,8 +49,8 @@ impl FakeHost {
 }
 
 impl Host for FakeHost {
-    fn name(&self) -> &'static str {
-        self.name.unwrap_or("zmx")
+    fn name(&self) -> HostName {
+        self.name.unwrap_or(HostName::Zmx)
     }
     fn sessions<'a>(&'a self, _: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
@@ -70,10 +70,11 @@ impl Host for FakeHost {
     fn close<'a>(
         &'a self,
         _: &'a Path,
-        name: &'a str,
+        place: &'a Origin,
         owner: &'a crate::sessions::Owner,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            let name = place.id();
             if !self
                 .remaining
                 .lock()
@@ -83,21 +84,23 @@ impl Host for FakeHost {
             {
                 return Ok(());
             }
-            let owned = match owner {
-                crate::sessions::Owner::Workspace(workspace) => self
-                    .remaining
-                    .lock()
-                    .map_err(|e| anyhow::anyhow!("{e}"))?
-                    .iter()
-                    .any(|(session, id)| session == name && id == workspace),
-                crate::sessions::Owner::Demo(launch) => {
-                    self.demos
+            // A Rex block carries no labels: the daemon's record proves it Shoal's.
+            let owned = self.name == Some(HostName::Rex)
+                || match owner {
+                    crate::sessions::Owner::Workspace(workspace) => self
+                        .remaining
                         .lock()
                         .map_err(|e| anyhow::anyhow!("{e}"))?
-                        .get(name)
-                        == Some(launch)
-                }
-            };
+                        .iter()
+                        .any(|(session, id)| session == name && id == workspace),
+                    crate::sessions::Owner::Demo(launch) => {
+                        self.demos
+                            .lock()
+                            .map_err(|e| anyhow::anyhow!("{e}"))?
+                            .get(name)
+                            == Some(launch)
+                    }
+                };
             if !owned {
                 return Ok(());
             }
@@ -127,7 +130,7 @@ async fn fixture_for(
 ) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
     let (root, mut manager) = manager().await;
     let host = Arc::new(FakeHost {
-        name: Some(name),
+        name: Some(name.parse()?),
         ..Default::default()
     });
     Arc::get_mut(&mut manager)
@@ -428,5 +431,82 @@ async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<(
             .await?
             .is_empty()
     );
+    Ok(())
+}
+
+/// A Rex host whose `remaining` blocks are open, with `owned` recorded as
+/// Shoal's for the workspace.
+async fn rex_fixture(
+    owned: &[&str],
+) -> Result<(tempfile::TempDir, Arc<Manager>, Workspace, Arc<FakeHost>)> {
+    let (root, manager, workspace, host) = fixture_for("rex").await?;
+    for block in owned {
+        manager
+            .record_owned_place(
+                &workspace.id,
+                Origin::created(HostName::Rex, (*block).into()),
+            )
+            .await?;
+    }
+    Ok((root, manager, workspace, host))
+}
+
+#[tokio::test]
+async fn removal_closes_only_the_blocks_shoal_recorded_creating() -> Result<()> {
+    let (_root, manager, workspace, host) = rex_fixture(&["created"]).await?;
+    host.add("created", &workspace.id)?;
+    // The user's own block ran an agent, but Shoal never recorded creating it.
+    host.add("users", &workspace.id)?;
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert_eq!(host.closed()?, ["created"]);
+    assert!(manager.owned_places(None).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_sweep_retries_failed_closes_once_the_workspace_is_gone() -> Result<()> {
+    let (_root, manager, workspace, host) = rex_fixture(&["bad", "live"]).await?;
+    host.add("bad", &workspace.id)?;
+    host.add("live", &workspace.id)?;
+    host.fail.store(true, Ordering::Relaxed);
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert_eq!(host.closed()?, ["live"]);
+    let left: Vec<_> = manager.owned_places(None).await?;
+    assert_eq!(left.len(), 1);
+    // A sweep leaves the places of a workspace that still exists.
+    host.fail.store(false, Ordering::Relaxed);
+    manager.cleanup_orphan_sessions().await;
+    assert_eq!(host.closed()?, ["live"]);
+    manager
+        .store
+        .run({
+            let id = workspace.id.clone();
+            move |db| {
+                db.execute(
+                    "UPDATE owned_places SET workspace_id='gone' WHERE workspace_id=?1",
+                    [id],
+                )?;
+                Ok(())
+            }
+        })
+        .await?;
+    manager.cleanup_orphan_sessions().await;
+    assert_eq!(host.closed()?, ["live", "bad"]);
+    assert!(manager.owned_places(None).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() -> Result<()> {
+    let (_root, manager, workspace, host) = fixture().await?;
+    manager
+        .record_owned_place(
+            &workspace.id,
+            Origin::created(HostName::Herdr, "w1:p1".into()),
+        )
+        .await?;
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert!(host.closed()?.is_empty());
+    assert!(manager.owned_places(None).await?.is_empty());
     Ok(())
 }

@@ -908,8 +908,27 @@ async fn start_in_background(
         argv: &argv,
         env: &place_env(ctx)?,
     };
-    host.host.run_in_background(&start).await?;
+    if let Some(place) = host.host.run_in_background(&start).await? {
+        record_owned(ctx, &workspace.id, place).await;
+    }
     Ok(())
+}
+
+/// Record `place`, one Shoal created for `workspace`, so the daemon closes
+/// it once the workspace is removed. Without the record the place stays
+/// open, so a failure only warns.
+async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
+    if let Err(error) = super::client::record_owned_place(&ctx.paths, workspace, place).await {
+        eprintln!("warning: cannot record the place Shoal opened: {error:#}");
+    }
+}
+
+/// Record the place this process runs in, one Shoal created for
+/// `workspace`, as [`record_owned`] does.
+pub(in crate::cli) async fn record_owned_here(ctx: &Context, workspace: &str) {
+    if let Some(place) = current_origin() {
+        record_owned(ctx, workspace, place).await;
+    }
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal
@@ -1253,6 +1272,7 @@ pub(in crate::cli) async fn host_workspace(
                 )
                 .await?;
             place.host.rename_place(&place.id, label).await;
+            record_owned_here(ctx, &workspace.id).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }

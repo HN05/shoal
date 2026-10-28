@@ -94,6 +94,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             command,
             close_in,
         } => {
+            // Shoal opened this place for the agent.
+            terminal::record_owned_here(&ctx, &workspace).await;
             if let Some(host) = close_in {
                 terminal::close_here_when_done(&ctx, &host, &workspace).await;
             }

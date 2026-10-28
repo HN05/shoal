@@ -243,7 +243,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     )?;
     db.execute_batch("DROP TABLE repository_moves;")?;
     db.execute_batch("DROP TABLE workspace_turn_retries; DROP TABLE execution_upstream_resets;")?;
-    db.execute_batch("DROP TABLE session_cleanup;")?;
+    db.execute_batch("DROP TABLE session_cleanup; DROP TABLE owned_places;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN origin;")?;
     Ok(())
 }
