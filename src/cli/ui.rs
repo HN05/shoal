@@ -8,8 +8,10 @@
 //!   ([`input_with_default`]).
 //! - [`picker`]: an fzf picker over `(id, label)` [`Entries`] that returns
 //!   the chosen id ([`pick`]), a typed value ([`pick_choice`]), an issue or
-//!   PR ([`pick_item`]), the key that chose it ([`pick_with_keys`]), or a row
-//!   of one of several views ([`pick_in_views`]).
+//!   PR ([`pick_item`]), or the key that chose it ([`pick_with_keys`]).
+//! - [`views`]: choosing a row across views ([`pick_in_views`]), reading
+//!   the next view ([`next_picker_view`]) and encoding its transition
+//!   ([`PickerView::transition`]).
 //! - [`several`]: choosing several items at once; Tab selects each and
 //!   Ctrl-A all of them ([`pick_many`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
@@ -26,10 +28,12 @@ mod picker;
 mod prompt;
 mod rows;
 mod several;
+mod views;
 mod workspaces;
 
 pub use picker::*;
 pub use prompt::*;
 pub use rows::*;
 pub use several::{Report, confirm_losses, failure, pick_many};
+pub use views::*;
 pub use workspaces::*;

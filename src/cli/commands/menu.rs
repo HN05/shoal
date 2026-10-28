@@ -33,7 +33,7 @@ use crate::{
         context::Context,
         internal::{Worker, internal_command},
         output::{Palette, Style},
-        ui::{self, Entries, ViewPicker, WidthLimit},
+        ui::{self, Entries, PickerView, ViewPicker, WidthLimit},
     },
     daemon::notifications::Notification,
     env,
@@ -161,22 +161,6 @@ impl View {
         }
     }
 
-    /// The view after the one fzf shows with `prompt`, or the first.
-    fn after(prompt: &str, views: &[Self]) -> Self {
-        let shown = views.iter().position(|view| view.prompt() == prompt);
-        views[shown.map_or(0, |shown| (shown + 1) % views.len())]
-    }
-
-    /// The fzf names of the keys a caller with this scope may not use here.
-    fn unbound(self, scoped: bool) -> Vec<&'static str> {
-        let bound = self.bound(scoped);
-        Key::ALL
-            .into_iter()
-            .filter(|key| !bound.contains(key))
-            .map(Key::name)
-            .collect()
-    }
-
     /// The keys a caller with this scope may use here.
     fn bound(self, scoped: bool) -> Vec<Key> {
         Key::ALL
@@ -198,24 +182,14 @@ impl View {
         ui::wrapped(&labels, "   ", ui::picker_width())
     }
 
-    /// The fzf actions that switch to this view, reloading its rows with
-    /// `reload`: rebind its keys, unbind the others, and name it.
-    fn switch_to(self, scoped: bool, reload: &str) -> String {
+    /// The view's presentation and actions for the shared picker.
+    fn description(self, scoped: bool, switches: bool) -> PickerView<'static> {
         let keys = self.bound(scoped);
-        let unbound = self.unbound(scoped);
-        let bound: Vec<_> = keys.iter().map(|key| key.name()).collect();
-        let mut actions = Vec::new();
-        if !unbound.is_empty() {
-            actions.push(format!("unbind({})", unbound.join(",")));
+        PickerView {
+            prompt: self.prompt(),
+            header: self.header(&keys, switches),
+            keys: keys.into_iter().map(Key::name).collect(),
         }
-        actions.extend([
-            format!("rebind({})", bound.join(",")),
-            format!("change-prompt({})", self.prompt()),
-            format!("change-header({})", self.header(&keys, true)),
-            // Last, so the command may hold any character.
-            format!("reload:{reload}"),
-        ]);
-        actions.join("+")
     }
 }
 
@@ -401,10 +375,8 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
         ctx,
         entries,
         ViewPicker {
-            prompt: view.prompt(),
-            header: &view.header(&view.bound(scoped), next.is_some()),
+            view: view.description(scoped, next.is_some()),
             keys: &Key::ALL.map(Key::name),
-            unbound: &view.unbound(scoped),
             next,
             query,
         },
@@ -465,8 +437,7 @@ pub(super) async fn print_rows(ctx: &Context, view: View) -> Result<i32> {
 pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     let scoped = env::inherits_scope(&ctx.paths.state);
     let views = View::available(scoped);
-    let prompt = std::env::var("FZF_PROMPT").unwrap_or_default();
-    let next = View::after(&prompt, views);
+    let next = *ui::next_picker_view(views, |view| view.prompt())?;
     let name = next.to_possible_value().context("views have names")?;
     let reload = worker_command(
         ctx,
@@ -474,7 +445,11 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
             view: name.get_name(),
         },
     )?;
-    outln!("{}", next.switch_to(scoped, &reload));
+    outln!(
+        "{}",
+        next.description(scoped, true)
+            .transition(&Key::ALL.map(Key::name), &reload)
+    );
     Ok(0)
 }
 

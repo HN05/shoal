@@ -1,5 +1,4 @@
-//! fzf pickers: one entry, one entry with a key that names the action,
-//! or one entry across views.
+//! fzf pickers: one entry, optionally with a key that names the action.
 use std::{
     io::Write,
     process::{Command, Stdio},
@@ -108,51 +107,6 @@ pub fn pick_choice<T: Clone>(ctx: &Context, prompt: &str, choices: &[(T, &str)])
         .context("picker returned an unknown choice")
 }
 
-/// A picker whose keys are bound per view, and which Tab can switch to
-/// another view by running `next`.
-pub struct ViewPicker<'a> {
-    pub prompt: &'a str,
-    pub header: &'a str,
-    /// Every key a view binds, by fzf name, `enter` included.
-    pub keys: &'a [&'a str],
-    /// The keys the first view leaves unbound.
-    pub unbound: &'a [&'a str],
-    /// The command whose output, fzf actions, shows the next view.
-    pub next: Option<String>,
-    /// The search the picker starts with.
-    pub query: Option<String>,
-}
-
-/// Choose an entry with one of `picker.keys`, returning the key pressed.
-/// The first view may be empty, and the entry may come from a view Tab
-/// loaded, so the caller checks the id.
-pub fn pick_in_views(
-    ctx: &Context,
-    entries: Entries,
-    picker: ViewPicker<'_>,
-) -> Result<Picked<String>> {
-    let mut args = vec!["--header".into(), picker.header.into()];
-    for key in picker.keys {
-        args.extend(["--bind".into(), format!("{key}:print({key})+accept")]);
-    }
-    if !picker.unbound.is_empty() {
-        let keys = picker.unbound.join(",");
-        args.extend(["--bind".into(), format!("start:unbind({keys})")]);
-    }
-    if let Some(next) = picker.next {
-        args.extend(["--bind".into(), format!("tab:transform({next})")]);
-    }
-    if let Some(query) = picker.query {
-        args.extend(["--query".into(), query]);
-    }
-    let output = fzf_output(ctx, picker.prompt, &entries, &args)?;
-    let (key, selected) = output.split_once('\n').context("picker omitted action")?;
-    Ok(Picked {
-        action: key.to_owned(),
-        id: entry_id(selected),
-    })
-}
-
 /// The width picker rows should fit: the terminal's, less fzf's pointer
 /// and scrollbar columns.
 pub fn picker_width() -> Option<usize> {
@@ -205,7 +159,12 @@ pub(super) fn picker_output(
 }
 
 /// `picker_output` for any number of entries, none included.
-fn fzf_output(ctx: &Context, prompt: &str, entries: &Entries, extra: &[String]) -> Result<String> {
+pub(super) fn fzf_output(
+    ctx: &Context,
+    prompt: &str,
+    entries: &Entries,
+    extra: &[String],
+) -> Result<String> {
     require_interactive(ctx)?;
     let mut command = Command::new(Tool::Fzf.program());
     if current_directory()?.is_none() {
