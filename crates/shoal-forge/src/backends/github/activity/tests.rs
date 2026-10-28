@@ -61,7 +61,7 @@ fn completed_checks_wake_individually_while_other_checks_run() {
         conflict_at: observed.conflict_at.clone(),
         ..Default::default()
     };
-    observed.schedule_conflict_reports(&before);
+    observed.normalize(&before, 1000);
     let updates = before.changes(&observed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),

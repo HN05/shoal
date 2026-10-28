@@ -116,6 +116,14 @@ pub struct MergeCheck {
 }
 
 impl Snapshot {
+    /// Retain unavailable activity and schedule reports against the preceding
+    /// observation. `now` is the current time in Unix seconds.
+    pub fn normalize(&mut self, previous: &Self, now: u64) {
+        self.retain_failed_checks(previous);
+        self.schedule_conflict_reports(previous);
+        self.schedule_failure_reports(previous, now);
+    }
+
     /// A local merge check, observed like PR mergeability.
     pub fn merge_check(check: Result<MergeCheck>) -> Self {
         let mut snapshot = Self::default();
@@ -231,7 +239,7 @@ impl Snapshot {
     /// still show its result for the previous commits, or report a PR it is
     /// still checking as not mergeable. An exact observation is taken at once.
     /// Unknown mergeability keeps the previous observation.
-    pub fn schedule_conflict_reports(&mut self, previous: &Self) {
+    fn schedule_conflict_reports(&mut self, previous: &Self) {
         if self.conflict.is_none() {
             self.conflict = previous.conflict;
             self.conflict_at = previous.conflict_at.clone();
@@ -247,7 +255,7 @@ impl Snapshot {
         };
     }
 
-    pub fn retain_failed_checks(&mut self, previous: &Self) {
+    fn retain_failed_checks(&mut self, previous: &Self) {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
@@ -292,7 +300,7 @@ impl Snapshot {
 
     /// Keeps each unchanged failure's report time until the interval passes,
     /// so `changes` reports a persisting failure again once per interval.
-    pub fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
+    fn schedule_failure_reports(&mut self, previous: &Self, now: u64) {
         self.reported = self
             .errors
             .iter()

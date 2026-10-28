@@ -599,25 +599,19 @@ impl Manager {
                             |row| row.get(0),
                         )
                         .optional()?;
+                    let previous: Option<Snapshot> = previous
+                        .map(|text| serde_json::from_str(&text))
+                        .transpose()?;
+                    snapshot.normalize(
+                        previous.as_ref().unwrap_or(&Snapshot::default()),
+                        crate::time::unix_seconds(),
+                    );
                     if let Some(previous) = previous {
-                        let previous: Snapshot = serde_json::from_str(&previous)?;
-                        snapshot.retain_failed_checks(&previous);
-                        snapshot.schedule_conflict_reports(&previous);
-                        snapshot.schedule_failure_reports(
-                            &previous,
-                            crate::time::unix_seconds(),
-                        );
                         for update in previous.changes(&snapshot, &url) {
                             crate::daemon::events::record_item_activity(
                                 &tx, &id, kind, &url, &update,
                             )?;
                         }
-                    } else {
-                        snapshot.schedule_conflict_reports(&Snapshot::default());
-                        snapshot.schedule_failure_reports(
-                            &Snapshot::default(),
-                            crate::time::unix_seconds(),
-                        );
                     }
                     tx.execute(
                         "INSERT INTO workspace_item_activity(workspace_id,url,record)
@@ -770,9 +764,7 @@ impl Manager {
                     updates.extend(previous.pending);
                     continue;
                 }
-                snapshot.retain_failed_checks(&previous.snapshot);
-                snapshot.schedule_conflict_reports(&previous.snapshot);
-                snapshot.schedule_failure_reports(&previous.snapshot, crate::time::unix_seconds());
+                snapshot.normalize(&previous.snapshot, crate::time::unix_seconds());
                 previous.snapshot.adopt_authored(&snapshot, &mut previous.authored);
                 // A poll that started by the agent's own state change may
                 // have read the state before it.

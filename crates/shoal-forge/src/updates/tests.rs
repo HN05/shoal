@@ -22,7 +22,7 @@ fn activity_changes_report_finished_checks_without_waiting_for_the_set() {
         .checks
         .insert("review".into(), check("review", true));
     reviewed.comments.insert("review".into(), "finding".into());
-    reviewed.schedule_conflict_reports(&pending);
+    reviewed.normalize(&pending, 1000);
     let updates = pending.changes(&reviewed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -50,7 +50,7 @@ fn conflicts_are_reported_again_for_a_new_head_or_base_once_confirmed() {
             },
             ..Default::default()
         };
-        next.schedule_conflict_reports(previous);
+        next.normalize(previous, 1000);
         let messages = previous
             .changes(&next, "pr")
             .into_iter()
@@ -96,7 +96,7 @@ fn persisting_lookup_failures_are_reported_again_after_the_interval() {
     };
     let poll = |previous: &Snapshot, error: &str, now| {
         let mut next = failing(error);
-        next.schedule_failure_reports(previous, now);
+        next.normalize(previous, now);
         let kinds = previous
             .changes(&next, "pr")
             .iter()
@@ -113,7 +113,7 @@ fn persisting_lookup_failures_are_reported_again_after_the_interval() {
     let (changed, kinds) = poll(&again, "timed out", 1000 + FAILURE_REPORT_INTERVAL + 1);
     assert_eq!(kinds, [UpdateKind::LookupFailed]);
     let mut recovered = Snapshot::default();
-    recovered.schedule_failure_reports(&changed, 5000);
+    recovered.normalize(&changed, 5000);
     assert!(changed.changes(&recovered, "pr").is_empty());
     assert!(recovered.reported.is_empty());
 }
@@ -250,7 +250,7 @@ fn a_failed_comment_lookup_keeps_that_sources_comments() {
     let mut failed = Snapshot::default();
     failed.record_comments("discussion", Err(anyhow::anyhow!("timed out")));
     failed.record_comments("reviews", Ok(Vec::new()));
-    failed.retain_failed_checks(&previous);
+    failed.normalize(&previous, 1000);
     assert_eq!(failed.comments.keys().collect::<Vec<_>>(), ["discussion:1"]);
     let mut recovered = failed.clone();
     recovered.errors.clear();
@@ -376,7 +376,7 @@ fn rest_checks_are_distinct_and_wake_when_they_complete() {
             ("deploy", "Skipped"),
         ],
     );
-    snapshot.schedule_conflict_reports(&rest_snapshot("rev-1", true, &[]));
+    snapshot.normalize(&rest_snapshot("rev-1", true, &[]), 1000);
     let updates = Snapshot::default().changes(&snapshot, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -422,8 +422,7 @@ fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
     failed
         .comments
         .insert("discussion:1".into(), "new finding".into());
-    failed.retain_failed_checks(&before);
-    failed.schedule_conflict_reports(&before);
+    failed.normalize(&before, 1000);
     let updates = before.changes(&failed, "pr");
     assert_eq!(
         updates.iter().map(|u| u.kind).collect::<Vec<_>>(),
@@ -441,7 +440,7 @@ fn failed_ci_lookup_preserves_checks_while_comments_and_conflicts_wake() {
         .insert("discussion:1".into(), "new finding".into());
     assert!(failed.changes(&recovered, "pr").is_empty());
     let mut unknown = Snapshot::default();
-    unknown.schedule_conflict_reports(&recovered);
+    unknown.normalize(&recovered, 1000);
     assert_eq!(unknown.conflict, Some(true));
 }
 
@@ -454,7 +453,7 @@ fn a_forgejo_conflict_is_reported_again_after_its_base_moves() {
         let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
         let mut snapshot = Snapshot::default();
         snapshot.record_checks(&pull, Ok(Vec::new()));
-        snapshot.schedule_conflict_reports(previous);
+        snapshot.normalize(previous, 1000);
         let kinds = previous
             .changes(&snapshot, "pr")
             .iter()
@@ -480,7 +479,7 @@ fn a_forgejo_push_waits_for_a_second_poll_to_report_a_conflict() {
         let pull = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
         let mut snapshot = Snapshot::default();
         snapshot.record_checks(&pull, Ok(Vec::new()));
-        snapshot.schedule_conflict_reports(previous);
+        snapshot.normalize(previous, 1000);
         let kinds = previous
             .changes(&snapshot, "pr")
             .iter()
