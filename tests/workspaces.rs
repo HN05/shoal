@@ -24310,6 +24310,14 @@ fn add_queues_agents_past_max_agents_until_removed() {
     assert_eq!(names(fixture.ok(&["queue"])), ["third", "second"]);
     let listed = String::from_utf8(fixture.run(&["queue"]).stdout).unwrap();
     assert!(listed.contains("queued, position 2"), "{listed}");
+    // A target that names nothing fails before a picker asks for its place.
+    let missing = fixture.run(&["queue", "move", "missing"]);
+    assert!(!missing.status.success());
+    let message = String::from_utf8_lossy(&missing.stderr);
+    assert!(
+        message.contains("missing is not in the agent queue"),
+        "{message}"
+    );
     let cancelled = fixture.ok(&["queue", "cancel", "third"]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
