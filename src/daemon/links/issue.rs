@@ -10,7 +10,6 @@ use crate::{
     },
     forge::{ForgeRepo, items::link::ItemKind},
     model::Workspace,
-    state::WorkspaceState,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -63,45 +62,21 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let (_, _, url) = self.issue_forge(&workspace, input).await?;
+        self.persist_issue_assignment(&workspace.id, url, title)
+            .await
+    }
+
+    async fn persist_issue_assignment(
+        &self,
+        id: &str,
+        url: String,
+        title: Option<String>,
+    ) -> Result<()> {
+        let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                let state: WorkspaceState = tx.query_row(
-                    "SELECT state FROM workspaces WHERE id=?1",
-                    [&workspace.id],
-                    |row| row.get(0),
-                )?;
-                ensure!(
-                    state.accepts_links(),
-                    "workspace cannot accept an issue in its current state"
-                );
-                let existing: Option<String> = tx
-                    .query_row(
-                        "SELECT url FROM workspace_issue WHERE workspace_id=?1",
-                        [&workspace.id],
-                        |row| row.get(0),
-                    )
-                    .optional()?;
-                ensure!(
-                    existing.as_ref().is_none_or(|existing| existing == &url),
-                    "workspace is already associated with a different issue"
-                );
-                let inserted = existing.is_none();
-                tx.execute(
-                    "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,?2,?3)
-                 ON CONFLICT(workspace_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
-                    rusqlite::params![workspace.id, url, title],
-                )?;
-                if inserted {
-                    events::record_link(
-                        &tx,
-                        &workspace.id,
-                        EventKind::Linked,
-                        crate::model::Relation::Assigned,
-                        ItemKind::Issue,
-                        &url,
-                    )?;
-                }
+                assign(&tx, &id, &url, title.as_deref())?;
                 tx.commit()?;
                 Ok(())
             })
@@ -138,6 +113,39 @@ impl Manager {
         let (number, url) = forge.issue(input)?;
         Ok((forge, number, url))
     }
+}
+
+/// Assign an issue within the caller's transaction, retaining a known title
+/// when none is supplied and recording only a new association as linked.
+fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<()> {
+    super::ensure_accepts_links(db, id)?;
+    let existing: Option<String> = db
+        .query_row(
+            "SELECT url FROM workspace_issue WHERE workspace_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    ensure!(
+        existing.as_deref().is_none_or(|existing| existing == url),
+        "workspace is already associated with a different issue"
+    );
+    db.execute(
+        "INSERT INTO workspace_issue(workspace_id,url,title) VALUES (?1,?2,?3)
+         ON CONFLICT(workspace_id) DO UPDATE SET title=COALESCE(excluded.title,title)",
+        rusqlite::params![id, url, title],
+    )?;
+    if existing.is_none() {
+        events::record_link(
+            db,
+            id,
+            EventKind::Linked,
+            crate::model::Relation::Assigned,
+            ItemKind::Issue,
+            url,
+        )?;
+    }
+    Ok(())
 }
 
 /// Remove the workspace's issue, which must be `selected` when one is named,
