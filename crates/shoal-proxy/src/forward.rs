@@ -281,23 +281,7 @@ async fn failed_status(
         .ok()
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
-    let now = clock.unix_seconds();
-    // A short Retry-After may come with a usage limit's far reset; the
-    // upstream refuses until the latest of them.
-    let retry_after = [
-        retry::retry_after(&parts.headers),
-        error
-            .as_ref()
-            .and_then(|error| retry::error_wait(error, now)),
-        // Anthropic names when every limit resets on each response, so only
-        // a refusal waits for it.
-        (failure == Failure::RateLimited)
-            .then(|| retry::limit_reset(&parts.headers, now))
-            .flatten(),
-    ]
-    .into_iter()
-    .flatten()
-    .max();
+    let retry_after = named_wait(failure, &parts.headers, error.as_ref(), clock);
     Attempt::Failed(Failed {
         failure,
         retry_after,
@@ -309,6 +293,31 @@ async fn failed_status(
 
 /// The first events of `response`'s stream: a failure among them, or an end
 /// before any content, is an attempt that failed; content goes to the agent.
+/// How long the upstream says it refuses requests after `failure`, by its
+/// response's `headers` and its `error`: the latest of `Retry-After`, the
+/// error's reset and, for a rate limit, Anthropic's reset header, since a
+/// short Retry-After may come with a usage limit's far reset.
+fn named_wait(
+    failure: Failure,
+    headers: &hyper::HeaderMap,
+    error: Option<&serde_json::Value>,
+    clock: &dyn Clock,
+) -> Option<Duration> {
+    let now = clock.unix_seconds();
+    [
+        retry::retry_after(headers),
+        error.and_then(|error| retry::error_wait(error, now)),
+        // Anthropic names when every limit resets on each response, so only
+        // a refusal waits for it.
+        (failure == Failure::RateLimited)
+            .then(|| retry::limit_reset(headers, now))
+            .flatten(),
+    ]
+    .into_iter()
+    .flatten()
+    .max()
+}
+
 async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Clock) -> Attempt {
     let (mut parts, mut body) = response.into_parts();
     strip_hop_by_hop(&mut parts.headers);
@@ -327,13 +336,11 @@ async fn opened(protocol: Protocol, response: Response<Incoming>, clock: &dyn Cl
                 "the upstream's stream ended before any content"
             )),
         }),
-        // A usage limit's reset in the event says how long to wait, as in
-        // an HTTP failure's body.
+        // The event's error and the response's headers say how long to
+        // wait, as an HTTP failure's do.
         Ok(Opening::Failure(failure, error, read)) => Attempt::Failed(Failed {
             failure,
-            retry_after: error
-                .as_ref()
-                .and_then(|error| retry::error_wait(error, clock.unix_seconds())),
+            retry_after: named_wait(failure, &parts.headers, error.as_ref(), clock),
             in_stream: true,
             error,
             response: Response::from_parts(parts, full(read)),

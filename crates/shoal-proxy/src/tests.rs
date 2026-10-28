@@ -767,6 +767,34 @@ async fn a_short_retry_after_does_not_hide_a_later_reset() {
 }
 
 #[tokio::test]
+async fn a_rate_limit_inside_a_claude_stream_waits_for_the_reset_its_headers_name() {
+    let reset = (clock::MANUAL_UNIX_START + 7200).to_string();
+    let upstream = FakeUpstream::start(move |_| {
+        let mut response = sse(
+            "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\"}}\n\n",
+        );
+        response
+            .headers_mut()
+            .insert("anthropic-ratelimit-unified-reset", reset.parse().unwrap());
+        response
+    })
+    .await;
+    let (addr, mut events, _clock) = proxy_on(upstream.url("")).await;
+    send(addr, Request::post("/v1/messages"), r#"{"stream":true}"#).await;
+    // The reset is past the budget, so the proxy hands it on at once.
+    assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(
+        drain(&mut events),
+        [Event::Failed {
+            failure: Failure::RateLimited,
+            in_stream: true,
+            wait: Some(Duration::from_secs(7200)),
+            subagent: false,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn a_subagents_failure_says_it_was_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(
