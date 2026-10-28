@@ -1815,8 +1815,10 @@ unreadable process identities before treating visibility as incomplete; an
 identity that has exited or is exiting no longer blocks the ownership proof, and
 an inaccessible macOS identity is treated as a different process because it
 cannot be a same-user process Shoal started. One whose exec has not yet
-published its environment is read again within a
-bounded settle wait before it counts as unreadable. An agent's reported
+published its environment, or that no ancestor attributes, is read again within a
+bounded settle wait before it counts as unreadable, so a short-lived helper launchd
+adopted while running a platform binary no longer blocks once it exits or execs a
+program whose environment lacks the execution's marker. An agent's reported
 exit first stops its verified processes outside its process group, so background
 shell commands do not outlive it. A reported command
 exit clears its execution and permits setup readiness only when marker, child and

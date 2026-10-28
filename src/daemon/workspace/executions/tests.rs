@@ -221,17 +221,21 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
     }
 }
 
-fn waiting_process() -> tokio::process::Child {
-    tokio::process::Command::new("cat")
+/// A waiting process, carrying the marker of `execution` when one is given.
+fn waiting_process(execution: Option<&str>) -> tokio::process::Child {
+    let mut command = tokio::process::Command::new("cat");
+    command
         .env_clear()
         .env("PATH", std::env::var_os("PATH").unwrap_or_default())
         .env("SHOAL_TEST_PROCESS", "1")
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::null())
         .process_group(0)
-        .kill_on_drop(true)
-        .spawn()
-        .unwrap()
+        .kill_on_drop(true);
+    if let Some(execution) = execution {
+        command.env(crate::env::EXECUTION_ID, execution);
+    }
+    command.spawn().unwrap()
 }
 
 /// A process waiting in a group of its own, marked as `execution`'s when
@@ -267,7 +271,8 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
             .unwrap();
         fs::remove_file(workspace.path.join(".shoal.toml")).unwrap();
         fs::remove_file(workspace.path.join("before.sh")).unwrap();
-        let mut child = waiting_process();
+        // Reading it again shows the marker where macOS does not hide it.
+        let mut child = waiting_process(Some(&started.plan.id));
         let identity = crate::process::identity::capture(child.id().unwrap())
             .unwrap()
             .unwrap();
@@ -365,7 +370,7 @@ async fn recorded_child_and_unverified_group_block_completion_without_markers() 
             )
             .await
             .unwrap();
-        let mut child = waiting_process();
+        let mut child = waiting_process(None);
         let identity = process::capture(child.id().unwrap()).unwrap().unwrap();
         manager
             .record_execution_child(

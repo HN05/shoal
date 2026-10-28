@@ -2,10 +2,11 @@ use super::*;
 
 #[tokio::test]
 async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
+    // Reading it again shows the marker where macOS does not hide it.
     let mut child = tokio::process::Command::new("sleep")
         .arg("60")
         .env_clear()
-        .env("SHOAL_TEST_PROCESS", "1")
+        .env(crate::env::EXECUTION_ID, "test-execution")
         .kill_on_drop(true)
         .spawn()
         .unwrap();
@@ -38,12 +39,49 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
     assert!(exited.completion_issue().is_none());
 }
 
+/// Like a detached helper that execs its own program after the scan.
+#[tokio::test]
+async fn unreadable_evidence_settles_once_it_shows_no_marker() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let mut child = tokio::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "process::identity::tests::marked_child",
+            "--ignored",
+        ])
+        .stdout(std::process::Stdio::null())
+        .env_clear()
+        .env("SHOAL_TEST_PROCESS", "1")
+        .kill_on_drop(true)
+        .spawn()?;
+    let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
+    let execution = Execution {
+        id: "test-execution".into(),
+        workspace_id: "test-workspace".into(),
+        state: crate::state::ExecutionState::Running,
+        wrapper: Some(identity.clone()),
+        child: None,
+        group_id: None,
+        origin: None,
+    };
+    let scan = process::Scan {
+        unreadable: vec![process::Unattributed::alone(identity)],
+        ..Default::default()
+    };
+    let settled = Processes::inspect(&execution, &scan).await;
+    child.kill().await?;
+    child.wait().await?;
+    assert!(settled?.unreadable.is_empty());
+    Ok(())
+}
+
 #[tokio::test]
 async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_older()
 -> anyhow::Result<()> {
     use anyhow::Context;
     let mut child = tokio::process::Command::new("sleep")
         .arg("60")
+        .env(crate::env::EXECUTION_ID, "test-execution")
         .kill_on_drop(true)
         .spawn()?;
     let identity = process::capture(child.id().context("child PID")?)?.context("child")?;

@@ -2,7 +2,7 @@
 //! uncertainty permits repair, ordinary stopping, or explicit manual removal.
 use anyhow::Result;
 
-use crate::{model::Execution, process::identity as process};
+use crate::{model::Execution, process::identity as process, protocol::timing};
 
 pub struct Processes {
     pub wrapper: Option<process::Identity>,
@@ -41,13 +41,14 @@ impl Processes {
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();
         let mut unreadable = Vec::new();
+        let settled = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
         for process in &scan.unreadable {
             if execution
                 .wrapper
                 .as_ref()
                 .is_none_or(|w| process.head.not_older_than(w))
                 && !owned.contains(&process.identity)
-                && process::alive(&process.identity)?
+                && process::stays_unattributed(&process.identity, &execution.id, settled).await?
             {
                 unreadable.push(process.identity.clone());
             }

@@ -315,6 +315,36 @@ enum Evidence {
     Elevated,
 }
 
+/// Whether the unattributed process `identity` still keeps the ownership of
+/// `execution` from being proven at `deadline`. A short-lived process launchd
+/// adopted while its environment was hidden, such as a detached helper still
+/// running a platform binary before it execs its own program, exits or shows
+/// an environment without the execution's marker by then.
+pub async fn stays_unattributed(
+    identity: &Identity,
+    execution: &str,
+    deadline: std::time::Instant,
+) -> Result<bool> {
+    let identity = identity.clone();
+    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
+    let ids = HashSet::from([execution.to_owned()]);
+    tokio::task::spawn_blocking(move || {
+        loop {
+            let evidence = observe(identity.pid, &marker, &ids, deadline)?
+                .filter(|observed| observed.lineage.identity == identity)
+                .map(|observed| observed.evidence);
+            match evidence {
+                None | Some(Evidence::Unmarked) => return Ok(false),
+                Some(Evidence::Marked(_)) => return Ok(true),
+                _ if std::time::Instant::now() >= deadline => return Ok(true),
+                _ => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
+    })
+    .await
+    .context("process settle worker failed")?
+}
+
 /// Read `pid`'s environment for `marker`, unless it has exited.
 fn observe(
     pid: u32,

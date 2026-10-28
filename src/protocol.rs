@@ -114,7 +114,8 @@ pub mod timing {
     pub const PROCESS_TERM_GRACE: Duration = Duration::from_secs(2);
     /// Wait for a survivor to disappear after SIGKILL before reporting it.
     pub const PROCESS_KILL_WAIT: Duration = Duration::from_secs(1);
-    /// Wait within one scan for processes caught mid-exec to publish their environment.
+    /// Wait within one scan for processes caught mid-exec to publish their
+    /// environment, and again for the ones an inspection finds unattributed.
     pub const PROCESS_SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
     /// Cover ordinary EXECUTION_START_TIMEOUT plus START_ACK_TIMEOUT and wrapper startup.
     pub const DETACHED_LAUNCH_TIMEOUT: Duration = Duration::from_secs(60);
@@ -140,11 +141,12 @@ pub mod timing {
 
     const _: () = {
         // Each pass scans markers, then inspects related processes with a
-        // second inventory; an exited agent gets a stop pass before completion.
+        // second inventory and lets unattributed ones settle; an exited agent
+        // gets a stop pass before completion.
         assert!(
             COMPLETION_ACK_TIMEOUT.as_millis()
                 > 2 * (2 * PROCESS_INVENTORY_TIMEOUT.as_millis()
-                    + PROCESS_SETTLE_TIMEOUT.as_millis())
+                    + 2 * PROCESS_SETTLE_TIMEOUT.as_millis())
                     + PROCESS_TERM_GRACE.as_millis()
                     + PROCESS_KILL_WAIT.as_millis()
         );

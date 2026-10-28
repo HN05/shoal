@@ -3334,7 +3334,8 @@ is read again for up to two seconds; a settled empty environment is readable and
 does not identify an execution. macOS hides the environments of its own
 binaries, such as shells, which then count as their nearest ancestor with a
 readable environment does, or as unreadable when launchd adopted them after
-their parent exited. Setup verification failures retain the workspace
+their parent exited and they neither exit nor show their own environment within
+another two seconds. Setup verification failures retain the workspace
 and report the command's exit status, blocking PIDs or inspection error, and
 recovery commands. `shoal stop` names unreadable PIDs without exposing their
 arguments or environments, and asks you to confirm that an execution without a
