@@ -297,3 +297,113 @@ fn another_states_workspace_replaces_the_native_herdr_claim() -> anyhow::Result<
     assert_eq!(closed(&original)?.len(), 1);
     Ok(())
 }
+
+/// Keep a direct shortcut running until its test explicitly stops it or unwinds.
+struct Shortcut<'a> {
+    fixture: &'a Fixture,
+    child: Child,
+}
+
+impl Drop for Shortcut<'_> {
+    fn drop(&mut self) {
+        let _ = self.fixture.run(&["stop", "new-owner", "--yes"]);
+        let _ = self.child.wait();
+    }
+}
+
+fn start_shortcut<'a>(fixture: &'a Fixture, command: &mut Command) -> anyhow::Result<Shortcut<'a>> {
+    install_test_script(
+        fixture.root.path().join("bin/claude"),
+        "#!/bin/sh\nexec /bin/sleep 600\n",
+    );
+    let shortcut = Shortcut {
+        fixture,
+        child: command
+            .args(["claude", "new-owner"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?,
+    };
+    wait_registered_execution(fixture, "new-owner");
+    Ok(shortcut)
+}
+
+#[test]
+fn an_agent_shortcut_replaces_another_states_herdr_ownership() -> anyhow::Result<()> {
+    for enabled in [true, false] {
+        let original = fixture();
+        start_workspace(&original)?;
+        let other = fixture();
+        if !enabled {
+            fs::write(
+                other.root.path().join(".config/shoal/config.toml"),
+                "[herdr]\nenabled = false\n",
+            )?;
+        }
+        let workspace = other.add("new-owner");
+        let mut command = other.command();
+        command
+            .current_dir(
+                workspace["path"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("workspace path"))?,
+            )
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", "w1:p9")
+            .env(
+                "HERDR_SOCKET_PATH",
+                original.root.path().join("owned-herdr.sock"),
+            );
+        let mut agent = start_shortcut(&other, &mut command)?;
+        original.ok(&["rm", "owned", "--yes"]);
+        assert!(closed(&original)?.is_empty());
+        assert!(agent.child.try_wait()?.is_none());
+        drop(agent);
+        other.ok(&["rm", "new-owner", "--yes"]);
+        assert_eq!(closed(&original)?.len(), usize::from(enabled));
+    }
+    Ok(())
+}
+
+#[test]
+fn an_agent_shortcut_replaces_reused_zmx_ownership() -> anyhow::Result<()> {
+    let fixture = Fixture::new();
+    let old = fixture.add("old-owner");
+    let workspace = fixture.add("new-owner");
+    let old_id = old["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("old workspace ID"))?;
+    let new_id = workspace["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("new workspace ID"))?;
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    fs::write(home.join("zmx-keep-sessions"), "")?;
+    fs::write(
+        home.join("zmx-sessions"),
+        format!("name=reused\tpid=1\tshoal.workspace={old_id}\tshoal.demo=old-demo\n"),
+    )?;
+    let mut agent = start_shortcut(
+        &fixture,
+        fixture.command().env("ZMX_SESSION", "reused").current_dir(
+            workspace["path"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("workspace path"))?,
+        ),
+    )?;
+    let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
+    assert!(sessions.contains(&format!("shoal.workspace={new_id}")));
+    assert!(!sessions.contains("shoal.demo="));
+    fixture.ok(&["rm", "old-owner", "--yes"]);
+    assert!(!zmx_calls(&fixture).iter().any(|call| call[0] == "kill"));
+    assert!(agent.child.try_wait()?.is_none());
+    drop(agent);
+    fixture.ok(&["rm", "new-owner", "--yes"]);
+    assert!(
+        zmx_calls(&fixture)
+            .iter()
+            .any(|call| call == &["kill", "reused"])
+    );
+    Ok(())
+}

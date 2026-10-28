@@ -91,6 +91,16 @@ pub(super) async fn tracked(
     {
         return Ok(code);
     }
+    if let Err(error) = terminal::label_current(
+        &ctx.paths,
+        &settings,
+        terminal::Owner::Workspace(&workspace.id),
+        &name,
+    )
+    .await
+    {
+        eprintln!("warning: {error:#}");
+    }
     if replaces.is_empty() {
         return execution::run(&ctx.paths, workspace.id, command, Some(name)).await;
     }

@@ -647,7 +647,8 @@ Terminal hosts register launch and cleanup adapters together; lifecycle policy
 uses their ownership, discovery and verified-close operations. Removal closes
 owned places, and startup and cleanup sweeps close those whose workspace record
 is gone, retrying failures without restoring ownership. Relabelling replaces
-obsolete ownership, so removal preserves a workspace place reused for a chat.
+obsolete ownership on every in-place agent or chat launch, so removal preserves
+a place reused by another owner.
 Herdr ownership persists in the owning state directory with its server socket,
 pane, terminal identity and a unique native ownership marker. Relabelling
 replaces or clears that marker across state directories, even with handoffs

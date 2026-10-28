@@ -22647,7 +22647,10 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let output = fixture.run(&["claude", "persist"]);
     assert!(output.status.success(), "{output:?}");
-    assert_eq!(zmx_calls(&fixture).len(), before);
+    let calls = zmx_calls(&fixture);
+    assert_eq!(calls.len(), before + 1);
+    assert_eq!(calls[before][..2], ["set", "outer"]);
+    assert!(calls[before].contains(&format!("shoal.workspace={id}")));
     assert_eq!(
         runs(),
         "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
