@@ -14,7 +14,7 @@ use crate::{
     process, repository, seed,
     state::WorkspaceState,
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, params};
 use std::{
     collections::BTreeMap,
@@ -128,8 +128,9 @@ impl Manager {
         Ok(())
     }
 
-    /// What preparing `target` changes, refused inside a directory that
-    /// would move into it or a workspace placed elsewhere.
+    /// What preparing `target` changes, refused when a location it creates or
+    /// links is inside a directory that would move into it or a workspace
+    /// placed elsewhere.
     async fn root_plan(
         &self,
         target: &registry::ConfiguredRoot,
@@ -142,14 +143,18 @@ impl Manager {
             None,
         )
         .await?;
-        let root = plan.destination()?;
-        for workspace in self.list_workspaces().await? {
-            ensure!(
-                !root.starts_with(&workspace.path),
-                "root_dir {} is inside the workspace {}",
-                root.display(),
-                workspace.name
-            );
+        let workspaces = self.list_workspaces().await?;
+        for location in plan.locations()? {
+            if let Some(workspace) = workspaces
+                .iter()
+                .find(|workspace| location.starts_with(&workspace.path))
+            {
+                bail!(
+                    "root_dir {} is inside the workspace {}",
+                    location.display(),
+                    workspace.name
+                );
+            }
         }
         Ok(plan)
     }
