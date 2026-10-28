@@ -1,5 +1,7 @@
 //! zmx session discovery and termination, shared by launchers and cleanup.
 use anyhow::{Context as _, Result};
+use sha2::{Digest, Sha256};
+use std::path::Path;
 use tokio::process::Command;
 
 use crate::{subprocess::Run, tools::Tool};
@@ -56,3 +58,14 @@ pub(crate) fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
 
 #[cfg(test)]
 mod tests;
+
+/// A whitespace-free state-directory identity for zmx's space-separated labels.
+pub(crate) fn state_label(state: &Path) -> String {
+    format!(
+        "shoal.state={}",
+        Sha256::digest(state.as_os_str().as_encoded_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
+}

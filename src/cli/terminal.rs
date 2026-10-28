@@ -282,6 +282,7 @@ pub(in crate::cli) trait Host: Sync {
     /// `shoal attach` finds `owner`'s agent there.
     fn label_current<'a>(
         &'a self,
+        _state: &'a Path,
         _owner: Owner<'a>,
         _agent: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
@@ -347,6 +348,8 @@ pub(in crate::cli) type DemoWorker<'a> = dyn Fn(&str) -> Result<Vec<OsString>> +
 /// Work a host starts in a new place, which generic code describes in full,
 /// so the host only carries it out.
 pub(in crate::cli) struct Start<'a> {
+    /// The daemon state directory that owns the place.
+    pub state: &'a Path,
     /// The directory the place opens at.
     pub cwd: &'a Path,
     /// What the place is called: a tab's label, a session's name.
@@ -552,6 +555,7 @@ async fn run_add(
         .then(ShellDirective::create)
         .transpose()?;
     let start = Start {
+        state: &ctx.paths.state,
         cwd: &std::env::current_dir()?,
         label: &add_label(host.host, plan, name),
         focus: placement == Placement::Focus,
@@ -761,6 +765,7 @@ async fn start_in_background(
     let template = host.options.name_template.clone();
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
     let start = Start {
+        state: &ctx.paths.state,
         cwd: &workspace.path,
         label: &label,
         focus: false,
@@ -803,6 +808,7 @@ pub(in crate::cli) async fn run_agent(
         env.push((env::QUEUE_ENTRY, entry.to_owned()));
     }
     let start = Start {
+        state: &ctx.paths.state,
         cwd: &workspace.path,
         label: &workspace.name,
         focus: true,
@@ -850,6 +856,7 @@ pub(in crate::cli) async fn start_chat(
         return Ok(false);
     }
     let start = Start {
+        state: &ctx.paths.state,
         cwd: &repository.path,
         label: name,
         focus: true,
@@ -1039,7 +1046,11 @@ pub(in crate::cli) async fn host_workspace(
         (Some(place), _) => {
             let labelled = place
                 .host
-                .label_current(Owner::Workspace(&workspace.id), agent.unwrap_or_default())
+                .label_current(
+                    &ctx.paths.state,
+                    Owner::Workspace(&workspace.id),
+                    agent.unwrap_or_default(),
+                )
                 .await;
             place.host.rename_place(&place.id, label).await;
             if place.closes_when_done {
@@ -1047,7 +1058,9 @@ pub(in crate::cli) async fn host_workspace(
             }
             labelled
         }
-        (None, Some(agent)) => label_current(Owner::Workspace(&workspace.id), agent).await,
+        (None, Some(agent)) => {
+            label_current(&ctx.paths, Owner::Workspace(&workspace.id), agent).await
+        }
         (None, None) => Ok(()),
     };
     if let Err(error) = labelled {
@@ -1092,9 +1105,13 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
 
 /// Label the session this process runs in, when it runs in one, so
 /// `shoal attach` finds `owner`'s agent there.
-pub(in crate::cli) async fn label_current(owner: Owner<'_>, agent: &str) -> Result<()> {
+pub(in crate::cli) async fn label_current(
+    paths: &crate::paths::Paths,
+    owner: Owner<'_>,
+    agent: &str,
+) -> Result<()> {
     for host in hosts() {
-        host.label_current(owner, agent).await?;
+        host.label_current(&paths.state, owner, agent).await?;
     }
     Ok(())
 }

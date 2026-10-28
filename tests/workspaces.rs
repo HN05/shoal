@@ -22574,7 +22574,9 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
     let labels = format!("shoal.workspace={id} shoal.agent=claude");
-    assert_eq!(calls[1][..4], ["attach", "--labels", &labels, "persist"]);
+    assert_eq!(calls[1][..2], ["attach", "--labels"]);
+    assert!(calls[1][2].starts_with(&format!("{labels} shoal.state=")));
+    assert_eq!(calls[1][3], "persist");
     let worker = &calls[1][4..];
     let session = worker.iter().position(|arg| arg == "session").unwrap();
     assert_eq!(worker[session - 1], "internal");
@@ -22704,7 +22706,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(started["chat"]["name"], CHAT_NAME);
     let chat_id = started["chat"]["id"].as_str().unwrap();
     assert_eq!(
-        calls[2],
+        calls[2][..4],
         [
             "set",
             session,
@@ -23519,7 +23521,12 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         &format!("shoal.workspace={id}"),
         "shoal.agent=pi",
     ];
-    assert!(calls.iter().any(|call| call == &labels), "{calls:?}");
+    assert!(
+        calls
+            .iter()
+            .any(|call| call.starts_with(&labels.map(str::to_owned))),
+        "{calls:?}"
+    );
 
     // An agent waiting for its first prompt attaches this terminal, which
     // detaching returns to the caller's shell where it was.
@@ -23665,7 +23672,11 @@ fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
     );
     let id = workspace["workspace"]["id"].as_str().unwrap();
     let labels = ["set", "shell-only", &format!("shoal.workspace={id}")];
-    assert!(zmx_calls(&fixture).iter().any(|call| call == &labels));
+    assert!(
+        zmx_calls(&fixture)
+            .iter()
+            .any(|call| call.starts_with(&labels.map(str::to_owned)))
+    );
 }
 
 #[test]

@@ -348,8 +348,12 @@ async fn launch(
     {
         return Ok(code);
     }
-    if let Err(error) =
-        terminal::label_current(terminal::Owner::Workspace(&workspace.id), &recovery.agent).await
+    if let Err(error) = terminal::label_current(
+        &ctx.paths,
+        terminal::Owner::Workspace(&workspace.id),
+        &recovery.agent,
+    )
+    .await
     {
         eprintln!("warning: {error:#}");
     }

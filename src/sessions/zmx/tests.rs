@@ -15,3 +15,14 @@ fn list_parses_names_fields_and_labels_after_the_marker() {
     assert_eq!(field(&sessions[1].1, "clients"), Some("1"));
     assert_eq!(field(&sessions[1].1, "cmd"), Some("sh -c 'x=y'"));
 }
+
+#[test]
+fn state_labels_are_stable_and_whitespace_free() {
+    let state = std::path::Path::new("/state with spaces");
+    assert_eq!(state_label(state), state_label(state));
+    assert!(!state_label(state).contains(char::is_whitespace));
+    assert_ne!(
+        state_label(state),
+        state_label(std::path::Path::new("/other-state"))
+    );
+}

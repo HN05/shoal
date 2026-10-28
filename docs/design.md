@@ -652,8 +652,9 @@ control to the caller, the CLI resets emulator input modes on the caller's
 terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
-after their workspace and labelled with its ID, which `attach` and `status` look
-up through `zmx list`; a detached session that Shoal starts labels itself once its
+after their workspace and labelled with its ID and state-directory identity,
+so daemons sharing zmx can distinguish their sessions; `attach` and `status` look
+them up through `zmx list`; a detached session that Shoal starts labels itself once its
 workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch

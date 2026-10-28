@@ -16,8 +16,13 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched};
-use crate::{cli::agents::ensure_program, env, sessions::zmx::{Fields, WORKSPACE_LABEL, field, kill, list}, subprocess::Run, tools::Tool};
-
+use crate::{
+    cli::agents::ensure_program,
+    env,
+    sessions::zmx::{Fields, WORKSPACE_LABEL, field, kill, list},
+    subprocess::Run,
+    tools::Tool,
+};
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
@@ -139,8 +144,13 @@ impl Host for Zmx {
         Box::pin(submit_prompt(session, text))
     }
 
-    fn label_current<'a>(&'a self, owner: Owner<'a>, agent: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(label_current(owner, agent))
+    fn label_current<'a>(
+        &'a self,
+        state: &'a Path,
+        owner: Owner<'a>,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(label_current(state, owner, agent))
     }
 
     fn keeps_agents_in_sessions(&self) -> bool {
@@ -195,7 +205,11 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
     ensure_program(agent, Tool::Zmx.program())?;
     let name = unused_name(start.label).await?;
     let mut zmx = Command::new(Tool::Zmx.program());
-    zmx.arg("attach").arg("--labels").arg(labels(owner, agent));
+    zmx.arg("attach").arg("--labels").arg(format!(
+        "{} {}",
+        labels(owner, agent),
+        crate::sessions::zmx::state_label(start.state)
+    ));
     attach_new(&mut zmx, &name, start);
     ended(zmx.status().await.context("run zmx")?)?;
     Ok(name)
@@ -357,14 +371,15 @@ async fn submit_prompt(session: &OsStr, text: &str) -> Result<()> {
 
 /// Label the zmx session this process runs in, when it runs in one, so
 /// `shoal attach` finds `owner`'s agent there.
-async fn label_current(owner: Owner<'_>, agent: &str) -> Result<()> {
+async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()> {
     let Some(session) = std::env::var_os(SESSION_VAR) else {
         return Ok(());
     };
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)
-        .args(labels(owner, agent).split(' '));
+        .args(labels(owner, agent).split(' '))
+        .arg(crate::sessions::zmx::state_label(state));
     Run::new(set)
         .checked()
         .await
