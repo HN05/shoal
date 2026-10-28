@@ -5738,10 +5738,11 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     fixture.restart();
     assert!(agent.try_wait().unwrap().is_none());
     wait_until("agent to reattach after a crash", || running(&fixture) == 1);
-    // Stopping works again and the daemon still knows the agent.
+    // Stopping works again and the daemon still knows the agent, which stays
+    // down as a last session.
     fixture.ok(&["stop", "restarted"]);
     assert!(agent.wait().unwrap().success());
-    assert_eq!(saved(), [".recovery.json"]);
+    assert_eq!(saved(), [".last-session.json"]);
     assert!(
         fixture.ok(&["status", "restarted"])["executions"]
             .as_array()
