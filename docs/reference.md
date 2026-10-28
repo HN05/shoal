@@ -853,6 +853,16 @@ key = { env = "CLIPROXY_API_KEY" }   # or key = "<the key itself>"
 proxy = "cliproxy"
 ```
 
+A launch profile inherits its base's `proxy`, and its `env` cannot take it off,
+so a profile such as `claude-direct` above would go through the proxy too. To
+keep a direct one, name the proxy on a profile and leave the base without it:
+
+```toml
+[ai.claude-cliproxy]
+base = "claude"
+proxy = "cliproxy"
+```
+
 The agent's wrapper runs one proxy on a loopback port for as long as the agent
 runs and points the agent at it: Claude Code through `ANTHROPIC_BASE_URL` in the
 settings Shoal passes, which win over its own settings and environment. Claude
