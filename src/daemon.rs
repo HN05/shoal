@@ -101,6 +101,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     }
     manager.learn_recorded_forge_hosts().await?;
     manager.audit_worktrees().await?;
+    manager.cleanup_orphan_sessions().await;
     let listener = ownership.listen()?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;

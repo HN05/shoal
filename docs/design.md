@@ -654,8 +654,11 @@ shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
 after their workspace and labelled with its ID and state-directory identity,
 so daemons sharing zmx can distinguish their sessions; `attach` and `status` look
-them up through `zmx list`; a detached session that Shoal starts labels itself once its
-workspace exists. Launches without a terminal, inside a zmx session, or in
+them up through `zmx list`. Removal closes every session labelled with its
+workspace ID; startup and cleanup sweeps close sessions whose workspace record
+is gone, retrying failures without restoring ownership. Only the default daemon
+cleans up legacy sessions without a state label. A detached session that Shoal
+starts labels itself once its workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.

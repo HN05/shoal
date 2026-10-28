@@ -56,9 +56,6 @@ pub(crate) fn field<'a>(fields: &'a Fields, key: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
-#[cfg(test)]
-mod tests;
-
 /// A whitespace-free state-directory identity for zmx's space-separated labels.
 pub(crate) fn state_label(state: &Path) -> String {
     format!(
@@ -69,3 +66,40 @@ pub(crate) fn state_label(state: &Path) -> String {
             .collect::<String>()
     )
 }
+
+/// Unnamespaced sessions predate state labels and belong to the default daemon.
+fn in_state(fields: &Fields, state: &Path, include_legacy: bool) -> bool {
+    match field(fields, "shoal.state") {
+        Some(label) => state_label(state) == format!("shoal.state={label}"),
+        None => include_legacy,
+    }
+}
+
+pub(super) struct Zmx;
+
+impl super::Host for Zmx {
+    fn sessions<'a>(
+        &'a self,
+        state: &'a Path,
+        include_legacy: bool,
+    ) -> futures_util::future::BoxFuture<'a, Result<Vec<super::Session>>> {
+        Box::pin(async move {
+            Ok(list()
+                .await?
+                .into_iter()
+                .filter(|(_, fields)| in_state(fields, state, include_legacy))
+                .filter_map(|(name, fields)| {
+                    let workspace = field(&fields, WORKSPACE_LABEL)?.to_owned();
+                    Some(super::Session { name, workspace })
+                })
+                .collect())
+        })
+    }
+
+    fn close<'a>(&'a self, session: &'a str) -> futures_util::future::BoxFuture<'a, Result<()>> {
+        Box::pin(kill(session))
+    }
+}
+
+#[cfg(test)]
+mod tests;

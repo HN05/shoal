@@ -689,6 +689,7 @@ impl Manager {
         mut outcome: RemovalResult,
         post_remove: Option<PostRemoveHook>,
     ) -> RemovalResult {
+        self.close_workspace_sessions(workspace).await;
         self.forget_workspace(&workspace.id).await;
         if let Err(error) = self.remember_kept_branch(workspace, &outcome).await {
             crate::daemon::log!(

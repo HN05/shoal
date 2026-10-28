@@ -721,7 +721,9 @@ tab, the Happy app or a terminal outside zmx has no session, and attaching
 says where it runs instead. Sessions are named after the workspace or chat,
 suffixed `-2`, `-3`, ... when the name is in use, and labelled
 `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
-`zmx ls` and `zmx attach` work as well.
+`zmx ls` and `zmx attach` work as well. Removing a workspace closes its labelled
+sessions. Daemon startup and cleanup sweeps close sessions whose workspace is
+gone; only the default state directory claims older sessions without a state label.
 
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,

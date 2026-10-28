@@ -34,6 +34,7 @@ mod repo_move;
 mod repo_removal;
 mod restore;
 pub(crate) mod review;
+mod sessions;
 mod signals;
 pub(crate) mod spotlight;
 mod stack;
@@ -97,6 +98,7 @@ enum WorkspaceSource {
 
 pub struct Manager {
     pub store: Store,
+    pub(crate) session_hosts: Vec<Arc<dyn crate::sessions::Host>>,
     pub(crate) gates: gates::Gates,
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
@@ -127,6 +129,7 @@ impl Manager {
             chat_waits: Default::default(),
             cleanup_health: Default::default(),
             store: Store::open(paths.database()).await?,
+            session_hosts: crate::sessions::hosts(),
             gates: Default::default(),
             paths,
             queues: Default::default(),

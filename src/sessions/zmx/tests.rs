@@ -17,9 +17,25 @@ fn list_parses_names_fields_and_labels_after_the_marker() {
 }
 
 #[test]
+fn session_cleanup_is_scoped_to_its_state_directory() {
+    let state = std::path::Path::new("/state with spaces");
+    let other = std::path::Path::new("/other-state");
+    let owned = parse_list(&format!("name=ours\t{}\n", state_label(state)));
+    let foreign = parse_list(&format!("name=theirs\t{}\n", state_label(other)));
+    assert!(!state_label(state).contains(char::is_whitespace));
+    for (_, fields) in owned {
+        assert!(in_state(&fields, state, false));
+    }
+    for (_, fields) in foreign {
+        assert!(!in_state(&fields, state, true));
+    }
+    assert!(!in_state(&Vec::new(), state, false));
+    assert!(in_state(&Vec::new(), state, true));
+}
+
+#[test]
 fn state_labels_are_stable_and_whitespace_free() {
     let state = std::path::Path::new("/state with spaces");
-    assert_eq!(state_label(state), state_label(state));
     assert!(!state_label(state).contains(char::is_whitespace));
     assert_ne!(
         state_label(state),

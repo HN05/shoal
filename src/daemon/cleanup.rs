@@ -307,6 +307,7 @@ pub fn fingerprint(root: &Path) -> Result<u64> {
 /// One pass of every automatic cleanup. A failed step does not skip the
 /// steps after it; the error names each step that failed.
 pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
+    manager.cleanup_orphan_sessions().await;
     let mut failed = Vec::new();
     let mut step = |name: &str, result: Result<()>| {
         if let Err(error) = result {
@@ -587,6 +588,9 @@ pub async fn on_request(
     selection: &Selection,
 ) -> Result<ManualCleanup> {
     let targets = Targets::of(manager, selection).await?;
+    if !dry_run {
+        manager.cleanup_orphan_sessions().await;
+    }
     let mut report = ManualCleanup {
         dry_run,
         ..ManualCleanup::default()
