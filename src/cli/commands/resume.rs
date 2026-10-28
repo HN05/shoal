@@ -211,27 +211,8 @@ pub async fn run(
     if let Some(reason) = &recorded.stop_reason {
         eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
     }
-    let handoff = handoff(&saved.commands);
-    if recorded.moved {
-        let records = std::iter::once(selected)
-            .chain(saved.commands.into_iter().map(|command| command.path))
-            .collect();
-        return start_moved(ctx, workspace, &recorded.agent, handoff.as_deref(), records).await;
-    }
-    let recovery = Recovery::resolve(
-        &ctx.paths,
-        workspace,
-        &recorded.agent,
-        handoff.as_deref(),
-        recorded.session.as_deref(),
-    )
-    .await?;
-    if !saved.commands.is_empty() && !recovery.handoff_delivered {
-        eprintln!("{}", command_list(workspace, &saved.commands));
-    }
-    let mut records = vec![selected];
-    records.extend(saved.commands.into_iter().map(|command| command.path));
-    launch(ctx, workspace, recovery, records).await
+    let session = recorded.into_last_session();
+    restore(ctx, workspace, session, selected, saved.commands).await
 }
 
 /// Forget the workspace's stopped work, only `execution`'s when given, or
@@ -270,19 +251,41 @@ async fn continue_last_session(
 ) -> Result<i32> {
     let path = LastSession::path(&ctx.paths, &workspace.id);
     let _claim = claim(&path)?;
-    if last.moved {
-        return start_moved(ctx, workspace, &last.agent, None, vec![path]).await;
+    if !last.moved {
+        eprintln!("shoal: continuing the last {} session", last.agent);
     }
-    eprintln!("shoal: continuing the last {} session", last.agent);
+    restore(ctx, workspace, last, path, vec![]).await
+}
+
+/// Restore the agent of `session`, saved at `path`, telling it about the
+/// stopped `commands`, which the caller claimed; it consumes their records
+/// once it runs.
+async fn restore(
+    ctx: &Context,
+    workspace: &Workspace,
+    session: LastSession,
+    path: PathBuf,
+    commands: Vec<SavedCommand>,
+) -> Result<i32> {
+    let handoff = handoff(&commands);
+    let mut records = vec![path];
+    if session.moved {
+        records.extend(commands.into_iter().map(|command| command.path));
+        return start_moved(ctx, workspace, &session.agent, handoff.as_deref(), records).await;
+    }
     let recovery = Recovery::resolve(
         &ctx.paths,
         workspace,
-        &last.agent,
-        None,
-        last.session.as_deref(),
+        &session.agent,
+        handoff.as_deref(),
+        session.session.as_deref(),
     )
     .await?;
-    launch(ctx, workspace, recovery, vec![path]).await
+    if !commands.is_empty() && !recovery.handoff_delivered {
+        eprintln!("{}", command_list(workspace, &commands));
+    }
+    records.extend(commands.into_iter().map(|command| command.path));
+    launch(ctx, workspace, recovery, records).await
 }
 
 /// Start `agent` as a new agent is started, since its session is not

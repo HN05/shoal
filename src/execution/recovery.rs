@@ -257,6 +257,15 @@ impl Record {
         }
     }
 
+    /// The session this record keeps, as a last session keeps it.
+    pub(crate) fn into_last_session(self) -> LastSession {
+        LastSession {
+            agent: self.agent,
+            session: self.session,
+            moved: self.moved,
+        }
+    }
+
     /// Whether the agent stopped between turns, with no work in flight. One
     /// whose turn is unknown counts as interrupted mid-turn.
     pub(crate) fn between_turns(&self) -> bool {

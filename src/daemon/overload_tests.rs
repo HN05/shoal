@@ -534,6 +534,9 @@ async fn isolated_overload_test() {
         "resume_without_an_agent_reports_stopped_commands_once" => {
             resume_without_an_agent_reports_stopped_commands_once_body().await
         }
+        "a_restored_stopped_agent_is_told_the_commands_stopped_with_it" => {
+            a_restored_stopped_agent_is_told_the_commands_stopped_with_it_body().await
+        }
         "resume_continues_an_agent_that_exited_on_its_own" => {
             resume_continues_an_agent_that_exited_on_its_own_body().await
         }
@@ -639,6 +642,54 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     // A manual stop never restores automatically.
     manager.overload_recovery.publish(Some(0));
     assert!(!workspace.path.join("restored").exists());
+    fs::write(
+        workspace.path.join("resume.sh"),
+        "#!/bin/sh\nprintf '%s' \"$1\" > restored\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[agent_resume]\nfixture = ['./resume.sh', '{prompt}']\n",
+    )
+    .unwrap();
+    assert_eq!(
+        bounded(resume_isolated(&manager, &workspace, false))
+            .await
+            .unwrap()
+            .unwrap(),
+        0
+    );
+    let handoff = fs::read_to_string(workspace.path.join("restored")).unwrap();
+    assert!(handoff.contains("\n- sh -c 'trap"), "{handoff}");
+    assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
+    serving.abort();
+}
+
+#[tokio::test]
+async fn a_restored_stopped_agent_is_told_the_commands_stopped_with_it() {
+    run_isolated_overload_test("a_restored_stopped_agent_is_told_the_commands_stopped_with_it")
+        .await;
+}
+
+async fn a_restored_stopped_agent_is_told_the_commands_stopped_with_it_body() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let agent = launch(&manager, &workspace);
+    let command = launch_child(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_command_child",
+    );
+    wait_started(&manager, &workspace).await;
+    wait_launched(&manager, &workspace, "command-started", 2).await;
+    // A stop other than `shoal stop`, such as a daemon shutdown's, keeps the
+    // agent as stopped work.
+    bounded(manager.stop_workspace(&workspace.id, StopRequest::manual()))
+        .await
+        .unwrap();
+    bounded(agent).await.unwrap().unwrap();
+    bounded(command).await.unwrap().unwrap();
+    let saved = crate::execution::recovery::Saved::load(&manager.paths, &workspace.id).unwrap();
+    assert_eq!((saved.agents.len(), saved.commands.len()), (1, 1));
     fs::write(
         workspace.path.join("resume.sh"),
         "#!/bin/sh\nprintf '%s' \"$1\" > restored\n",
