@@ -242,14 +242,19 @@ async fn start(ctx: &Context) -> Result<()> {
         .await
 }
 
-/// Stop a foreground daemon over the socket, or a managed one via the OS.
+/// Stop a foreground daemon over the socket, or with SIGTERM when it does not
+/// answer, or a managed one via the OS.
 async fn stop(paths: &Paths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {
             client::request::<()>(paths, DaemonMethod::Shutdown).await?;
         }
         Err(error) if !service::file(paths, Platform::current()?).exists() => {
-            return Err(error);
+            let Some(unresponsive) = error.downcast_ref::<client::Unresponsive>() else {
+                return Err(error);
+            };
+            // The daemon shuts down on SIGTERM as on a shutdown request.
+            crate::process::identity::signal(&unresponsive.owner, libc::SIGTERM)?;
         }
         _ => service::stop(paths).await?,
     }

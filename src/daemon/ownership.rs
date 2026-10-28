@@ -1,19 +1,25 @@
-//! Exclusive ownership of a state directory: its lock and listening socket.
+//! Exclusive ownership of a state directory: its lock, which names the
+//! daemon holding it, and listening socket.
 use std::{
     fs::{self, File, OpenOptions},
     os::unix::{
-        fs::{FileTypeExt, OpenOptionsExt, PermissionsExt},
+        fs::{FileExt, FileTypeExt, OpenOptionsExt, PermissionsExt},
         net::UnixListener as StdListener,
     },
     path::Path,
 };
 
 use anyhow::{Context, Result, ensure};
-use fs2::FileExt;
 use tokio::net::UnixListener;
 
-use super::handoff::{self, Handoff};
-use crate::paths::Paths;
+use super::{
+    handoff::{self, Handoff},
+    log,
+};
+use crate::{
+    paths::Paths,
+    process::identity::{self, Identity},
+};
 
 /// Held from startup through shutdown or handoff; dropping it removes the
 /// socket. Never unlink the lock file: waiters must all lock the same inode.
@@ -36,8 +42,11 @@ impl Ownership {
             }
             None => (open_lock(paths)?, None),
         };
-        lock.try_lock_exclusive()
+        fs2::FileExt::try_lock_exclusive(&lock)
             .context("a daemon already owns this state directory")?;
+        if let Err(error) = record_owner(&lock) {
+            log!("record the daemon's process in its lock: {error:#}");
+        }
         if inherited.is_none() {
             remove_stale_socket(paths)?;
         }
@@ -71,6 +80,22 @@ impl Drop for Ownership {
     }
 }
 
+/// Name this process in the lock, so clients can tell a daemon that holds the
+/// state directory without answering from one that is not running.
+fn record_owner(lock: &File) -> Result<()> {
+    let owner = identity::capture(std::process::id())?.context("this process has no identity")?;
+    lock.set_len(0)?;
+    lock.write_all_at(&serde_json::to_vec(&owner)?, 0)?;
+    Ok(())
+}
+
+/// The live daemon that owns the state directory, as its lock names it.
+pub(crate) fn owner(paths: &Paths) -> Option<Identity> {
+    let recorded = fs::read(paths.daemon_lock()).ok()?;
+    let owner = serde_json::from_slice(&recorded).ok()?;
+    identity::alive(&owner).ok()?.then_some(owner)
+}
+
 fn open_lock(paths: &Paths) -> Result<File> {
     Ok(OpenOptions::new()
         .create(true)
@@ -96,3 +121,6 @@ fn remove_stale_socket(paths: &Paths) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

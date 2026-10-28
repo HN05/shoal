@@ -251,7 +251,9 @@ Managed daemons record their stable executable path before startup work and rest
 after a replacement, including one during startup, once daemon operations are idle
 and no setup or landing runs; commands reattach.
 Retain the ownership lock and listening socket across exec so queued requests reach
-the replacement under the same service PID. Read-only streams reconnect after the
+the replacement under the same service PID. The lock file names the owning
+process by PID and birth, so a client refused by the socket tells a live daemon
+that does not answer from none running and points to restarting it. Read-only streams reconnect after the
 handoff, preserving event cursors, and item waits resume for their remaining time;
 when the replacement speaks a newer protocol, they continue by executing the
 installed release with that cursor or time.

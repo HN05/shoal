@@ -36,6 +36,28 @@ impl std::fmt::Display for ProtocolMismatch {
 
 impl std::error::Error for ProtocolMismatch {}
 
+/// A daemon owns the state directory but does not answer, as when it stopped
+/// accepting connections.
+#[derive(Debug)]
+pub struct Unresponsive {
+    pub owner: crate::process::identity::Identity,
+}
+
+impl std::fmt::Display for Unresponsive {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the daemon (PID {}) is running but not responding; restart it with `shoal daemon restart`",
+            self.owner.pid
+        )
+    }
+}
+
+/// [`Unresponsive`] when a live daemon owns the state directory.
+fn unresponsive(paths: &Paths) -> Option<Unresponsive> {
+    crate::daemon::ownership::owner(paths).map(|owner| Unresponsive { owner })
+}
+
 /// Send `method` and return the open stream with the daemon's first reply,
 /// including [`Body::Error`]. Executions keep using the stream; [`call`] drops it.
 pub async fn open(paths: &Paths, method: impl Into<Method>) -> Result<(UnixStream, Body)> {
@@ -129,12 +151,15 @@ fn awaits_update(paths: &Paths, method: &Method, error: &anyhow::Error) -> bool 
 }
 
 async fn connect(paths: &Paths) -> Result<UnixStream> {
-    UnixStream::connect(&paths.socket).await.with_context(|| {
-        format!(
-            "connect to {}; run `shoal daemon install` or `shoal daemon start`",
-            paths.socket.display()
-        )
-    })
+    UnixStream::connect(&paths.socket)
+        .await
+        .map_err(|error| match unresponsive(paths) {
+            Some(unresponsive) => anyhow::Error::new(error).context(unresponsive),
+            None => anyhow::Error::new(error).context(format!(
+                "connect to {}; run `shoal daemon install` or `shoal daemon start`",
+                paths.socket.display()
+            )),
+        })
 }
 
 async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> Result<Body> {
@@ -158,9 +183,13 @@ pub async fn call(paths: &Paths, method: impl Into<Method>) -> Result<Body> {
         timing::REQUEST_TIMEOUT
     };
     let _span = crate::profile::span("call", || method.name());
-    let (_stream, body) = timeout(duration, open(paths, method))
-        .await
-        .context("daemon request timed out")??;
+    let (_stream, body) = timeout(duration, open(paths, method)).await.map_err(|_| {
+        let error = anyhow::anyhow!("daemon request timed out");
+        match unresponsive(paths) {
+            Some(unresponsive) => error.context(unresponsive),
+            None => error,
+        }
+    })??;
     body.into_result()
 }
 
@@ -322,11 +351,12 @@ pub async fn keep_repository_agent_environment(
     Ok(())
 }
 
-/// `None` when no daemon is listening on the socket.
+/// `None` when no daemon is running; one that runs without answering is an
+/// [`Unresponsive`] error.
 pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
     match request(paths, DaemonMethod::Status).await {
         Ok(status) => Ok(Some(status)),
-        Err(error) if is_unreachable(&error) => Ok(None),
+        Err(error) if not_running(&error) => Ok(None),
         Err(error) => Err(error),
     }
 }
@@ -336,11 +366,17 @@ pub async fn status(paths: &Paths) -> Result<Option<DaemonStatus>> {
 pub async fn reload_config(paths: &Paths) -> Result<bool> {
     match call(paths, DaemonMethod::ReloadConfig).await {
         Ok(_) => Ok(true),
-        Err(error) if is_unreachable(&error) => Ok(false),
+        Err(error) if not_running(&error) => Ok(false),
         Err(error) => Err(error),
     }
 }
 
+/// No daemon listens on the socket or owns the state directory.
+fn not_running(error: &anyhow::Error) -> bool {
+    is_unreachable(error) && !error.is::<Unresponsive>()
+}
+
+/// No daemon listens on the socket, though one may own the state directory.
 pub(crate) fn is_unreachable(error: &anyhow::Error) -> bool {
     error
         .chain()

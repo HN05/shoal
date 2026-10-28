@@ -82,7 +82,10 @@ run `shoal --state-dir /tmp/shoal-dev daemon run` in the foreground and target
 it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 `~/.local/state/shoal`; runtime state and the Unix socket are private to the
 user. Service commands target the one registered per-user service, whose state
-directory must match. `daemon status` exits 1 when offline. `daemon start`
+directory must match. `daemon status` exits 1 when offline. A daemon that
+owns the state directory but does not answer is reported with its PID by every
+command; `daemon stop` and `daemon restart` still stop it, a foreground one with
+SIGTERM. `daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
 `shoal daemon install` preserves the invoked executable's symlink path and captures the

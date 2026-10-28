@@ -190,3 +190,25 @@ async fn protocol_mismatch_precedes_payload_extraction() {
         }
     }
 }
+
+#[tokio::test]
+async fn a_daemon_that_owns_the_state_directory_without_answering_is_unresponsive() -> Result<()> {
+    let temp = tempfile::tempdir_in("/tmp")?;
+    let paths = Paths::for_test(temp.path());
+    paths.prepare()?;
+    assert!(status(&paths).await?.is_none());
+    // This process stands in for a daemon whose socket refuses connections.
+    let owner = crate::process::identity::capture(std::process::id())?.context("no identity")?;
+    std::fs::write(paths.daemon_lock(), serde_json::to_vec(&owner)?)?;
+    let error = status(&paths).await.unwrap_err();
+    let unresponsive = error
+        .downcast_ref::<Unresponsive>()
+        .context("expected an unresponsive daemon")?;
+    assert_eq!(unresponsive.owner.pid, std::process::id());
+    let message = format!("{error:#}");
+    assert!(message.contains("not responding"), "{message}");
+    assert!(message.contains("shoal daemon restart"), "{message}");
+    // Followers still wait for it as for a daemon that went away.
+    assert!(is_unreachable(&error));
+    Ok(())
+}

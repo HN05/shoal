@@ -27,7 +27,7 @@ pub mod notifications;
 mod overload;
 #[cfg(test)]
 mod overload_tests;
-mod ownership;
+pub(crate) mod ownership;
 pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
