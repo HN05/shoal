@@ -1,9 +1,7 @@
-//! When a place a host opened for a workspace closes: once the workspace is
-//! removed, or once a completion that keeps the workspace has its agent's
-//! final turn finished. A place whose agent is stopped and waits for
-//! `shoal resume` stays open, showing why it stopped and where it resumes.
-//! A detached watcher decides this for each place, and a marker it keeps
-//! tells commands run in the place that it closes with the workspace.
+//! Close a place after completion keeps its workspace and the agent's final
+//! turn has finished. Stopped work keeps its place for `shoal resume`.
+//! A detached watcher decides this and keeps a marker for commands in the
+//! place. Removal ends the watcher; daemon host adapters own its cleanup.
 use std::{future::Future, path::PathBuf, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result};
@@ -147,6 +145,11 @@ where
         let lifecycle = lifecycle()
             .await?
             .filter(|lifecycle| !earlier.only_one_in(lifecycle));
+        // Removal's adapters own verified closes and retries. A watcher must
+        // not close a tab after its workspace pane has gone or been reused.
+        if matches!(lifecycle, Some(Lifecycle::Removed)) {
+            break;
+        }
         let reported = match host.place_state(place).await {
             Ok(PlaceState::Gone) => break,
             Ok(PlaceState::Open(agent)) => Some(agent),
@@ -271,11 +274,10 @@ impl Lifecycle {
     /// keeps the place, which shows why it stopped and where it resumes.
     fn closes(&self, reported: Option<AgentState>) -> bool {
         match self {
-            Self::Active | Self::Kept { stopped: true, .. } => false,
+            Self::Active | Self::Removed | Self::Kept { stopped: true, .. } => false,
             Self::Kept { running, turn, .. } => {
                 !running || turn.or(reported) == Some(AgentState::Idle)
             }
-            Self::Removed => true,
         }
     }
 }

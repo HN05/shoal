@@ -80,7 +80,7 @@ fn kept_completion_closes_the_place_once_the_agent_finishes_its_turn() {
         assert!(completed(false, false, None).closes(reported));
         assert!(!completed(false, true, None).closes(reported));
         assert!(!completed(true, true, Some(Idle)).closes(reported));
-        assert!(Lifecycle::Removed.closes(reported));
+        assert!(!Lifecycle::Removed.closes(reported));
         assert!(!Lifecycle::Active.closes(reported));
     }
 }
@@ -202,7 +202,7 @@ async fn the_watcher_closes_a_place_once_its_workspace_is_done() {
     let active = Some(Lifecycle::Active);
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     assert_eq!(watch_fake(&host, &[Some(Lifecycle::Removed)], 5).await, 1);
-    assert_eq!(host.closed(), ["place-1"]);
+    assert!(host.closed().is_empty());
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     let idle = kept("head", Some(AgentState::Idle));
     assert_eq!(watch_fake(&host, &[active.clone(), idle], 5).await, 2);
@@ -223,7 +223,7 @@ async fn the_watcher_keeps_a_place_without_proof() {
         ),
         // A failed daemon or host query proves nothing.
         (Ok(PlaceState::Open(None)), vec![active, None]),
-        (Err(()), vec![Some(Lifecycle::Removed)]),
+        (Err(()), vec![kept("head", Some(AgentState::Idle))]),
     ] {
         let host = FakeHost::new(state);
         assert_eq!(watch_fake(&host, &lifecycles, 3).await, 3);
@@ -242,9 +242,14 @@ async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     assert_eq!(watch_fake(&host, &[idle()], 3).await, 1);
     assert_eq!(host.closed(), ["place-1"]);
-    // Removal, a withdrawn completion and one at another HEAD all count.
+    let host = FakeHost::new(Ok(PlaceState::Open(None)));
+    assert_eq!(
+        watch_from(&host, Some("head"), &[idle(), Some(Lifecycle::Removed)], 5).await,
+        2
+    );
+    assert!(host.closed().is_empty());
+    // A withdrawn completion or one at another HEAD closes the place.
     for later in [
-        vec![Some(Lifecycle::Removed)],
         vec![Some(Lifecycle::Active), idle()],
         vec![kept("next", Some(AgentState::Idle))],
     ] {

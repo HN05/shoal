@@ -451,7 +451,8 @@ configured command for another agent, plus proven child
   replaces obsolete ownership; conflicting chat labels prevent workspace cleanup.
   Herdr ownership persists with the server socket, pane and terminal identity;
   cleanup verifies the terminal and closes only that pane. Disabling handoffs
-  preserves cleanup of already owned places.
+  preserves cleanup of already owned places. Place watchers end on removal;
+  only daemon adapters close removed ownership, avoiding a second tab close.
   Failed detached handoffs close only the originally observed process and creation time.
   A demo session closes after verified execution completion, including a disconnected stop, only
   while its host still verifies the launch ownership. Failed demo closes persist

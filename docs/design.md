@@ -627,7 +627,9 @@ Shoal opened for it, a Herdr tab or a zmx session, only after tracked executions
 have resolved or the agent's turn finished, since interactive agents stay running
 at their prompt, and never while stopped work waits for resume, so the place keeps
 the stop's cause and `shoal resume --all` can restore the agent there; removal
-closes it immediately, so completion cleanup leaves the agent its grace period.
+closes owned places through the daemon adapters, so completion cleanup leaves
+the agent its grace period. Watchers stop once removal persists, leaving failed
+closes to the daemon's retries.
 The turn comes from the agent's hooks, and from the host only for an agent
 without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
 of such agents close with their execution. The rule, the watcher and its marker
@@ -645,7 +647,7 @@ Terminal hosts register launch and cleanup adapters together; lifecycle policy
 uses their ownership, discovery and verified-close operations. Removal closes
 owned places, and startup and cleanup sweeps close those whose workspace record
 is gone, retrying failures without restoring ownership. Relabelling replaces
-obsolete ownership, so reusing a workspace place for a chat preserves it.
+obsolete ownership, so removal preserves a workspace place reused for a chat.
 Herdr ownership persists in the owning state directory with its server socket,
 pane and terminal identity; cleanup closes only the matching pane, preserving
 other panes in the tab and replacements at the same pane ID.

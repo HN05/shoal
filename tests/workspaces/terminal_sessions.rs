@@ -173,3 +173,44 @@ fn failed_herdr_demo_handoffs_only_close_the_original_verified_pane() -> anyhow:
     }
     Ok(())
 }
+
+#[test]
+fn removal_ends_the_place_watcher_without_closing_other_panes_in_its_tab() -> anyhow::Result<()> {
+    let fixture = fixture();
+    let workspace = start_workspace(&fixture)?;
+    let id = workspace["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("workspace ID"))?;
+    struct Watcher(Child);
+    impl Drop for Watcher {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    // The mock keeps reporting an open tab after its owned pane closes,
+    // representing another pane the user has split into that tab.
+    let mut watcher = Watcher(
+        fixture
+            .command()
+            .args(["internal", "herdr-watch", id, "w1:t9"])
+            .spawn()?,
+    );
+    wait_until("place watcher host read", || {
+        herdr_calls(&fixture)
+            .iter()
+            .any(|call| call == &["tab", "get", "w1:t9"])
+    });
+    fixture.ok(&["rm", "owned", "--yes"]);
+    let status = wait_for("place watcher exit", || {
+        watcher.0.try_wait().expect("query own watcher")
+    });
+    assert!(status.success());
+    assert_eq!(closed(&fixture)?.len(), 1);
+    assert!(
+        !herdr_calls(&fixture)
+            .iter()
+            .any(|call| call == &["tab", "close", "w1:t9"])
+    );
+    Ok(())
+}

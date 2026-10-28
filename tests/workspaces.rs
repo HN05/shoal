@@ -21352,7 +21352,7 @@ from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
 # Tab watchers poll `tab get`; keep those reads out of the recorded actions.
-log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else 'herdr-calls'
+log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else ('herdr-pane-gets' if args[:2] == ['pane', 'get'] else 'herdr-calls')
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
@@ -21370,12 +21370,14 @@ elif args[:2] == ['tab', 'get']:
         print(json.dumps({'error': {'code': 'server_not_running'}}))
         sys.exit(1)
     print(json.dumps({'result': {'tab_id': args[2]}}))
+elif args[:2] == ['pane', 'get']:
+    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'terminal_id': 'original-terminal'}}}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()
     processes = {'shell_pid': 1, 'foreground_process_group_id': 1 if at_prompt else 2}
     print(json.dumps({'result': {'process_info': processes}}))
-print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info']) else None
+print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info'], ['pane', 'get']) else None
 "#,
     );
 }
@@ -21403,7 +21405,13 @@ fn herdr_worker_command(fixture: &Fixture) -> Command {
     command
         .env_remove("SHOAL_STATE_DIR")
         .args(&herdr_worker(fixture)[1..])
-        .env("HERDR_TAB_ID", "w1:t9");
+        .env("HERDR_TAB_ID", "w1:t9")
+        .env("HERDR_ENV", "1")
+        .env("HERDR_PANE_ID", "w1:p9")
+        .env(
+            "HERDR_SOCKET_PATH",
+            fixture.root.path().join("fixture-herdr.sock"),
+        );
     let calls = herdr_calls(fixture);
     let create = calls
         .iter()
@@ -22174,7 +22182,9 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
 
 fn wait_for_herdr_close(fixture: &Fixture) {
     wait_until("Herdr tab closure", || {
-        herdr_calls(fixture).last().unwrap() == &["tab", "close", "w1:t9"]
+        herdr_calls(fixture).last().is_some_and(|call| {
+            call == &["tab", "close", "w1:t9"] || call == &["pane", "close", "w1:p9"]
+        })
     });
 }
 
