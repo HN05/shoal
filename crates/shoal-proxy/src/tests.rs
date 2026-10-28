@@ -714,6 +714,29 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
 }
 
 #[tokio::test]
+async fn a_short_retry_after_does_not_hide_a_later_reset() {
+    let upstream = FakeUpstream::start(|_| {
+        let mut response = reply(
+            429,
+            r#"{"error":{"type":"usage_limit_reached","resets_in_seconds":7200}}"#,
+        );
+        response
+            .headers_mut()
+            .insert("retry-after", "1".parse().unwrap());
+        response
+    })
+    .await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    // The reset is past the budget, so the proxy hands it on at once.
+    assert_eq!(upstream.requests().len(), 1);
+    assert!(matches!(
+        drain(&mut events)[..],
+        [Event::Failed { wait: Some(wait), .. }] if wait == Duration::from_secs(7200)
+    ));
+}
+
+#[tokio::test]
 async fn a_subagents_failure_says_it_was_a_subagents() {
     let upstream = FakeUpstream::start(|_| {
         reply(

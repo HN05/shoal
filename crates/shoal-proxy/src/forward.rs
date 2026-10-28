@@ -262,19 +262,22 @@ async fn failed_status(
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
     let now = clock.unix_seconds();
-    let retry_after = retry::retry_after(&parts.headers)
-        .or_else(|| {
-            error
-                .as_ref()
-                .and_then(|error| retry::error_wait(error, now))
-        })
-        .or_else(|| {
-            // Anthropic names when every limit resets on each response, so
-            // only a refusal waits for it.
-            (failure == Failure::RateLimited)
-                .then(|| retry::limit_reset(&parts.headers, now))
-                .flatten()
-        });
+    // A short Retry-After may come with a usage limit's far reset; the
+    // upstream refuses until the latest of them.
+    let retry_after = [
+        retry::retry_after(&parts.headers),
+        error
+            .as_ref()
+            .and_then(|error| retry::error_wait(error, now)),
+        // Anthropic names when every limit resets on each response, so only
+        // a refusal waits for it.
+        (failure == Failure::RateLimited)
+            .then(|| retry::limit_reset(&parts.headers, now))
+            .flatten(),
+    ]
+    .into_iter()
+    .flatten()
+    .max();
     Attempt::Failed(Failed {
         failure,
         retry_after,
