@@ -465,11 +465,11 @@ enum Visibility {
     Gone,
 }
 
-// Only Linux exposes transient images; macOS reports every image settled.
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 enum Image {
     Settled,
-    /// Replacing its image: the new environment is not published yet.
+    /// Replacing its image: the new environment is not published yet. Only
+    /// Linux exposes it.
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
     Loading,
     /// Exiting or a kernel thread: it runs no more user code.
     Ended,
@@ -533,9 +533,23 @@ fn visibility_with(
     }
 }
 
+/// macOS refuses an exiting process's arguments, and its records soon after;
+/// in between they flag the exit.
 #[cfg(target_os = "macos")]
-fn image(_pid: u32) -> Result<Image> {
-    Ok(Image::Settled)
+fn image(pid: u32) -> Result<Image> {
+    Ok(bsd_info(pid, false)?.map_or(Image::Ended, |info| bsd_image(&info.bsd)))
+}
+
+#[cfg(target_os = "macos")]
+fn bsd_image(bsd: &libc::proc_bsdinfo) -> Image {
+    // PROC_FLAG_INEXIT in sys/proc_info.h.
+    const EXITING: u32 = 0x4;
+    // BSD SZOMB = 5.
+    if bsd.pbi_status == 5 || bsd.pbi_flags & EXITING != 0 {
+        Image::Ended
+    } else {
+        Image::Settled
+    }
 }
 
 /// macOS 27 hides the environments of its own platform binaries, such as

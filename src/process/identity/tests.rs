@@ -432,6 +432,21 @@ fn empty_environment_waits_only_for_a_loading_image() {
     ));
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn an_exiting_or_exited_process_has_ended_its_image() {
+    let bsd = |status: u32, flags: u32| {
+        let mut bsd: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
+        bsd.pbi_status = status;
+        bsd.pbi_flags = flags;
+        bsd
+    };
+    // SRUN = 2; PROC_FLAG_LP64 = 0x10; PROC_FLAG_INEXIT = 0x4; SZOMB = 5.
+    assert!(matches!(bsd_image(&bsd(2, 0x10)), Image::Settled));
+    assert!(matches!(bsd_image(&bsd(2, 0x14)), Image::Ended));
+    assert!(matches!(bsd_image(&bsd(5, 0)), Image::Ended));
+}
+
 #[tokio::test]
 async fn spawned_process_environment_is_visible_until_it_exits() {
     let mut child = tokio::process::Command::new(std::env::current_exe().unwrap())
