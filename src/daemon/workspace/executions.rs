@@ -939,12 +939,18 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
-            // Before stopping, so a restore admitted meanwhile cannot start after.
+            // Before stopping, so a restore admitted meanwhile cannot start
+            // after, and again once stopped, for the request of an agent a
+            // signal was ending meanwhile.
             if protected == Protected::Stop {
                 self.cancel_stopped_restores(&workspace.id).await?;
             }
             self.stop_executions_keeping(&workspace.id, policy, &request, protected)
-                .await
+                .await?;
+            if protected == Protected::Stop {
+                self.cancel_stopped_restores(&workspace.id).await?;
+            }
+            anyhow::Ok(())
         }
         .await;
         // A stop waiting for the user's confirmation has not failed.
