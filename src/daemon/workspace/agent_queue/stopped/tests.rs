@@ -249,7 +249,10 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
         .unwrap();
     assert!(queue(&manager).await.is_empty());
     let refused = manager.reserve_queue_entry(&entry.id).await.unwrap_err();
-    assert!(format!("{refused:#}").contains("was cancelled"), "{refused:#}");
+    assert!(
+        format!("{refused:#}").contains("was cancelled"),
+        "{refused:#}"
+    );
 }
 
 #[tokio::test]
