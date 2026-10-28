@@ -258,13 +258,14 @@ impl Record {
     }
 
     /// This record as the last session of execution `id`, which keeps its
-    /// agent and session.
+    /// agent, session and place.
     pub(crate) fn into_last_session(self, id: String) -> LastSession {
         LastSession {
             execution: id,
             agent: self.agent,
             session: self.session,
             moved: self.moved,
+            place: self.place,
         }
     }
 
@@ -524,6 +525,27 @@ pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -
     }
 }
 
+/// The file keeping the agent stopped as `id`: its recovery record, or else
+/// its last session.
+pub(crate) fn saved_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
+    let record = record_path(paths, workspace_id, id);
+    if record.exists() {
+        return record;
+    }
+    LastSession::path(paths, workspace_id, id)
+}
+
+/// Where the agent a recovery record or last session at `path` keeps ran,
+/// when known.
+pub(crate) fn saved_place(path: &Path) -> Option<String> {
+    #[derive(Deserialize)]
+    struct Placed {
+        place: Option<String>,
+    }
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice::<Placed>(&bytes).ok()?.place
+}
+
 pub(crate) fn record_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
     paths
         .workspace_state(workspace_id)
@@ -604,6 +626,10 @@ pub struct LastSession {
     /// The workspace moved where the session is not available.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub moved: bool,
+    /// Where the agent ran, as its terminal backend names it, so `shoal
+    /// resume` can restore it there; unknown for one that exited on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub place: Option<String>,
 }
 
 /// The key of a last session saved without its execution.
@@ -617,6 +643,7 @@ impl LastSession {
         Self {
             session: None,
             moved: true,
+            place: None,
             ..self
         }
     }
@@ -634,6 +661,7 @@ impl LastSession {
             agent: agent.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
             moved: false,
+            place: None,
         }
         .write(paths, workspace_id)
     }

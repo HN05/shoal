@@ -30,7 +30,6 @@ use crate::{
     config::Effective,
     demos::Launch,
     env,
-    execution::recovery::Record,
     model::{Repository, Workspace},
 };
 
@@ -710,10 +709,7 @@ async fn rerun_in_host(
 /// Where the agent of `record` stopped, unless that is where this process
 /// runs, which is never reused.
 fn stopped_place(host: &dyn Host, record: &Path) -> Option<String> {
-    std::fs::read(record)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Record>(&bytes).ok())
-        .and_then(|record| record.place)
+    crate::execution::recovery::saved_place(record)
         .filter(|place| host.current_place().as_ref() != Some(place))
 }
 

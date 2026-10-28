@@ -143,10 +143,15 @@ impl Manifest {
             }
         });
         let last_sessions = sessions.last_sessions.iter().cloned().map(|last| {
-            if last.session.is_some() {
+            if last.session.is_none() {
+                last.moved()
+            } else if exporting {
                 last
             } else {
-                last.moved()
+                LastSession {
+                    place: None,
+                    ..last
+                }
             }
         });
         RemovedWorkspace {

@@ -289,6 +289,7 @@ fn manifest_with_sessions() -> Manifest {
         agent: "codex".into(),
         session: Some("s2".into()),
         moved: false,
+        place: Some("tab".into()),
     };
     let workspace: RemovedWorkspace = serde_json::from_value(serde_json::json!({
         "workspace_id": "w1",
@@ -342,6 +343,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     };
     assert_eq!(last.execution, "quit");
     assert_eq!((last.session.as_deref(), last.moved), (Some("s2"), false));
+    assert_eq!(last.place.as_deref(), Some("tab"));
 
     for new in [
         manifest.workspace_on(Some("m2"), None),
@@ -360,6 +362,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.place, None);
     assert!(!kept.last_sessions[0].moved);
+    assert_eq!(kept.last_sessions[0].place, None);
 
     // So does an export from a machine without an ID.
     manifest.sessions.as_mut().unwrap().machine = None;

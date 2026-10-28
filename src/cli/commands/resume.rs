@@ -144,7 +144,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
         .workspace;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let record = crate::execution::recovery::record_path(&ctx.paths, &workspace.id, execution);
+    let record = crate::execution::recovery::saved_path(&ctx.paths, &workspace.id, execution);
     let args = [
         "resume",
         &workspace.id,

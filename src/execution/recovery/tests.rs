@@ -242,7 +242,12 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
         "execution",
         Record {
             session: Some("stopped".into()),
-            ..Record::new("claude", Some("its terminal closed"), Stage::Stopped, None)
+            ..Record::new(
+                "claude",
+                Some("its terminal closed"),
+                Stage::Stopped,
+                Some("w1:p2".into()),
+            )
         },
     )
     .unwrap();
@@ -256,6 +261,10 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
             agent: "claude".into(),
             session: Some("stopped".into()),
             moved: false,
+            place: Some("w1:p2".into()),
         }]
     );
+    let kept = LastSession::path(&paths, "workspace", "execution");
+    assert_eq!(saved_place(&kept).as_deref(), Some("w1:p2"));
+    assert_eq!(saved_path(&paths, "workspace", "execution"), kept);
 }
