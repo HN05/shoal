@@ -394,6 +394,7 @@ impl Manager {
         }
         let cause = match grant {
             Some(Grant::Update) => "for an update",
+            Some(Grant::Queue) => "from the agent queue",
             _ => "after sustained healthy readings",
         };
         self.notify(
@@ -488,7 +489,7 @@ impl Manager {
     ) -> anyhow::Result<bool> {
         self.verify_restore_workspace(workspace_id).await?;
         let current = match grant {
-            Grant::Update => true,
+            Grant::Update | Grant::Queue => true,
             Grant::Recovery(epoch) => self.overload_recovery.epoch() == epoch,
         };
         if !current {

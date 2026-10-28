@@ -191,7 +191,7 @@ pub(super) fn request(repository: &Repository, name: &str, now: bool) -> QueueRe
     }
 }
 
-async fn add(manager: &Manager, repository: &Repository, name: &str) -> QueueAdmission {
+pub(super) async fn add(manager: &Manager, repository: &Repository, name: &str) -> QueueAdmission {
     manager
         .queue_add(request(repository, name, false))
         .await
@@ -419,11 +419,14 @@ async fn only_waiting_entries_can_be_removed() {
     );
     assert_eq!(manager.queue_entries().await.unwrap().len(), 2);
 
-    let error = manager.queue_remove(&starting.name).await.unwrap_err();
+    let error = manager
+        .queue_remove(&starting.name, None)
+        .await
+        .unwrap_err();
     assert!(format!("{error:#}").contains("already starting"));
-    let removed = manager.queue_remove("waiting").await.unwrap();
+    let removed = manager.queue_remove("waiting", None).await.unwrap();
     assert_eq!(removed.name, "waiting");
-    assert!(manager.queue_remove("waiting").await.is_err());
+    assert!(manager.queue_remove("waiting", None).await.is_err());
     assert!(manager.queued_plan(&starting.id).await.is_ok());
 }
 
@@ -564,7 +567,7 @@ async fn protection_stopped_agents_keep_their_slot_without_load() {
 }
 
 /// A hang guard, not a deadline: the awaited step is already admitted.
-async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
+pub(super) async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
     tokio::time::timeout(Duration::from_secs(60), future)
         .await
         .expect("queue step hung")
@@ -583,7 +586,7 @@ pub(super) async fn create(
 
 /// Agents connected in `workspaces`, each stopped by memory protection with
 /// its restore queued in order.
-async fn stopped_agents(
+pub(super) async fn stopped_agents(
     manager: &Manager,
     workspaces: &[&crate::model::Workspace],
 ) -> Vec<(String, tokio::sync::watch::Receiver<bool>)> {
@@ -603,7 +606,7 @@ async fn stopped_agents(
 }
 
 /// The restore of `execution` waiting for admission, once its waiter counts.
-async fn await_restore(
+pub(super) async fn await_restore(
     manager: &std::sync::Arc<Manager>,
     execution: &str,
 ) -> tokio::task::JoinHandle<Result<Grant>> {
@@ -1120,7 +1123,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     // Until its processes are proven stopped the agent keeps its slot.
     let held = add(&manager, &repo, "held").await;
     assert!(!held.start);
-    manager.queue_remove("held").await.unwrap();
+    manager.queue_remove("held", None).await.unwrap();
     let restoring = await_restore(&manager, &execution).await;
     // Healthy readings do not restore it, and its slot is free for a launch.
     publish_recovery(&manager);

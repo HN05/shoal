@@ -28,7 +28,13 @@ pub(super) async fn handle(
         }
         QueueMethod::ListQueue => Body::QueueEntries(manager.visible_queue(caller).await?),
         QueueMethod::QueuedPlan { entry } => Body::QueuedPlan(manager.queued_plan(&entry).await?),
-        QueueMethod::QueueRemove { entry } => Body::QueueEntry(manager.queue_remove(&entry).await?),
+        QueueMethod::QueueRemove { entry } => {
+            Body::QueueEntry(manager.queue_remove(&entry, caller).await?)
+        }
+        QueueMethod::QueueStart { entry } => Body::QueueEntry(manager.queue_start(&entry).await?),
+        QueueMethod::QueueMove { entry, place } => {
+            Body::QueueEntry(manager.queue_move(&entry, place, caller).await?)
+        }
         QueueMethod::QueueAttach { entry, workspace } => {
             manager.queue_attach(&entry, &workspace).await?;
             Body::Ok
@@ -52,10 +58,13 @@ pub(super) async fn handle(
 impl Scoped for QueueMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            QueueMethod::ListQueue => None,
+            // Each answer confines the entries to those below the caller.
+            QueueMethod::ListQueue
+            | QueueMethod::QueueRemove { .. }
+            | QueueMethod::QueueMove { .. } => None,
             QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
             QueueMethod::QueuedPlan { .. }
-            | QueueMethod::QueueRemove { .. }
+            | QueueMethod::QueueStart { .. }
             | QueueMethod::QueueHold { .. }
             | QueueMethod::QueueAttach { .. }
             | QueueMethod::QueueFail { .. }

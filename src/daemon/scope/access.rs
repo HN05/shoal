@@ -98,15 +98,22 @@ impl Manager {
         }
     }
 
-    /// The agent queue `caller` may see: none for a workspace process.
+    /// The agent queue `caller` may see: the entries for the workspaces
+    /// below its own, where it may queue agents.
     pub(in crate::daemon) async fn visible_queue(
         &self,
         caller: Option<&Caller>,
     ) -> Result<Vec<QueueEntry>> {
-        match caller {
-            Some(_) => Ok(Vec::new()),
-            None => self.queue_entries().await,
+        let mut entries = self.queue_entries().await?;
+        if let Some(caller) = caller {
+            let subtree = self.subtree(&caller.workspace_id).await?;
+            entries.retain(|entry| {
+                entry.workspace().is_some_and(|workspace| {
+                    workspace != caller.workspace_id && subtree.iter().any(|id| id == workspace)
+                })
+            });
         }
+        Ok(entries)
     }
 
     /// The workspace `request` starts an agent in, which must be one below

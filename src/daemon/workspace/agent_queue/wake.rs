@@ -17,6 +17,8 @@ pub(crate) enum Grant {
     Recovery(u64),
     /// An update for the agent.
     Update,
+    /// Its turn in the agent queue, or `shoal queue start`.
+    Queue,
 }
 
 /// A restore entry with the workspace and execution of its agent.

@@ -870,47 +870,6 @@ impl Manager {
             .await
     }
 
-    /// Remove a waiting entry by ID or name. A stopped agent whose restore is
-    /// removed stays stopped.
-    pub async fn queue_remove(&self, selector: &str) -> Result<QueueEntry> {
-        // Dispatch cannot start the entry between finding and deleting it.
-        let _gate = self.agent_queue.lock_admission().await;
-        let entries = self.queue_entries().await?;
-        let mut matches = entries
-            .iter()
-            .filter(|entry| entry.id == selector || entry.name == selector);
-        let entry = matches
-            .next()
-            .with_context(|| format!("{selector} is not in the agent queue"))?
-            .clone();
-        ensure!(
-            matches.next().is_none(),
-            "several queue entries are named {selector}; pass the entry ID"
-        );
-        ensure!(
-            entry.kind == QueueKind::Launch || self.restores_stopped_agent(&entry.id).await?,
-            "{0} waits to restore its stopped agent; shoal stop {0} cancels the restore",
-            entry.name
-        );
-        ensure!(
-            entry.state == QueueState::Queued,
-            "{} is already starting; remove its workspace instead",
-            entry.name
-        );
-        let id = entry.id.clone();
-        let removed = self
-            .store
-            .run(move |db| {
-                Ok(db.execute(
-                    "DELETE FROM agent_queue WHERE id=?1 AND state=?2",
-                    params![id, QueueState::Queued],
-                )?)
-            })
-            .await?;
-        ensure!(removed == 1, "{} is no longer waiting", entry.name);
-        Ok(entry)
-    }
-
     /// Hold the queue gate for an agent taking over `entry`'s slot, refusing
     /// an entry no longer starting, whose start a stop or completion
     /// cancelled. The guard keeps cancellation out until the agent has taken
@@ -1224,8 +1183,10 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     })
 }
 
+mod actions;
 mod dependencies;
 mod expiry;
+mod order;
 mod state;
 mod stopped;
 mod wake;

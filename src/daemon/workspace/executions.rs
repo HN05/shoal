@@ -128,6 +128,15 @@ impl StopRequest {
         }
     }
 
+    /// The stop `shoal queue cancel` requests of an agent waiting for its
+    /// restore.
+    pub fn queue_cancel() -> Self {
+        Self {
+            reason: "its restore was cancelled with shoal queue cancel".into(),
+            save: Save::Everything,
+        }
+    }
+
     pub fn repair() -> Self {
         Self {
             reason: "stopped to repair the workspace".into(),

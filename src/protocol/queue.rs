@@ -14,9 +14,19 @@ pub enum QueueMethod {
     QueuedPlan {
         entry: String,
     },
-    /// Remove a waiting entry, named by ID or workspace name.
+    /// Cancel a waiting entry, named by ID or workspace name; a cancelled
+    /// restore leaves its agent stopped.
     QueueRemove {
         entry: String,
+    },
+    /// Start a waiting entry now, regardless of the limits.
+    QueueStart {
+        entry: String,
+    },
+    /// Move a waiting entry to `place`.
+    QueueMove {
+        entry: String,
+        place: crate::model::QueuePlace,
     },
     /// Keep a starting entry's slot while the connection stays open.
     QueueHold {

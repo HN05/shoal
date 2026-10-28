@@ -735,6 +735,24 @@ pub struct QueueEntry {
     pub base: Option<String>,
 }
 
+impl QueueEntry {
+    /// The workspace the entry starts its agent in, once known.
+    pub fn workspace(&self) -> Option<&str> {
+        self.opens.as_deref().or(self.workspace_id.as_deref())
+    }
+}
+
+/// Where `shoal queue move` places an entry among the waiting ones.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueuePlace {
+    /// The 1-based position, as `shoal queue` numbers them.
+    Position(usize),
+    /// In front of the entry with this ID.
+    Before(String),
+    Last,
+}
+
 /// Work a queued launch waits for until it is complete.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
