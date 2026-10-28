@@ -3,6 +3,7 @@ pub(crate) mod zmx;
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
+use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Arc};
 
 /// A terminal session labelled with the workspace that owns it.
@@ -13,7 +14,8 @@ pub(crate) struct Session {
 
 /// The ownership that must still match when a session is closed. Demo launches
 /// have unique IDs even when their host reuses a session name in one workspace.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Owner {
     Workspace(String),
     Demo(String),

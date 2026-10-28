@@ -250,6 +250,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 72 {
         db.execute_batch(include_str!("agent_queue_stopped_restores.sql"))?;
     }
+    if version >= 73 {
+        db.execute_batch(include_str!("session_cleanup.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

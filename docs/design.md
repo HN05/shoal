@@ -669,7 +669,8 @@ agent gives, and a workspace runs several. Its wrapper is an ordinary tracked
 command that records the demo with its execution, so stopping, removal and
 recovery use that execution. Its verified end closes the demo session, including
 a disconnected wrapper stopped by the daemon, only while its unique launch label
-still matches the session; the wrapper
+still matches the session. Pending closes persist with execution deletion and retry
+at startup or cleanup, even while the workspace remains. The wrapper
 restarts the command, backing off after quick exits so a failing command keeps
 its error on screen. The CLI places the wrapper where queued agents start,
 through the terminal hosts, since a demo is something the user opens and reads,

@@ -449,7 +449,8 @@ configured command for another agent, plus proven child
   sessions; startup and cleanup sweeps close orphan sessions only in their state
   namespace, with legacy labels claimed only by the default daemon. A demo session
   closes after verified execution completion, including a disconnected stop, only
-  while its unique launch label still matches the session. The daemon owns
+  while its unique launch label still matches the session. Failed demo closes persist
+  beyond execution deletion and retry at startup or cleanup. The daemon owns
   state and prepares each execution kind before shared registration through one
   request. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;

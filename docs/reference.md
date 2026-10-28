@@ -955,7 +955,8 @@ the workspace's state directory, which removal deletes, and takes no keys. A com
 within 10 seconds of a start doubles the wait before the next run, from 1 to 30
 seconds. Stopping the demo, `shoal stop`, `shoal done` without `--keep-demos`
 and removing the workspace end it, and its session with it; a running demo keeps the workspace from idle cleanup as
-other commands do.
+other commands do. Failed session closes notify and retry at startup or with
+`shoal cleanup`, including while the workspace still exists.
 
 ### Chats
 

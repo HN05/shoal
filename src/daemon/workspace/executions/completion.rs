@@ -3,10 +3,7 @@ use anyhow::Result;
 use rusqlite::{TransactionBehavior, params};
 
 use super::{ExecutionKind, Manager};
-use crate::{
-    demos::Launch,
-    state::{ExecutionState, WorkspaceState},
-};
+use crate::state::{ExecutionState, WorkspaceState};
 
 impl Manager {
     pub(super) async fn record_execution_completion(
@@ -15,9 +12,10 @@ impl Manager {
         kind: ExecutionKind,
         exit_code: Option<i32>,
         issue: Option<String>,
-    ) -> Result<Option<Launch>> {
+    ) -> Result<Option<String>> {
         let complete = issue.is_none();
         let record_id = id.to_owned();
+        let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -47,7 +45,7 @@ impl Manager {
                         ],
                     )?;
                 }
-                let demo = if complete { super::super::demos::execution_launch(&tx, &record_id)? } else { None };
+                let demo = if complete { super::super::sessions::pending::record_demo(&tx, &record_id, &hosts)? } else { None };
                 if complete {
                     tx.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
                 } else {
@@ -62,12 +60,13 @@ impl Manager {
             .await
     }
 
-    pub(super) async fn delete_execution_record(&self, id: &str) -> Result<Option<Launch>> {
+    pub(super) async fn delete_execution_record(&self, id: &str) -> Result<Option<String>> {
         let id = id.to_owned();
+        let hosts: Vec<_> = self.session_hosts.iter().map(|host| host.name()).collect();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                let demo = super::super::demos::execution_launch(&tx, &id)?;
+                let demo = super::super::sessions::pending::record_demo(&tx, &id, &hosts)?;
                 tx.execute("DELETE FROM executions WHERE id=?1", [id])?;
                 tx.commit()?;
                 Ok(demo)

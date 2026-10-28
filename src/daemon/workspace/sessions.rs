@@ -1,6 +1,8 @@
 //! End terminal sessions after ownership ends, including leftovers from older
 //! removals. Hosts supply discovery and close operations, not lifecycle policy.
-use anyhow::Result;
+pub(super) mod pending;
+
+use anyhow::{Context as _, Result};
 
 use super::Manager;
 use crate::{daemon::notifications::NotificationKind, model::Workspace};
@@ -42,6 +44,7 @@ impl Manager {
     /// newly registered workspace as removed. Only the default daemon owns
     /// legacy sessions without a state-directory label.
     pub(crate) async fn cleanup_orphan_sessions(&self) {
+        self.retry_session_closes(None).await;
         for host in &self.session_hosts {
             if let Err(error) = self.cleanup_host_sessions(host.as_ref()).await {
                 self.session_cleanup_failed(None, &error).await;
@@ -66,24 +69,40 @@ impl Manager {
         Ok(())
     }
 
-    /// A demo's place belongs to that launch even when its wrapper was stopped
-    /// while disconnected and cannot close the session's shell itself.
-    pub(super) async fn close_demo_session(&self, launch: Option<crate::demos::Launch>) {
-        let Some(launch) = launch else {
-            return;
-        };
-        if let Some(host) = self
+    /// The close was queued atomically with deleting the verified execution.
+    pub(super) async fn close_demo_session(&self, id: Option<String>) {
+        if id.is_some() {
+            self.retry_session_closes(id).await;
+        }
+    }
+
+    async fn retry_session_closes(&self, id: Option<String>) {
+        let pending = self
+            .store
+            .run(move |db| pending::list(db, id.as_deref()))
+            .await;
+        match pending {
+            Ok(pending) => {
+                for close in pending {
+                    if let Err(error) = self.close_pending_session(close).await {
+                        self.session_cleanup_failed(None, &error).await;
+                    }
+                }
+            }
+            Err(error) => self.session_cleanup_failed(None, &error).await,
+        }
+    }
+
+    async fn close_pending_session(&self, close: pending::Close) -> Result<()> {
+        let host = self
             .session_hosts
             .iter()
-            .find(|host| host.name() == launch.host)
-        {
-            self.close_session(
-                host.as_ref(),
-                &launch.place,
-                &crate::sessions::Owner::Demo(launch.id),
-            )
-            .await;
-        }
+            .find(|host| host.name() == close.host)
+            .with_context(|| format!("terminal host {} is unavailable", close.host))?;
+        host.close(&close.name, &close.owner).await?;
+        self.store
+            .run(move |db| pending::forget(db, &close.id))
+            .await
     }
 
     async fn close_session(

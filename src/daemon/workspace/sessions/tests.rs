@@ -4,7 +4,6 @@ use crate::{
     sessions::{Host, Session},
     test_support::{manager, repository},
 };
-use anyhow::Context as _;
 use futures_util::future::BoxFuture;
 use std::{
     path::Path,
@@ -289,5 +288,136 @@ async fn finishing_an_old_demo_does_not_close_a_replacement_in_the_same_workspac
     host.demo("reused", "new-launch")?;
     manager.forget_execution(&started.plan.id).await?;
     assert!(host.closed()?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn failed_demo_closes_survive_restart_and_retry_without_removing_the_workspace() -> Result<()>
+{
+    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+
+    for replacement in [false, true] {
+        let (_root, manager, workspace, host) = fixture().await?;
+        host.add("bad", &workspace.id)?;
+        host.demo("bad", "launch")?;
+        host.fail.store(true, Ordering::Relaxed);
+        let demo = Launch {
+            id: "launch".into(),
+            name: "demo".into(),
+            preset: None,
+            open: None,
+            scheme: None,
+            environment: Default::default(),
+            host: "zmx".into(),
+            place: "bad".into(),
+        };
+        let started = manager
+            .begin_execution_running(
+                &workspace.id,
+                None,
+                ExecutionKind::Command,
+                None,
+                Some(demo),
+            )
+            .await?;
+        if replacement {
+            manager.forget_execution(&started.plan.id).await?;
+        } else {
+            assert!(
+                manager
+                    .finish_execution(started.plan.id, ExecutionKind::Command, Some(0))
+                    .await?
+            );
+        }
+        assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
+        assert!(host.closed()?.is_empty());
+        assert_eq!(
+            manager
+                .store
+                .run(|db| Ok(pending::list(db, None)?.len()))
+                .await?,
+            1
+        );
+        let paths = manager.paths.clone();
+        manager.store.shutdown().await;
+        drop(manager);
+        let mut reopened = Manager::open(paths).await?;
+        Arc::get_mut(&mut reopened)
+            .context("reopened manager is shared")?
+            .session_hosts = vec![host.clone()];
+        reopened.cleanup_orphan_sessions().await;
+        assert!(host.closed()?.is_empty());
+        assert_eq!(
+            reopened
+                .store
+                .run(|db| Ok(pending::list(db, None)?.len()))
+                .await?,
+            1
+        );
+        if replacement {
+            host.demo("bad", "replacement-launch")?;
+        }
+        host.fail.store(false, Ordering::Relaxed);
+        reopened.cleanup_orphan_sessions().await;
+        assert_eq!(
+            host.closed()?,
+            if replacement { vec![] } else { vec!["bad"] }
+        );
+        assert!(
+            reopened
+                .store
+                .run(|db| pending::list(db, None))
+                .await?
+                .is_empty()
+        );
+        assert!(reopened.find_workspace(&workspace.id).await?.is_some());
+        reopened.store.shutdown().await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn failed_execution_deletion_does_not_commit_a_pending_close() -> Result<()> {
+    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+
+    let (_root, manager, workspace, _host) = fixture().await?;
+    let demo = Launch {
+        id: "launch".into(),
+        name: "demo".into(),
+        preset: None,
+        open: None,
+        scheme: None,
+        environment: Default::default(),
+        host: "zmx".into(),
+        place: "session".into(),
+    };
+    let started = manager
+        .begin_execution_running(
+            &workspace.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            Some(demo),
+        )
+        .await?;
+    manager
+        .store
+        .run(|db| {
+            db.execute_batch(
+                "CREATE TRIGGER refuse_execution_delete BEFORE DELETE ON executions
+            BEGIN SELECT RAISE(ABORT, 'delete failed'); END;",
+            )?;
+            Ok(())
+        })
+        .await?;
+    assert!(manager.forget_execution(&started.plan.id).await.is_err());
+    assert_eq!(manager.demos(Some(&workspace.id)).await?.len(), 1);
+    assert!(
+        manager
+            .store
+            .run(|db| pending::list(db, None))
+            .await?
+            .is_empty()
+    );
     Ok(())
 }
