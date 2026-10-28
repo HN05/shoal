@@ -7,6 +7,7 @@ use tokio::process::Command;
 use crate::{subprocess::Run, tools::Tool};
 
 pub(crate) const WORKSPACE_LABEL: &str = "shoal.workspace";
+pub(crate) const CHAT_LABEL: &str = "shoal.chat";
 
 /// End `session` with everything running in it.
 pub(crate) async fn kill(session: &str) -> Result<()> {
@@ -102,7 +103,7 @@ impl super::Host for Zmx {
                 .into_iter()
                 .filter(|(_, fields)| in_state(fields, &state_label, include_legacy))
                 .filter_map(|(name, fields)| {
-                    let workspace = field(&fields, WORKSPACE_LABEL)?.to_owned();
+                    let workspace = workspace_owner(&fields)?.to_owned();
                     Some(super::Session { name, workspace })
                 })
                 .collect())
@@ -129,11 +130,21 @@ impl super::Host for Zmx {
 
 /// Session names can be reused; a close must still own the current session.
 fn owned_by(fields: &Fields, owner: &super::Owner) -> bool {
-    let (label, id) = match owner {
-        super::Owner::Workspace(id) => (WORKSPACE_LABEL, id),
-        super::Owner::Demo(id) => ("shoal.demo", id),
-    };
-    field(fields, label) == Some(id.as_str())
+    match owner {
+        super::Owner::Workspace(id) => workspace_owner(fields) == Some(id.as_str()),
+        super::Owner::Demo(id) => {
+            field(fields, CHAT_LABEL).is_none() && field(fields, "shoal.demo") == Some(id.as_str())
+        }
+    }
+}
+
+/// Old launchers could leave both owner labels when a workspace session became
+/// a chat. Conflicting ownership must never authorize workspace cleanup.
+fn workspace_owner(fields: &Fields) -> Option<&str> {
+    if field(fields, CHAT_LABEL).is_some() {
+        return None;
+    }
+    field(fields, WORKSPACE_LABEL)
 }
 
 #[cfg(test)]

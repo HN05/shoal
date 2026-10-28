@@ -19,14 +19,13 @@ use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start,
 use crate::{
     cli::agents::ensure_program,
     env,
-    sessions::zmx::{Fields, WORKSPACE_LABEL, field, kill, list},
+    sessions::zmx::{CHAT_LABEL, Fields, WORKSPACE_LABEL, field, kill, list},
     subprocess::Run,
     tools::Tool,
 };
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
-const CHAT_LABEL: &str = "shoal.chat";
 const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
 const MAX_NAME_LEN: usize = 32;
@@ -449,7 +448,7 @@ async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)
-        .args(labels(owner, agent).split(' '))
+        .args(replacement_labels(owner, agent).split(' '))
         .arg(crate::sessions::zmx::state_label(state)?);
     Run::new(set)
         .checked()
@@ -540,6 +539,20 @@ fn labels(owner: Owner<'_>, agent: &str) -> String {
     let mut labels = format!("{}={}", owner_label(owner.kind()), owner.id());
     if !agent.is_empty() && !agent.contains(char::is_whitespace) {
         labels.push_str(&format!(" {AGENT_LABEL}={agent}"));
+    }
+    labels
+}
+
+/// Replace Shoal ownership in a reused session without touching user labels.
+/// Empty values remove labels in the same zmx set request.
+fn replacement_labels(owner: Owner<'_>, agent: &str) -> String {
+    let obsolete = match owner.kind() {
+        OwnerKind::Workspace => CHAT_LABEL,
+        OwnerKind::Chat => WORKSPACE_LABEL,
+    };
+    let mut labels = format!("{} {obsolete}= shoal.demo=", labels(owner, agent));
+    if agent.is_empty() || agent.contains(char::is_whitespace) {
+        labels.push_str(&format!(" {AGENT_LABEL}="));
     }
     labels
 }

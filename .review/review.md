@@ -447,8 +447,9 @@ configured command for another agent, plus proven child
   terminal emulator between agent and terminal; launches without a terminal, inside
   zmx, or in an enabled Herdr pane run in place. Removal closes labelled workspace
   sessions; startup and cleanup sweeps close orphan sessions only in their state
-  namespace, with legacy labels claimed only by the default daemon. A demo session
-  closes after verified execution completion, including a disconnected stop, only
+  namespace, with legacy labels claimed only by the default daemon. Relabelling
+  replaces obsolete ownership; conflicting chat labels prevent workspace cleanup.
+  A demo session closes after verified execution completion, including a disconnected stop, only
   while its unique launch label still matches the session. Failed demo closes persist
   beyond execution deletion and retry at startup or cleanup. The daemon owns
   state and prepares each execution kind before shared registration through one

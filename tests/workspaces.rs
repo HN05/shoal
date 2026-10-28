@@ -21275,8 +21275,18 @@ with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
     sessions = root / 'zmx-sessions'
-    lines = [line + '\t' + '\t'.join(args[2:]) if line.split('\t')[0].strip() == f'name={args[1]}' else line
-        for line in sessions.read_text().splitlines()]
+    lines = []
+    for line in sessions.read_text().splitlines():
+        fields = dict(field.split('=', 1) for field in line.strip().split('\t'))
+        if fields.get('name') == args[1]:
+            for assignment in args[2:]:
+                key, value = assignment.split('=', 1)
+                if value:
+                    fields[key] = value
+                else:
+                    fields.pop(key, None)
+            line = '\t'.join(f'{key}={value}' for key, value in fields.items())
+        lines.append(line)
     sessions.write_text(''.join(line + '\n' for line in lines))
 elif args[:1] in (['set'], ['kill']):
     pass
@@ -22771,6 +22781,48 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
         fs::read_to_string(home.join("chat-sessions")).unwrap(),
         format!("{session}\nouter\n")
     );
+}
+
+#[test]
+fn a_chat_replaces_workspace_ownership_in_a_reused_zmx_session() -> anyhow::Result<()> {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("old-owner");
+    let workspace_id = workspace["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("workspace id"))?;
+    let home = fixture.root.path();
+    install_recording_agent(&fixture, "claude");
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    fs::write(home.join("zmx-keep-sessions"), "")?;
+    fs::write(
+        home.join("zmx-sessions"),
+        format!(
+            "name=reused\tpid=1\tshoal.workspace={workspace_id}\tshoal.demo=old-launch\tuser.label=keep\n"
+        ),
+    )?;
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "reused")
+            .args(["chat", "--here", "--name", "new-chat", "--agent", "claude"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let sessions = fs::read_to_string(home.join("zmx-sessions"))?;
+    assert!(sessions.contains("shoal.chat="), "{sessions}");
+    assert!(sessions.contains("user.label=keep"), "{sessions}");
+    assert!(!sessions.contains("shoal.workspace="), "{sessions}");
+    assert!(!sessions.contains("shoal.demo="), "{sessions}");
+    fixture.ok(&["rm", "old-owner", "--yes"]);
+    fixture.ok(&["cleanup"]);
+    assert!(
+        !zmx_calls(&fixture)
+            .iter()
+            .any(|call| call.first().is_some_and(|command| command == "kill"))
+    );
+    Ok(())
 }
 
 #[test]

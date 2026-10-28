@@ -653,10 +653,10 @@ terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
-so daemons sharing zmx can distinguish their sessions; `attach` and `status` look
-them up through `zmx list`. Removal closes every session labelled with its
-workspace ID; startup and cleanup sweeps close sessions whose workspace record
-is gone, retrying failures without restoring ownership. Only the default daemon
+so daemons sharing zmx can distinguish their sessions. Relabelling replaces Shoal
+ownership; `attach` and `status` look sessions up through `zmx list`. Removal
+closes sessions labelled with its workspace ID unless chat ownership conflicts;
+startup and cleanup sweeps close sessions whose workspace record is gone, retrying failures without restoring ownership. Only the default daemon
 cleans up legacy sessions without a state label. A detached session that Shoal
 starts labels itself once its workspace exists. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent

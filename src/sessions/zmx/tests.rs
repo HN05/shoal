@@ -88,3 +88,20 @@ fn closing_checks_ownership_even_when_a_name_is_reused() {
         ));
     }
 }
+
+#[test]
+fn conflicting_chat_ownership_never_authorizes_workspace_or_demo_cleanup() {
+    let sessions =
+        parse_list("name=reused\tshoal.workspace=w1\tshoal.demo=old-launch\tshoal.chat=c1\n");
+    for (_, fields) in sessions {
+        assert!(workspace_owner(&fields).is_none());
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Workspace("w1".into())
+        ));
+        assert!(!owned_by(
+            &fields,
+            &super::super::Owner::Demo("old-launch".into())
+        ));
+    }
+}
