@@ -1,7 +1,9 @@
 #!/usr/bin/env sh
 # Run `cargo test` repeatedly and print the Markdown body of the evergreen
 # flaky-test report on stdout. flaky.yml runs it nightly on main and hands the
-# body to publish-report.sh; it also runs from a checkout.
+# body to publish-report.sh; it also runs from a checkout. Each failed test's
+# captured output goes to stderr, so the run log keeps it after the round logs
+# are gone.
 #
 #   flaky-report.sh <rounds>
 #
@@ -54,6 +56,18 @@ while [ "$round" -le "$ROUNDS" ]; do
       }
     }' "$log" >>"$WORK/panics"
   echo "round $round of $ROUNDS: $(grep -c . "$WORK/failed-$round" || true) failed" >&2
+  if [ -s "$WORK/failed-$round" ]; then
+    echo "::group::round $round failure output" >&2
+    # Every captured section up to its binary's summary, each one bounded.
+    awk -v max=200 '
+      /^---- .* std(out|err) ----$/ { printing = 1; lines = 0; print; next }
+      /^failures:$/ { printing = 0 }
+      printing {
+        if (++lines <= max) print
+        else if (lines == max + 1) print "[output truncated]"
+      }' "$log" >&2
+    echo "::endgroup::" >&2
+  fi
   round=$((round + 1))
 done
 
