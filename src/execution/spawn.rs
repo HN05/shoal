@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
 
 use super::Mode;
-use crate::{env, model::ExecutionPlan, paths::Paths};
+use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
 
 /// What an agent's or publishing child receives beyond the workspace
 /// environment: the agent account and, for agents, the configured secrets and
@@ -23,7 +23,25 @@ pub(super) struct AgentLaunch {
     /// The proxy the agent's API requests go through, which
     /// [`AgentLaunch::start_proxy`] runs as long as this wrapper does.
     pub(super) routed: Option<crate::proxy::Proxy>,
+    /// The key `routed` names by command, with the value the command
+    /// printed, fetched before the execution registers: the daemon cannot
+    /// stop a launch until its agent starts.
+    pub(super) fetched_key: Option<(Value, String)>,
     pub(super) proxy: Option<crate::proxy::Running>,
+}
+
+/// Run the command that `routed` takes its key from, when it names one.
+pub(super) async fn fetch_command_key(
+    routed: Option<&crate::proxy::Proxy>,
+) -> Result<Option<(Value, String)>> {
+    let Some(key) = routed
+        .and_then(|proxy| proxy.key.as_ref())
+        .filter(|key| key.runs_command())
+    else {
+        return Ok(None);
+    };
+    let value = key.resolve(|_| None).await.context("the proxy's key")?;
+    Ok(Some((key.clone(), value)))
 }
 
 impl AgentLaunch {
@@ -36,10 +54,29 @@ impl AgentLaunch {
         let Some(routed) = &self.routed else {
             return Ok(());
         };
+        let key = match &routed.key {
+            Some(key) => Some(self.proxy_key(key, environment).await?),
+            None => None,
+        };
+        self.proxy = Some(crate::proxy::start(routed, key.as_deref()).await?);
+        Ok(())
+    }
+
+    /// The value of the proxy's `key`: the one fetched before the launch
+    /// registered for the same command, otherwise read now.
+    async fn proxy_key(
+        &self,
+        key: &Value,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> Result<String> {
+        if let Some((fetched, value)) = &self.fetched_key
+            && fetched == key
+        {
+            return Ok(value.clone());
+        }
         let configured = self.configured_environment(environment);
         let variable = |name: &str| self.variable(&configured, name);
-        self.proxy = Some(crate::proxy::start(routed, variable).await?);
-        Ok(())
+        key.resolve(variable).await.context("the proxy's key")
     }
 
     /// Run the restored agent, with the workspace's `environment`, through

@@ -43,9 +43,14 @@ impl Value {
         }
     }
 
+    /// Whether reading the value runs a command, which takes as long as the
+    /// command does.
+    pub fn runs_command(&self) -> bool {
+        matches!(self, Self::Cmd { .. })
+    }
+
     /// The value itself, reading `variable` of the agent's environment for
-    /// one it names. A build without the proxy reads none yet.
-    #[cfg_attr(not(feature = "proxy"), allow(dead_code))]
+    /// one it names.
     pub async fn resolve(&self, variable: impl Fn(&str) -> Option<OsString>) -> Result<String> {
         let (value, source) = match self {
             Self::Written(value) => return Ok(value.clone()),
@@ -95,6 +100,7 @@ pub async fn command_output(command: &[String], path: Option<&OsStr>) -> Result<
         .args(&command[1..])
         .stdin(Stdio::null())
         .stderr(Stdio::inherit())
+        .kill_on_drop(true)
         .output()
         .await
         .with_context(|| format!("run {program}"))?;

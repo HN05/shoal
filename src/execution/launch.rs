@@ -366,6 +366,12 @@ async fn prepare_agent_launch(
     } else {
         Default::default()
     };
+    // An agent Shoal cannot point at its proxy does not start.
+    let routed = match agent {
+        Some(agent) => crate::cli::agents::launch_proxy(&settings, agent)?.cloned(),
+        None => None,
+    };
+    let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
     Ok(Some(AgentLaunch {
         account: settings.agent_auth.prepare(paths, &config.git)?,
         secrets,
@@ -375,11 +381,8 @@ async fn prepare_agent_launch(
             .map(|agent| settings.launch(agent).environment.clone())
             .unwrap_or_default(),
         home: paths.home.clone(),
-        // An agent Shoal cannot point at its proxy does not start.
-        routed: match agent {
-            Some(agent) => crate::cli::agents::launch_proxy(&settings, agent)?.cloned(),
-            None => None,
-        },
+        routed,
+        fetched_key,
         proxy: None,
     }))
 }

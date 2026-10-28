@@ -20,6 +20,7 @@ fn launch(home: &std::path::Path) -> AgentLaunch {
         environment: Default::default(),
         home: home.to_owned(),
         routed: None,
+        fetched_key: None,
         proxy: None,
     }
 }
@@ -69,4 +70,34 @@ async fn a_restored_agent_runs_through_the_proxy_its_restore_command_names() {
     assert!(launch.restart_proxy(None, &environment).await.unwrap());
     assert!(launch.proxy.is_none());
     assert!(!launch.restart_proxy(None, &environment).await.unwrap());
+}
+
+#[tokio::test]
+async fn a_proxy_uses_the_key_its_command_printed_before_the_launch_registered() {
+    let home = tempfile::tempdir().unwrap();
+    let mut launch = launch(home.path());
+    let fetched: crate::proxy::Proxy =
+        toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['echo', 'sk-cmd'] }")
+            .unwrap();
+    launch.fetched_key = fetch_command_key(Some(&fetched)).await.unwrap();
+    let key = fetched.key.clone().unwrap();
+    assert_eq!(launch.fetched_key, Some((key.clone(), "sk-cmd".to_owned())));
+    // The same command is not run again, so one that would fail never does.
+    let failing: crate::proxy::Proxy =
+        toml::from_str("upstream = 'http://127.0.0.1:9'\nkey = { cmd = ['false'] }").unwrap();
+    launch.fetched_key = Some((failing.key.clone().unwrap(), "sk-fetched".to_owned()));
+    assert!(
+        launch
+            .restart_proxy(Some(failing), &BTreeMap::new())
+            .await
+            .unwrap()
+    );
+    assert!(launch.proxy.is_some());
+    // A key from the environment is read when the proxy starts.
+    assert_eq!(
+        fetch_command_key(Some(&proxy("http://host", Some("KEY"))))
+            .await
+            .unwrap(),
+        None
+    );
 }
