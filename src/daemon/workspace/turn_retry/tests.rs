@@ -312,8 +312,33 @@ async fn a_retry_waits_past_the_reset_the_upstream_named() {
         .await
         .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
-    // An ended execution waits for nothing.
-    manager.forget_proxy_retry(&execution).await;
+    // A wrapper that only lost its connection may come back, and the reset
+    // still holds for it; an execution that ended waits for nothing.
+    manager.forget_proxy_retry(&execution, false).await;
+    assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
+    manager.forget_proxy_retry(&execution, true).await;
+    assert_eq!(stored_reset(&manager, &execution).await, None);
+}
+
+#[tokio::test]
+async fn a_lost_connection_keeps_the_reset_and_an_ended_execution_drops_it() {
+    let (_temp, manager, workspace, execution, _connection) = agent("").await;
+    let reset = 4_000_000_000_000;
+    manager
+        .report_upstream_reset(&workspace.name, execution.clone(), Some(reset))
+        .await
+        .unwrap();
+    // The wrapper, with its proxy, may reattach.
+    let kind = super::super::ExecutionKind::Command;
+    manager
+        .finish_execution(execution.clone(), kind, None)
+        .await
+        .unwrap();
+    assert_eq!(stored_reset(&manager, &execution).await, Some(reset));
+    manager
+        .finish_execution(execution.clone(), kind, Some(0))
+        .await
+        .unwrap();
     assert_eq!(stored_reset(&manager, &execution).await, None);
 }
 

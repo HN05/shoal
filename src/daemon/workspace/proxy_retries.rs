@@ -51,10 +51,15 @@ impl Manager {
         self.record_upstream_reset(execution, resets_at).await
     }
 
-    /// An execution that ended no longer retries anything, nor waits for
-    /// its upstream's reset.
-    pub(super) async fn forget_proxy_retry(&self, execution: &str) {
+    /// Forget the retry `execution`'s proxy waits to make, once its wrapper
+    /// is gone, and, when `ended` reports the execution's end, its
+    /// upstream's reset. A wrapper that only lost its connection may come
+    /// back with its proxy, and the reset still holds for it.
+    pub(super) async fn forget_proxy_retry(&self, execution: &str, ended: bool) {
         self.proxy_retries.lock().unwrap().remove(execution);
+        if !ended {
+            return;
+        }
         let execution = execution.to_owned();
         let forgot = self
             .store
