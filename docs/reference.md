@@ -1470,6 +1470,11 @@ with its existing path is fine; a different path is rejected. Registering, and
 creating a workspace, fail when the daemon cannot create a file in the directory
 it would write within 30 seconds, as on a volume macOS has not given it access to.
 
+On macOS, Spotlight does not index a `root_dir` Shoal creates: it is a symlink
+to `<parent>/.<name>.noindex`, a directory Spotlight skips by name, so `~/shoal`
+still leads to every workspace while Shoal and Git show the real paths. An
+existing `root_dir` is used as it is.
+
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
 `.git` suffixes match) or canonical local path, and never fetches. Clone URLs
 lose trailing slashes so worktrees get a remote forge CLIs recognize. Names from

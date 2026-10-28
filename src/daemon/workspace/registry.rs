@@ -1,5 +1,5 @@
 //! Repository registration and lookup; independent of worktree lifecycle.
-use super::{Manager, paths::canonical_with_missing_tail};
+use super::{Manager, spotlight};
 use crate::{daemon::store, git, model::Repository, repository, validate};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::params;
@@ -105,7 +105,7 @@ impl Manager {
                 None => Ok(existing.clone()),
             };
         }
-        let root = self.config().root_dir(&self.paths)?;
+        let root = self.configured_root()?;
         let state = fs::canonicalize(&self.paths.state)?;
         let directory_name = name
             .clone()
@@ -210,9 +210,10 @@ impl Manager {
             return Ok(directory.clone());
         }
         let root = prepare_root(
-            &self.config().root_dir(&self.paths)?,
+            &self.configured_root()?,
             &fs::canonicalize(&self.paths.state)?,
-            repositories.iter().map(|repo| repo.path.as_path()),
+            &repositories,
+            None,
         )
         .await?;
         let directory = reserve_directory(
@@ -298,22 +299,14 @@ async fn find_existing<'a>(
 /// it is already placed under the configured root.
 async fn local_checkout_location(
     source: &str,
-    root: &Path,
+    root: &ConfiguredRoot,
     state: &Path,
     directory_name: &str,
     repositories: &[Repository],
 ) -> Result<(PathBuf, PathBuf)> {
     let toplevel = git::worktree_root(Path::new(source)).await?;
     let path = fs::canonicalize(toplevel.trim())?;
-    let root = prepare_root(
-        root,
-        state,
-        repositories
-            .iter()
-            .map(|repo| repo.path.as_path())
-            .chain([path.as_path()]),
-    )
-    .await?;
+    let root = prepare_root(root, state, repositories, Some(&path)).await?;
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
     // directory, unless `<x>` is itself a checkout or another repository's.
     let placed = path
@@ -345,7 +338,7 @@ struct Cloning<'a> {
 
 async fn clone_into_reserved_directory(
     cloning: Cloning<'_>,
-    root: &Path,
+    root: &ConfiguredRoot,
     state: &Path,
     directory_name: &str,
     requested_name: Option<&str>,
@@ -364,12 +357,7 @@ async fn clone_into_reserved_directory(
         source.contains("://") || source.contains('@'),
         "repository path does not exist: {source}"
     );
-    let root = prepare_root(
-        root,
-        state,
-        repositories.iter().map(|repo| repo.path.as_path()),
-    )
-    .await?;
+    let root = prepare_root(root, state, repositories, None).await?;
     if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
         crate::daemon::access::ensure_writable(parent).await?;
     }
@@ -418,33 +406,77 @@ fn create_clone_directory(path: PathBuf) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// The canonical, existing `root_dir`. Worktrees must stay out of Shoal's
-/// state and of every checkout, and the daemon must be able to write there,
-/// so a root it cannot write or inside either is refused before anything is
-/// created.
-pub(super) async fn prepare_root<'a>(
-    root: &Path,
+/// The configured `root_dir` and how preparing it treats it.
+pub(super) struct ConfiguredRoot {
+    pub(super) path: PathBuf,
+    pub(super) layout: spotlight::Layout,
+}
+
+impl Manager {
+    /// The configured `root_dir`, taken as registration finds it.
+    pub(super) fn configured_root(&self) -> Result<ConfiguredRoot> {
+        Ok(ConfiguredRoot {
+            path: self.config().root_dir(&self.paths)?,
+            layout: spotlight::Layout::AsFound,
+        })
+    }
+}
+
+/// The canonical, existing directory that holds repository directories: the
+/// `root_dir`, or where its layout keeps them. Worktrees must stay out of
+/// Shoal's state, every checkout, including the one `checkout` registers, and
+/// every repository directory, and the daemon must be able to write there, so
+/// a root it cannot write or that is or resolves inside one of them is
+/// refused before anything is created or linked.
+pub(super) async fn prepare_root(
+    root: &ConfiguredRoot,
     state: &Path,
-    checkouts: impl IntoIterator<Item = &'a Path>,
+    repositories: &[Repository],
+    checkout: Option<&Path>,
 ) -> Result<PathBuf> {
-    let intended = canonical_with_missing_tail(root)?;
+    let plan = spotlight::plan(&root.path, root.layout)?;
+    for location in plan.locations()? {
+        ensure_outside(&location, state, repositories, checkout)?;
+        crate::daemon::access::ensure_writable(&location).await?;
+    }
+    plan.apply()?;
+    plan.destination()
+}
+
+/// Refuse a root `location` inside Shoal's state, a checkout or a repository
+/// directory.
+fn ensure_outside(
+    location: &Path,
+    state: &Path,
+    repositories: &[Repository],
+    checkout: Option<&Path>,
+) -> Result<()> {
     ensure!(
-        !intended.starts_with(state),
+        !location.starts_with(state),
         "root_dir {} is inside Shoal's state directory",
-        intended.display()
+        location.display()
     );
-    for checkout in checkouts {
+    let checkouts = repositories.iter().map(|repo| repo.path.as_path());
+    for checkout in checkouts.chain(checkout) {
         ensure!(
-            !intended.starts_with(checkout),
+            !location.starts_with(checkout),
             "root_dir {} is inside the repository checkout {}",
-            intended.display(),
+            location.display(),
             checkout.display()
         );
     }
-    crate::daemon::access::ensure_writable(&intended).await?;
-    fs::create_dir_all(&intended)
-        .with_context(|| format!("create repository root directory {}", root.display()))?;
-    Ok(fs::canonicalize(&intended)?)
+    for directory in repositories
+        .iter()
+        .filter_map(|repo| repo.workspaces_dir.as_deref())
+    {
+        ensure!(
+            !location.starts_with(directory),
+            "root_dir {} is inside the repository directory {}",
+            location.display(),
+            directory.display()
+        );
+    }
+    Ok(())
 }
 
 /// Reserve `<root>/<name>` (suffixed `-2`, `-3`, ... when occupied or recorded)

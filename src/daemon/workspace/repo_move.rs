@@ -101,27 +101,17 @@ impl Manager {
     /// `root`, or the configured one, refused inside a directory that would
     /// move into it or a workspace placed elsewhere.
     async fn move_root(&self, root: Option<&Path>, repositories: &[Repository]) -> Result<PathBuf> {
-        let root = match root {
-            Some(root) => root.to_owned(),
-            None => self.config().root_dir(&self.paths)?,
-        };
+        let mut target = self.configured_root()?;
+        if let Some(root) = root {
+            target.path = root.to_owned();
+        }
         let root = registry::prepare_root(
-            &root,
+            &target,
             &fs::canonicalize(&self.paths.state)?,
-            repositories.iter().map(|repo| repo.path.as_path()),
+            repositories,
+            None,
         )
         .await?;
-        for directory in repositories
-            .iter()
-            .filter_map(|repo| repo.workspaces_dir.as_ref())
-        {
-            ensure!(
-                !root.starts_with(directory),
-                "root_dir {} is inside the repository directory {}",
-                root.display(),
-                directory.display()
-            );
-        }
         for workspace in self.list_workspaces().await? {
             ensure!(
                 !root.starts_with(&workspace.path),

@@ -273,6 +273,11 @@ default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
 checkout, and outside the state directory; a root inside either, or inside a
 recorded repository directory, is refused.
+On macOS a root Shoal creates links to `<parent>/.<name>.noindex`, which holds
+its contents: Spotlight ignores `.metadata_never_index` below a volume root and
+its privacy list needs root, so only a skipped name keeps build output out of
+the index, and the link keeps `root_dir` the same on every system. An existing
+root is used as found.
 Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
 differ from the terminal's, and on macOS opening a file on a volume it lacks
