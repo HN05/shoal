@@ -400,21 +400,7 @@ async fn stop_executions(
             agent.workspace
         );
     }
-    let executions: Vec<(String, String)> = manager
-        .store
-        .run(|db| {
-            Ok(db
-                .prepare("SELECT id, workspace_id FROM executions")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()?)
-        })
-        .await?;
-    let mut workspaces = Vec::new();
-    for (execution, workspace) in executions {
-        if !manager.agent_was_overloaded(&execution).await && !workspaces.contains(&workspace) {
-            workspaces.push(workspace);
-        }
-    }
+    let workspaces = workspaces_with_unprotected_executions(manager).await?;
     let (low, reason) = (&low, &protection.reason);
     let stops = workspaces.into_iter().map(|id| async move {
         let workspace = manager.workspace(&id).await?;
@@ -450,6 +436,27 @@ async fn stop_executions(
         }
     }
     Ok(())
+}
+
+/// Workspaces with executions other than agents already stopped by protection.
+/// This inventory is advisory; stopping rechecks protection under its locks.
+async fn workspaces_with_unprotected_executions(manager: &Manager) -> Result<Vec<String>> {
+    let executions: Vec<(String, String)> = manager
+        .store
+        .run(|db| {
+            Ok(db
+                .prepare("SELECT id, workspace_id FROM executions")?
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await?;
+    let mut workspaces = Vec::new();
+    for (execution, workspace) in executions {
+        if !manager.agent_was_overloaded(&execution).await && !workspaces.contains(&workspace) {
+            workspaces.push(workspace);
+        }
+    }
+    Ok(workspaces)
 }
 
 #[cfg(test)]
