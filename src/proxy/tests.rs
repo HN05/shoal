@@ -80,15 +80,16 @@ fn daemon_speaking(
     tokio::task::JoinHandle<()>,
     std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
-    daemon_refusing(paths, version, 0)
+    daemon_refusing(paths, version, &[])
 }
 
-/// [`daemon_speaking`], refusing the first `refused` requests with an
-/// error, which it keeps as `refused <method>`.
+/// [`daemon_speaking`], refusing the requests at the places `refused`
+/// names, counted from 0, with an error, which it keeps as
+/// `refused <method>`.
 fn daemon_refusing(
     paths: &crate::paths::Paths,
     version: u32,
-    refused: usize,
+    refused: &[usize],
 ) -> (
     tokio::task::JoinHandle<()>,
     std::sync::Arc<std::sync::Mutex<Vec<String>>>,
@@ -97,8 +98,9 @@ fn daemon_refusing(
     let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
     let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let received = methods.clone();
+    let refused = refused.to_vec();
     let serving = tokio::spawn(async move {
-        let mut refused = refused;
+        let mut place = 0;
         while let Ok((stream, _)) = listener.accept().await {
             let (read, mut write) = stream.into_split();
             let mut read = tokio::io::BufReader::new(read);
@@ -109,8 +111,9 @@ fn daemon_refusing(
                 .as_object()
                 .and_then(|method| method.keys().next().cloned())
                 .unwrap_or_else(|| method.as_str().unwrap_or_default().to_owned());
-            let body = if refused > 0 {
-                refused -= 1;
+            let refuse = refused.contains(&place);
+            place += 1;
+            let body = if refuse {
                 received.lock().unwrap().push(format!("refused {name}"));
                 crate::protocol::Body::error(crate::protocol::ErrorCode::OperationFailed, "busy")
             } else {
@@ -318,16 +321,13 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         now: || 1_700_000_000,
     };
     reporter.run(events).await;
-    let mut methods = methods.lock().unwrap().clone();
-    // The two clears go together, in either order.
-    methods[3..].sort();
+    // The failure took the retry away, so recovery clears the reset alone.
     assert_eq!(
-        methods,
+        *methods.lock().unwrap(),
         [
             "report_proxy_retry",
             "report_proxy_retry",
             "report_upstream_reset",
-            "report_proxy_retry",
             "report_upstream_reset",
         ]
     );
@@ -340,7 +340,7 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
     // The daemon refuses the first reset, as one restarting might.
-    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, 1);
+    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[0]);
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
     let limited = Event::Failed {
         failure: Failure::RateLimited,
@@ -361,12 +361,57 @@ async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
         now: || 1_700_000_000,
     };
     reporter.run(events).await;
-    let mut methods = methods.lock().unwrap().clone();
-    methods[2..].sort();
     assert_eq!(
-        methods,
+        *methods.lock().unwrap(),
         [
             "refused report_upstream_reset",
+            "report_upstream_reset",
+            "report_upstream_reset",
+        ]
+    );
+}
+
+#[tokio::test]
+#[cfg(feature = "proxy")]
+async fn a_recovery_the_daemon_took_in_part_keeps_what_it_did_not() {
+    use shoal_proxy::{Event, Failure};
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    // The daemon refuses the retry's clearing but takes the reset's.
+    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, &[2]);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let limited = Event::Failed {
+        failure: Failure::RateLimited,
+        in_stream: false,
+        wait: Some(std::time::Duration::from_secs(7200)),
+        subagent: false,
+    };
+    let retrying = Event::Retrying {
+        failure: Failure::Overloaded,
+        attempt: 1,
+        wait: std::time::Duration::from_secs(1),
+    };
+    for event in [limited.clone(), retrying, Event::Recovered, limited] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        now: || 1_700_000_000,
+    };
+    reporter.run(events).await;
+    // The reset the daemon dropped goes again, and the retry it still shows
+    // is cleared again.
+    assert_eq!(
+        *methods.lock().unwrap(),
+        [
+            "report_upstream_reset",
+            "report_proxy_retry",
+            "refused report_proxy_retry",
             "report_upstream_reset",
             "report_proxy_retry",
             "report_upstream_reset",

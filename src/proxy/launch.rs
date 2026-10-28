@@ -264,13 +264,7 @@ impl Reporter {
                     }
                 }
                 // An upstream that answers again refuses nothing until.
-                Event::Recovered => {
-                    if self.sent.told()
-                        && forget_reports(&self.paths, &self.workspace, &self.execution).await
-                    {
-                        self.sent = Sent::default();
-                    }
-                }
+                Event::Recovered => self.recovered().await,
             }
         }
     }
@@ -288,6 +282,26 @@ impl Reporter {
             next_at: self.after(wait),
         };
         self.sent.retry |= self.retried(Some(retry)).await;
+    }
+
+    /// Clear what the daemon holds of an outage that ended, each report on
+    /// its own, keeping in [`Sent`] any clear it did not take, so the next
+    /// event's reports go out as they should.
+    async fn recovered(&mut self) {
+        self.retry_done().await;
+        if self.sent.reset.is_some() && self.reset_cleared().await {
+            self.sent.reset = None;
+        }
+    }
+
+    /// Whether the daemon took the clearing of the upstream's reset.
+    async fn reset_cleared(&self) -> bool {
+        self.send(crate::protocol::AgentMethod::ReportUpstreamReset {
+            workspace: self.workspace.clone(),
+            execution: self.execution.clone(),
+            resets_at: None,
+        })
+        .await
     }
 
     /// Take the retry the agent's status shows away, when it shows one.
@@ -355,14 +369,6 @@ impl Reporter {
     /// release instead.
     async fn send(&self, report: crate::protocol::AgentMethod) -> bool {
         send(&self.paths, report).await
-    }
-}
-
-#[cfg(feature = "proxy")]
-impl Sent {
-    /// Whether the daemon holds anything of the proxy's to forget.
-    fn told(&self) -> bool {
-        self.retry || self.reset.is_some()
     }
 }
 
