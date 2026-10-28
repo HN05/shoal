@@ -17,6 +17,10 @@ pub enum Failure {
     ServerError,
     /// The upstream could not be reached.
     Unreachable,
+    /// The account's quota is spent, as OpenAI's `insufficient_quota` says
+    /// even on a 429: waiting does not refill it, so no retry fixes it, but
+    /// the agent's turn ends on it.
+    Exhausted,
     /// Any other error, such as authentication or an invalid request, which a
     /// retry does not fix.
     Other,
@@ -37,7 +41,17 @@ impl Failure {
 
     /// Whether the same request may succeed once the upstream recovers.
     pub fn retryable(self) -> bool {
-        self != Self::Other
+        !matches!(self, Self::Exhausted | Self::Other)
+    }
+
+    /// The failure an HTTP failure's body names, over the one its status
+    /// does: a spent quota, which no wait refills, whatever the status says.
+    pub(crate) fn of_error(self, error: Option<&serde_json::Value>) -> Self {
+        let code = error.and_then(|error| error["code"].as_str().or(error["type"].as_str()));
+        match code {
+            Some(crate::stream::QUOTA_EXHAUSTED) => Self::Exhausted,
+            _ => self,
+        }
     }
 }
 

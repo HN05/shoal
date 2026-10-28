@@ -795,27 +795,37 @@ async fn a_rate_limit_inside_a_claude_stream_waits_for_the_reset_its_headers_nam
 }
 
 #[tokio::test]
-async fn a_failure_no_retry_fixes_inside_a_stream_still_ends_the_turn() {
+async fn a_spent_quota_ends_the_turn_at_once_in_either_form() {
+    let error = r#"{"code":"insufficient_quota","message":"Out of credits."}"#;
+    // Inside the stream, Codex gets it as it came.
     let opening = format!(
         "{RESPONSE_CREATED}event: response.failed\ndata: {}\n\n",
-        r#"{"type":"response.failed","response":{"error":{"code":"insufficient_quota","message":"Out of credits."}}}"#
+        format_args!(r#"{{"type":"response.failed","response":{{"error":{error}}}}}"#)
     );
     let reply_with = opening.clone();
     let upstream = FakeUpstream::start(move |_| sse(&reply_with)).await;
     let (addr, mut events) = proxy(upstream.url("")).await;
     let (_, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
-    // Passed on as it came, at once.
     assert_eq!(body, opening);
     assert_eq!(upstream.requests().len(), 1);
-    assert_eq!(
-        drain(&mut events),
-        [Event::Failed {
-            failure: Failure::Other,
-            in_stream: true,
-            wait: None,
-            subagent: false,
-        }]
-    );
+    let ended = Event::Failed {
+        failure: Failure::Exhausted,
+        in_stream: true,
+        wait: None,
+        subagent: false,
+    };
+    assert_eq!(drain(&mut events), std::slice::from_ref(&ended));
+    // As a 429, which alone would be a rate limit, it ends the stream with
+    // the upstream's error, untried again.
+    let body = format!(r#"{{"error":{error}}}"#);
+    let upstream = FakeUpstream::start(move |_| reply(429, &body)).await;
+    let (addr, mut events) = proxy(upstream.url("")).await;
+    let (status, _, body) = send(addr, Request::post("/responses"), r#"{"stream":true}"#).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(r#""code":"insufficient_quota""#), "{body}");
+    assert!(body.contains("Out of credits."), "{body}");
+    assert_eq!(upstream.requests().len(), 1);
+    assert_eq!(drain(&mut events), [ended]);
 }
 
 #[tokio::test]

@@ -77,7 +77,7 @@ fn events_open_carry_or_fail_a_stream() {
             openai,
             "response.failed",
             failed("insufficient_quota"),
-            Kind::Failure(Failure::Other),
+            Kind::Failure(Failure::Exhausted),
         ),
     ] {
         assert_eq!(

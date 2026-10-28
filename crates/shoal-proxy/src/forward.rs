@@ -225,7 +225,9 @@ impl Forwarder {
     /// protocol ends a turn on a failure inside the stream gets one in place
     /// of an HTTP failure, which the agent would retry itself.
     fn give_up(&self, failed: Failed, request: &Buffered) -> Response<Body> {
-        if !failed.failure.retryable() {
+        // A spent quota ends the turn like a failure the proxy gave up on,
+        // though it was never retried.
+        if !failed.failure.retryable() && failed.failure != Failure::Exhausted {
             // One inside the stream still ends the agent's turn, which an
             // agent without a hook for it learns of only here.
             if failed.in_stream {
@@ -291,6 +293,7 @@ async fn failed_status(
         .ok()
         .map(|body| body["error"].clone())
         .filter(serde_json::Value::is_object);
+    let failure = failure.of_error(error.as_ref());
     let retry_after = named_wait(failure, &parts.headers, error.as_ref(), clock);
     Attempt::Failed(Failed {
         failure,

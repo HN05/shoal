@@ -73,6 +73,7 @@ impl Protocol {
             Failure::RateLimited => "rate_limit_exceeded",
             Failure::Overloaded | Failure::Unreachable => "server_is_overloaded",
             Failure::ServerError => "server_error",
+            Failure::Exhausted => QUOTA_EXHAUSTED,
             Failure::Other => return None,
         };
         match self {
@@ -127,8 +128,12 @@ fn anthropic_failure(error: Option<&str>) -> Failure {
     }
 }
 
+/// The code OpenAI names a spent quota with.
+pub(crate) const QUOTA_EXHAUSTED: &str = "insufficient_quota";
+
 fn openai_failure(code: Option<&str>) -> Failure {
     match code {
+        Some(QUOTA_EXHAUSTED) => Failure::Exhausted,
         Some("server_is_overloaded" | "slow_down") => Failure::Overloaded,
         // A usage limit lasts until it resets, longer than the proxy waits,
         // so the turn ends and Shoal retries it.

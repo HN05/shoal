@@ -315,7 +315,7 @@ fn turn_failure(failure: shoal_proxy::Failure) -> crate::state::TurnFailure {
         Failure::RateLimited => TurnFailure::RateLimited,
         Failure::Overloaded | Failure::Unreachable => TurnFailure::Overloaded,
         Failure::ServerError => TurnFailure::ServerError,
-        Failure::Other => TurnFailure::Other,
+        Failure::Exhausted | Failure::Other => TurnFailure::Other,
     }
 }
 
