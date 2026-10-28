@@ -573,7 +573,7 @@ impl Manager {
     /// register over the evidence.
     pub(crate) async fn release_exited_child(&self, id: &str, workspace: &Workspace) -> Result<()> {
         match self
-            .pause_agent_execution(id, &workspace.id, timing::WORKSPACE_STOP_TIMEOUT)
+            .pause_agent_execution(id, &workspace.id, timing::PROCESS_PROOF_TIMEOUT)
             .await?
         {
             super::agents::Pause::Paused => {}

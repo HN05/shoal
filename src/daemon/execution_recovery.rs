@@ -43,7 +43,7 @@ pub(super) async fn pause(
     // leaves only processes Shoal cannot stop. The wrapper finishes on each,
     // and the daemon's completion scan decides whether they leave it unknown.
     let stopped = match manager
-        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
         .await
     {
         Ok(stopped) => stopped,
@@ -111,7 +111,7 @@ async fn restart_once_stopped(
     stop: &mut watch::Receiver<bool>,
 ) -> Result<Action> {
     let stopped = match manager
-        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
         .await
     {
         Ok(stopped) => stopped,
@@ -226,7 +226,7 @@ pub(super) async fn stop_survivors(manager: &Manager, execution_id: &str, worksp
         return;
     }
     match manager
-        .pause_agent_execution(execution_id, workspace_id, timing::WORKSPACE_STOP_TIMEOUT)
+        .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
         .await
     {
         Ok(Pause::Paused) => {}

@@ -40,7 +40,8 @@ instead of the PR delivery guidance below.
   agent's turn finished, and for stopped work to be resumed, before closing the
   tab; removal closes it immediately. Unreadable
   inventory entries block ownership proof only while their recorded identity is live;
-  recovery polls incomplete proof within the stop budget without weakening it.
+  recovery polls incomplete proof within a bounded wait without weakening it,
+  and workspace stopping covers child registration, stopping and completion verification.
   Worktree ownership is proven by the owner marker in the Git admin directory; the recorded
   inode/birth-time identity proves only unmarked records, which gain a marker only
   after it still matches; missing proofs never establish ownership.

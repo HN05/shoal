@@ -430,6 +430,73 @@ async fn setup_preserves_inventory_failure_in_its_retained_diagnostic() {
 }
 
 #[tokio::test]
+async fn stopping_allows_the_child_stop_and_completion_budgets() -> Result<()> {
+    let (_root, manager, workspace) = fixture("true").await;
+    let mut running = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await?;
+    // Pause only after fixture setup, which uses real subprocesses.
+    tokio::time::pause();
+    let request = StopRequest::manual();
+    let stopping =
+        manager.stop_executions(&workspace.id, StopPolicy::RequireCompleteProof, &request);
+    tokio::pin!(stopping);
+    tokio::select! {
+        biased;
+        result = &mut stopping => bail!("stop ended before notification: {result:?}"),
+        changed = running.stop.wait_for(|stop| *stop) => { changed?; }
+    }
+
+    // A connected wrapper may spend its grace stopping the child, then the
+    // completion budget awaiting the daemon's survivor cleanup and inventories.
+    tokio::time::advance(timing::EXECUTION_STOP_GRACE + timing::COMPLETION_ACK_TIMEOUT).await;
+    tokio::select! {
+        biased;
+        result = &mut stopping => bail!("stop ended during valid completion work: {result:?}"),
+        changed = running.stop.changed() => { changed?; }
+    }
+    manager
+        .finish_execution_after_scan(
+            running.plan.id,
+            ExecutionKind::Command,
+            Some(0),
+            Some(Ok(process::Scan::default())),
+        )
+        .await?;
+    stopping.await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn stopping_still_bounds_a_wrapper_that_never_completes() -> Result<()> {
+    let (_root, manager, workspace) = fixture("true").await;
+    let _running = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await?;
+    tokio::time::pause();
+    let started = Instant::now();
+    let error = manager
+        .stop_executions(
+            &workspace.id,
+            StopPolicy::RequireCompleteProof,
+            &StopRequest::manual(),
+        )
+        .await
+        .expect_err("a wrapper that never completes must time out");
+    assert_eq!(
+        error.to_string(),
+        "timed out waiting for workspace processes to stop"
+    );
+    assert!(
+        (timing::WORKSPACE_STOP_TIMEOUT
+            ..=timing::WORKSPACE_STOP_TIMEOUT + timing::WORKSPACE_STOP_POLL_INTERVAL)
+            .contains(&started.elapsed())
+    );
+    assert_eq!(manager.workspace_executions(&workspace.id).await?.len(), 1);
+    Ok(())
+}
+
+#[tokio::test]
 async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
     let (_root, manager, workspace) = fixture("true").await;
     let mut running = manager

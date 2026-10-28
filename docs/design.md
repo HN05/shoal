@@ -1719,8 +1719,9 @@ nearest ancestor whose environment tells, through any setuid program the user
 started, such as a terminal's `login`, which runs as another user and is never
 stopped itself; one launchd adopted after its parent exited has none and counts
 as unreadable. The reporting wrapper may remain alive
-awaiting acknowledgement. Recovery polls
-incomplete proof within the workspace stop budget and still refuses live or
+awaiting acknowledgement; workspace stopping allows for child registration,
+stopping and completion verification. Recovery polls
+incomplete proof within a separate bounded wait and still refuses live or
 unverifiable survivors. Moved
 worktrees stay unresolved until restored. Any other ownership failure is
 recoverable by explicit reclaim, which a human requests after checking the

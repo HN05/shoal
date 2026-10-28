@@ -118,8 +118,10 @@ pub mod timing {
     pub const DETACHED_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
     /// Give the child time to handle a stop signal before escalating to SIGKILL.
     pub const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);
-    /// Allow wrappers to stop beyond EXECUTION_STOP_GRACE and report completion.
-    pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Retry incomplete process proof without extending the wrapper completion budget.
+    pub const PROCESS_PROOF_TIMEOUT: Duration = Duration::from_secs(10);
+    /// Cover child registration, its stop grace, and the daemon completion acknowledgement.
+    pub const WORKSPACE_STOP_TIMEOUT: Duration = Duration::from_secs(90);
     /// Notice completed execution records promptly while workspace stopping waits.
     pub const WORKSPACE_STOP_POLL_INTERVAL: Duration = Duration::from_millis(50);
     /// First retry of a detached wrapper; the delay doubles up to the cap.
@@ -130,7 +132,7 @@ pub mod timing {
     pub const REATTACH_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
     /// After its command exits, wait this long for a restarting daemon to take
     /// the exit report; cover a stop with its workspace drain plus a start.
-    pub const REATTACH_EXIT_TIMEOUT: Duration = Duration::from_secs(60);
+    pub const REATTACH_EXIT_TIMEOUT: Duration = Duration::from_secs(120);
 
     const _: () = {
         // Each pass scans markers, then inspects related processes with a
@@ -146,7 +148,13 @@ pub mod timing {
             DETACHED_LAUNCH_TIMEOUT.as_millis()
                 > EXECUTION_START_TIMEOUT.as_millis() + START_ACK_TIMEOUT.as_millis()
         );
-        assert!(WORKSPACE_STOP_TIMEOUT.as_millis() > EXECUTION_STOP_GRACE.as_millis());
+        assert!(
+            WORKSPACE_STOP_TIMEOUT.as_millis()
+                > START_ACK_TIMEOUT.as_millis()
+                    + EXECUTION_STOP_GRACE.as_millis()
+                    + COMPLETION_ACK_TIMEOUT.as_millis()
+        );
+        assert!(PROCESS_PROOF_TIMEOUT.as_millis() < COMPLETION_ACK_TIMEOUT.as_millis());
         assert!(
             REATTACH_EXIT_TIMEOUT.as_millis()
                 > WORKSPACE_STOP_TIMEOUT.as_millis() + 2 * DAEMON_WAIT_TIMEOUT.as_millis()
