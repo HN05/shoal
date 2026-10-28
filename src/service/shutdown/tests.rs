@@ -10,8 +10,30 @@ fn owned_daemon(root: &std::path::Path) -> Result<(Paths, File)> {
     Ok((paths, owner))
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn draining_waits_for_ownership_and_keeps_it_through_job_removal() -> Result<()> {
+    let root = tempfile::tempdir_in("/tmp")?;
+    let output = tokio::time::timeout(
+        Duration::from_secs(120),
+        crate::test_support::isolated_test(
+            root.path(),
+            "service::shutdown::tests::ownership_lock_child",
+        )
+        .output(),
+    )
+    .await??;
+    ensure!(output.status.success(), "{output:?}");
+    Ok(())
+}
+
+// Other tests spawn processes concurrently. A fork can inherit a flock until
+// exec even with CLOEXEC, so verify close-based release in an isolated process.
+#[tokio::test(start_paused = true)]
+#[ignore = "isolated ownership-lock test without concurrent process spawning"]
+async fn ownership_lock_child() -> Result<()> {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return Ok(());
+    }
     let root = tempfile::tempdir_in("/tmp")?;
     let (paths, owner) = owned_daemon(root.path())?;
     let waiting = await_exit(&paths, true);
