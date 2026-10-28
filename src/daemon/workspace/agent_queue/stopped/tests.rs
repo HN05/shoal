@@ -241,12 +241,15 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
         .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(manager.queue_entry_starting(&entry.id).await.unwrap());
+    // The agent may take over the slot only while its start is admitted.
+    drop(manager.reserve_queue_entry(&entry.id).await.unwrap());
     manager
         .stop_workspace("work", crate::daemon::workspace::StopRequest::manual())
         .await
         .unwrap();
-    // Its worker finds the entry gone and restores nothing.
     assert!(queue(&manager).await.is_empty());
+    let refused = manager.reserve_queue_entry(&entry.id).await.unwrap_err();
+    assert!(format!("{refused:#}").contains("was cancelled"), "{refused:#}");
 }
 
 #[tokio::test]

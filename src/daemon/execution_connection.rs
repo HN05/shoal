@@ -81,6 +81,19 @@ pub(super) async fn execute(
         demo,
         caller,
     } = context;
+    let takes_entry = (kind == ExecutionKind::Command && agent.is_some())
+        .then_some(queue_entry.as_deref())
+        .flatten();
+    let reserved = match takes_entry {
+        Some(entry) => match manager.reserve_queue_entry(entry).await {
+            Ok(gate) => Some(gate),
+            Err(error) => {
+                let body = Body::error(ErrorCode::ExecutionFailed, format!("{error:#}"));
+                return protocol::write(&mut stream, &Response::new(request_id, body)).await;
+            }
+        },
+        None => None,
+    };
     let StartedExecution {
         plan,
         stop,
@@ -117,10 +130,11 @@ pub(super) async fn execute(
                 std::time::Duration::ZERO,
             )
             .await;
-        if let Some(entry) = &queue_entry {
+        if let Some(entry) = takes_entry {
             manager.consume_queue_entry(entry, &plan.workspace.id).await;
         }
     }
+    drop(reserved);
     let execution = Connected {
         id: plan.id.clone(),
         kind,

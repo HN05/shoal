@@ -944,6 +944,22 @@ impl Manager {
         Ok(entry)
     }
 
+    /// Hold the queue gate for an agent taking over `entry`'s slot, refusing
+    /// an entry no longer starting, whose start a stop or completion
+    /// cancelled. The guard keeps cancellation out until the agent has taken
+    /// the slot.
+    pub(crate) async fn reserve_queue_entry(
+        &self,
+        entry: &str,
+    ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
+        let gate = self.agent_queue_gate.lock().await;
+        ensure!(
+            self.queue_entry_starting(entry).await?,
+            "this agent's start from the agent queue was cancelled"
+        );
+        Ok(gate)
+    }
+
     /// Count an open hold on a starting entry.
     pub(crate) async fn hold_queue_entry(&self, id: &str) -> Result<()> {
         ensure!(
