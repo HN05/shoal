@@ -50,7 +50,7 @@ is in `prompt_file` and the user must send it from the app.
 
 With `max_agents` configured (the default starts agents one at a time while measured load allows), `add` may queue the agent instead: it then emits
 the queue entry (`state: queued`, `position`) and creates nothing yet. The
-daemon starts it when a slot frees; `shoal work --queue` lists entries, and
+daemon starts it when a slot frees; `shoal queue` lists entries, and
 `--now` or `--focus` starts one regardless only when the user asks.
 `--after <workspace|queued agent|issue>` (repeatable) queues an agent until that
 work is done; an issue's agent also waits for the issues its forge records as

@@ -1044,8 +1044,11 @@ shoal add <issue-url> --agent claude          # Starts now, or queues when no sl
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal add <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
 shoal resume --all                            # Queues the restore of every stopped agent
-shoal work --queue                            # Waiting and starting entries
-shoal rm 612-add-queue-cmd                    # Removes a waiting launch
+shoal queue                                   # Waiting and starting entries; on a terminal, pick one to act on
+shoal queue start api                         # Starts a waiting entry now regardless of the limits
+shoal queue move api 1                        # Moves an entry to position 1; without a position, pick its place
+shoal queue move api last                     # Stops api's running agent and queues its restore last
+shoal queue cancel api                        # Removes a waiting entry; a restore's agent stays stopped
 ```
 
 `max_agents` limits the agents that run at once. It defaults to `dynamic`,
@@ -1131,16 +1134,35 @@ on separate branches it waits until all but one have merged and their workspaces
 are gone. `--base` and `--existing` keep their own starting point, and `--now`
 and `--focus` cannot wait for work.
 
-`shoal work` lists entries after the workspaces as `queued, position N` or
-`starting`, followed by the work a waiting launch is after, or `after an
-update` for a restore of an idle agent, and a restore with its agent; `work
---queue` lists only them (`--json` gives the entries with their `kind`,
+`shoal queue` lists the entries of every repository, since positions apply
+machine-wide, or of one with `--repo`, as `queued, position N` or `starting`,
+followed by the work a waiting launch is after, or `after an update` for a
+restore of an idle agent, and a restore with its agent; `shoal work` lists them
+after the workspaces. `queue --json` gives the entries with their `kind`,
 `launch` or `restore`, a restore's stopped `execution`, `waiting_for` while dependencies remain,
 `waits_for_update` for a restore of an idle agent and
 `base` once a launch starts on a dependency's branch, while `work --json` stays
-a list of workspaces). `shoal rm` removes a waiting launch by name or ID, and
-only by ID when a workspace has the same name; a starting one belongs to its
-workspace. Scoped callers see no entries.
+a list of workspaces. Entries are named as listed, by workspace name or by ID
+when several share one. On a terminal, `shoal queue` picks a waiting entry and
+then starts, moves or cancels it.
+
+`queue start` starts a waiting entry now regardless of the limits, as `--now`
+does, or restores an idle agent waiting for an update; it refuses a launch
+still waiting for work, whose branch it builds on, and a restore whose agent's
+processes have not stopped yet. `queue cancel` removes a waiting entry: a
+cancelled restore stops the waiting wrapper as `shoal stop` does and leaves the
+agent for `shoal resume`. `shoal rm` also removes a waiting launch by name or
+ID, and only by ID when a workspace has the same name; a starting entry belongs
+to its workspace. `queue move` moves a waiting entry to a 1-based position, or
+`last`; without a position on a terminal it picks the entry to place it in
+front of, or the last place. The order lasts across daemon restarts. Moving a
+workspace whose agent runs stops the agent as `shoal restart` does and places
+its restore, which its wrapper waits for in the same terminal and which needs
+only a free slot, whatever the overload policy; like `restart`, it refuses a
+disconnected agent or one without a restore command. Scoped callers see the
+entries for the workspaces below their own and may cancel them or move them
+back, never ahead; starting an entry and moving a running agent are for the
+user.
 
 ### Agent accounts
 
@@ -1431,7 +1453,8 @@ the caller's; Codex runs as its CLI. The agent and that launcher, zmx outside a
 Herdr that opens tabs, are checked before the child is created, and the launch
 reopens only the child, failing if it was removed meanwhile. `--json` adds the
 queue entry as `agent`.
-Workspace processes may queue agents only in the workspaces below their own.
+Workspace processes may queue agents only in the workspaces below their own,
+and cancel or move back only those agents' entries.
 
 Claude Code launched in a workspace runs `shoal internal worktree-create` and
 `worktree-remove` as its `WorktreeCreate` and `WorktreeRemove` hooks, so a

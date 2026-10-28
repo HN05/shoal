@@ -14,12 +14,8 @@ use crate::{
 
 pub(in crate::cli::commands) async fn list(
     ctx: &Context,
-    queue: bool,
     filter: &listing::ListFilter,
 ) -> Result<i32> {
-    if queue {
-        return agent_queue::list(ctx, filter).await;
-    }
     // Listing chats first ends finished ones, returning their workspaces to the user.
     let chats = chat::listed(ctx, filter).await?;
     let mut workspaces = client::workspaces(&ctx.paths).await?;

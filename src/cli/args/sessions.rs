@@ -6,6 +6,7 @@ use clap::Subcommand;
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, WorkspaceTargets},
+    model::QueuePlace,
 };
 
 #[derive(Debug, Subcommand)]
@@ -51,6 +52,22 @@ pub enum SessionsCommand {
         #[arg(long)]
         sequential: bool,
     },
+    /// List the agent queue, or start, move or cancel an entry.
+    ///
+    /// The queue holds the agent launches and restores of every repository
+    /// waiting for a slot under max_agents, named by workspace. Without a
+    /// command on a terminal, choose an entry, then an action.
+    #[command(args_conflicts_with_subcommands = true)]
+    Queue {
+        #[command(subcommand)]
+        command: Option<QueueCommand>,
+        /// List only this registered repository's entries.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Print the list instead of opening the picker, as filters and JSON do.
+        #[arg(long)]
+        print: bool,
+    },
     /// Attach this terminal to a workspace's or chat's agent session; Ctrl-\ detaches.
     ///
     /// Terminal agents and chats run in zmx sessions that keep running after
@@ -80,6 +97,43 @@ pub enum SessionsCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum QueueCommand {
+    /// Start a waiting entry now, regardless of the agent limits.
+    Start {
+        /// Entry by workspace name or ID; omit to choose one.
+        entry: Option<String>,
+    },
+    /// Move an entry to another position, or stop a running agent and
+    /// queue its restore there.
+    Move {
+        /// Entry by workspace name or ID, or a workspace with a running
+        /// agent; omit to choose an entry.
+        entry: Option<String>,
+        /// 1-based position as shoal queue numbers them, or last; omit to
+        /// choose the entry to move in front of.
+        #[arg(value_parser = queue_position)]
+        position: Option<QueuePlace>,
+    },
+    /// Cancel a waiting entry; a cancelled restore leaves its agent stopped.
+    Cancel {
+        /// Entry by workspace name or ID; omit to choose one.
+        entry: Option<String>,
+    },
+}
+
+/// A position as `shoal queue` numbers entries, or `last`.
+fn queue_position(input: &str) -> Result<QueuePlace, String> {
+    if input == "last" {
+        return Ok(QueuePlace::Last);
+    }
+    match input.parse() {
+        Ok(position) if position > 0 => Ok(QueuePlace::Position(position)),
+        _ => Err("expected a position from 1, or last".into()),
+    }
 }
 
 #[derive(Debug, Subcommand)]

@@ -237,7 +237,6 @@ fn work_setup_accepts_a_workspace_without_listing_filters() {
         ));
     }
     for filters in [
-        vec!["--queue"],
         vec!["--chats"],
         vec!["--repo", "project"],
         vec!["--status", "ready"],

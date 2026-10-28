@@ -399,7 +399,8 @@ to its own parent and journals the change. `work` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
 own through the agent queue; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
-scoped callers may queue only for the workspaces below theirs. A workspace's
+scoped callers may queue only for the workspaces below theirs, and cancel those
+entries or move them back, but never ahead of other work. A workspace's
 coordinator is the agent of its nearest ancestor that has one, or the chat that
 owns the workspace or an ancestor nearer than that agent: the events about
 it that notify the user, the child agent's messages, questions and completion
@@ -739,6 +740,15 @@ a launch: its stopped agent holds no slot while it waits, so stopped agents past
 a limit cannot keep each other from restoring. Its entry names the execution
 without referencing its row, which ended with the agent, and leaves the queue
 once the recovery record is gone.
+`shoal queue` starts, moves and cancels entries, and the daemon owns their
+order, `agent_queue.seq`: a move gives the waiting entries' numbers to them in
+their new order in one transaction, so it lasts across restarts, and positions
+count waiting entries machine-wide, as admission does. Moving a running agent
+stops it as `shoal restart` does rather than as `shoal stop` does, so its
+wrapper keeps the terminal and restores it there once the queue starts it. That
+restore waits only for a free slot and holds none, whatever the overload policy,
+since the user rather than protection sent it back, and lets daemon updates
+through, since its turn may take long.
 The queue stores
 the CLI's launch plan opaquely and creates nothing until a slot frees, so a
 waiting entry costs no worktree and branches from the default branch current

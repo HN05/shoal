@@ -14,6 +14,8 @@
 //!   ([`PickerView::transition`]).
 //! - [`several`]: choosing several items at once; Tab selects each and
 //!   Ctrl-A all of them ([`pick_many`]).
+//! - [`place`]: a place in an ordered list, in front of one of its items or
+//!   last ([`pick_place`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
 //!   picked ([`select_workspace`]), listed by what the command needs of it,
 //!   or picked among running chats as well ([`pick_workspace_or_chat`]).
@@ -25,6 +27,7 @@
 //! instead. A new kind of input or choice belongs here, built on these
 //! operations, so the next command can use it too.
 mod picker;
+mod place;
 mod prompt;
 mod rows;
 mod several;
@@ -32,6 +35,7 @@ mod views;
 mod workspaces;
 
 pub use picker::*;
+pub use place::{Place, pick_place};
 pub use prompt::*;
 pub use rows::*;
 pub use several::{Report, confirm_losses, failure, pick_many};

@@ -21,7 +21,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
         } => work::run(&ctx, command).await,
         WorkspaceCommand::Work {
             command: None,
-            queue,
             chats,
             repository,
             status,
@@ -31,7 +30,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: WorkspaceComman
             if chats {
                 return chat::list(&ctx, &filter).await;
             }
-            workspaces::list(&ctx, queue, &filter).await
+            workspaces::list(&ctx, &filter).await
         }
         WorkspaceCommand::Status { workspace, item } => {
             workspaces::status(&ctx, workspace, item).await

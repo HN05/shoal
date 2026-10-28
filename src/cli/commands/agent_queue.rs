@@ -245,23 +245,11 @@ pub(super) async fn entries(ctx: &Context) -> Result<Vec<QueueEntry>> {
     request(&ctx.paths, QueueMethod::ListQueue).await
 }
 
-/// The entries `shoal work` shows under `filter`.
+/// The entries `shoal work` and `shoal queue` show under `filter`.
 pub(super) async fn listed(ctx: &Context, filter: &ListFilter) -> Result<Vec<QueueEntry>> {
     let mut entries = entries(ctx).await?;
     entries.retain(|entry| filter.keeps_entry(entry));
     Ok(entries)
-}
-
-/// `shoal work --queue`.
-pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
-    let entries = listed(ctx, filter).await?;
-    let rows = rows(ctx, &entries).await?;
-    ctx.show(&entries, |_| {
-        for row in rows {
-            outln!("{row}");
-        }
-    })?;
-    Ok(0)
 }
 
 /// Text rows for `entries`; JSON output needs none.

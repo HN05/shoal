@@ -22,9 +22,6 @@ pub enum WorkspaceCommand {
     Work {
         #[command(subcommand)]
         command: Option<WorkCommand>,
-        /// List only the agents waiting for a slot under max_agents.
-        #[arg(long, conflicts_with = "chats")]
-        queue: bool,
         /// List only the running chats.
         #[arg(long)]
         chats: bool,

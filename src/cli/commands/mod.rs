@@ -31,6 +31,7 @@ mod notifications;
 mod plan;
 mod ports;
 mod questions;
+mod queue;
 mod repo_menu;
 mod repo_migrate;
 mod repo_setup;
@@ -184,7 +185,6 @@ fn picker_start(ctx: &Context, command: Option<&Command>) -> Option<Option<menu:
         }
         Some(Command::Workspace(WorkspaceCommand::Work {
             command: None,
-            queue: false,
             chats: false,
             repository: None,
             status,

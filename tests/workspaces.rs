@@ -24273,20 +24273,20 @@ fn add_queues_agents_past_max_agents_until_removed() {
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == name && workspace["running"] == true)
-            && fixture.ok(&["work", "--queue"]) == serde_json::json!([])
+            && fixture.ok(&["queue"]) == serde_json::json!([])
     };
     wait_until("the first agent start", || started("first"));
 
     let queued = fixture.ok(&["add", repo, "second", "--agent", "waiter"]);
     assert_eq!(queued["state"], "queued", "{queued}");
     assert_eq!(queued["position"], 1, "{queued}");
-    let entries = fixture.ok(&["work", "--queue"]);
+    let entries = fixture.ok(&["queue"]);
     assert_eq!(entries.as_array().unwrap().len(), 1, "{entries}");
     assert_eq!(entries[0]["name"], "second");
     let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     assert_eq!(
-        fixture.ok(&["work", "--queue", "--repo", "other"]),
+        fixture.ok(&["queue", "--repo", "other"]),
         serde_json::json!([])
     );
     let listed = String::from_utf8(fixture.run(&["work"]).stdout).unwrap();
@@ -24294,9 +24294,29 @@ fn add_queues_agents_past_max_agents_until_removed() {
     // A queued entry creates nothing until it starts.
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 
+    // Entries move to a position and leave the queue when cancelled.
+    fixture.ok(&["add", repo, "third", "--agent", "waiter"]);
+    let moved = fixture.ok(&["queue", "move", "third", "1"]);
+    assert_eq!(moved["entry"]["position"], 1, "{moved}");
+    assert_eq!(moved["stopped"], false, "{moved}");
+    let names = |entries: serde_json::Value| -> Vec<String> {
+        entries
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(names(fixture.ok(&["queue"])), ["third", "second"]);
+    let listed = String::from_utf8(fixture.run(&["queue"]).stdout).unwrap();
+    assert!(listed.contains("queued, position 2"), "{listed}");
+    let cancelled = fixture.ok(&["queue", "cancel", "third"]);
+    assert_eq!(cancelled["name"], "third", "{cancelled}");
+    assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
+
     let removed = fixture.ok(&["rm", "second"]);
     assert_eq!(removed["name"], "second", "{removed}");
-    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
 
     // A focused launch is one the user waits for, so it skips the queue.
     let mut focused = fixture
@@ -24324,7 +24344,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
     );
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
     fixture.ok(&["rm", shared["id"].as_str().unwrap()]);
-    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     fixture.ok(&["stop", "first"]);
     first.wait().unwrap();
 }
@@ -24354,7 +24374,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
-            && fixture.ok(&["work", "--queue"]) == serde_json::json!([])
+            && fixture.ok(&["queue"]) == serde_json::json!([])
     });
     let output = fixture
         .command()
@@ -24414,7 +24434,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     assert_eq!(names, ["first", "second", "third"], "{queued}");
     wait_until("the first restore", || paths[0].join("restored").exists());
     // The restored agent takes the only slot, so the others wait.
-    let waiting = fixture.ok(&["work", "--queue"]);
+    let waiting = fixture.ok(&["queue"]);
     assert_eq!(waiting.as_array().unwrap().len(), 2, "{waiting}");
     assert_eq!(waiting[0]["name"], "second", "{waiting}");
     assert_eq!(waiting[0]["state"], "queued", "{waiting}");
@@ -24433,7 +24453,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
     assert!(!paths[3].join("restored").exists());
     // Stopping everything also cancels the restore still waiting.
     fixture.ok(&["stop", "--all"]);
-    assert_eq!(fixture.ok(&["work", "--queue"]), serde_json::json!([]));
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
     assert!(!paths[2].join("restored").exists());
 }
 

@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::sessions::SessionsCommand,
-    commands::{demo, restart, resume, sessions},
+    commands::{demo, queue, restart, resume, sessions},
     context::Context,
 };
 
@@ -35,5 +35,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             wait,
             sequential,
         } => restart::run(&ctx, targets, agent, wait, sequential).await,
+        SessionsCommand::Queue {
+            command,
+            repository,
+            print,
+        } => queue::run(&ctx, command, repository, print).await,
     }
 }

@@ -51,7 +51,7 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
 /// What the user reads once `count` restores are queued.
 fn summary(count: usize) -> String {
     let agents = if count == 1 { "agent" } else { "agents" };
-    format!("Queued {count} {agents}; shoal work --queue shows them")
+    format!("Queued {count} {agents}; shoal queue shows them")
 }
 
 /// Queue the restore of the agent stopped as `execution` in `workspace`,

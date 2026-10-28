@@ -644,7 +644,6 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
                 repository: None,
                 copy: false,
             }),
-            queue: false,
             chats: false,
             repository: None,
             status: Vec::new(),
