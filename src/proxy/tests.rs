@@ -80,11 +80,25 @@ fn daemon_speaking(
     tokio::task::JoinHandle<()>,
     std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 ) {
+    daemon_refusing(paths, version, 0)
+}
+
+/// [`daemon_speaking`], refusing the first `refused` requests with an
+/// error, which it keeps as `refused <method>`.
+fn daemon_refusing(
+    paths: &crate::paths::Paths,
+    version: u32,
+    refused: usize,
+) -> (
+    tokio::task::JoinHandle<()>,
+    std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+) {
     std::fs::create_dir_all(paths.socket.parent().unwrap()).unwrap();
     let listener = tokio::net::UnixListener::bind(&paths.socket).unwrap();
     let methods = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let received = methods.clone();
     let serving = tokio::spawn(async move {
+        let mut refused = refused;
         while let Ok((stream, _)) = listener.accept().await {
             let (read, mut write) = stream.into_split();
             let mut read = tokio::io::BufReader::new(read);
@@ -95,9 +109,16 @@ fn daemon_speaking(
                 .as_object()
                 .and_then(|method| method.keys().next().cloned())
                 .unwrap_or_else(|| method.as_str().unwrap_or_default().to_owned());
-            received.lock().unwrap().push(name);
+            let body = if refused > 0 {
+                refused -= 1;
+                received.lock().unwrap().push(format!("refused {name}"));
+                crate::protocol::Body::error(crate::protocol::ErrorCode::OperationFailed, "busy")
+            } else {
+                received.lock().unwrap().push(name);
+                crate::protocol::Body::Ok
+            };
             let id = request["id"].as_u64().unwrap();
-            let mut response = crate::protocol::Response::new(id, crate::protocol::Body::Ok);
+            let mut response = crate::protocol::Response::new(id, body);
             response.protocol = version;
             crate::protocol::write(&mut write, &response).await.unwrap();
         }
@@ -141,6 +162,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
             execution: "e".into(),
             ends_turns,
             sent: Default::default(),
+            now: || 1_700_000_000,
         };
         reporter.run(events).await;
         assert_eq!(
@@ -170,6 +192,7 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
         execution: "e".into(),
         ends_turns: true,
         sent: Default::default(),
+        now: || 1_700_000_000,
     };
     reporter.run(events).await;
     assert_eq!(*methods.lock().unwrap(), ["report_turn_failure"]);
@@ -292,6 +315,7 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         execution: "e".into(),
         ends_turns: true,
         sent: Default::default(),
+        now: || 1_700_000_000,
     };
     reporter.run(events).await;
     let mut methods = methods.lock().unwrap().clone();
@@ -302,6 +326,47 @@ async fn the_reporter_sends_each_change_once_and_clears_only_what_it_reported() 
         [
             "report_proxy_retry",
             "report_proxy_retry",
+            "report_upstream_reset",
+            "report_proxy_retry",
+            "report_upstream_reset",
+        ]
+    );
+}
+
+#[tokio::test]
+#[cfg(feature = "proxy")]
+async fn a_report_the_daemon_did_not_take_goes_again_with_the_next_event() {
+    use shoal_proxy::{Event, Failure};
+    let root = tempfile::tempdir().unwrap();
+    let paths = crate::paths::Paths::for_test(root.path());
+    // The daemon refuses the first reset, as one restarting might.
+    let (_daemon, methods) = daemon_refusing(&paths, crate::protocol::VERSION, 1);
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let limited = Event::Failed {
+        failure: Failure::RateLimited,
+        in_stream: false,
+        wait: Some(std::time::Duration::from_secs(7200)),
+        subagent: false,
+    };
+    for event in [limited.clone(), limited, Event::Recovered] {
+        sender.send(event).unwrap();
+    }
+    drop(sender);
+    let reporter = launch::Reporter {
+        paths: paths.clone(),
+        workspace: "w".into(),
+        execution: "e".into(),
+        ends_turns: false,
+        sent: Default::default(),
+        now: || 1_700_000_000,
+    };
+    reporter.run(events).await;
+    let mut methods = methods.lock().unwrap().clone();
+    methods[2..].sort();
+    assert_eq!(
+        methods,
+        [
+            "refused report_upstream_reset",
             "report_upstream_reset",
             "report_proxy_retry",
             "report_upstream_reset",
