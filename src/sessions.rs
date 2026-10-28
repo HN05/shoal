@@ -25,6 +25,7 @@ pub(crate) enum Owner {
 }
 
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
+/// Verified closes must exclude ownership replacement in the native namespace.
 pub(crate) trait Host: Send + Sync {
     fn name(&self) -> &'static str;
     fn sessions<'a>(

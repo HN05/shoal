@@ -1,6 +1,17 @@
 use super::*;
 
 #[test]
+fn native_socket_directory_preserves_path_whitespace_and_requires_a_report() -> Result<()> {
+    assert_eq!(
+        reported_socket_directory("zmx\t0.8.1\nsocket_dir\t\t/path with spaces \n")?,
+        std::path::PathBuf::from("/path with spaces ")
+    );
+    assert!(reported_socket_directory("socket_dir\t\n").is_err());
+    assert!(reported_socket_directory("zmx\t0.8.1\n").is_err());
+    Ok(())
+}
+
+#[test]
 fn list_parses_names_fields_and_labels_after_the_marker() {
     let output = "  name=fix-login\tpid=1\tclients=0\tcreated=1\tcwd=file://host/a\t\
             cmd=shoal internal session\tshoal.agent=claude\tshoal.workspace=w1\n\

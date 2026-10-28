@@ -12,7 +12,7 @@ async fn socket_aliases_share_an_exclusive_lock_across_states() -> Result<()> {
     let path = lock_path(&server)?;
     assert_eq!(lock_path(&alias)?, path);
     std::fs::write(&path, "")?;
-    let _guard = for_socket(&server).await?;
+    let _guard = for_server(&server).await?;
     let contender = open(&lock_path(&alias)?)?;
     assert_eq!(
         fs2::FileExt::try_lock_exclusive(&contender)
@@ -30,7 +30,7 @@ async fn independent_servers_do_not_block_each_other_even_without_a_socket() -> 
     let second = root.path().join("second.sock");
     std::fs::write(lock_path(&first)?, "")?;
     std::fs::write(lock_path(&second)?, "")?;
-    let _guard = for_socket(&first).await?;
+    let _guard = for_server(&first).await?;
     let contender = open(&lock_path(&second)?)?;
     fs2::FileExt::try_lock_exclusive(&contender)?;
     Ok(())

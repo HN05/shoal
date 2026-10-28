@@ -9,6 +9,36 @@ use crate::{subprocess::Run, tools::Tool};
 pub(crate) const WORKSPACE_LABEL: &str = "shoal.workspace";
 pub(crate) const CHAT_LABEL: &str = "shoal.chat";
 
+/// Serialize in-place ownership replacement with verified cleanup in the native
+/// namespace, regardless of which Shoal state directory initiated it.
+pub(crate) async fn ownership_lock() -> Result<std::fs::File> {
+    let directory = socket_directory().await?;
+    super::locking::for_server(&directory).await
+}
+
+async fn socket_directory() -> Result<std::path::PathBuf> {
+    if let Some(directory) = std::env::var_os("ZMX_DIR").filter(|value| !value.is_empty()) {
+        return Ok(directory.into());
+    }
+    let mut command = Command::new(Tool::Zmx.program());
+    command.arg("version");
+    let output = Run::new(command).checked().await?;
+    reported_socket_directory(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn reported_socket_directory(version: &str) -> Result<std::path::PathBuf> {
+    version
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .find_map(|(key, value)| {
+            (key == "socket_dir")
+                .then(|| value.trim_start_matches('\t'))
+                .filter(|value| !value.is_empty())
+        })
+        .map(Into::into)
+        .context("zmx did not report its socket directory")
+}
+
 /// End `session` with everything running in it.
 pub(crate) async fn kill(session: &str) -> Result<()> {
     let mut kill = Command::new(Tool::Zmx.program());
@@ -117,6 +147,7 @@ impl super::Host for Zmx {
         owner: &'a super::Owner,
     ) -> futures_util::future::BoxFuture<'a, Result<()>> {
         Box::pin(async move {
+            let _server = ownership_lock().await?;
             if list()
                 .await?
                 .iter()

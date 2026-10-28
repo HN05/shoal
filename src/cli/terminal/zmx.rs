@@ -473,6 +473,7 @@ async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()
     let Some(session) = std::env::var_os(SESSION_VAR) else {
         return Ok(());
     };
+    let _server = crate::sessions::zmx::ownership_lock().await?;
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)

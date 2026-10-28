@@ -85,5 +85,13 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
 }
 
 pub fn cli(root: &Path) -> Command {
+    // Debug builds may lock existing native runtime files, but do not create
+    // files outside their state directory. Prepare only this fixture's lock.
+    fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(root.join("zmx.shoal-ownership.lock"))
+        .expect("prepare isolated zmx ownership lock");
     isolated(root, env!("CARGO_BIN_EXE_shoal"))
 }

@@ -644,16 +644,17 @@ binary, once another binary is installed there, so tabs opened before an upgrade
 still close.
 
 Terminal hosts register launch and cleanup adapters together; lifecycle policy
-uses their ownership, discovery and verified-close operations. Removal closes
-owned places, and startup and cleanup sweeps close those whose workspace record
-is gone, retrying failures without restoring ownership. Relabelling replaces
+uses their ownership, discovery and verified-close operations. Hosts with separate
+ownership checks and closes serialize them against reassignment within the native
+server namespace. Removal closes owned places; startup and cleanup sweeps close
+those whose workspace record is gone, retrying failures without restoring ownership.
+Relabelling replaces
 obsolete ownership before any in-place agent or chat can launch, so removal
 preserves a place reused by another owner.
 Herdr ownership persists in the owning state directory with its server socket,
 pane, terminal identity and a unique native ownership marker. Relabelling
 replaces or clears that marker across state directories, even with handoffs
-disabled. Ownership changes and verified closes hold a server-scoped lock across
-state directories. Cleanup requires both the marker and terminal identity to match,
+disabled. Cleanup requires both the marker and terminal identity to match,
 preserving other panes in the tab and replacements at the same pane ID.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:

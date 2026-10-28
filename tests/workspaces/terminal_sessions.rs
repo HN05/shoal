@@ -654,3 +654,81 @@ fn herdr_reassignment_waits_for_another_states_verified_close() -> anyhow::Resul
     assert_eq!(closed(&original)?.len(), 1);
     Ok(())
 }
+
+#[test]
+fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<()> {
+    let original = Fixture::new();
+    original.add("old-owner");
+    let home = original.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    install_test_script(home.join("bin/claude"), "#!/bin/sh\n");
+    fs::write(home.join("zmx-keep-sessions"), "")?;
+    fs::write(home.join("zmx-sessions"), "name=reused\tpid=1\n")?;
+    let output = original
+        .command()
+        .env("ZMX_SESSION", "reused")
+        .args(["claude", "old-owner"])
+        .output()?;
+    assert!(output.status.success(), "{output:?}");
+    let other = Fixture::new();
+    other.add("new-owner");
+    install_test_script(other.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    install_test_script(
+        other.root.path().join("bin/claude"),
+        "#!/bin/sh\ntouch \"$HOME/new-agent-started\"\n",
+    );
+    fs::write(home.join("zmx-pause-owner-check"), "")?;
+    fs::write(home.join("zmx-close-removes-session"), "")?;
+    let mut removal = PausedRemoval {
+        child: original
+            .command()
+            .args(["rm", "old-owner", "--yes"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?,
+        release: home.join("zmx-owner-check-release"),
+    };
+    wait_until("zmx ownership check paused under its lock", || {
+        home.join("zmx-owner-check-paused").exists()
+    });
+    let shared = fs::File::open(home.join("zmx.shoal-ownership.lock"))?;
+    assert_eq!(
+        fs2::FileExt::try_lock_exclusive(&shared)
+            .expect_err("verified close must exclude cross-state reassignment")
+            .kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+    let mut agent = Shortcut {
+        fixture: &other,
+        child: other
+            .command()
+            .env("ZMX_SESSION", "reused")
+            .env("ZMX_TEST_ROOT", home)
+            .env_remove("ZMX_DIR")
+            .args(["claude", "new-owner"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?,
+    };
+    let waiting = wait_for("reassignment resolves the same native namespace", || {
+        if agent
+            .child
+            .try_wait()
+            .expect("query own shortcut")
+            .is_some()
+        {
+            return Some(false);
+        }
+        home.join("zmx-version-called").exists().then_some(true)
+    });
+    assert!(waiting);
+    assert!(!other.root.path().join("new-agent-started").exists());
+    fs::write(&removal.release, "")?;
+    assert!(removal.child.wait()?.success());
+    let status = wait_for("reassignment observes the closed session", || {
+        agent.child.try_wait().expect("query own shortcut")
+    });
+    assert!(!status.success());
+    assert!(!other.root.path().join("new-agent-started").exists());
+    Ok(())
+}

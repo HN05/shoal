@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result};
 
 /// Hold the server's lock through native ownership reads and mutations. Never
 /// unlink it: another process may already have opened the same inode.
-pub(super) async fn for_socket(socket: &Path) -> Result<File> {
+pub(super) async fn for_server(socket: &Path) -> Result<File> {
     let path = lock_path(socket)?;
     tokio::task::spawn_blocking(move || {
         let file = open(&path)?;

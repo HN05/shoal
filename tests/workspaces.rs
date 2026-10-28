@@ -21267,9 +21267,9 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
 /// recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
-import json, os, subprocess, sys
+import fcntl, json, os, subprocess, sys, time
 from pathlib import Path
-root = Path(os.environ['HOME'])
+root = Path(os.environ.get('ZMX_TEST_ROOT', os.environ['HOME']))
 args = sys.argv[1:]
 parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
     capture_output=True, text=True).stdout
@@ -21281,9 +21281,11 @@ if args[:1] == ['set'] and (root / 'zmx-label-fails').exists():
 if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
     sessions = root / 'zmx-sessions'
     lines = []
+    found = False
     for line in sessions.read_text().splitlines():
         fields = dict(field.split('=', 1) for field in line.strip().split('\t'))
         if fields.get('name') == args[1]:
+            found = True
             for assignment in args[2:]:
                 key, value = assignment.split('=', 1)
                 if value:
@@ -21292,7 +21294,13 @@ if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
                     fields.pop(key, None)
             line = '\t'.join(f'{key}={value}' for key, value in fields.items())
         lines.append(line)
+    if not found:
+        sys.exit('session not found')
     sessions.write_text(''.join(line + '\n' for line in lines))
+elif args[:1] == ['kill'] and (root / 'zmx-close-removes-session').exists():
+    sessions = root / 'zmx-sessions'
+    sessions.write_text(''.join(line + '\n' for line in sessions.read_text().splitlines()
+        if not any(field == f'name={args[1]}' for field in line.strip().split('\t'))))
 elif args[:1] in (['set'], ['kill']):
     pass
 elif args[:1] == ['run']:
@@ -21309,9 +21317,25 @@ elif args[:1] == ['send']:
     with (root / f'zmx-{args[1]}.log').open('a') as log:
         subprocess.run(['sh', '-c', args[2].rstrip('\r')], env=env,
             stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+elif args[:1] == ['version']:
+    (root / 'zmx-version-called').touch()
+    print(f'socket_dir\t{root / "zmx"}')
 elif args[:1] == ['list']:
     sessions = root / 'zmx-sessions'
-    print(sessions.read_text() if sessions.exists() else 'no sessions found')
+    listed = sessions.read_text() if sessions.exists() else 'no sessions found'
+    if (root / 'zmx-pause-owner-check').exists():
+        with (root / 'zmx.shoal-ownership.lock').open() as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                (root / 'zmx-pause-owner-check').unlink()
+                (root / 'zmx-owner-check-paused').touch()
+                deadline = time.monotonic() + 120
+                while not (root / 'zmx-owner-check-release').exists():
+                    if time.monotonic() >= deadline:
+                        sys.exit('ownership check hang guard')
+                    time.sleep(0.01)
+    print(listed)
 elif args[:1] == ['attach']:
     args = args[1:]
     if args[:1] == ['--labels']:
