@@ -227,3 +227,16 @@ fn a_trusted_projects_provider_and_the_working_directory_select_what_moves() {
     user(false);
     assert_eq!(moved_in(&nested, &[]).as_deref(), Some("user"));
 }
+
+#[test]
+fn the_proxys_key_header_joins_the_providers_own() {
+    let config = "model_provider = 'cliproxy'\n\
+                  [model_providers.cliproxy.env_http_headers]\nx-team = 'TEAM_HEADER'\n";
+    let args = routed(config, &[]).unwrap();
+    let headers = effective(&args, "model_providers.cliproxy.env_http_headers").unwrap();
+    assert_eq!(headers["x-team"].as_str(), Some("TEAM_HEADER"));
+    assert_eq!(
+        headers[crate::proxy::KEY_HEADER].as_str(),
+        Some(crate::proxy::KEY_VARIABLE)
+    );
+}

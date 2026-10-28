@@ -39,6 +39,21 @@ impl Integration for Claude {
         settings::merge(args, url, directory)
     }
 
+    /// Claude Code adds `ANTHROPIC_CUSTOM_HEADERS`, one per line, to each
+    /// request, so the key joins those the agent has.
+    fn proxy_environment(
+        &self,
+        key: &str,
+        variable: &dyn Fn(&str) -> Option<OsString>,
+    ) -> Vec<(&'static str, OsString)> {
+        let mut headers = variable(CUSTOM_HEADERS).unwrap_or_default();
+        if !headers.is_empty() {
+            headers.push("\n");
+        }
+        headers.push(format!("{}: {key}", crate::proxy::KEY_HEADER));
+        vec![(CUSTOM_HEADERS, headers)]
+    }
+
     fn proxy_args(&self) -> Vec<OsString> {
         let settings = json!({"env": {"ANTHROPIC_BASE_URL": crate::proxy::URL}});
         vec!["--settings".into(), settings.to_string().into()]
@@ -217,6 +232,9 @@ fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
     }]});
     [("Stop", group.clone()), ("StopFailure", group)]
 }
+
+/// The variable whose lines Claude Code adds to each request as headers.
+const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";
 
 mod settings;
 

@@ -150,7 +150,7 @@ async fn proxy_with(
     clock: Arc<dyn clock::Clock>,
 ) -> (SocketAddr, UnboundedReceiver<Event>) {
     let (events, received) = tokio::sync::mpsc::unbounded_channel();
-    let proxy = Proxy::bind_with(upstream, events, policy, clock)
+    let proxy = Proxy::bind_with(upstream, None, events, policy, clock)
         .await
         .unwrap();
     let addr = proxy.local_addr().unwrap();
@@ -711,6 +711,36 @@ async fn a_claude_subscription_limit_waits_for_the_reset_its_headers_name() {
     let (addr, _) = proxy(upstream.url("")).await;
     let (status, _, body) = send(addr, Request::post("/v1/messages"), "{}").await;
     assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+}
+
+#[tokio::test]
+async fn only_a_client_that_names_the_key_reaches_the_upstream() {
+    let upstream = FakeUpstream::start(|_| reply(200, "done")).await;
+    let (events, _received) = tokio::sync::mpsc::unbounded_channel();
+    let proxy = Proxy::bind(upstream.url(""), "client-key", events)
+        .await
+        .unwrap();
+    let addr = proxy.local_addr().unwrap();
+    tokio::spawn(proxy.serve());
+    for key in [None, Some("wrong")] {
+        let mut request = Request::post("/v1/messages");
+        if let Some(key) = key {
+            request = request.header(CLIENT_KEY_HEADER, key);
+        }
+        let (status, _, _) = send(addr, request, "{}").await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{key:?}");
+    }
+    assert!(upstream.requests().is_empty());
+    let request = Request::post("/v1/messages").header(CLIENT_KEY_HEADER, "client-key");
+    let (status, _, body) = send(addr, request, "{}").await;
+    assert_eq!((status, body.as_str()), (StatusCode::OK, "done"));
+    // The key is the proxy's alone.
+    assert!(
+        upstream.requests()[0]
+            .headers
+            .get(CLIENT_KEY_HEADER)
+            .is_none()
+    );
 }
 
 #[tokio::test]

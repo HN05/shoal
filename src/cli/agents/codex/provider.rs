@@ -57,10 +57,13 @@ fn place_last(args: &mut Vec<OsString>, at: usize, flags: &Flags, overrides: Vec
 }
 
 /// The provider a launch uses, and the config key that names it.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 struct Selected {
     provider: String,
     key: Vec<String>,
+    /// The headers its config fills from the environment, which Shoal's
+    /// key joins.
+    headers: toml::Table,
 }
 
 impl Selected {
@@ -83,27 +86,46 @@ impl Selected {
             .profile
             .clone()
             .or_else(|| config.get("profile")?.as_str().map(str::to_owned));
-        if let Some(profile) = profile {
+        let in_profile = profile.and_then(|profile| {
             let provider = config
-                .get("profiles")
-                .and_then(|profiles| profiles.get(&profile))
-                .and_then(|profile| profile.get("model_provider")?.as_str());
-            if let Some(provider) = provider {
-                return Ok(Self {
-                    provider: provider.to_owned(),
-                    key: vec!["profiles".into(), profile, "model_provider".into()],
-                });
-            }
-        }
-        Ok(Self {
-            provider: config
+                .get("profiles")?
+                .get(&profile)?
+                .get("model_provider")?
+                .as_str()?;
+            let key = vec!["profiles".into(), profile, "model_provider".into()];
+            Some((provider.to_owned(), key))
+        });
+        let (provider, key) = in_profile.unwrap_or_else(|| {
+            let provider = config
                 .get("model_provider")
                 .and_then(toml::Value::as_str)
-                .unwrap_or("openai")
-                .to_owned(),
-            key: vec!["model_provider".into()],
+                .unwrap_or("openai");
+            (provider.to_owned(), vec!["model_provider".into()])
+        });
+        let headers = config
+            .get("model_providers")
+            .and_then(|providers| providers.get(&provider))
+            .and_then(|provider| provider.get("env_http_headers")?.as_table())
+            .cloned()
+            .unwrap_or_default();
+        Ok(Self {
+            provider,
+            key,
+            headers,
         })
     }
+}
+
+/// The `selected` provider's headers from the environment with the one that
+/// names the proxy's key, which [`crate::proxy::KEY_VARIABLE`] holds. Codex
+/// takes them only as a whole table, not one header at a time.
+fn headers(selected: &Selected) -> toml::Value {
+    let mut headers = selected.headers.clone();
+    headers.insert(
+        crate::proxy::KEY_HEADER.to_owned(),
+        toml::Value::String(crate::proxy::KEY_VARIABLE.to_owned()),
+    );
+    toml::Value::Table(headers)
 }
 
 /// The overrides that send the `selected` provider to the proxy at `url`. A
@@ -113,12 +135,14 @@ impl Selected {
 /// the launch named it. The proxy forwards plain HTTP.
 fn overrides(selected: &Selected, url: &str) -> Result<Vec<OsString>> {
     let url = toml::Value::String(url.to_owned());
+    let headers = headers(selected);
     let overrides = match selected.provider.as_str() {
         "openai" => vec![
             format!("{}=\"{PROXY_PROVIDER}\"", dotted(&selected.key)),
             format!(
                 "model_providers.{PROXY_PROVIDER}={{name=\"Shoal proxy\",base_url={url},\
-                 wire_api=\"responses\",requires_openai_auth=true,supports_websockets=false}}"
+                 wire_api=\"responses\",requires_openai_auth=true,supports_websockets=false,\
+                 env_http_headers={headers}}}"
             ),
         ],
         id if BUILT_IN_PROVIDERS.contains(&id) => {
@@ -129,6 +153,7 @@ fn overrides(selected: &Selected, url: &str) -> Result<Vec<OsString>> {
             vec![
                 format!("model_providers.{key}.base_url={url}"),
                 format!("model_providers.{key}.supports_websockets=false"),
+                format!("model_providers.{key}.env_http_headers={headers}"),
             ]
         }
     };

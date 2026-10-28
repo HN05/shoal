@@ -35,6 +35,7 @@ async fn a_retry_gives_up_on_an_outage_another_request_gave_up_on() {
     let (events, _received) = tokio::sync::mpsc::unbounded_channel();
     let forwarder = Arc::new(Forwarder::new(
         upstream.url(""),
+        None,
         events,
         retry::POLICY,
         clock.clone(),
@@ -68,6 +69,7 @@ async fn a_retry_resends_once_another_request_found_the_upstream_back() {
     let (events, _received) = tokio::sync::mpsc::unbounded_channel();
     let forwarder = Arc::new(Forwarder::new(
         upstream.url(""),
+        None,
         events,
         retry::POLICY,
         clock.clone(),

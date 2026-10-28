@@ -120,11 +120,33 @@ impl AgentLaunch {
         )
     }
 
-    fn apply(&self, command: &mut Command) {
+    /// Give `command` the agent's environment, over the workspace's
+    /// `environment`, and the key its proxy wants, when one runs.
+    fn apply(
+        &self,
+        command: &mut Command,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) {
         self.account.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
         self.environment.apply(command.as_std_mut(), &self.home);
+        if let Some(proxy) = &self.proxy {
+            command.envs(self.proxy_environment(&proxy.key, environment));
+        }
+    }
+
+    /// What the agent's environment gets so its requests name its proxy's
+    /// `key`, joining what it has, such as its own extra headers.
+    fn proxy_environment(
+        &self,
+        key: &str,
+        environment: &std::collections::BTreeMap<String, OsString>,
+    ) -> Vec<(&'static str, OsString)> {
+        let configured = self.configured_environment(environment);
+        let kind = self.integration.unwrap_or(crate::ai::IntegrationKind::None);
+        let variable = |name: &str| self.variable(&configured, name);
+        crate::cli::agents::proxy_environment(kind, key, &variable)
     }
 }
 
@@ -145,7 +167,7 @@ pub(super) fn spawn(
         .current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
-        auth.apply(&mut process);
+        auth.apply(&mut process, &plan.environment);
     }
     export_execution(&mut process, paths, plan);
     // A demo is the user's, so the agent's output setting stays behind, and

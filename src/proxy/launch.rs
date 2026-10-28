@@ -8,6 +8,15 @@ use anyhow::Result;
 /// which the wrapper fills in once the proxy listens.
 pub const URL: &str = "{shoal-proxy-url}";
 
+/// The header an agent names its proxy's key in, which the proxy checks.
+pub const KEY_HEADER: &str = "x-shoal-proxy-key";
+
+/// The variable of a proxied agent's environment that holds its proxy's
+/// key, for an agent that names a variable rather than a value: the
+/// environment is the agent's alone, while any local user can read its
+/// command line.
+pub const KEY_VARIABLE: &str = "SHOAL_PROXY_KEY";
+
 /// Fill in [`URL`] in each of `args` with the proxy's `url`.
 pub fn fill_url(args: &mut [std::ffi::OsString], url: &str) {
     for arg in args {
@@ -20,6 +29,9 @@ pub fn fill_url(args: &mut [std::ffi::OsString], url: &str) {
 /// The proxy a tracked agent's wrapper runs while the agent does, at `url`.
 pub struct Running {
     pub url: String,
+    /// The key the agent names in [`KEY_HEADER`], which the proxy answers
+    /// only with.
+    pub key: String,
     #[cfg(feature = "proxy")]
     serving: tokio::task::JoinHandle<std::io::Result<()>>,
     /// What the proxy reports, until [`Running::report_turns`] takes it.
@@ -312,12 +324,14 @@ pub async fn start(
         upstream = upstream.with_key(&key.value(variable)?)?;
     }
     let (sender, events) = tokio::sync::mpsc::unbounded_channel();
-    let proxy = shoal_proxy::Proxy::bind(upstream, sender)
+    let key = uuid::Uuid::new_v4().simple().to_string();
+    let proxy = shoal_proxy::Proxy::bind(upstream, &key, sender)
         .await
         .context("start the agent's proxy")?;
     let url = format!("http://{}", proxy.local_addr()?);
     Ok(Running {
         url,
+        key,
         serving: tokio::spawn(proxy.serve()),
         events: Some(events),
         reporting: None,

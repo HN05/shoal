@@ -12770,7 +12770,7 @@ fn proxied_claude() -> Fixture {
     fixture.add("proxied");
     install_test_script(
         home.join("bin/claude"),
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/claude-args\"\nenv > \"$HOME/claude-env\"\n",
     );
     fixture
 }
@@ -12833,6 +12833,16 @@ fn a_proxied_agent_takes_its_key_from_its_environment_or_does_not_start() {
         "{args}"
     );
     assert!(!args.contains("sk-test"), "{args}");
+    // Its requests name the proxy's key from its private environment, not
+    // its command line, which any local user can read.
+    let env = fs::read_to_string(home.join("claude-env")).unwrap();
+    let header = env
+        .lines()
+        .find_map(|line| line.strip_prefix("ANTHROPIC_CUSTOM_HEADERS="))
+        .unwrap_or_else(|| panic!("{env}"));
+    let key = header.strip_prefix("x-shoal-proxy-key: ").unwrap();
+    assert_eq!(key.len(), 32, "{header}");
+    assert!(!args.contains(key), "{args}");
 }
 
 #[test]

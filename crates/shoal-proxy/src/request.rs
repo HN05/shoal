@@ -94,6 +94,7 @@ impl Buffered {
             let replaced = key.is_some() && CREDENTIALS.contains(name);
             if forwarded(name)
                 && !replaced
+                && name != crate::CLIENT_KEY_HEADER
                 && name != header::HOST
                 && name != header::CONTENT_LENGTH
             {

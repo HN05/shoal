@@ -42,6 +42,12 @@ pub enum Event {
     Recovered,
 }
 
+/// The header a client names the proxy's key in. Any local user can reach
+/// a loopback port, so the proxy answers only clients that know its key,
+/// which travels in their private environment rather than on a command
+/// line others can read; the upstream never sees it.
+pub const CLIENT_KEY_HEADER: &str = "x-shoal-proxy-key";
+
 /// A proxy listening on a loopback port.
 pub struct Proxy {
     listener: TcpListener,
@@ -49,21 +55,29 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    /// Listen on a free loopback port for requests to forward to `upstream`,
-    /// telling `events` about retries.
-    pub async fn bind(upstream: Upstream, events: UnboundedSender<Event>) -> std::io::Result<Self> {
+    /// Listen on a free loopback port for requests to forward to `upstream`
+    /// from clients that send `client_key` in [`CLIENT_KEY_HEADER`], telling
+    /// `events` about retries.
+    pub async fn bind(
+        upstream: Upstream,
+        client_key: &str,
+        events: UnboundedSender<Event>,
+    ) -> std::io::Result<Self> {
+        let client_key = hyper::header::HeaderValue::from_str(client_key)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
         let clock = Arc::new(clock::Tokio::new());
-        Self::bind_with(upstream, events, retry::POLICY, clock).await
+        Self::bind_with(upstream, Some(client_key), events, retry::POLICY, clock).await
     }
 
     async fn bind_with(
         upstream: Upstream,
+        client_key: Option<hyper::header::HeaderValue>,
         events: UnboundedSender<Event>,
         policy: retry::Policy,
         clock: Arc<dyn clock::Clock>,
     ) -> std::io::Result<Self> {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
-        let forwarder = forward::Forwarder::new(upstream, events, policy, clock);
+        let forwarder = forward::Forwarder::new(upstream, client_key, events, policy, clock);
         Ok(Self {
             listener,
             forwarder: Arc::new(forwarder),

@@ -69,6 +69,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
         }
         let mut args = Codex.hook_args(true).unwrap();
         assert_eq!(args.last().unwrap(), PROVIDER);
+        let routing = args.len() - 1;
         let configured = BTreeMap::from([("CODEX_HOME".to_owned(), codex.clone().into())]);
         let environment = AgentEnvironment {
             home: home.path(),
@@ -81,7 +82,7 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
                 &environment,
                 home.path(),
             )
-            .map(|()| args.split_off(args.len() - 4))
+            .map(|()| args.split_off(routing))
     };
     // A provider of the user's keeps its token and only moves.
     let custom = routed(Some("model_provider = 'cliproxy'\n")).unwrap();
@@ -92,6 +93,8 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
             "model_providers.cliproxy.base_url=\"http://127.0.0.1:4000\"",
             "-c",
             "model_providers.cliproxy.supports_websockets=false",
+            "-c",
+            "model_providers.cliproxy.env_http_headers={ x-shoal-proxy-key = \"SHOAL_PROXY_KEY\" }",
         ]
     );
     // The built-in one gives way to Shoal's provider with its login.
@@ -100,6 +103,10 @@ fn proxied_codex_sends_the_provider_its_config_uses_to_the_proxy() {
         assert_eq!(builtin[1], "model_provider=\"shoal-proxy\"");
         let provider = builtin[3].to_str().unwrap();
         assert!(provider.contains("requires_openai_auth=true"), "{provider}");
+        assert!(
+            provider.contains(r#"env_http_headers={ x-shoal-proxy-key = "SHOAL_PROXY_KEY" }"#),
+            "{provider}"
+        );
         assert!(
             provider.contains(r#"base_url="http://127.0.0.1:4000""#),
             "{provider}"

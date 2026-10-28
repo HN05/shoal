@@ -148,3 +148,21 @@ fn proxied_settings_send_api_requests_to_the_proxy() {
             .contains(r#""ANTHROPIC_BASE_URL":"http://127.0.0.1:4000""#)
     );
 }
+
+#[test]
+fn the_proxys_key_joins_the_agents_own_headers() {
+    let none = |_: &str| None;
+    let mine = |name: &str| (name == CUSTOM_HEADERS).then(|| "x-team: blue".into());
+    let header = format!("{}: sk", crate::proxy::KEY_HEADER);
+    assert_eq!(
+        Claude.proxy_environment("sk", &none),
+        [(CUSTOM_HEADERS, OsString::from(&header))]
+    );
+    assert_eq!(
+        Claude.proxy_environment("sk", &mine),
+        [(
+            CUSTOM_HEADERS,
+            OsString::from(format!("x-team: blue\n{header}"))
+        )]
+    );
+}

@@ -233,3 +233,9 @@ async fn the_proxy_report_worker_sends_only_a_proxys_reports() {
     }
     assert!(send_relayed(&paths, "not json").await.is_err());
 }
+
+#[test]
+#[cfg(feature = "proxy")]
+fn agents_name_the_key_in_the_header_the_proxy_reads() {
+    assert_eq!(KEY_HEADER, shoal_proxy::CLIENT_KEY_HEADER);
+}

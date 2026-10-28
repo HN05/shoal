@@ -3,7 +3,13 @@ use std::{convert::Infallible, sync::Arc, time::Duration};
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper::{Request, Response, body::Incoming, header, server::conn::http1, service::service_fn};
+use hyper::{
+    Request, Response,
+    body::Incoming,
+    header::{self, HeaderValue},
+    server::conn::http1,
+    service::service_fn,
+};
 use hyper_rustls::HttpsConnector;
 use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
@@ -16,7 +22,7 @@ use crate::{
     clock::Clock,
     request::Buffered,
     response::{
-        Body, bad_gateway, event_stream, full, is_event_stream, passthrough, prefixed,
+        Body, bad_gateway, event_stream, forbidden, full, is_event_stream, passthrough, prefixed,
         strip_hop_by_hop,
     },
     retry::{self, Bound, Failure, Outage, Policy},
@@ -25,6 +31,8 @@ use crate::{
 
 pub(crate) struct Forwarder {
     upstream: Upstream,
+    /// The key a client must name, when the proxy has one.
+    client_key: Option<HeaderValue>,
     client: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
     outage: Outage,
     clock: Arc<dyn Clock>,
@@ -53,6 +61,7 @@ struct Failed {
 impl Forwarder {
     pub(crate) fn new(
         upstream: Upstream,
+        client_key: Option<HeaderValue>,
         events: UnboundedSender<Event>,
         policy: Policy,
         clock: Arc<dyn Clock>,
@@ -64,6 +73,7 @@ impl Forwarder {
             .build();
         Self {
             upstream,
+            client_key,
             client: Client::builder(TokioExecutor::new()).build(connector),
             outage: Outage::new(policy, clock.clone()),
             clock,
@@ -84,10 +94,20 @@ impl Forwarder {
     }
 
     async fn handle(&self, request: Request<Incoming>) -> Response<Body> {
+        if !self.knows_key(&request) {
+            return forbidden();
+        }
         match Buffered::read(request).await {
             Ok(request) => self.forward(&request).await,
             Err(error) => bad_gateway(&error),
         }
+    }
+
+    /// Whether `request` names the proxy's key, when it has one.
+    fn knows_key(&self, request: &Request<Incoming>) -> bool {
+        self.client_key
+            .as_ref()
+            .is_none_or(|key| request.headers().get(crate::CLIENT_KEY_HEADER) == Some(key))
     }
 
     /// Send `request` until the upstream answers it or the outage outlasts

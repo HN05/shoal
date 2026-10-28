@@ -64,6 +64,17 @@ pub(in crate::cli) trait Integration: Sync {
         false
     }
 
+    /// What its environment gets so its requests name its proxy's `key`:
+    /// by default [`crate::proxy::KEY_VARIABLE`], which its proxy arguments
+    /// name. `variable` reads the environment it runs with otherwise.
+    fn proxy_environment(
+        &self,
+        key: &str,
+        _variable: &dyn Fn(&str) -> Option<OsString>,
+    ) -> Vec<(&'static str, OsString)> {
+        vec![(crate::proxy::KEY_VARIABLE, key.into())]
+    }
+
     /// Arguments that only send its API requests to Shoal's proxy, for a
     /// launch Shoal gives no hooks, such as a configured resume command,
     /// with the placeholders of [`Self::hook_args`].
@@ -550,6 +561,17 @@ pub(crate) fn hook_args(kind: IntegrationKind, proxied: bool) -> std::io::Result
 /// `kind` ends its turn.
 pub(crate) fn proxy_ends_turns(kind: IntegrationKind) -> bool {
     integration(kind).proxy_ends_turns()
+}
+
+/// What the environment of an agent with integration `kind` gets so its
+/// requests name its proxy's `key`, reading the environment it runs with
+/// otherwise from `variable`.
+pub(crate) fn proxy_environment(
+    kind: IntegrationKind,
+    key: &str,
+    variable: &dyn Fn(&str) -> Option<OsString>,
+) -> Vec<(&'static str, OsString)> {
+    integration(kind).proxy_environment(key, variable)
 }
 
 /// Whether an agent with integration `kind` can go through Shoal's proxy.
