@@ -1,6 +1,6 @@
 //! Spawning a tracked command in its workspace, with the environment, agent
 //! account and output streams its mode gives it.
-use std::{ffi::OsString, path::PathBuf, process::Stdio};
+use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::Stdio};
 
 use anyhow::{Context, Result};
 use tokio::process::{Child, Command};
@@ -52,7 +52,7 @@ impl AgentLaunch {
     /// the agent runs with.
     pub(super) async fn start_proxy(
         &mut self,
-        environment: &std::collections::BTreeMap<String, OsString>,
+        environment: &BTreeMap<String, OsString>,
     ) -> Result<()> {
         let Some(routed) = &self.routed else {
             return Ok(());
@@ -101,7 +101,7 @@ impl AgentLaunch {
     pub(super) async fn restart_proxy(
         &mut self,
         proxy: Option<crate::proxy::Proxy>,
-        environment: &std::collections::BTreeMap<String, OsString>,
+        environment: &BTreeMap<String, OsString>,
     ) -> Result<bool> {
         if self.routed == proxy {
             return Ok(false);
@@ -116,19 +116,24 @@ impl AgentLaunch {
     /// `execution` in `workspace`, its turns' ends when the proxy's failure
     /// stream ends them.
     pub(super) fn report_proxy(&mut self, paths: &Paths, workspace: &str, execution: &str) {
-        let kind = self.integration.unwrap_or(crate::ai::IntegrationKind::None);
-        let ends_turns = crate::cli::agents::proxy_ends_turns(kind);
+        let ends_turns = crate::cli::agents::proxy_ends_turns(self.kind());
         if let Some(proxy) = self.proxy.as_mut() {
             proxy.report_turns(paths, workspace, execution, ends_turns);
         }
     }
 
+    /// The integration the agent runs with.
+    fn kind(&self) -> crate::ai::IntegrationKind {
+        self.integration.unwrap_or(crate::ai::IntegrationKind::None)
+    }
+
     /// What the agent's launch adds to this process's environment: the
-    /// workspace's `environment`, the secrets, then the agent's own.
+    /// workspace's `environment`, the secrets, then the agent's own. Its
+    /// proxy reads its key, routing and headers from this, as the agent does.
     fn configured_environment(
         &self,
-        environment: &std::collections::BTreeMap<String, OsString>,
-    ) -> std::collections::BTreeMap<String, OsString> {
+        environment: &BTreeMap<String, OsString>,
+    ) -> BTreeMap<String, OsString> {
         let mut configured = environment.clone();
         configured.extend(self.secrets.environment());
         self.environment.layer(&mut configured, &self.home);
@@ -137,16 +142,11 @@ impl AgentLaunch {
 
     /// Variable `name` as the agent sees it: as `configured` sets it, else
     /// as this process has it unless the agent's own environment removes it.
-    fn variable(
-        &self,
-        configured: &std::collections::BTreeMap<String, OsString>,
-        name: &str,
-    ) -> Option<OsString> {
-        match configured.get(name) {
-            Some(value) => Some(value.clone()),
-            None if self.environment.remove.contains(name) => None,
-            None => std::env::var_os(name),
+    fn variable(&self, configured: &BTreeMap<String, OsString>, name: &str) -> Option<OsString> {
+        if self.environment.remove.contains(name) && !configured.contains_key(name) {
+            return None;
         }
+        crate::env::configured_var(configured, name)
     }
 
     /// `command` with its proxy placeholders filled in, for an agent that
@@ -154,21 +154,20 @@ impl AgentLaunch {
     fn route(
         &self,
         command: &[OsString],
-        environment: &std::collections::BTreeMap<String, OsString>,
+        environment: &BTreeMap<String, OsString>,
         directory: &std::path::Path,
     ) -> Result<Vec<OsString>> {
         let Some(proxy) = &self.proxy else {
             return Ok(command.to_vec());
         };
-        let mut configured = environment.clone();
-        self.environment.layer(&mut configured, &self.home);
+        let configured = self.configured_environment(environment);
         let routing = crate::cli::agents::Routing {
             url: &proxy.url,
             directory,
             private: proxy.private_dir(),
         };
         crate::cli::agents::route_through_proxy(
-            self.integration.unwrap_or(crate::ai::IntegrationKind::None),
+            self.kind(),
             command.to_vec(),
             &routing,
             &self.home,
@@ -178,11 +177,7 @@ impl AgentLaunch {
 
     /// Give `command` the agent's environment, over the workspace's
     /// `environment`, and the key its proxy wants, when one runs.
-    fn apply(
-        &self,
-        command: &mut Command,
-        environment: &std::collections::BTreeMap<String, OsString>,
-    ) {
+    fn apply(&self, command: &mut Command, environment: &BTreeMap<String, OsString>) {
         self.account.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
@@ -197,12 +192,11 @@ impl AgentLaunch {
     fn proxy_environment(
         &self,
         key: &str,
-        environment: &std::collections::BTreeMap<String, OsString>,
+        environment: &BTreeMap<String, OsString>,
     ) -> Vec<(&'static str, OsString)> {
         let configured = self.configured_environment(environment);
-        let kind = self.integration.unwrap_or(crate::ai::IntegrationKind::None);
         let variable = |name: &str| self.variable(&configured, name);
-        crate::cli::agents::proxy_environment(kind, key, &variable)
+        crate::cli::agents::proxy_environment(self.kind(), key, &variable)
     }
 }
 

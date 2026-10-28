@@ -193,7 +193,12 @@ pub fn codex_home_with(configured: &BTreeMap<String, OsString>) -> Result<Option
     absolute_dir(CODEX_HOME, configured_var(configured, CODEX_HOME))
 }
 
-fn configured_var(configured: &BTreeMap<String, OsString>, name: &str) -> Option<OsString> {
+/// Variable `name` as `configured` sets it for a launch, else as this
+/// process has it.
+pub(crate) fn configured_var(
+    configured: &BTreeMap<String, OsString>,
+    name: &str,
+) -> Option<OsString> {
     configured
         .get(name)
         .cloned()
