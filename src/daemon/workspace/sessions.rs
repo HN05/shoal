@@ -56,6 +56,21 @@ impl Manager {
         Ok(())
     }
 
+    /// A demo's place belongs to that launch even when its wrapper was stopped
+    /// while disconnected and cannot close the session's shell itself.
+    pub(super) async fn close_demo_session(&self, launch: Option<crate::demos::Launch>) {
+        let Some(launch) = launch else {
+            return;
+        };
+        if let Some(host) = self
+            .session_hosts
+            .iter()
+            .find(|host| host.name() == launch.host)
+        {
+            self.close_session(host.as_ref(), &launch.place).await;
+        }
+    }
+
     async fn close_session(&self, host: &dyn crate::sessions::Host, name: &str) {
         if let Err(error) = host.close(name).await {
             self.session_cleanup_failed(None, &error).await;

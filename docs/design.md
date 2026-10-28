@@ -667,7 +667,8 @@ Demos let the user try a change where the agent's windows are out of sight,
 usually over SSH. A demo is a named command the repository configures or the
 agent gives, and a workspace runs several. Its wrapper is an ordinary tracked
 command that records the demo with its execution, so stopping, removal and
-recovery need nothing new and the record ends with the execution; the wrapper
+recovery use that execution. Its verified end closes the demo session, including
+a disconnected wrapper stopped by the daemon; the wrapper
 restarts the command, backing off after quick exits so a failing command keeps
 its error on screen. The CLI places the wrapper where queued agents start,
 through the terminal hosts, since a demo is something the user opens and reads,

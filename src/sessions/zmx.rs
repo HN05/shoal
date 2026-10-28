@@ -12,10 +12,16 @@ pub(crate) const WORKSPACE_LABEL: &str = "shoal.workspace";
 pub(crate) async fn kill(session: &str) -> Result<()> {
     let mut kill = Command::new(Tool::Zmx.program());
     kill.args(["kill", session]);
-    Run::new(kill)
-        .checked()
-        .await
-        .with_context(|| format!("end zmx session {session}"))?;
+    let result = Run::new(kill).checked().await;
+    // The session's shell or a place watcher may have closed it first.
+    if result.is_err()
+        && list()
+            .await
+            .is_ok_and(|sessions| !sessions.iter().any(|(name, _)| name == session))
+    {
+        return Ok(());
+    }
+    result.with_context(|| format!("end zmx session {session}"))?;
     Ok(())
 }
 
@@ -78,6 +84,9 @@ fn in_state(fields: &Fields, state: &Path, include_legacy: bool) -> bool {
 pub(super) struct Zmx;
 
 impl super::Host for Zmx {
+    fn name(&self) -> &'static str {
+        "zmx"
+    }
     fn sessions<'a>(
         &'a self,
         state: &'a Path,

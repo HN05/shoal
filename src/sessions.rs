@@ -13,6 +13,7 @@ pub(crate) struct Session {
 
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
 pub(crate) trait Host: Send + Sync {
+    fn name(&self) -> &'static str;
     fn sessions<'a>(
         &'a self,
         state: &'a Path,

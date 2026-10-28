@@ -99,10 +99,6 @@ impl Drop for DaemonGuard {
 /// count. A runner with zmx keeps its own, and the CLI's PATH is unchanged.
 #[allow(dead_code)]
 pub fn provide_zmx(root: &Path, launch: &mut Command) {
-    // Even an installed zmx must never discover the runner's own sessions.
-    let sessions = root.join("daemon-zmx");
-    fs::create_dir_all(&sessions).unwrap();
-    launch.env("ZMX_DIR", sessions);
     let path = launch
         .get_envs()
         .find(|(name, _)| *name == "PATH")

@@ -143,6 +143,20 @@ impl Manager {
     }
 }
 
+/// Resolve a demo's place before deleting the execution cascades its record.
+pub(super) fn execution_launch(db: &Connection, execution: &str) -> Result<Option<Launch>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM demos WHERE execution_id=?1",
+            [execution],
+            |row| row.get(0),
+        )
+        .optional()?;
+    record
+        .map(|record| serde_json::from_str(&record).context("invalid demo record"))
+        .transpose()
+}
+
 /// Record `launch` as the demo `execution` runs, in the transaction that
 /// registers the execution. A record lasts as long as its execution, so a
 /// name still recorded belongs to a demo that runs or is stopping.

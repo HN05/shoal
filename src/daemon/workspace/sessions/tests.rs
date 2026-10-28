@@ -40,6 +40,9 @@ impl FakeHost {
 }
 
 impl Host for FakeHost {
+    fn name(&self) -> &'static str {
+        "zmx"
+    }
     fn sessions<'a>(&'a self, _: &'a Path, _: bool) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
             Ok(self
@@ -156,5 +159,62 @@ async fn failed_session_close_does_not_block_removal_or_other_sessions_and_is_re
     host.fail.store(false, Ordering::Relaxed);
     manager.cleanup_orphan_sessions().await;
     assert_eq!(host.closed()?, ["good", "bad"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn demos_close_their_session_after_completion_or_verified_forgetting() -> Result<()> {
+    use crate::{daemon::workspace::ExecutionKind, demos::Launch};
+
+    let (_root, manager, workspace, host) = fixture().await?;
+    for disconnected in [false, true] {
+        let name = if disconnected {
+            "disconnected"
+        } else {
+            "connected"
+        };
+        host.add(name, &workspace.id)?;
+        let demo = Launch {
+            id: name.into(),
+            name: name.into(),
+            preset: None,
+            open: None,
+            scheme: None,
+            environment: Default::default(),
+            host: "zmx".into(),
+            place: name.into(),
+        };
+        let started = manager
+            .begin_execution_running(
+                &workspace.id,
+                None,
+                ExecutionKind::Command,
+                None,
+                Some(demo),
+            )
+            .await?;
+        if disconnected {
+            let execution = started.plan.id.clone();
+            drop(started);
+            // Disconnected stop paths call this after proving processes stopped.
+            manager.forget_execution(&execution).await?;
+        } else {
+            // Unknown process state must leave the session open for recovery.
+            assert!(
+                !manager
+                    .finish_execution(started.plan.id.clone(), ExecutionKind::Command, None)
+                    .await?
+            );
+            assert!(host.closed()?.is_empty());
+            assert!(
+                manager
+                    .finish_execution(started.plan.id, ExecutionKind::Command, Some(0))
+                    .await?
+            );
+        }
+    }
+    assert_eq!(host.closed()?, ["connected", "disconnected"]);
+    assert!(manager.demos(Some(&workspace.id)).await?.is_empty());
+    assert!(manager.find_workspace(&workspace.id).await?.is_some());
     Ok(())
 }

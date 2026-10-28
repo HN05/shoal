@@ -1,5 +1,7 @@
 //! Daemon-side execution registration and stopping. Terminal I/O stays in
 //! crate::execution, in the invoking CLI process.
+mod completion;
+
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::daemon::log;
 use crate::{
@@ -638,47 +640,8 @@ impl Manager {
         let complete = issue.is_none();
         self.keep_stopped_turn(&id).await;
         let connections = self.executions.connections().await;
-        let record_id = id.clone();
-        self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-                if kind == ExecutionKind::Setup {
-                    let code = exit_code.unwrap_or(1);
-                    let error = (!(complete && code == 0)).then(|| {
-                        let reason = issue.as_ref().map_or(String::new(), |issue| format!("; {issue}"));
-                        if code == 0 {
-                            format!("setup command exited successfully (exit 0), but process verification is incomplete{reason}; stop its processes with shoal stop, then retry or skip setup")
-                        } else {
-                            format!("setup failed (exit {code}, processes stopped: {complete}){reason}; retry with shoal work setup")
-                        }
-                    });
-                    let state = if error.is_none() {
-                        WorkspaceState::Ready
-                    } else {
-                        WorkspaceState::Failed
-                    };
-                    tx.execute(
-                        "UPDATE workspaces SET state=?2,error=?3,setup_finished=?4 WHERE id=(SELECT workspace_id FROM executions WHERE id=?1) AND state=?5",
-                        params![
-                            record_id,
-                            state,
-                            error,
-                            error.is_none(),
-                            WorkspaceState::Preparing
-                        ],
-                    )?;
-                }
-                if complete {
-                    tx.execute("DELETE FROM executions WHERE id=?1", [record_id])?;
-                } else {
-                    tx.execute(
-                        "UPDATE executions SET state=?2 WHERE id=?1",
-                        params![record_id, ExecutionState::Unknown],
-                    )?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
+        let demo = self
+            .record_execution_completion(&id, kind, exit_code, issue)
             .await?;
         if connections.disconnect(&id).await {
             self.agent_queue.wake();
@@ -686,6 +649,7 @@ impl Manager {
         if !complete {
             self.signals.execution_became_unknown();
         }
+        self.close_demo_session(demo).await;
         Ok(complete)
     }
 
@@ -1123,13 +1087,9 @@ impl Manager {
     /// Delete an execution record whose processes the caller proved stopped.
     pub(crate) async fn forget_execution(&self, id: &str) -> Result<()> {
         self.keep_stopped_turn(id).await;
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute("DELETE FROM executions WHERE id=?1", [id])?;
-                Ok(())
-            })
-            .await
+        let demo = self.delete_execution_record(id).await?;
+        self.close_demo_session(demo).await;
+        Ok(())
     }
 }
 
