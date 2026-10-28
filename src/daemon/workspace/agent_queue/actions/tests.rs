@@ -133,6 +133,19 @@ async fn cancelling_a_restore_leaves_its_agent_stopped() {
 }
 
 #[tokio::test]
+async fn a_restore_whose_wrapper_must_reattach_is_not_cancelled() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "stopped").await;
+    let agents = stopped_agents(&manager, &[&workspace]).await;
+    manager.detach_execution(&agents[0].0).await;
+    let error = manager.queue_remove("stopped", None).await.unwrap_err();
+    assert!(format!("{error:#}").contains("reattach"), "{error:#}");
+    assert_eq!(waiting(&manager).await, ["stopped"]);
+}
+
+#[tokio::test]
 async fn cancelling_succeeds_when_the_stopped_wrapper_removes_its_entry_first() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

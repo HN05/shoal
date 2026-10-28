@@ -137,7 +137,7 @@ impl Manager {
             .await?;
         let wrapper = self.waiting_wrapper(&entry).await?;
         if let Some(execution) = &wrapper {
-            self.stop_waiting_wrapper(execution).await?;
+            self.stop_waiting_wrapper(&entry, execution).await?;
         }
         // A stopped wrapper removes its entry as it finishes, which may come first.
         let deleted = self.delete_waiting_entry(entry.id.clone()).await?;
@@ -149,14 +149,22 @@ impl Manager {
         Ok(entry)
     }
 
-    /// Stop the wrapper of `execution` waiting for its restore, as `shoal
-    /// stop` stops it, leaving its recovery record.
-    async fn stop_waiting_wrapper(&self, execution: &str) -> Result<()> {
-        self.executions
+    /// Stop the wrapper of `execution` waiting for the restore `entry`, as
+    /// `shoal stop` stops it, leaving its recovery record. A disconnected
+    /// wrapper would queue the restore again once it reattaches, so it is
+    /// refused.
+    async fn stop_waiting_wrapper(&self, entry: &QueueEntry, execution: &str) -> Result<()> {
+        let stopped = self
+            .executions
             .connections()
             .await
             .stop(execution, &StopRequest::queue_cancel(), false)
             .await?;
+        ensure!(
+            stopped,
+            "the agent of {0} waits to reattach to the daemon; cancel its restore once it has, or stop it with shoal stop {0}",
+            entry.name
+        );
         Ok(())
     }
 
