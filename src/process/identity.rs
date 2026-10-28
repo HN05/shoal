@@ -589,18 +589,8 @@ fn started_by_launchd(process: &UniqueIdentifiers, launchd: Option<u32>) -> bool
 fn launchd_version() -> Option<u32> {
     static LAUNCHD_VERSION: std::sync::OnceLock<Option<u32>> = std::sync::OnceLock::new();
     *LAUNCHD_VERSION.get_or_init(|| {
-        let mut launchd = std::mem::MaybeUninit::<UniqueIdentifiers>::zeroed();
-        let size = std::mem::size_of::<UniqueIdentifiers>();
-        let result = unsafe {
-            libc::proc_pidinfo(
-                1,
-                PROC_PIDUNIQIDENTIFIERINFO,
-                0,
-                launchd.as_mut_ptr().cast(),
-                size as i32,
-            )
-        };
-        (result as usize == size).then(|| unsafe { launchd.assume_init() }.id_version as u32)
+        let launchd = pid_info::<UniqueIdentifiers>(1, PROC_PIDUNIQIDENTIFIERINFO, 0);
+        Some(launchd.ok()??.id_version as u32)
     })
 }
 
@@ -654,14 +644,21 @@ const PROC_PIDT_BSDINFOWITHUNIQID: i32 = 18;
 
 #[cfg(target_os = "macos")]
 fn bsd_info(pid: u32, include_zombies: bool) -> Result<Option<BsdInfo>> {
-    let mut info = std::mem::MaybeUninit::<BsdInfo>::zeroed();
-    let size = std::mem::size_of::<BsdInfo>();
+    // XNU only searches its zombie list when this argument is nonzero.
+    pid_info(pid, PROC_PIDT_BSDINFOWITHUNIQID, u64::from(include_zombies))
+}
+
+/// `pid`'s `proc_pidinfo` record of `flavor`, a plain C struct, or `None`
+/// when it has exited or is another user's.
+#[cfg(target_os = "macos")]
+fn pid_info<T>(pid: u32, flavor: i32, argument: u64) -> Result<Option<T>> {
+    let mut info = std::mem::MaybeUninit::<T>::zeroed();
+    let size = std::mem::size_of::<T>();
     let result = unsafe {
         libc::proc_pidinfo(
             pid as i32,
-            PROC_PIDT_BSDINFOWITHUNIQID,
-            // XNU only searches its zombie list when this argument is nonzero.
-            u64::from(include_zombies),
+            flavor,
+            argument,
             info.as_mut_ptr().cast(),
             size as i32,
         )
