@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Result, bail};
 use tokio::{
     net::{UnixListener, UnixStream},
     sync::{OwnedSemaphorePermit, Semaphore},
@@ -18,9 +18,13 @@ use tokio::{
 
 use super::log;
 use crate::protocol::Method;
+use running::Running;
 
-/// Most connections reading their request or running a request/response
-/// operation at once.
+pub(super) mod running;
+
+/// Most request/response operations running at once. A request past it is
+/// refused at once with the requests that hold the capacity, so a few that
+/// hang cannot keep the daemon from accepting the rest.
 const MAX_REQUESTS: usize = 128;
 /// Descriptors kept for the daemon's own files and the commands it runs.
 const RESERVED_DESCRIPTORS: usize = 512;
@@ -29,19 +33,26 @@ const MIN_LONG_LIVED: usize = 64;
 
 /// Separate limits for requests and for connections that stay open, such as
 /// executions and waits, so those cannot take the capacity of the requests
-/// that end them.
+/// that end them. Connections are accepted whatever either holds.
 pub(super) struct Capacity {
-    requests: Arc<Semaphore>,
-    long_lived: Arc<Semaphore>,
-    long_lived_limit: usize,
-    /// Set from the first refusal until a long-lived connection is admitted
-    /// again, so retrying clients log the limit once.
-    long_lived_full: AtomicBool,
+    requests: Limit,
+    running: Arc<Running>,
+    long_lived: Limit,
+}
+
+/// One kind of capacity and whether it was full when last asked.
+struct Limit {
+    permits: Arc<Semaphore>,
+    limit: usize,
+    /// Set from the first refusal until a connection is admitted again, so
+    /// retrying clients log the limit once.
+    full: AtomicBool,
 }
 
 /// Capacity a connection holds until it closes.
 pub(super) struct Slot {
     _permit: OwnedSemaphorePermit,
+    _running: Option<running::Entry>,
 }
 
 impl Capacity {
@@ -57,53 +68,64 @@ impl Capacity {
 
     pub(super) fn new(requests: usize, long_lived: usize) -> Self {
         Self {
-            requests: Arc::new(Semaphore::new(requests)),
-            long_lived: Arc::new(Semaphore::new(long_lived)),
-            long_lived_limit: long_lived,
-            long_lived_full: AtomicBool::new(false),
+            requests: Limit::new(requests),
+            running: Arc::default(),
+            long_lived: Limit::new(long_lived),
         }
     }
 
-    /// The next client connection, once a request slot is free.
-    pub(super) async fn accept(&self, listener: &UnixListener) -> io::Result<(UnixStream, Slot)> {
-        let permit = self
-            .requests
-            .clone()
-            .acquire_owned()
-            .await
-            .expect("request capacity is never closed");
-        Ok((accept(listener).await?, Slot { _permit: permit }))
-    }
-
-    /// The slot a connection keeps once its request is known. One that stays
-    /// open moves into long-lived capacity, freeing its request slot.
-    pub(super) fn admit(&self, request: Slot, method: &Method) -> Result<Slot> {
-        if !method.holds_connection() {
-            return Ok(request);
-        }
-        let Ok(permit) = self.long_lived.clone().try_acquire_owned() else {
-            if !self.long_lived_full.swap(true, Ordering::Relaxed) {
-                log!(
-                    "refusing long-lived connections at the limit of {}",
-                    self.long_lived_limit
+    /// The slot a connection keeps once its request is known: long-lived
+    /// capacity for one that stays open, otherwise a request slot.
+    pub(super) fn admit(&self, method: &Method) -> Result<Slot> {
+        if method.holds_connection() {
+            let Some(permit) = self.long_lived.try_acquire() else {
+                self.long_lived
+                    .log_full("refusing long-lived connections", "");
+                bail!(
+                    "the daemon already serves its limit of {} long-lived connections",
+                    self.long_lived.limit
                 );
-            }
-            return Err(anyhow!(
-                "the daemon already serves its limit of {} long-lived connections",
-                self.long_lived_limit
-            ));
+            };
+            return Ok(Slot {
+                _permit: permit,
+                _running: None,
+            });
+        }
+        let Some(permit) = self.requests.try_acquire() else {
+            let held = self.running.summary();
+            self.requests
+                .log_full("refusing requests", &format!("; running: {held}"));
+            bail!(
+                "the daemon is busy: all {} request slots are held by {held}; retry once they finish, or run `shoal daemon restart` if they hang",
+                self.requests.limit
+            );
         };
-        self.long_lived_full.store(false, Ordering::Relaxed);
-        drop(request);
-        Ok(Slot { _permit: permit })
+        Ok(Slot {
+            _permit: permit,
+            _running: Some(self.running.start(method.name())),
+        })
+    }
+}
+
+impl Limit {
+    fn new(limit: usize) -> Self {
+        Self {
+            permits: Arc::new(Semaphore::new(limit)),
+            limit,
+            full: AtomicBool::new(false),
+        }
     }
 
-    /// A request slot for a connection served without a listener.
-    #[cfg(test)]
-    pub(super) fn request_slot(&self) -> Slot {
-        let permit = self.requests.clone().try_acquire_owned();
-        Slot {
-            _permit: permit.expect("a free request slot"),
+    fn try_acquire(&self) -> Option<OwnedSemaphorePermit> {
+        let permit = self.permits.clone().try_acquire_owned().ok()?;
+        self.full.store(false, Ordering::Relaxed);
+        Some(permit)
+    }
+
+    /// Log the first refusal since the last admission.
+    fn log_full(&self, refusing: &str, details: &str) {
+        if !self.full.swap(true, Ordering::Relaxed) {
+            log!("{refusing} at the limit of {}{details}", self.limit);
         }
     }
 }
@@ -153,7 +175,7 @@ const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(500);
 /// The next client connection. Running out of descriptors or a client that
 /// hung up before acceptance passes, so those failures wait and retry instead
 /// of stopping the daemon.
-async fn accept(listener: &UnixListener) -> io::Result<UnixStream> {
+pub(super) async fn accept(listener: &UnixListener) -> io::Result<UnixStream> {
     loop {
         match listener.accept().await {
             Ok((stream, _)) => return Ok(stream),

@@ -30,9 +30,7 @@ async fn reattachment_is_served_at_every_protocol_version_without_scope() {
     });
     let (client, stream) = UnixStream::pair().unwrap();
     let operation = manager.gates.owned_operation().await;
-    let server = server(manager);
-    let capacity = server.capacity.clone();
-    let served = tokio::spawn(serve(stream, server, capacity.request_slot(), operation));
+    let served = tokio::spawn(serve(stream, server(manager), operation));
     let mut client = BufReader::new(client);
     client
         .get_mut()

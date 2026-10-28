@@ -176,15 +176,18 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                 }
             },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
-            accepted = server.capacity.accept(&listener) => {
-                let (stream, slot) = match accepted {
-                    Ok(accepted) => accepted,
-                    Err(error) => break Err(error.into()),
+            accepted = connections::accept(&listener) => {
+                let stream = match accepted {
+                    Ok(stream) => stream,
+                    Err(error) => {
+                        log!("stopped accepting connections: {error}");
+                        break Err(error.into());
+                    }
                 };
                 let server = server.clone();
                 let operation = server.manager.gates.owned_operation().await;
                 clients.spawn(async move {
-                    if let Err(error) = serve(stream, server, slot, operation).await {
+                    if let Err(error) = serve(stream, server, operation).await {
                         log!("client connection: {error:#}");
                     }
                 });
@@ -261,16 +264,16 @@ async fn poll_item_activity(manager: Arc<Manager>) {
 async fn serve(
     mut stream: UnixStream,
     server: Server,
-    slot: connections::Slot,
     operation_guard: OperationGuard,
 ) -> Result<()> {
     let Some(request) = read_request(&mut stream).await? else {
         return Ok(());
     };
     let _span = request_span(&request);
-    let Some(_slot) = admit(&mut stream, &server, slot, &request).await? else {
+    let Some(_slot) = admit(&mut stream, &server, &request).await? else {
         return Ok(());
     };
+    let name = request.method.name();
     let mut operation = match request.method {
         // Wrappers from any release reattach, and their launch scope does not
         // survive the restart; the record and token they present prove ownership.
@@ -298,7 +301,8 @@ async fn serve(
     let Some(caller) = accepted.await? else {
         return Ok(());
     };
-    let answer = requests::operation(&server, operation, caller.as_ref()).await;
+    let answer = requests::operation(&server, operation, caller.as_ref());
+    let answer = connections::running::logged_when_slow(&name, answer).await;
     answer
         .send(stream, request.id, &server.manager, operation_guard)
         .await
@@ -329,10 +333,9 @@ fn request_span(request: &Request) -> Option<crate::profile::Span> {
 async fn admit(
     stream: &mut UnixStream,
     server: &Server,
-    slot: connections::Slot,
     request: &Request,
 ) -> Result<Option<connections::Slot>> {
-    match server.capacity.admit(slot, &request.method) {
+    match server.capacity.admit(&request.method) {
         Ok(slot) => Ok(Some(slot)),
         // Their clients take a reply as final but wait for a free slot this way.
         Err(_) if request.method.retries_when_closed() => Ok(None),

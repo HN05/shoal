@@ -55,13 +55,16 @@ one are sent in as many frames as they need, then `ok`; the daemon answers any
 other reply that would not fit with an error saying so.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
-The daemon raises its open file limit at startup. Connections reading a request
-or running a request/response operation share a fixed limit; executions, waits and
-streams take a separate share of the remaining descriptors, so neither can block the
-other. When that share is full, a request whose client sends it again after the
-daemon closes its connection, as across a restart, is closed unanswered; others are
-refused. Accept failures that clear on their own,
-such as running out of descriptors, are retried.
+The daemon raises its open file limit at startup and accepts every connection,
+whatever its requests hold. Request/response operations share a fixed limit;
+executions, waits and streams take a separate share of the remaining descriptors,
+so neither can block the other. A request past the limit is refused at once with
+the requests that hold it, and a request that runs past a minute is logged, again
+when it ends. When the long-lived share is full, a request whose client sends it
+again after the daemon closes its connection, as across a restart, is closed
+unanswered; others are refused. Accept failures that clear on their own,
+such as running out of descriptors, are retried; any other stops the daemon with
+a log line.
 Resource protocol methods use domain-then-verb names matching the CLI operations.
 The daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
 SQLite runs on one dedicated blocking thread with one reusable connection and a

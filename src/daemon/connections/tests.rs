@@ -63,8 +63,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .unwrap();
     let socket = &manager.paths.socket.clone();
     let listener = UnixListener::bind(socket).unwrap();
-    // With one request slot, the next connection is accepted only once
-    // the wait before it has moved into long-lived capacity.
+    // One long-lived slot, which the first wait takes.
     let server = Server {
         manager: manager.clone(),
         started: Instant::now(),
@@ -74,10 +73,10 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
     };
     let serving = tokio::spawn(async move {
         loop {
-            let (stream, slot) = server.capacity.accept(&listener).await.unwrap();
+            let stream = accept(&listener).await.unwrap();
             let server = server.clone();
             let operation = manager.gates.owned_operation().await;
-            tokio::spawn(serve(stream, server, slot, operation));
+            tokio::spawn(serve(stream, server, operation));
         }
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
@@ -153,18 +152,60 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
 #[test]
 fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
     let capacity = Capacity::new(1, 1);
-    let restart = capacity
-        .admit(
-            capacity.request_slot(),
-            &crate::protocol::ExecutionMethod::RestartAgent {
-                execution: "agent".into(),
-            }
-            .into(),
-        )
-        .unwrap();
+    let restart = crate::protocol::ExecutionMethod::RestartAgent {
+        execution: "agent".into(),
+    };
+    let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.
-    let _wrapper = capacity.request_slot();
-    drop(restart);
+    capacity.admit(&DaemonMethod::Status.into()).unwrap();
+}
+
+#[tokio::test]
+async fn a_request_past_the_limit_is_refused_with_what_holds_the_capacity() {
+    let capacity = Capacity::new(1, 1);
+    let status = Method::from(DaemonMethod::Status);
+    let held = capacity.admit(&status).unwrap();
+    let Err(error) = capacity.admit(&status) else {
+        panic!("a request past the limit was admitted");
+    };
+    let message = format!("{error:#}");
+    assert!(message.contains("busy"), "{message}");
+    assert!(message.contains("all 1 request slots"), "{message}");
+    assert!(message.contains("1 status (oldest"), "{message}");
+    drop(held);
+    capacity.admit(&status).unwrap();
+}
+
+#[tokio::test]
+async fn connections_are_accepted_and_answered_while_requests_hold_every_slot() {
+    let (_root, manager) = manager().await;
+    let socket = &manager.paths.socket.clone();
+    let listener = UnixListener::bind(socket).unwrap();
+    let server = Server {
+        manager: manager.clone(),
+        started: Instant::now(),
+        managed: false,
+        shutdown: watch::channel(false).0,
+        capacity: Arc::new(Capacity::new(1, 1)),
+    };
+    let _held = server.capacity.admit(&DaemonMethod::Status.into()).unwrap();
+    let serving = tokio::spawn(async move {
+        loop {
+            let stream = accept(&listener).await.unwrap();
+            let operation = manager.gates.owned_operation().await;
+            tokio::spawn(serve(stream, server.clone(), operation));
+        }
+    });
+    // More clients than the slots, each answered rather than left queued.
+    for _ in 0..3 {
+        let Body::Error { message, .. } =
+            reply(&mut send(socket, DaemonMethod::Status).await).await
+        else {
+            panic!("expected the daemon to refuse the request as busy");
+        };
+        assert!(message.contains("busy"), "{message}");
+    }
+    serving.abort();
 }
 
 #[test]
