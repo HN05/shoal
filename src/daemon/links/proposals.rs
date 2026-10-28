@@ -85,7 +85,7 @@ impl Manager {
         link: bool,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let files = self.proposal_files.lock().await;
+        let files = self.gates.lock_proposal_files().await;
         self.keep_attachments(&workspace.id, &mut issue.body, &mut issue.attachments)
             .await?;
         let commit = crate::git::revision(&workspace.path, "HEAD", crate::git::run).await?;
@@ -118,7 +118,7 @@ impl Manager {
         commit: String,
         proposer: Proposer,
     ) -> Result<Proposed> {
-        let files = self.proposal_files.lock().await;
+        let files = self.gates.lock_proposal_files().await;
         self.keep_attachments(&workspace.id, &mut pull.body, &mut pull.attachments)
             .await?;
         let specification = Specification::Pull(PullSpecification {
@@ -160,14 +160,14 @@ impl Manager {
     /// [`Self::prune_proposal_files`] for the cleanup sweep, which also
     /// catches proposals removed with their workspace or repository.
     pub(crate) async fn sweep_proposal_files(&self) -> Result<()> {
-        let _files = self.proposal_files.lock().await;
+        let _files = self.gates.lock_proposal_files().await;
         self.remove_unattached_files().await
     }
 
     /// Delete copied files no pending proposal attaches any more. Failure
     /// only logs.
     pub(crate) async fn prune_proposal_files(&self) {
-        let _files = self.proposal_files.lock().await;
+        let _files = self.gates.lock_proposal_files().await;
         if let Err(error) = self.remove_unattached_files().await {
             crate::daemon::log::log!("proposal files not pruned: {error:#}");
         }
@@ -229,8 +229,8 @@ impl Manager {
         let duplicated = self.duplicated_proposal(&decision).await?;
         let changed = duplicated.iter().map(|original| &original.workspace_id);
         let _gate = self
-            .pr_gates
-            .lock(changed.chain([&request.workspace_id]))
+            .gates
+            .lock_prs(changed.chain([&request.workspace_id]))
             .await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.find_workspace(&request.workspace_id).await?;

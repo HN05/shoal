@@ -35,7 +35,10 @@ impl Manager {
         // The PR sweep restacks under the gates of a base and the workspaces
         // stacked on it, so a change cannot land between its retarget and its
         // recorded move, nor stack a workspace on a base it is removing.
-        let _gate = self.pr_gates.lock(base.iter().chain([&workspace.id])).await;
+        let _gate = self
+            .gates
+            .lock_prs(base.iter().chain([&workspace.id]))
+            .await;
         let workspace = self.workspace(&workspace.id).await?;
         let (id, repository_id) = (workspace.id.clone(), workspace.repository_id.clone());
         self.store

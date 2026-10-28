@@ -456,7 +456,7 @@ impl Manager {
     /// Tell the user about `question` unless it was withdrawn or answered
     /// since it was asked.
     async fn announce_question(&self, question: &Question) {
-        let _gate = self.announcement_gate.lock().await;
+        let _gate = self.gates.lock_announcements().await;
         let id = question.id;
         let stored = self.store.run(move |db| by_id(db, id)).await;
         match stored {
@@ -547,8 +547,8 @@ impl Manager {
                 Ok(question)
             })
             .await?;
-        self.agent_messages_changed.send_modify(|count| *count += 1);
-        self.questions_changed.send_modify(|count| *count += 1);
+        self.signals.agent_message_queued();
+        self.signals.question_changed();
         Ok(question)
     }
 
@@ -562,7 +562,7 @@ impl Manager {
         shown: Option<Question>,
     ) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
-        let _gate = self.announcement_gate.lock().await;
+        let _gate = self.gates.lock_announcements().await;
         let (question, retracted) = self
             .store
             .run(move |db| {
@@ -578,7 +578,7 @@ impl Manager {
                 Ok((question, retracted))
             })
             .await?;
-        self.questions_changed.send_modify(|count| *count += 1);
+        self.signals.question_changed();
         if !retracted {
             self.notify(
                 Some(&question.workspace),
@@ -597,7 +597,7 @@ impl Manager {
     pub async fn await_answer(&self, selector: &str, id: i64, ask: &Ask) -> Result<Question> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so an answer in between still wakes.
-        let mut changed = self.questions_changed.subscribe();
+        let mut changed = self.signals.watch_questions();
         loop {
             let question = self
                 .store

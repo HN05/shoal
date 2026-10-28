@@ -51,7 +51,7 @@ impl Manager {
             let Some(root) = &repo.workspaces_dir else {
                 continue;
             };
-            let Some(_guard) = self.try_lock_repository_git(&repo.id).await else {
+            let Some(_guard) = self.gates.try_lock_git(&repo.id) else {
                 continue;
             };
             let owned = self.owned_worktrees(&repo, root).await?;

@@ -60,7 +60,7 @@ impl Manager {
     }
 
     async fn recheck_startup_failure(&self, workspace: &Workspace) -> Result<()> {
-        let Some(_git) = self.try_lock_repository_git(&workspace.repository_id).await else {
+        let Some(_git) = self.gates.try_lock_git(&workspace.repository_id) else {
             return Ok(());
         };
         // Check without reserving first, so a workspace that still fails

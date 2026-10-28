@@ -40,7 +40,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     fs::File::open(&cache).unwrap().set_modified(old).unwrap();
 
     // Creating a workspace or landing holds the gate.
-    let gate = manager.lock_repository_git(&repo.id).await;
+    let gate = manager.gates.lock_git(&repo.id).await;
     manager
         .remove_workspace("removed", UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await

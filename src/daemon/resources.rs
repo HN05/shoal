@@ -627,7 +627,7 @@ impl Manager {
             .enter(target, &workspace.id, &request.name, request.queue);
         // A hook in this workspace holds the guard briefly; a queued request
         // waits it out in place instead of failing.
-        let _resources = match self.resource_guard(&workspace.id, mode).await {
+        let _resources = match self.gates.resource_guard(&workspace.id, mode) {
             Ok(guard) => guard,
             Err(error) if request.queue => {
                 let busy = Ok(Allocation::Busy(error.to_string()));
@@ -692,7 +692,7 @@ impl Manager {
         } else {
             GuardMode::Shared
         };
-        let _resources = self.resource_guard(&workspace.id, mode).await?;
+        let _resources = self.gates.resource_guard(&workspace.id, mode)?;
         let (id, lookup_pool, lookup_name) = (workspace.id.clone(), pool.clone(), name.clone());
         let owned = self
             .store

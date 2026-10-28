@@ -10,7 +10,7 @@ use crate::{
         forge_hosts::ForgeHosts,
         notifications::NotificationKind,
         store,
-        workspace::{Manager, pr_gate::PrGuard},
+        workspace::{Manager, PrGuard},
     },
     forge::{ForgeRepo, account::Account, items::link::ItemKind, review::status::PrStatus},
     git,
@@ -245,7 +245,7 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
         Ok(())
     }
 
@@ -331,7 +331,7 @@ impl Manager {
     async fn lock_for_pr_sweep(&self, listed: &Workspace) -> Result<Option<(Workspace, PrGuard)>> {
         let locked = |id: &str| listed.stacked_workspaces.iter().any(|held| held.id == id);
         let stacked = listed.stacked_workspaces.iter().map(|stacked| &stacked.id);
-        let guard = self.pr_gates.lock(stacked.chain([&listed.id])).await;
+        let guard = self.gates.lock_prs(stacked.chain([&listed.id])).await;
         let Some(workspace) = self.find_workspace(&listed.id).await? else {
             return Ok(None);
         };

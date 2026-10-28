@@ -1,6 +1,6 @@
 use super::*;
 use crate::test_support::{manager, repository};
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[tokio::test]
 async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
@@ -118,7 +118,7 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
 
     // Agents recover only once every filesystem has the cleanup threshold.
     let cleanup = manager.config().overload.disk.cleanup_free_bytes();
-    let recovered = |manager: &Manager| manager.disk_space_recovered();
+    let recovered = |manager: &Manager| manager.config_state.disk_space_recovered();
     monitor
         .check(&manager, start, |_: &Path| Ok(cleanup - 1))
         .await
@@ -131,10 +131,10 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     assert!(recovered(&manager));
     // A reload, even back to the same settings, waits for a new reading,
     // including one published after the reload from an earlier snapshot.
-    let sampled = manager.config_generation.load(Ordering::SeqCst);
+    let sampled = manager.config_state.generation();
     manager.reload_config().await.unwrap();
     assert!(!recovered(&manager));
-    manager.publish_disk_reading(Some(sampled));
+    manager.config_state.publish_disk_reading(Some(sampled));
     assert!(!recovered(&manager));
     monitor
         .check(&manager, start, |_: &Path| Ok(cleanup))
@@ -165,7 +165,9 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     assert!(!complete);
 
     // Disabled protection reads nothing and forgets its last reading.
-    manager.publish_disk_reading(Some(manager.config_generation.load(Ordering::SeqCst)));
+    manager
+        .config_state
+        .publish_disk_reading(Some(manager.config_state.generation()));
     crate::test_support::configure(&manager, "[overload.disk]\nenabled = false\n").await;
     Monitor::default()
         .check(&manager, start, |_: &Path| -> io::Result<u64> {

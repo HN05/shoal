@@ -273,7 +273,7 @@ impl Manager {
         bundle: Option<&Path>,
         removed: RemovedWorkspace,
     ) -> Result<()> {
-        let _refs = self.checkpoint_gate.lock().await;
+        let _refs = self.gates.lock_checkpoints().await;
         let commit = &removed.checkpoint.commit;
         let reference = git::checkpoint::reference(commit);
         match bundle {

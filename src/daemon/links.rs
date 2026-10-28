@@ -5,12 +5,15 @@ mod checks;
 mod ci;
 pub mod issue;
 mod listing;
+mod memories;
 pub mod pr;
 pub mod proposals;
 mod raw;
 mod runs;
 mod stack;
 pub mod wait;
+
+pub(crate) use memories::ForgeMemories;
 
 use anyhow::{Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};

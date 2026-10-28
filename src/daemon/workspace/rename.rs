@@ -17,16 +17,14 @@ impl Manager {
         let (initial, _completion) = self.lock_pr_gate(selector).await?;
         let (repo, _git) = self.lock_repository(&initial.repository_id).await?;
         let workspace = self.workspace(&initial.id).await?;
-        let _resources = self
-            .resource_guard(
-                &workspace.id,
-                if caller_execution.is_some() {
-                    super::GuardMode::Shared
-                } else {
-                    super::GuardMode::Exclusive
-                },
-            )
-            .await?;
+        let _resources = self.gates.resource_guard(
+            &workspace.id,
+            if caller_execution.is_some() {
+                super::GuardMode::Shared
+            } else {
+                super::GuardMode::Exclusive
+            },
+        )?;
         let workspace = self
             .finish_pending_rename(workspace, caller_execution)
             .await?;

@@ -45,7 +45,7 @@ async fn scoped_landing_answers_with_its_approval_request() {
                 execution: None,
             }),
         },
-        manager.background_operations.clone().read_owned().await,
+        manager.gates.owned_operation().await,
     ));
     let response: Response = read(&mut BufReader::new(client)).await;
     bounded(executing).await.unwrap().unwrap();
@@ -110,7 +110,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             awaiting_restore: None,
             between_runs: false,
         },
-        manager.background_operations.clone().read_owned().await,
+        manager.gates.owned_operation().await,
     ));
     let mut capable = BufReader::new(client);
     let response: Response = read(&mut capable).await;
@@ -132,11 +132,11 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
             demo: None,
             caller: None,
         },
-        manager.background_operations.clone().read_owned().await,
+        manager.gates.owned_operation().await,
     ));
     let mut legacy = BufReader::new(client);
     let response: Response = read(&mut legacy).await;
-    assert!(manager.has_unattachable_connections());
+    assert!(manager.executions.has_unattachable());
     let Body::Execution(plan) = response.body else {
         panic!("execution was not registered");
     };
@@ -156,7 +156,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     });
     assert!(matches!(read(&mut capable).await, Control::Detach));
     bounded(reattached).await.unwrap().unwrap();
-    assert!(!manager.execution_connected(&detaching).await);
+    assert!(!manager.executions.is_connected(&detaching).await);
     assert!(matches!(
         read(&mut legacy).await,
         Control::Pause { reason: Some(reason), removed: false } if reason == "the Shoal daemon shut down"
@@ -170,7 +170,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     ));
     bounded(executing).await.unwrap().unwrap();
     bounded(shutdown).await.unwrap();
-    assert!(!manager.has_unattachable_connections());
+    assert!(!manager.executions.has_unattachable());
     // The detached execution awaits reattachment; the stopped one is gone.
     let executions = manager
         .inspect_workspace(&workspace.id)
@@ -213,13 +213,13 @@ async fn running_executions_leave_daemon_operations_idle() {
             queue_entry: None,
             demo: None,
         },
-        manager.background_operations.clone().read_owned().await,
+        manager.gates.owned_operation().await,
     ));
     let mut wrapper_side = BufReader::new(client);
     let response: Response = read(&mut wrapper_side).await;
     assert!(matches!(response.body, Body::Execution(_)));
     // Until its child is recorded, the wrapper cannot reattach.
-    assert!(manager.background_operations.try_write().is_err());
+    assert!(manager.gates.try_quiesce().is_none());
     protocol::write(
         wrapper_side.get_mut(),
         &ExecutionEvent::Started {
@@ -231,7 +231,7 @@ async fn running_executions_leave_daemon_operations_idle() {
     .unwrap();
     assert!(matches!(read(&mut wrapper_side).await, Control::Started));
     // An update can take every operation while the command still runs.
-    let update = bounded(manager.background_operations.write()).await;
+    let update = bounded(manager.gates.quiesce()).await;
     // A command exiting meanwhile reports to the replacement daemon.
     protocol::write(
         wrapper_side.get_mut(),
@@ -247,5 +247,5 @@ async fn running_executions_leave_daemon_operations_idle() {
         .unwrap()
         .executions;
     assert_eq!(executions.len(), 1);
-    assert!(!manager.execution_connected(&executions[0].id).await);
+    assert!(!manager.executions.is_connected(&executions[0].id).await);
 }

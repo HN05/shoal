@@ -357,7 +357,7 @@ impl Manager {
             Some(workspace) => Some(self.launch_target(workspace, &repository.id).await?),
             None => None,
         };
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         // Whether any limit applies does not depend on the slots in use.
         let limits = self.agent_limits(vec![repository.id.clone()], &[]).await?;
         if target.is_none() && request.after.is_empty() && !limits.apply_to(&repository.id) {
@@ -409,7 +409,7 @@ impl Manager {
     /// queue the restores stopped agents request, then start the waiting
     /// entries that fit.
     pub(crate) async fn dispatch_queue(&self) -> Result<()> {
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries().await?;
         self.expire_orphaned_restores().await?;
         self.forget_resolved_restores().await?;
@@ -440,7 +440,7 @@ impl Manager {
         let slots = self.occupied_slots(&dormant).await?;
         let limits = self.agent_limits(repositories, &slots).await?;
         let occupied: Vec<String> = slots.into_iter().map(|slot| slot.repository).collect();
-        let published = self.published_recovery();
+        let published = self.overload_recovery.published();
         let admitted = admit(&occupied, &waiting, &limits, published.is_some());
         let (woken, recovered): (Vec<_>, Vec<_>) = admitted
             .iter()
@@ -449,7 +449,8 @@ impl Manager {
         if !recovered.is_empty() {
             // A stop, reload or unsafe reading since the check withdrew the
             // readings; the pass it wakes decides again.
-            let Some(epoch) = published.and_then(|epoch| self.consume_recovery(epoch)) else {
+            let Some(epoch) = published.and_then(|epoch| self.overload_recovery.consume(epoch))
+            else {
                 return Ok(false);
             };
             self.grant_restores(&recovered, Grant::Recovery(epoch));
@@ -464,13 +465,7 @@ impl Manager {
     /// launch.
     async fn waiting_work(&self) -> Result<WaitingWork> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
-        let waiters: HashSet<String> = self
-            .restore_waiters
-            .lock()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect();
+        let waiters = self.agent_queue.restore_waiters();
         let mut restores = HashMap::new();
         let mut stopped = HashSet::new();
         let mut waiting = Vec::new();
@@ -514,11 +509,8 @@ impl Manager {
 
     /// Grant the admitted restores of `restores`, by execution.
     fn grant_restores(&self, restores: &[&(String, Wake)], grant: Grant) {
-        let mut waiters = self.restore_waiters.lock().unwrap();
         for (execution, _) in restores {
-            if let Some(granted) = waiters.get_mut(execution) {
-                *granted = Some(grant);
-            }
+            self.agent_queue.grant_restore(execution, grant);
         }
     }
 
@@ -647,11 +639,8 @@ impl Manager {
     async fn dynamic_starts(&self, overload: &Overload, slots: &[Slot]) -> Result<u32> {
         let paths = self.admission_paths().await?;
         let paths: Vec<&Path> = paths.iter().map(PathBuf::as_path).collect();
-        let cpu = self
-            .cpu_usage
-            .lock()
-            .unwrap()
-            .admission(tokio::time::Instant::now());
+        let now = tokio::time::Instant::now();
+        let cpu = self.usage.with_cpu(|cpu| cpu.admission(now));
         let limit = capacity::limit(
             capacity::sample(&paths, overload, cpu),
             Agents::count(slots.iter().map(|slot| slot.activity)),
@@ -752,13 +741,7 @@ impl Manager {
     /// been gone for the grace period. A launch that never opened a workspace,
     /// like a restore whose agent never registered, failed to start, so say so.
     async fn expire_starting_entries(&self) -> Result<()> {
-        let held: HashSet<String> = self
-            .agent_queue_holds
-            .lock()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect();
+        let held = self.agent_queue.held();
         let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
         let expired = self
             .store
@@ -808,7 +791,7 @@ impl Manager {
     /// record stays for `shoal resume`. A restore the daemon starts has no
     /// wrapper.
     async fn expire_orphaned_restores(&self) -> Result<()> {
-        let connected: HashSet<String> = self.connections.lock().await.keys().cloned().collect();
+        let connected = self.executions.connection_ids().await;
         let cutoff = crate::time::unix_seconds() as i64 - START_GRACE.as_secs() as i64;
         self.store
             .run(move |db| {
@@ -907,7 +890,7 @@ impl Manager {
     /// removed stays stopped.
     pub async fn queue_remove(&self, selector: &str) -> Result<QueueEntry> {
         // Dispatch cannot start the entry between finding and deleting it.
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         let entries = self.queue_entries().await?;
         let mut matches = entries
             .iter()
@@ -952,7 +935,7 @@ impl Manager {
         &self,
         entry: &str,
     ) -> Result<tokio::sync::MutexGuard<'_, ()>> {
-        let gate = self.agent_queue_gate.lock().await;
+        let gate = self.agent_queue.lock_admission().await;
         ensure!(
             self.queue_entry_starting(entry).await?,
             "this agent's start from the agent queue was cancelled"
@@ -966,26 +949,13 @@ impl Manager {
             self.queue_entry_starting(id).await?,
             "queue entry is no longer starting"
         );
-        *self
-            .agent_queue_holds
-            .lock()
-            .unwrap()
-            .entry(id.to_owned())
-            .or_default() += 1;
+        self.agent_queue.hold(id);
         Ok(())
     }
 
     /// Drop a hold; the entry's grace period starts once none remain.
     pub(crate) async fn release_queue_hold(&self, id: &str) -> Result<()> {
-        {
-            let mut holds = self.agent_queue_holds.lock().unwrap();
-            if let Some(count) = holds.get_mut(id) {
-                *count -= 1;
-                if *count == 0 {
-                    holds.remove(id);
-                }
-            }
-        }
+        self.agent_queue.release(id);
         let (id, now) = (id.to_owned(), crate::time::unix_seconds() as i64);
         self.store
             .run(move |db| {
@@ -1096,7 +1066,7 @@ impl Manager {
             format!("{name} did not start from the agent queue: {error}"),
         )
         .await;
-        self.agent_queue_wake.notify_one();
+        self.agent_queue.wake();
         Ok(())
     }
 
@@ -1143,8 +1113,8 @@ impl Manager {
     /// agent waits with every process stopped, and return what admitted it.
     pub(crate) async fn await_restore_admission(&self, execution: &str) -> Result<Grant> {
         let mut changed = self.store.watch_changes();
-        let _waiter = RestoreWaiter::register(self, execution);
-        self.agent_queue_wake.notify_one();
+        let _waiter = self.agent_queue.wait_for_restore(execution);
+        self.agent_queue.wake();
         loop {
             let id = execution.to_owned();
             let state = self
@@ -1162,12 +1132,8 @@ impl Manager {
             match state {
                 Some(QueueState::Starting) => {
                     return self
-                        .restore_waiters
-                        .lock()
-                        .unwrap()
-                        .get(execution)
-                        .copied()
-                        .flatten()
+                        .agent_queue
+                        .restore_grant(execution)
                         .context("the restore started without admission");
                 }
                 Some(QueueState::Queued) => changed.changed().await?,
@@ -1245,36 +1211,6 @@ impl Manager {
     }
 }
 
-/// Marks a restore's agent as waiting for admission while it lives.
-struct RestoreWaiter<'a> {
-    manager: &'a Manager,
-    execution: String,
-}
-
-impl<'a> RestoreWaiter<'a> {
-    fn register(manager: &'a Manager, execution: &str) -> Self {
-        manager
-            .restore_waiters
-            .lock()
-            .unwrap()
-            .insert(execution.to_owned(), None);
-        Self {
-            manager,
-            execution: execution.to_owned(),
-        }
-    }
-}
-
-impl Drop for RestoreWaiter<'_> {
-    fn drop(&mut self) {
-        self.manager
-            .restore_waiters
-            .lock()
-            .unwrap()
-            .remove(&self.execution);
-    }
-}
-
 /// A configured value as a slot count. Dynamic admission measures the whole
 /// machine, so it adds no repository limit of its own.
 fn fixed_limit(limit: AgentLimit) -> Option<u32> {
@@ -1305,9 +1241,11 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
 }
 
 mod dependencies;
+mod state;
 mod stopped;
 mod wake;
 
+pub(crate) use state::AgentQueue;
 pub(crate) use wake::Grant;
 
 #[cfg(test)]

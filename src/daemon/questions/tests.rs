@@ -338,6 +338,7 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

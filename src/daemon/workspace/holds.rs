@@ -16,8 +16,8 @@ impl Manager {
         validate::reason("hold", reason.as_deref())?;
         let workspace = self.workspace(selector).await?;
         let _guard = self
-            .resource_guard(&workspace.id, GuardMode::Shared)
-            .await?;
+            .gates
+            .resource_guard(&workspace.id, GuardMode::Shared)?;
         self.verify_worktree(&workspace).await?;
         let id = workspace.id.clone();
         let hold = self.store.run(move |db| {
@@ -53,7 +53,7 @@ impl Manager {
             })
             .await?;
         self.touch(&workspace.id).await;
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
         Ok(())
     }
 

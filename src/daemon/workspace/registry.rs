@@ -75,7 +75,7 @@ impl Manager {
         if let Some(name) = &name {
             validate::name("repository", name)?;
         }
-        let _guard = self.registry_gate.lock().await;
+        let _guard = self.gates.lock_registry().await;
         let repositories = self.repositories().await?;
         let source = match repository::select(&repositories, &source).await {
             Ok(existing)

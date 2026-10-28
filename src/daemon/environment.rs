@@ -114,10 +114,10 @@ fn global_config_check(paths: &crate::paths::Paths) -> Check {
 pub async fn watch_environment(manager: std::sync::Arc<Manager>) {
     loop {
         {
-            let _operation = manager.background_operations.read().await;
+            let _operation = manager.gates.operation().await;
             manager.report_environment().await;
         }
-        manager.environment_recheck.notified().await;
+        manager.signals.environment_recheck().await;
     }
 }
 
@@ -126,7 +126,7 @@ impl Manager {
     /// [`watch_environment`], since the checks can outlast a reply's budget.
     pub async fn reload_config_and_recheck(&self) -> Result<()> {
         self.reload_config().await?;
-        self.environment_recheck.notify_one();
+        self.signals.recheck_environment();
         Ok(())
     }
 

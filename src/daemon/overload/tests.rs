@@ -16,13 +16,11 @@ async fn recovery_progresses_after_every_protection_is_disabled() {
         "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false\n",
     )
     .await;
-    let mut ready = manager.recovery_ready.subscribe();
+    let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let monitor = tokio::spawn(run(manager.clone()));
     wait_published(&mut ready).await;
-    let epoch = manager
-        .recovery_epoch
-        .load(std::sync::atomic::Ordering::Relaxed);
+    let epoch = manager.overload_recovery.epoch();
     assert_eq!(*ready.borrow(), Some(epoch));
     monitor.abort();
 }
@@ -33,15 +31,13 @@ async fn recovery_waits_for_free_disk_space() {
     let mut config = crate::config::Config::default();
     config.overload.memory.enabled = false;
     manager.publish_config(config);
-    let mut ready = manager.recovery_ready.subscribe();
+    let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let monitor = tokio::spawn(run(manager.clone()));
     tokio::time::sleep(Duration::from_secs(600)).await;
     assert_eq!(*ready.borrow(), None);
-    let generation = manager
-        .config_generation
-        .load(std::sync::atomic::Ordering::SeqCst);
-    manager.publish_disk_reading(Some(generation));
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
     let recovered = Instant::now();
     wait_published(&mut ready).await;
     let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
@@ -55,24 +51,18 @@ async fn unsafe_readings_revoke_the_recovery_epoch() {
     let mut config = crate::config::Config::default();
     config.overload.memory.enabled = false;
     manager.publish_config(config);
-    let generation = manager
-        .config_generation
-        .load(std::sync::atomic::Ordering::SeqCst);
-    manager.publish_disk_reading(Some(generation));
-    let mut ready = manager.recovery_ready.subscribe();
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
+    let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let monitor = tokio::spawn(run(manager.clone()));
     wait_published(&mut ready).await;
-    let epoch = || {
-        manager
-            .recovery_epoch
-            .load(std::sync::atomic::Ordering::Relaxed)
-    };
+    let epoch = || manager.overload_recovery.epoch();
     // Admitting a restore advances the epoch it then holds while it checks
     // its workspace.
-    manager.reset_overload_recovery();
+    manager.overload_recovery.reset();
     let admitted = epoch();
-    manager.publish_disk_reading(None);
+    manager.config_state.publish_disk_reading(None);
     tokio::time::timeout(Duration::from_secs(3600), async {
         while epoch() == admitted {
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -95,7 +85,7 @@ async fn changed_thresholds_restart_the_recovery_window() {
         config
     };
     manager.publish_config(config(60));
-    let mut ready = manager.recovery_ready.subscribe();
+    let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let start = Instant::now();
     let monitor = tokio::spawn(run(manager.clone()));
@@ -120,7 +110,7 @@ async fn a_reload_withdraws_published_readiness_until_a_new_window() {
         config
     };
     manager.publish_config(config(85));
-    let mut ready = manager.recovery_ready.subscribe();
+    let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
     let monitor = tokio::spawn(run(manager.clone()));
     wait_published(&mut ready).await;

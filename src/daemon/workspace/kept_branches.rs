@@ -107,7 +107,7 @@ impl Manager {
     ) -> Result<()> {
         let repo = self.repository(repository_id).await?;
         // Creation opens branches under the same gate.
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         // An unresolved default branch could be any of them.
         let Ok(default) =
             git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await
@@ -144,7 +144,7 @@ impl Manager {
                 continue;
             }
             let repo = self.repository(&repository_id).await?;
-            let _git = self.lock_repository_git(&repo.id).await;
+            let _git = self.gates.lock_git(&repo.id).await;
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await
                 .ok();
@@ -180,7 +180,7 @@ impl Manager {
         let mut chosen = Vec::new();
         for repository_id in &repository_ids {
             let repo = self.repository(repository_id).await?;
-            gates.push(self.lock_repository_git(&repo.id).await);
+            gates.push(self.gates.lock_git(&repo.id).await);
             // An unresolved default branch could be any of them.
             let default = git::default_branch::resolve(&repo.path, DefaultBranchLookup::Cached)
                 .await

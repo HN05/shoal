@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 impl Manager {
     pub(crate) async fn caller(&self, token: &str) -> Result<Option<Caller>> {
-        if let Some(caller) = self.scopes.lock().await.get(token).cloned() {
+        if let Some(caller) = self.executions.scope(token).await {
             return Ok(Some(caller));
         }
         let token = token.to_owned();
@@ -38,7 +38,7 @@ impl Manager {
         selector: &str,
     ) -> Result<BTreeMap<String, String>> {
         let workspace = self.workspace(selector).await?;
-        let _guard = self.lock_repository_git(&workspace.repository_id).await;
+        let _guard = self.gates.lock_git(&workspace.repository_id).await;
         let workspace = self.workspace(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings(&workspace).await?;

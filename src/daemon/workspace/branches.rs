@@ -86,7 +86,7 @@ impl Manager {
         selector: &crate::repository::Selector,
     ) -> Result<SyncedRepository> {
         let repo = self.repository(selector).await?;
-        let _guard = self.lock_repository_git(&repo.id).await;
+        let _guard = self.gates.lock_git(&repo.id).await;
         let (default, remote) = fetch_default_remote(&repo).await?;
         let default_branch = self
             .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
@@ -104,7 +104,7 @@ impl Manager {
     /// see what the forge merged; local branches stay unchanged.
     pub async fn fetch_default_branch(&self, repository_id: &str) -> Result<()> {
         let repo = self.repository(repository_id).await?;
-        let _guard = self.lock_repository_git(&repo.id).await;
+        let _guard = self.gates.lock_git(&repo.id).await;
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let mut remotes = Vec::new();

@@ -4,10 +4,7 @@ use super::{GuardMode, Manager, ResourceGuard};
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
-    daemon::{
-        scope::{Caller, ScopedExecution},
-        store,
-    },
+    daemon::{scope::Caller, store},
     demos::Launch,
     hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
@@ -21,9 +18,8 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
-    sync::atomic::Ordering,
     time::Duration,
 };
 use tokio::{
@@ -32,6 +28,7 @@ use tokio::{
 };
 use uuid::Uuid;
 
+mod state;
 /// The workspaces with a running execution. One whose wrapper is gone is
 /// left for `shoal stop <workspace>` rather than failing every bulk stop.
 fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
@@ -43,6 +40,8 @@ fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
 
 #[cfg(test)]
 mod tests;
+
+pub(crate) use state::Executions;
 
 states!(
     /// What a tracked execution runs, which decides its lifecycle rules.
@@ -338,13 +337,8 @@ impl Manager {
         parent_execution: Option<&str>,
         demo: Option<Launch>,
     ) -> Result<RegisteredExecution> {
-        // Coordinate registration and stop notification without holding the map
-        // during any external command or lifetime of the agent.
-        let mut connections = self.connections.lock().await;
-        ensure!(
-            !self.shutting_down.load(Ordering::Relaxed),
-            "the daemon is shutting down; retry once it restarts"
-        );
+        let mut connections = self.executions.connections().await;
+        connections.ensure_accepting()?;
         let workspace = self.workspace(workspace_id).await?;
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         self.verify_worktree(&workspace).await?;
@@ -375,15 +369,8 @@ impl Manager {
             &ports,
             &caches,
         );
-        let receiver = self
-            .connect_execution(
-                &mut connections,
-                &id,
-                kind,
-                &workspace.id,
-                scope_token.clone(),
-                false,
-            )
+        let receiver = connections
+            .connect(&id, kind, &workspace.id, scope_token.clone(), false)
             .await;
         Ok(RegisteredExecution {
             id,
@@ -506,7 +493,7 @@ impl Manager {
         match kind {
             ExecutionKind::Command => Ok(PreparedExecution::default()),
             ExecutionKind::Land => {
-                let guard = self.lock_repository_git(&workspace.repository_id).await;
+                let guard = self.gates.lock_git(&workspace.repository_id).await;
                 let land = self.prepare_land(&workspace.id).await?;
                 if scoped {
                     self.authorize_scoped_land(&land).await?;
@@ -518,7 +505,7 @@ impl Manager {
                 })
             }
             ExecutionKind::Setup => {
-                let git_guard = self.lock_repository_git(&workspace.repository_id).await;
+                let git_guard = self.gates.lock_git(&workspace.repository_id).await;
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
@@ -532,7 +519,7 @@ impl Manager {
                 } else {
                     GuardMode::Shared
                 };
-                let resources = self.resource_guard(&workspace.id, mode).await?;
+                let resources = self.gates.resource_guard(&workspace.id, mode)?;
                 Ok(PreparedExecution {
                     setup_cmd,
                     copy_ignored,
@@ -650,7 +637,7 @@ impl Manager {
         let issue = self.execution_completion_issue(&id, scan).await?;
         let complete = issue.is_none();
         self.keep_stopped_turn(&id).await;
-        let mut connections = self.connections.lock().await;
+        let connections = self.executions.connections().await;
         let record_id = id.clone();
         self.store
             .run(move |db| {
@@ -693,11 +680,11 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        connections.remove(&id);
-        drop(connections);
-        self.forget_connection(&id).await;
+        if connections.disconnect(&id).await {
+            self.agent_queue.wake();
+        }
         if !complete {
-            self.execution_unknown.notify_one();
+            self.signals.execution_became_unknown();
         }
         Ok(complete)
     }
@@ -713,11 +700,9 @@ impl Manager {
             process::alive(&request.wrapper)?,
             "execution wrapper is no longer alive"
         );
-        let mut connections = self.connections.lock().await;
+        let mut connections = self.executions.connections().await;
         ensure!(
-            !connections
-                .get(&request.execution)
-                .is_some_and(|sender| !sender.is_closed()),
+            !connections.is_connected(&request.execution),
             "execution is already connected"
         );
         let workspace_id = self.authorize_reattachment(request).await?;
@@ -728,9 +713,8 @@ impl Manager {
             self.discard_undelivered_stop(&workspace, &request.execution);
         }
         // A stopped agent stays stopped until its restore.
-        let stop = self
-            .connect_execution(
-                &mut connections,
+        let stop = connections
+            .connect(
                 &request.execution,
                 ExecutionKind::Command,
                 &workspace.id,
@@ -797,33 +781,6 @@ impl Manager {
             .await
     }
 
-    /// Give a wrapper its stop channel, starting as `stopped`, and let its
-    /// scope token act for the execution. Runs under the connections lock.
-    async fn connect_execution(
-        &self,
-        connections: &mut HashMap<String, watch::Sender<bool>>,
-        id: &str,
-        kind: ExecutionKind,
-        workspace_id: &str,
-        scope_token: String,
-        stopped: bool,
-    ) -> watch::Receiver<bool> {
-        let (sender, stop) = watch::channel(stopped);
-        connections.insert(id.to_owned(), sender);
-        self.issue_scope(
-            scope_token,
-            Caller {
-                execution: Some(ScopedExecution {
-                    id: id.to_owned(),
-                    kind,
-                }),
-                workspace_id: workspace_id.to_owned(),
-            },
-        )
-        .await;
-        stop
-    }
-
     /// A reattaching wrapper still runs its command, so a stop the previous
     /// daemon saved but never delivered no longer describes the agent.
     fn discard_undelivered_stop(&self, workspace: &Workspace, execution: &str) {
@@ -843,24 +800,9 @@ impl Manager {
     /// Drop a wrapper's connection without recording completion, so its
     /// execution awaits reattachment.
     pub(crate) async fn detach_execution(&self, id: &str) {
-        self.connections.lock().await.remove(id);
-        self.forget_connection(id).await;
-    }
-
-    /// Drop what the daemon kept in memory for a removed connection.
-    async fn forget_connection(&self, id: &str) {
-        self.unattachable
-            .lock()
-            .expect("unattachable executions lock")
-            .remove(id);
-        if self.agents.lock().await.remove(id).is_some() {
-            self.agent_queue_wake.notify_one();
+        if self.executions.disconnect(id).await {
+            self.agent_queue.wake();
         }
-        self.stop_requests.lock().await.remove(id);
-        self.scopes
-            .lock()
-            .await
-            .retain(|_, caller| caller.execution_id() != Some(id));
     }
 
     async fn execution_completion_issue(
@@ -897,7 +839,7 @@ impl Manager {
     /// agents meanwhile, and executions are read before requests, which an
     /// agent a signal stops saves before its execution ends.
     pub async fn stop_targets(&self) -> Result<Vec<Workspace>> {
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
         targets.extend(self.pending_restore_workspaces().await?);
         Ok(self
@@ -1006,38 +948,15 @@ impl Manager {
     /// startup audit.
     pub async fn stop_for_shutdown(&self) {
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
-        {
-            let connections = self.connections.lock().await;
-            self.shutting_down.store(true, Ordering::Relaxed);
-            let mut agents = self.agents.lock().await;
-            let mut requests = self.stop_requests.lock().await;
-            for (id, sender) in connections.iter().filter(|(_, sender)| !sender.is_closed()) {
-                if let Some(agent) = agents.get_mut(id) {
-                    agent.cancel_recovery();
-                }
-                requests.insert(
-                    id.clone(),
-                    StopRequest {
-                        reason: "the Shoal daemon shut down".into(),
-                        save: Save::Everything,
-                    },
-                );
-                let _ = sender.send(true);
-            }
-        }
-        while Instant::now() < deadline && !self.connections.lock().await.is_empty() {
+        self.executions
+            .shut_down(StopRequest {
+                reason: "the Shoal daemon shut down".into(),
+                save: Save::Everything,
+            })
+            .await;
+        while Instant::now() < deadline && self.executions.has_connections().await {
             sleep(timing::WORKSPACE_STOP_POLL_INTERVAL).await;
         }
-    }
-
-    /// Set once shutdown starts asking executions to stop.
-    pub(crate) fn shutting_down(&self) -> bool {
-        self.shutting_down.load(Ordering::Relaxed)
-    }
-
-    /// Why the daemon asked a connected execution to stop, if it did.
-    pub(crate) async fn stop_request(&self, id: &str) -> Option<StopRequest> {
-        self.stop_requests.lock().await.get(id).cloned()
     }
 
     pub(super) async fn stop_disconnected(
@@ -1145,7 +1064,7 @@ impl Manager {
         let id = id.to_owned();
         let deadline = Instant::now() + timing::WORKSPACE_STOP_TIMEOUT;
         loop {
-            let connections = self.connections.lock().await;
+            let connections = self.executions.connections().await;
             let query_id = id.clone();
             let executions = self
                 .store
@@ -1157,27 +1076,13 @@ impl Manager {
             let mut connected = 0;
             let mut disconnected = Vec::new();
             for execution in executions {
-                match connections
-                    .get(&execution.id)
-                    .filter(|sender| !sender.is_closed())
+                if !connections.is_connected(&execution.id) {
+                    disconnected.push(execution);
+                } else if connections
+                    .stop(&execution.id, request, protected == Protected::Keep)
+                    .await?
                 {
-                    Some(sender) => {
-                        if let Some(agent) = self.agents.lock().await.get_mut(&execution.id) {
-                            if protected == Protected::Keep && agent.protected() {
-                                continue;
-                            }
-                            agent.cancel_recovery();
-                        }
-                        self.stop_requests
-                            .lock()
-                            .await
-                            .insert(execution.id.clone(), request.clone());
-                        sender
-                            .send(true)
-                            .context("execution disconnected during stop")?;
-                        connected += 1;
-                    }
-                    None => disconnected.push(execution),
+                    connected += 1;
                 }
             }
             // Registration and notifications are coordinated under the map lock.
@@ -1209,14 +1114,6 @@ impl Manager {
                 Ok(())
             })
             .await
-    }
-
-    pub(crate) async fn execution_connected(&self, id: &str) -> bool {
-        self.connections
-            .lock()
-            .await
-            .get(id)
-            .is_some_and(|sender| !sender.is_closed())
     }
 }
 

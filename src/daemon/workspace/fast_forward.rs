@@ -40,7 +40,7 @@ impl Manager {
             workspace.name,
             workspace.branch
         );
-        let _git = self.lock_repository_git(&workspace.repository_id).await;
+        let _git = self.gates.lock_git(&workspace.repository_id).await;
         self.verify_checkout(workspace, branch).await?;
         let (path, target) = (&workspace.path, git::remote_ref("origin", branch));
         if git::is_ancestor(path, &target, "HEAD", git::isolated_command).await? {

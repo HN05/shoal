@@ -382,7 +382,7 @@ impl Manager {
             .run(move |db| record_failure(db, &id, &execution, failure, now, spread))
             .await?;
         match scheduled {
-            Scheduled::Waiting => self.turn_retry_wake.notify_one(),
+            Scheduled::Waiting => self.signals.wake_turn_retry(),
             Scheduled::Exhausted => {
                 let reason = GiveUp::Exhausted(failure);
                 self.give_up_turn(&workspace, &agent, reason).await?;
@@ -436,7 +436,7 @@ impl Manager {
             log!("turn retry for {workspace} not delivered: {error:#}");
         }
         if delivered.queued {
-            self.agent_messages_changed.send_modify(|count| *count += 1);
+            self.signals.agent_message_queued();
         }
         Ok(delivered.next)
     }
@@ -446,7 +446,7 @@ impl Manager {
 pub(crate) async fn run(manager: Arc<Manager>) {
     loop {
         let next = {
-            let _operation = manager.background_operations.read().await;
+            let _operation = manager.gates.operation().await;
             manager.deliver_turn_retries().await
         };
         let wait = match next {
@@ -461,7 +461,7 @@ pub(crate) async fn run(manager: Arc<Manager>) {
             }
         };
         tokio::select! {
-            () = manager.turn_retry_wake.notified() => {}
+            () = manager.signals.turn_retry_woken() => {}
             () = tokio::time::sleep(wait) => {}
         }
     }

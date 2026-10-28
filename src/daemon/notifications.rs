@@ -387,7 +387,7 @@ impl Manager {
             })
             .await?;
         if recorded.new {
-            self.notifications_changed.send_replace(recorded.id);
+            self.signals.notification_recorded(recorded.id);
         }
         Ok(recorded.id)
     }

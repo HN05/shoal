@@ -116,7 +116,7 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
                 accepted = server.capacity.accept(&listener) => {
                     let (stream, slot) = accepted.unwrap();
                     let server = server.clone();
-                    let operation = server.manager.background_operations.clone().read_owned().await;
+                    let operation = server.manager.gates.owned_operation().await;
                     clients.spawn(async move { serve(stream, server, slot, operation).await });
                 }
                 Some(result) = clients.join_next(), if !clients.is_empty() => {
@@ -636,7 +636,7 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     assert_eq!(commands[0]["argv"][0], "sh");
     assert!(crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     // A manual stop never restores automatically.
-    manager.recovery_ready.send_replace(Some(0));
+    manager.overload_recovery.publish(Some(0));
     assert!(!workspace.path.join("restored").exists());
     fs::write(
         workspace.path.join("resume.sh"),
@@ -823,7 +823,7 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     .unwrap();
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
-    let monitor = manager.background_operations.read().await;
+    let monitor = manager.gates.operation().await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -831,20 +831,18 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     );
     drop(monitor);
     // An update waits for the restore, so the stop holds one back.
-    assert!(manager.background_operations.try_write().is_err());
+    assert!(manager.gates.try_quiesce().is_none());
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
-    assert!(manager.background_operations.try_write().is_err());
+    assert!(manager.gates.try_quiesce().is_none());
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
-    let epoch = manager
-        .recovery_epoch
-        .load(std::sync::atomic::Ordering::Relaxed);
-    manager.recovery_ready.send_replace(Some(epoch));
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 7);
     // The restored agent took over the slot its restore kept.
     assert!(queue_is_empty(&manager).await);
-    drop(bounded(manager.background_operations.write()).await);
+    drop(bounded(manager.gates.quiesce()).await);
     assert!(!crate::execution::recovery::pending(&manager.paths, &workspace.id).unwrap());
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
@@ -890,7 +888,7 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
         )
         .await
         .unwrap();
-    let monitor = manager.background_operations.read().await;
+    let monitor = manager.gates.operation().await;
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -901,17 +899,15 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     wait_restore_queued(&manager).await;
     // Waiting for an update lets go of the hold once its processes stopped.
     bounded(async {
-        while manager.background_operations.try_write().is_err() {
+        while manager.gates.try_quiesce().is_none() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await;
     assert!(!launched.is_finished());
     // The fixture runs no disk monitor; a reading finds the space free.
-    let generation = manager
-        .config_generation
-        .load(std::sync::atomic::Ordering::SeqCst);
-    manager.publish_disk_reading(Some(generation));
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
     manager
         .send_agent_message(&workspace.name, "Review requested".into())
         .await
@@ -1280,10 +1276,8 @@ async fn refused_recovery_finishes_the_stopped_execution_and_retains_manual_reco
         .set_state(&workspace.id, crate::state::WorkspaceState::Failed, None)
         .await
         .unwrap();
-    let epoch = manager
-        .recovery_epoch
-        .load(std::sync::atomic::Ordering::Relaxed);
-    manager.recovery_ready.send_replace(Some(epoch));
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
     bounded(launched).await.unwrap().unwrap();
     assert!(
         manager
@@ -1357,10 +1351,8 @@ async fn set_recovery(manager: &Manager, enabled: bool) {
 }
 
 fn publish_recovery(manager: &Manager) {
-    let epoch = manager
-        .recovery_epoch
-        .load(std::sync::atomic::Ordering::Relaxed);
-    manager.recovery_ready.send_replace(Some(epoch));
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
 }
 
 #[tokio::test]
@@ -1558,11 +1550,11 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
     );
     // Later critical readings leave the waiting agent's restore in place.
     bounded(monitor.check(&manager, now, empty)).await.unwrap();
-    assert!(!manager.disk_space_recovered());
+    assert!(!manager.config_state.disk_space_recovered());
     bounded(monitor.check(&manager, now, |_: &std::path::Path| Ok(u64::MAX)))
         .await
         .unwrap();
-    assert!(manager.disk_space_recovered());
+    assert!(manager.config_state.disk_space_recovered());
     publish_recovery(&manager);
     assert_eq!(bounded(agent).await.unwrap().unwrap(), 0);
     assert_eq!(

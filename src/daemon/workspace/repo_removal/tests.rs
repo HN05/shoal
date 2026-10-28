@@ -12,13 +12,11 @@ async fn removal_waits_for_queued_workspace_creation() {
         .await
         .unwrap();
 
-    let gate = manager.lock_repository_git(&repo.id).await;
+    let gate = manager.gates.lock_git(&repo.id).await;
     let creating_manager = manager.clone();
     let creating_repo = repo.clone();
     let mut creating = Box::pin(async move {
-        let _git = creating_manager
-            .lock_repository_git(&creating_repo.id)
-            .await;
+        let _git = creating_manager.gates.lock_git(&creating_repo.id).await;
         creating_manager
             .create_branch_workspace(
                 &creating_repo,

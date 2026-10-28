@@ -117,7 +117,7 @@ impl Manager {
         if !directory.try_exists().unwrap_or(false) {
             return false;
         }
-        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+        let Some(_git) = self.gates.try_lock_git(&repo.id) else {
             log!("DerivedData of {name} kept: the repository is busy");
             return false;
         };
@@ -157,7 +157,7 @@ impl Manager {
     /// gate leaves pruning to a later pass rather than waiting.
     async fn prune_checkouts(&self, repo: &Repository, cache: PathBuf) -> bool {
         let name = crate::repository::name(repo);
-        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+        let Some(_git) = self.gates.try_lock_git(&repo.id) else {
             log!("package checkouts of {name} kept: the repository is busy");
             return false;
         };

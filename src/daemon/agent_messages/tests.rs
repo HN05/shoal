@@ -27,7 +27,7 @@ async fn workspace(
 async fn messages_wait_until_delivered_and_repeats_collapse() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
-    let changed = manager.agent_messages_changed.subscribe();
+    let changed = manager.signals.watch_agent_messages();
     for _ in 0..2 {
         manager
             .send_agent_message(&workspace.name, "Stop the dev server".into())
@@ -108,6 +108,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

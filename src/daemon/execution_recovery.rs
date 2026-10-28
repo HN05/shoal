@@ -174,7 +174,7 @@ async fn admit_restore(
     let grant = manager
         .admit_agent_restore(execution_id, workspace_id)
         .await?;
-    *hold = Some(manager.background_operations.clone().read_owned().await);
+    *hold = Some(manager.gates.owned_operation().await);
     Ok(grant)
 }
 
@@ -249,6 +249,7 @@ pub(super) fn discard_handoff(manager: &Manager, workspace_id: &str, execution_i
 /// Why a stop cancelled the restore, such as `shoal stop`.
 async fn requested_reason(manager: &Manager, execution_id: &str) -> Option<String> {
     manager
+        .executions
         .stop_request(execution_id)
         .await
         .map(|request| request.reason)
@@ -257,7 +258,7 @@ async fn requested_reason(manager: &Manager, execution_id: &str) -> Option<Strin
 /// Resolves once a reload disables overload recovery, so a waiting agent
 /// finishes with its restore record instead of waiting for load to recover.
 async fn recovery_disabled(manager: &Manager) {
-    let mut config = manager.watch_config();
+    let mut config = manager.config_state.watch();
     if config
         .wait_for(|config| !config.overload.recovery.enabled)
         .await

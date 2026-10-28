@@ -323,7 +323,7 @@ async fn interrupt_while_protected(interruption: Interruption, stop: impl AsyncF
         ExecutionState::Running
     );
     // An update waits for the restore here too.
-    assert!(reopened.background_operations.try_write().is_err());
+    assert!(reopened.gates.try_quiesce().is_none());
     assert!(!launched.is_finished());
     assert!(!workspace.path.join("restored").exists());
     publish_recovery(&reopened);
@@ -415,7 +415,7 @@ async fn update_restart_discards_a_stop_that_never_reached_the_agent() {
         executions(&reopened, &workspace).await[0].state == ExecutionState::Running
     })
     .await;
-    drop(reopened.connections.lock().await);
+    drop(reopened.executions.connections().await);
     assert!(record(&reopened, &workspace, &id).is_none());
     assert!(blocked(&reopened).await.is_empty());
     // A stop the agent receives saves the wrapper's record as usual.

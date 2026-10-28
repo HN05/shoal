@@ -187,7 +187,7 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         .unwrap();
     assert!(manager.wait_prs(&workspace.id, Some(60)).await.is_err());
 
-    let mut queued = manager.agent_messages_changed.subscribe();
+    let mut queued = manager.signals.watch_agent_messages();
     let waiting = {
         let manager = manager.clone();
         let id = workspace.id.clone();
@@ -284,7 +284,7 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .await
         .unwrap();
     register_watch(&manager, &workspace.id, "pr").await;
-    let queued = manager.item_updates_queued.subscribe();
+    let queued = manager.signals.watch_item_updates();
     manager
         .queue_background_updates(
             &workspace.id,
@@ -345,7 +345,7 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
     let queued = manager.agent_updates(&workspace.id).await.unwrap();
     let delivery = queued.updates[0].delivery.clone();
     // Cleanup holds the gate across forge requests and removals.
-    let gate = manager.pr_gates.lock([&workspace.id]).await;
+    let gate = manager.gates.lock_prs([&workspace.id]).await;
     let delivered = manager.agent_updates(&workspace.id).await.unwrap();
     assert!(delivered.updates.is_empty());
     assert_eq!(delivered.messages[0].message, "Rebase onto main");
@@ -387,14 +387,14 @@ async fn hook_delivery_waits_only_for_the_workspaces_it_reads() {
         )
         .await
         .unwrap();
-    let unrelated = manager.pr_gates.lock([&other.id]).await;
+    let unrelated = manager.gates.lock_prs([&other.id]).await;
     let delivered = manager.agent_updates(&parent.id).await.unwrap();
     assert_eq!(delivered.updates.len(), 1);
     assert_eq!(delivered.updates[0].workspace.as_deref(), Some("child"));
     drop(unrelated);
     // The parent's agent receives the child's updates, so delivery waits
     // for work on the child.
-    let read = manager.pr_gates.lock([&child.id]).await;
+    let read = manager.gates.lock_prs([&child.id]).await;
     let delivered = manager.agent_updates(&parent.id).await.unwrap();
     assert!(delivered.updates.is_empty());
     drop(read);

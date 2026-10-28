@@ -199,7 +199,7 @@ impl Manager {
         };
         let restore = Restore::new(target, execution, &record.agent, &env)?;
         // Read the entry before dispatch can start it and its agent take it.
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         self.store.run(move |db| insert(db, &restore)).await?;
         self.queue_entries()
             .await?
@@ -266,7 +266,7 @@ impl Manager {
     /// gate keeps dispatch from queueing a request meanwhile, and a restore
     /// whose agent already registered has left the queue.
     pub(crate) async fn cancel_stopped_restores(&self, workspace_id: &str) -> Result<()> {
-        let _gate = self.agent_queue_gate.lock().await;
+        let _gate = self.agent_queue.lock_admission().await;
         self.clear_restore_requests(workspace_id)?;
         let workspace_id = workspace_id.to_owned();
         self.store

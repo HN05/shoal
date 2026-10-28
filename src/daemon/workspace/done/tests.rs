@@ -16,8 +16,8 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .await
         .unwrap();
     let resources = manager
+        .gates
         .resource_guard(&workspace.id, GuardMode::Exclusive)
-        .await
         .unwrap();
     manager.mark_done(&workspace.id, false).await.unwrap();
     manager
@@ -344,7 +344,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
         }
     })
     .await;
-    assert!(manager.pr_gates.try_lock([&workspace.id]).is_none());
+    assert!(manager.gates.try_lock_prs([&workspace.id]).is_none());
     // Another workspace's commands do not wait for the removal.
     bounded(manager.mark_done(&other.id, false)).await.unwrap();
     bounded(manager.undo_done(&other.id)).await.unwrap();

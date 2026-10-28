@@ -34,7 +34,7 @@ impl Manager {
             config::repo::parse(text).context("invalid local repository config")?;
         }
         // Serialize changes with registration/removal and retain config on failed cleanup.
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let repo = self.repository(selector).await?;
         self.ensure_repository_available(&repo.id).await?;
         self.save_repository_config(repo.id, toml).await
@@ -46,7 +46,7 @@ impl Manager {
         changes: &[config::edit::Change],
     ) -> Result<LocalConfig> {
         // Hold the same gate as imports and removal across read/modify/write.
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let repo = self.repository(selector).await?;
         self.ensure_repository_available(&repo.id).await?;
         let text = self

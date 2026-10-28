@@ -25,7 +25,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .set_repository_config(&repo.id, Some("post_agent_exit_cmd = 'exited'\n".into()))
         .await
         .unwrap();
-    let cleanup_woken = manager.cleanup_notify.notified();
+    let cleanup_woken = manager.signals.cleanup_woken();
     manager
         .notify_agent_exit(&workspace, "helper", None, false, None)
         .await;
@@ -78,7 +78,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     manager.mark_done(&workspace.id, true).await.unwrap();
-    assert!(manager.cleanup_notify.notified().now_or_never().is_some());
+    assert!(manager.signals.cleanup_woken().now_or_never().is_some());
     let complete = manager
         .finish_execution(execution.plan.id, ExecutionKind::Command, Some(0))
         .await
@@ -87,7 +87,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
     manager
         .post_agent_exit(&workspace, "helper", Some(0), complete)
         .await;
-    assert!(manager.cleanup_notify.notified().now_or_never().is_some());
+    assert!(manager.signals.cleanup_woken().now_or_never().is_some());
     crate::daemon::cleanup::sweep(&manager, &mut Default::default())
         .await
         .unwrap();
@@ -270,7 +270,10 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
         .finish_execution(second.plan.id, ExecutionKind::Command, Some(1))
         .await
         .unwrap();
-    assert_eq!(manager.agents.lock().await.len(), 1);
+    assert_eq!(
+        manager.executions.with_agents(|agents| agents.len()).await,
+        1
+    );
 }
 
 #[tokio::test]

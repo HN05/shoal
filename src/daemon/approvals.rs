@@ -822,10 +822,10 @@ impl Manager {
         // Deciding a proposal opens its item under the workspace's gate
         // before forgetting the request, which withdrawal must not split.
         let _decision = match selected.target.is_proposal() {
-            true => Some(self.pr_gates.lock([workspace_id]).await),
+            true => Some(self.gates.lock_prs([workspace_id]).await),
             false => None,
         };
-        let _announcement = self.announcement_gate.lock().await;
+        let _announcement = self.gates.lock_announcements().await;
         let (request, retracted) = self
             .store
             .run(move |db| {
@@ -964,7 +964,7 @@ impl Manager {
             }
             return Ok(decision.request);
         }
-        let gate = self.announcement_gate.lock().await;
+        let gate = self.gates.lock_announcements().await;
         let routed = self.route_approval(&request, Some(coordinator)).await?;
         self.announce_approval(&request.workspace, &routed).await;
         drop(gate);
@@ -984,7 +984,7 @@ impl Manager {
     ) -> Result<Option<Decision>> {
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
-        let _guard = self.simulator_gate.lock().await;
+        let _guard = self.gates.lock_simulators().await;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -1016,7 +1016,7 @@ impl Manager {
         let key = request.key;
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
-        let _guard = self.simulator_gate.lock().await;
+        let _guard = self.gates.lock_simulators().await;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
@@ -1058,7 +1058,7 @@ impl Manager {
     /// coordinators passed over on the way, or else the user. A request is
     /// routed once; repeating it tells its decider again.
     pub async fn notify_approval(&self, workspace: &str, request: &ApprovalRequest) {
-        let _gate = self.announcement_gate.lock().await;
+        let _gate = self.gates.lock_announcements().await;
         // It may have been withdrawn or decided since it was requested.
         let key = request.key.clone();
         let request = match self.store.run(move |db| by_key(db, &key)).await {
@@ -1115,7 +1115,7 @@ impl Manager {
             "approval request {id} is not {}'s to decide",
             workspace.name
         );
-        let _gate = self.announcement_gate.lock().await;
+        let _gate = self.gates.lock_announcements().await;
         let routed = self.route_approval(&request, Some(&workspace.id)).await?;
         self.announce_approval(&request.workspace, &routed).await;
         Ok(routed.request)

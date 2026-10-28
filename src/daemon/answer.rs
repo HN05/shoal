@@ -146,7 +146,7 @@ pub(super) async fn answer_wait(
         .unwrap_or_else(|error| Body::error(ErrorCode::OperationFailed, format!("{error:#}")));
     // Hold the operation guard through the write so a restart cannot begin
     // while the reply is in flight.
-    let Ok(_operation) = manager.background_operations.try_read() else {
+    let Some(_operation) = manager.gates.try_operation() else {
         return Ok(());
     };
     protocol::write(&mut stream, &Response::new(request_id, body)).await

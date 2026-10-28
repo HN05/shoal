@@ -131,7 +131,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         // Keep publishing recovery with every protection off: an agent stopped
         // before they were disabled still waits for it.
         tokio::time::sleep(Duration::from_secs(config.overload.poll_seconds)).await;
-        let operation = manager.background_operations.read().await;
+        let operation = manager.gates.operation().await;
         // Check after sleeping, so a reload during it cannot be sampled under
         // the old thresholds. Publication already withdrew readiness, and
         // earlier readings do not count toward the new thresholds.
@@ -163,9 +163,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
         for (signal, message) in monitor.warnings(now, settings, memory_warning) {
             warned.warn(&manager, now, signal, &message).await;
         }
-        let epoch = manager
-            .recovery_epoch
-            .load(std::sync::atomic::Ordering::Relaxed);
+        let epoch = manager.overload_recovery.epoch();
         if monitor.recovery_epoch != epoch {
             monitor.healthy = Sustained::default();
             monitor.recovery_epoch = epoch;
@@ -177,19 +175,19 @@ pub(super) async fn run(manager: Arc<Manager>) {
             || monitor
                 .cpu_used
                 .is_some_and(|used| used < f64::from(settings.recovery.cpu_used_percent));
-        let disk_safe = !settings.disk.enabled || manager.disk_space_recovered();
+        let disk_safe = !settings.disk.enabled || manager.config_state.disk_space_recovered();
         let safe = memory_safe && cpu_safe && disk_safe;
         // Readings that turn unsafe revoke a restore admitted on the earlier
         // ones before its agent starts.
         if std::mem::replace(&mut monitor.safe, safe) && !safe {
-            manager.reset_overload_recovery();
+            manager.overload_recovery.reset();
         }
         let recovered = monitor
             .healthy
             .observe(now, safe, settings.recovery.sustained_seconds);
         manager
-            .recovery_ready
-            .send_replace(recovered.then_some(epoch));
+            .overload_recovery
+            .publish(recovered.then_some(epoch));
         if let Some(reason) = reason
             && manager.stop_agent_for_overload(reason).await
         {

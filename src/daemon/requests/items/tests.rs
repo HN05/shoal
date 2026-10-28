@@ -30,7 +30,7 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         });
         (client, served)
     };
-    let update = manager.background_operations.clone().write_owned().await;
+    let update = manager.gates.quiesce().await;
     let (mut client, served) = wait(manager.clone());
     served.await.unwrap().unwrap();
     let mut sent = Vec::new();

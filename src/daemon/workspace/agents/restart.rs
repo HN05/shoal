@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use tokio::sync::oneshot;
 
-use super::Manager;
+use super::{Agent, Manager};
 use crate::{
     daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
     state::AgentState,
@@ -43,35 +43,33 @@ impl Manager {
     /// which may have run one; connected commands are left out.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>> {
         let executions = self.store.run(|db| store::all_executions(db)).await?;
-        let connections = self.connections.lock().await;
-        let agents = self.agents.lock().await;
-        Ok(executions
-            .into_iter()
-            .filter_map(|execution| {
-                let (agent, restorable, state) = match agents.get(&execution.id) {
-                    // Named as `--agent` and recovery records name it.
-                    Some(agent) => (
-                        Some(agent.name.replace(' ', "-")),
-                        agent.recover,
-                        agent.turn,
-                    ),
-                    None if connections
-                        .get(&execution.id)
-                        .is_some_and(|sender| !sender.is_closed()) =>
-                    {
-                        return None;
-                    }
-                    None => (None, false, None),
-                };
-                Some(RunningAgent {
-                    state,
-                    execution: execution.id,
-                    workspace_id: execution.workspace_id,
-                    agent,
-                    restorable,
-                })
+        let connections = self.executions.connections().await;
+        Ok(connections
+            .with_agents(|agents| {
+                executions
+                    .into_iter()
+                    .filter_map(|execution| {
+                        let (agent, restorable, state) = match agents.get(&execution.id) {
+                            // Named as `--agent` and recovery records name it.
+                            Some(agent) => (
+                                Some(agent.name.replace(' ', "-")),
+                                agent.recover,
+                                agent.turn,
+                            ),
+                            None if connections.is_connected(&execution.id) => return None,
+                            None => (None, false, None),
+                        };
+                        Some(RunningAgent {
+                            state,
+                            execution: execution.id,
+                            workspace_id: execution.workspace_id,
+                            agent,
+                            restorable,
+                        })
+                    })
+                    .collect()
             })
-            .collect())
+            .await)
     }
 
     /// Restart the agent of `execution`, returning once it runs again.
@@ -85,10 +83,19 @@ impl Manager {
 
     /// Ask the agent's wrapper to stop it for a restart.
     async fn request_restart(&self, id: &str) -> Result<oneshot::Receiver<Result<(), String>>> {
-        let mut agents = self.agents.lock().await;
-        let agent = agents
-            .get_mut(id)
-            .with_context(|| format!("no connected agent runs execution {id}"))?;
+        self.executions
+            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id)))
+            .await
+    }
+
+    /// Save the handoff of `agent`, the agent of `id`, then stop it for a
+    /// restart.
+    fn stop_for_restart(
+        &self,
+        id: &str,
+        agent: Option<&mut Agent>,
+    ) -> Result<oneshot::Receiver<Result<(), String>>> {
+        let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         ensure!(
             agent.recover,
             "{} has no command to resume its session; configure [agent_resume] for it",
@@ -123,28 +130,30 @@ impl Manager {
     /// Whether a restart of `id` has not resumed its agent yet; after the
     /// resume, a record left behind belongs to the wrapper.
     pub(crate) async fn restart_before_resume(&self, id: &str) -> bool {
-        self.agents
-            .lock()
+        self.executions
+            .with_agent(id, |agent| {
+                agent
+                    .restart
+                    .as_ref()
+                    .is_some_and(|restart| !restart.resumed)
+            })
             .await
-            .get(id)
-            .and_then(|agent| agent.restart.as_ref())
-            .is_some_and(|restart| !restart.resumed)
+            .unwrap_or(false)
     }
 
     /// Keep the turn state the agent of `id` reported.
     pub(crate) async fn record_agent_turn(&self, id: &str, state: AgentState) {
-        if let Some(agent) = self.agents.lock().await.get_mut(id) {
-            agent.turn = Some(state);
-        }
+        self.executions
+            .with_agent(id, |agent| agent.turn = Some(state))
+            .await;
     }
 
     /// Whether `shoal restart` is restarting the agent of `id`.
     pub(crate) async fn restart_requested(&self, id: &str) -> bool {
-        self.agents
-            .lock()
+        self.executions
+            .with_agent(id, |agent| agent.restart.is_some())
             .await
-            .get(id)
-            .is_some_and(|agent| agent.restart.is_some())
+            .unwrap_or(false)
     }
 
     /// The wrapper of `id` started its child: once a restart resumed the
@@ -159,11 +168,15 @@ impl Manager {
     }
 
     async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<(), String>) {
-        let restart = self.agents.lock().await.get_mut(id).and_then(|agent| {
-            agent
-                .restart
-                .take_if(|restart| restart.resumed || !once_resumed)
-        });
+        let restart = self
+            .executions
+            .with_agent(id, |agent| {
+                agent
+                    .restart
+                    .take_if(|restart| restart.resumed || !once_resumed)
+            })
+            .await
+            .flatten();
         if let Some(restart) = restart {
             // The request may have gone with its client.
             let _ = restart.done.send(outcome);

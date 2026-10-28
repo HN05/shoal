@@ -174,8 +174,8 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let wait = self.item_waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.agent_messages_changed.subscribe();
-        let mut background = self.item_updates_queued.subscribe();
+        let mut queued = self.signals.watch_agent_messages();
+        let mut background = self.signals.watch_item_updates();
         let mut messages = self.agent_messages(&workspace.id).await?;
         if messages.is_empty() {
             // A cancelled poll leaves its deliveries pending for the newer wait.
@@ -214,7 +214,7 @@ impl Manager {
         // The messages share the response with the updates.
         let reserved = serde_json::to_vec(&messages)?.len();
         let children = self.delegated_workspaces(&workspace.id).await?;
-        let updates = match self.pr_gates.try_lock(receiving(&workspace.id, &children)) {
+        let updates = match self.gates.try_lock_prs(receiving(&workspace.id, &children)) {
             Some(_gate) => {
                 self.gated_agent_updates(workspace, &children, reserved)
                     .await?
@@ -242,8 +242,8 @@ impl Manager {
     ) -> Result<Vec<Update>> {
         let children = self.delegated_workspaces(&workspace.id).await?;
         let _gate = self
-            .pr_gates
-            .lock(receiving(&workspace.id, &children))
+            .gates
+            .lock_prs(receiving(&workspace.id, &children))
             .await;
         self.gated_agent_updates(workspace, &children, reserved)
             .await
@@ -334,9 +334,9 @@ impl Manager {
     pub async fn wait_agent_wake(&self, selector: &str, due: bool) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so a change in between still wakes.
-        let mut messages = self.agent_messages_changed.subscribe();
-        let mut queued = self.item_updates_queued.subscribe();
-        let mut changed = self.agent_wake_changed.subscribe();
+        let mut messages = self.signals.watch_agent_messages();
+        let mut queued = self.signals.watch_item_updates();
+        let mut changed = self.signals.watch_agents();
         while self.agent_wake_due(&workspace).await? != due {
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
@@ -359,7 +359,7 @@ impl Manager {
             return Ok(true);
         }
         let children = self.delegated_workspaces(&workspace.id).await?;
-        let Some(_gate) = self.pr_gates.try_lock(receiving(&workspace.id, &children)) else {
+        let Some(_gate) = self.gates.try_lock_prs(receiving(&workspace.id, &children)) else {
             return Ok(false);
         };
         Ok(!self
@@ -404,7 +404,7 @@ impl Manager {
             Some(_) => Vec::new(),
             None => self.delegated_workspaces(id).await?,
         };
-        let guard = self.pr_gates.lock(receiving(id, &children)).await;
+        let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let workspace = self.workspace(id).await?;
         self.verify_worktree(&workspace).await?;
         current_head(&workspace).await?;
@@ -568,7 +568,7 @@ impl Manager {
             .record_observed(id, observations, &Selection::default(), observed_at)
             .await?;
         if !updates.is_empty() {
-            self.item_updates_queued.send_modify(|count| *count += 1);
+            self.signals.item_updates_queued();
         }
         Ok(())
     }
@@ -740,7 +740,7 @@ impl Manager {
         observed_at: u64,
     ) -> Result<Vec<Update>> {
         let selection = selection.clone();
-        let _guard = self.pr_gates.lock([id]).await;
+        let _guard = self.gates.lock_prs([id]).await;
         let id = id.to_owned();
         let agents = self.tracked_agents().await;
         self.store.run(move |db| {
@@ -864,7 +864,7 @@ impl Manager {
                 })
             })
             .await?;
-        self.agent_wake_changed.send_modify(|count| *count += 1);
+        self.signals.agent_changed();
         Ok(())
     }
 }

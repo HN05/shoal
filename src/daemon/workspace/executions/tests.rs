@@ -62,12 +62,12 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
     let after = manager.workspace(&workspace.id).await.unwrap();
     assert_eq!(after.state, workspace.state);
     assert_eq!(setup_finished(&manager, &workspace).await, was_finished);
-    assert!(manager.connections.lock().await.is_empty());
-    assert!(manager.scopes.lock().await.is_empty());
+    assert!(!manager.executions.has_connections().await);
+    assert!(manager.executions.scopes().await.is_empty());
     assert!(
         manager
+            .gates
             .resource_guard(&workspace.id, GuardMode::Exclusive)
-            .await
             .is_ok()
     );
 }
@@ -76,11 +76,11 @@ async fn registration_rolls_back_setup_reservation_when_insertion_fails() {
 async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup() {
     let (_root, manager, workspace) =
         fixture(": > hook-started\nwhile [ ! -f hook-release ]; do sleep 0.01; done").await;
-    let guard = manager.lock_repository_git(&workspace.repository_id).await;
+    let guard = manager.gates.lock_git(&workspace.repository_id).await;
     let git_gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     // Pause publication after persistence, with registration still in flight.
-    let scopes = manager.scopes.lock().await;
+    let scopes = manager.executions.scopes().await;
     let starting = {
         let manager = manager.clone();
         let id = workspace.id.clone();
@@ -105,12 +105,12 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
         }
     })
     .await;
-    assert!(manager.connections.try_lock().is_err());
+    assert!(manager.executions.connections_locked());
     assert!(git_gate.try_lock().is_err());
     assert!(
         manager
+            .gates
             .resource_guard(&workspace.id, GuardMode::Shared)
-            .await
             .is_err()
     );
     drop(scopes);
@@ -123,18 +123,24 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
     assert!(git_gate.try_lock().is_ok());
     assert!(
         manager
+            .gates
             .resource_guard(&workspace.id, GuardMode::Shared)
-            .await
             .is_err()
     );
     let (token, caller) = {
-        let scopes = manager.scopes.lock().await;
+        let scopes = manager.executions.scopes().await;
         let (token, caller) = scopes.iter().next().unwrap();
         (token.clone(), caller.clone())
     };
     assert_eq!(caller.workspace_id, workspace.id);
     assert_eq!(caller.kind(), Some(ExecutionKind::Setup));
-    let mut stop = manager.connections.lock().await[caller.execution_id().unwrap()].subscribe();
+    let mut stop = manager
+        .executions
+        .connections()
+        .await
+        .stop_channel(caller.execution_id().unwrap())
+        .unwrap()
+        .subscribe();
     let stopping = {
         let manager = manager.clone();
         let id = workspace.id.clone();
@@ -158,8 +164,8 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
     assert_eq!(started.plan.scope_token, token);
     assert!(
         manager
+            .gates
             .resource_guard(&workspace.id, GuardMode::Exclusive)
-            .await
             .is_ok()
     );
     manager
@@ -204,12 +210,12 @@ async fn pre_setup_failure_and_identity_change_close_registration() {
                 .iter()
                 .all(|execution| execution.state == ExecutionState::Unknown)
         );
-        assert!(manager.connections.lock().await.is_empty());
-        assert!(manager.scopes.lock().await.is_empty());
+        assert!(!manager.executions.has_connections().await);
+        assert!(manager.executions.scopes().await.is_empty());
         assert!(
             manager
+                .gates
                 .resource_guard(&workspace.id, GuardMode::Exclusive)
-                .await
                 .is_ok()
         );
     }
@@ -270,7 +276,7 @@ async fn unreadable_process_keeps_finished_execution_unknown() {
             .unwrap()
             .unwrap();
         assert_eq!(execution.state, ExecutionState::Unknown);
-        assert!(!manager.execution_connected(&execution.id).await);
+        assert!(!manager.executions.is_connected(&execution.id).await);
         assert!(
             manager
                 .caller(&started.plan.scope_token)
@@ -438,6 +444,7 @@ async fn shutdown_stops_connected_executions_and_refuses_new_ones() {
     bounded(running.stop.wait_for(|stop| *stop)).await.unwrap();
     assert!(
         manager
+            .executions
             .stop_request(&id)
             .await
             .is_some_and(|request| request.save == Save::Everything)
@@ -539,14 +546,14 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         let error = manager.reattach_execution(&request).await.unwrap_err();
         assert!(format!("{error:#}").contains(refusal), "{error:#}");
     }
-    assert!(!manager.execution_connected(&id).await);
+    assert!(!manager.executions.is_connected(&id).await);
     let reattached = manager.reattach_execution(&request).await.unwrap();
     assert_eq!(reattached.workspace.id, workspace.id);
-    assert!(manager.execution_connected(&id).await);
+    assert!(manager.executions.is_connected(&id).await);
     let caller = manager.caller(&token).await.unwrap().unwrap();
     assert_eq!(caller.execution_id(), Some(id.as_str()));
     assert_eq!(caller.kind(), Some(ExecutionKind::Command));
-    assert!(manager.agents.lock().await.contains_key(&id));
+    assert!(manager.executions.with_agent(&id, |_| ()).await.is_some());
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert_eq!(inspection.executions[0].state, ExecutionState::Running);
     let error = manager.reattach_execution(&request).await.unwrap_err();

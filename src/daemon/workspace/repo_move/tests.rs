@@ -206,7 +206,7 @@ async fn a_checkpoint_waits_for_the_move_and_refuses_while_it_is_pending() -> Re
     fs::create_dir_all(&destination)?;
 
     // The move holds the repository's Git gate from its check to its end.
-    let gate = manager.lock_repository_git(&repo.id).await;
+    let gate = manager.gates.lock_git(&repo.id).await;
     let checkpointing = manager.clone();
     let id = workspace.id.clone();
     let mut checkpoint = Box::pin(async move { checkpointing.take_checkpoint(&id, None).await });

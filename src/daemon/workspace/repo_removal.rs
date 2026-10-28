@@ -49,10 +49,10 @@ impl Manager {
     ) -> Result<RepositoryRemoval> {
         // Registration cannot adopt or allocate a path during removal. The Git
         // gate also serializes with workspace creation, branch refresh, and reconciliation.
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let repo = self.repository(selector).await?;
         let _seed = self.stop_seed_build(&repo.id).await;
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         self.remove_locked_repository(repo).await
     }
 
@@ -64,10 +64,10 @@ impl Manager {
         &self,
         id: &str,
     ) -> Result<Option<RepositoryRemoval>> {
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let repo = self.repository(id).await?;
         let _seed = self.stop_seed_build(&repo.id).await;
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         if !repo.contribution
             || self.checkout_has_work(&repo).await?
             || !self.begin_contribution_removal(&repo).await?

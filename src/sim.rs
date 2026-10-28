@@ -351,7 +351,7 @@ impl Manager {
             &request.name,
             request.queue,
         );
-        let _guard = self.simulator_gate.lock().await;
+        let _guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
         // An exported scope has no execution, but its requests still need approval.
         let scoped = caller.is_some();
@@ -629,7 +629,7 @@ impl Manager {
     }
 
     pub async fn release_simulator(&self, selector: &str, name: String) -> Result<()> {
-        let _guard = self.simulator_gate.lock().await;
+        let _guard = self.gates.lock_simulators().await;
         let workspace = self.workspace(selector).await?;
         ensure!(
             workspace.state == WorkspaceState::Ready,
@@ -679,7 +679,7 @@ impl Manager {
     }
 
     pub async fn remove_simulators(&self, owner: &str) -> Result<()> {
-        let _guard = self.simulator_gate.lock().await;
+        let _guard = self.gates.lock_simulators().await;
         for mut sim in self.list_simulators(Some(owner)).await? {
             self.delete_sim(&mut sim).await?;
         }
@@ -689,7 +689,7 @@ impl Manager {
     /// Delete expired idle devices to bound both storage and file count.
     /// Compatible devices can be reused during the grace period.
     pub async fn expire_simulators(&self) -> Result<()> {
-        let Ok(_guard) = self.simulator_gate.try_lock() else {
+        let Some(_guard) = self.gates.try_lock_simulators() else {
             return Ok(());
         };
         let idle_seconds = self.config().simulators.idle_seconds;

@@ -115,7 +115,7 @@ pub(super) async fn execute(
         }
     };
     if !reattach {
-        manager.mark_unattachable(&plan.id);
+        manager.executions.mark_unattachable(&plan.id);
     }
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent
@@ -252,15 +252,15 @@ async fn serve(
     }
     let operation = match unattachable {
         Some(operation) => operation,
-        None => match manager.background_operations.clone().try_read_owned() {
-            Ok(operation) => operation,
+        None => match manager.gates.try_owned_operation() {
+            Some(operation) => operation,
             // An update is restarting the daemon; the wrapper reports its
             // exit to the replacement.
-            Err(_) if execution.reattach && result.is_ok() => {
+            None if execution.reattach && result.is_ok() => {
                 manager.detach_execution(&execution.id).await;
                 return Ok(());
             }
-            Err(_) => manager.background_operations.clone().read_owned().await,
+            None => manager.gates.owned_operation().await,
         },
     };
     finish(
@@ -347,7 +347,7 @@ async fn relay(
                 *started = true;
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
-                    None => manager.background_operations.clone().read_owned().await,
+                    None => manager.gates.owned_operation().await,
                 };
                 manager
                     .record_execution_child(execution_id.clone(), child, group_id)
@@ -368,7 +368,7 @@ async fn relay(
                 // wrapper while that registration waits for its answer.
                 let operation = match unattachable.take() {
                     Some(operation) => operation,
-                    None => manager.background_operations.clone().read_owned().await,
+                    None => manager.gates.owned_operation().await,
                 };
                 // A refusal stops the demo instead of letting it run again.
                 let control = match manager.release_exited_child(execution_id, workspace).await {
@@ -396,7 +396,7 @@ async fn relay(
                 // An update waits for the restore; other shutdowns hand the
                 // wait to the next daemon.
                 if unattachable.is_none() {
-                    *unattachable = manager.background_operations.clone().try_read_owned().ok();
+                    *unattachable = manager.gates.try_owned_operation();
                 }
                 match execution_recovery::pause(
                     manager,
@@ -416,7 +416,7 @@ async fn relay(
                         protocol::write(writer, &Control::Resume { ports }).await?;
                     }
                     // The next daemon continues the wait once the wrapper reattaches.
-                    Action::Stop(_) if reattach && manager.shutting_down() => {
+                    Action::Stop(_) if reattach && manager.executions.shutting_down() => {
                         protocol::write(writer, &Control::Detach).await?;
                         return Ok(Ended::Detached);
                     }
@@ -467,10 +467,13 @@ async fn prepare_stop(manager: &Manager, stopping: Stopping<'_>) -> PreparedStop
     if manager.restart_requested(stopping.execution_id).await {
         return prepare_restart();
     }
-    let control = if stopping.reattach && manager.shutting_down() {
+    let control = if stopping.reattach && manager.executions.shutting_down() {
         Control::Detach
     } else {
-        requested_stop(manager.stop_request(stopping.execution_id).await, stopping)
+        requested_stop(
+            manager.executions.stop_request(stopping.execution_id).await,
+            stopping,
+        )
     };
     PreparedStop {
         control,
@@ -584,7 +587,7 @@ async fn finish(
         .finish_execution(execution_id.clone(), kind, result.as_ref().ok().copied())
         .await?;
     if let Some(launch) = unrun {
-        manager.remember_unrun_launch(launch);
+        manager.executions.remember_unrun_launch(launch);
     }
     if let Some(agent) = &agent
         && result.is_ok()

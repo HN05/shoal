@@ -8,7 +8,7 @@ use std::{
     io,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
-    sync::{Arc, atomic::Ordering},
+    sync::Arc,
     time::Duration,
 };
 use tokio::time::Instant;
@@ -64,12 +64,12 @@ pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         let poll = manager.config().overload.poll_seconds;
         tokio::time::sleep(Duration::from_secs(poll)).await;
-        let _operation = manager.background_operations.read().await;
+        let _operation = manager.gates.operation().await;
         if let Err(error) = monitor
             .check(&manager, Instant::now(), crate::fsutil::available_bytes)
             .await
         {
-            manager.publish_disk_reading(None);
+            manager.config_state.publish_disk_reading(None);
             log!("disk space monitor: {error:#}");
         }
     }
@@ -83,12 +83,12 @@ impl Monitor {
         available: impl Fn(&Path) -> io::Result<u64>,
     ) -> Result<()> {
         // Before the config: a reload in between makes this reading stale.
-        let generation = manager.config_generation.load(Ordering::SeqCst);
+        let generation = manager.config_state.generation();
         let config = manager.config();
         let settings = &config.overload.disk;
         if !settings.enabled {
             // Re-enabling waits for a fresh reading before recovery.
-            manager.publish_disk_reading(None);
+            manager.config_state.publish_disk_reading(None);
             return Ok(());
         }
         let workspaces = manager.list_workspaces().await?;
@@ -98,7 +98,9 @@ impl Monitor {
             && low
                 .iter()
                 .all(|filesystem| filesystem.free >= settings.cleanup_free_bytes());
-        manager.publish_disk_reading(recovered.then_some(generation));
+        manager
+            .config_state
+            .publish_disk_reading(recovered.then_some(generation));
         if config.overload.warning.enabled
             && let Some(lowest) = low
                 .iter()
@@ -131,22 +133,6 @@ impl Monitor {
             stop_executions(manager, settings, critical).await?;
         }
         Ok(())
-    }
-}
-
-impl Manager {
-    /// Record the configuration generation under which a reading found the
-    /// cleanup threshold free everywhere, or that the latest one did not.
-    pub(super) fn publish_disk_reading(&self, recovered_in: Option<u64>) {
-        let encoded = recovered_in.map_or(0, |generation| generation + 1);
-        self.disk_recovered_in.store(encoded, Ordering::SeqCst);
-    }
-
-    /// Whether the latest reading found the cleanup threshold free everywhere
-    /// under the current configuration; a reload waits for a new reading.
-    pub(super) fn disk_space_recovered(&self) -> bool {
-        let current = self.config_generation.load(Ordering::SeqCst);
-        self.disk_recovered_in.load(Ordering::SeqCst) == current + 1
     }
 }
 

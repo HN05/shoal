@@ -47,7 +47,7 @@ impl Manager {
         root: Option<&Path>,
         layout: Layout,
     ) -> Result<RepositoryMoves> {
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;
         if let Some(root) = root {
@@ -65,7 +65,7 @@ impl Manager {
     /// root these moves emptied to the directory Spotlight skips. Each
     /// repository must be idle; all are checked before the first moves.
     pub async fn move_repositories(&self, layout: Layout) -> Result<Vec<MovedRepository>> {
-        let _registry = self.registry_gate.lock().await;
+        let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;
         let (plan, moving) = self.movable_repositories(&target).await?;
@@ -120,7 +120,7 @@ impl Manager {
             })
             .await?;
         for id in pending {
-            let _git = self.lock_repository_git(&id).await;
+            let _git = self.gates.lock_git(&id).await;
             self.finish_repository_move(&id)
                 .await
                 .context("finish an interrupted repository move")?;
@@ -226,7 +226,7 @@ impl Manager {
 
     async fn move_repository(&self, repo: &Repository, root: &Path) -> Result<MovedRepository> {
         let _seed = self.stop_seed_build(&repo.id).await;
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         let repo = self.repository(&repo.id).await?;
         self.check_movable(&repo).await?;
         let workspaces = self.repository_workspaces(&repo.id).await?;
@@ -259,8 +259,8 @@ impl Manager {
         let mut guards = Vec::with_capacity(workspaces.len());
         for workspace in workspaces {
             guards.push(
-                self.resource_guard(&workspace.id, GuardMode::Exclusive)
-                    .await?,
+                self.gates
+                    .resource_guard(&workspace.id, GuardMode::Exclusive)?,
             );
         }
         Ok(guards)

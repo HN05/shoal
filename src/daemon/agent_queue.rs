@@ -22,12 +22,12 @@ pub(super) async fn run(manager: Arc<Manager>) {
         log!("agent queue: {error:#}");
     }
     let mut changed = manager.store.watch_changes();
-    let mut config = manager.watch_config();
+    let mut config = manager.config_state.watch();
     // Restores wait for sustained healthy readings.
-    let mut recovered = manager.recovery_ready.subscribe();
+    let mut recovered = manager.overload_recovery.watch();
     loop {
         {
-            let _operation = manager.background_operations.read().await;
+            let _operation = manager.gates.operation().await;
             if let Err(error) = manager.dispatch_queue().await {
                 log!("agent queue: {error:#}");
             }
@@ -36,7 +36,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
             _ = changed.changed() => {}
             _ = config.changed() => {}
             _ = recovered.changed() => {}
-            _ = manager.agent_queue_wake.notified() => {}
+            _ = manager.agent_queue.woken() => {}
             _ = tokio::time::sleep(SWEEP_INTERVAL) => {}
         }
         tokio::time::sleep(SETTLE).await;

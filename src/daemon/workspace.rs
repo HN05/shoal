@@ -7,6 +7,7 @@ mod agents;
 mod branches;
 pub(crate) mod capacity;
 mod checkpoints;
+mod config_state;
 mod conflicts;
 mod contributions;
 mod demos;
@@ -15,15 +16,17 @@ mod done;
 mod environment;
 mod executions;
 mod fast_forward;
+mod gates;
 mod holds;
 pub(super) mod identity;
 mod kept_branches;
 mod land;
 mod lifecycle;
 mod location;
+mod overload_recovery;
 mod ownership;
 pub(crate) mod paths;
-pub(crate) mod pr_gate;
+mod pr_gate;
 mod registry;
 mod rename;
 mod repo_configuration;
@@ -31,12 +34,14 @@ mod repo_move;
 mod repo_removal;
 mod restore;
 pub(crate) mod review;
+mod signals;
 pub(crate) mod spotlight;
 mod stack;
 mod status;
 mod stopped_work;
 mod tree;
 pub(crate) mod turn_retry;
+mod usage;
 mod xcode;
 
 pub(crate) use agent_queue::Grant;
@@ -44,6 +49,7 @@ pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub use executions::{ExecutionKind, Save, StopRequest, UnprovenStop};
 pub(crate) use executions::{ReattachedExecution, StartedExecution};
+pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
@@ -54,10 +60,7 @@ pub(crate) use tree::{
 
 use crate::{
     config::Config,
-    daemon::{
-        scope::Caller,
-        store::{self, Store},
-    },
+    daemon::store::{self, Store},
     git::{self, default_branch::DefaultBranchLookup, worktrunk},
     model::{Execution, Inspection, Repository, Workspace},
     paths::Paths,
@@ -68,12 +71,8 @@ use branches::UpstreamPolicy;
 use futures_util::StreamExt as _;
 use ownership::owns_git_dir;
 use rusqlite::{OptionalExtension, TransactionBehavior, params};
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    sync::Arc,
-};
-use tokio::sync::{Mutex, OwnedMutexGuard, RwLock, watch};
+use std::{collections::HashSet, fs, sync::Arc};
+use tokio::sync::OwnedMutexGuard;
 
 /// Review checks a listing runs at once, each reading HEAD with one Git
 /// process: enough to overlap their waits without one listing taking a
@@ -96,124 +95,23 @@ enum WorkspaceSource {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum GuardMode {
-    Shared,
-    Exclusive,
-}
-
-pub(crate) enum ResourceGuard {
-    Operation {
-        _guard: tokio::sync::OwnedRwLockReadGuard<()>,
-    },
-    Hook {
-        _guard: tokio::sync::OwnedRwLockWriteGuard<()>,
-    },
-}
-
 pub struct Manager {
     pub store: Store,
-    /// Readers cover background operations, so a writer can quiesce them
-    /// without cancelling hooks or mutations already in progress.
-    pub(super) background_operations: Arc<RwLock<()>>,
-    pub(crate) pr_gates: pr_gate::PrGates,
-    /// Orders copying a proposal's files and storing it against pruning, so
-    /// pruning never deletes the copies of a proposal not yet stored.
-    pub(crate) proposal_files: Mutex<()>,
-    /// Orders announcing a question or approval request against withdrawing
-    /// it, so a withdrawn one is never announced afterwards.
-    pub(crate) announcement_gate: Mutex<()>,
+    pub(crate) gates: gates::Gates,
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
-    pub cleanup_notify: tokio::sync::Notify,
-    /// Wakes the environment check after the config was reloaded.
-    pub environment_recheck: tokio::sync::Notify,
-    pub(super) cleanup_health: std::sync::Mutex<super::cleanup::Health>,
-    /// The global file as last loaded; a reload replaces it for later reads
-    /// and wakes subscribers.
-    config: watch::Sender<Arc<Config>>,
-    /// Orders reloads so the last file read is the one published.
-    config_reload: Mutex<()>,
+    pub(super) cleanup_health: super::cleanup::CleanupHealth,
+    pub(crate) config_state: config_state::ConfigState,
     pub(crate) paths: Paths,
-    /// Serializes every simctl transition.
-    pub(crate) simulator_gate: Mutex<()>,
     /// Arrival order of queued resource and simulator requests.
     pub(crate) queues: super::queue::Queues,
-    /// Serializes repository registration, removal, and local config changes.
-    registry_gate: Mutex<()>,
-    /// Orders checkpoint records and refs against expiry, so a ref is never
-    /// deleted between its record and its write. Held only for those steps,
-    /// since removal takes checkpoints under the repository's Git gate.
-    checkpoint_gate: Mutex<()>,
-    /// Per-repository gate for ref updates and worktree creation/removal.
-    git_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    /// Per-host gate, so concurrent first lookups ask a forge host once.
-    pub(super) forge_host_gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    /// Excludes lifecycle transitions and overlapping permit hooks per workspace.
-    resource_gates: Mutex<HashMap<String, Arc<RwLock<()>>>>,
-    /// Scope token → the execution it was issued to.
-    scopes: Mutex<HashMap<String, Caller>>,
-    /// Connected executions and the channel that asks their wrapper to stop.
-    pub(super) connections: Mutex<HashMap<String, watch::Sender<bool>>>,
-    /// Connected executions whose wrapper stops instead of reattaching when
-    /// the daemon shuts down.
-    unattachable: std::sync::Mutex<HashSet<String>>,
-    agents: Mutex<HashMap<String, agents::Agent>>,
-    /// Why the daemon asked connected executions to stop.
-    stop_requests: Mutex<HashMap<String, executions::StopRequest>>,
-    /// Recent demo launches whose execution ended before their command ran,
-    /// for the start waiting on each.
-    unrun_demo_launches: std::sync::Mutex<std::collections::VecDeque<String>>,
-    /// Set under the connections lock once shutdown stops executions.
-    shutting_down: std::sync::atomic::AtomicBool,
-    pub(super) recovery_ready: watch::Sender<Option<u64>>,
-    pub(super) recovery_epoch: std::sync::atomic::AtomicU64,
-    /// Counts published configurations, so a reading taken under an earlier
-    /// one cannot pass for a current one.
-    pub(super) config_generation: std::sync::atomic::AtomicU64,
-    /// One more than the configuration generation under which the disk
-    /// monitor's latest reading found the cleanup threshold free on every
-    /// filesystem, so restored agents can write; zero for none.
-    pub(super) disk_recovered_in: std::sync::atomic::AtomicU64,
-    /// Per-workspace activity counters folded into cleanup fingerprints.
-    activity: Mutex<HashMap<String, u64>>,
-    /// The newest recorded notification ID; wakes `shoal alerts --follow`.
-    pub(crate) notifications_changed: watch::Sender<i64>,
-    /// Counts queued agent messages; wakes watches waiting for them.
-    pub(crate) agent_messages_changed: watch::Sender<u64>,
-    /// Counts queued chat messages; wakes chats waiting for them.
-    pub(crate) chat_messages_changed: watch::Sender<u64>,
-    /// Counts answered and closed questions; wakes waits for an answer.
-    pub(crate) questions_changed: watch::Sender<u64>,
-    /// Counts background polls that queued item updates; wakes watches.
-    pub(crate) item_updates_queued: watch::Sender<u64>,
-    /// Counts agent state changes and deliveries to agents; wakes waits for
-    /// an idle agent's updates.
-    pub(crate) agent_wake_changed: watch::Sender<u64>,
-    /// Serializes agent queue admission, so two passes cannot fill one slot.
-    agent_queue_gate: Mutex<()>,
-    /// Open holds per starting queue entry.
-    agent_queue_holds: std::sync::Mutex<HashMap<String, usize>>,
-    /// Executions whose stopped agent waits for its queued restore with
-    /// every process stopped, with what admitted it once admission did.
-    restore_waiters: std::sync::Mutex<HashMap<String, Option<agent_queue::Grant>>>,
-    /// Wakes the queue dispatcher when a slot may have freed.
-    pub(crate) agent_queue_wake: tokio::sync::Notify,
-    /// Wakes turn retry delivery when a retry is scheduled.
-    pub(crate) turn_retry_wake: tokio::sync::Notify,
-    /// Wakes stopped-agent reconciliation when an execution becomes unknown.
-    pub(crate) execution_unknown: tokio::sync::Notify,
-    /// Recent CPU readings for dynamic agent admission.
-    pub(crate) cpu_usage: std::sync::Mutex<crate::daemon::cpu_usage::CpuUsage>,
-    /// What each workspace's processes used at the latest sample.
-    pub(crate) workspace_usage: std::sync::Mutex<crate::daemon::workspace_usage::WorkspaceUsages>,
-    /// The commit and settings whose seed build last failed, per repository.
-    pub(super) seed_failures: std::sync::Mutex<HashMap<String, (String, String)>>,
-    /// Running seed builds, which repository removal cancels and waits for.
-    pub(super) seed_builds: std::sync::Mutex<HashMap<String, Arc<super::seed::SeedSlot>>>,
-    /// What forge responses taught, per account the daemon acts as.
-    pub(crate) forge_memories:
-        std::sync::Mutex<HashMap<String, crate::forge::transport::memory::Memory>>,
+    pub(crate) executions: executions::Executions,
+    pub(crate) overload_recovery: overload_recovery::OverloadRecovery,
+    pub(crate) agent_queue: agent_queue::AgentQueue,
+    pub(crate) signals: signals::Signals,
+    pub(crate) usage: usage::Usage,
+    pub(crate) seeds: super::seed::Seeds,
+    pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
 }
 
 impl Manager {
@@ -224,67 +122,27 @@ impl Manager {
         let config = Config::load(&paths)?;
         super::forge_hosts::learn_forge_pins(&Default::default(), &config.forges);
         Ok(Arc::new(Self {
-            config: watch::channel(Arc::new(config)).0,
-            config_reload: Mutex::new(()),
-            pr_gates: Default::default(),
-            proposal_files: Mutex::new(()),
-            announcement_gate: Mutex::new(()),
+            config_state: config_state::ConfigState::new(config),
             item_waits: Default::default(),
             chat_waits: Default::default(),
-            cleanup_notify: tokio::sync::Notify::new(),
-            environment_recheck: tokio::sync::Notify::new(),
             cleanup_health: Default::default(),
             store: Store::open(paths.database()).await?,
-            background_operations: Arc::new(RwLock::new(())),
+            gates: Default::default(),
             paths,
-            simulator_gate: Mutex::new(()),
             queues: Default::default(),
-            registry_gate: Mutex::new(()),
-            checkpoint_gate: Mutex::new(()),
-            git_gates: Mutex::new(HashMap::new()),
-            forge_host_gates: Mutex::new(HashMap::new()),
-            resource_gates: Mutex::new(HashMap::new()),
-            scopes: Mutex::new(HashMap::new()),
-            connections: Mutex::new(HashMap::new()),
-            unattachable: Default::default(),
-            agents: Mutex::new(HashMap::new()),
-            stop_requests: Mutex::new(HashMap::new()),
-            unrun_demo_launches: Default::default(),
-            shutting_down: std::sync::atomic::AtomicBool::new(false),
-            recovery_ready: watch::channel(None).0,
-            recovery_epoch: std::sync::atomic::AtomicU64::new(0),
-            config_generation: std::sync::atomic::AtomicU64::new(0),
-            disk_recovered_in: std::sync::atomic::AtomicU64::new(0),
-            activity: Mutex::new(HashMap::new()),
-            notifications_changed: watch::channel(0).0,
-            agent_messages_changed: watch::channel(0).0,
-            chat_messages_changed: watch::channel(0).0,
-            questions_changed: watch::channel(0).0,
-            item_updates_queued: watch::channel(0).0,
-            agent_wake_changed: watch::channel(0).0,
-            agent_queue_gate: Mutex::new(()),
-            agent_queue_holds: Default::default(),
-            restore_waiters: Default::default(),
-            agent_queue_wake: tokio::sync::Notify::new(),
-            turn_retry_wake: tokio::sync::Notify::new(),
-            execution_unknown: tokio::sync::Notify::new(),
-            cpu_usage: Default::default(),
-            workspace_usage: Default::default(),
-            seed_failures: Default::default(),
-            seed_builds: Default::default(),
+            executions: Default::default(),
+            overload_recovery: Default::default(),
+            agent_queue: Default::default(),
+            signals: Default::default(),
+            usage: Default::default(),
+            seeds: Default::default(),
             forge_memories: Default::default(),
         }))
     }
 
-    /// The global config as last loaded. Take one snapshot per operation so a
-    /// concurrent reload cannot mix two versions.
+    /// The global config as last loaded; see [`config_state::ConfigState::current`].
     pub fn config(&self) -> Arc<Config> {
-        self.config.borrow().clone()
-    }
-
-    /// Observe reloads, for waits that a policy change must end.
-    pub(crate) fn watch_config(&self) -> watch::Receiver<Arc<Config>> {
-        self.config.subscribe()
+        self.config_state.current()
     }
 
     /// Make `config` the one later operations read. Changed overload
@@ -292,51 +150,20 @@ impl Manager {
     /// a waiting agent needs a fresh healthy interval under the new thresholds.
     pub(crate) fn publish_config(&self, config: Config) {
         if config.overload != self.config().overload {
-            self.reset_overload_recovery();
+            self.overload_recovery.reset();
         }
         super::forge_hosts::learn_forge_pins(&self.config().forges, &config.forges);
-        self.config.send_replace(Arc::new(config));
-        // After the swap: a reader that sees the new generation sees this config.
-        self.config_generation
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.config_state.publish(config);
     }
 
     /// Replace the global config with the file's current contents for later
     /// operations. An invalid file leaves the running config in place.
     pub async fn reload_config(&self) -> Result<()> {
-        let _reload = self.config_reload.lock().await;
+        let _reload = self.config_state.lock_reload().await;
         let paths = self.paths.clone();
         let config = tokio::task::spawn_blocking(move || Config::load_settled(&paths)).await??;
         self.publish_config(config);
         Ok(())
-    }
-
-    /// Acquire the Git gate by recorded ID without checking repository availability.
-    /// Callers must not already hold this repository's gate.
-    pub(crate) async fn lock_repository_git(&self, repository_id: &str) -> OwnedMutexGuard<()> {
-        let gate = self
-            .git_gates
-            .lock()
-            .await
-            .entry(repository_id.to_owned())
-            .or_default()
-            .clone();
-        gate.lock_owned().await
-    }
-
-    /// [`Self::lock_repository_git`] when nothing holds the gate.
-    pub(crate) async fn try_lock_repository_git(
-        &self,
-        repository_id: &str,
-    ) -> Option<OwnedMutexGuard<()>> {
-        let gate = self
-            .git_gates
-            .lock()
-            .await
-            .entry(repository_id.to_owned())
-            .or_default()
-            .clone();
-        gate.try_lock_owned().ok()
     }
 
     pub(crate) async fn lock_repository(
@@ -344,35 +171,11 @@ impl Manager {
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<(Repository, OwnedMutexGuard<()>)> {
         let repo = self.repository(selector).await?;
-        let guard = self.lock_repository_git(&repo.id).await;
+        let guard = self.gates.lock_git(&repo.id).await;
         // Removal may have completed or failed while this request waited.
         let repo = self.repository(&repo.id).await?;
         self.ensure_repository_available(&repo.id).await?;
         Ok((repo, guard))
-    }
-
-    pub(crate) async fn resource_guard(&self, id: &str, mode: GuardMode) -> Result<ResourceGuard> {
-        let gate = self
-            .resource_gates
-            .lock()
-            .await
-            .entry(id.to_owned())
-            .or_default()
-            .clone();
-        let guard = match mode {
-            GuardMode::Exclusive => gate
-                .try_write_owned()
-                .map(|guard| ResourceGuard::Hook { _guard: guard }),
-            GuardMode::Shared => gate
-                .try_read_owned()
-                .map(|guard| ResourceGuard::Operation { _guard: guard }),
-        };
-        guard.context("workspace resource operation is in progress; retry when its hook finishes")
-    }
-
-    /// Bind a scope token to the execution it was issued to.
-    pub(crate) async fn issue_scope(&self, token: String, caller: Caller) {
-        self.scopes.lock().await.insert(token, caller);
     }
 
     pub async fn list_workspaces(&self) -> Result<Vec<Workspace>> {
@@ -406,10 +209,8 @@ impl Manager {
 
     /// What the workspace's processes use, from the latest sample.
     pub(crate) fn workspace_usage(&self, id: &str) -> Option<crate::model::WorkspaceUsage> {
-        self.workspace_usage
-            .lock()
-            .unwrap()
-            .get(id, tokio::time::Instant::now())
+        let now = tokio::time::Instant::now();
+        self.usage.with_workspaces(|usages| usages.get(id, now))
     }
 
     /// The workspaces a caller lists, with review marks checked against
@@ -431,24 +232,6 @@ impl Manager {
             workspace.usage = self.workspace_usage(&workspace.id);
         }
         Ok(workspaces)
-    }
-
-    /// Record that a restart would stop this connected execution.
-    pub(super) fn mark_unattachable(&self, id: &str) {
-        self.unattachable
-            .lock()
-            .expect("unattachable executions lock")
-            .insert(id.to_owned());
-    }
-
-    /// Whether a restart would stop a connected execution. Disconnected
-    /// records keep their state across it.
-    pub(super) fn has_unattachable_connections(&self) -> bool {
-        !self
-            .unattachable
-            .lock()
-            .expect("unattachable executions lock")
-            .is_empty()
     }
 
     /// Whether the workspace has any recorded execution, in any state.
@@ -968,7 +751,7 @@ impl Manager {
         state: WorkspaceState,
         allow_pending_rename: bool,
     ) -> Result<WorkspaceState> {
-        let _resources = self.resource_guard(id, GuardMode::Shared).await?;
+        let _resources = self.gates.resource_guard(id, GuardMode::Shared)?;
         let id = id.to_owned();
         self.store
             .run(move |db| {
@@ -1007,7 +790,7 @@ impl Manager {
     /// Record activity so automatic cleanup restarts its idle timer, and its
     /// time for idle periods that must survive a restart.
     pub async fn touch(&self, id: &str) {
-        *self.activity.lock().await.entry(id.to_owned()).or_default() += 1;
+        self.usage.record_activity(id);
         let id = id.to_owned();
         let recorded = self
             .store
@@ -1044,18 +827,10 @@ impl Manager {
             .await
     }
 
-    pub(crate) async fn activity(&self, id: &str) -> u64 {
-        self.activity.lock().await.get(id).copied().unwrap_or(0)
-    }
-
     /// Drop in-memory bookkeeping for a workspace that no longer exists.
     pub(crate) async fn forget_workspace(&self, id: &str) {
-        self.activity.lock().await.remove(id);
-        self.resource_gates.lock().await.remove(id);
-        self.scopes
-            .lock()
-            .await
-            .retain(|_, caller| caller.workspace_id != id);
+        self.usage.forget_workspace(id);
+        self.executions.forget_workspace(id).await;
     }
 }
 

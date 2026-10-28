@@ -105,7 +105,7 @@ impl Manager {
         let queued = self.workspace(selector).await?;
         // Serializes with branch creation and main updates; state reservation below
         // prevents new executions, removal, stop, and resource claims during repair.
-        let _guard = self.lock_repository_git(&queued.repository_id).await;
+        let _guard = self.gates.lock_git(&queued.repository_id).await;
         // Read again: a repair that held the gate meanwhile may have changed it.
         let workspace = self.workspace(&queued.id).await?;
         let mut report = Report::new(workspace.clone());
@@ -323,7 +323,7 @@ impl Manager {
         scan: &mut process::Scan,
         ids: &HashSet<String>,
     ) -> Result<ExecutionReport> {
-        let connected = self.execution_connected(&execution.id).await;
+        let connected = self.executions.is_connected(&execution.id).await;
         let mut processes = Processes::inspect(execution, scan).await?;
         if options.stop && !connected {
             processes = stop_survivors(execution, processes, report, scan, ids).await?;

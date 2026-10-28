@@ -605,12 +605,7 @@ async fn await_restore(
         tokio::spawn(async move { manager.await_restore_admission(&execution).await })
     };
     bounded(async {
-        while !manager
-            .restore_waiters
-            .lock()
-            .unwrap()
-            .contains_key(execution)
-        {
+        while !manager.agent_queue.restore_waiters().contains(execution) {
             tokio::task::yield_now().await;
         }
     })
@@ -622,10 +617,8 @@ async fn await_restore(
 const ABSENT_GROUP: u32 = i32::MAX as u32;
 
 fn publish_recovery(manager: &Manager) {
-    let epoch = manager
-        .recovery_epoch
-        .load(std::sync::atomic::Ordering::Relaxed);
-    manager.recovery_ready.send_replace(Some(epoch));
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
 }
 
 /// Each entry's name, kind and state in queue order.
@@ -696,7 +689,7 @@ async fn stopped_agents_restore_in_queue_order_before_later_launches() {
     manager.dispatch_queue().await.unwrap();
     let [first_restore, second_restore] = restoring;
     bounded(first_restore).await.unwrap().unwrap();
-    assert_eq!(manager.published_recovery(), None);
+    assert_eq!(manager.overload_recovery.published(), None);
     assert_eq!(
         queue(&manager).await[..2],
         [
@@ -736,7 +729,7 @@ async fn a_stop_after_admission_returns_the_restore_to_its_place() {
     manager.dispatch_queue().await.unwrap();
     let epoch = bounded(restoring).await.unwrap().unwrap();
     // Load worsens again while the restore checks its workspace.
-    manager.reset_overload_recovery();
+    manager.overload_recovery.reset();
     assert!(
         !manager
             .confirm_restore(&agents[0].0, &first.id, epoch)
@@ -767,14 +760,17 @@ async fn a_stop_after_admission_returns_the_restore_to_its_place() {
 async fn admission_consumes_only_the_published_recovery_epoch() {
     let (_temp, manager) = manager().await;
     publish_recovery(&manager);
-    let published = manager.published_recovery().unwrap();
+    let published = manager.overload_recovery.published().unwrap();
     // A stop between the check and the admission withdraws the readings.
-    manager.reset_overload_recovery();
-    assert_eq!(manager.consume_recovery(published), None);
+    manager.overload_recovery.reset();
+    assert_eq!(manager.overload_recovery.consume(published), None);
     publish_recovery(&manager);
-    let published = manager.published_recovery().unwrap();
-    assert_eq!(manager.consume_recovery(published), Some(published + 1));
-    assert_eq!(manager.published_recovery(), None);
+    let published = manager.overload_recovery.published().unwrap();
+    assert_eq!(
+        manager.overload_recovery.consume(published),
+        Some(published + 1)
+    );
+    assert_eq!(manager.overload_recovery.published(), None);
 }
 
 #[tokio::test]
@@ -793,7 +789,7 @@ async fn lowered_limits_hold_restores_until_a_stopped_agent_is_discarded() {
     // Each restore would take back its own slot, but the other one fills the machine.
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await[0], ("first".into(), Restore, Queued));
-    assert!(manager.published_recovery().is_some());
+    assert!(manager.overload_recovery.published().is_some());
 
     // `shoal stop` cancels the second restore; its wrapper ends with the
     // recovery record, which still holds the slot until it is discarded.
@@ -912,10 +908,12 @@ async fn dynamic_admission_restores_once_measured_load_has_room() {
     tokio::time::pause();
     let start = tokio::time::Instant::now();
     let record = |seconds: u64, busy: u64, total: u64| {
-        manager.cpu_usage.lock().unwrap().record(
-            start + Duration::from_secs(seconds),
-            Ok(crate::process::load::CpuTicks { busy, total }),
-        );
+        manager.usage.with_cpu(|cpu| {
+            cpu.record(
+                start + Duration::from_secs(seconds),
+                Ok(crate::process::load::CpuTicks { busy, total }),
+            )
+        });
     };
     // Ninety percent busy leaves no room for the restored agent's load.
     record(0, 0, 0);
@@ -998,6 +996,7 @@ async fn workspace_processes_start_agents_only_below_their_workspace() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             crate::daemon::scope::Caller {
@@ -1121,7 +1120,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     let launch = add(&manager, &repo, "later").await;
     assert!(launch.start);
     manager.dispatch_queue().await.unwrap();
-    assert!(manager.published_recovery().is_some());
+    assert!(manager.overload_recovery.published().is_some());
     assert_eq!(queue(&manager).await[0], ("idle".into(), Restore, Queued));
     assert!(manager.queue_entries().await.unwrap()[0].waits_for_update);
 
@@ -1138,7 +1137,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
     assert_eq!(queue(&manager).await, [("idle".into(), Restore, Starting)]);
     // The update's admission holds through later stops.
-    manager.reset_overload_recovery();
+    manager.overload_recovery.reset();
     assert!(
         manager
             .confirm_restore(&execution, &idle.id, Grant::Update)
@@ -1177,13 +1176,11 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
         .await
         .unwrap();
     // No reading has found the cleanup threshold free yet.
-    manager.publish_disk_reading(None);
+    manager.config_state.publish_disk_reading(None);
     manager.dispatch_queue().await.unwrap();
     assert_eq!(queue(&manager).await, [("idle".into(), Restore, Queued)]);
-    let generation = manager
-        .config_generation
-        .load(std::sync::atomic::Ordering::SeqCst);
-    manager.publish_disk_reading(Some(generation));
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
     manager.dispatch_queue().await.unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
 }

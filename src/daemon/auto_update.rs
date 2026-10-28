@@ -33,8 +33,8 @@ impl Update {
 /// their execution changes or their wrapper cannot reattach. Connected
 /// executions that never reattach block restart.
 pub(super) fn quiesce(manager: &Manager) -> Option<RwLockWriteGuard<'_, ()>> {
-    let guard = manager.background_operations.try_write().ok()?;
-    (!manager.has_unattachable_connections()).then_some(guard)
+    let guard = manager.gates.try_quiesce()?;
+    (!manager.executions.has_unattachable()).then_some(guard)
 }
 
 #[cfg(test)]

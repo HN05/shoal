@@ -159,6 +159,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

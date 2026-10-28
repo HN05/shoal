@@ -132,7 +132,7 @@ impl Manager {
     /// checkpoint mutex keeps from running in between.
     async fn save_checkpoint(&self, mut checkpoint: Checkpoint) -> Result<Checkpoint> {
         let repo = self.repository(&checkpoint.repository_id).await?;
-        let _refs = self.checkpoint_gate.lock().await;
+        let _refs = self.gates.lock_checkpoints().await;
         let reference = git::checkpoint::reference(&checkpoint.commit);
         git::checkpoint::save(&repo.path, &reference, &checkpoint.commit).await?;
         let record = checkpoint.clone();
@@ -248,7 +248,7 @@ impl Manager {
             "checkpoint {} could not keep the workspace's unsaved files; commit or remove them first",
             replaced.number
         );
-        let _git = self.lock_repository_git(&workspace.repository_id).await;
+        let _git = self.gates.lock_git(&workspace.repository_id).await;
         git::checkpoint::rewind(&workspace.path, &checkpoint.head, &checkpoint.commit)
             .await
             .with_context(|| {
@@ -362,14 +362,14 @@ impl Manager {
     /// A busy repository, or one being moved or removed, keeps its refs until
     /// a later pass rather than holding up the others.
     async fn expire_repository_checkpoints(&self, repo: &Repository) -> Result<()> {
-        let Some(_git) = self.try_lock_repository_git(&repo.id).await else {
+        let Some(_git) = self.gates.try_lock_git(&repo.id) else {
             return Ok(());
         };
         if self.ensure_repository_available(&repo.id).await.is_err() {
             return Ok(());
         }
         let repo = &self.repository(&repo.id).await?;
-        let _refs = self.checkpoint_gate.lock().await;
+        let _refs = self.gates.lock_checkpoints().await;
         let repository_id = repo.id.clone();
         self.store
             .run(move |db| delete_expired(db, &repository_id))

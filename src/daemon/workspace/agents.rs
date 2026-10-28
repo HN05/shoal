@@ -18,7 +18,7 @@ use crate::{
 
 mod restart;
 
-pub(super) struct Agent {
+pub(crate) struct Agent {
     name: String,
     workspace: String,
     workspace_id: String,
@@ -163,7 +163,7 @@ impl Manager {
         }
         // A completion or forge transition may have happened while the agent
         // was running. Retry cleanup once the exit hook is finished.
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
     }
 
     async fn run_agent_exit_hook(
@@ -184,8 +184,8 @@ impl Manager {
             return Ok(());
         };
         let _resources = self
-            .resource_guard(&workspace.id, GuardMode::Exclusive)
-            .await?;
+            .gates
+            .resource_guard(&workspace.id, GuardMode::Exclusive)?;
         // Removal uses its own hooks; recheck after excluding new transitions.
         if !self.agent_exit_workspace_ready(&workspace.id).await? {
             return Ok(());
@@ -230,26 +230,27 @@ impl Manager {
         recover: bool,
         running: Duration,
     ) {
-        let connections = self.connections.lock().await;
-        if let Some(stop) = connections.get(id) {
-            self.agents.lock().await.insert(
-                id.into(),
-                Agent {
-                    name: name.into(),
-                    workspace: workspace.into(),
-                    workspace_id: workspace_id.into(),
-                    started: Instant::now()
-                        .checked_sub(running)
-                        .unwrap_or_else(Instant::now),
-                    recover,
-                    stop: stop.clone(),
-                    overload: None,
-                    update_hold: None,
-                    restart: None,
-                    turn: None,
-                },
-            );
-        }
+        let connections = self.executions.connections().await;
+        let Some(stop) = connections.stop_channel(id) else {
+            return;
+        };
+        let agent = Agent {
+            name: name.into(),
+            workspace: workspace.into(),
+            workspace_id: workspace_id.into(),
+            started: Instant::now()
+                .checked_sub(running)
+                .unwrap_or_else(Instant::now),
+            recover,
+            stop: stop.clone(),
+            overload: None,
+            update_hold: None,
+            restart: None,
+            turn: None,
+        };
+        connections
+            .with_agents(|agents| agents.insert(id.into(), agent))
+            .await;
     }
 
     /// Prove that a protection-stopped agent ended, then forget its stopped
@@ -331,11 +332,9 @@ impl Manager {
     /// beyond healthy readings.
     pub(crate) async fn notify_restore_waits(&self, id: &str, issue: &str) {
         let Some((name, workspace)) = self
-            .agents
-            .lock()
+            .executions
+            .with_agent(id, |agent| (agent.name.clone(), agent.workspace.clone()))
             .await
-            .get(id)
-            .map(|agent| (agent.name.clone(), agent.workspace.clone()))
         else {
             return;
         };
@@ -355,31 +354,40 @@ impl Manager {
         id: &str,
         grant: Option<Grant>,
     ) -> anyhow::Result<bool> {
-        let connections = self.connections.lock().await;
+        let connections = self.executions.connections().await;
         let stop = connections
-            .get(id)
+            .stop_channel(id)
             .ok_or_else(|| anyhow::anyhow!("execution disconnected"))?;
-        let mut agents = self.agents.lock().await;
-        let agent = agents
-            .get_mut(id)
-            .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
-        let restarting = agent
-            .restart
-            .as_mut()
-            .map(restart::Restart::resume)
-            .is_some();
-        if agent.overload.is_none() && !restarting {
-            return Ok(false);
-        }
-        stop.send(false)?;
-        agent.overload = None;
-        agent.update_hold = None;
-        agent.started = Instant::now();
-        // The resumed agent reports its own turns.
-        agent.turn = None;
-        let (name, workspace) = (agent.name.clone(), agent.workspace.clone());
-        drop(agents);
+        let resumed = connections
+            .with_agents(|agents| {
+                let agent = agents
+                    .get_mut(id)
+                    .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
+                let restarting = agent
+                    .restart
+                    .as_mut()
+                    .map(restart::Restart::resume)
+                    .is_some();
+                if agent.overload.is_none() && !restarting {
+                    return Ok(None);
+                }
+                stop.send(false)?;
+                agent.overload = None;
+                agent.update_hold = None;
+                agent.started = Instant::now();
+                // The resumed agent reports its own turns.
+                agent.turn = None;
+                anyhow::Ok(Some((
+                    agent.name.clone(),
+                    agent.workspace.clone(),
+                    restarting,
+                )))
+            })
+            .await?;
         drop(connections);
+        let Some((name, workspace, restarting)) = resumed else {
+            return Ok(false);
+        };
         // `shoal restart` reports its own restarts.
         if restarting {
             return Ok(true);
@@ -401,75 +409,42 @@ impl Manager {
     /// while waiting for its automatic restore. A restart continues without
     /// the request that asked for it, which ended with the previous daemon.
     pub(crate) async fn await_agent_restore(&self, id: &str, protection: Protection) {
-        if let Some(agent) = self.agents.lock().await.get_mut(id) {
-            if protection.is_restart() {
-                agent.restart = Some(restart::Restart::unanswered());
-            } else {
-                agent.overload = Some(protection);
-            }
-        }
+        self.executions
+            .with_agent(id, |agent| {
+                if protection.is_restart() {
+                    agent.restart = Some(restart::Restart::unanswered());
+                } else {
+                    agent.overload = Some(protection);
+                }
+            })
+            .await;
     }
 
     pub(crate) async fn agent_overload(&self, id: &str) -> Option<Protection> {
-        self.agents
-            .lock()
+        self.executions
+            .with_agent(id, |agent| agent.overload.clone())
             .await
-            .get(id)
-            .and_then(|agent| agent.overload.clone())
+            .flatten()
     }
 
     /// The guard a protection stop took for the execution's connection.
     pub(crate) async fn take_update_hold(&self, id: &str) -> Option<OwnedRwLockReadGuard<()>> {
-        self.agents
-            .lock()
+        self.executions
+            .with_agent(id, |agent| agent.update_hold.take())
             .await
-            .get_mut(id)
-            .and_then(|agent| agent.update_hold.take())
+            .flatten()
     }
 
     pub(crate) async fn agent_was_overloaded(&self, id: &str) -> bool {
         self.agent_overload(id).await.is_some()
     }
 
-    pub(crate) fn reset_overload_recovery(&self) {
-        self.recovery_epoch
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.recovery_ready.send_replace(None);
-    }
-
-    /// The recovery epoch the overload monitor published sustained healthy
-    /// readings for, if it still holds.
-    pub(super) fn published_recovery(&self) -> Option<u64> {
-        let epoch = self
-            .recovery_epoch
-            .load(std::sync::atomic::Ordering::SeqCst);
-        (*self.recovery_ready.borrow() == Some(epoch)).then_some(epoch)
-    }
-
-    /// Consume the healthy interval published for `epoch`, returning the
-    /// epoch a restore admitted on it holds; `None` when a stop, reload or
-    /// unsafe reading advanced the epoch first.
-    pub(super) fn consume_recovery(&self, epoch: u64) -> Option<u64> {
-        self.recovery_epoch
-            .compare_exchange(
-                epoch,
-                epoch + 1,
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-            )
-            .ok()?;
-        self.recovery_ready.send_replace(None);
-        Some(epoch + 1)
-    }
-
     /// Queue the automatic restore of the protection-stopped agent `id`.
     pub(crate) async fn queue_agent_restore(&self, id: &str) -> anyhow::Result<()> {
         let (name, workspace_id) = self
-            .agents
-            .lock()
+            .executions
+            .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
             .await
-            .get(id)
-            .map(|agent| (agent.name.clone(), agent.workspace_id.clone()))
             .ok_or_else(|| anyhow::anyhow!("agent no longer exists"))?;
         self.queue_restore(id, &name, &workspace_id).await
     }
@@ -514,11 +489,7 @@ impl Manager {
         self.verify_restore_workspace(workspace_id).await?;
         let current = match grant {
             Grant::Update => true,
-            Grant::Recovery(epoch) => {
-                self.recovery_epoch
-                    .load(std::sync::atomic::Ordering::Relaxed)
-                    == epoch
-            }
+            Grant::Recovery(epoch) => self.overload_recovery.epoch() == epoch,
         };
         if !current {
             self.requeue_restore(id).await?;
@@ -532,19 +503,22 @@ impl Manager {
     pub(super) async fn agent_executions(
         &self,
     ) -> std::collections::HashMap<String, (String, Activity)> {
-        let agents = self.agents.lock().await;
-        let waiting = self.restore_waiters.lock().unwrap();
-        agents
-            .iter()
-            .map(|(id, agent)| {
-                let activity = if waiting.contains_key(id) {
-                    Activity::Stopped
-                } else {
-                    Activity::Running(agent.started.elapsed())
-                };
-                (id.clone(), (agent.workspace_id.clone(), activity))
+        let waiting = self.agent_queue.restore_waiters();
+        self.executions
+            .with_agents(|agents| {
+                agents
+                    .iter()
+                    .map(|(id, agent)| {
+                        let activity = if waiting.contains(id) {
+                            Activity::Stopped
+                        } else {
+                            Activity::Running(agent.started.elapsed())
+                        };
+                        (id.clone(), (agent.workspace_id.clone(), activity))
+                    })
+                    .collect()
             })
-            .collect()
+            .await
     }
 
     /// A scoped caller as a proposer, naming the agent whose execution it
@@ -554,28 +528,32 @@ impl Manager {
         caller: Option<&crate::daemon::scope::Caller>,
     ) -> Option<crate::daemon::links::proposals::Proposer> {
         let caller = caller?;
-        let agents = self.agents.lock().await;
-        let agent = caller
-            .execution_id()
-            .and_then(|id| agents.get(id))
-            .map(|agent| agent.name.clone());
+        let agent = match caller.execution_id() {
+            Some(id) => self.agent_name(id).await,
+            None => None,
+        };
         Some(crate::daemon::links::proposals::Proposer { agent })
     }
 
     /// The name of the connected agent that `execution` runs.
     pub(crate) async fn agent_name(&self, execution: &str) -> Option<String> {
-        let agents = self.agents.lock().await;
-        agents.get(execution).map(|agent| agent.name.clone())
+        self.executions
+            .with_agent(execution, |agent| agent.name.clone())
+            .await
     }
 
     /// Workspaces with a connected agent that is not being stopped.
     pub(crate) async fn running_agent_workspaces(&self) -> Vec<String> {
-        let agents = self.agents.lock().await;
-        let mut workspaces: Vec<_> = agents
-            .values()
-            .filter(|agent| !agent.stop.is_closed() && !*agent.stop.borrow())
-            .map(|agent| agent.workspace_id.clone())
-            .collect();
+        let mut workspaces: Vec<_> = self
+            .executions
+            .with_agents(|agents| {
+                agents
+                    .values()
+                    .filter(|agent| !agent.stop.is_closed() && !*agent.stop.borrow())
+                    .map(|agent| agent.workspace_id.clone())
+                    .collect()
+            })
+            .await;
         workspaces.sort();
         workspaces.dedup();
         workspaces
@@ -613,30 +591,32 @@ impl Manager {
         select: Select,
         mut turns: HashMap<String, Turn>,
     ) -> Vec<StoppedAgent> {
-        let stopped: Vec<_> = {
-            let mut agents = self.agents.lock().await;
-            still_idle(&mut turns, &agents);
-            let running = agents
-                .iter()
-                .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
-                .map(|(id, agent)| (id, agent.started));
-            let selected: Vec<String> = match select {
-                Select::One => first_to_stop(running, &turns)
+        let stopped: Vec<_> = self
+            .executions
+            .with_agents(|agents| {
+                still_idle(&mut turns, agents);
+                let running = agents
+                    .iter()
+                    .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
+                    .map(|(id, agent)| (id, agent.started));
+                let selected: Vec<String> = match select {
+                    Select::One => first_to_stop(running, &turns)
+                        .into_iter()
+                        .cloned()
+                        .collect(),
+                    Select::All => running.map(|(id, _)| id.clone()).collect(),
+                };
+                selected
                     .into_iter()
-                    .cloned()
-                    .collect(),
-                Select::All => running.map(|(id, _)| id.clone()).collect(),
-            };
-            selected
-                .into_iter()
-                .filter_map(|id| {
-                    let turn = turns.get(&id).map(|turn| turn.state);
-                    self.protect(&id, agents.get_mut(&id)?, protection, turn)
-                })
-                .collect()
-        };
+                    .filter_map(|id| {
+                        let turn = turns.get(&id).map(|turn| turn.state);
+                        self.protect(&id, agents.get_mut(&id)?, protection, turn)
+                    })
+                    .collect()
+            })
+            .await;
         if !stopped.is_empty() {
-            self.reset_overload_recovery();
+            self.overload_recovery.reset();
         }
         for agent in &stopped {
             self.notify_protection_stop(agent).await;
@@ -667,7 +647,7 @@ impl Manager {
         let protection = restored_after(protection, turn);
         agent.overload = Some(protection.clone());
         // The monitor holds an operation, so no update can take the lock.
-        agent.update_hold = self.background_operations.clone().try_read_owned().ok();
+        agent.update_hold = self.gates.try_owned_operation();
         agent.stop.send(true).ok()?;
         Some(StoppedAgent {
             id: id.into(),

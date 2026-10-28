@@ -89,7 +89,7 @@ impl Manager {
             })
             .await?;
         if queued {
-            self.agent_messages_changed.send_modify(|count| *count += 1);
+            self.signals.agent_message_queued();
         }
         Ok(())
     }
@@ -146,7 +146,7 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        self.agent_wake_changed.send_modify(|count| *count += 1);
+        self.signals.agent_changed();
         Ok(())
     }
 }

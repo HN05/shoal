@@ -148,7 +148,7 @@ async fn stopping_demos_asks_only_their_wrappers_to_stop() {
         .unwrap();
     assert!(*web.stop.borrow_and_update());
     assert!(!*tui.stop.borrow_and_update());
-    let request = manager.stop_request(&web.plan.id).await.unwrap();
+    let request = manager.executions.stop_request(&web.plan.id).await.unwrap();
     assert_eq!(request.save, Save::Nothing);
 
     manager.stop_demos(&first.name, None).await.unwrap();
@@ -167,6 +167,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
     let (temp, manager) = manager().await;
     let (first, second) = workspaces(&manager, temp.path()).await;
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

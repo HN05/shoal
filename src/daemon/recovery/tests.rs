@@ -98,7 +98,7 @@ async fn failed_repair_restores_the_state_it_reserved_from() -> Result<()> {
 
     // Play the first repair: hold the gate with the lifecycle reserved while
     // the second repair reads the workspace and queues on that gate.
-    let guard = manager.lock_repository_git(&workspace.repository_id).await;
+    let guard = manager.gates.lock_git(&workspace.repository_id).await;
     let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     manager
         .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)

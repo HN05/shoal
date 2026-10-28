@@ -123,6 +123,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {
@@ -489,6 +490,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         "{messages:?}"
     );
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {
@@ -650,6 +652,7 @@ async fn a_scoped_answer_binds_to_the_question_it_was_authorized_for() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {
@@ -823,6 +826,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
     // decider changes nothing.
     for (workspace, allowed) in [(&parent, false), (&root, true)] {
         manager
+            .executions
             .issue_scope(
                 format!("scope-{}", workspace.name),
                 Caller {
@@ -1082,7 +1086,10 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         workspace_id: parent.id.clone(),
         execution: None,
     };
-    manager.issue_scope("scope".into(), caller.clone()).await;
+    manager
+        .executions
+        .issue_scope("scope".into(), caller.clone())
+        .await;
     for displayed in [false, true] {
         let requested = manager
             .request_approval(secret(&child))
@@ -1182,6 +1189,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         .await
         .unwrap();
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

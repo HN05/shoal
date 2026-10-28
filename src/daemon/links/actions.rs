@@ -23,7 +23,6 @@ use crate::{
             item::{Item, ItemState, Opened},
             link::ItemKind,
         },
-        transport::memory::Memory,
     },
     fsutil::expand_home,
     model::{Relation, ReviewMark, Workspace},
@@ -58,7 +57,7 @@ impl Manager {
         };
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
-        let _gate = self.pr_gates.lock([&workspace.id]).await;
+        let _gate = self.gates.lock_prs([&workspace.id]).await;
         let target = Target { kind, number, url };
         self.apply_own(&workspace.id, &forge, &account, target, &action)
             .await
@@ -244,7 +243,7 @@ fn own_state(action: &Action) -> bool {
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket).remembering(self.forge_memory(USER_LOGINS))
+        Account::user(&self.config().bitbucket).remembering(self.forge_memories.of(USER_LOGINS))
     }
 
     pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
@@ -273,14 +272,10 @@ impl Manager {
             Some(logins) => format!("agent {logins}"),
             None => USER_LOGINS.to_owned(),
         };
-        Ok(Account::agent(logins, &config.bitbucket).remembering(self.forge_memory(&identity)))
-    }
-
-    /// The memory of forge responses to the account `identity` names.
-    fn forge_memory(&self, identity: &str) -> Memory {
-        let mut memories =
-            (self.forge_memories.lock()).unwrap_or_else(|poisoned| poisoned.into_inner());
-        memories.entry(identity.to_owned()).or_default().clone()
+        Ok(
+            Account::agent(logins, &config.bitbucket)
+                .remembering(self.forge_memories.of(&identity)),
+        )
     }
 }
 

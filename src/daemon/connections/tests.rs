@@ -76,7 +76,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         loop {
             let (stream, slot) = server.capacity.accept(&listener).await.unwrap();
             let server = server.clone();
-            let operation = manager.background_operations.clone().read_owned().await;
+            let operation = manager.gates.owned_operation().await;
             tokio::spawn(serve(stream, server, slot, operation));
         }
     });

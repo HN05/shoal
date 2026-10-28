@@ -41,7 +41,7 @@ impl Manager {
             })
             .await?;
         if queued {
-            self.chat_messages_changed.send_modify(|count| *count += 1);
+            self.signals.chat_message_queued();
         }
         Ok(())
     }
@@ -88,7 +88,7 @@ impl Manager {
     pub async fn wait_chat_messages(&self, chat: &str) -> Result<Updates> {
         let wait = self.chat_waits.start(chat);
         // Subscribe before reading, so a message queued in between still wakes.
-        let mut queued = self.chat_messages_changed.subscribe();
+        let mut queued = self.signals.watch_chat_messages();
         let mut messages = self.chat_messages(chat).await?;
         while messages.is_empty() {
             tokio::select! {

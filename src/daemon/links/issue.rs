@@ -122,7 +122,7 @@ impl Manager {
                 Ok(())
             })
             .await?;
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
         Ok(())
     }
 

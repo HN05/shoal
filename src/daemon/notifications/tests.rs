@@ -4,7 +4,7 @@ use crate::test_support::manager;
 #[tokio::test]
 async fn repeated_conflicts_collapse_until_read_and_completed_events_never_do() {
     let (_temp, manager) = manager().await;
-    let watcher = manager.notifications_changed.subscribe();
+    let watcher = manager.signals.watch_notifications();
     for _ in 0..3 {
         manager
             .notify(Some("a"), NotificationKind::ResourceBusy, "pool busy")
@@ -126,6 +126,7 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     assert_eq!(unread[0].kind, NotificationKind::AgentMessage);
     assert_eq!(unread[0].message, "PR #12 is ready to merge");
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {

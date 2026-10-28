@@ -181,7 +181,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
                     Err(error) => break Err(error.into()),
                 };
                 let server = server.clone();
-                let operation = server.manager.background_operations.clone().read_owned().await;
+                let operation = server.manager.gates.owned_operation().await;
                 clients.spawn(async move {
                     if let Err(error) = serve(stream, server, slot, operation).await {
                         log!("client connection: {error:#}");
@@ -234,7 +234,7 @@ where
 async fn expire_simulators(manager: Arc<Manager>) {
     loop {
         tokio::time::sleep(SIMULATOR_SWEEP_INTERVAL).await;
-        let _operation = manager.background_operations.read().await;
+        let _operation = manager.gates.operation().await;
         if let Err(error) = manager.expire_simulators().await {
             log!("simulator cleanup: {error:#}");
         }
@@ -245,7 +245,7 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     let mut interval = tokio::time::interval(ITEM_ACTIVITY_SWEEP_INTERVAL);
     loop {
         interval.tick().await;
-        let _operation = manager.background_operations.read().await;
+        let _operation = manager.gates.operation().await;
         if let Err(error) = manager.poll_linked_item_activity().await {
             log!("item activity: {error:#}");
         }

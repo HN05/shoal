@@ -74,7 +74,7 @@ impl Manager {
     /// Whether disk space allows a restore an update woke: with disk
     /// protection on, the latest reading found the cleanup threshold free.
     fn restore_disk_ready(&self) -> bool {
-        !self.config().overload.disk.enabled || self.disk_space_recovered()
+        !self.config().overload.disk.enabled || self.config_state.disk_space_recovered()
     }
 
     /// Whether the recovery record of `execution` says it stopped between

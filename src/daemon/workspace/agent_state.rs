@@ -122,7 +122,7 @@ impl Manager {
             })
             .await?;
         if changed {
-            self.agent_wake_changed.send_modify(|count| *count += 1);
+            self.signals.agent_changed();
         }
         Ok(status)
     }

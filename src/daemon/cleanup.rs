@@ -66,6 +66,32 @@ struct Failure {
     notified: bool,
 }
 
+/// [`Health`] as the sweep records it and status reads it; each operation
+/// holds the lock only while it runs.
+#[derive(Default)]
+pub(crate) struct CleanupHealth(std::sync::Mutex<Health>);
+
+impl CleanupHealth {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Health> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn problem(&self, now: Instant) -> Option<String> {
+        self.lock().problem(now)
+    }
+
+    fn record(&self, now: Moment, result: &Result<()>) -> Option<String> {
+        self.lock().record(now, result)
+    }
+
+    /// The user was told about the current failure.
+    fn failure_notified(&self) {
+        if let Some(failure) = &mut self.lock().failure {
+            failure.notified = true;
+        }
+    }
+}
+
 impl Default for Health {
     fn default() -> Self {
         Self {
@@ -134,21 +160,15 @@ impl Health {
 }
 
 impl Manager {
-    fn cleanup_health(&self) -> std::sync::MutexGuard<'_, Health> {
-        self.cleanup_health
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-
     /// Why automatic cleanup is not working, if it is not.
     pub fn cleanup_problem(&self) -> Option<String> {
-        self.cleanup_health().problem(Instant::now())
+        self.cleanup_health.problem(Instant::now())
     }
 
     /// Notify the user when passes start failing. A notification that cannot
     /// be recorded, as when the disk is full, is retried on the next pass.
     async fn record_sweep(&self, result: Result<()>) {
-        let Some(error) = self.cleanup_health().record(Moment::now(), &result) else {
+        let Some(error) = self.cleanup_health.record(Moment::now(), &result) else {
             return;
         };
         let message = format!("automatic cleanup failed: {error}");
@@ -156,11 +176,7 @@ impl Manager {
             .record_notification(Default::default(), NotificationKind::CleanupFailed, message)
             .await
         {
-            Ok(_) => {
-                if let Some(failure) = &mut self.cleanup_health().failure {
-                    failure.notified = true;
-                }
-            }
+            Ok(_) => self.cleanup_health.failure_notified(),
             Err(error) => log!("notification not recorded: {error:#}"),
         }
     }
@@ -781,7 +797,7 @@ pub async fn run(manager: Arc<Manager>) {
     let mut timers = Timers::default();
     loop {
         {
-            let _operation = manager.background_operations.read().await;
+            let _operation = manager.gates.operation().await;
             let result = sweep(&manager, &mut timers).await;
             if let Err(error) = &result {
                 log!("auto cleanup: {error:#}");
@@ -790,7 +806,7 @@ pub async fn run(manager: Arc<Manager>) {
         }
         tokio::select! {
             _ = sleep(SWEEP_INTERVAL) => {},
-            _ = manager.cleanup_notify.notified() => {},
+            _ = manager.signals.cleanup_woken() => {},
         }
     }
 }

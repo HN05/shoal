@@ -61,13 +61,13 @@ async fn watch_notifications(
     after: i64,
     startup: OperationGuard,
 ) -> Result<()> {
-    let mut changed = manager.notifications_changed.subscribe();
+    let mut changed = manager.signals.watch_notifications();
     protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
     drop(startup);
     let (mut reader, mut writer) = stream.split();
     let mut delivered = after;
     loop {
-        let operation = manager.background_operations.read().await;
+        let operation = manager.gates.operation().await;
         let batch = manager.notifications_after(delivered, 100).await?;
         for notification in batch {
             delivered = notification.id;

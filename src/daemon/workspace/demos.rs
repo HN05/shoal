@@ -16,10 +16,6 @@ use crate::{
     process::{execution::Processes, identity as process},
 };
 
-/// Launches that ended unrun the daemon remembers; a start asks about its
-/// own within moments.
-const UNRUN_LAUNCHES: usize = 64;
-
 impl Manager {
     /// The running demos of `selector`'s workspace, or of every workspace.
     pub async fn demos(&self, selector: Option<&str>) -> Result<Vec<Running>> {
@@ -44,7 +40,7 @@ impl Manager {
                 demo: Box::new(demo),
             },
             Some(_) => Progress::Starting,
-            None if self.launch_ended_unrun(launch) => Progress::Ended,
+            None if self.executions.launch_ended_unrun(launch) => Progress::Ended,
             None => Progress::Starting,
         })
     }
@@ -71,26 +67,6 @@ impl Manager {
                     .transpose()
             })
             .await
-    }
-
-    /// Remember that `launch` ended before its command ran.
-    pub(crate) fn remember_unrun_launch(&self, launch: String) {
-        let mut launches = self
-            .unrun_demo_launches
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if launches.len() == UNRUN_LAUNCHES {
-            launches.pop_front();
-        }
-        launches.push_back(launch);
-    }
-
-    fn launch_ended_unrun(&self, launch: &str) -> bool {
-        self.unrun_demo_launches
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .iter()
-            .any(|ended| ended == launch)
     }
 
     /// Ask the workspace's demo `name`, or every demo there, to stop. Their
@@ -150,22 +126,18 @@ impl Manager {
     /// rest. Native scans run after the connection map is released, as a
     /// workspace stop runs them.
     async fn request_demo_stops(&self, executions: Vec<String>) -> Vec<String> {
-        let connections = self.connections.lock().await;
-        let mut requests = self.stop_requests.lock().await;
+        let request = StopRequest {
+            reason: "stopped by shoal demo stop".into(),
+            save: Save::Nothing,
+        };
+        let connections = self.executions.connections().await;
         let mut disconnected = Vec::new();
         for id in executions {
-            let Some(sender) = connections.get(&id).filter(|sender| !sender.is_closed()) else {
+            if connections.is_connected(&id) {
+                let _ = connections.stop(&id, &request, false).await;
+            } else {
                 disconnected.push(id);
-                continue;
-            };
-            requests.insert(
-                id.clone(),
-                StopRequest {
-                    reason: "stopped by shoal demo stop".into(),
-                    save: Save::Nothing,
-                },
-            );
-            let _ = sender.send(true);
+            }
         }
         disconnected
     }

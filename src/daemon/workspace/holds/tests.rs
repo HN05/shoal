@@ -42,6 +42,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
         hold
     );
     manager
+        .executions
         .issue_scope(
             "scope".into(),
             Caller {
@@ -173,8 +174,8 @@ async fn release_remains_available_during_lifecycle_operations_and_hooks() {
         .await
         .unwrap();
     let _hook = manager
+        .gates
         .resource_guard(&workspace.id, GuardMode::Exclusive)
-        .await
         .unwrap();
     manager
         .release_hold(&workspace.id, "first".into())

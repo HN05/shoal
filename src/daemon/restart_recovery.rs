@@ -74,7 +74,7 @@ pub(super) async fn reconcile(manager: &Manager, recheck: Duration) {
     loop {
         let pending = reconcile_until_done(manager).await;
         tokio::select! {
-            () = manager.execution_unknown.notified() => {}
+            () = manager.signals.execution_unknown() => {}
             () = await_change(manager, pending, recheck) => {}
         }
     }
@@ -115,7 +115,7 @@ async fn await_change(manager: &Manager, pending: Pending, recheck: Duration) {
 async fn reconcile_until_done(manager: &Manager) -> Pending {
     loop {
         let result = {
-            let _operation = manager.background_operations.read().await;
+            let _operation = manager.gates.operation().await;
             manager.reconcile_interrupted_agents().await
         };
         match result {

@@ -10,15 +10,15 @@ use crate::{
 async fn a_lookup_waiting_on_the_host_takes_the_answer_the_first_one_records() {
     let (_root, manager) = crate::test_support::manager().await;
     let host = "waiting.invalid";
-    let asking = manager.lock_forge_host(host).await;
-    let gate = manager.forge_host_gates.lock().await[host].clone();
+    let asking = manager.gates.lock_forge_host(host).await;
+    let gate = manager.gates.forge_host_gate(host);
     let waiting = tokio::spawn({
         let manager = manager.clone();
         async move { manager.host_type(host, "https").await }
     });
-    // The map, the asking lookup, this test and the waiting lookup.
+    // The asking lookup, this test and the waiting lookup.
     tokio::time::timeout(Duration::from_secs(60), async {
-        while Arc::strong_count(&gate) < 4 {
+        while Arc::strong_count(&gate) < 3 {
             tokio::task::yield_now().await;
         }
     })

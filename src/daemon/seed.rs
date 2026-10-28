@@ -130,12 +130,13 @@ impl Manager {
             .is_some_and(|snapshot| (snapshot.commit, snapshot.settings) == build);
         // Checked first: seeing any other build, a current one included,
         // forgets the failed one.
-        let failed = self.repeats_seed_failure(&repo.id, &build);
+        let failed = self.seeds.repeats_failure(&repo.id, &build);
         if failed || current || !self.seed_headroom(&layout) {
             return Ok(());
         }
         let result = self.build_seed(repo, &layout, &plan, &build).await;
-        self.record_seed_result(&repo.id, result.is_err().then_some(build));
+        self.seeds
+            .record_result(&repo.id, result.is_err().then_some(build));
         result
     }
 
@@ -151,10 +152,10 @@ impl Manager {
             return Ok(());
         }
         let _seed = self.stop_seed_build(&repo.id).await;
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         self.ensure_repository_available(&repo.id).await?;
         self.remove_seed(repo).await?;
-        self.record_seed_result(&repo.id, None);
+        self.seeds.record_result(&repo.id, None);
         Ok(())
     }
 
@@ -167,13 +168,13 @@ impl Manager {
         plan: &Plan,
         (tip, settings): &(String, String),
     ) -> Result<()> {
-        let slot = self.seed_slot(&repo.id);
+        let slot = self.seeds.slot(&repo.id);
         let _build = slot.gate.lock().await;
         if self.repository(&repo.id).await.is_err() {
             return Ok(());
         }
         {
-            let _git = self.lock_repository_git(&repo.id).await;
+            let _git = self.gates.lock_git(&repo.id).await;
             self.ensure_repository_available(&repo.id).await?;
             check_out_seed(repo, layout, tip).await?;
         }
@@ -188,7 +189,7 @@ impl Manager {
         )
         .await?;
         // Creation clones under the same gate, so it never sees a partial swap.
-        let _git = self.lock_repository_git(&repo.id).await;
+        let _git = self.gates.lock_git(&repo.id).await;
         self.ensure_repository_available(&repo.id).await?;
         let worktree = layout.worktree();
         ensure!(
@@ -249,7 +250,7 @@ impl Manager {
     /// until the returned guard drops. Take it before the Git gate, which a
     /// build takes while holding its own.
     pub(super) async fn stop_seed_build(&self, repository_id: &str) -> SeedStop {
-        let slot = self.seed_slot(repository_id);
+        let slot = self.seeds.slot(repository_id);
         slot.cancel.send_replace(true);
         let guard = slot.gate.clone().lock_owned().await;
         SeedStop {
@@ -264,20 +265,12 @@ impl Manager {
         &self,
         repository_id: &str,
     ) -> Option<tokio::sync::OwnedMutexGuard<()>> {
-        self.seed_slot(repository_id)
+        self.seeds
+            .slot(repository_id)
             .gate
             .clone()
             .try_lock_owned()
             .ok()
-    }
-
-    fn seed_slot(&self, repository_id: &str) -> Arc<SeedSlot> {
-        self.seed_builds
-            .lock()
-            .expect("seed builds lock")
-            .entry(repository_id.to_owned())
-            .or_default()
-            .clone()
     }
 
     /// Delete the repository's seed. The caller holds a [`SeedStop`] and the
@@ -307,26 +300,6 @@ impl Manager {
         };
         sample.memory == MemoryState::Healthy
             && sample.disk_free.is_some_and(|free| free >= disk_floor)
-    }
-
-    /// Whether `build` is the one that last failed; any other build makes
-    /// the failed one worth retrying when it comes back.
-    fn repeats_seed_failure(&self, repository_id: &str, build: &(String, String)) -> bool {
-        let mut failures = self.seed_failures.lock().expect("seed failures lock");
-        if failures.get(repository_id) == Some(build) {
-            return true;
-        }
-        failures.remove(repository_id);
-        false
-    }
-
-    /// Remember the build that failed, or forget an earlier failure.
-    fn record_seed_result(&self, repository_id: &str, failed: Option<(String, String)>) {
-        let mut failures = self.seed_failures.lock().expect("seed failures lock");
-        match failed {
-            Some(build) => failures.insert(repository_id.to_owned(), build),
-            None => failures.remove(repository_id),
-        };
     }
 }
 
@@ -594,5 +567,8 @@ async fn exited(pid: i32) -> Result<()> {
     .await?
 }
 
+mod state;
 #[cfg(test)]
 mod tests;
+
+pub(crate) use state::Seeds;

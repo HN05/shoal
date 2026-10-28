@@ -22,7 +22,7 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(5);
 pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         tokio::time::sleep(SWEEP_INTERVAL).await;
-        let _operation = manager.background_operations.read().await;
+        let _operation = manager.gates.operation().await;
         if let Err(error) = manager.end_finished_chats().await {
             log!("chats: {error:#}");
         }
@@ -95,7 +95,7 @@ impl Manager {
             return Ok(());
         }
         if let Some(id) = self.store.run(move |db| delete(db, &ended)).await? {
-            self.notifications_changed.send_replace(id);
+            self.signals.notification_recorded(id);
         }
         Ok(())
     }

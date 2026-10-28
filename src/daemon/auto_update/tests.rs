@@ -4,11 +4,11 @@ use super::*;
 async fn restart_waits_for_background_work_and_executions_that_cannot_reattach() {
     let (_root, manager) = crate::test_support::manager().await;
     assert!(quiesce(&manager).is_some());
-    let operation = manager.background_operations.read().await;
+    let operation = manager.gates.operation().await;
     assert!(quiesce(&manager).is_none());
     drop(operation);
     let quiet = quiesce(&manager).unwrap();
-    assert!(manager.background_operations.try_read().is_err());
+    assert!(manager.gates.try_operation().is_none());
     drop(quiet);
     // A restart leaves disconnected records as they are, including
     // commands from releases before reattachment.
@@ -24,6 +24,6 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
         }).await.unwrap();
     assert!(quiesce(&manager).is_some());
     // Connected setup and landing stop with the daemon.
-    manager.mark_unattachable("setup");
+    manager.executions.mark_unattachable("setup");
     assert!(quiesce(&manager).is_none());
 }

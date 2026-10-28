@@ -88,10 +88,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         let ticks = crate::process::load::cpu_ticks();
         manager
-            .cpu_usage
-            .lock()
-            .unwrap()
-            .record(Instant::now(), ticks);
+            .usage
+            .with_cpu(|cpu| cpu.record(Instant::now(), ticks));
         tokio::time::sleep(SAMPLE_INTERVAL).await;
     }
 }

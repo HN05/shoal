@@ -260,9 +260,11 @@ fn reaper<'a>(
 
 pub(super) async fn run(manager: Arc<Manager>) {
     loop {
-        let tracked = manager.workspace_usage.lock().unwrap().tracked();
+        let tracked = manager.usage.with_workspaces(|usages| usages.tracked());
         let sample = sample(&manager, tracked).await;
-        manager.workspace_usage.lock().unwrap().record(sample);
+        manager
+            .usage
+            .with_workspaces(|usages| usages.record(sample));
         tokio::time::sleep(SAMPLE_INTERVAL).await;
     }
 }

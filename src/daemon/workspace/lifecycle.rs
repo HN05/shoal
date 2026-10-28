@@ -380,7 +380,7 @@ impl Manager {
             return Ok(Err(reason));
         }
         let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
-        let activity = self.activity(id).await;
+        let activity = self.usage.activity(id);
         Ok(Ok((
             check.workspace.path,
             crate::daemon::cleanup::signals(&head, activity),
@@ -409,7 +409,7 @@ impl Manager {
             return Ok(None);
         }
         let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
-        let activity = self.activity(id).await;
+        let activity = self.usage.activity(id);
         Ok(Some((
             check.workspace.path,
             crate::daemon::cleanup::signals(&head, activity),

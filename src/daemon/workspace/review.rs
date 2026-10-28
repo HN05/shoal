@@ -67,8 +67,8 @@ impl Manager {
         // Like post_done_cmd, the hook excludes lifecycle and permit changes.
         let _resources = match command {
             Some(_) => Some(
-                self.resource_guard(&workspace.id, GuardMode::Exclusive)
-                    .await?,
+                self.gates
+                    .resource_guard(&workspace.id, GuardMode::Exclusive)?,
             ),
             None => None,
         };

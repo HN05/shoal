@@ -60,7 +60,7 @@ impl Hold {
 
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut changed = manager.store.watch_changes();
-    let mut reloaded = manager.watch_config();
+    let mut reloaded = manager.config_state.watch();
     let mut hold = Hold::Released;
     loop {
         let config = manager.config();

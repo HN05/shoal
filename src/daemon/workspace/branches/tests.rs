@@ -569,7 +569,7 @@ async fn existing_branch_opens_without_suffix_and_reuses_owned_workspace() {
         .unwrap();
     assert!(again.reused);
     assert_eq!(again.workspace.id, opened.workspace.id);
-    assert_eq!(f.manager.activity(&opened.workspace.id).await, 1);
+    assert_eq!(f.manager.usage.activity(&opened.workspace.id), 1);
     git(&opened.workspace.path, &["switch", "--detach"]);
     assert!(
         f.manager
@@ -1349,10 +1349,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
 async fn setup_releases_git_gate_after_registration_and_on_preparation_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let guard = f
-        .manager
-        .lock_repository_git(&workspace.repository_id)
-        .await;
+    let guard = f.manager.gates.lock_git(&workspace.repository_id).await;
     let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     assert!(
@@ -1419,10 +1416,7 @@ async fn incomplete_removal_allows_refresh_recovery_and_diagnosis() {
 async fn land_execution_holds_git_gate_through_completion_and_releases_on_failure() {
     let f = Fixture::new().await;
     let workspace = f.add("worker").await;
-    let guard = f
-        .manager
-        .lock_repository_git(&workspace.repository_id)
-        .await;
+    let guard = f.manager.gates.lock_git(&workspace.repository_id).await;
     let gate = tokio::sync::OwnedMutexGuard::mutex(&guard).clone();
     drop(guard);
     for exit in [Some(0), None] {
@@ -1770,7 +1764,7 @@ impl Manager {
         push: bool,
     ) -> anyhow::Result<crate::model::LandedBranch> {
         let workspace = self.workspace(selector).await?;
-        let _guard = self.lock_repository_git(&workspace.repository_id).await;
+        let _guard = self.gates.lock_git(&workspace.repository_id).await;
         crate::git::repo::finish_land(self.prepare_land(selector).await?, push).await
     }
 }
@@ -1881,7 +1875,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
             .id,
         w.id
     );
-    assert_eq!(f.manager.activity(&w.id).await, 1);
+    assert_eq!(f.manager.usage.activity(&w.id), 1);
     let restored = Manager::open(Paths::for_test(f.root.path())).await.unwrap();
     assert_eq!(
         restored.workspace(&w.id).await.unwrap().git_dir_id,
@@ -1895,6 +1889,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
         copy: false,
     };
     f.manager
+        .executions
         .issue_scope(
             "adoption-test".into(),
             scope::Caller {

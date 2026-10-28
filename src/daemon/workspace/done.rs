@@ -55,7 +55,7 @@ impl Manager {
                 Ok(completion)
             })
             .await?;
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
         Ok(completion)
     }
 
@@ -106,7 +106,7 @@ impl Manager {
         if let Some((command, _resources)) = hook {
             self.run_done_hook(workspace, &command, &completion).await;
         }
-        self.cleanup_notify.notify_one();
+        self.signals.wake_cleanup();
         Ok(completion)
     }
 
@@ -138,7 +138,7 @@ impl Manager {
             })
             .await?;
         if !persisted.closed.is_empty() {
-            self.questions_changed.send_modify(|count| *count += 1);
+            self.signals.question_changed();
         }
         Ok(persisted)
     }
@@ -154,8 +154,8 @@ impl Manager {
             return Ok(None);
         };
         let guard = self
-            .resource_guard(&workspace.id, GuardMode::Exclusive)
-            .await?;
+            .gates
+            .resource_guard(&workspace.id, GuardMode::Exclusive)?;
         Ok(Some((workspace.path.join(path), guard)))
     }
 
@@ -202,7 +202,7 @@ impl Manager {
     /// Each workspace's PR gate is held only while that workspace is handled.
     pub async fn sweep_completed(&self) -> Result<()> {
         for listed in self.list_workspaces().await? {
-            let _guard = self.pr_gates.lock([&listed.id]).await;
+            let _guard = self.gates.lock_prs([&listed.id]).await;
             let Some(workspace) = self.find_workspace(&listed.id).await? else {
                 continue;
             };
