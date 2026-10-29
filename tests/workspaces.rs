@@ -24909,6 +24909,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
         calls_since(0),
         [
             vec!["tab", "focus", "w1:t4"],
+            vec!["session", "list", "--json"],
             vec!["session", "attach", "work"],
         ]
     );

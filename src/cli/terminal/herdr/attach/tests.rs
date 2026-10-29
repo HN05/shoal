@@ -62,8 +62,13 @@ fn outside_herdr_the_session_holding_the_recorded_server_is_attached() {
         ..plain.clone()
     };
     let named = Origin {
+        data: vars(&[("HERDR_SESSION", "work")]),
+        ..plain.clone()
+    };
+    // The socket wins over a session name naming another server.
+    let conflicting = Origin {
         data: vars(&[
-            ("HERDR_SESSION", "work"),
+            ("HERDR_SESSION", "other"),
             ("HERDR_SOCKET_PATH", "/h/work/herdr.sock"),
         ]),
         ..plain.clone()
@@ -75,6 +80,10 @@ fn outside_herdr_the_session_holding_the_recorded_server_is_attached() {
         Some(HerdrSession::AtSocket("/h/work/herdr.sock"))
     );
     assert_eq!(attached(&named), Some(HerdrSession::Named("work")));
+    assert_eq!(
+        attached(&conflicting),
+        Some(HerdrSession::AtSocket("/h/work/herdr.sock"))
+    );
     // A pane of the same server already shows it.
     let inside = |name: &str| match name {
         "HERDR_ENV" => Some("1".to_owned()),

@@ -107,9 +107,10 @@ fn client_session(
     let session = place.data.get("HERDR_SESSION").map(String::as_str);
     if current("HERDR_ENV").as_deref() != Some("1") {
         let socket = place.data.get("HERDR_SOCKET_PATH").map(String::as_str);
-        return Ok(Some(match (session, socket) {
-            (Some(session), _) => HerdrSession::Named(session),
-            (None, Some(socket)) => HerdrSession::AtSocket(socket),
+        // The socket routes before the session name, as `herdr` reads them.
+        return Ok(Some(match (socket, session) {
+            (Some(socket), _) => HerdrSession::AtSocket(socket),
+            (None, Some(session)) => HerdrSession::Named(session),
             (None, None) => HerdrSession::Default,
         }));
     }
