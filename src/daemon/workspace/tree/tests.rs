@@ -440,7 +440,7 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
 }
 
 #[tokio::test]
-async fn children_keep_their_parent_from_cleanup() {
+async fn children_never_keep_their_parent_and_go_with_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -455,21 +455,42 @@ async fn children_keep_their_parent_from_cleanup() {
         .split_workspace(&parent.id, "child".into(), None)
         .await
         .unwrap();
-    assert_eq!(
-        manager.cleanup_reason(&parent).await,
-        CleanupReason::Children
-    );
-    assert_eq!(
-        manager.cleanup_reason(&child).await,
-        CleanupReason::Idle { minutes: 10 }
-    );
     manager
-        .remove_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .acquire_hold(&child.id, "editor".into(), None)
         .await
         .unwrap();
+    std::fs::write(child.path.join("draft.txt"), "draft").unwrap();
     assert_eq!(
         manager.cleanup_reason(&parent).await,
         CleanupReason::Idle { minutes: 10 }
+    );
+    assert_eq!(manager.cleanup_reason(&child).await, CleanupReason::Held);
+
+    let snapshot = manager.cleanup_snapshot(&parent.id).await.unwrap().unwrap();
+    manager
+        .remove_for_disk_space(&parent.id, snapshot)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(!workspace.path.exists());
+    }
+    // The user hears of the child an unattended removal took.
+    let notifications = manager.notifications(true, 50).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.workspace.as_deref() == Some("child")
+                && notification
+                    .message
+                    .contains("removed with its parent parent")
+        }),
+        "{notifications:?}"
     );
 }
 

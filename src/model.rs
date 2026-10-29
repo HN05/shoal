@@ -524,8 +524,6 @@ pub enum CleanupReason {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
-    /// Workspaces split from this one remain.
-    Children,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
     PrWatch,
@@ -563,7 +561,6 @@ impl std::fmt::Display for CleanupReason {
             Self::Held => f.write_str("Kept by holds"),
             Self::Question => f.write_str("Open question"),
             Self::PrProposal => f.write_str("PR proposal waiting for approval"),
-            Self::Children => f.write_str("Child workspaces"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::Completed { integrated: false } => {

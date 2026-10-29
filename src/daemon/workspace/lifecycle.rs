@@ -36,8 +36,6 @@ pub(crate) enum Retention {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
-    /// Workspaces split from this one remain.
-    Children,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
 }
@@ -48,7 +46,6 @@ impl From<Retention> for CleanupReason {
             Retention::Held => Self::Held,
             Retention::Question => Self::Question,
             Retention::PrProposal => Self::PrProposal,
-            Retention::Children => Self::Children,
             Retention::QueuedAgent => Self::QueuedAgent,
         }
     }
@@ -61,7 +58,6 @@ impl std::fmt::Display for Retention {
             Self::Held => "workspace is held",
             Self::Question => "a question waits for the user",
             Self::PrProposal => "a PR proposal waits for approval",
-            Self::Children => "workspaces split from it remain",
             Self::QueuedAgent => "an agent launch in it waits in the agent queue",
         })
     }
@@ -572,8 +568,8 @@ impl Manager {
 
     /// The path and signals of a merged cleanup candidate, or `None` when
     /// it is not one: merged into the default branch and unused, with no Git
-    /// operation under way, no workspace stacked on it or split from it, no
-    /// hold or keep choice, and any unsaved files left over from merged work. Assignment
+    /// operation under way, no workspace stacked on it, no hold or keep
+    /// choice, and any unsaved files left over from merged work. Assignment
     /// state does not keep it. `cancelled` are the restores a removal stopped.
     async fn merged_candidate(
         &self,
@@ -702,9 +698,6 @@ impl Manager {
         }
         if self.has_pending_pull_proposal(id).await? {
             return Ok(Some(Retention::PrProposal));
-        }
-        if !self.workspace(id).await?.child_workspaces.is_empty() {
-            return Ok(Some(Retention::Children));
         }
         Ok(self
             .has_queued_launch(id)
