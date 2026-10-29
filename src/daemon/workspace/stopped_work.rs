@@ -17,12 +17,44 @@ pub struct Discarded {
     pub executions: Vec<String>,
 }
 
+/// A workspace process stopping another workspace's executions, which may
+/// resume the agents among them.
+pub(super) struct Stopper<'a> {
+    /// The ID of the process's workspace.
+    workspace: &'a str,
+    /// The executions running before the stop.
+    executions: Vec<String>,
+}
+
 impl Manager {
+    /// The process of workspace `stopped_by` about to stop the executions of
+    /// the workspace `selector` names.
+    pub(super) async fn stopper<'a>(
+        &self,
+        selector: &str,
+        stopped_by: &'a str,
+    ) -> Result<Stopper<'a>> {
+        let workspace = self.workspace(selector).await?;
+        let executions = self.workspace_executions(&workspace.id).await?;
+        Ok(Stopper {
+            workspace: stopped_by,
+            executions: executions
+                .into_iter()
+                .map(|execution| execution.id)
+                .collect(),
+        })
+    }
+
     /// Keep the workspace's stopped agents whose execution ended as last
-    /// sessions, which hold no agent slot and nothing restores on its own. One
-    /// a wrapper waits to restore stays, and one that cannot be kept, such as
-    /// one a resume holds, stays stopped work.
-    pub(super) async fn keep_stopped_as_last_sessions(&self, selector: &str) -> Result<()> {
+    /// sessions, which hold no agent slot and nothing restores on its own,
+    /// recording `stopper` on those it stopped. One a wrapper waits to
+    /// restore stays, and one that cannot be kept, such as one a resume
+    /// holds, stays stopped work.
+    pub(super) async fn keep_stopped_as_last_sessions(
+        &self,
+        selector: &str,
+        stopper: Option<&Stopper<'_>>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let executions = self.workspace_executions(&workspace.id).await?;
         let mut saved = Saved::load(&self.paths, &workspace.id)?;
@@ -31,8 +63,11 @@ impl Manager {
             if executions.iter().any(|execution| execution.id == id) {
                 continue;
             }
+            let stopped_by = stopper
+                .filter(|stopper| stopper.executions.contains(&id))
+                .map(|stopper| stopper.workspace);
             if let Err(error) =
-                recovery::keep_as_last_session(&self.paths, &workspace.id, &id, &path)
+                recovery::keep_as_last_session(&self.paths, &workspace.id, &id, &path, stopped_by)
             {
                 crate::daemon::log!("stopped agent {id} not kept as a last session: {error:#}");
             }

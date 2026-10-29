@@ -762,7 +762,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
         .spawn()
         .unwrap();
     let blocked = manager
-        .stop_workspace_manually(&workspace.id, true)
+        .stop_workspace_manually(&workspace.id, true, None)
         .await
         .unwrap_err();
     assert!(
@@ -775,7 +775,7 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     user.wait().await.unwrap();
 
     manager
-        .stop_workspace_manually(&workspace.id, true)
+        .stop_workspace_manually(&workspace.id, true, None)
         .await
         .unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
@@ -818,7 +818,9 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             .unwrap_err();
         assert!(error.to_string().contains("cannot verify"), "{error:#}");
         // The user's acknowledgement never covers a live process.
-        let acknowledged = manager.stop_workspace_manually(&workspace.id, true).await;
+        let acknowledged = manager
+            .stop_workspace_manually(&workspace.id, true, None)
+            .await;
         assert!(acknowledged.is_err());
         assert!(identity::alive(&live).unwrap());
         assert_eq!(

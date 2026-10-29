@@ -251,7 +251,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
         },
     )
     .unwrap();
-    keep_as_last_session(&paths, "workspace", "execution", &record).unwrap();
+    keep_as_last_session(&paths, "workspace", "execution", &record, None).unwrap();
     assert!(!record.exists());
     assert!(!pending(&paths, "workspace").unwrap());
     assert_eq!(
@@ -262,6 +262,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
             session: Some("stopped".into()),
             moved: false,
             origin: Some(herdr_pane("w1:p2")),
+            stopped_by: None,
         }]
     );
     let kept = LastSession::path(&paths, "workspace", "execution");

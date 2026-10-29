@@ -29,8 +29,9 @@ pub(super) async fn handle(
             workspace,
             acknowledge_unproven,
         } => {
+            let stopped_by = caller.map(|caller| caller.workspace_id.as_str());
             manager
-                .stop_workspace_manually(&workspace, acknowledge_unproven)
+                .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by)
                 .await?;
             Body::Ok
         }

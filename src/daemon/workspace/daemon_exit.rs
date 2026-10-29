@@ -51,7 +51,7 @@ impl Manager {
     async fn stop_all_for_exit(&self) {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
-            self.stop_workspace_manually(&workspace, false).await
+            self.stop_workspace_manually(&workspace, false, None).await
         })
         .await;
     }

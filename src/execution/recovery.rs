@@ -323,6 +323,7 @@ impl Record {
             session: self.session,
             moved: self.moved,
             origin: self.origin,
+            stopped_by: None,
         }
     }
 
@@ -552,20 +553,24 @@ pub(crate) fn save_stopped_agents(
 }
 
 /// Keep the agent stopped as `id`, whose recovery record is at `path`, as a
-/// last session instead.
+/// last session instead, which the process of workspace `stopped_by` stopped
+/// when given.
 pub(crate) fn keep_as_last_session(
     paths: &Paths,
     workspace_id: &str,
     id: &str,
     path: &Path,
+    stopped_by: Option<&str>,
 ) -> Result<()> {
     let _claim = claim(path)?;
     let Some(record) = Record::load(path)? else {
         return Ok(());
     };
-    record
-        .into_last_session(id.to_owned())
-        .write(paths, workspace_id)?;
+    LastSession {
+        stopped_by: stopped_by.map(str::to_owned),
+        ..record.into_last_session(id.to_owned())
+    }
+    .write(paths, workspace_id)?;
     consume(path)
 }
 
@@ -693,6 +698,11 @@ pub struct LastSession {
         skip_serializing_if = "Option::is_none"
     )]
     pub origin: Option<Origin>,
+    /// The workspace whose process stopped the agent with `shoal stop`,
+    /// which with the workspaces above it may resume it; unknown for one the
+    /// user or Shoal stopped, or that exited on its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_by: Option<String>,
 }
 
 /// The key of a last session saved without its execution.
@@ -725,6 +735,7 @@ impl LastSession {
             session: reported_session(paths, workspace_id, id),
             moved: false,
             origin: None,
+            stopped_by: None,
         }
         .write(paths, workspace_id)
     }

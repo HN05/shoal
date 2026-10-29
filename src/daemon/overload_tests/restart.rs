@@ -179,6 +179,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         session: Some("kept-session".into()),
         moved: false,
         origin: None,
+        stopped_by: None,
     };
     kept_session.write(&manager.paths, &workspace.id).unwrap();
     let wrapper = exited().await;
@@ -230,6 +231,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
                 session: Some("rebooted-session".into()),
                 moved: false,
                 origin: None,
+                stopped_by: None,
             }
         ]
     );
