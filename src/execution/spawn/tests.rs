@@ -22,6 +22,7 @@ fn launch(home: &std::path::Path) -> AgentLaunch {
         routed: None,
         fetched_key: None,
         proxy: None,
+        shown: None,
     }
 }
 

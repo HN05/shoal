@@ -44,8 +44,6 @@ struct TrackedLaunch {
     recovery: Option<recovery::Recovery>,
     /// The saved record a restored agent consumes once it is registered.
     record: Option<PathBuf>,
-    /// The host's place the command runs in, when one serves its terminal.
-    place: Option<Origin>,
 }
 
 pub(super) async fn run_tracked(
@@ -95,8 +93,7 @@ impl TrackedLaunch {
 
     /// Report whether a terminal shows the agent while it runs.
     fn attachment(&self, paths: &Paths) -> Option<attachment::Monitor> {
-        self.recovery.as_ref()?;
-        let shown = attachment::Shown::of(self.place.clone())?;
+        let shown = self.auth.as_ref()?.shown.clone()?;
         Some(attachment::start(paths, &self.plan, shown))
     }
 
@@ -262,20 +259,20 @@ async fn prepare_tracked_launch(
     if agent.is_some() {
         crate::proxy::remember_executable();
     }
-    let mut auth = prepare_agent_launch(paths, &workspace, mode, agent.as_deref()).await?;
+    // A detached command or a demo never runs in the caller's terminal.
+    let place = match mode {
+        Mode::Detached { .. } | Mode::Demo { .. } => None,
+        _ => crate::cli::terminal::current_place().await,
+    };
+    let mut auth =
+        prepare_agent_launch(paths, &workspace, mode, agent.as_deref(), place.as_ref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
         None
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
-    // A detached command or a demo never runs in the caller's terminal.
-    let place = match mode {
-        Mode::Detached { .. } | Mode::Demo { .. } => None,
-        _ => crate::cli::terminal::current_place().await,
-    };
-    let (mut link, plan) =
-        open_execution(paths, workspace, mode, agent, recover, place.clone()).await?;
+    let (mut link, plan) = open_execution(paths, workspace, mode, agent, recover, place).await?;
     // The daemon has registered the execution, so a launch that fails from
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
@@ -294,7 +291,6 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
-        place,
     })
 }
 
@@ -375,6 +371,7 @@ async fn prepare_agent_launch(
     workspace: &str,
     mode: &Mode,
     agent: Option<&str>,
+    place: Option<&Origin>,
 ) -> Result<Option<AgentLaunch>> {
     let has_agent = agent.is_some();
     if !has_agent && !matches!(mode, Mode::Publish) {
@@ -408,6 +405,9 @@ async fn prepare_agent_launch(
         routed,
         fetched_key,
         proxy: None,
+        shown: has_agent
+            .then(|| attachment::Shown::of(&settings, place))
+            .flatten(),
     }))
 }
 

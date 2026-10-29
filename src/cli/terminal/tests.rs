@@ -52,6 +52,29 @@ fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
 }
 
 #[test]
+fn attachment_is_read_only_through_enabled_hosts() {
+    let resolved = |global: &str| {
+        let config: crate::config::Config = toml::from_str(global).unwrap();
+        config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap()
+    };
+    let (enabled, disabled) = (
+        resolved(""),
+        resolved("[herdr]\nenabled = false\n[rex]\nenabled = false\n"),
+    );
+    for host in [HostName::Herdr, HostName::Rex, HostName::Zmx] {
+        let place = Origin::created(host, "p1".to_owned());
+        assert!(
+            Attachment::of(&enabled, place.clone()).is_some(),
+            "{host:?}"
+        );
+        let read = Attachment::of(&disabled, place).is_some();
+        assert_eq!(read, host == HostName::Zmx, "{host:?}");
+    }
+}
+
+#[test]
 fn a_repeated_place_keeps_the_agent_recorded_there() {
     let session = Origin::created(HostName::Zmx, "work".to_owned());
     let agent = Recorded {

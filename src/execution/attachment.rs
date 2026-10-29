@@ -3,7 +3,8 @@
 use std::{io::IsTerminal, time::Duration};
 
 use crate::{
-    cli::{client, terminal},
+    cli::{client, terminal::Attachment},
+    config::Effective,
     model::ExecutionPlan,
     paths::Paths,
     protocol::AgentMethod,
@@ -25,9 +26,10 @@ impl Drop for Monitor {
 }
 
 /// What shows the agent to the user.
+#[derive(Clone)]
 pub(super) enum Shown {
     /// The place a terminal host runs it in, which the host reads.
-    Place(Origin),
+    Place(Attachment),
     /// The terminal the wrapper runs in, which no host serves: the user's
     /// own.
     Terminal,
@@ -35,10 +37,11 @@ pub(super) enum Shown {
 
 impl Shown {
     /// What shows an agent running at `place`, or in this process's
-    /// terminal; `None` without either, as for a detached launch.
-    pub(super) fn of(place: Option<Origin>) -> Option<Self> {
+    /// terminal; `None` without either, as for a detached launch, or when
+    /// `settings` disable the place's host.
+    pub(super) fn of(settings: &Effective, place: Option<&Origin>) -> Option<Self> {
         match place {
-            Some(place) => Some(Self::Place(place)),
+            Some(place) => Attachment::of(settings, place.clone()).map(Self::Place),
             None => std::io::stdin().is_terminal().then_some(Self::Terminal),
         }
     }
@@ -47,7 +50,7 @@ impl Shown {
     /// tell.
     async fn attached(&self) -> Option<bool> {
         match self {
-            Self::Place(place) => terminal::attached(place).await.ok().flatten(),
+            Self::Place(place) => place.attached().await.ok(),
             Self::Terminal => Some(true),
         }
     }
