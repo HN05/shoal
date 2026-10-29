@@ -318,16 +318,46 @@ fn demos_fall_back_to_the_configured_session_and_take_input() {
             .to_owned()
     };
     wait_until("the demo to run", || screen().contains("ready"));
-    demo(&["send", "demo", "--workspace", "tried", "hello\r"]);
-    wait_until("the demo to read its input", || {
-        screen().contains("got hello")
-    });
+    send_until_shown(
+        "the demo to read its input",
+        || {
+            demo(&["send", "demo", "--workspace", "tried", "hello\r"]);
+        },
+        screen,
+        "got hello",
+    );
     demo(&["stop", "--workspace", "tried"]);
     wait_until("the demo's window to close", || {
         !rex.windows(&session)
             .iter()
             .any(|window| window.contains("demo"))
     });
+}
+
+/// Send keys until `screen` shows `expected`, again after each few seconds
+/// without it: nothing on a screen proves its program has the terminal and
+/// is reading, so the first keys may be lost, while later ones are harmless.
+/// Times out with the last screen.
+fn send_until_shown(
+    what: &str,
+    mut send: impl FnMut(),
+    mut screen: impl FnMut() -> String,
+    expected: &str,
+) {
+    let mut shown = String::new();
+    let mut sent: Option<Instant> = None;
+    let found = try_wait_for(|| {
+        shown = screen();
+        if shown.contains(expected) {
+            return Some(());
+        }
+        if sent.is_none_or(|sent| sent.elapsed() >= Duration::from_secs(5)) {
+            send();
+            sent = Some(Instant::now());
+        }
+        None
+    });
+    assert!(found.is_some(), "timed out waiting for {what}:\n{shown}");
 }
 
 #[test]
