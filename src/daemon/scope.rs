@@ -71,6 +71,7 @@ impl Scoped for Operation {
             Operation::Queue(method) => method.scope(manager, caller).await,
             Operation::Hold(method) => method.scope(manager, caller).await,
             Operation::Demo(method) => method.scope(manager, caller).await,
+            Operation::File(method) => method.scope(manager, caller).await,
             Operation::Item(method) => method.scope(manager, caller).await,
             Operation::Ci(method) => method.scope(manager, caller).await,
             Operation::Notification(method) => method.scope(manager, caller).await,

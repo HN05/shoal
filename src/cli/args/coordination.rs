@@ -25,6 +25,14 @@ pub enum CoordinationCommand {
         #[command(flatten)]
         args: QuestionsArgs,
     },
+    /// List the files attached to a workspace: sent to its agents with a
+    /// message, added, or handed back with done.
+    Files {
+        workspace: Option<String>,
+        /// Print only the paths of Shoal's copies, one per line.
+        #[arg(long)]
+        path: bool,
+    },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,

@@ -72,12 +72,22 @@ impl Layout {
             })
             .collect();
         let copies = keep_copies(&directory, workspace_id, message, &attachments)?;
+        let paths: Vec<_> = copies
+            .attachments
+            .into_iter()
+            .map(|copy| copy.path)
+            .collect();
+        let bytes = paths
+            .iter()
+            .map(|path| {
+                let metadata =
+                    std::fs::metadata(path).with_context(|| format!("read {}", path.display()))?;
+                Ok(metadata.len())
+            })
+            .collect::<Result<_>>()?;
         Ok(Kept {
-            paths: copies
-                .attachments
-                .into_iter()
-                .map(|copy| copy.path)
-                .collect(),
+            paths,
+            bytes,
             created: copies.created,
             workspace: directory,
         })
@@ -105,6 +115,8 @@ impl Layout {
 #[derive(Debug)]
 pub(crate) struct Kept {
     pub(crate) paths: Vec<PathBuf>,
+    /// The size of each copy in `paths`, in bytes.
+    pub(crate) bytes: Vec<u64>,
     /// The directory of copies made for this message, rather than reused.
     created: Option<PathBuf>,
     /// The directory of the workspace's attached files.

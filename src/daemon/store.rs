@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 87;
+const SCHEMA_VERSION: i64 = 88;
 
 #[cfg(test)]
 mod benchmark;
@@ -430,6 +430,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (85, AGENT_MESSAGE_ATTACHMENTS, None),
     (86, QUIET_AGENT_MESSAGES, None),
     (87, WORKSPACE_TITLES, None),
+    (88, include_str!("store/workspace_files.sql"), None),
 ];
 
 /// The JSON array of paths of the files attached to an agent message.

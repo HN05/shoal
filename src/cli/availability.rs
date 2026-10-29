@@ -69,7 +69,7 @@ impl Need {
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
-                "status" | "diff" | "conflicts" | "rm" | "export" | "leases" | "messages"
+                "status" | "diff" | "conflicts" | "rm" | "export" | "leases" | "messages" | "files"
                 | "questions" | "approvals" | "view" | "resume" | "catalog" | "history" | "config"
                 | "pr" | "issue" | "alerts" | "demo" | "queue",
                 ..,

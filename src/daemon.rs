@@ -46,7 +46,7 @@ pub mod store;
 mod untracked;
 mod warnings;
 pub mod workspace;
-pub(crate) mod workspace_files;
+pub mod workspace_files;
 mod workspace_usage;
 
 use std::{

@@ -19541,6 +19541,16 @@ fn messages_carry_copies_of_attached_files() {
     let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
     assert!(copy.starts_with(fixture.shoal_dir()), "{copy:?}");
     assert_eq!(fs::read_to_string(copy).unwrap(), "image");
+    // The workspace's files list the copy after the message is read.
+    let files = fixture.ok(&["files", "receiver"]);
+    assert_eq!(files[0]["name"], "shot.png", "{files}");
+    assert_eq!(files[0]["source"], "message", "{files}");
+    assert_eq!(files[0]["path"], messages[0]["attachments"][0], "{files}");
+    let paths = fixture.run(&["files", "receiver", "--path"]);
+    assert_eq!(
+        String::from_utf8(paths.stdout).unwrap().trim(),
+        copy.display().to_string()
+    );
 }
 
 #[test]

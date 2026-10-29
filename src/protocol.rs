@@ -31,6 +31,7 @@ mod ci;
 mod daemon;
 mod demos;
 mod executions;
+mod files;
 mod holds;
 mod items;
 mod notifications;
@@ -54,6 +55,7 @@ pub use ci::CiMethod;
 pub use daemon::{DaemonMethod, Exit, ExitRequest};
 pub use demos::DemoMethod;
 pub use executions::ExecutionMethod;
+pub use files::FileMethod;
 pub use holds::HoldMethod;
 pub use items::{ItemContext, ItemMethod};
 pub use notifications::NotificationMethod;
@@ -228,6 +230,7 @@ pub enum Operation {
     Queue(QueueMethod),
     Hold(HoldMethod),
     Demo(DemoMethod),
+    File(FileMethod),
     Item(ItemMethod),
     Ci(CiMethod),
     Notification(NotificationMethod),
@@ -307,6 +310,7 @@ impl Operation {
             | Self::Assignment(_)
             | Self::Hold(_)
             | Self::Demo(_)
+            | Self::File(_)
             | Self::Ci(_)
             | Self::Approval(_)
             | Self::Port(_)
@@ -359,6 +363,7 @@ from_domains!(
     Queue(QueueMethod),
     Hold(HoldMethod),
     Demo(DemoMethod),
+    File(FileMethod),
     Item(ItemMethod),
     Ci(CiMethod),
     Notification(NotificationMethod),
@@ -492,6 +497,7 @@ response_bodies! {
     MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
+    AttachedFiles(Vec<crate::daemon::workspace_files::AttachedFile>),
     Demos(Vec<crate::demos::Running>),
     DemoProgress(crate::demos::Progress),
     Workspaces(Vec<Workspace>),

@@ -492,7 +492,7 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
 }
 
 #[tokio::test]
-async fn unread_messages_follow_their_attached_files_to_the_new_root() -> Result<()> {
+async fn unread_messages_and_file_records_follow_their_files_to_the_new_root() -> Result<()> {
     let (temp, manager, _repo, workspace, root) = cloned().await?;
     let file = temp.path().join("crash.log");
     fs::write(&file, "panic")?;
@@ -510,6 +510,8 @@ async fn unread_messages_follow_their_attached_files_to_the_new_root() -> Result
         "{copy:?}"
     );
     assert_eq!(fs::read_to_string(copy)?, "panic");
+    let files = manager.workspace_files(&workspace.id).await?;
+    assert_eq!(files[0].path, *copy);
     Ok(())
 }
 

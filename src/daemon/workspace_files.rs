@@ -1,20 +1,116 @@
 //! Files attached to workspaces, such as those sent with a message to their
-//! agents. Each repository keeps them beside its workspaces, in a directory
-//! its agents are given as a working directory.
-use std::path::PathBuf;
+//! agents. Each repository keeps Shoal's copies beside its workspaces, in a
+//! directory its agents are given as a working directory, and the store
+//! records each copy with how it came, so `shoal files` lists them.
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
+use rusqlite::{Transaction, params};
+use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::workspace::Manager,
     model::{Repository, Workspace},
-    state::WorkspaceState,
+    state::{WorkspaceState, states},
 };
 
 pub(crate) mod layout;
 
 use layout::{Kept, Layout};
+
+#[cfg(test)]
+mod tests;
+
+states!(FileSource {
+    /// Sent with a message to the workspace's agents.
+    Message => "message",
+});
+
+/// A file attached to a workspace: Shoal's copy and how it came.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AttachedFile {
+    pub id: i64,
+    /// The workspace's name when the file was attached.
+    pub workspace: String,
+    pub source: FileSource,
+    /// The attached file's name.
+    pub name: String,
+    /// Shoal's copy.
+    pub path: PathBuf,
+    pub bytes: u64,
+    /// Unix seconds.
+    pub created_at: i64,
+}
+
+const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at";
+
+fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
+    Ok(AttachedFile {
+        id: row.get(0)?,
+        workspace: row.get(1)?,
+        source: row.get(2)?,
+        name: row.get(3)?,
+        path: PathBuf::from(row.get::<_, String>(4)?),
+        bytes: row.get::<_, i64>(5)?.try_into().unwrap_or_default(),
+        created_at: row.get(6)?,
+    })
+}
+
+/// Record the copies `kept` as attached to the workspace `workspace_id` from
+/// `source`, in the caller's transaction. A copy already recorded, as when
+/// the same files are sent again, keeps its record.
+pub(crate) fn record(
+    tx: &Transaction<'_>,
+    workspace_id: &str,
+    source: FileSource,
+    paths: &[PathBuf],
+    bytes: &[u64],
+) -> Result<()> {
+    for (path, bytes) in paths.iter().zip(bytes) {
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        tx.execute(
+            "INSERT OR IGNORE INTO workspace_files
+                (workspace_id,workspace,parent_id,repository_id,source,name,path,bytes,created_at)
+                SELECT id,name,parent_workspace_id,repository_id,?2,?3,?4,?5,unixepoch()
+                FROM workspaces WHERE id=?1",
+            params![
+                workspace_id,
+                source,
+                name,
+                path.to_string_lossy(),
+                i64::try_from(*bytes)?
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+/// Point the recorded copies of repository `repository_id` from `source` to
+/// `destination`, in the transaction that moves the repository's directory.
+pub(crate) fn rebase(
+    tx: &Transaction<'_>,
+    repository_id: &str,
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let recorded: Vec<(i64, String)> = tx
+        .prepare("SELECT id,path FROM workspace_files WHERE repository_id=?1")?
+        .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (id, path) in recorded {
+        if let Ok(inside) = Path::new(&path).strip_prefix(source) {
+            tx.execute(
+                "UPDATE workspace_files SET path=?2 WHERE id=?1",
+                params![id, destination.join(inside).to_string_lossy()],
+            )?;
+        }
+    }
+    Ok(())
+}
 
 /// Copies of `files`, attached to `message` for the workspace
 /// `workspace_id`, made off the async runtime. Callers hold the gate of the
@@ -43,6 +139,21 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
+    /// The files attached to the workspace `selector` names, oldest first.
+    pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
+        let workspace = self.workspace(selector).await?;
+        self.store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT {COLUMNS} FROM workspace_files WHERE workspace_id=?1 ORDER BY id"
+                    ))?
+                    .query_map([&workspace.id], row)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
     /// Hold the gate of the files attached to `workspace`, with
     /// where its repository keeps them, once the workspace is still there and
     /// not being removed. A registration older than the repository's
@@ -69,12 +180,20 @@ impl Manager {
         Ok((layout, guard))
     }
 
-    /// Delete the files attached to `workspace` once it is removed.
+    /// Delete the files attached to `workspace` once it is removed, with
+    /// their records.
     pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
         let _files = self
             .gates
             .lock_message_files(&workspace.repository_id)
             .await;
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM workspace_files WHERE workspace_id=?1", [id])?;
+                Ok(())
+            })
+            .await?;
         let repo = self.repository(&workspace.repository_id).await?;
         let Some(layout) = Layout::of(&repo) else {
             return Ok(());
@@ -87,6 +206,13 @@ impl Manager {
     /// workspaces are gone.
     pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
+        let id = repo.id.clone();
+        self.store
+            .run(move |db| {
+                db.execute("DELETE FROM workspace_files WHERE repository_id=?1", [id])?;
+                Ok(())
+            })
+            .await?;
         let Some(layout) = Layout::of(repo) else {
             return Ok(());
         };

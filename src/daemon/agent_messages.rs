@@ -178,7 +178,13 @@ impl Manager {
         let (layout, _files) = self.lock_files(&workspace).await?;
         let kept = workspace_files::keep(layout, &workspace.id, &message, attachments).await?;
         let queued = self
-            .queue_attached_message(&workspace.id, message, kept.paths.clone(), Delivery::Wake)
+            .queue_attached_message(
+                &workspace.id,
+                message,
+                kept.paths.clone(),
+                kept.bytes.clone(),
+                Delivery::Wake,
+            )
             .await;
         if queued.is_err() {
             workspace_files::discard(kept).await;
@@ -201,15 +207,18 @@ impl Manager {
         message: String,
         delivery: Delivery,
     ) -> Result<()> {
-        self.queue_attached_message(workspace_id, message, Vec::new(), delivery)
+        self.queue_attached_message(workspace_id, message, Vec::new(), Vec::new(), delivery)
             .await
     }
 
+    /// Queue `message` with Shoal's copies `attachments`, of `bytes` each,
+    /// which the workspace's attached files list from then on.
     async fn queue_attached_message(
         &self,
         workspace_id: &str,
         message: String,
         attachments: Vec<PathBuf>,
+        bytes: Vec<u64>,
         delivery: Delivery,
     ) -> Result<()> {
         let workspace_id = workspace_id.to_owned();
@@ -219,6 +228,13 @@ impl Manager {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let queued =
                     insert_delivered(&tx, &workspace_id, &message, &attachments, delivery)?;
+                workspace_files::record(
+                    &tx,
+                    &workspace_id,
+                    workspace_files::FileSource::Message,
+                    &attachments,
+                    &bytes,
+                )?;
                 tx.commit()?;
                 Ok(queued.is_some())
             })

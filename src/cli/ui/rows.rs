@@ -56,16 +56,25 @@ fn usage_cell(workspace: &Workspace) -> Cell {
     )
 }
 
+/// A size in bytes as lists show it: `512 B`, `12 KiB`, `640 MiB` or `1.5 GiB`.
+pub fn size_label(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    let bytes = bytes as f64;
+    if bytes < KIB {
+        format!("{bytes} B")
+    } else if bytes < KIB * KIB {
+        format!("{:.0} KiB", bytes / KIB)
+    } else if bytes < KIB * KIB * KIB {
+        format!("{:.0} MiB", bytes / KIB / KIB)
+    } else {
+        format!("{:.1} GiB", bytes / KIB / KIB / KIB)
+    }
+}
+
 /// How lists and status show what a workspace's processes use:
 /// `12% CPU, 640 MiB`, without CPU until the daemon has measured it.
 pub fn usage_label(usage: &WorkspaceUsage) -> String {
-    const MIB: f64 = 1024.0 * 1024.0;
-    let memory = usage.memory_bytes as f64 / MIB;
-    let memory = if memory >= 1024.0 {
-        format!("{:.1} GiB", memory / 1024.0)
-    } else {
-        format!("{memory:.0} MiB")
-    };
+    let memory = size_label(usage.memory_bytes);
     match usage.cpu_percent {
         Some(cpu) => format!("{cpu:.0}% CPU, {memory}"),
         None => memory,

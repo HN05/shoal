@@ -18,6 +18,7 @@ mod contribute;
 mod demo;
 mod dispatch;
 mod events;
+mod files;
 mod holds;
 mod inbox;
 pub(super) mod issues;

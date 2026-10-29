@@ -3379,7 +3379,7 @@ lines under its first. `--attach` copies a file of at most 100 MiB into the
 repository directory's `.attachments`, which agents can read, and the message
 lists each copy's path as an `Attached file:` line, or in `attachments` with
 `--json`; a message may be its files alone. The copies stay until the workspace
-is removed. Agents read messages with
+is removed, and [`shoal files`](#attached-files) lists them. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 
@@ -3428,6 +3428,20 @@ call or prompt.
 An identical message that is still unread is not queued again, and a workspace
 or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.
+
+### Attached files
+
+```sh
+shoal files [workspace]          # The workspace's attached files, oldest first
+shoal files [workspace] --path   # Only the paths of Shoal's copies
+```
+
+`shoal files` lists the files attached to a workspace: each one's name, size,
+how it came (`message` for a file sent with `shoal messages send --attach`),
+when, and the path of Shoal's copy in the repository directory's
+`.attachments`. `--json` gives each as a record with `source`, `path` and
+`bytes`. Scoped agents may list their own workspace's files and those of the
+workspaces split from it.
 
 ### Questions
 
