@@ -55,7 +55,7 @@ impl Manager {
                 &workspace.id,
                 crate::state::WorkspaceState::Failed,
                 Some(format!(
-                    "rename needs repair: {error:#}; run shoal work rename again to finish it"
+                    "rename needs repair: {error:#}; run shoal branch rename again to finish it"
                 )),
             )
             .await?;

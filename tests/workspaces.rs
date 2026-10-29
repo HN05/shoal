@@ -361,7 +361,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "original",
         "--",
         binary,
-        "work",
+        "branch",
         "rename",
         "other",
         "stolen",
@@ -378,7 +378,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "--",
         binary,
         "--json",
-        "work",
+        "branch",
         "rename",
         "feature/topic",
     ]);
@@ -387,7 +387,7 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     let output = fixture
         .command()
         .current_dir(path)
-        .args(["--json", "work", "rename", "by-directory"])
+        .args(["--json", "branch", "rename", "by-directory"])
         .output()
         .unwrap();
     assert!(
@@ -399,9 +399,9 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         serde_json::from_slice::<Value>(&output.stdout).unwrap()["name"],
         "by-directory"
     );
-    let explicit = fixture.ok(&["work", "rename", "by-directory", "explicit"]);
+    let explicit = fixture.ok(&["branch", "rename", "by-directory", "explicit"]);
     assert_eq!(explicit["name"], "explicit");
-    assert!(!fixture.run(&["work", "rename"]).status.success());
+    assert!(!fixture.run(&["branch", "rename"]).status.success());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
         "INSERT INTO executions(id,workspace_id,state) VALUES ('unknown',?1,'unknown')",
@@ -528,7 +528,7 @@ fn workspace_rename_issue_reopens_the_associated_workspace() {
     let repo = fixture.repo.to_str().unwrap();
     let issue = ["add", "34", "--repo", repo, "--agent", "pi"];
     let created = fixture.ok(&[&issue[..], &["--base", "HEAD"]].concat());
-    let renamed = fixture.ok(&["work", "rename", "34-fix-api-timeout", "renamed-issue"]);
+    let renamed = fixture.ok(&["branch", "rename", "34-fix-api-timeout", "renamed-issue"]);
     let reopened = fixture.ok(&issue);
     assert_eq!(reopened["id"], created["id"]);
     assert_eq!(reopened["path"], created["path"]);
@@ -701,7 +701,7 @@ fn work_rename_finishes_an_interrupted_rename() {
         fixture.restart();
         assert_eq!(fixture.ok(&["status", id])["workspace"]["state"], "failed");
         // Another recorded execution keeps the rename unfinished.
-        let refused = fixture.run(&["work", "rename", id, requested]);
+        let refused = fixture.run(&["branch", "rename", id, requested]);
         assert!(!refused.status.success());
         assert!(
             String::from_utf8_lossy(&refused.stderr).contains("other active or unknown executions")
@@ -711,7 +711,7 @@ fn work_rename_finishes_an_interrupted_rename() {
             .unwrap();
         // Running the rename again finishes or cancels the interrupted one,
         // then renames to the branch asked for.
-        let renamed = fixture.ok(&["work", "rename", id, requested]);
+        let renamed = fixture.ok(&["branch", "rename", id, requested]);
         assert_eq!(renamed["branch"], "new/topic");
         assert_eq!(renamed["state"], "ready");
         assert_eq!(

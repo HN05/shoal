@@ -3802,7 +3802,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
             "--",
             shoal,
             "--json",
-            "work",
+            "branch",
             "rename",
             to,
         ]);

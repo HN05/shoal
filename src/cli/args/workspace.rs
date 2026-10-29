@@ -84,13 +84,6 @@ pub enum WorkCommand {
         #[arg(long)]
         copy: bool,
     },
-    /// Rename a workspace's Git branch and derived workspace name.
-    #[command(allow_missing_positional = true)]
-    Rename {
-        workspace: Option<String>,
-        /// New literal Git branch name.
-        branch: String,
-    },
     /// Give a workspace a short title, which the tabs Shoal opened for it show.
     #[command(allow_missing_positional = true)]
     Title {

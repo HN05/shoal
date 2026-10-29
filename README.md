@@ -85,7 +85,7 @@ shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix
 shoal work adopt ../existing-worktree        # Take ownership, including automatic cleanup
 shoal work adopt --copy ../existing-worktree # Copy work into Shoal's default directory
-shoal work rename fix-login fix/login        # Rename its branch and workspace together
+shoal branch rename fix-login fix/login      # Rename its branch and workspace together
 shoal work title fix-login "Login retries"  # Name the tabs Shoal opens for it
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link

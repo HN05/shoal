@@ -15,9 +15,6 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
             repository,
             copy,
         } => workspaces::adopt(ctx, path, repository, copy).await,
-        WorkCommand::Rename { workspace, branch } => {
-            workspaces::rename(ctx, workspace, branch).await
-        }
         WorkCommand::Title { workspace, title } => workspaces::title(ctx, workspace, title).await,
         WorkCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(ctx, workspace, name).await

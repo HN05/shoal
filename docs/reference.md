@@ -447,7 +447,7 @@ notification and tries again only once agents have no work or the config reloads
 
 ## Workspaces
 
-`shoal work rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
+`shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
 branch and its derived workspace name while keeping the worktree path and
 owned resources and settings. Dirty files are preserved;
 Git keeps the branch's upstream and reflog. Remotes and open PR head branches
@@ -458,7 +458,7 @@ their own workspace when no other execution is recorded; unscoped renames
 require no recorded executions. The caller keeps its original environment, and
 new commands receive the renamed identity. Existing PR watches and acknowledgements
 block renaming because their recorded remote head remains the original branch.
-An interrupted rename leaves the workspace failed until `shoal work rename` runs
+An interrupted rename leaves the workspace failed until `shoal branch rename` runs
 again: it first finishes the interrupted rename when Git completed it, or cancels it
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted
 worktrees can still be removed through normal cleanup.
@@ -3530,7 +3530,7 @@ shoal inbox                         # Failed workspaces and untracked worktrees,
 shoal alerts                        # Problems the daemon found when it started or reloaded
 shoal stop fix-login                # Stop survivors; asks before forgetting an unprovable execution
 shoal work setup fix-login --skip   # Accept a failed setup
-shoal work rename fix-login topic   # Finish an interrupted rename, then rename
+shoal branch rename fix-login topic # Finish an interrupted rename, then rename
 shoal work adopt <path>             # Reclaim a worktree at its recorded path after checking it
 ```
 

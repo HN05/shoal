@@ -522,7 +522,7 @@ A subagent inherits its agent's scope, and under Codex its instructions and
 directory, so a `SubagentStart` hook names the workspace it works in; without
 it, a Codex subagent finishes its agent's assignment as the instructions say.
 
-`shoal work rename` changes a ready workspace's checked-out branch and derived name
+`shoal branch rename` changes a ready workspace's checked-out branch and derived name
 in one durable operation; its path, identity, resources, and associations stay
 with the workspace. The default branch, a branch checked out elsewhere, or a
 name collision is refused. No execution other than the scoped caller may be

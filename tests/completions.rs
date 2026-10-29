@@ -161,7 +161,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "daemon", "ins"], "install"),
         (vec!["shoal", "work", "set"], "setup"),
         (vec!["shoal", "work", "ad"], "adopt"),
-        (vec!["shoal", "work", "ren"], "rename"),
+        (vec!["shoal", "branch", "ren"], "rename"),
         (vec!["shoal", "branch", "ba"], "base"),
         (vec!["shoal", "work", "ch"], "checkpoint"),
         (vec!["shoal", "work", "res"], "restore"),

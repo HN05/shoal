@@ -11,6 +11,13 @@ use crate::{
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum BranchCommand {
+    /// Rename a workspace's Git branch and derived workspace name.
+    #[command(allow_missing_positional = true)]
+    Rename {
+        workspace: Option<String>,
+        /// New literal Git branch name.
+        branch: String,
+    },
     /// Show, set or clear the workspace a stacked workspace builds on.
     #[command(args_conflicts_with_subcommands = true)]
     Base {
