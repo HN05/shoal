@@ -599,7 +599,8 @@ impl<'a> Inventory<'a> {
                 continue;
             }
             let identity = &process.lineage.identity;
-            let evidence = match self.evidence(self.resolve(*pid, &mut attributions)) {
+            let direct = matches!(process.evidence, Evidence::Marked(_) | Evidence::Unmarked);
+            let evidence = match self.evidence(self.resolve(*pid, &mut attributions), direct) {
                 Ok(evidence) => evidence,
                 Err(head) => {
                     scan.unreadable.push(Unattributed {
@@ -624,20 +625,32 @@ impl<'a> Inventory<'a> {
         Ok(scan)
     }
 
-    /// What `attribution` tells about a process's owner, observed by this
-    /// inventory unless it was remembered, or the head of the processes it
-    /// leaves unknown.
-    fn evidence(&self, attribution: Attribution) -> Result<owners::Evidence, Identity> {
-        let told = match attribution {
-            Attribution::Remembered(evidence) => return Ok(evidence),
+    /// What `attribution` tells about a process's owner, `direct` when read
+    /// from its own environment, observed by this inventory unless it was
+    /// remembered, or the head of the processes it leaves unknown.
+    fn evidence(
+        &self,
+        attribution: Attribution,
+        direct: bool,
+    ) -> Result<owners::Evidence, Identity> {
+        let (told, observed) = match attribution {
+            Attribution::Remembered(evidence) => (evidence.told, evidence.observed),
             Attribution::Unknown(head) => return Err(head),
-            Attribution::Owned(marks) => owners::Told::Owner(marks),
-            Attribution::Foreign => owners::Told::NoExecution,
+            Attribution::Owned(marks) => (owners::Told::Owner(marks), self.started),
+            Attribution::Foreign => (owners::Told::NoExecution, self.started),
         };
         Ok(owners::Evidence {
             told,
-            observed: self.started,
+            observed,
+            direct,
         })
+    }
+
+    /// What an earlier inventory read from `lineage`'s own environment,
+    /// which outranks its ancestors' while it hides its environment.
+    fn read_before(&self, lineage: &Lineage) -> Option<Attribution> {
+        let evidence = self.owners.recall(lineage.unique?)?;
+        evidence.direct.then_some(Attribution::Remembered(evidence))
     }
 
     /// The unique IDs observed processes name as their own or their parent's.
@@ -691,7 +704,13 @@ impl<'a> Inventory<'a> {
                 Evidence::Marked(marks) => break Attribution::Owned(marks.clone()),
                 Evidence::Unmarked => break Attribution::Foreign,
                 Evidence::Unreadable => break self.remembered(lineage),
-                Evidence::Hidden | Evidence::Elevated => hidden.push(process),
+                Evidence::Hidden => {
+                    hidden.push(process);
+                    if let Some(attribution) = self.read_before(lineage) {
+                        break attribution;
+                    }
+                }
+                Evidence::Elevated => hidden.push(process),
             }
             if lineage.parent_pid <= 1 {
                 break if lineage.adopted {

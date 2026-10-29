@@ -351,8 +351,12 @@ fn a_process_read_as_no_executions_keeps_no_remembered_owner() -> Result<()> {
     inventory(&owners, [agent(), child(Hidden, 9, false)]).attribute(Marker::Execution, &ids)?;
     // It replaced its image with a program started without the marker...
     inventory(&owners, [agent(), child(Unmarked, 9, false)]).attribute(Marker::Execution, &ids)?;
-    // ...then with a hidden one, and launchd adopted it once the agent exited,
-    // whose owner is still remembered.
+    // ...then with a hidden one while the agent still lives...
+    let hidden = inventory(&owners, [agent(), child(Hidden, 9, false)]);
+    assert_eq!(describe(hidden.resolve(10, &mut HashMap::new())), "foreign");
+    hidden.attribute(Marker::Execution, &ids)?;
+    // ...and launchd adopted it once the agent exited, whose owner is still
+    // remembered.
     let later = inventory(&owners, [child(Hidden, 1, true)]);
     assert_eq!(describe(later.resolve(10, &mut HashMap::new())), "foreign");
     Ok(())
@@ -370,6 +374,7 @@ fn an_inventory_keeps_owners_recorded_after_it_began() {
     let recorded = owners::Evidence {
         told,
         observed: std::time::Instant::now(),
+        direct: true,
     };
     owners.update(
         recorded.observed,
@@ -385,7 +390,16 @@ fn an_older_inventory_never_replaces_what_a_later_one_told() {
     let owners = owners::Owners::default();
     let older = std::time::Instant::now();
     let later = older + Duration::from_secs(1);
-    let told = |told, observed| (100, owners::Evidence { told, observed });
+    let told = |told, observed| {
+        (
+            100,
+            owners::Evidence {
+                told,
+                observed,
+                direct: true,
+            },
+        )
+    };
     let marks = Marks {
         execution: Some("execution".into()),
         workspace: None,
@@ -407,6 +421,27 @@ fn an_older_inventory_never_replaces_what_a_later_one_told() {
 }
 
 #[test]
+fn an_inventory_keeps_what_a_later_one_named_with_older_evidence() {
+    let owners = owners::Owners::default();
+    let told_at = std::time::Instant::now();
+    let earlier = told_at + Duration::from_secs(1);
+    let later = told_at + Duration::from_secs(2);
+    let recalled = owners::Evidence {
+        told: owners::Told::Owner(Marks {
+            execution: Some("execution".into()),
+            workspace: None,
+        }),
+        observed: told_at,
+        direct: false,
+    };
+    // A later inventory found a new orphan and recorded what it recalled
+    // for it, told long before; an earlier one that missed it updates after.
+    owners.update(later, vec![(100, recalled.clone())], &HashSet::new());
+    owners.update(earlier, Vec::new(), &HashSet::new());
+    assert_eq!(owners.recall(100), Some(recalled));
+}
+
+#[test]
 fn a_remembered_owner_keeps_when_it_was_told() -> Result<()> {
     use Evidence::Hidden;
     let owners = owners::Owners::default();
@@ -421,6 +456,7 @@ fn a_remembered_owner_keeps_when_it_was_told() -> Result<()> {
     let owned = owners::Evidence {
         told: owners::Told::Owner(marks),
         observed: first,
+        direct: true,
     };
     owners.update(first, vec![(100, owned)], &HashSet::new());
     // An inventory that began after another read the process without the
@@ -434,6 +470,7 @@ fn a_remembered_owner_keeps_when_it_was_told() -> Result<()> {
     let unmarked = owners::Evidence {
         told: owners::Told::NoExecution,
         observed: reading,
+        direct: true,
     };
     owners.update(reading, vec![(100, unmarked.clone())], &HashSet::new());
     assert_eq!(owners.recall(100), Some(unmarked));
