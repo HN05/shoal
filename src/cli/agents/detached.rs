@@ -35,9 +35,10 @@ pub(in crate::cli) trait App: Sync {
     /// Where its sessions run, for a user looking for one.
     fn place(&self) -> &'static str;
 
-    /// Whether the agent takes instructions apart from its first message,
-    /// as the arguments it is configured with.
-    fn takes_instruction_args(&self) -> bool;
+    /// Whether the agent takes the arguments it is configured with, such as
+    /// its instructions apart from its first message and other working
+    /// directories.
+    fn takes_agent_args(&self) -> bool;
 
     /// Variables a session must not inherit from this process.
     fn not_inherited(&self) -> &'static [&'static str];
@@ -217,7 +218,12 @@ fn workspace_input(
     let (instruction_args, prompt) =
         super::launch::separate_instructions(instruction_args, instructions, prompt);
     let prompt = Some(prompt).filter(|prompt| !prompt.is_empty());
-    (prompt, instruction_args.into_iter().chain(args).collect())
+    let args = instruction_args
+        .into_iter()
+        .chain(temp_dir_args(app, settings))
+        .chain(args)
+        .collect();
+    (prompt, args)
 }
 
 /// The arguments that give `app`'s agent `instructions` apart from its first
@@ -231,7 +237,17 @@ fn instruction_args(
         .launch(app.agent())
         .arguments
         .instruction_args(instructions)
-        .filter(|_| app.takes_instruction_args())
+        .filter(|_| app.takes_agent_args())
+}
+
+/// The arguments that give `app`'s agent the temporary directories, when it
+/// takes arguments.
+fn temp_dir_args(app: &dyn App, settings: &Effective) -> Vec<OsString> {
+    if app.takes_agent_args() {
+        super::temp_dir_args(settings, app.agent())
+    } else {
+        Vec::new()
+    }
 }
 
 /// Add the fields of an app's object `fields` to the JSON `report`.
@@ -290,7 +306,7 @@ pub(super) async fn start_chat(
 /// The first message and arguments of a chat session: the instructions as
 /// arguments with the chat's `opening`, where the agent takes them apart,
 /// otherwise as the first message, which starts a turn before the user
-/// speaks.
+/// speaks. The temporary directories come before the chat's own arguments.
 fn chat_input(
     app: &dyn App,
     settings: &Effective,
@@ -298,14 +314,17 @@ fn chat_input(
     opening: &Option<String>,
     args: &[OsString],
 ) -> (Option<String>, Vec<OsString>) {
+    let args = temp_dir_args(app, settings)
+        .into_iter()
+        .chain(args.to_vec());
     match instruction_args(app, settings, instructions) {
         Some(instruction_args) => (
             opening.clone(),
-            instruction_args.into_iter().chain(args.to_vec()).collect(),
+            instruction_args.into_iter().chain(args).collect(),
         ),
         None => (
             templates::chat_first_message(instructions, opening.as_deref()),
-            args.to_vec(),
+            args.collect(),
         ),
     }
 }

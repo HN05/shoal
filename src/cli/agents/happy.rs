@@ -70,7 +70,7 @@ impl App for Happy {
     }
 
     /// Happy's Codex mode takes no arguments.
-    fn takes_instruction_args(&self) -> bool {
+    fn takes_agent_args(&self) -> bool {
         happy::accepts_prompt(self.0)
     }
 

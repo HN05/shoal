@@ -16106,7 +16106,7 @@ fn happy_issue_prompts_reach_claude_and_are_saved_for_codex() {
             );
             assert_eq!(args[6], "--append-system-prompt");
             assert_eq!(after_guidance(args[7]), "General 34-fix-api-timeout");
-            assert_eq!(args[8..10], ["--model", "test"]);
+            assert_eq!(after_temp_dirs(&args[8..])[..2], ["--model", "test"]);
             assert_eq!(launch["prompt_file"], Value::Null);
             assert_eq!(launch["prompt_delivered"], true, "{launch}");
             assert!(!stderr.contains("initial prompt"), "{stderr}");
@@ -23301,6 +23301,32 @@ fn chat_args(fixture: &Fixture) -> Vec<String> {
         .collect()
 }
 
+/// `args` after the leading arguments that give an agent the temporary
+/// directories, once they are checked to name `/tmp`.
+fn after_temp_dirs<S: AsRef<str>>(args: &[S]) -> &[S] {
+    let mut directories = Vec::new();
+    let mut rest = args;
+    loop {
+        match rest {
+            [flag, directory, tail @ ..] if flag.as_ref() == "--add-dir" => {
+                directories.push(directory.as_ref());
+                rest = tail;
+            }
+            [flag, tail @ ..] if flag.as_ref().starts_with("--add-dir=") => {
+                directories.push(&flag.as_ref()["--add-dir=".len()..]);
+                rest = tail;
+            }
+            _ => break,
+        }
+    }
+    let tmp = fs::canonicalize("/tmp").unwrap();
+    assert!(
+        directories.contains(&tmp.to_str().unwrap()),
+        "{directories:?}"
+    );
+    rest
+}
+
 #[test]
 fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let fixture = Fixture::new();
@@ -23396,7 +23422,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert!(command("PostToolUse", 0).ends_with(" messages --hook"));
     assert!(command("Stop", 0).contains(" internal wake "));
     assert!(!args[3].contains("agent-state"), "{}", args[3]);
-    assert_eq!(args[4..], ["--model", "fast"]);
+    assert_eq!(after_temp_dirs(&args[4..]), ["--model", "fast"]);
     // The checkout is trusted as workspace launches trust theirs.
     let claude: Value =
         serde_json::from_str(&fs::read_to_string(home.join(".claude.json")).unwrap()).unwrap();
@@ -23794,7 +23820,7 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         ["hooks.PostToolUse", "hooks.UserPromptSubmit"]
     );
     // Codex's default launcher appends its own options after forwarded ones.
-    assert_eq!(args[6], "--search");
+    assert_eq!(after_temp_dirs(&args[6..])[0], "--search");
     let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
     assert!(
         codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),
@@ -24067,7 +24093,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
         "{}",
         claude[6]
     );
-    assert_eq!(claude[7..], ["--model", "test"]);
+    assert_eq!(after_temp_dirs(&claude[7..]), ["--model", "test"]);
     assert_eq!(started["prompt_file"], Value::Null);
     // The chat lasts while the session runs, not the command that started it.
     let pid = chat_record["pid"].as_u64().unwrap();

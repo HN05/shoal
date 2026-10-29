@@ -704,7 +704,7 @@ pub(crate) fn temp_dir_args(settings: &Effective, name: &str) -> Vec<OsString> {
 
 /// `/tmp` and the system temporary directory, resolved as agents compare
 /// paths, each once.
-fn temp_dirs() -> BTreeSet<PathBuf> {
+pub(crate) fn temp_dirs() -> BTreeSet<PathBuf> {
     [PathBuf::from("/tmp"), std::env::temp_dir()]
         .into_iter()
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
