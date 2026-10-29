@@ -52,7 +52,7 @@ class StopTests(unittest.TestCase):
 
     def test_a_run_stops_what_it_started_in_its_directory_and_nothing_else(self):
         earlier = self.detached(self.run_dir, "earlier")
-        # Start times have whole seconds, which Linux can put up to a second
+        # Linux puts start times on a boot time in whole seconds, up to a second
         # early; begin the run in the next one, and start later ones after it.
         since = earlier.started + 1
         while time.time() < since + 1:
@@ -91,7 +91,7 @@ class StopTests(unittest.TestCase):
 
     def test_a_reused_pid_is_not_the_process_it_named(self):
         left = self.detached(self.run_dir, "left")
-        replaced = processes.Process(left.pid, left.ppid, left.started - 1, left.cwd)
+        replaced = processes.Process(left.pid, left.ppid, (0, 0), left.started, left.cwd)
 
         self.assertFalse(processes.alive(replaced))
         self.assertEqual(processes.stop([replaced]), [])

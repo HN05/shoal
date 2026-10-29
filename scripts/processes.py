@@ -1,12 +1,13 @@
 """Find and stop the processes a run left behind: those it started, which may
-have detached from it, and only those. A process is named by its PID and start
-time together, and checked again before each signal, so a PID another process
-took over is never signalled."""
+have detached from it, and only those. A process is named by its PID and the
+kernel's record of its start together, checked again just before each signal,
+so a PID another process took over is never signalled."""
 import ctypes
 import os
 import signal
 import subprocess
 import sys
+import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,12 +17,23 @@ TERM_GRACE_SECONDS = 5
 KILL_WAIT_SECONDS = 2
 # prctl(2) option that makes orphaned descendants this process's children.
 PR_SET_CHILD_SUBREAPER = 36
+# proc_pidinfo(3) flavor reading `struct proc_bsdinfo`, its size, the offset
+# of its status and of its start time, and the status of a zombie.
+PROC_PIDTBSDINFO = 3
+PROC_BSDINFO_SIZE = 136
+PROC_BSDINFO_STATUS = 4
+PROC_BSDINFO_START = 120
+SZOMB = 5
 
 
 @dataclass(frozen=True)
 class Process:
     pid: int
     ppid: int
+    # The kernel's record of when it started, which no later process with
+    # the same PID shares.
+    birth: tuple
+    # When it started, by the clock.
     started: float
     cwd: Optional[Path]
 
@@ -37,7 +49,7 @@ def become_subreaper():
 
 
 def run_start():
-    """When a run starting now began, as `ps` start times tell it. Linux
+    """When a run starting now began, as process start times tell it. Linux
     derives them from a boot time in whole seconds, which can put a process
     up to a second before the clock said, so the run counts from the second
     before."""
@@ -47,34 +59,63 @@ def run_start():
 def snapshot():
     """This user's live processes other than this one and the `ps` listing
     them, by PID."""
-    listing = subprocess.Popen(["ps", "-axo", "pid=,ppid=,uid=,stat=,lstart="],
-                               env={**os.environ, "LC_ALL": "C"}, stdout=subprocess.PIPE,
+    listing = subprocess.Popen(["ps", "-axo", "pid=,ppid=,uid="], stdout=subprocess.PIPE,
                                text=True)
     output, _ = listing.communicate()
     user, excluded = os.getuid(), {os.getpid(), listing.pid}
     found = {}
     for line in output.splitlines():
-        pid, ppid, uid, *status = line.split()
-        started = start_time(status)
-        if int(uid) == user and int(pid) not in excluded and started is not None:
-            found[int(pid)] = (int(ppid), started)
+        pid, ppid, uid = (int(field) for field in line.split())
+        recorded = birth(pid) if uid == user and pid not in excluded else None
+        if recorded is not None:
+            found[pid] = (ppid, recorded)
     directories = working_directories(found)
-    return {pid: Process(pid, ppid, started, directories.get(pid))
-            for pid, (ppid, started) in found.items()}
+    return {pid: Process(pid, ppid, recorded, start_time(recorded), directories.get(pid))
+            for pid, (ppid, recorded) in found.items()}
 
 
-def ps(*args):
-    return subprocess.run(["ps", *args], env={**os.environ, "LC_ALL": "C"},
-                          stdout=subprocess.PIPE, text=True).stdout
+def birth(pid):
+    """The kernel's record of when `pid` started, or None once it has exited,
+    including when it only waits to be reaped."""
+    if sys.platform.startswith("linux"):
+        return linux_birth(pid)
+    return macos_birth(pid)
 
 
-def start_time(status):
-    """When a process with `ps` columns `stat` and `lstart` started, or None
-    once it has exited and only waits to be reaped."""
-    state, *start = status
-    if state.startswith("Z"):
+def linux_birth(pid):
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:
         return None
-    return time.mktime(time.strptime(" ".join(start), "%a %b %d %H:%M:%S %Y"))
+    # Fields after the parenthesized command name, which may hold spaces:
+    # state is the third field of stat(5) and the start time the 22nd.
+    fields = stat[stat.rindex(")") + 2:].split()
+    if fields[0] in ("Z", "X"):
+        return None
+    return (boot, int(fields[19]))
+
+
+def macos_birth(pid):
+    libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    info = ctypes.create_string_buffer(PROC_BSDINFO_SIZE)
+    if libproc.proc_pidinfo(pid, PROC_PIDTBSDINFO, ctypes.c_uint64(0), info,
+                            PROC_BSDINFO_SIZE) != PROC_BSDINFO_SIZE:
+        return None
+    (status,) = struct.unpack_from("I", info.raw, PROC_BSDINFO_STATUS)
+    if status == SZOMB:
+        return None
+    return struct.unpack_from("QQ", info.raw, PROC_BSDINFO_START)
+
+
+def start_time(recorded):
+    """When a process with the birth `recorded` started, by the clock."""
+    if sys.platform.startswith("linux"):
+        boot_time = next(int(line.split()[1]) for line in Path("/proc/stat").open()
+                         if line.startswith("btime "))
+        return boot_time + recorded[1] / os.sysconf("SC_CLK_TCK")
+    seconds, micros = recorded
+    return seconds + micros / 1_000_000
 
 
 def working_directories(pids):
@@ -148,20 +189,26 @@ def detached_in(directory):
 
 
 def alive(process):
-    status = ps("-o", "stat=,lstart=", "-p", str(process.pid)).split()
-    return bool(status) and start_time(status) == process.started
+    return birth(process.pid) == process.birth
+
+
+def signal_if_alive(process, number):
+    """Send `number` to `process` if its PID still names it, checked just
+    before the signal."""
+    if alive(process):
+        try:
+            os.kill(process.pid, number)
+        except ProcessLookupError:
+            pass
 
 
 def stop(processes):
     """Stop `processes`, returning those still running afterwards."""
-    for sig, wait in ((signal.SIGTERM, TERM_GRACE_SECONDS),
-                      (signal.SIGKILL, KILL_WAIT_SECONDS)):
+    for number, wait in ((signal.SIGTERM, TERM_GRACE_SECONDS),
+                         (signal.SIGKILL, KILL_WAIT_SECONDS)):
+        for process in processes:
+            signal_if_alive(process, number)
         live = [process for process in processes if alive(process)]
-        for process in live:
-            try:
-                os.kill(process.pid, sig)
-            except ProcessLookupError:
-                pass
         deadline = time.monotonic() + wait
         while live and time.monotonic() < deadline:
             time.sleep(0.1)
