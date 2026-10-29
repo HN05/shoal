@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result, bail};
 use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{TabInfo, failed_with, herdr, in_herdr};
+use super::{TabInfo, failed_with, herdr};
 use crate::{
     cli::terminal::Session,
     sessions::{HostName, Origin},
@@ -16,9 +16,6 @@ use crate::{
 
 /// The variables naming the Herdr server a pane runs in, most specific first.
 const SERVER_VARS: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION"];
-
-/// The session Herdr attaches when a pane recorded none.
-const DEFAULT_SESSION: &str = "default";
 
 /// The session at `place`, named after its tab, while its pane is open.
 pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {
@@ -38,7 +35,7 @@ pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {
 /// Focus the tab of the pane at `place`, attaching this terminal to the
 /// tab's Herdr session when it runs outside Herdr.
 pub(super) async fn reveal(place: &Origin) -> Result<()> {
-    let client = client_session(place)?;
+    let client = client_session(place, |name| std::env::var(name).ok())?;
     let pane = pane(place).await?.context("the Herdr pane is gone")?;
     focus_tab(place, &pane.tab_id).await?;
     match client {
@@ -47,22 +44,28 @@ pub(super) async fn reveal(place: &Origin) -> Result<()> {
     }
 }
 
-/// The Herdr session this terminal attaches to show `place`, or `None`
-/// when this terminal already shows it, as a pane of the same server does.
-fn client_session(place: &Origin) -> Result<Option<&str>> {
-    let session = place
-        .data
-        .get("HERDR_SESSION")
-        .map_or(DEFAULT_SESSION, String::as_str);
-    if !in_herdr() {
-        return Ok(Some(session));
+/// The Herdr session a terminal with the variables `current` gives attaches
+/// to show `place`, or `None` when it already shows it, as a pane of the
+/// same server does. A pane that recorded no session has none to attach.
+fn client_session(
+    place: &Origin,
+    current: impl Fn(&str) -> Option<String>,
+) -> Result<Option<&str>> {
+    let session = place.data.get("HERDR_SESSION").map(String::as_str);
+    if current("HERDR_ENV").as_deref() != Some("1") {
+        return session
+            .map(Some)
+            .context("the Herdr tab recorded no session to attach; open it in Herdr");
     }
-    if same_server(&place.data, |name| std::env::var(name).ok()) {
+    if same_server(&place.data, current) {
         return Ok(None);
     }
-    bail!(
-        "the Herdr tab runs in Herdr session {session}; open it there or attach from outside Herdr"
-    )
+    match session {
+        Some(session) => bail!(
+            "the Herdr tab runs in Herdr session {session}; open it there or attach from outside Herdr"
+        ),
+        None => bail!("the Herdr tab runs in another Herdr session; open it there"),
+    }
 }
 
 /// Whether `current` names the server `recorded` does, by the first

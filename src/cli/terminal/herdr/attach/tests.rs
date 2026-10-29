@@ -51,3 +51,29 @@ fn tab_info_reads_the_label() {
     .unwrap();
     assert_eq!(info.result.tab.label.as_deref(), Some("shoal#1328"));
 }
+
+#[test]
+fn outside_herdr_only_a_recorded_session_is_attached() {
+    let outside = |_: &str| None;
+    let socket_only = Origin {
+        data: vars(&[("HERDR_SOCKET_PATH", "/h/work/herdr.sock")]),
+        ..Origin::created(HostName::Herdr, "w1:p1".to_owned())
+    };
+    let error = client_session(&socket_only, outside).unwrap_err();
+    assert!(
+        error.to_string().contains("recorded no session"),
+        "{error:#}"
+    );
+    let recorded = Origin {
+        data: vars(&[("HERDR_SESSION", "work")]),
+        ..socket_only.clone()
+    };
+    assert_eq!(client_session(&recorded, outside).unwrap(), Some("work"));
+    // A pane of the same server already shows it.
+    let inside = |name: &str| match name {
+        "HERDR_ENV" => Some("1".to_owned()),
+        "HERDR_SESSION" => Some("work".to_owned()),
+        _ => None,
+    };
+    assert_eq!(client_session(&recorded, inside).unwrap(), None);
+}
