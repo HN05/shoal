@@ -49,18 +49,21 @@ impl Manager {
                 executions
                     .into_iter()
                     .filter_map(|execution| {
-                        let (agent, restorable, state) = match agents.get(&execution.id) {
-                            // Named as `--agent` and recovery records name it.
-                            Some(agent) => (
-                                Some(agent.name.replace(' ', "-")),
-                                agent.recover,
-                                agent.turn,
-                            ),
-                            None if connections.is_connected(&execution.id) => return None,
-                            None => (None, false, None),
-                        };
+                        let (agent, restorable, state, interrupted) =
+                            match agents.get(&execution.id) {
+                                // Named as `--agent` and recovery records name it.
+                                Some(agent) => (
+                                    Some(agent.name.replace(' ', "-")),
+                                    agent.recover,
+                                    agent.turn,
+                                    agent.interrupted,
+                                ),
+                                None if connections.is_connected(&execution.id) => return None,
+                                None => (None, false, None, false),
+                            };
                         Some(RunningAgent {
                             state,
+                            interrupted,
                             execution: execution.id,
                             workspace_id: execution.workspace_id,
                             agent,
@@ -143,9 +146,17 @@ impl Manager {
     }
 
     /// Keep the turn state the agent of `id` reported.
-    pub(crate) async fn record_agent_turn(&self, id: &str, state: AgentState) {
+    pub(crate) async fn record_agent_turn(
+        &self,
+        id: &str,
+        state: AgentState,
+        interrupted: Option<bool>,
+    ) {
         self.executions
-            .with_agent(id, |agent| agent.turn = Some(state))
+            .with_agent(id, |agent| {
+                agent.turn = Some(state);
+                agent.interrupted = interrupted.unwrap_or(agent.interrupted);
+            })
             .await;
     }
 

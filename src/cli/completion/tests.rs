@@ -141,6 +141,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     agent: agent.map(Into::into),
                     restorable: agent.is_some(),
                     state: None,
+                    interrupted: false,
                     origin: Some(Origin::created(HostName::Zmx, session.into())),
                 })
                 .into(),

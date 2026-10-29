@@ -18,6 +18,7 @@ use crate::{
 
 mod attachment;
 mod forks;
+mod interrupts;
 mod queue_move;
 mod restart;
 
@@ -38,6 +39,10 @@ pub(crate) struct Agent {
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
+    /// Whether an interrupt ended its last turn, which leaves it idle
+    /// without the hook that ends its other turns, until a turn starts or
+    /// ends again.
+    interrupted: bool,
     /// Whether a terminal shows the agent, as its wrapper reported last;
     /// `None` until it reports.
     attached: Option<bool>,
@@ -269,6 +274,7 @@ impl Manager {
             update_hold: None,
             restart: None,
             turn: None,
+            interrupted: false,
             attached: None,
             told_attached: None,
         };

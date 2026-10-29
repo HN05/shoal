@@ -739,6 +739,10 @@ pub struct RunningAgent {
     /// until it reports again.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<crate::state::AgentState>,
+    /// Whether an interrupt ended its last turn, which `shoal resume`
+    /// continues.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub interrupted: bool,
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,

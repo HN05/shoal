@@ -349,14 +349,21 @@ impl Manager {
     /// Return once whether the workspace's agent is idle with undelivered
     /// messages that wake it or queued updates matches `due`, so a launcher
     /// can prompt an agent that has no hook to wake it, then wait for it to
-    /// take them.
-    pub async fn wait_agent_wake(&self, selector: &str, due: bool) -> Result<()> {
+    /// take them. With `interrupted`, the agent is due only while an
+    /// interrupt ended the last turn of that execution's agent, whose hook
+    /// wakes it otherwise.
+    pub async fn wait_agent_wake(
+        &self,
+        selector: &str,
+        due: bool,
+        interrupted: Option<&str>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so a change in between still wakes.
         let mut messages = self.signals.watch_agent_messages();
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
-        while self.agent_wake_due(&workspace).await? != due {
+        while self.agent_wake_due(&workspace, interrupted).await? != due {
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
             tokio::select! {
@@ -402,7 +409,16 @@ impl Manager {
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 
-    async fn agent_wake_due(&self, workspace: &Workspace) -> Result<bool> {
+    async fn agent_wake_due(
+        &self,
+        workspace: &Workspace,
+        interrupted: Option<&str>,
+    ) -> Result<bool> {
+        if let Some(execution) = interrupted
+            && !self.turn_interrupted(execution).await
+        {
+            return Ok(false);
+        }
         let id = workspace.id.clone();
         let state = self
             .store

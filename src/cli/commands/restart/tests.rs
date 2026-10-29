@@ -18,6 +18,7 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
         agent: agent.map(str::to_owned),
         restorable,
         state: None,
+        interrupted: false,
         origin: None,
     }
 }

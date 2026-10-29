@@ -89,6 +89,7 @@ async fn request(paths: &Paths, workspace: &str, due: bool) -> Result<()> {
     let method = AgentMethod::AwaitAgentWake {
         workspace: workspace.to_owned(),
         due,
+        interrupted: None,
     };
     let (_stream, body) = client::open(paths, method).await?;
     body.into_result().map(drop)

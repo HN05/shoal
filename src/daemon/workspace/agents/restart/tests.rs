@@ -73,6 +73,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 agent: Some("claude".into()),
                 restorable: true,
                 state: Some(AgentState::Idle),
+                interrupted: false,
                 origin: None,
             },
             RunningAgent {
@@ -81,6 +82,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 agent: None,
                 restorable: false,
                 state: None,
+                interrupted: false,
                 origin: None,
             },
         ]

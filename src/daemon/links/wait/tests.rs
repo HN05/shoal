@@ -820,7 +820,7 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     let wait = |due| {
         let manager = manager.clone();
         let id = workspace.id.clone();
-        tokio::spawn(async move { manager.wait_agent_wake(&id, due).await })
+        tokio::spawn(async move { manager.wait_agent_wake(&id, due, None).await })
     };
     // A hang guard only: each wait ends on the change before it.
     let finish = |task: tokio::task::JoinHandle<Result<()>>| async {

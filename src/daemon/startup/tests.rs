@@ -49,6 +49,7 @@ async fn startup_answers_status_with_its_step_and_serves_other_requests_after() 
         let wake = AgentMethod::AwaitAgentWake {
             workspace: "w".into(),
             due: false,
+            interrupted: None,
         };
         let mut retried = send(&socket, 8, wake).await;
         let Body::Error { message, .. } = reply(send(&socket, 9, DaemonMethod::Status).await).await

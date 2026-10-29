@@ -19,13 +19,26 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        AgentMethod::AwaitAgentWake { workspace, due } => {
+        AgentMethod::AwaitAgentWake {
+            workspace,
+            due,
+            interrupted,
+        } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
-                manager.wait_agent_wake(&workspace, due).await?;
+                manager
+                    .wait_agent_wake(&workspace, due, interrupted.as_deref())
+                    .await?;
                 Ok(Body::Ok)
             }));
         }
+        AgentMethod::WorkspaceAgents { workspace } => {
+            Body::RunningAgents(manager.workspace_agents(&workspace).await?)
+        }
+        AgentMethod::InterruptTurn {
+            workspace,
+            execution,
+        } => Body::AgentStatus(manager.interrupt_turn(&workspace, execution).await?),
         AgentMethod::AcknowledgePrUpdates {
             workspace,
             deliveries,
@@ -146,6 +159,7 @@ impl Scoped for AgentMethod {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentMessages { workspace }
             | AgentMethod::AgentSession { workspace }
+            | AgentMethod::WorkspaceAgents { workspace }
             | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
@@ -169,6 +183,15 @@ impl Scoped for AgentMethod {
                         caller,
                         workspace,
                         "workspace processes report agent state only for their own workspace",
+                    )
+                    .await?,
+            ),
+            AgentMethod::InterruptTurn { workspace, .. } => Some(
+                manager
+                    .workspace_below(
+                        caller,
+                        workspace,
+                        "workspace processes interrupt only the agents of the workspaces below theirs",
                     )
                     .await?,
             ),

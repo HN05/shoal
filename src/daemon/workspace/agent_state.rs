@@ -146,10 +146,29 @@ impl Manager {
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
-            failed: false,
             prompt_cache: self.prompt_cache(execution.as_deref(), turn_end).await,
+            ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
+            .await
+    }
+
+    /// Record that an interrupt ended the turn of the agent `execution`
+    /// runs, which leaves it idle without the hook that ends its other
+    /// turns.
+    pub(crate) async fn end_interrupted_turn(
+        &self,
+        selector: &str,
+        execution: String,
+    ) -> Result<AgentStatus> {
+        let ending = TurnEnding {
+            interrupted: true,
+            prompt_cache: self
+                .prompt_cache(Some(&execution), TurnEnd::default())
+                .await,
+            ..TurnEnding::ended()
+        };
+        self.record_agent_state(selector, AgentState::Idle, Some(execution), None, ending)
             .await
     }
 
@@ -181,7 +200,8 @@ impl Manager {
     ) -> Result<AgentStatus> {
         let id = self.workspace(selector).await?.id;
         if let Some(execution) = &execution {
-            self.record_agent_turn(execution, state).await;
+            self.record_agent_turn(execution, state, ending.interrupted_after(state))
+                .await;
         }
         if let (Some(execution), Some(session)) = (&execution, &session) {
             ensure!(recovery::valid_session(session), "invalid agent session ID");
@@ -220,19 +240,39 @@ impl Manager {
         let ending = TurnEnding {
             failed: true,
             prompt_cache: self.prompt_cache(execution.as_deref(), turn_end).await,
+            ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
             .await
     }
 }
 
-/// How a report ends the agent's turn: whether a failure ended it, and how
-/// long its prompt cache lives after it. A report that ends no turn has
-/// neither.
+/// How a report ends the agent's turn: whether it ends one, whether a
+/// failure or an interrupt ended it, and how long its prompt cache lives
+/// after it. A report that ends no turn has none of them.
 #[derive(Debug, Clone, Copy, Default)]
 struct TurnEnding {
+    ends: bool,
     failed: bool,
+    interrupted: bool,
     prompt_cache: Option<Duration>,
+}
+
+impl TurnEnding {
+    fn ended() -> Self {
+        Self {
+            ends: true,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the agent idles after an interrupt once it reports `state`
+    /// so: a turn that starts or ends says, while a report that the agent
+    /// is still idle, such as Claude Code's notice of a waiting prompt,
+    /// leaves it as it was.
+    fn interrupted_after(self, state: AgentState) -> Option<bool> {
+        (self.ends || state != AgentState::Idle).then_some(self.interrupted)
+    }
 }
 
 /// A state report as the store records it.
