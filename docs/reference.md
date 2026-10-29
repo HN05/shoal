@@ -347,8 +347,11 @@ types into demos, and records the agent idle. An agent without a running turn,
 including one whose turn Shoal has not heard of since a daemon restart, is left
 alone. An agent that runs outside a terminal host, such as in Happy, or that
 Shoal knows no interrupt key for fails the command. Messages and item activity
-reach an interrupted agent as they reach any idle one. A workspace process
-interrupts only the agents of the workspaces below its own.
+reach an interrupted agent as they reach any idle one, and
+`shoal resume <workspace>` continues its turn: it submits `Continue where you
+left off.` in the session, until the agent starts another turn. A workspace
+process interrupts and continues only the agents of the workspaces below its
+own.
 
 `shoal restart [workspace...]` restarts running agents in place: the wrapper
 stops the agent and starts its saved session again in the same terminal with the

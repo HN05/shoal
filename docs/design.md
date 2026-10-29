@@ -194,7 +194,8 @@ the key through the terminal host of the place the daemon recorded for the
 agent, so a client driving Shoal need not know each agent's key or each host,
 and the daemon records the turn's end, which no hook reports. The daemon keeps
 the interruption with the agent's transient metadata until a turn starts or
-ends again.
+ends again; `shoal resume` continues the interrupted turn, as it continues
+stopped work, so a client pairs one command with each.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
 workspace loads the machine; protection, warnings and admission do not use it
@@ -1249,8 +1250,9 @@ into the zmx session it runs in once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook
 does not run after an interrupted turn, so its wrapper prompts it the same way
 while it idles after one. Besides that prompt, Shoal writes to an agent's
-terminal only the interrupt key `shoal stop --interrupt` sends: the daemon
-never does, the prompt carries no forge text, and it is appended to anything
+terminal only the interrupt key `shoal stop --interrupt` sends and the fixed
+prompt with which `shoal resume` continues the interrupted turn: the daemon
+never does, the prompts carry no forge text, and they are appended to anything
 typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse.
 A message may attach files, which the daemon copies from paths the CLI checked

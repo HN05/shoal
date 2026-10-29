@@ -126,9 +126,10 @@ instead of the PR delivery guidance below.
   events, which the user receives as notifications if the chat ends first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
   the tracked wrapper's fixed prompt into an idle Codex's zmx session, or an
-  idle Claude Code's after an interrupted turn, once per idle stretch, and the
-  agent's interrupt key the CLI types for `shoal stop --interrupt`; the daemon
-  never writes to a terminal. Workspace events are an unscoped, durable lifecycle
+  idle Claude Code's after an interrupted turn, once per idle stretch, the
+  agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
+  fixed prompt with which `shoal resume` continues that turn; the daemon never
+  writes to a terminal. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state. Ready-for-review
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
   journal events, and never notify, complete, or change cleanup; `post_ready_cmd`

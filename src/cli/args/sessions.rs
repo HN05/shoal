@@ -16,7 +16,8 @@ pub enum SessionsCommand {
     ///
     /// The daemon starts queued restores as `max_agents` allows: where each
     /// agent stopped, otherwise in a background Herdr tab or a detached zmx
-    /// session. `--all` leaves out workspaces whose assignment is done.
+    /// session. `--all` leaves out workspaces whose assignment is done. A named workspace
+    /// whose agent's turn `shoal stop --interrupt` ended continues that turn instead.
     Resume {
         #[command(flatten)]
         targets: WorkspaceTargets,

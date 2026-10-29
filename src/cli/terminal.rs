@@ -1285,6 +1285,13 @@ pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Resul
     }
 }
 
+/// Submit `text` as a prompt in `place`, as if pasted and sent: bracketed
+/// paste keeps it one prompt, and Enter in the same write submits it rather
+/// than ending the paste.
+pub(in crate::cli) async fn submit_prompt(place: &Origin, text: &str) -> Result<()> {
+    send_keys(place, &format!("\x1b[200~{text}\x1b[201~\r")).await
+}
+
 /// Type `keys` into `place`, as they are, through the host that keeps it.
 pub(in crate::cli) async fn send_keys(place: &Origin, keys: &str) -> Result<()> {
     let host = kept_by(place);

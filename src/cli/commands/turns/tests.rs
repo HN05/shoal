@@ -35,6 +35,25 @@ fn only_a_working_or_waiting_agent_runs_a_turn() {
 }
 
 #[test]
+fn only_an_idle_agent_continues_the_turn_an_interrupt_ended() {
+    let interrupted = RunningAgent {
+        state: Some(AgentState::Idle),
+        interrupted: true,
+        ..agent(None)
+    };
+    assert!(idles_interrupted(&interrupted));
+    assert!(!idles_interrupted(&RunningAgent {
+        interrupted: false,
+        ..interrupted.clone()
+    }));
+    // A turn it started since then runs.
+    assert!(!idles_interrupted(&RunningAgent {
+        state: Some(AgentState::Working),
+        ..interrupted
+    }));
+}
+
+#[test]
 fn an_agent_outside_any_terminal_host_takes_no_keys() {
     let workspace = workspace();
     let detached = agent(None);

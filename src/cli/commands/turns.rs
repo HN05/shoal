@@ -1,5 +1,6 @@
-//! Interrupting an agent's turn without stopping the agent: Shoal types the
-//! agent's own interrupt key into the place it runs in, through that place's
+//! Interrupting an agent's turn without stopping the agent, and continuing
+//! the turn an interrupt ended: Shoal types the agent's own interrupt key, or
+//! a prompt to continue, into the place it runs in, through that place's
 //! terminal host, and the daemon records that the interrupt ended the turn.
 use anyhow::{Context as _, Result};
 use serde::Serialize;
@@ -20,7 +21,10 @@ use crate::{
     state::AgentState,
 };
 
-/// An agent whose turn Shoal interrupted.
+/// What `shoal resume` submits to an agent whose turn an interrupt ended.
+const CONTINUE_PROMPT: &str = "Continue where you left off.";
+
+/// An agent whose turn Shoal interrupted or continued.
 #[derive(Debug, Serialize)]
 struct Turn {
     workspace: String,
@@ -81,6 +85,43 @@ async fn interrupt_workspace(ctx: &Context, workspace: &Workspace) -> Result<Vec
         interrupted.push(typed.turn(workspace));
     }
     Ok(interrupted)
+}
+
+/// Continue the turns an interrupt ended of the agents in the workspaces
+/// `selectors` name, returning the selectors of the workspaces without one.
+pub(super) async fn continue_interrupted(
+    ctx: &Context,
+    selectors: Vec<String>,
+) -> Result<Vec<String>> {
+    let mut remaining = Vec::new();
+    for selector in selectors {
+        let workspace = client::inspect(&ctx.paths, selector.clone())
+            .await?
+            .workspace;
+        let agents = workspace_agents(ctx, &workspace).await?;
+        let interrupted: Vec<_> = agents
+            .iter()
+            .filter(|agent| idles_interrupted(agent))
+            .collect();
+        if interrupted.is_empty() {
+            remaining.push(selector);
+        }
+        for agent in interrupted {
+            let typed = Typed::of(&workspace, agent)?;
+            terminal::submit_prompt(typed.place, CONTINUE_PROMPT).await?;
+            ctx.emit_styled(
+                Style::Success,
+                &format!("Continued the turn of {} in {}", typed.name, workspace.name),
+                json!({"continued": typed.turn(&workspace)}),
+            )?;
+        }
+    }
+    Ok(remaining)
+}
+
+/// Whether `agent` idles after an interrupt ended its turn.
+fn idles_interrupted(agent: &RunningAgent) -> bool {
+    agent.interrupted && agent.state == Some(AgentState::Idle)
 }
 
 /// Whether an agent in `state` runs a turn, which waits for the user while

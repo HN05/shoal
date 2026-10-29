@@ -25,17 +25,26 @@ use std::{
 /// `focus`, which restores one agent in this terminal.
 pub async fn select(
     ctx: &Context,
-    targets: WorkspaceTargets,
+    mut targets: WorkspaceTargets,
     execution: Option<String>,
     discard: bool,
     now: bool,
     focus: bool,
 ) -> Result<i32> {
-    if crate::env::inherits_scope(&ctx.paths.state) {
+    let scoped = crate::env::inherits_scope(&ctx.paths.state);
+    if scoped {
         ensure_below(&targets, now || focus)?;
-        if !discard {
-            return queue_below(ctx, targets.workspace, execution).await;
+    }
+    // A named workspace whose agent idles after an interrupt continues its
+    // turn; the rest resume their stopped work.
+    if !discard && execution.is_none() && !targets.workspace.is_empty() {
+        targets.workspace = super::turns::continue_interrupted(ctx, targets.workspace).await?;
+        if targets.workspace.is_empty() {
+            return Ok(0);
         }
+    }
+    if scoped && !discard {
+        return queue_below(ctx, targets.workspace, execution).await;
     }
     let selected = if targets.all {
         None
