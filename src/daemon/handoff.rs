@@ -1,5 +1,5 @@
 //! Keep ownership and queued connections across a managed daemon update.
-use crate::paths::Paths;
+use crate::{fsutil::set_inherited, paths::Paths};
 use anyhow::{Context, Result, ensure};
 use std::{
     fs::{self, File},
@@ -37,8 +37,8 @@ impl Handoff {
             lock > 2 && listener > 2 && lock != listener,
             "invalid daemon handoff descriptors"
         );
-        inherit(lock, false)?;
-        inherit(listener, false)?;
+        set_inherited(lock, false)?;
+        set_inherited(listener, false)?;
         // SAFETY: these distinct open descriptors transferred by exec have no
         // other Rust owners before the new process creates its runtime.
         Ok(Some(unsafe {
@@ -64,27 +64,6 @@ impl Handoff {
     }
 }
 
-fn inherit(fd: RawFd, enabled: bool) -> Result<()> {
-    // SAFETY: fcntl validates the descriptor; neither operation uses a pointer.
-    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-    ensure!(
-        flags >= 0,
-        "inspect daemon descriptor: {}",
-        std::io::Error::last_os_error()
-    );
-    let flags = if enabled {
-        flags & !libc::FD_CLOEXEC
-    } else {
-        flags | libc::FD_CLOEXEC
-    };
-    ensure!(
-        unsafe { libc::fcntl(fd, libc::F_SETFD, flags) } == 0,
-        "configure daemon descriptor: {}",
-        std::io::Error::last_os_error()
-    );
-    Ok(())
-}
-
 /// Workers and SQLite have drained before descriptors become inheritable.
 /// Exec retains the service PID, ownership lock and listening socket backlog.
 pub(super) fn exec(path: &Path, paths: &Paths, listener: &UnixListener, lock: &File) -> Result<()> {
@@ -99,11 +78,11 @@ pub(super) fn exec(path: &Path, paths: &Paths, listener: &UnixListener, lock: &F
             format!("{},{}", descriptors[0], descriptors[1]),
         );
     for fd in descriptors {
-        inherit(fd, true)?;
+        set_inherited(fd, true)?;
     }
     let error = command.exec();
     for fd in descriptors {
-        inherit(fd, false)?;
+        set_inherited(fd, false)?;
     }
     Err(error).context("restart updated daemon")
 }

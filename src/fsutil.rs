@@ -111,6 +111,29 @@ pub fn find_executable(program: &OsStr, search_path: &OsStr) -> Option<PathBuf> 
         .find(|path| is_executable(path).unwrap_or(false))
 }
 
+/// Set whether descriptor `fd` stays open in a program this process execs.
+pub fn set_inherited(fd: std::os::fd::RawFd, inherited: bool) -> anyhow::Result<()> {
+    // SAFETY: fcntl validates the descriptor; neither operation uses a pointer.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+    anyhow::ensure!(
+        flags >= 0,
+        "inspect descriptor {fd}: {}",
+        io::Error::last_os_error()
+    );
+    let flags = if inherited {
+        flags & !libc::FD_CLOEXEC
+    } else {
+        flags | libc::FD_CLOEXEC
+    };
+    anyhow::ensure!(
+        // SAFETY: as above.
+        unsafe { libc::fcntl(fd, libc::F_SETFD, flags) } == 0,
+        "configure descriptor {fd}: {}",
+        io::Error::last_os_error()
+    );
+    Ok(())
+}
+
 /// The absolute path this process was started through. Unlike `current_exe`
 /// on Linux, it keeps an installation symlink instead of resolving into a
 /// versioned directory, so a later run of it reaches an upgraded binary.
