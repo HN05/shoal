@@ -360,7 +360,10 @@ own.
 stops the agent and starts its saved session again in the same terminal with the
 continuation prompt, as an automatic restore does, so `shoal attach` keeps
 working. The restore command finds the agent through `PATH` again, so an updated
-agent binary runs; the wrapper keeps its Shoal binary. `--all` selects every
+agent binary runs. A wrapper whose Shoal binary an upgrade replaced continues
+from the installed one in the same process and terminal, as on every automatic
+restore; wrappers of 0.13.0 and earlier keep their binary until the agent is
+stopped and resumed. `--all` selects every
 workspace and `--agent <name>` only agents of that name. Agents restart
 together; `--sequential` restarts one at a time, idle ones first, each once the
 previous one runs again and at least 10 seconds after it started. With

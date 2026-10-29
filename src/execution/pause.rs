@@ -8,6 +8,7 @@ use super::{
     Mode,
     link::Link,
     recovery::{self, Restorer},
+    takeover,
 };
 use crate::{
     model::{ExecutionPlan, PortReservation},
@@ -27,6 +28,12 @@ pub(super) enum AfterPause {
         command: Vec<OsString>,
         proxy: Option<crate::proxy::Proxy>,
         ports: Vec<PortReservation>,
+        record: Option<PathBuf>,
+    },
+    /// The daemon resumed the agent, which `installed`, the binary an
+    /// upgrade put in place of this wrapper's, restores from `record`.
+    TakeOver {
+        installed: PathBuf,
         record: Option<PathBuf>,
     },
 }
@@ -90,10 +97,13 @@ async fn await_restore(
     match recovery::wait(link).await? {
         recovery::Waited::Resume(ports) => {
             let record = record.ok();
+            eprintln!("shoal: restoring agent session");
+            if let Some(installed) = takeover::installed(link) {
+                return Ok(AfterPause::TakeOver { installed, record });
+            }
             let (command, proxy) = recovery
                 .restore_command(paths, &plan.workspace, record.as_deref())
                 .await;
-            eprintln!("shoal: restoring agent session");
             Ok(AfterPause::Restart {
                 command,
                 proxy,

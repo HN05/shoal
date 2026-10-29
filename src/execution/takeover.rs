@@ -4,18 +4,101 @@
 //! connection, and the installed release registers again and starts the
 //! agent. The daemon sends nothing between its resume and the restored
 //! child's start, so the handover loses no control.
-use std::os::fd::{FromRawFd as _, RawFd};
+use std::{
+    os::{
+        fd::{FromRawFd as _, RawFd},
+        unix::process::CommandExt as _,
+    },
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail, ensure};
 use tokio::io::BufReader;
 
-use super::link::Link;
+use super::{Mode, link::Link};
 use crate::{
+    cli::internal::{Worker, internal_command},
+    env,
     fsutil::set_inherited,
     model::ExecutionPlan,
+    paths::Paths,
     protocol::{Control, ExecutionEvent, timing},
     sessions::Origin,
 };
+
+/// The binary the wrapper continues from: the installed one, once an
+/// upgrade put it in place of the wrapper's own, while `link` can hand its
+/// connection over.
+pub(super) fn installed(link: &Link) -> Option<PathBuf> {
+    link.descriptor()?;
+    crate::cli::installed::started()
+        .installed()
+        .map(Path::to_owned)
+}
+
+/// The agent a wrapper hands over, which the binary it continues from
+/// restores.
+pub(super) struct Handover<'a> {
+    pub workspace: &'a str,
+    pub agent: &'a str,
+    /// The recovery record the agent resumes from.
+    pub record: Option<&'a Path>,
+}
+
+/// Replace this wrapper with `installed`, handing it `link` and the agent.
+/// Returns only on failure, after which the wrapper finishes.
+pub(super) fn exec(
+    paths: &Paths,
+    installed: &Path,
+    link: &Link,
+    mode: &Mode,
+    handover: Handover<'_>,
+) -> anyhow::Error {
+    let Some(connection) = link.descriptor() else {
+        return anyhow::anyhow!("the daemon connection is not attached");
+    };
+    match continue_with(paths, installed, connection, mode, handover) {
+        Ok(error) => anyhow::Error::new(error),
+        Err(error) => error,
+    }
+    .context("continue with the installed shoal")
+}
+
+/// Exec `installed` as the take-over worker over descriptor `connection`;
+/// the error exec returned, or the failure before it.
+fn continue_with(
+    paths: &Paths,
+    installed: &Path,
+    connection: RawFd,
+    mode: &Mode,
+    handover: Handover<'_>,
+) -> Result<std::io::Error> {
+    let log = match mode {
+        Mode::Detached { log } => Some(log.as_path()),
+        _ => None,
+    };
+    let argv = internal_command(
+        paths,
+        false,
+        Worker::TakeOver {
+            workspace: handover.workspace,
+            agent: handover.agent,
+            connection,
+            record: handover.record,
+            log,
+        },
+    )?;
+    let mut command = std::process::Command::new(installed);
+    command.args(&argv[1..]);
+    // This process took the marker out of its environment as it started.
+    if env::ends_launch_session() {
+        command.env(env::ENDS_SESSION, "1");
+    }
+    set_inherited(connection, true)?;
+    // The installed binary writes to the same output after this.
+    let _ = std::io::Write::flush(&mut std::io::stdout());
+    Ok(command.exec())
+}
 
 /// The daemon connection a wrapper handed over at descriptor `fd`, closed to
 /// the programs this process starts.

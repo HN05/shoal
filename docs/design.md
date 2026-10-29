@@ -179,8 +179,13 @@ the reason `restarted by shoal restart` and recovery whatever the overload
 policy, so wrappers of earlier releases restore it too, and resumes the agent
 once its processes are proven stopped, outside the agent queue, since it keeps
 its slot. The restore command resolves the agent again, so an updated agent
-binary runs; the wrapper keeps its own Shoal binary. The CLI restarts the
-selected agents together by default; `--sequential` spreads the load of
+binary runs. A wrapper whose binary an upgrade replaced execs the installed one
+when the daemon resumes its agent, keeping its process, terminal and daemon
+connection: the daemon sends nothing until the restored child starts, so no
+control is lost. The installed release registers the execution again on that
+connection, which records its place and returns a new plan, then restores the
+agent, so new wrapper code reaches running sessions without stopping them.
+The CLI restarts the selected agents together by default; `--sequential` spreads the load of
 starting them, restarting one at a time, idle ones first, starting the next
 once the daemon registers the restarted agent and at least the admission
 stagger after the previous start.

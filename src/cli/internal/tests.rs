@@ -302,3 +302,35 @@ fn proxy_report_round_trips_its_json() {
     };
     assert_eq!(parsed, report);
 }
+
+#[test]
+fn take_over_round_trips_the_agent_and_its_connection() {
+    let record = Path::new("/state/a record.json");
+    let log = Path::new("/logs/session log");
+    for (record, log) in [(None, None), (Some(record), Some(log))] {
+        let InternalCommand::TakeOver {
+            workspace,
+            agent,
+            connection,
+            record: parsed_record,
+            log: parsed_log,
+        } = parse(
+            Worker::TakeOver {
+                workspace: "workspace-id",
+                agent: "happy codex",
+                connection: 7,
+                record,
+                log,
+            },
+            false,
+        )
+        else {
+            panic!("expected take-over worker");
+        };
+        assert_eq!(workspace, "workspace-id");
+        assert_eq!(agent, "happy codex");
+        assert_eq!(connection, 7);
+        assert_eq!(parsed_record.as_deref(), record);
+        assert_eq!(parsed_log.as_deref(), log);
+    }
+}

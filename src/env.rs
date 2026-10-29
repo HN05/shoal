@@ -496,14 +496,16 @@ pub(crate) unsafe fn take_session_end() {
     unsafe { std::env::remove_var(ENDS_SESSION) };
 }
 
+/// Whether this process ends the session it runs in, as
+/// [`take_session_end`] read it.
+pub(crate) fn ends_launch_session() -> bool {
+    ENDS_LAUNCH_SESSION.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// The exit status to report for `code`, the exit of the agent or shell this
 /// process ran: success when that ends its session, which reads only success.
 pub(crate) fn session_exit_code(code: i32) -> i32 {
-    if ENDS_LAUNCH_SESSION.load(std::sync::atomic::Ordering::Relaxed) {
-        0
-    } else {
-        code
-    }
+    if ends_launch_session() { 0 } else { code }
 }
 
 /// Record the queue entry whose slot the agent this process launches takes.

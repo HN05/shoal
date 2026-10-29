@@ -7,6 +7,9 @@ mod rex;
 #[path = "workspaces/herdr_default.rs"]
 mod herdr_default;
 
+#[path = "workspaces/upgrades.rs"]
+mod upgrades;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]

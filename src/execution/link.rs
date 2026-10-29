@@ -142,6 +142,16 @@ impl Link {
         }
     }
 
+    /// The connection's descriptor while it is attached, which the wrapper
+    /// hands to the binary it continues from.
+    pub(super) fn descriptor(&self) -> Option<std::os::fd::RawFd> {
+        use std::os::fd::AsRawFd as _;
+        match &self.connection {
+            Connection::Attached(attached) => Some(attached.writer.as_ref().as_raw_fd()),
+            Connection::Reattaching(_) | Connection::Refused(_) => None,
+        }
+    }
+
     pub(super) fn is_attached(&self) -> bool {
         matches!(self.connection, Connection::Attached(_))
     }

@@ -2,7 +2,7 @@
 //! launch it prepares, the runs of its command, and what follows each run.
 use std::{
     ffi::OsString,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -43,6 +43,8 @@ struct TrackedLaunch {
     recovery: Option<recovery::Recovery>,
     /// The saved record a restored agent consumes once it is registered.
     record: Option<PathBuf>,
+    /// The agent, as the execution registered it.
+    agent: Option<String>,
 }
 
 pub(super) async fn run_tracked(
@@ -206,6 +208,9 @@ impl TrackedLaunch {
         };
         match pause_agent(&mut self.link, paths, &self.plan, mode, recovery, stop).await? {
             AfterPause::Finish => Ok(false),
+            AfterPause::TakeOver { installed, record } => Err(self
+                .hand_over(paths, mode, &installed, record.as_deref())
+                .await),
             AfterPause::Restart {
                 command,
                 proxy,
@@ -227,6 +232,33 @@ impl TrackedLaunch {
                 Ok(true)
             }
         }
+    }
+
+    /// Continue from `installed`, which restores the agent from `record`.
+    /// The agent's proxy and secrets go first, since this process never
+    /// exits to release them. Returns only on failure.
+    async fn hand_over(
+        &mut self,
+        paths: &Paths,
+        mode: &Mode,
+        installed: &Path,
+        record: Option<&Path>,
+    ) -> anyhow::Error {
+        let Some(agent) = self.agent.clone() else {
+            return anyhow::anyhow!("only an agent's wrapper continues from the installed shoal");
+        };
+        let proxied = self.auth.take().is_some_and(|auth| auth.proxy.is_some());
+        let (workspace, execution) = (&self.plan.workspace.id, &self.plan.id);
+        // What the stopped proxy reported goes with it.
+        if proxied {
+            crate::proxy::forget_reports(paths, workspace, execution).await;
+        }
+        let handover = takeover::Handover {
+            workspace,
+            agent: &agent,
+            record,
+        };
+        takeover::exec(paths, installed, &self.link, mode, handover)
     }
 
     /// Report the result's exit code unless the daemon refused the
@@ -281,7 +313,8 @@ async fn prepare_tracked_launch(
         None
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
-    let (mut link, plan) = open_execution(paths, workspace, mode, agent, recover, place).await?;
+    let (mut link, plan) =
+        open_execution(paths, workspace, mode, agent.clone(), recover, place).await?;
     // The daemon has registered the execution, so a launch that fails from
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
@@ -295,6 +328,7 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
+        agent,
     })
 }
 
@@ -355,6 +389,7 @@ async fn prepare_taken_over_launch(
         auth,
         recovery: Some(recovery),
         record,
+        agent: Some(agent),
     })
 }
 

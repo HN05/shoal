@@ -101,6 +101,17 @@ pub enum Worker<'a> {
     Launch {
         file: &'a Path,
     },
+    /// Continue an agent's wrapper whose binary an upgrade replaced: resume
+    /// the agent of `workspace` from `record` over the daemon connection
+    /// at descriptor `connection`, writing to `log` when detached. Wrappers
+    /// of earlier releases start it, so it only gains optional arguments.
+    TakeOver {
+        workspace: &'a str,
+        agent: &'a str,
+        connection: i32,
+        record: Option<&'a Path>,
+        log: Option<&'a Path>,
+    },
 }
 
 /// This executable for a command a terminal or session runs as typed,
@@ -238,6 +249,28 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         Worker::MenuNext => args.push(MENU_NEXT.into()),
         Worker::ProxyReport { report } => args.extend([PROXY_REPORT.into(), report.into()]),
         Worker::Launch { file } => args.extend([LAUNCH.into(), file.as_os_str().to_owned()]),
+        Worker::TakeOver {
+            workspace,
+            agent,
+            connection,
+            record,
+            log,
+        } => {
+            args.extend([
+                TAKE_OVER.into(),
+                workspace.into(),
+                "--agent".into(),
+                agent.into(),
+                "--connection".into(),
+                connection.to_string().into(),
+            ]);
+            if let Some(record) = record {
+                args.extend(["--record".into(), record.as_os_str().to_owned()]);
+            }
+            if let Some(log) = log {
+                args.extend(["--log".into(), log.as_os_str().to_owned()]);
+            }
+        }
     }
     Ok(args)
 }
