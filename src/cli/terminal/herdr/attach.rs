@@ -57,15 +57,7 @@ impl HerdrSession<'_> {
         if let Self::Named(name) = self {
             return Ok((*name).to_owned());
         }
-        let mut list = Command::new("herdr");
-        list.args(["session", "list", "--json"]);
-        let output = Run::new(list)
-            .checked()
-            .await
-            .context("list Herdr sessions")?;
-        let listed: Sessions =
-            serde_json::from_slice(&output.stdout).context("invalid Herdr session list")?;
-        self.find(&listed.sessions)
+        self.find(&listed_sessions().await?)
             .map(|session| session.name.clone())
             .context("Herdr lists no session holding the tab; open it in Herdr")
     }
@@ -78,6 +70,19 @@ impl HerdrSession<'_> {
             Self::Default => session.default,
         })
     }
+}
+
+/// The sessions Herdr lists.
+async fn listed_sessions() -> Result<Vec<ListedSession>> {
+    let mut list = Command::new("herdr");
+    list.args(["session", "list", "--json"]);
+    let output = Run::new(list)
+        .checked()
+        .await
+        .context("list Herdr sessions")?;
+    let listed: Sessions =
+        serde_json::from_slice(&output.stdout).context("invalid Herdr session list")?;
+    Ok(listed.sessions)
 }
 
 #[derive(Deserialize)]
