@@ -32,10 +32,10 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
         .unwrap();
     assert_eq!(live.unreadable.len(), 1);
     assert!(!live.visibility_complete());
-    assert!(live.completion_issue().unwrap().contains(&format!(
-        "unreadable live process environments (PID {})",
-        child.id().unwrap()
-    )));
+    let issue = live.completion_issue().unwrap();
+    let pid = child.id().unwrap();
+    assert!(issue.contains(&format!("unreadable live process environments (PID {pid})")));
+    assert!(issue.ends_with(&format!("check them, then end them with kill {pid}")));
     child.kill().await.unwrap();
     child.wait().await.unwrap();
     let exited = Processes::inspect(&execution, workspace.path(), &scan)

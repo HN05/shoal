@@ -94,7 +94,8 @@ impl Processes {
         self.owned.is_empty() && self.group_candidates.is_empty() && self.unreadable.is_empty()
     }
 
-    /// Explain incomplete proof without disclosing process arguments or environments.
+    /// Explain incomplete proof without disclosing process arguments or
+    /// environments, and how to end the processes Shoal does not stop.
     pub fn completion_issue(&self) -> Option<String> {
         if self.command_stopped() {
             return None;
@@ -110,9 +111,18 @@ impl Processes {
             ),
         ] {
             if !processes.is_empty() {
-                let pids: Vec<_> = processes.iter().map(|p| p.pid.to_string()).collect();
-                issues.push(format!("{label} (PID {})", pids.join(", ")));
+                issues.push(format!("{label} (PID {})", pids(processes, ", ")));
             }
+        }
+        let unsignaled: Vec<_> = unverified
+            .into_iter()
+            .chain(self.unreadable.clone())
+            .collect();
+        if !unsignaled.is_empty() {
+            issues.push(format!(
+                "Shoal does not stop processes it cannot verify; check them, then end them with kill {}",
+                pids(&unsignaled, " ")
+            ));
         }
         Some(issues.join("; "))
     }
@@ -131,6 +141,12 @@ impl Processes {
         process::stop_verified(&targets).await?;
         Ok(!targets.is_empty())
     }
+}
+
+/// The PIDs of `processes`, separated by `separator`.
+fn pids(processes: &[process::Identity], separator: &str) -> String {
+    let pids: Vec<_> = processes.iter().map(|p| p.pid.to_string()).collect();
+    pids.join(separator)
 }
 
 /// The unattributed processes of `scan` that may survive `execution`: those

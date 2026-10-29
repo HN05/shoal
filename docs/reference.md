@@ -3584,9 +3584,11 @@ readable environment does, or as unreadable when launchd adopted them after
 their parent exited and they neither exit nor show their own environment within
 another two seconds. Setup verification failures retain the workspace
 and report the command's exit status, blocking PIDs or inspection error, and
-recovery commands. `shoal stop` names unreadable PIDs without exposing their
-arguments or environments, and asks you to confirm that an execution without a
-launch record ended; visible live processes still block.
+recovery commands; they and blocked restores name the `kill` command that ends
+the processes Shoal cannot verify and does not stop itself. `shoal stop` names
+unreadable PIDs without exposing their arguments or environments, and asks you
+to confirm that an execution without a launch record ended; visible live
+processes still block.
 
 ### Scoped workspace commands
 
