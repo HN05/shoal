@@ -326,14 +326,17 @@ async fn reveal(server: &Server, block: &Block, id: &str, name: &str) -> Result<
 }
 
 /// Type `argv` into the block of `place` once its shell is back at its
-/// prompt.
+/// prompt. A block whose `rex` is gone, as after Rex was uninstalled, is
+/// not, so a restore falls back to another place.
 async fn run_at_prompt(
     state: &Path,
     place: &Origin,
     argv: &[OsString],
     env: &[(&str, String)],
 ) -> Result<bool> {
-    let server = Server::recorded(&place.data)?;
+    let Ok(server) = Server::recorded(&place.data) else {
+        return Ok(false);
+    };
     if !server.at_prompt(place.id()).await {
         return Ok(false);
     }
