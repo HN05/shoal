@@ -1290,7 +1290,11 @@ because agents forget or misuse watches: built-in agent launches register a hook
 that delivers both after each tool call and prompt, the only point where a
 working agent accepts new context, except a subagent's tool call, whose context
 the agent never sees, and replaces a running watch so nothing is
-delivered twice. The hook never waits for cleanup or an item change, which can
+delivered twice. A workspace's messages reach its agent once they settle: a run
+queued in quick succession, such as the user deciding several approvals, would
+otherwise cost a wake or a hook output each, so deliveries hold unread messages
+until none has arrived for a configured window, bounded so a steady stream still
+arrives; reading them with `messages` does not wait. The hook never waits for cleanup or an item change, which can
 hold Shoal's item records for minutes: an agent discards the output of a hook
 that outlasts its timeout, so the activity waits for a later delivery. Claude Code also runs a background hook, after a turn ends normally
 (`Stop`) or on an API error (`StopFailure`), that waits for the next update and

@@ -3551,6 +3551,16 @@ call or prompt.
 An identical message that is still unread is not queued again, and a workspace
 or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.
+The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's
+unread messages until none has arrived for `[messages] settle_seconds`, and at
+most six times as long after the first, so a run of them, such as several
+approval decisions, reaches the agent in one delivery; `shoal messages` shows
+them at once, and 0 delivers each message as it arrives.
+
+```toml
+[messages]
+settle_seconds = 5 # Default: 5; at most 60
+```
 
 ### Attached files
 

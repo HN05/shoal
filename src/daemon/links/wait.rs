@@ -210,6 +210,10 @@ impl Manager {
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
+        let messages = tokio::select! {
+            settled = self.settled_messages(&workspace, messages) => settled?,
+            () = wait.superseded.notified() => return Ok(Updates::superseded()),
+        };
         // A newer wait or hook delivery reads the same unacknowledged messages.
         if !wait.is_current() {
             return Ok(Updates::superseded());
@@ -217,8 +221,8 @@ impl Manager {
         Ok(Updates::messages(messages))
     }
 
-    /// What the workspace's agent has not received: its messages and the
-    /// updates queued on its cursor, without waiting or polling the forge.
+    /// What the workspace's agent has not received: its settled messages and
+    /// the updates queued on its cursor, without waiting or polling the forge.
     /// Delivery replaces a running watch, which would otherwise deliver the
     /// same updates again. Cleanup and item changes hold a workspace's PR
     /// gate across its forge requests and its removal, longer than an agent
@@ -227,7 +231,7 @@ impl Manager {
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
-        let messages = self.agent_messages(&workspace.id).await?;
+        let messages = self.deliverable_messages(&workspace).await?;
         // The messages share the response with the updates.
         let reserved = serde_json::to_vec(&messages)?.len();
         let children = self.delegated_workspaces(&workspace.id).await?;
@@ -346,8 +350,8 @@ impl Manager {
         self.pending_activity(&workspace.id, &keys).await
     }
 
-    /// Return once whether the workspace's agent is idle with undelivered
-    /// messages that wake it or queued updates matches `due`, so a launcher
+    /// Return once whether the workspace's agent is idle with settled
+    /// undelivered messages that wake it or queued updates matches `due`, so a launcher
     /// can prompt an agent that has no hook to wake it, then wait for it to
     /// take them. With `interrupted`, the agent is due only while an
     /// interrupt ended the last turn of that execution's agent, whose hook
@@ -364,13 +368,19 @@ impl Manager {
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
         while self.agent_wake_due(&workspace, interrupted).await? != due {
+            // Held messages settle without a signal.
+            let unread = self.agent_messages(&workspace.id).await?;
+            let recheck = self
+                .message_hold(&workspace, &unread)
+                .await?
+                .map_or(POLL_INTERVAL, |hold| hold.min(POLL_INTERVAL));
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
             tokio::select! {
                 Ok(()) = messages.changed() => {}
                 Ok(()) = queued.changed() => {}
                 Ok(()) = changed.changed() => {}
-                () = tokio::time::sleep(POLL_INTERVAL) => {}
+                () = tokio::time::sleep(recheck) => {}
             }
         }
         Ok(())
@@ -409,7 +419,7 @@ impl Manager {
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 
-    async fn agent_wake_due(
+    pub(crate) async fn agent_wake_due(
         &self,
         workspace: &Workspace,
         interrupted: Option<&str>,
@@ -427,7 +437,12 @@ impl Manager {
         if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
             return Ok(false);
         }
-        Ok(self.unread_agent_messages(&workspace.id).await?.wakes
+        let unread = self.unread_agent_messages(&workspace.id).await?;
+        let settled = self
+            .message_hold(workspace, &unread.messages)
+            .await?
+            .is_none();
+        Ok(unread.wakes && settled
             || !self
                 .agent_queued_updates(workspace.clone(), 0)
                 .await?

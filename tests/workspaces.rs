@@ -54,6 +54,9 @@ struct Fixture {
 /// Global config without a cleanup grace period, at the root so the rest of a
 /// test's config follows unchanged.
 const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
+/// Global config delivering each agent message at once, so a test reads it
+/// without waiting for a run of them to settle.
+const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "forges.\"forge.example\".type = \"forgejo\"\n";
@@ -86,7 +89,10 @@ impl Fixture {
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
         fs::write(
             root.path().join(".config/shoal/config.toml"),
-            format!("{NO_GRACE}{FORGEJO_HOST}{}", config.unwrap_or_default()),
+            format!(
+                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{}",
+                config.unwrap_or_default()
+            ),
         )
         .unwrap();
         if fake_sim {
@@ -7224,7 +7230,7 @@ fn global_config_changes_reload_a_running_daemon() {
     fs::write(&config, format!("{edited}\n[simulators]\nmax_booted = 0\n")).unwrap();
     assert!(!fixture.run(&["daemon", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
-    fs::write(&config, format!("{NO_GRACE}{FORGEJO_HOST}")).unwrap();
+    fs::write(&config, format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     assert!(policy()["default"].is_null());
     let scoped = fixture
