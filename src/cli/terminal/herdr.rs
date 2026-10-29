@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     ChatStart, Demo, Host, Options, PlaceState, Start, Watched,
-    host::{Closes, Demos, Watches},
+    host::{Closes, Demos, Places, Watches},
 };
 
 mod demo;
@@ -34,6 +34,24 @@ impl Host for Herdr {
         in_herdr()
     }
 
+    fn places(&self) -> Option<&dyn Places> {
+        Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+
+    fn closes(&self) -> Option<&dyn Closes> {
+        Some(self)
+    }
+
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Places for Herdr {
     /// A tab in the Herdr workspace the start was queued from.
     fn takes_queued(&self, origin: Option<&Origin>) -> bool {
         origin.is_some_and(|origin| origin.host == HostName::Herdr)
@@ -47,10 +65,6 @@ impl Host for Herdr {
     }
 
     /// A background tab.
-    fn runs_in_background(&self) -> bool {
-        true
-    }
-
     fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
         Box::pin(open_tab(start))
     }
@@ -100,29 +114,17 @@ impl Host for Herdr {
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(rename_tab(place, label))
     }
+}
 
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn watches(&self) -> Option<&dyn Watches> {
-        Some(self)
-    }
-
-    fn closes(&self) -> Option<&dyn Closes> {
-        Some(self)
+impl Watches for Herdr {
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(tab_state(&place.id))
     }
 }
 
 impl Closes for Herdr {
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(close_tab(place))
-    }
-}
-
-impl Watches for Herdr {
-    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(tab_state(&place.id))
     }
 }
 

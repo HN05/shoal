@@ -12,7 +12,9 @@ use super::{Owner, OwnerKind, PlaceState, Session, Watched};
 use crate::sessions::{HostName, Origin};
 
 /// A terminal host: a multiplexer or terminal app that runs Shoal work beside
-/// the caller. A capability a host lacks keeps that work in this process.
+/// the caller. Each capability it has is a trait of its own, which it hands
+/// out; generic code keeps work a host lacks the capability for in this
+/// process, or does it its own way.
 pub(in crate::cli) trait Host: Sync {
     /// The name records, sessions and messages use.
     fn name(&self) -> HostName;
@@ -21,15 +23,15 @@ pub(in crate::cli) trait Host: Sync {
     /// config enables it.
     fn serves(&self) -> bool;
 
-    /// Whether a queued start from `origin`, the place that queued it, runs
-    /// here, where config lets the host open places.
-    fn takes_queued(&self, _origin: Option<&Origin>) -> bool {
-        false
-    }
-
     /// Refuse when the programs this host runs are missing.
     fn ensure_installed(&self) -> Result<()> {
         Ok(())
+    }
+
+    /// How this host opens places beside the caller and runs work there,
+    /// unless it opens none.
+    fn places(&self) -> Option<&dyn Places> {
+        None
     }
 
     /// How this host reads the places it opened, so a watcher closes them
@@ -58,6 +60,49 @@ pub(in crate::cli) trait Host: Sync {
     fn demos(&self) -> Option<&dyn Demos> {
         None
     }
+}
+
+/// A host that opens places, such as tabs, windows or sessions, beside the
+/// caller and runs Shoal work there. Generic code starts work through it only
+/// where config lets the host open places; what a place this process runs in
+/// tells, it reads whatever config says.
+pub(in crate::cli) trait Places: Sync {
+    /// Whether a queued start from `origin`, the place that queued it, runs
+    /// here.
+    fn takes_queued(&self, origin: Option<&Origin>) -> bool;
+
+    /// Run `start`, a workspace addition, in a new place, returning whether
+    /// it left this process.
+    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>>;
+
+    /// Run `start`, Shoal for a workspace, in a new background place.
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>>;
+
+    /// Run `start`, a chat, beside this terminal.
+    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>>;
+
+    /// What several background starts run in.
+    fn background_places(&self) -> &'static str;
+
+    /// How a background start of `name` is reported: where it runs and how
+    /// to reach it.
+    fn background_note(&self, name: &str) -> String;
+
+    /// The place this process runs in, one this host opened, as [`Watches`]
+    /// and [`Closes`] name it.
+    fn this_place(&self) -> Option<String>;
+
+    /// The place this process runs in, with what a later start needs to
+    /// open a place beside it, for a host whose places new ones join.
+    fn origin(&self) -> Option<Origin> {
+        None
+    }
+
+    /// The variables that name this host's place for a process in it, which
+    /// a place another host opens must not inherit.
+    fn place_variables(&self) -> &'static [&'static str] {
+        &[]
+    }
 
     /// The group labelled `label` on the server of `near`, or this
     /// machine's, created at `cwd` when there is none; `None` for a host
@@ -71,26 +116,9 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(None) })
     }
 
-    /// Run `start`, a workspace addition, in a new place, returning whether
-    /// it left this process. Generic code calls it only where config lets
-    /// the host open places.
-    fn start_add<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async { Ok(false) })
-    }
-
-    /// Whether this host runs Shoal for a workspace in the background, where
-    /// config lets it open places.
-    fn runs_in_background(&self) -> bool {
-        false
-    }
-
-    /// Run `start` in a new background place.
-    fn run_in_background<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
-    }
-
     /// Run `argv` with `env` in `place`, an earlier place of this host, when
-    /// it is idle, for the state directory `state`. Returns whether it ran.
+    /// it is idle, for the state directory `state`. Returns whether it ran;
+    /// a host whose places end with their work never does.
     fn run_in_place<'a>(
         &'a self,
         _state: &'a Path,
@@ -101,46 +129,13 @@ pub(in crate::cli) trait Host: Sync {
         Box::pin(async { Ok(false) })
     }
 
-    /// Run `start`, a chat, beside this terminal, where config lets the host
-    /// open places.
-    fn start_chat<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
-        Box::pin(async { Ok(ChatStart::Here) })
-    }
-
-    /// What several background starts run in.
-    fn background_places(&self) -> &'static str;
-
-    /// How a background start of `name` is reported: where it runs and how
-    /// to reach it.
-    fn background_note(&self, name: &str) -> String;
-
-    // The capabilities below belong to the host this process runs in,
-    // whichever host serves its terminal.
-
-    /// The place this process runs in, with what a later start needs to
-    /// open a place beside it.
-    fn origin(&self) -> Option<Origin> {
-        None
-    }
-
-    /// The variables that name this host's place for a process in it, which
-    /// a place another host opens must not inherit.
-    fn place_variables(&self) -> &'static [&'static str] {
-        &[]
-    }
-
-    /// The place this process runs in, as [`Watches`] and [`Closes`] name
-    /// it.
-    fn this_place(&self) -> Option<String> {
-        None
-    }
-
     /// Whether the places this host opens show a name.
     fn names_places(&self) -> bool {
         false
     }
 
-    /// Show `label` as the name of `place`, one this host opened.
+    /// Show `label` as the name of `place`, one this host opened, where its
+    /// places show names.
     fn rename_place<'a>(&'a self, _place: &'a str, _label: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async {})
     }
@@ -305,8 +300,6 @@ pub(in crate::cli) struct Demo<'a> {
 
 /// Where a host started a chat beside this terminal.
 pub(in crate::cli) enum ChatStart {
-    /// Nowhere: it runs in place, in this process.
-    Here,
     /// In a new tab.
     Tab,
     /// In this new session, which this terminal stayed attached to until the

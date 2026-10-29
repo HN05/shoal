@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     ChatStart, Demo, Host, PlaceState, Session, Start, Watched,
-    host::{Demos, Prompts, Sessions, Watches},
+    host::{Demos, Places, Prompts, Sessions, Watches},
     typed::Typed,
 };
 use crate::sessions::{
@@ -35,6 +35,28 @@ impl Host for Rex {
         Server::here().map(drop)
     }
 
+    fn places(&self) -> Option<&dyn Places> {
+        Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Places for Rex {
     /// A background window in the session the start was queued from.
     fn takes_queued(&self, origin: Option<&Origin>) -> bool {
         origin.is_some_and(|origin| origin.host == HostName::Rex)
@@ -57,10 +79,6 @@ impl Host for Rex {
     }
 
     /// A background window.
-    fn runs_in_background(&self) -> bool {
-        true
-    }
-
     fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { open_window(start).await.map(drop) })
     }
@@ -113,22 +131,6 @@ impl Host for Rex {
                 eprintln!("warning: cannot rename the Rex window of {place}: {error:#}");
             }
         })
-    }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
-        Some(self)
-    }
-
-    fn sessions(&self) -> Option<&dyn Sessions> {
-        Some(self)
-    }
-
-    fn watches(&self) -> Option<&dyn Watches> {
-        Some(self)
     }
 }
 

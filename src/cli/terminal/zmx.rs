@@ -17,7 +17,7 @@ use tokio::process::Command;
 
 use super::{
     ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Closes, Demos, Prompts, Sessions, Watches},
+    host::{Closes, Demos, Places, Prompts, Sessions, Watches},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -53,6 +53,32 @@ impl Host for Zmx {
         ensure_program("background launch", Tool::Zmx.program())
     }
 
+    fn places(&self) -> Option<&dyn Places> {
+        Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+
+    fn closes(&self) -> Option<&dyn Closes> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Places for Zmx {
     /// A detached session needs no terminal, so it takes any queued start.
     fn takes_queued(&self, _origin: Option<&Origin>) -> bool {
         true
@@ -68,10 +94,6 @@ impl Host for Zmx {
             start_detached(start).await?;
             Ok(true)
         })
-    }
-
-    fn runs_in_background(&self) -> bool {
-        true
     }
 
     fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
@@ -100,32 +122,6 @@ impl Host for Zmx {
     fn places_keep_shells(&self) -> bool {
         false
     }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
-        Some(self)
-    }
-
-    fn sessions(&self) -> Option<&dyn Sessions> {
-        Some(self)
-    }
-
-    fn watches(&self) -> Option<&dyn Watches> {
-        Some(self)
-    }
-
-    fn closes(&self) -> Option<&dyn Closes> {
-        Some(self)
-    }
-}
-
-impl Closes for Zmx {
-    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(kill(place))
-    }
 }
 
 impl Watches for Zmx {
@@ -152,6 +148,12 @@ impl Watches for Zmx {
                 PlaceState::Gone
             })
         })
+    }
+}
+
+impl Closes for Zmx {
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(kill(place))
     }
 }
 

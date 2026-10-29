@@ -273,7 +273,7 @@ impl Drop for Marker {
 /// removed.
 pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
     hosts().any(|host| {
-        host.this_place().is_some_and(|place| {
+        super::this_place(host).is_some_and(|place| {
             [
                 Marker::path(paths, host.name().as_str(), workspace, &place),
                 Marker::earlier_path(paths, workspace, &place),

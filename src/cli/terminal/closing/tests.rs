@@ -132,14 +132,6 @@ impl Host for FakeHost {
         false
     }
 
-    fn background_places(&self) -> &'static str {
-        "fake places"
-    }
-
-    fn background_note(&self, name: &str) -> String {
-        name.to_owned()
-    }
-
     fn watches(&self) -> Option<&dyn Watches> {
         Some(self)
     }

@@ -7,7 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context as _, Result};
 
-use super::{Configured, Origin};
+use super::{Configured, Origin, Places};
 use crate::{
     cli::{client, context::Context},
     config::Effective,
@@ -54,7 +54,10 @@ async fn configured(
     };
     let label =
         crate::config::placeholders::render(template, &[("{repo}", &repo.name(ctx).await?)]);
-    host.host.group(near, &label, cwd).await
+    match host.host.places() {
+        Some(places) => places.group(near, &label, cwd).await,
+        None => Ok(None),
+    }
 }
 
 /// The place a start beside this terminal joins in `host`: the one `host`
@@ -65,7 +68,7 @@ pub(super) async fn beside(
     repo: &Repo<'_>,
     cwd: &Path,
 ) -> Result<Option<Origin>> {
-    match host.host.origin() {
+    match host.host.places().and_then(Places::origin) {
         Some(origin) => Ok(Some(origin)),
         None => configured(ctx, host, None, repo, cwd).await,
     }

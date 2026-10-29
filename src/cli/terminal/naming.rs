@@ -113,7 +113,7 @@ pub(super) async fn workspace_label(
     host: &dyn Host,
     workspace: &Workspace,
 ) -> String {
-    if !host.names_places() {
+    if !super::names_places(host) {
         return workspace.name.clone();
     }
     let labelled = async {
