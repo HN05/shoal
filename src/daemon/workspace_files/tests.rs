@@ -580,6 +580,38 @@ async fn upgrading_records_the_copies_messages_attached_before() {
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    // A move of the repository's directory is unfinished until recovery.
+    let repository_id = workspace.repository_id.clone();
+    reopened
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO repository_moves
+                    (repository_id,source,destination,source_id,destination_id,states)
+                    VALUES (?1,'/old','/new','old','new','{}')",
+                [repository_id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    reopened.record_earlier_files().await.unwrap();
+    assert!(
+        reopened
+            .workspace_files(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    reopened
+        .store
+        .run(|db| {
+            db.execute("DELETE FROM repository_moves", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    reopened.record_earlier_files().await.unwrap();
     let files = reopened.workspace_files(&workspace.name).await.unwrap();
     let mut recorded: Vec<_> = files.iter().map(|file| file.path.clone()).collect();
     recorded.sort();

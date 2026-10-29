@@ -14,6 +14,7 @@ use crate::{
     state::{WorkspaceState, states},
 };
 
+mod earlier;
 pub(crate) mod layout;
 mod records;
 mod retention;

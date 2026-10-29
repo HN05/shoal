@@ -16,7 +16,6 @@ use crate::{
 /// Schema version written by this build; older databases are migrated on open.
 const SCHEMA_VERSION: i64 = 89;
 
-mod attached_copies;
 #[cfg(test)]
 mod benchmark;
 mod chat_names;
@@ -432,8 +431,15 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (86, QUIET_AGENT_MESSAGES, None),
     (87, WORKSPACE_TITLES, None),
     (88, include_str!("store/workspace_files.sql"), None),
-    (89, "", Some(attached_copies::record_existing)),
+    (89, EARLIER_ATTACHED_FILES, None),
 ];
+
+/// The repositories whose copies of files attached to messages before Shoal
+/// recorded them the cleanup sweep has yet to record, once no move of their
+/// directory is unfinished.
+const EARLIER_ATTACHED_FILES: &str =
+    "CREATE TABLE IF NOT EXISTS earlier_attached_files (repository_id TEXT PRIMARY KEY);
+    INSERT OR IGNORE INTO earlier_attached_files SELECT id FROM repositories;";
 
 /// The JSON array of paths of the files attached to an agent message.
 const AGENT_MESSAGE_ATTACHMENTS: &str =

@@ -224,3 +224,37 @@ pub(crate) fn rebase(
     }
     Ok(())
 }
+
+/// The repositories whose earlier copies are still to be recorded.
+pub(super) fn earlier_pending(db: &Connection) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT repository_id FROM earlier_attached_files")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Whether a move of repository `repository_id`'s directory is unfinished.
+pub(super) fn moving(db: &Connection, repository_id: &str) -> Result<bool> {
+    crate::daemon::store::exists(
+        db,
+        "SELECT 1 FROM repository_moves WHERE repository_id=?1",
+        [repository_id],
+    )
+}
+
+/// The workspaces of repository `repository_id`.
+pub(super) fn repository_workspaces(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT id FROM workspaces WHERE repository_id=?1")?
+        .query_map([repository_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Mark repository `repository_id`'s earlier copies recorded.
+pub(super) fn earlier_recorded(db: &Connection, repository_id: &str) -> Result<()> {
+    db.execute(
+        "DELETE FROM earlier_attached_files WHERE repository_id=?1",
+        [repository_id],
+    )?;
+    Ok(())
+}

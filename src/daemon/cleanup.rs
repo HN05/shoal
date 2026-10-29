@@ -333,6 +333,10 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
     step("result expiry", manager.expire_results().await);
+    step(
+        "earlier attached files",
+        manager.record_earlier_files().await,
+    );
     step("contributions", manager.sweep_contributions().await);
     step("proposal files", manager.sweep_proposal_files().await);
     step("grace periods", manager.end_unclaimed_grace().await);
