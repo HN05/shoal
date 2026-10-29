@@ -612,3 +612,49 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
     wrapper.kill().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<()> {
+    let (temp, manager, repo, workspace, root) = cloned().await?;
+    let file = temp.path().join("notes.md");
+    fs::write(&file, "plan")?;
+    manager
+        .add_workspace_files(&workspace.id, vec![file])
+        .await?;
+    // A move, then a deletion, wait for the files gate this test holds.
+    let held = manager.gates.lock_message_files(&repo.id).await;
+    let gate = manager.gates.message_files_gate(&repo.id);
+    let waiting = |count| {
+        let gate = gate.clone();
+        tokio::time::timeout(std::time::Duration::from_secs(60), async move {
+            // This test's two handles and the guard, then each waiter.
+            while Arc::strong_count(&gate) < count {
+                tokio::task::yield_now().await;
+            }
+        })
+    };
+    let moving = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.move_repositories(Layout::Regular).await }
+    });
+    waiting(4).await.context("the move reaches the gate")?;
+    let deleting = tokio::spawn({
+        let (manager, id) = (manager.clone(), workspace.id.clone());
+        async move { manager.remove_workspace_files(&id, vec![], vec![]).await }
+    });
+    waiting(5).await.context("the deletion reaches the gate")?;
+    drop(held);
+    moving.await??;
+    let deleted = deleting.await??;
+    let [gone] = deleted.as_slice() else {
+        anyhow::bail!("expected one deleted file: {deleted:?}");
+    };
+    assert!(
+        gone.path.starts_with(root.join("origin")),
+        "{:?}",
+        gone.path
+    );
+    assert!(!gone.path.exists());
+    assert!(manager.workspace_files(&workspace.id).await?.is_empty());
+    Ok(())
+}

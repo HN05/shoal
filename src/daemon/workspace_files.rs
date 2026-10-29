@@ -191,8 +191,7 @@ impl Manager {
         ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
-        let repo = self.repository(&owner.repository_id).await?;
-        let _files = self.gates.lock_message_files(&repo.id).await;
+        let (repo, _files) = self.lock_repository_files(&owner.repository_id).await?;
         let id = owner.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
         if !names.is_empty() || !ids.is_empty() {
@@ -222,11 +221,11 @@ impl Manager {
     /// No execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
-        for repo in self.repositories().await? {
+        for listed in self.repositories().await? {
             // Execution admission comes first, as nothing holding the files
             // gate waits for it.
             let _admission = self.executions.connections().await;
-            let _files = self.gates.lock_message_files(&repo.id).await;
+            let (repo, _files) = self.lock_repository_files(&listed.id).await?;
             let id = repo.id.clone();
             let files = self.store.run(move |db| records::idle(db, &id)).await?;
             deleted.extend(self.delete_files(&repo, files).await?);
@@ -297,6 +296,18 @@ impl Manager {
         self.store
             .run(move |db| records::record_all(db, &id, source, &paths, &bytes))
             .await
+    }
+
+    /// Hold the gate of repository `repository_id`'s attached files, with the
+    /// repository as it is once held: a move of its directory, which holds
+    /// the gate, may have finished meanwhile.
+    pub(crate) async fn lock_repository_files(
+        &self,
+        repository_id: &str,
+    ) -> Result<(Repository, OwnedMutexGuard<()>)> {
+        let guard = self.gates.lock_message_files(repository_id).await;
+        let repo = self.repository(repository_id).await?;
+        Ok((repo, guard))
     }
 
     /// Hold the gate of the files attached to `workspace`, with

@@ -63,12 +63,12 @@ impl Manager {
         Ok(())
     }
 
-    async fn expire_repository_results(&self, repo: &Repository) -> Result<()> {
-        let _files = self.gates.lock_message_files(&repo.id).await;
+    async fn expire_repository_results(&self, listed: &Repository) -> Result<()> {
+        let (repo, _files) = self.lock_repository_files(&listed.id).await?;
         let id = repo.id.clone();
         let expired = self.store.run(move |db| records::expired(db, &id)).await?;
         for workspace_id in expired {
-            self.delete_results_of(repo, workspace_id).await?;
+            self.delete_results_of(&repo, workspace_id).await?;
         }
         Ok(())
     }
@@ -81,8 +81,7 @@ impl Manager {
 
     /// Delete the results that the removed workspace `owner` handed back.
     pub(crate) async fn delete_results(&self, owner: &Owner) -> Result<()> {
-        let repo = self.repository(&owner.repository_id).await?;
-        let _files = self.gates.lock_message_files(&repo.id).await;
+        let (repo, _files) = self.lock_repository_files(&owner.repository_id).await?;
         self.delete_results_of(&repo, owner.id.clone()).await
     }
 
