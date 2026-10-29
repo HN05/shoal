@@ -490,3 +490,25 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
     assert!(fs::symlink_metadata(&placed).is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn unread_messages_follow_their_attached_files_to_the_new_root() -> Result<()> {
+    let (temp, manager, _repo, workspace, root) = cloned().await?;
+    let file = temp.path().join("crash.log");
+    fs::write(&file, "panic")?;
+    manager
+        .send_agent_message(&workspace.id, "See the log".into(), vec![file])
+        .await?;
+
+    manager.move_repositories(Layout::Regular).await?;
+    let messages = manager.agent_messages(&workspace.id).await?;
+    let [copy] = messages[0].attachments.as_slice() else {
+        anyhow::bail!("expected one attachment: {messages:?}");
+    };
+    assert!(
+        copy.starts_with(root.join("origin").join(".attachments")),
+        "{copy:?}"
+    );
+    assert_eq!(fs::read_to_string(copy)?, "panic");
+    Ok(())
+}

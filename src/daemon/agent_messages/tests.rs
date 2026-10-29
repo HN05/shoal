@@ -195,6 +195,29 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
 }
 
 #[tokio::test]
+async fn a_refused_message_leaves_no_copies() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    for n in 0..super::MAX_UNREAD {
+        manager
+            .send_agent_message(&workspace.name, format!("message {n}"), Vec::new())
+            .await
+            .unwrap();
+    }
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    assert!(
+        manager
+            .send_agent_message(&workspace.name, "See the log".into(), vec![file])
+            .await
+            .is_err()
+    );
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let attachments = repo.workspaces_dir.unwrap().join(".attachments");
+    assert!(!attachments.join(&workspace.id).exists());
+}
+
+#[tokio::test]
 async fn attachments_must_be_files() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;

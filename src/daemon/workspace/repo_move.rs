@@ -384,6 +384,12 @@ impl Manager {
                     ),
                     params![id, source, destination],
                 )?;
+                crate::daemon::agent_messages::rebase_attachments(
+                    &tx,
+                    &id,
+                    Path::new(&source),
+                    Path::new(&destination),
+                )?;
                 tx.execute(
                     "UPDATE repository_moves SET switched=1 WHERE repository_id=?1",
                     [&id],

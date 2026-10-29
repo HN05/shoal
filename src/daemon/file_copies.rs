@@ -6,6 +6,14 @@ use anyhow::{Context, Result, ensure};
 
 use crate::forge::items::attach::Attachment;
 
+/// Copies [`keep_copies`] made or reused.
+pub(crate) struct Copies {
+    pub(crate) attachments: Vec<Attachment>,
+    /// The directory holding them when this call made it, so a caller that
+    /// cannot use them may delete it; copies reused from earlier stay.
+    pub(crate) created: Option<PathBuf>,
+}
+
 /// The copies of `attachments` below `root`, in a directory named by the
 /// owner, text and files that attach them. An existing directory is reused
 /// unchanged; a new one is filled under a temporary name first, so a partial
@@ -15,24 +23,35 @@ pub(crate) fn keep_copies(
     owner: &str,
     body: &str,
     attachments: &[Attachment],
-) -> Result<Vec<Attachment>> {
+) -> Result<Copies> {
     let directory = root.join(content_key(owner, body, attachments)?);
+    let mut created = None;
     if !directory.exists() {
         let staging = root.join(format!(".copying-{}", uuid::Uuid::new_v4()));
-        copy_attachments(&staging, attachments)?;
-        if let Err(error) = std::fs::rename(&staging, &directory) {
+        let copied = copy_attachments(&staging, attachments)
+            .and_then(|()| std::fs::rename(&staging, &directory).map_err(Into::into));
+        if let Err(error) = copied {
             std::fs::remove_dir_all(&staging).ok();
-            ensure!(directory.exists(), "keep {}: {error}", directory.display());
+            ensure!(
+                directory.exists(),
+                "keep {}: {error:#}",
+                directory.display()
+            );
+        } else {
+            created = Some(directory.clone());
         }
     }
-    Ok(attachments
-        .iter()
-        .enumerate()
-        .map(|(index, attachment)| Attachment {
-            path: copy_path(&directory, index, attachment),
-            alt: attachment.alt.clone(),
-        })
-        .collect())
+    Ok(Copies {
+        attachments: attachments
+            .iter()
+            .enumerate()
+            .map(|(index, attachment)| Attachment {
+                path: copy_path(&directory, index, attachment),
+                alt: attachment.alt.clone(),
+            })
+            .collect(),
+        created,
+    })
 }
 
 /// A name for the files attached with this owner, text and attachments,

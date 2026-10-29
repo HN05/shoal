@@ -50,7 +50,7 @@ impl Layout {
         workspace_id: &str,
         message: &str,
         files: &[PathBuf],
-    ) -> Result<Vec<PathBuf>> {
+    ) -> Result<Kept> {
         for file in files {
             check(file)?;
         }
@@ -71,12 +71,16 @@ impl Layout {
                 alt: None,
             })
             .collect();
-        Ok(
-            keep_copies(&directory, workspace_id, message, &attachments)?
+        let copies = keep_copies(&directory, workspace_id, message, &attachments)?;
+        Ok(Kept {
+            paths: copies
+                .attachments
                 .into_iter()
                 .map(|copy| copy.path)
                 .collect(),
-        )
+            created: copies.created,
+            workspace: directory,
+        })
     }
 
     /// Delete the files attached for the workspace `workspace_id`.
@@ -97,9 +101,41 @@ impl Layout {
     }
 }
 
+/// The copies [`Layout::keep`] made or reused for one message.
+#[derive(Debug)]
+pub(crate) struct Kept {
+    pub(crate) paths: Vec<PathBuf>,
+    /// The directory of copies made for this message, rather than reused.
+    created: Option<PathBuf>,
+    /// The directory of the workspace's attached files.
+    workspace: PathBuf,
+}
+
+impl Kept {
+    /// Delete the copies made for a message that was not queued, and the
+    /// workspace's directory when nothing else is left in it, as when the
+    /// workspace was removed while they were copied.
+    pub(crate) fn discard(self) -> Result<()> {
+        if let Some(created) = &self.created {
+            remove_dir(created)?;
+        }
+        match std::fs::remove_dir(&self.workspace) {
+            Err(error)
+                if !matches!(
+                    error.kind(),
+                    ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
+                ) =>
+            {
+                Err(error).with_context(|| format!("delete {}", self.workspace.display()))
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 /// Refuse what a message cannot attach: a relative path, something other
 /// than a file, or a file over [`MAX_FILE_BYTES`].
-fn check(path: &Path) -> Result<()> {
+pub(crate) fn check(path: &Path) -> Result<()> {
     let shown = path.display();
     ensure!(path.is_absolute(), "{shown}: give an absolute path");
     let metadata = std::fs::metadata(path).with_context(|| format!("read {shown}"))?;

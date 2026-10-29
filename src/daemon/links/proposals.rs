@@ -150,9 +150,10 @@ impl Manager {
         }
         let root = self.paths.proposal_files();
         let (owner, text, originals) = (owner.to_owned(), body.clone(), attachments.clone());
-        let copies =
-            tokio::task::spawn_blocking(move || keep_copies(&root, &owner, &text, &originals))
-                .await??;
+        let copies = tokio::task::spawn_blocking(move || {
+            keep_copies(&root, &owner, &text, &originals).map(|copies| copies.attachments)
+        })
+        .await??;
         *body = attach::retarget(body, attachments, &copies);
         *attachments = copies;
         Ok(())

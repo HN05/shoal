@@ -3,7 +3,7 @@
 //! messages through `shoal messages`, watches and agent hooks, and a delivered
 //! message is deleted. Files attached to a message outlive it, until their
 //! workspace is removed.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
@@ -87,6 +87,52 @@ pub(crate) fn insert(
     Ok(Some(tx.last_insert_rowid()))
 }
 
+/// Delete the copies of a message that was refused, such as one for a
+/// workspace removed while they were made. Failure only logs: the workspace's
+/// removal deletes whatever is left.
+async fn discard_message_files(kept: files::Kept) {
+    let discarded = tokio::task::spawn_blocking(move || kept.discard()).await;
+    if let Err(error) = discarded
+        .map_err(anyhow::Error::from)
+        .and_then(|result| result)
+    {
+        crate::daemon::log!("files attached to a refused message not deleted: {error:#}");
+    }
+}
+
+/// Point the attached paths of messages in the workspaces of repository
+/// `repository_id` from `source` to `destination`, in the transaction that
+/// moves the repository's directory.
+pub(crate) fn rebase_attachments(
+    tx: &Transaction<'_>,
+    repository_id: &str,
+    source: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let attached: Vec<(i64, String)> = tx
+        .prepare(
+            "SELECT m.id,m.attachments FROM agent_messages m
+                JOIN workspaces w ON w.id=m.workspace_id
+                WHERE w.repository_id=?1 AND m.attachments!='[]'",
+        )?
+        .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (id, attachments) in attached {
+        let paths: Vec<PathBuf> = serde_json::from_str::<Vec<PathBuf>>(&attachments)?
+            .into_iter()
+            .map(|path| match path.strip_prefix(source) {
+                Ok(inside) => destination.join(inside),
+                Err(_) => path,
+            })
+            .collect();
+        tx.execute(
+            "UPDATE agent_messages SET attachments=?2 WHERE id=?1",
+            params![id, serde_json::to_string(&paths)?],
+        )?;
+    }
+    Ok(())
+}
+
 impl Manager {
     /// Queue a message for the workspace's agents with copies of the files
     /// `attachments`; without text, the files are the message. An identical
@@ -101,26 +147,35 @@ impl Manager {
             crate::validate::agent_message(&message)?;
         }
         let workspace = self.workspace(selector).await?;
-        let attachments = self
+        let Some(kept) = self
             .keep_message_files(&workspace, &message, attachments)
-            .await?;
-        self.queue_attached_message(&workspace.id, message, attachments)
-            .await
+            .await?
+        else {
+            return self.queue_agent_message(&workspace.id, message).await;
+        };
+        let queued = self
+            .queue_attached_message(&workspace.id, message, kept.paths.clone())
+            .await;
+        if queued.is_err() {
+            discard_message_files(kept).await;
+        }
+        queued
     }
 
-    /// Copies of `files`, attached to `message` for `workspace`'s agents.
+    /// Copies of `files`, attached to `message` for `workspace`'s agents;
+    /// `None` without files.
     async fn keep_message_files(
         &self,
         workspace: &Workspace,
         message: &str,
         files: Vec<PathBuf>,
-    ) -> Result<Vec<PathBuf>> {
+    ) -> Result<Option<files::Kept>> {
         if files.is_empty() {
-            return Ok(files);
+            return Ok(None);
         }
         let layout = self.message_files(workspace).await?;
         let (id, message) = (workspace.id.clone(), message.to_owned());
-        tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
+        tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files).map(Some)).await?
     }
 
     /// Where `workspace`'s repository keeps attached files, reserving the
