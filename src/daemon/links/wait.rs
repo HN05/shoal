@@ -184,6 +184,7 @@ impl Manager {
             selection.input.is_none() || selection.kind.is_some(),
             "explicit items need a kind"
         );
+        let deadline = watch_deadline(seconds);
         let workspace = self.workspace(selector).await?;
         let wait = self.item_waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
@@ -194,13 +195,13 @@ impl Manager {
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
-                updates = wait_for_updates(seconds, &mut background, || {
+                updates = wait_for_updates(deadline, &mut background, || {
                     self.poll_item_activity(&workspace.id, selection)
                 }) => {
                     let updates = updates?;
-                    // Including those queued while the wait ran. A newer
-                    // delivery may take them and the updates meanwhile.
-                    let unread = self.agent_messages(&workspace.id).await?;
+                    // Including settled ones queued while the wait ran. A
+                    // newer delivery may take them and the updates meanwhile.
+                    let unread = self.deliverable_messages(&workspace).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
@@ -210,9 +211,11 @@ impl Manager {
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
+        // Messages still settling at the deadline wait for a later delivery.
         let messages = tokio::select! {
             settled = self.settled_messages(&workspace, messages) => settled?,
             () = wait.superseded.notified() => return Ok(Updates::superseded()),
+            () = until(deadline) => return Ok(Updates::timed_out()),
         };
         // A newer wait or hook delivery reads the same unacknowledged messages.
         if !wait.is_current() {
@@ -1440,6 +1443,16 @@ impl Updates {
         }
     }
 
+    fn timed_out() -> Self {
+        Self {
+            updates: Vec::new(),
+            messages: Vec::new(),
+            timed_out: true,
+            superseded: false,
+            attached: None,
+        }
+    }
+
     pub(crate) fn messages(messages: Vec<AgentMessage>) -> Self {
         Self {
             updates: Vec::new(),
@@ -1473,30 +1486,33 @@ fn watches_branch(selection: &Selection, items: &[(String, LinkKind)]) -> bool {
         && !items.iter().any(|(_, kind)| *kind == LinkKind::Pr)
 }
 
+/// When a watch with a timeout of `seconds` started now ends.
+fn watch_deadline(seconds: Option<u64>) -> Option<tokio::time::Instant> {
+    seconds.map(|seconds| tokio::time::Instant::now() + Duration::from_secs(seconds))
+}
+
+/// Resolves at `deadline`, or never without one.
+async fn until(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
 /// Poll every [`POLL_INTERVAL`], or once a forge's rate limit ends, and at
-/// once whenever `queued` changes.
+/// once whenever `queued` changes, until `deadline`.
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
-    seconds: Option<u64>,
+    deadline: Option<tokio::time::Instant>,
     queued: &mut tokio::sync::watch::Receiver<u64>,
     mut poll: impl FnMut() -> F,
 ) -> Result<Updates> {
-    let deadline =
-        seconds.map(|seconds| tokio::time::Instant::now() + Duration::from_secs(seconds));
     loop {
         // A cancelled poll may already have committed a pending delivery. The
         // next wait replays it, so the advertised timeout can remain strict.
         let polled = match deadline {
             Some(deadline) => match tokio::time::timeout_at(deadline, poll()).await {
                 Ok(polled) => polled,
-                Err(_) => {
-                    return Ok(Updates {
-                        updates: Vec::new(),
-                        messages: Vec::new(),
-                        timed_out: true,
-                        superseded: false,
-                        attached: None,
-                    });
-                }
+                Err(_) => return Ok(Updates::timed_out()),
             },
             None => poll().await,
         };
@@ -1513,13 +1529,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
         let sleep_for = if let Some(deadline) = deadline {
             let now = tokio::time::Instant::now();
             if now >= deadline {
-                return Ok(Updates {
-                    updates: Vec::new(),
-                    messages: Vec::new(),
-                    timed_out: true,
-                    superseded: false,
-                    attached: None,
-                });
+                return Ok(Updates::timed_out());
             }
             interval.min(deadline - now)
         } else {

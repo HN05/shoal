@@ -47,7 +47,7 @@ async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
     let attempts = std::sync::atomic::AtomicUsize::new(0);
     let started = tokio::time::Instant::now();
     let result = wait_for_updates(
-        Some(3600),
+        watch_deadline(Some(3600)),
         &mut tokio::sync::watch::channel(0).1,
         || async {
             Ok(
@@ -72,9 +72,11 @@ async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
     assert_eq!(result.updates.len(), 1);
     assert_eq!(tokio::time::Instant::now() - started, POLL_INTERVAL);
     let started = tokio::time::Instant::now();
-    let result = wait_for_updates(Some(75), &mut tokio::sync::watch::channel(0).1, || async {
-        Ok(Vec::new())
-    })
+    let result = wait_for_updates(
+        watch_deadline(Some(75)),
+        &mut tokio::sync::watch::channel(0).1,
+        || async { Ok(Vec::new()) },
+    )
     .await
     .unwrap();
     assert!(result.timed_out && result.updates.is_empty());
@@ -83,7 +85,7 @@ async fn polling_wakes_for_a_single_result_and_timeout_has_no_update() {
         Duration::from_secs(75)
     );
     let error = wait_for_updates(
-        Some(3600),
+        watch_deadline(Some(3600)),
         &mut tokio::sync::watch::channel(0).1,
         || async { anyhow::bail!("lookup failed") },
     )
@@ -1376,10 +1378,14 @@ async fn blocked_gate_and_remote_poll_respect_the_timeout() {
     let gate = tokio::sync::Mutex::new(());
     let held = gate.lock().await;
     let started = tokio::time::Instant::now();
-    let result = wait_for_updates(Some(1), &mut tokio::sync::watch::channel(0).1, || async {
-        let _guard = gate.lock().await;
-        Ok(Vec::new())
-    })
+    let result = wait_for_updates(
+        watch_deadline(Some(1)),
+        &mut tokio::sync::watch::channel(0).1,
+        || async {
+            let _guard = gate.lock().await;
+            Ok(Vec::new())
+        },
+    )
     .await
     .unwrap();
     assert!(result.timed_out);
@@ -1391,7 +1397,7 @@ async fn blocked_gate_and_remote_poll_respect_the_timeout() {
     drop(held);
     let started = tokio::time::Instant::now();
     let result = wait_for_updates(
-        Some(1),
+        watch_deadline(Some(1)),
         &mut tokio::sync::watch::channel(0).1,
         std::future::pending,
     )
@@ -1884,4 +1890,65 @@ async fn background_polls_a_finished_run_until_its_finish_is_queued() {
     assert!(polled().await.unwrap().is_empty());
     let queued = manager.agent_updates(&id).await.unwrap().updates;
     assert_eq!(queued[0].kind, UpdateKind::CiCompleted, "{queued:?}");
+}
+
+/// A workspace whose repository holds agent messages for a minute.
+async fn settling_workspace(root: &tempfile::TempDir, manager: &Manager) -> Workspace {
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .set_repository_config(&repo.id, Some("[messages]\nsettle_seconds = 60\n".into()))
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "settling".into(), None, None, None)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn updates_leave_settling_messages_for_a_later_delivery() {
+    let (root, manager) = manager().await;
+    let workspace = settling_workspace(&root, &manager).await;
+    register_watch(&manager, &workspace.id, "pr").await;
+    manager
+        .queue_agent_message_delivered(
+            &workspace.id,
+            "Memory is low".into(),
+            crate::daemon::agent_messages::Delivery::WhileWorkRuns,
+        )
+        .await
+        .unwrap();
+    manager
+        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .await
+        .unwrap();
+    let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
+    assert_eq!(updates.updates.len(), 1);
+    assert!(updates.messages.is_empty(), "{updates:?}");
+    let unread = manager.agent_messages(&workspace.id).await.unwrap();
+    assert_eq!(unread.len(), 1);
+}
+
+#[tokio::test]
+async fn a_watch_times_out_while_its_messages_settle() {
+    let (root, manager) = manager().await;
+    let workspace = settling_workspace(&root, &manager).await;
+    manager
+        .send_agent_message(&workspace.id, "Request 1 approved".into(), Vec::new())
+        .await
+        .unwrap();
+    let updates = manager
+        .wait_items(&workspace.id, &Selection::default(), Some(1))
+        .await
+        .unwrap();
+    assert!(
+        updates.timed_out && updates.messages.is_empty(),
+        "{updates:?}"
+    );
+    let unread = manager.agent_messages(&workspace.id).await.unwrap();
+    assert_eq!(unread.len(), 1);
 }
