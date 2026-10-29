@@ -463,7 +463,7 @@ again: it first finishes the interrupted rename when Git completed it, or cancel
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted
 worktrees can still be removed through normal cleanup.
 
-`shoal work title [WORKSPACE] TITLE` gives a workspace a title, one line of at
+`shoal work rename [WORKSPACE] TITLE` gives a workspace a title, one line of at
 most 40 characters that its agent chooses to say what the work is. The Herdr tabs
 and Rex windows Shoal opens for the workspace show it in place of the issue label
 or branch, and setting it renames those already open on the server of the Herdr

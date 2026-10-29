@@ -52,7 +52,7 @@ impl Need {
             ["stop" | "restart"] => Self::Running,
             ["repo", "labels"] | ["forge", "capabilities" | "api" | "ci", ..] => Self::Any,
             ["work", "setup"] => Self::Setup,
-            ["work", "restore" | "title"] => Self::Any,
+            ["work", "restore" | "rename"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,

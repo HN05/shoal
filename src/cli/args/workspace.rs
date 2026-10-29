@@ -84,9 +84,11 @@ pub enum WorkCommand {
         #[arg(long)]
         copy: bool,
     },
-    /// Give a workspace a short title, which the tabs Shoal opened for it show.
+    /// Give a workspace a short title, which the tabs Shoal opens for it show.
+    ///
+    /// `shoal branch rename` renames its Git branch instead.
     #[command(allow_missing_positional = true)]
-    Title {
+    Rename {
         workspace: Option<String>,
         /// Title of at most 40 characters on one line.
         title: String,

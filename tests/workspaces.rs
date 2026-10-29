@@ -22619,11 +22619,11 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     }
 }
 
-/// `shoal work title` run in the tab Shoal opened for `workspace`.
+/// `shoal work rename` run in the tab Shoal opened for `workspace`.
 fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
     fixture
         .command()
-        .args(["--json", "work", "title", workspace, title])
+        .args(["--json", "work", "rename", workspace, title])
         .env("HERDR_ENV", "1")
         .env("HERDR_WORKSPACE_ID", "w1")
         .env("HERDR_TAB_ID", "w1:t9")
@@ -22683,7 +22683,7 @@ fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     );
     // Without a workspace, the title is refused before a picker asks for one.
     let (refused, transcript) =
-        fixture.interactive_command(fixture.command().args(["work", "title", "   "]), "");
+        fixture.interactive_command(fixture.command().args(["work", "rename", "   "]), "");
     assert!(!refused.status.success());
     assert!(transcript.contains("titles must be"), "{transcript}");
 }
