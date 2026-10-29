@@ -37,7 +37,9 @@ mod macos {
 
     pub(super) unsafe fn claim() {
         // SAFETY: the caller guarantees no other thread reads the environment.
-        if unsafe { take_claimed() } || !signed_with_certificate() {
+        if unsafe { take_claimed() }
+            || !crate::process::code_signing::own_signature_has_certificate()
+        {
             return;
         }
         let error = match Image::current() {
@@ -64,14 +66,6 @@ mod macos {
         // SAFETY: the caller guarantees no other thread reads the environment.
         unsafe { std::env::remove_var(env::RESPONSIBILITY_CLAIMED) };
         claimed
-    }
-
-    /// Whether a certificate signs this binary, which keeps its grants across
-    /// rebuilds; an ad-hoc signature identifies one build only.
-    fn signed_with_certificate() -> bool {
-        const CS_ADHOC: u32 = 0x2;
-        crate::process::identity::code_signing_flags(std::process::id() as libc::pid_t)
-            .is_some_and(|flags| flags & CS_ADHOC == 0)
     }
 
     /// This process's binary, arguments and environment, marked as claimed.

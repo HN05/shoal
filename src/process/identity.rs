@@ -620,20 +620,8 @@ fn bsd_image(bsd: &libc::proc_bsdinfo) -> Image {
 #[cfg(target_os = "macos")]
 fn hides_environment(pid: u32) -> bool {
     const CS_PLATFORM_BINARY: u32 = 0x0400_0000;
-    code_signing_flags(pid as i32).is_none_or(|flags| flags & CS_PLATFORM_BINARY != 0)
-}
-
-/// The code signing status flags of process `pid`, from `sys/codesign.h`.
-#[cfg(target_os = "macos")]
-pub(super) fn code_signing_flags(pid: libc::pid_t) -> Option<u32> {
-    const CS_OPS_STATUS: u32 = 0;
-    unsafe extern "C" {
-        fn csops(pid: libc::pid_t, ops: u32, status: *mut u32, size: usize) -> libc::c_int;
-    }
-    let mut flags = 0_u32;
-    // SAFETY: CS_OPS_STATUS writes the 32-bit status flags into `flags`.
-    let result = unsafe { csops(pid, CS_OPS_STATUS, &mut flags, size_of::<u32>()) };
-    (result == 0).then_some(flags)
+    super::code_signing::status_flags(pid as i32)
+        .is_none_or(|flags| flags & CS_PLATFORM_BINARY != 0)
 }
 
 #[cfg(target_os = "linux")]
