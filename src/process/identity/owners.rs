@@ -27,21 +27,24 @@ impl Owners {
         owners.get(&unique).map(|owner| owner.marks.clone())
     }
 
-    /// Remember the owners of `attributed`, and forget those no process in
-    /// `live` names as itself or its parent any more, which no process can
-    /// name again, unless an inventory that started after `since` recorded
-    /// them.
+    /// Remember the owners `told` names, forget the processes it tells are
+    /// no execution's, and forget those no process in `live` names as itself
+    /// or its parent any more, which no process can name again, unless an
+    /// inventory that started after `since` recorded them.
     pub(super) fn update(
         &self,
         since: Instant,
-        attributed: Vec<(u64, Marks)>,
+        told: Vec<(u64, Option<Marks>)>,
         live: &HashSet<u64>,
     ) {
         let recorded = Instant::now();
         let mut owners = self.0.lock().unwrap_or_else(PoisonError::into_inner);
         owners.retain(|unique, owner| owner.recorded >= since || live.contains(unique));
-        for (unique, marks) in attributed {
-            owners.insert(unique, Owner { marks, recorded });
+        for (unique, marks) in told {
+            match marks {
+                Some(marks) => owners.insert(unique, Owner { marks, recorded }),
+                None => owners.remove(&unique),
+            };
         }
     }
 

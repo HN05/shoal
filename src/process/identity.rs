@@ -587,11 +587,12 @@ impl<'a> Inventory<'a> {
 
     /// Attribute every observed process and collect the scan of those whose
     /// `marker` is one of `ids`, checking that owned processes still live.
-    /// Every owner told is remembered for later inventories.
+    /// Every owner told is remembered for later inventories, and a process
+    /// told to be no execution's is forgotten.
     fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
-        let mut attributed = Vec::new();
+        let mut told = Vec::new();
         for (pid, process) in &self.observed {
             if matches!(process.evidence, Evidence::Elevated) {
                 continue;
@@ -607,18 +608,18 @@ impl<'a> Inventory<'a> {
                             identity: identity.clone(),
                         });
                     }
-                    if let Some(unique) = process.lineage.unique {
-                        attributed.push((unique, marks));
-                    }
+                    told.extend(process.lineage.unique.map(|unique| (unique, Some(marks))));
                 }
                 Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
                     identity: identity.clone(),
                     head,
                 }),
-                Attribution::Foreign => {}
+                Attribution::Foreign => {
+                    told.extend(process.lineage.unique.map(|unique| (unique, None)));
+                }
             }
         }
-        self.owners.update(self.started, attributed, &self.named());
+        self.owners.update(self.started, told, &self.named());
         Ok(scan)
     }
 

@@ -336,6 +336,29 @@ fn owners_are_forgotten_once_no_live_process_names_them() -> Result<()> {
 }
 
 #[test]
+fn a_process_read_as_no_executions_loses_its_remembered_owner() -> Result<()> {
+    use Evidence::{Hidden, Unmarked};
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    let at = |evidence, parent, adopted| {
+        inventory(
+            &owners,
+            [unique(observed(10, parent, adopted, evidence), 100, 90)],
+        )
+    };
+    at(marked("execution"), 9, false).attribute(Marker::Execution, &ids)?;
+    // It replaced its image with a program started without the marker...
+    at(Unmarked, 9, false).attribute(Marker::Execution, &ids)?;
+    // ...then with a hidden one, and launchd adopted it.
+    let later = at(Hidden, 1, true);
+    assert_eq!(
+        describe(later.resolve(10, &mut HashMap::new())),
+        "unknown under 10"
+    );
+    Ok(())
+}
+
+#[test]
 fn an_inventory_keeps_owners_recorded_after_it_began() {
     let owners = owners::Owners::default();
     let marks = Marks {
@@ -346,7 +369,7 @@ fn an_inventory_keeps_owners_recorded_after_it_began() {
     // An overlapping inventory records a process this one's listing missed.
     owners.update(
         std::time::Instant::now(),
-        vec![(100, marks.clone())],
+        vec![(100, Some(marks.clone()))],
         &HashSet::new(),
     );
     owners.update(began, Vec::new(), &HashSet::new());
