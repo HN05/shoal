@@ -106,25 +106,33 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
     let workspaces = client::workspaces(&ctx.paths).await?;
     let mut ids = Vec::new();
     for selector in selectors {
-        let id = client::inspect(&ctx.paths, selector).await?.workspace.id;
-        if !ids.contains(&id) {
-            ids.push(id);
+        ids.push(client::inspect(&ctx.paths, selector).await?.workspace.id);
+    }
+    Ok(with_descendants(ids, &workspaces))
+}
+
+/// `ids` once each, followed by every workspace of `workspaces` below them.
+fn with_descendants(ids: Vec<String>, workspaces: &[Workspace]) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    for id in ids {
+        if !found.contains(&id) {
+            found.push(id);
         }
     }
     let mut next = 0;
-    while let Some(parent) = ids.get(next).cloned() {
-        for workspace in &workspaces {
+    while let Some(parent) = found.get(next).cloned() {
+        for workspace in workspaces {
             let child = workspace
                 .parent_workspace
                 .as_ref()
                 .is_some_and(|reference| reference.id == parent);
-            if child && !ids.contains(&workspace.id) {
-                ids.push(workspace.id.clone());
+            if child && !found.contains(&workspace.id) {
+                found.push(workspace.id.clone());
             }
         }
         next += 1;
     }
-    Ok(ids)
+    found
 }
 
 /// Refuse a stop in a workspace process that `selected` includes its own
