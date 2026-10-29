@@ -117,6 +117,9 @@ pub enum Save {
     Everything,
     /// Agent sessions, which the removed workspace's removal record keeps.
     RemovedAgents,
+    /// Agent sessions and interrupted commands, saved before the stop since
+    /// the system shuts down, with restores that need no user queued.
+    Shutdown,
 }
 
 impl StopRequest {
@@ -144,6 +147,14 @@ impl StopRequest {
         }
     }
 
+    /// The stop before the system shuts down.
+    pub(crate) fn system_shutdown() -> Self {
+        Self {
+            reason: "the system is shutting down".into(),
+            save: Save::Shutdown,
+        }
+    }
+
     /// Removal of a missing worktree, which keeps no checkpoint or record.
     pub(super) fn removal() -> Self {
         Self {
@@ -165,12 +176,16 @@ impl StopRequest {
         self.save == Save::RemovedAgents
     }
 
+    pub(crate) fn before_shutdown(&self) -> bool {
+        self.save == Save::Shutdown
+    }
+
     /// Whether the wrapper saves its agent's session, or its interrupted
     /// command when it runs no agent.
     pub(crate) fn saves(&self, agent: bool) -> bool {
         match self.save {
             Save::Nothing => false,
-            Save::Everything => true,
+            Save::Everything | Save::Shutdown => true,
             Save::RemovedAgents => agent,
         }
     }

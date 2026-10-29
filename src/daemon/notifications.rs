@@ -42,7 +42,8 @@ states!(NotificationKind {
     /// An automatic removal was attempted and the workspace retained, or a
     /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",
-    /// Disk protection could not stop a workspace's tracked executions.
+    /// Disk protection or a system shutdown could not stop a workspace's
+    /// tracked executions.
     StopFailed => "stop_failed",
     /// A best-effort event hook failed.
     HookFailed => "hook_failed",
@@ -58,6 +59,8 @@ states!(NotificationKind {
     CachesEmptied => "caches_emptied",
     /// A forge limits the requests Shoal sends it, so polling waits.
     ForgeLimited => "forge_limited",
+    /// The daemon stopped tracked work before the system shut down.
+    SystemShutdown => "system_shutdown",
     /// The sleep inhibitor `keep_awake` holds could not start or ended.
     KeepAwakeFailed => "keep_awake_failed",
     /// The daemon removed a contribution repository nothing was left of.

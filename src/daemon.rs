@@ -38,6 +38,7 @@ mod restart_recovery;
 pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
+mod shutdown_lock;
 mod startup;
 mod startup_audit;
 pub mod store;
@@ -132,6 +133,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         workspace_usage::run,
     );
     spawn_supervised(&mut background, &manager, "keep awake", keep_awake::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "shutdown lock",
+        shutdown_lock::run,
+    );
     spawn_supervised(&mut background, &manager, "agent queue", agent_queue::run);
     spawn_supervised(
         &mut background,

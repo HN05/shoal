@@ -474,8 +474,12 @@ impl Manager {
 
     /// Admit waiting entries that fit, start launches other than `caller`'s,
     /// and return whether `caller`'s entry was admitted. An admitted restore
-    /// is left to its waiting agent. Requires the queue gate.
+    /// is left to its waiting agent; nothing is admitted while the system
+    /// shuts down. Requires the queue gate.
     async fn admit_waiting(&self, caller: Option<&str>) -> Result<bool> {
+        if self.agent_queue.suspended() {
+            return Ok(false);
+        }
         let WaitingWork {
             entries: mut waiting,
             restores,

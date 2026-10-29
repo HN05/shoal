@@ -3,7 +3,10 @@
 //! dispatcher.
 use std::{
     collections::{HashMap, HashSet},
-    sync::Mutex as StdMutex,
+    sync::{
+        Mutex as StdMutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use tokio::sync::{Mutex, MutexGuard, Notify, futures::Notified};
@@ -19,6 +22,8 @@ pub(crate) struct AgentQueue {
     /// every process stopped, with what admitted it once admission did.
     restore_waiters: StdMutex<HashMap<String, Option<Grant>>>,
     wake: Notify,
+    /// Admission waits while the system shuts down.
+    suspended: AtomicBool,
 }
 
 impl AgentQueue {
@@ -87,6 +92,19 @@ impl AgentQueue {
             .get(execution)
             .copied()
             .flatten()
+    }
+
+    /// Hold back admission while the system shuts down, so nothing the
+    /// shutdown stopped starts again before it; resuming wakes the dispatcher.
+    pub(crate) fn suspend(&self, suspended: bool) {
+        self.suspended.store(suspended, Ordering::SeqCst);
+        if !suspended {
+            self.wake();
+        }
+    }
+
+    pub(crate) fn suspended(&self) -> bool {
+        self.suspended.load(Ordering::SeqCst)
     }
 
     /// Wake the dispatcher, since a slot may have freed or work may fit.

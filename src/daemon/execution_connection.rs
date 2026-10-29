@@ -564,7 +564,7 @@ fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Contr
         {
             Control::Pause {
                 removed: request.keeps_removed_agents(),
-                shutdown: false,
+                shutdown: request.before_shutdown(),
                 reason: Some(request.reason),
             }
         }
