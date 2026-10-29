@@ -354,9 +354,12 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
     Ok(Some(Session::open(name, clients, place)))
 }
 
+/// A block that is gone leaves nothing to rename.
 async fn rename_block(place: &str, label: &str) -> Result<()> {
     let server = Server::here()?;
-    let block = server.block(place).await?.context("the block is gone")?;
+    let Some(block) = server.block(place).await? else {
+        return Ok(());
+    };
     server.rename(place, &block, label).await
 }
 

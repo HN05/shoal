@@ -15,6 +15,7 @@ mod rename;
 mod run;
 mod setup;
 mod status;
+mod title;
 mod watch;
 
 pub(super) use add::{AddOptions, AgentLaunch, add};
@@ -34,4 +35,5 @@ pub(super) use rename::rename;
 pub(super) use run::{edit, exec};
 pub(super) use setup::{copy_ignored_worker, run_post_setup, setup, setup_workspace, skip_setup};
 pub(super) use status::status;
+pub(super) use title::title;
 pub(super) use watch::{wait_for_items, watch_items};

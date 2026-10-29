@@ -41,7 +41,7 @@ use crate::{
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
 use host::{Demo, DemoWorker, Host, Places, Sessions, Start};
-pub(in crate::cli) use naming::{PlaceName, issue_label};
+pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_places};
 pub(in crate::cli) use typed::run as run_launch;
 
 /// Hosts in the order they claim a terminal, each with the options its own

@@ -80,10 +80,12 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         agent_queue::attach(ctx, entry, &opened.workspace).await?;
     }
-    let label = match (place_name, &issue) {
-        (Some(name), _) => name.render(&opened.workspace.branch),
-        (None, Some(issue)) => issue.tab_label(target.repository(ctx).await?),
-        (None, None) => opened.workspace.branch.clone(),
+    let (branch, title) = (&opened.workspace.branch, &opened.workspace.title);
+    let label = match (place_name, &issue, title) {
+        (Some(name), _, title) => name.render(branch, title.as_deref()),
+        (None, _, Some(title)) => title.clone(),
+        (None, Some(issue), None) => issue.tab_label(target.repository(ctx).await?),
+        (None, None, None) => branch.clone(),
     };
     let agent_name = agent.agent.clone().map(String::from);
     terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;

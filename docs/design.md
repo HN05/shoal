@@ -700,7 +700,11 @@ hide the decision being made.
 plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
-allocated workspace branch by default. An optional `herdr.tab_name` template
+allocated workspace branch by default. An issue number or branch says little about
+the work, so its agent names it with a workspace title, which replaces that
+default and fills a template's `{title}`; setting one relabels the places Shoal
+created for the workspace that the caller's host server reaches, while other
+places take it when they next open. An optional `herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
 with the launch plan so the worker preserves the caller's naming choice. Shoal

@@ -53,7 +53,7 @@ impl Need {
             ["repo", "labels"] | ["forge", "capabilities" | "api" | "ci", ..] => Self::Any,
             ["work", "setup"] => Self::Setup,
             ["work", "rename"] => Self::Settled,
-            ["work", "restore"] => Self::Any,
+            ["work", "restore" | "title"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["work", "base", "clear"] => Self::Base,
             ["work", "base", ..] => Self::Any,

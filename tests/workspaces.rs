@@ -22615,6 +22615,75 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     }
 }
 
+/// `shoal work title` run in the tab Shoal opened for `workspace`.
+fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
+    fixture
+        .command()
+        .args(["--json", "work", "title", workspace, title])
+        .env("HERDR_ENV", "1")
+        .env("HERDR_WORKSPACE_ID", "w1")
+        .env("HERDR_TAB_ID", "w1:t9")
+        .env("HERDR_PANE_ID", "w1:p9")
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
+    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    install_fake_herdr(&fixture);
+    let args = [
+        "add",
+        fixture.repo.to_str().unwrap(),
+        "topic",
+        "--base",
+        "HEAD",
+        "--agent",
+        "pi",
+    ];
+    let (caller, transcript) = herdr_call(&fixture, &args, "");
+    assert!(caller.status.success(), "{caller:?} {transcript}");
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+    assert!(worker.status.success(), "{worker:?} {transcript}");
+
+    let titled = title_in_herdr(&fixture, "topic", "Agent tab names");
+    assert!(titled.status.success(), "{titled:?}");
+    let record: Value = serde_json::from_slice(&titled.stdout).unwrap();
+    assert_eq!(record["title"], "Agent tab names");
+    assert_eq!(
+        herdr_changes(&fixture).last().unwrap(),
+        &["tab", "rename", "w1:t9", "Agent tab names"]
+    );
+    assert_eq!(
+        fixture.ok(&["status", "topic"])["workspace"]["title"],
+        "Agent tab names"
+    );
+
+    // A tab the user closed keeps the title on the record only.
+    fs::write(fixture.root.path().join("closed-tabs"), "w1:t9\n").unwrap();
+    let before = herdr_changes(&fixture).len();
+    let titled = title_in_herdr(&fixture, "topic", "Renamed later");
+    assert!(titled.status.success(), "{titled:?}");
+    assert!(
+        titled.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&titled.stderr)
+    );
+    assert_eq!(herdr_changes(&fixture).len(), before);
+
+    let refused = title_in_herdr(&fixture, "topic", "two\nlines");
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("titles must be"),
+        "{refused:?}"
+    );
+    // Without a workspace, the title is refused before a picker asks for one.
+    let (refused, transcript) =
+        fixture.interactive_command(fixture.command().args(["work", "title", "   "]), "");
+    assert!(!refused.status.success());
+    assert!(transcript.contains("titles must be"), "{transcript}");
+}
+
 #[test]
 fn herdr_plans_carry_issue_urls_instead_of_bodies() {
     let fixture = Fixture::new();

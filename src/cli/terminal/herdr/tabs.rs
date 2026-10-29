@@ -61,10 +61,13 @@ pub(super) async fn close(place: &str) -> Result<()> {
         .with_context(|| format!("cannot close Herdr tab {}", holding.tab))
 }
 
-/// Show `label` as the name of the tab holding `place`.
+/// Show `label` as the name of the tab holding `place`; a place that is
+/// gone leaves nothing to rename.
 pub(super) async fn rename(place: &str, label: &str) {
     let renamed = async {
-        let holding = holding(place).await?.context("the pane is gone")?;
+        let Some(holding) = holding(place).await? else {
+            return Ok(());
+        };
         run(["tab", "rename", &holding.tab, label]).await
     };
     if let Err(error) = renamed.await {

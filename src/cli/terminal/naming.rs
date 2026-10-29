@@ -1,11 +1,12 @@
 //! What the places hosts open for workspaces are called: the host's name
-//! template with the repository, branch and issue filled in, otherwise
+//! template with the repository, branch, issue and title filled in,
+//! otherwise the title the workspace's agent gave it, otherwise
 //! `<repo>#<number>` for an issue, otherwise the branch. Hosts that show
 //! names apply the label they are given.
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
-use super::Host;
+use super::{Configured, Host};
 use crate::{
     cli::{
         client,
@@ -15,7 +16,9 @@ use crate::{
         },
         context::Context,
     },
-    model::{Repository, Workspace},
+    model::{OwnedPlace, Repository, Workspace},
+    protocol::{ConfigTarget, WorkspaceMethod},
+    sessions::Origin,
 };
 
 /// The name of the place hosting a workspace, with the repository and issue
@@ -42,20 +45,31 @@ impl PlaceName {
         }
     }
 
-    pub fn render(&self, branch: &str) -> String {
-        match (&self.template, self.issue_number) {
-            (Some(template), _) => self.fill(template, branch),
-            (None, Some(number)) => issue_label(&self.repo, number),
-            (None, None) => branch.to_owned(),
+    /// The label of a place hosting the workspace on `branch` with `title`.
+    pub fn render(&self, branch: &str, title: Option<&str>) -> String {
+        match &self.template {
+            Some(template) => self.fill(template, branch, title),
+            None => title.map_or_else(|| self.untitled(branch), str::to_owned),
         }
     }
 
-    fn fill(&self, template: &str, branch: &str) -> String {
+    /// The label without a title or template: the issue's, else the branch.
+    fn untitled(&self, branch: &str) -> String {
+        match self.issue_number {
+            Some(number) => issue_label(&self.repo, number),
+            None => branch.to_owned(),
+        }
+    }
+
+    /// `template` filled in; `{title}` falls back to the untitled label.
+    fn fill(&self, template: &str, branch: &str, title: Option<&str>) -> String {
+        let title = title.map_or_else(|| self.untitled(branch), str::to_owned);
         crate::config::templates::render(
             template,
             &[
                 ("{repo}", &self.repo),
                 ("{branch}", branch),
+                ("{title}", &title),
                 (
                     "{issue_number}",
                     &self.issue_number.map(|n| n.to_string()).unwrap_or_default(),
@@ -116,6 +130,9 @@ pub(super) async fn workspace_label(
     if !super::names_places(host) {
         return workspace.name.clone();
     }
+    if let (None, Some(title)) = (&template, &workspace.title) {
+        return title.clone();
+    }
     let labelled = async {
         let repositories = client::repositories(&ctx.paths).await?;
         let repo = repositories
@@ -127,12 +144,54 @@ pub(super) async fn workspace_label(
             None => None,
         };
         let name = PlaceName::new(template, repo, issue.as_ref());
-        anyhow::Ok(name.render(&workspace.branch))
+        anyhow::Ok(name.render(&workspace.branch, workspace.title.as_deref()))
     };
     labelled.await.unwrap_or_else(|error| {
         eprintln!("warning: cannot name the {} place: {error:#}", host.name());
         workspace.branch.clone()
     })
+}
+
+/// Show `workspace`'s label on the places Shoal created for it, as after its
+/// title changed. Only a host this process runs under reaches its places,
+/// and only those on its own server; a place that is gone is skipped.
+pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace) -> Result<()> {
+    let places: Vec<OwnedPlace> = client::request(
+        &ctx.paths,
+        WorkspaceMethod::WorkspacePlaces {
+            workspace: workspace.id.clone(),
+        },
+    )
+    .await?;
+    let settings =
+        client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    for configured in Configured::all(&settings).filter(|host| host.options.enabled) {
+        let Some(host_places) = configured.host.places().filter(|p| p.names_places()) else {
+            continue;
+        };
+        let Some(here) = host_places.origin() else {
+            continue;
+        };
+        let reachable = reachable_from(&here, &places);
+        if reachable.is_empty() {
+            continue;
+        }
+        let template = configured.options.name_template.clone();
+        let label = workspace_label(ctx, template, configured.host, workspace).await;
+        for place in reachable {
+            host_places.rename_place(place.id(), &label).await;
+        }
+    }
+    Ok(())
+}
+
+/// The places of `places` on the host and server of `here`.
+fn reachable_from<'a>(here: &Origin, places: &'a [OwnedPlace]) -> Vec<&'a Origin> {
+    places
+        .iter()
+        .map(|owned| &owned.origin)
+        .filter(|place| place.host == here.host && place.server() == here.server())
+        .collect()
 }
 
 #[cfg(test)]

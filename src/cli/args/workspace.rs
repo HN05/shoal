@@ -115,6 +115,13 @@ pub enum WorkCommand {
         /// New literal Git branch name.
         branch: String,
     },
+    /// Give a workspace a short title, which the tabs Shoal opened for it show.
+    #[command(allow_missing_positional = true)]
+    Title {
+        workspace: Option<String>,
+        /// Title of at most 40 characters on one line.
+        title: String,
+    },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
     Checkpoint {
         workspace: Option<String>,

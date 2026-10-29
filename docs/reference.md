@@ -463,6 +463,12 @@ again: it first finishes the interrupted rename when Git completed it, or cancel
 when the branch is unchanged, then renames to the branch given. Confirmed-deleted
 worktrees can still be removed through normal cleanup.
 
+`shoal work title [WORKSPACE] TITLE` gives a workspace a title, one line of at
+most 40 characters that its agent chooses to say what the work is. The Herdr tabs
+and Rex windows Shoal opens for the workspace show it in place of the issue label
+or branch, and setting it renames those already open on the server of the Herdr
+or Rex terminal the command runs in. Scoped callers may title their own workspace.
+
 `shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `--repo` selects one explicitly and
 must match the link. An unregistered remote offers interactive registration,
@@ -816,7 +822,8 @@ the issue and resolves repository, branch, and agent choices in the caller's pan
 then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitted
 there. Setup and agent execution run in that tab, which reads the issue again and
 is labeled `<repo>#<number>` for an issue (such as `shoal#375`) and with the
-allocated workspace branch otherwise, unless `tab_name` supplies a template.
+allocated workspace branch otherwise, unless `tab_name` supplies a template;
+a [workspace title](#workspaces) replaces either.
 `--here` keeps the command in the current pane; JSON, help, and noninteractive
 calls run in place.
 
@@ -839,8 +846,9 @@ workspace_name = "{repo}" # The workspace for tabs Shoal opens outside Herdr
 # close_when_done = true # Close after done keeps the workspace
 ```
 
-`tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,
-or a literal name. Issue fields are empty without an issue; unknown placeholders
+`tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, `{issue_title}`, and
+`{title}`, or a literal name. `{title}` is the workspace title, or without one the
+label it would replace; issue fields are empty without an issue; unknown placeholders
 stay literal and inserted values are never expanded again. `{branch}` uses the
 requested branch when the tab opens and the allocated branch after creation.
 

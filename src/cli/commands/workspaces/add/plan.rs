@@ -195,7 +195,7 @@ impl AddPlan {
             .unwrap_or("shoal add");
         self.place_name
             .as_ref()
-            .map_or_else(|| branch.to_owned(), |name| name.render(branch))
+            .map_or_else(|| branch.to_owned(), |name| name.render(branch, None))
     }
 }
 
