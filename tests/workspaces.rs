@@ -4,6 +4,9 @@ mod terminal_sessions;
 #[path = "workspaces/rex.rs"]
 mod rex;
 
+#[path = "workspaces/herdr_default.rs"]
+mod herdr_default;
+
 #[path = "support/prompt.rs"]
 mod prompt;
 #[path = "support/pty.rs"]
@@ -21822,6 +21825,12 @@ if args[:2] == ['tab', 'create']:
     print(json.dumps({'result': {'tab': {'tab_id': 'w1:t9'}, 'root_pane': {'pane_id': 'w1:p9'}}}))
 elif args[:2] == ['pane', 'run']:
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
+    if (root / 'herdr-runs-panes').exists():
+        import subprocess
+        pane = subprocess.Popen(['sh', '-c', args[3]], start_new_session=True,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with (root / 'herdr-pane-groups').open('a') as groups:
+            groups.write('%d\n' % pane.pid)
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
 elif args[:2] == ['pane', 'close'] and (root / 'herdr-unreachable').exists():
@@ -21845,12 +21854,26 @@ elif args[1:2] == ['get']:
         print(json.dumps({'result': {'pane': {'pane_id': id, 'tab_id': tab}}}))
     else:
         print(json.dumps({'result': {'tab': {'tab_id': id, 'label': 'tab ' + id}}}))
+elif args[:2] == ['workspace', 'list']:
+    path = root / 'herdr-workspaces'
+    workspaces = json.loads(path.read_text()) if path.exists() else []
+    print(json.dumps({'result': {'workspaces': workspaces}}))
+elif args[:2] == ['workspace', 'create']:
+    path = root / 'herdr-workspaces'
+    workspaces = json.loads(path.read_text()) if path.exists() else []
+    created = {'workspace_id': 'w%d' % (len(workspaces) + 7), 'label': args[args.index('--label') + 1]}
+    path.write_text(json.dumps(workspaces + [created]))
+    print(json.dumps({'result': {'workspace': created}}))
+elif args[:2] == ['session', 'list']:
+    print(json.dumps({'sessions': [
+        {'name': 'default', 'default': True, 'socket_path': '/herdr/default/herdr.sock'},
+        {'name': 'work', 'default': False, 'socket_path': '/herdr/work/herdr.sock'}]}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()
     processes = {'shell_pid': 1, 'foreground_process_group_id': 1 if at_prompt else 2}
     print(json.dumps({'result': {'process_info': processes}}))
-print('{}') if args[:2] not in (['tab', 'create'], ['tab', 'get'], ['pane', 'get'], ['pane', 'process-info']) else None
+print('{}') if args[:2] not in (['tab', 'create'], ['tab', 'get'], ['pane', 'get'], ['pane', 'process-info'], ['workspace', 'list'], ['workspace', 'create'], ['session', 'list']) else None
 "#,
     );
 }

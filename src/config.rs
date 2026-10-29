@@ -752,6 +752,9 @@ pub struct Herdr {
     pub enabled: bool,
     pub tab_name: Option<String>,
     pub new_tab: bool,
+    /// The workspace Shoal opens tabs in when it has none of its own;
+    /// `{repo}` is the repository's name.
+    pub workspace_name: String,
     /// Overrides the top-level `close_when_done` for Herdr tabs.
     pub close_when_done: Option<bool>,
 }

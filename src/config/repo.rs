@@ -542,6 +542,7 @@ pub struct Herdr {
     pub enabled: Option<bool>,
     pub tab_name: Option<String>,
     pub new_tab: Option<bool>,
+    pub workspace_name: Option<String>,
     pub close_when_done: Option<bool>,
 }
 
@@ -573,6 +574,7 @@ states!(
     DefaultHost {
         #[default]
         Zmx => "zmx",
+        Herdr => "herdr",
         Rex => "rex",
     }
 );

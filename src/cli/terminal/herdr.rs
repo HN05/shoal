@@ -15,6 +15,7 @@ use super::{
 mod attach;
 mod demo;
 mod tabs;
+mod workspaces;
 use crate::{
     config,
     sessions::{HostName, Origin, herdr},
@@ -23,7 +24,8 @@ use crate::{
 };
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
-/// pane's process, so agents in its panes run in place.
+/// pane's process, so agents in its panes run in place. As the default host,
+/// it opens tabs for a terminal no host serves in a workspace of its own.
 pub(super) struct Herdr;
 
 impl Host for Herdr {
@@ -34,6 +36,10 @@ impl Host for Herdr {
     /// A Herdr pane.
     fn serves(&self) -> bool {
         in_herdr()
+    }
+
+    fn ensure_installed(&self) -> Result<()> {
+        crate::cli::agents::ensure_program("background launch", "herdr")
     }
 
     fn places(&self) -> Option<&dyn Places> {
@@ -61,6 +67,15 @@ impl Places for Herdr {
     /// A tab in the Herdr workspace the start was queued from.
     fn takes_queued(&self, origin: Option<&Origin>) -> bool {
         origin.is_some_and(|origin| origin.host == HostName::Herdr)
+    }
+
+    fn group<'a>(
+        &'a self,
+        near: Option<&'a Origin>,
+        label: &'a str,
+        cwd: &'a Path,
+    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+        Box::pin(async move { workspaces::labelled(near, label, cwd).await.map(Some) })
     }
 
     fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
@@ -183,7 +198,8 @@ impl Demos for Herdr {
 }
 
 /// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
-/// (`herdr.new_tab`), their names (`herdr.tab_name`), and
+/// (`herdr.new_tab`), their names (`herdr.tab_name`), the workspace for a
+/// terminal outside Herdr (`herdr.workspace_name`), and
 /// `herdr.close_when_done`, which overrides the top-level option.
 pub(super) fn options(config: &config::Herdr) -> Options {
     Options {
@@ -191,7 +207,7 @@ pub(super) fn options(config: &config::Herdr) -> Options {
         opens_places: config.new_tab,
         opens_splits: false,
         name_template: config.tab_name.clone(),
-        group_template: None,
+        group_template: Some(config.workspace_name.clone()),
         close_when_done: config.close_when_done,
     }
 }

@@ -741,8 +741,9 @@ emulator input modes on the caller's terminal. zmx reports no exit status: these
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), in a Herdr pane with `herdr.enabled` or in a
 Rex block with `rex.enabled` runs in place. On a terminal outside zmx, a missing
-zmx refuses the agent as a missing agent executable does. `default_host = "rex"`
-sends these launches to [Rex](#rex) instead.
+zmx refuses the agent as a missing agent executable does. The top-level
+`default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
+[Rex](#rex) instead.
 
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
@@ -782,6 +783,8 @@ Shoal agent ran in it, as do sessions from Shoal versions without the label. An
 agent or chat launched in place refuses to start if Shoal cannot relabel the
 session.
 
+#### Herdr
+
 Inside Herdr (`HERDR_ENV=1`), interactive `shoal add` looks up
 the issue and resolves repository, branch, and agent choices in the caller's pane,
 then opens a tab in `HERDR_WORKSPACE_ID` and returns once the command is submitted
@@ -805,6 +808,7 @@ Herdr pane as a plain terminal:
 [herdr]
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
+workspace_name = "{repo}" # The workspace for tabs Shoal opens outside Herdr
 # tab_name = "{repo}: {branch}" # Customize the tab name
 # close_when_done = true # Close after done keeps the workspace
 ```
@@ -826,6 +830,16 @@ open, and a tab you opened stays open. A background tab `shoal resume` opens
 closes the same way; a pane it reuses keeps its tab's behavior. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
+
+With `default_host = "herdr"`, launches from a terminal outside Herdr and Rex
+open their tabs in the `workspace_name` workspace of the Herdr server the
+terminal's `herdr` reaches, which must be running; `{repo}` is the only
+placeholder, and Shoal reuses the first workspace with that label or creates
+it. With `herdr.enabled = false` these launches use zmx, and `new_tab = false`
+keeps queued ones out of Herdr. A start queued from Herdr opens a background
+tab in the workspace it was queued from, then falls back to the
+`workspace_name` workspace on the same server, then to `default_host`, then to
+zmx.
 
 #### Rex
 
@@ -857,9 +871,8 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 # close_when_done = true # Close after done keeps the workspace
 ```
 
-The top-level `default_host` sets where launches from a terminal outside Herdr
-and Rex run: `"zmx"` (the default) or `"rex"`, which opens their windows in the
-`session_name` session on the local Rex server; `{repo}` is the only
+With `default_host = "rex"`, launches from a terminal outside Herdr and Rex
+open their windows in the `session_name` session on the local Rex server; `{repo}` is the only
 placeholder, and Shoal reuses the oldest session with that label or creates it;
 with `rex.enabled = false` these launches use zmx, and `new_window = false`
 keeps queued ones out of Rex.
@@ -1301,9 +1314,10 @@ branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
-records a `queue_started` notification. An entry queued from Herdr opens a
-background tab in the same Herdr workspace; otherwise it runs in a detached zmx
-session that `shoal attach` reaches. A start keeps its slot through setup until
+records a `queue_started` notification. An entry queued from Herdr or Rex opens
+a background tab or window where it was queued; otherwise it runs where
+`default_host` puts it, by default a detached zmx session that `shoal attach`
+reaches. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the
 workspace for two minutes, records a `queue_failed` notification with the reason
 and frees the slot. Deleting the workspace during setup frees it without one.

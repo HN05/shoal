@@ -9,7 +9,7 @@ worker_template = 'agent'\nchat_template = 'chat'\ngit_profile = 'work'\n\
 default_agent = 'claude'\nmax_agents = 2\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\ncopy_ignored = false\nsetup_cmd = 'setup'\npre_setup_cmd = 'pre-setup'\n\
 post_remove_cmd = 'post-remove'\npost_done_cmd = 'post-done'\npost_ready_cmd = 'post-ready'\npost_agent_exit_cmd = 'agent-exit'\npost_resource_acquire_cmd = 'acquire'\n\
 pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd = 'detach'\npresets = ['cargo']\n\
-[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[claude]\ndefault_mode = 'app'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nclose_when_done = false\n[rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n[happy]\nenabled = true\n\
+[env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[agent_auth]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\ngit_profile = 'agent'\n[claude]\ndefault_mode = 'app'\n[codex]\ndefault_mode = 'app'\n[herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n[rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n[happy]\nenabled = true\n\
 [ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
@@ -191,8 +191,9 @@ fn herdr_defaults_and_options_resolve_independently() {
     assert!(defaults.enabled && defaults.new_tab);
     assert_eq!(defaults.close_when_done, None);
     assert_eq!(defaults.tab_name, None);
+    assert_eq!(defaults.workspace_name, "{repo}");
     let settings = stack(
-        "[herdr]\nenabled = false\nnew_tab = false\n",
+        "[herdr]\nenabled = false\nnew_tab = false\nworkspace_name = 'work'\n",
         "[herdr]\nnew_tab = true\nclose_when_done = false\n",
         "",
     )
@@ -201,6 +202,7 @@ fn herdr_defaults_and_options_resolve_independently() {
     .herdr;
     assert!(!settings.enabled && settings.new_tab);
     assert_eq!(settings.close_when_done, Some(false));
+    assert_eq!(settings.workspace_name, "work");
 }
 
 #[test]
@@ -224,7 +226,9 @@ fn rex_defaults_and_options_resolve_independently() {
     assert_eq!(settings.rex.session_name, "work");
     assert_eq!(settings.rex.placement, config::repo::RexPlacement::Split);
     assert_eq!(settings.rex.close_when_done, Some(false));
-    assert!(toml::from_str::<Config>("default_host = 'herdr'\n").is_err());
+    let herdr = stack("default_host = 'herdr'\n", "", "").resolve().unwrap();
+    assert_eq!(herdr.default_host, config::repo::DefaultHost::Herdr);
+    assert!(toml::from_str::<Config>("default_host = 'tmux'\n").is_err());
     assert!(toml::from_str::<Config>("[rex]\nplacement = 'tab'\n").is_err());
 }
 
@@ -422,6 +426,7 @@ fn every_option_survives_layering_in_both_directions() {
         herdr.enabled.is_some(),
         herdr.tab_name.is_some(),
         herdr.new_tab.is_some(),
+        herdr.workspace_name.is_some(),
         herdr.close_when_done.is_some(),
         default_host.is_some(),
         rex.enabled.is_some(),

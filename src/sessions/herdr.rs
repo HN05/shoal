@@ -11,7 +11,7 @@ use tokio::process::Command;
 use crate::subprocess::Run;
 
 /// The variable naming the `herdr` that reaches the server of a pane.
-const BIN_PATH: &str = "HERDR_BIN_PATH";
+pub(crate) const BIN_PATH: &str = "HERDR_BIN_PATH";
 
 /// The variables naming the Herdr server a pane runs in, most specific first.
 pub(crate) const SERVER_VARS: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION"];

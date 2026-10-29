@@ -143,6 +143,7 @@ impl Configured {
             settings,
             match settings.default_host {
                 DefaultHost::Zmx => HostName::Zmx,
+                DefaultHost::Herdr => HostName::Herdr,
                 DefaultHost::Rex => HostName::Rex,
             },
         );

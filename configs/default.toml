@@ -42,7 +42,8 @@ root_dir = "~/shoal"
 close_when_done = true
 
 # Where launches from a terminal outside Herdr and Rex run: detached zmx
-# sessions ("zmx"), or windows on the local Rex server ("rex").
+# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
+# local Rex server ("rex").
 default_host = "zmx"
 
 # Prompt templates normally live beside this file as worker-template.md and
@@ -116,6 +117,8 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 enabled = true
 # Run issue/add in a new tab inside Herdr, after interactive choices.
 new_tab = true
+# The workspace for tabs Shoal opens outside a Herdr pane.
+workspace_name = "{repo}"
 # Override the top-level close_when_done for Herdr tabs.
 # close_when_done = true
 # tab_name = "{repo}: {branch}"

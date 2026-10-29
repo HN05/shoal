@@ -748,9 +748,10 @@ from the caller's own place passes it to the host, so queued starts and starts
 without one open windows. A block beside others carries its own label, and
 Shoal renames a window only while the block it opened is alone there, so a
 split never renames the user's window. A terminal no host
-serves goes to `default_host`, zmx unless set to Rex, whose windows then join the
-session `rex.session_name` names; generic code reads the setting and renders
-the name, and a host only finds or creates a group by label. Shoal remembers
+serves goes to `default_host`, zmx unless set to Herdr or Rex, whose places
+then join the group the host's config names, `herdr.workspace_name` or
+`rex.session_name`; generic code reads the setting and renders the name, and a
+host only finds or creates a group by label. Shoal remembers
 every place as one host-neutral origin record: the host, its group and place,
 host-defined data, and whether Shoal created the place. The place is the one ID
 a host names it by, for its watcher as well: a Herdr place is the pane, whose
