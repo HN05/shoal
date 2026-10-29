@@ -33,3 +33,38 @@ fn selected_numbers_name_one_kind() {
     ));
     assert!(selected.kind_of(remote, 5).is_err());
 }
+
+#[test]
+fn linked_items_list_each_url_once_with_its_title() {
+    let item = |kind, url: &str, title: Option<&str>| LinkedItem {
+        kind,
+        url: url.into(),
+        title: title.map(Into::into),
+    };
+    let links = WorkspaceLinks {
+        issue: Some("https://forge/o/r/issues/1".into()),
+        issue_title: None,
+        prs: vec!["https://forge/o/r/pulls/2".into()],
+        opened: vec![
+            item(ItemKind::Pr, "https://forge/o/r/pulls/2", Some("Fix it")),
+            item(ItemKind::Issue, "https://forge/o/r/issues/3", None),
+        ],
+        related: vec![item(
+            ItemKind::Issue,
+            "https://forge/o/r/issues/1",
+            Some("Broken"),
+        )],
+    };
+    assert_eq!(
+        links.items(),
+        [
+            item(
+                ItemKind::Issue,
+                "https://forge/o/r/issues/1",
+                Some("Broken")
+            ),
+            item(ItemKind::Pr, "https://forge/o/r/pulls/2", Some("Fix it")),
+            item(ItemKind::Issue, "https://forge/o/r/issues/3", None),
+        ]
+    );
+}

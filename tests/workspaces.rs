@@ -9685,7 +9685,7 @@ fn menu_bindings_preserve_enter_status_cancel_and_scope() {
     fs::create_dir_all(&bin).unwrap();
     let picker = bin.join("fzf");
     for scoped in [false, true] {
-        for key in ["", "ctrl-o", "ctrl-z", "cancel"] {
+        for key in ["", "ctrl-o", "ctrl-v", "ctrl-z", "cancel"] {
             install_test_script(
                 &picker,
                 format!(
@@ -9728,17 +9728,18 @@ head -n 1 "$HOME/picker-input"
             let (unbound, header) = if scoped {
                 (
                     Some("ctrl-t,ctrl-a,ctrl-s,ctrl-d"),
-                    "enter: cd   ctrl-f: diff   ctrl-e: execute   ctrl-o: status",
+                    "enter: cd   ctrl-f: diff   ctrl-v: view   ctrl-e: execute   ctrl-o: status",
                 )
             } else {
                 (
                     None,
-                    "enter: cd   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-a: add   ctrl-e: execute   ctrl-o: status   ctrl-s: stop   ctrl-d: delete",
+                    "enter: cd   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-v: view   ctrl-a: add   ctrl-e: execute   ctrl-o: status   ctrl-s: stop   ctrl-d: delete",
                 )
             };
             assert!(args.contains(&format!("--header\n{header}\n")), "{args}");
             let binds: String = [
-                "enter", "ctrl-t", "ctrl-f", "ctrl-a", "ctrl-e", "ctrl-o", "ctrl-s", "ctrl-d",
+                "enter", "ctrl-t", "ctrl-f", "ctrl-v", "ctrl-a", "ctrl-e", "ctrl-o", "ctrl-s",
+                "ctrl-d",
             ]
             .iter()
             .map(|key| format!("--bind\n{key}:print({key})+accept\n"))
@@ -9758,6 +9759,13 @@ head -n 1 "$HOME/picker-input"
                 "ctrl-z" => {
                     assert!(!output.status.success());
                     assert!(transcript.contains("unknown picker action"), "{transcript}");
+                }
+                "ctrl-v" => {
+                    assert!(!output.status.success());
+                    assert!(
+                        transcript.contains("the workspace links no issue or PR"),
+                        "{transcript}"
+                    );
                 }
                 _ => {
                     assert!(output.status.success(), "{transcript}");
@@ -9855,7 +9863,7 @@ esac
     );
     let to_notifications = next("work> ");
     assert!(
-        to_notifications.starts_with("unbind(ctrl-t,ctrl-f,ctrl-e,ctrl-s,ctrl-d)+")
+        to_notifications.starts_with("unbind(ctrl-t,ctrl-f,ctrl-v,ctrl-e,ctrl-s,ctrl-d)+")
             && to_notifications.ends_with("internal menu-rows notifications\n"),
         "{to_notifications}"
     );
@@ -9930,7 +9938,7 @@ esac
     assert!(args.contains("--prompt\ninbox> \n"), "{args}");
     assert!(
         args.contains(
-            "--header\nenter: act   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-a: add   ctrl-o: status\n"
+            "--header\nenter: act   tab: next view   ctrl-t: attach   ctrl-f: diff   ctrl-v: view   ctrl-a: add   ctrl-o: status\n"
         ),
         "{args}"
     );
@@ -15828,6 +15836,29 @@ fn view_shows_linked_items_with_status_and_discussion() {
         text.contains("src/a.rs:3 · bot · t3 · comment 21 · unresolved"),
         "{text}"
     );
+
+    // Ctrl-V in the picker views one of the workspace's items, chosen
+    // among them.
+    install_test_script(
+        bin.join("fzf"),
+        r#"#!/bin/sh
+cat > "$HOME/picker-input"
+case "$*" in
+*'View> '*) cp "$HOME/picker-input" "$HOME/view-rows"; grep /pull/ "$HOME/picker-input" ;;
+*) echo ctrl-v; head -n 1 "$HOME/picker-input" ;;
+esac
+"#,
+    );
+    let (output, transcript) = fixture.terminal_command(fixture.command().arg("work"), "", true);
+    assert!(output.status.success(), "{transcript}");
+    let rows = fs::read_to_string(root.join("view-rows")).unwrap();
+    assert_eq!(rows.lines().count(), 2, "{rows}");
+    assert!(
+        rows.contains("Issue") && rows.contains("Crash") && rows.contains("PR"),
+        "{rows}"
+    );
+    assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
+    assert!(!transcript.contains("Same here"), "{transcript}");
 
     // An unreadable item reports its error and fails the command.
     let missing = fixture.run(&["--json", "view", "issue", "9", "--workspace", "view"]);

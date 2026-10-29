@@ -37,6 +37,8 @@ use crate::{
     },
     daemon::notifications::Notification,
     env,
+    forge::items::link::ItemKind,
+    model::LinkedItem,
     protocol::{ConfigTarget, NotificationMethod},
 };
 
@@ -56,14 +58,16 @@ enum Key {
     Stop,
     Attach,
     Diff,
+    View,
 }
 
 impl Key {
     /// Every key, in the order headers list them: by how often each is used.
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 9] = [
         Self::Enter,
         Self::Attach,
         Self::Diff,
+        Self::View,
         Self::Add,
         Self::Execute,
         Self::Status,
@@ -82,6 +86,7 @@ impl Key {
             Self::Stop => "ctrl-s",
             Self::Attach => "ctrl-t",
             Self::Diff => "ctrl-f",
+            Self::View => "ctrl-v",
         }
     }
 
@@ -96,6 +101,7 @@ impl Key {
             Self::Stop => "stop",
             Self::Attach => "attach",
             Self::Diff => "diff",
+            Self::View => "view",
         }
     }
 
@@ -112,7 +118,7 @@ impl Key {
     fn allowed_scoped(self) -> bool {
         matches!(
             self,
-            Self::Enter | Self::Execute | Self::Status | Self::Diff
+            Self::Enter | Self::Execute | Self::Status | Self::Diff | Self::View
         )
     }
 }
@@ -707,9 +713,68 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             session: None,
         }),
         Key::Diff => Command::Changes(ChangesCommand::Diff { workspace }),
+        Key::View => view_command(ctx, workspace).await?,
         Key::Execute => execute_command(ctx, workspace).await?,
         Key::Add => add(),
     })
+}
+
+/// View one of the issues and PRs `workspace` links, choosing it when
+/// there are several.
+async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
+    let workspace = workspace.context("select a workspace to view its issues and PRs")?;
+    let items = linked_items(ctx, &workspace).await?;
+    let url = match items.as_slice() {
+        [] => anyhow::bail!("the workspace links no issue or PR"),
+        [item] => item.url.clone(),
+        items => pick_linked(ctx, items)?,
+    };
+    Ok(Command::Items(ItemsCommand::View {
+        items: ItemArgs {
+            kind_or_url: Some(url),
+            item: None,
+            workspace: Some(workspace),
+        },
+        no_comments: false,
+        check: None,
+    }))
+}
+
+/// The issues and PRs `workspace` links.
+async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>> {
+    Ok(client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|record| record.id == workspace)
+        .with_context(|| format!("unknown workspace: {workspace}"))?
+        .links
+        .items())
+}
+
+/// The URL of one of `items`, listed by kind and title.
+fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<String> {
+    let cells = items
+        .iter()
+        .map(|item| {
+            let kind = match item.kind {
+                ItemKind::Issue => "Issue",
+                ItemKind::Pr => "PR",
+            };
+            [
+                (kind.to_owned(), Some(Style::Heading)),
+                (item.title.clone().unwrap_or_default(), None),
+                (item.url.clone(), Some(Style::Muted)),
+            ]
+        })
+        .collect();
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 1, width });
+    let labels = ui::aligned_to(cells, Palette::picker(), limit);
+    let choices: Vec<_> = items
+        .iter()
+        .map(|item| item.url.clone())
+        .zip(labels.iter().map(String::as_str))
+        .collect();
+    ui::pick_choice(ctx, "View> ", &choices)
 }
 
 #[derive(Clone)]

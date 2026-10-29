@@ -555,7 +555,8 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
-the diff, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
+the diff, Ctrl-V shows a linked issue or PR with `shoal view`, choosing one when
+the workspace links several, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal work --print`, like a filter, `--json` or output that is not a terminal,
@@ -577,7 +578,7 @@ Shoal directory that no workspace owns. There Enter answers a question, approves
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, and adopts an untracked worktree
-with [`shoal work adopt`](#adopting-a-worktree); Ctrl-T, Ctrl-O and Ctrl-F act on the row's
+with [`shoal work adopt`](#adopting-a-worktree); Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
 `kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo` or

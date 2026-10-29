@@ -147,6 +147,33 @@ pub struct WorkspaceLinks {
     pub related: Vec<LinkedItem>,
 }
 
+impl WorkspaceLinks {
+    /// Every linked item once: the assigned issue and PRs, then those opened
+    /// and related.
+    pub fn items(&self) -> Vec<LinkedItem> {
+        use crate::forge::items::link::ItemKind;
+        let issue = self.issue.iter().map(|url| LinkedItem {
+            kind: ItemKind::Issue,
+            url: url.clone(),
+            title: self.issue_title.clone(),
+        });
+        let prs = self.prs.iter().map(|url| LinkedItem {
+            kind: ItemKind::Pr,
+            url: url.clone(),
+            title: None,
+        });
+        let recorded = self.opened.iter().chain(&self.related).cloned();
+        let mut items: Vec<LinkedItem> = Vec::new();
+        for item in issue.chain(prs).chain(recorded) {
+            match items.iter_mut().find(|known| known.url == item.url) {
+                Some(known) => known.title = known.title.take().or(item.title),
+                None => items.push(item),
+            }
+        }
+        items
+    }
+}
+
 crate::state::states!(
     /// How an issue or PR relates to a workspace.
     Relation: ValueEnum {
