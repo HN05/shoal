@@ -33,6 +33,7 @@ pub(super) async fn run(
             workspace,
             state,
             session,
+            turn_end: None,
         },
     )
     .await?;
@@ -58,6 +59,7 @@ pub(super) async fn turn_failed(
             failure,
             session: session_of(&event),
             execution: None,
+            turn_end: Default::default(),
         },
     )
     .await?;

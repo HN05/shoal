@@ -335,7 +335,11 @@ async fn inspect(
             "topic".into(),
             WorkspaceState::Ready,
         );
-        workspace.agent_state = turn.map(|state| AgentStatus { state, since: 0 });
+        workspace.agent_state = turn.map(|state| AgentStatus {
+            state,
+            since: 0,
+            prompt_cache_expires_at: None,
+        });
         let inspection = Inspection {
             workspace,
             completion: completion.map(|cleanup| Completion {

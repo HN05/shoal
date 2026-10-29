@@ -181,6 +181,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             workspace: target.clone(),
             state: AgentState::Waiting,
             session: None,
+            turn_end: None,
         };
         assert_eq!(
             scope::authorize(&manager, Some("scope"), &mut method)
@@ -197,6 +198,7 @@ async fn scoped_callers_report_only_for_their_own_workspace() {
             failure: TurnFailure::Overloaded,
             session: None,
             execution,
+            turn_end: Default::default(),
         };
         assert_eq!(
             scope::authorize(&manager, Some("scope"), &mut method)
@@ -223,7 +225,13 @@ async fn a_failed_turn_leaves_the_agent_idle() {
         .await
         .unwrap();
     let status = manager
-        .report_turn_failure(&workspace.name, TurnFailure::Overloaded, None, None)
+        .report_turn_failure(
+            &workspace.name,
+            TurnFailure::Overloaded,
+            None,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(status.state, AgentState::Idle);
@@ -277,4 +285,75 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
         !record_path(&manager.paths, &workspace.id, "exited").exists(),
         "a turn alone must not make a recovery record"
     );
+}
+
+#[tokio::test]
+async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_again() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&manager, &temp).await;
+    let hour = TurnEnd {
+        prompt_cache_secs: Some(3600),
+    };
+    let ended = manager
+        .end_agent_turn(&workspace.name, None, None, hour)
+        .await
+        .unwrap();
+    assert_eq!(ended.state, AgentState::Idle);
+    assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 3600));
+    // Another idle report, such as an idle prompt's, keeps the expiry.
+    let repeated = manager
+        .set_agent_state(&workspace.name, AgentState::Idle, None, None)
+        .await
+        .unwrap();
+    assert_eq!(repeated, ended);
+    // Working drops it, and idle without an ended turn knows none.
+    for state in [AgentState::Working, AgentState::Idle] {
+        let status = manager
+            .set_agent_state(&workspace.name, state, None, None)
+            .await
+            .unwrap();
+        assert_eq!(status.prompt_cache_expires_at, None, "{state:?}");
+    }
+    // A turn whose agent knows no lifetime leaves it unknown.
+    let unknown = manager
+        .end_agent_turn(&workspace.name, None, None, TurnEnd::default())
+        .await
+        .unwrap();
+    assert_eq!(unknown.prompt_cache_expires_at, None);
+}
+
+#[tokio::test]
+async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
+    let (temp, manager) = manager().await;
+    manager.publish_config(crate::test_support::global_config(
+        "[ai.claude]\nprompt_cache_minutes = 5\n",
+    ));
+    let workspace = workspace(&manager, &temp).await;
+    let started = manager
+        .begin_execution(
+            &workspace.id,
+            None,
+            super::super::ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &started.plan.id,
+            "claude",
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    let reported = TurnEnd {
+        prompt_cache_secs: Some(3600),
+    };
+    let ended = manager
+        .end_agent_turn(&workspace.name, Some(started.plan.id), None, reported)
+        .await
+        .unwrap();
+    assert_eq!(ended.prompt_cache_expires_at, Some(ended.since + 300));
 }

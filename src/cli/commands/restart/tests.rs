@@ -120,6 +120,7 @@ fn only_an_agents_own_report_makes_it_idle() {
     shared_state.agent_state = Some(AgentStatus {
         state: AgentState::Idle,
         since: 0,
+        prompt_cache_expires_at: None,
     });
     let working = RunningAgent {
         execution: "working".into(),

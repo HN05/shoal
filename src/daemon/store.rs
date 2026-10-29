@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 80;
+const SCHEMA_VERSION: i64 = 81;
 
 #[cfg(test)]
 mod benchmark;
@@ -423,11 +423,16 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (78, EXECUTION_AGENTS, None),
     (79, include_str!("store/execution_unretried_turns.sql"), None),
     (80, "", Some(place_servers::key_by_server)),
+    (81, PROMPT_CACHE_EXPIRY, None),
 ];
 
 /// The agent each execution runs, which keeps its reported session once the
 /// execution ends without a stop of its own, as at a reboot.
 const EXECUTION_AGENTS: &str = "ALTER TABLE executions ADD COLUMN agent TEXT;";
+
+/// When the prompt cache of an agent idle since a turn ended expires.
+const PROMPT_CACHE_EXPIRY: &str =
+    "ALTER TABLE workspace_agent_state ADD COLUMN prompt_cache_expires_at INTEGER;";
 
 /// Restores Shoal queued on its own, as after a signal stop, rather than
 /// `shoal resume`: one of an agent stopped between turns waits for an update.

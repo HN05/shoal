@@ -1363,6 +1363,12 @@ message hooks (Happy sessions do not), so the agents' own configuration stays th
 user's; an interrupted Claude Code turn has no hook and ends with Claude Code's
 idle-prompt notification, while an interrupted Codex turn stays working until
 its next turn ends.
+An idle report that ends a turn also starts the agent's prompt cache lifetime,
+which each request renews, so Shoal knows when an idle agent's next turn would
+write its whole conversation to the cache again. The AI tool's configured
+lifetime wins, then the one the agent's own settings give, which only its hook
+reads from the environment the agent runs with, then the built-in tool's; a
+tool with none shows none rather than a guess.
 
 A chat is a conversation with an agent about a repository, not an assignment,
 so it runs in the registered checkout with the user's authority instead of in a

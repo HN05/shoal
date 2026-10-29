@@ -951,6 +951,12 @@ turns ends normally. A pending retry outlasts a daemon restart;
 `status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,
 `due_at` and `delivered`.
 
+`prompt_cache_minutes` sets how long a tool's prompt cache lives after its last
+request, which `status` uses to show when an idle agent's
+[cache expires](#agent-state); a tool's launch profiles inherit it unless they
+set their own. Without it, Codex's is 30 minutes, the least OpenAI keeps a
+GPT-5.6 or later cache, and other tools have none.
+
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
 `[proxy.<name>]`, the base URL the agent would otherwise use:
@@ -2957,7 +2963,11 @@ two seconds without input. `work` and `status` show
 `working`, `needs input` for `waiting`, or `waiting` for `idle`, since an idle
 agent waits for the user or for activity that [wakes it](#agent-messages); `status`,
 `inspect` and `work --json` give `agent_state` with `state` and the Unix-seconds
-`since` it began. A state
+`since` it began. An idle report that ends a turn starts the agent's prompt cache
+lifetime: until the agent works again, `status` shows `Prompt cache` with when
+the cache expires, and the JSON adds `prompt_cache_expires_at` in Unix seconds.
+The lifetime is the AI tool's [`prompt_cache_minutes`](#agents), else what the
+agent's own settings give, else the built-in tool's; without one, none shows. A state
 reported from a tracked execution shows only while that execution runs, so an
 agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next

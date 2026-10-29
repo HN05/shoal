@@ -274,6 +274,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 80 {
         super::place_servers::key_by_server(&db)?;
     }
+    if version >= 81 {
+        db.execute_batch(PROMPT_CACHE_EXPIRY)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

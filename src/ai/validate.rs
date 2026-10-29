@@ -34,6 +34,14 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
             agent.retry.is_none() || runs_as_agent(agents, name),
             "ai.{name}.retry needs a command or base, or a built-in AI tool"
         );
+        ensure!(
+            agent.prompt_cache_minutes.is_none() || runs_as_agent(agents, name),
+            "ai.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
+        );
+        ensure!(
+            agent.prompt_cache_minutes != Some(0),
+            "ai.{name}.prompt_cache_minutes must be at least 1"
+        );
         for (key, argv, placeholders) in [
             (
                 "instructions",

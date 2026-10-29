@@ -98,7 +98,13 @@ async fn retry(manager: &Manager, workspace: &Workspace) -> Option<TurnRetry> {
 
 async fn fail(manager: &Manager, workspace: &Workspace, execution: &str, failure: TurnFailure) {
     let status = manager
-        .report_turn_failure(&workspace.name, failure, Some(execution.into()), None)
+        .report_turn_failure(
+            &workspace.name,
+            failure,
+            Some(execution.into()),
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     assert_eq!(status.state, AgentState::Idle);

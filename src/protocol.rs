@@ -46,7 +46,7 @@ mod secrets;
 mod simulators;
 mod workspaces;
 
-pub use agents::AgentMethod;
+pub use agents::{AgentMethod, TurnEnd};
 pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
 pub use chats::ChatMethod;
@@ -68,7 +68,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 151;
+pub const VERSION: u32 = 152;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.

@@ -52,6 +52,9 @@ pub struct Agent {
     /// Whether Shoal retries a turn an API failure ended, for an agent whose
     /// integration reports failed turns.
     pub retry: Option<bool>,
+    /// How many minutes the tool's prompt cache lives after its last
+    /// request, over what its own settings give.
+    pub prompt_cache_minutes: Option<u64>,
     /// The `[proxy.<name>]` the tool's tracked agents reach their API through.
     pub proxy: Option<String>,
 }

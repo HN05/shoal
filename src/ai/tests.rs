@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
+    time::Duration,
 };
 
 use super::*;
@@ -312,4 +313,37 @@ fn launch_profiles_need_a_reachable_base_and_valid_variables() {
     }
     // Built-in tools take an environment of their own.
     parse("[ai.claude]\nenv_remove = ['ANTHROPIC_BASE_URL']\n").unwrap();
+}
+
+#[test]
+fn prompt_cache_lifetime_prefers_configured_then_reported_then_built_in() {
+    let agents = parse(
+        "[ai.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n\
+         [ai.claude-shorter]\nbase = 'claude-short'\n\
+         [ai.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n",
+    )
+    .unwrap();
+    let minutes = |minutes: u64| Some(Duration::from_secs(minutes * 60));
+    assert_eq!(agents["claude"].prompt_cache(None), None);
+    assert_eq!(agents["claude"].prompt_cache(minutes(60)), minutes(60));
+    assert_eq!(
+        agents["claude-shorter"].prompt_cache(minutes(60)),
+        minutes(5)
+    );
+    assert_eq!(agents["codex"].prompt_cache(None), minutes(30));
+    assert_eq!(agents["codex-long"].prompt_cache(None), minutes(720));
+    assert_eq!(agents["pi"].prompt_cache(None), None);
+    for (config, message) in [
+        (
+            "[ai.notes]\nprompt_cache_minutes = 5\n",
+            "needs a command or base",
+        ),
+        (
+            "[ai.codex]\nprompt_cache_minutes = 0\n",
+            "must be at least 1",
+        ),
+    ] {
+        let error = format!("{:#}", parse(config).unwrap_err());
+        assert!(error.contains(message), "{config}: {error}");
+    }
 }

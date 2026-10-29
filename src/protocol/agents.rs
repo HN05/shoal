@@ -7,12 +7,15 @@ use super::Lifetime;
 #[serde(rename_all = "snake_case")]
 pub enum AgentMethod {
     /// The caller's execution, when scoped, is recorded as the reporter,
-    /// and `session` as the agent session it resumes.
+    /// and `session` as the agent session it resumes. `turn_end` comes with
+    /// an idle report that ends a turn.
     SetAgentState {
         workspace: String,
         state: crate::state::AgentState,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_end: Option<TurnEnd>,
     },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
     /// schedule a retry of the turn. An unscoped caller, such as the wrapper
@@ -25,6 +28,8 @@ pub enum AgentMethod {
         session: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         execution: Option<String>,
+        #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]
+        turn_end: TurnEnd,
     },
     /// The retry the proxy of `execution` waits to make, which its wrapper
     /// reports; `None` once the proxy succeeded or gave up.
@@ -75,6 +80,22 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         messages: Vec<i64>,
     },
+}
+
+/// What an agent reports when a turn ends.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TurnEnd {
+    /// How long its prompt cache lives after the turn, as its own settings
+    /// give it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_secs: Option<u64>,
+}
+
+impl TurnEnd {
+    /// Whether it reports nothing beyond the turn's end.
+    fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl AgentMethod {

@@ -1,14 +1,17 @@
 //! The daemon's answers to [`AgentMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 
 use super::super::{
     answer::Answer,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::protocol::{AgentMethod, Body};
+use crate::{
+    protocol::{AgentMethod, Body},
+    state::AgentState,
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -37,19 +40,35 @@ pub(super) async fn handle(
             workspace,
             state,
             session,
-        } => Body::AgentStatus(
-            manager
-                .set_agent_state(&workspace, state, execution(caller), session)
-                .await?,
-        ),
+            turn_end,
+        } => Body::AgentStatus(match turn_end {
+            Some(turn_end) => {
+                ensure!(state == AgentState::Idle, "only an idle report ends a turn");
+                manager
+                    .end_agent_turn(&workspace, execution(caller), session, turn_end)
+                    .await?
+            }
+            None => {
+                manager
+                    .set_agent_state(&workspace, state, execution(caller), session)
+                    .await?
+            }
+        }),
         AgentMethod::ReportTurnFailure {
             workspace,
             failure,
             session,
             execution: reported,
+            turn_end,
         } => Body::AgentStatus(
             manager
-                .report_turn_failure(&workspace, failure, execution(caller).or(reported), session)
+                .report_turn_failure(
+                    &workspace,
+                    failure,
+                    execution(caller).or(reported),
+                    session,
+                    turn_end,
+                )
                 .await?,
         ),
         AgentMethod::ReportUpstreamReset {

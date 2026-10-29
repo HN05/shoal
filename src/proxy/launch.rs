@@ -359,6 +359,7 @@ impl Reporter {
             failure,
             session: None,
             execution: Some(self.execution.clone()),
+            turn_end: Default::default(),
         })
         .await;
     }

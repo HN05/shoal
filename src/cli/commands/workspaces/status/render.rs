@@ -118,6 +118,12 @@ fn render_activity(view: &StatusView, palette: Palette) {
             .agent_state
             .map_or("none", |status| { ui::agent_state_label(status.state) })
     );
+    if let Some(expires_at) = workspace
+        .agent_state
+        .and_then(|status| status.prompt_cache_expires_at)
+    {
+        outln!("Prompt cache:  {}", prompt_cache_label(expires_at));
+    }
     if let Some(retry) = &status.proxy_retry {
         outln!("API retry:     {}", proxy_retry_label(retry));
     }
@@ -287,6 +293,18 @@ fn proxy_retry_label(retry: &crate::daemon::workspace::proxy_retries::ProxyRetry
         retry.attempt,
         retry.next_at.saturating_sub(now).max(0)
     )
+}
+
+/// When the idle agent's prompt cache expires, or expired, as `status`
+/// shows it.
+fn prompt_cache_label(expires_at: i64) -> String {
+    let now = i64::try_from(crate::time::unix_seconds()).unwrap_or(i64::MAX);
+    let at = crate::time::local_minutes(expires_at);
+    if expires_at > now {
+        format!("expires at {at}")
+    } else {
+        format!("expired at {at}")
+    }
 }
 
 /// A pending retry of the agent's failed turn as `status` shows it.

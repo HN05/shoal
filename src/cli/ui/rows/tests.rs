@@ -224,7 +224,13 @@ fn workspace_rows_align_status_and_titles() {
     workspaces[4].running = true;
     workspaces[4].review = vec![mark(false)];
     workspaces[5].review = vec![mark(true)];
-    let agent = |state| Some(crate::model::AgentStatus { state, since: 0 });
+    let agent = |state| {
+        Some(crate::model::AgentStatus {
+            state,
+            since: 0,
+            prompt_cache_expires_at: None,
+        })
+    };
     // Needing input outranks completion, which outranks a current mark
     // and other turn states.
     workspaces.extend([

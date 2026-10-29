@@ -309,6 +309,10 @@ pub struct ReviewMark {
 pub struct AgentStatus {
     pub state: AgentState,
     pub since: i64,
+    /// When the prompt cache of an agent idle since a turn ended expires,
+    /// in Unix seconds, for an AI tool whose cache lifetime is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_cache_expires_at: Option<i64>,
 }
 
 /// A caller-named claim that a workspace is still in use.

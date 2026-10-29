@@ -3,6 +3,7 @@
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use anyhow::Result;
@@ -41,6 +42,10 @@ pub struct Tool {
     /// The `[proxy.<name>]` its tracked agents reach their API through: the
     /// one named nearest in its lineage.
     pub proxy: Option<String>,
+    /// `prompt_cache_minutes` configured nearest in its lineage.
+    configured_prompt_cache: Option<Duration>,
+    /// The built-in tool's prompt cache lifetime.
+    default_prompt_cache: Option<Duration>,
 }
 
 /// What a tool's launcher takes besides its command, which `[commands]` may
@@ -70,6 +75,15 @@ enum SkillDir {
 }
 
 impl Tool {
+    /// How long its prompt cache lives after a turn whose agent `reported`
+    /// the lifetime its own settings give: as configured, else as reported,
+    /// else the built-in tool's.
+    pub fn prompt_cache(&self, reported: Option<Duration>) -> Option<Duration> {
+        self.configured_prompt_cache
+            .or(reported)
+            .or(self.default_prompt_cache)
+    }
+
     /// The tool's user-level skill directory for a launch from this process;
     /// `None` when it has none.
     pub fn skill_dir(&self, home: &Path) -> Result<Option<PathBuf>> {
@@ -143,6 +157,11 @@ fn tool(entries: &Agents, name: &str) -> Tool {
         skill_dir: skill_directory(&configured, builtin),
         retry: retries(&configured, integration),
         proxy: configured.iter().find_map(|agent| agent.proxy.clone()),
+        configured_prompt_cache: configured
+            .iter()
+            .find_map(|agent| agent.prompt_cache_minutes)
+            .map(|minutes| Duration::from_secs(minutes * 60)),
+        default_prompt_cache: builtin.and_then(|provider| provider.prompt_cache),
     }
 }
 
