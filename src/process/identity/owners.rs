@@ -34,33 +34,71 @@ pub(super) struct Evidence {
 }
 
 #[derive(Default)]
-pub(super) struct Owners(Mutex<HashMap<u64, Evidence>>);
+pub(super) struct Owners(Mutex<Memory>);
+
+#[derive(Default)]
+struct Memory {
+    entries: HashMap<u64, Entry>,
+    /// How many inventories have updated the memory.
+    inventories: u64,
+}
+
+struct Entry {
+    evidence: Evidence,
+    /// The inventory that last named the process.
+    named: u64,
+}
 
 impl Owners {
     pub(super) fn recall(&self, unique: u64) -> Option<Evidence> {
-        let owners = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        owners.get(&unique).cloned()
+        let memory = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        memory
+            .entries
+            .get(&unique)
+            .map(|entry| entry.evidence.clone())
     }
 
     /// Record an inventory's evidence over what earlier ones told, except an
-    /// inference over a reading of the process itself, and forget what no
-    /// process in `live` names as itself or its parent any more, which no
-    /// process can name again.
+    /// inference over a reading of the process itself, and forget what
+    /// neither it nor the inventory before it named, as no process in `live`
+    /// names it as itself or its parent: a process that forked and exited
+    /// between one inventory's listing and its reading leaves a child only the
+    /// next inventory lists, and after that no process can name it again.
     pub(super) fn update(&self, evidence: Vec<(u64, Evidence)>, live: &HashSet<u64>) {
-        let mut owners = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        owners.retain(|unique, _| live.contains(unique));
+        let mut memory = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        memory.inventories += 1;
+        let now = memory.inventories;
+        for unique in live {
+            if let Some(entry) = memory.entries.get_mut(unique) {
+                entry.named = now;
+            }
+        }
+        memory.entries.retain(|_, entry| entry.named + 1 >= now);
         for (unique, evidence) in evidence {
-            if owners
-                .get(&unique)
-                .is_none_or(|recorded| evidence.direct || !recorded.direct)
-            {
-                owners.insert(unique, evidence);
+            match memory.entries.get_mut(&unique) {
+                Some(entry) if !evidence.direct && entry.evidence.direct => entry.named = now,
+                Some(entry) => {
+                    *entry = Entry {
+                        evidence,
+                        named: now,
+                    }
+                }
+                None => {
+                    memory.entries.insert(
+                        unique,
+                        Entry {
+                            evidence,
+                            named: now,
+                        },
+                    );
+                }
             }
         }
     }
 
     #[cfg(test)]
     pub(super) fn len(&self) -> usize {
-        self.0.lock().unwrap_or_else(PoisonError::into_inner).len()
+        let memory = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        memory.entries.len()
     }
 }

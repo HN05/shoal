@@ -320,13 +320,16 @@ fn owners_are_forgotten_once_no_live_process_names_them() -> Result<()> {
     )
     .attribute(Marker::Execution, &ids)?;
     assert_eq!(owners.len(), 3);
-    // The next inventory sees only the adopted job, which names itself and
-    // its exited shell.
-    inventory(&owners, [unique(observed(12, 1, true, Hidden), 102, 101)])
-        .attribute(Marker::Execution, &ids)?;
+    // The next inventories see only the adopted job, which names itself and
+    // its exited shell; the agent goes after the second.
+    let adopted = || inventory(&owners, [unique(observed(12, 1, true, Hidden), 102, 101)]);
+    adopted().attribute(Marker::Execution, &ids)?;
+    assert!(owners.recall(100).is_some());
+    adopted().attribute(Marker::Execution, &ids)?;
     assert_eq!(owners.len(), 2);
     assert!(owners.recall(100).is_none());
     // Once the job has exited too, nothing can name them again.
+    inventory(&owners, []).attribute(Marker::Execution, &ids)?;
     inventory(&owners, []).attribute(Marker::Execution, &ids)?;
     assert_eq!(owners.len(), 0);
     Ok(())
@@ -351,6 +354,27 @@ fn a_process_read_as_no_executions_keeps_no_remembered_owner() -> Result<()> {
     // remembered.
     let later = inventory(&owners, [child(Hidden, 1, true)]);
     assert_eq!(describe(later.resolve(10, &mut HashMap::new())), "foreign");
+    Ok(())
+}
+
+#[test]
+fn a_parent_that_forked_and_exited_between_listing_and_reading_stays_remembered() -> Result<()> {
+    use Evidence::Hidden;
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    inventory(
+        &owners,
+        [unique(observed(10, 9, false, marked("execution")), 100, 90)],
+    )
+    .attribute(Marker::Execution, &ids)?;
+    // Listed, then forked a job and exited before it was read; the job was
+    // born after the listing.
+    inventory(&owners, []).attribute(Marker::Execution, &ids)?;
+    let next = inventory(&owners, [unique(observed(11, 1, true, Hidden), 101, 100)]);
+    assert_eq!(
+        describe(next.resolve(11, &mut HashMap::new())),
+        "owned by execution"
+    );
     Ok(())
 }
 
