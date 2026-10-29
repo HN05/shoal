@@ -53,6 +53,9 @@ impl Manager {
             origin.host
         );
         origin.owned = true;
+        // A record that replaces an earlier instance's does so under the
+        // lock its closes hold.
+        let _ownership = self.place_ownership.lock().await;
         self.store
             .run(move |db| insert_owned(db, &workspace.id, &origin))
             .await
@@ -110,16 +113,19 @@ impl Manager {
 
     /// Forget `place` once it is closed.
     pub(super) async fn forget_owned_place(&self, place: Origin) -> Result<()> {
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM owned_places WHERE host=?1 AND place=?2",
-                    params![place.host, place.id()],
-                )?;
-                Ok(())
-            })
-            .await
+        self.store.run(move |db| forget_owned(db, &place)).await
     }
+}
+
+/// Forget the record of `place`, the instance it names: a later instance
+/// under its ID keeps its own record.
+fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
+    db.execute(
+        "DELETE FROM owned_places WHERE host=?1 AND place=?2
+         AND json_extract(origin,'$.instance') IS ?3",
+        params![place.host, place.id(), place.instance],
+    )?;
+    Ok(())
 }
 
 /// Record `origin` as owned by `workspace` unless that place is recorded
