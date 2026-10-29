@@ -324,7 +324,7 @@ async fn open_execution(
         // A detached command or a demo never runs in the caller's terminal.
         origin: match mode {
             Mode::Detached { .. } | Mode::Demo { .. } => None,
-            _ => crate::cli::terminal::current_origin().map(Box::new),
+            _ => crate::cli::terminal::current_place().await.map(Box::new),
         },
     };
     let kind = mode.kind();

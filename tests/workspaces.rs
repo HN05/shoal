@@ -22887,9 +22887,11 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     let output = fixture.run(&["claude", "persist"]);
     assert!(output.status.success(), "{output:?}");
     let calls = zmx_calls(&fixture);
-    assert_eq!(calls.len(), before + 1);
+    // The execution tells its session apart from a later one under the name.
+    assert_eq!(calls.len(), before + 2, "{calls:?}");
     assert_eq!(calls[before][..2], ["set", "outer"]);
     assert!(calls[before].contains(&format!("shoal.workspace={id}")));
+    assert_eq!(calls[before + 1], ["list"]);
     assert_eq!(
         runs(),
         "persist tracked\npersist-2 tracked\nouter tracked\nnone tracked\n"
@@ -22985,8 +22987,11 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     assert_eq!(started["chat"]["agent"], "claude");
     assert_eq!(started["chat"]["name"], CHAT_NAME);
     let chat_id = started["chat"]["id"].as_str().unwrap();
+    // It tells its session apart from a later one under the name before
+    // recording the chat there.
+    assert_eq!(calls[2], ["list"]);
     assert_eq!(
-        calls[2][..4],
+        calls[3][..4],
         [
             "set",
             session,
@@ -23045,8 +23050,9 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
-    assert_eq!(calls.len(), before + 1);
-    assert_eq!(calls[before][..2], ["set", "outer"]);
+    assert_eq!(calls.len(), before + 2);
+    assert_eq!(calls[before], ["list"]);
+    assert_eq!(calls[before + 1][..2], ["set", "outer"]);
     assert_eq!(
         fs::read_to_string(home.join("chat-sessions")).unwrap(),
         format!("{session}\nouter\n")
@@ -24665,6 +24671,22 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
         fixture.ok(&["status", "failed"])["sessions"],
         serde_json::json!([{"name": "failed", "clients": 0}])
     );
+}
+
+#[test]
+fn a_later_session_under_a_recorded_name_is_not_the_recorded_one() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    let sessions = fixture.root.path().join("zmx-sessions");
+    fs::write(&sessions, "  name=persist\tpid=1\tcreated=10\tclients=0\n").unwrap();
+    let agent = agent_in_session(&fixture, "persist", "persist");
+    let listed = || fixture.ok(&["status", "persist"])["sessions"].clone();
+    assert_eq!(listed(), serde_json::json!([{"name": "persist", "clients": 0}]));
+    // A record left by a wrapper that crashed outlives its session; another
+    // session under the name is not the recorded one.
+    fs::write(&sessions, "  name=persist\tpid=2\tcreated=20\tclients=0\n").unwrap();
+    assert_eq!(listed(), serde_json::json!([]));
+    drop(agent);
 }
 
 #[test]

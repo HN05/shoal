@@ -156,7 +156,7 @@ pub(super) async fn begin(
         &repo,
         &name,
         agent.name(),
-        terminal::current_origin(),
+        terminal::current_place().await,
     )
     .await?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;

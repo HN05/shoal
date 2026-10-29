@@ -530,6 +530,38 @@ pub(crate) fn current_origin() -> Option<Origin> {
     hosts().filter_map(Host::places).find_map(Places::origin)
 }
 
+/// The place this process runs in, as [`current_origin`] names it, with what
+/// tells it apart from a later place under its ID, for the daemon's record of
+/// where an execution or chat runs. Without that, a record left by a process
+/// that crashed would name a later place under the ID. A host that cannot
+/// tell leaves it out, with a warning.
+pub(crate) async fn current_place() -> Option<Origin> {
+    for host in hosts() {
+        if let Some(origin) = host.places().and_then(Places::origin) {
+            return Some(match with_instance(host, origin.clone()).await {
+                Ok(place) => place,
+                Err(error) => {
+                    eprintln!(
+                        "warning: cannot tell this {} place apart: {error:#}",
+                        host.name()
+                    );
+                    origin
+                }
+            });
+        }
+    }
+    None
+}
+
+/// `place` of `host` with what tells it apart from a later place under its
+/// ID, for a host that reuses IDs.
+async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
+    if let Some(watches) = host.watches() {
+        place.instance = watches.place_instance(place.id()).await?;
+    }
+    Ok(place)
+}
+
 /// Whether the place this process runs in closes once `workspace` is
 /// removed, ending anything it streams.
 pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
@@ -694,19 +726,13 @@ pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspa
     let Some(host) = named(host) else {
         return;
     };
-    let Some(mut place) = host.places().and_then(Places::origin) else {
+    let Some(place) = host.places().and_then(Places::origin) else {
         return;
     };
-    if let Some(watches) = host.watches() {
-        match watches.place_instance(place.id()).await {
-            Ok(instance) => place.instance = instance,
-            Err(error) => {
-                eprintln!("warning: cannot record the place Shoal opened: {error:#}");
-                return;
-            }
-        }
+    match with_instance(host, place).await {
+        Ok(place) => record_owned(ctx, workspace, place).await,
+        Err(error) => eprintln!("warning: cannot record the place Shoal opened: {error:#}"),
     }
-    record_owned(ctx, workspace, place).await;
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal
@@ -861,14 +887,15 @@ pub(in crate::cli) async fn sessions(
     Ok(sessions)
 }
 
-/// `places` without repeats of a place: the same ID in the same host and
-/// its data, which tells servers of one host apart.
+/// `places` without repeats of a place: the same ID in the same host, its
+/// data, which tells servers of one host apart, and its instance, which tells
+/// a later place under a reused ID apart.
 fn distinct_places<'a>(places: &[&'a Origin]) -> Vec<&'a Origin> {
     let mut seen = HashSet::new();
     places
         .iter()
         .copied()
-        .filter(|place| seen.insert((place.host, place.id(), &place.data)))
+        .filter(|place| seen.insert((place.host, place.id(), &place.data, &place.instance)))
         .collect()
 }
 
