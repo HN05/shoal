@@ -39,6 +39,19 @@ fn tab_info_reads_the_agent_status() {
 }
 
 #[test]
+fn pane_info_names_the_tab_and_the_agent_status() {
+    let info: PaneInfo = serde_json::from_str(
+        r#"{"id":"cli:pane:get","result":{"pane":{"agent_status":"working","pane_id":"w2:pAS","tab_id":"w2:tAS"},"type":"pane_info"}}"#,
+    )
+    .unwrap();
+    assert_eq!(info.result.pane.tab_id, "w2:tAS");
+    assert_eq!(info.result.pane.agent_status, AgentStatus::Working);
+    let older: PaneInfo =
+        serde_json::from_str(r#"{"result":{"pane":{"tab_id":"w2:t1"}}}"#).unwrap();
+    assert_eq!(older.result.pane.agent_status, AgentStatus::Unknown);
+}
+
+#[test]
 fn a_finished_or_unseen_turn_reads_as_idle() {
     use AgentStatus::*;
     assert_eq!(Idle.turn(), Some(AgentState::Idle));

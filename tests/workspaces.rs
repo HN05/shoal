@@ -1160,24 +1160,24 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("tabbed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    // The tab's watcher records that the tab closes with the workspace,
-    // here under the name a watcher of an earlier release keeps.
+    // The pane's watcher records that its tab closes with the workspace.
     let state = fixture
         .root
         .path()
         .join("state/workspaces")
         .join(workspace["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
-    fs::write(state.join("closing-tab-tab-7"), "").unwrap();
-    let export = |tab: &str| {
+    fs::write(state.join("closing-herdr-w1:p7"), "").unwrap();
+    let export = |pane: &str| {
         fixture
             .command()
             .args(["export", "tabbed", "-o", "-"])
-            .env("HERDR_TAB_ID", tab)
+            .env("HERDR_ENV", "1")
+            .env("HERDR_PANE_ID", pane)
             .output()
             .unwrap()
     };
-    let refused = export("tab-7");
+    let refused = export("w1:p7");
     assert!(!refused.status.success());
     assert!(
         String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
@@ -1185,8 +1185,8 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     );
     assert!(refused.stdout.is_empty());
     assert!(path.exists());
-    // Another tab keeps its stream.
-    let exported = export("tab-8");
+    // Another pane keeps its stream.
+    let exported = export("w1:p8");
     assert!(exported.status.success(), "{exported:?}");
     assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
     assert!(!path.exists());
@@ -11682,11 +11682,12 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         .join("state/workspaces")
         .join(workspaces[1]["id"].as_str().unwrap());
     fs::create_dir_all(&state).unwrap();
-    fs::write(state.join("closing-herdr-tab-7"), "").unwrap();
+    fs::write(state.join("closing-herdr-w1:p7"), "").unwrap();
     let refused = fixture
         .command()
         .args(["rm", "first", "second", "--yes"])
-        .env("HERDR_TAB_ID", "tab-7")
+        .env("HERDR_ENV", "1")
+        .env("HERDR_PANE_ID", "w1:p7")
         .output()
         .unwrap();
     assert!(!refused.status.success());
@@ -11696,7 +11697,7 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         "{stderr}"
     );
     assert!(path(0).exists());
-    fs::remove_file(state.join("closing-herdr-tab-7")).unwrap();
+    fs::remove_file(state.join("closing-herdr-w1:p7")).unwrap();
 
     let (no, prompt) = fixture.interactive(&["rm", "first", "second", "third"], "n\n");
     let prompt = prompt.replace("\r\n", "\n");
@@ -21590,8 +21591,9 @@ import json, os, shlex, sys
 from pathlib import Path
 root = Path(os.environ['HOME'])
 args = sys.argv[1:]
-# Tab watchers poll `tab get`; keep those reads out of the recorded actions.
-log = 'herdr-tab-gets' if args[:2] == ['tab', 'get'] else 'herdr-calls'
+# Place watchers poll `pane get` and `tab get`; keep reads out of the recorded
+# actions.
+log = 'herdr-gets' if args[1:2] == ['get'] else 'herdr-calls'
 with (root / log).open('a') as calls:
     calls.write(json.dumps(args) + '\n')
 if args[:2] == ['tab', 'create']:
@@ -21600,21 +21602,24 @@ elif args[:2] == ['pane', 'run']:
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
-elif args[:2] == ['tab', 'get']:
-    closed = root / 'closed-tabs'
-    if closed.exists() and args[2] in closed.read_text().split():
-        print(json.dumps({'error': {'code': 'tab_not_found'}}))
-        sys.exit(1)
+elif args[1:2] == ['get']:
+    # Pane `w1:pN` is the root pane of tab `w1:tN`, and goes with it.
     if (root / 'herdr-unreachable').exists():
         print(json.dumps({'error': {'code': 'server_not_running'}}))
         sys.exit(1)
-    print(json.dumps({'result': {'tab': {'tab_id': args[2], 'label': 'tab ' + args[2]}}}))
-elif args[:2] == ['pane', 'get']:
-    closed = root / 'closed-panes'
-    if closed.exists() and args[2] in closed.read_text().split():
-        print(json.dumps({'error': {'code': 'pane_not_found'}}))
+    kind, id = args[0], args[2]
+    tab = id.replace(':p', ':t')
+    def listed(name, value):
+        path = root / name
+        return path.exists() and value in path.read_text().split()
+    if not id.split(':')[-1].startswith(kind[0]) or listed('closed-tabs', tab) \
+            or listed('closed-panes', id):
+        print(json.dumps({'error': {'code': kind + '_not_found'}}))
         sys.exit(1)
-    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'tab_id': args[2].replace(':p', ':t')}}}))
+    if kind == 'pane':
+        print(json.dumps({'result': {'pane': {'pane_id': id, 'tab_id': tab}}}))
+    else:
+        print(json.dumps({'result': {'tab': {'tab_id': id, 'label': 'tab ' + id}}}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()
@@ -21648,7 +21653,9 @@ fn herdr_worker_command(fixture: &Fixture) -> Command {
     command
         .env_remove("SHOAL_STATE_DIR")
         .args(&herdr_worker(fixture)[1..])
-        .env("HERDR_TAB_ID", "w1:t9");
+        .env("HERDR_ENV", "1")
+        .env("HERDR_TAB_ID", "w1:t9")
+        .env("HERDR_PANE_ID", "w1:p9");
     let calls = herdr_calls(fixture);
     let create = calls
         .iter()
@@ -22383,7 +22390,7 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
             .unwrap()
     };
     let tab_gets = |fixture: &Fixture, tab: &str| {
-        fs::read_to_string(fixture.root.path().join("herdr-tab-gets"))
+        fs::read_to_string(fixture.root.path().join("herdr-gets"))
             .unwrap_or_default()
             .lines()
             .filter(|line| serde_json::from_str::<Vec<String>>(line).unwrap()[2] == tab)
@@ -24489,8 +24496,6 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     assert_eq!(
         calls_since(0),
         [
-            vec!["pane", "get", "w1:p4"],
-            vec!["pane", "get", "w1:p4"],
             vec!["tab", "focus", "w1:t4"],
             vec!["session", "attach", "work"],
         ]

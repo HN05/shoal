@@ -2,7 +2,7 @@
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
@@ -14,6 +14,7 @@ use super::{
 
 mod attach;
 mod demo;
+mod tabs;
 use crate::{
     config,
     sessions::{HostName, Origin},
@@ -109,27 +110,29 @@ impl Places for Herdr {
     }
 
     fn this_place(&self) -> Option<String> {
-        current_tab()
+        current_pane()
     }
 
     fn names_places(&self) -> bool {
         true
     }
 
+    /// The tab holding the pane.
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
-        Box::pin(rename_tab(place, label))
+        Box::pin(tabs::rename(place, label))
     }
 }
 
 impl Watches for Herdr {
     fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(tab_state(&place.id))
+        Box::pin(tabs::state(&place.id))
     }
 }
 
 impl Closes for Herdr {
+    /// The tab holding the pane.
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(close_tab(place))
+        Box::pin(tabs::close(place))
     }
 }
 
@@ -374,48 +377,49 @@ fn shell_command(argv: &[OsString]) -> Result<String> {
     Ok(crate::shell::quote(&words))
 }
 
-async fn rename_tab(tab: &str, label: &str) {
-    let mut rename = Command::new("herdr");
-    rename.args(["tab", "rename"]).arg(tab).arg(label);
-    if let Err(error) = Run::new(rename).checked().await {
-        eprintln!("warning: cannot rename Herdr tab {tab}: {error:#}");
-    }
-}
-
-async fn close_tab(tab: &str) -> Result<()> {
-    let mut close = Command::new("herdr");
-    close.args(["tab", "close"]).arg(tab);
-    Run::new(close)
-        .checked()
+/// Herdr's answer to `herdr <kind> get <id>` through `herdr`, or `None`
+/// when it reports no such `kind`.
+async fn query<T: DeserializeOwned>(mut herdr: Command, kind: &str, id: &str) -> Result<Option<T>> {
+    herdr.args([kind, "get", id]);
+    let output = Run::new(herdr)
+        .capture()
         .await
-        .with_context(|| format!("cannot close Herdr tab {tab}"))?;
-    Ok(())
-}
-
-/// The tab's agent state, or that Herdr reports the tab gone.
-async fn tab_state(tab: &str) -> Result<PlaceState> {
-    let mut get = Command::new("herdr");
-    get.args(["tab", "get"]).arg(tab);
-    let output = Run::new(get).capture().await.context("query Herdr tab")?;
+        .with_context(|| format!("query Herdr {kind}"))?;
     if output.status.success() {
-        let status = serde_json::from_slice::<TabInfo>(&output.stdout)
-            .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status);
-        return Ok(PlaceState::Open(status.turn()));
+        return serde_json::from_slice(&output.stdout)
+            .map(Some)
+            .with_context(|| format!("invalid Herdr {kind} response"));
     }
-    if failed_with(&output.stdout, "tab_not_found") {
-        return Ok(PlaceState::Gone);
+    if failed_with(&output.stdout, &format!("{kind}_not_found")) {
+        return Ok(None);
     }
     bail!(
-        "herdr tab get {tab} failed: {}",
+        "herdr {kind} get {id} failed: {}",
         String::from_utf8_lossy(&output.stdout).trim()
     )
 }
 
-/// The Herdr tab this process runs in.
-fn current_tab() -> Option<String> {
-    std::env::var("HERDR_TAB_ID")
-        .ok()
-        .filter(|tab| !tab.is_empty())
+/// The pane `id` on the server `herdr` reaches, or `None` when Herdr
+/// reports it gone.
+async fn pane(herdr: Command, id: &str) -> Result<Option<Pane>> {
+    Ok(query::<PaneInfo>(herdr, "pane", id)
+        .await?
+        .map(|info| info.result.pane))
+}
+
+#[derive(Deserialize)]
+struct PaneInfo {
+    result: PaneResult,
+}
+#[derive(Deserialize)]
+struct PaneResult {
+    pane: Pane,
+}
+#[derive(Deserialize)]
+struct Pane {
+    tab_id: String,
+    #[serde(default)]
+    agent_status: AgentStatus,
 }
 
 #[derive(Deserialize)]
@@ -449,7 +453,7 @@ fn failed_with(stdout: &[u8], code: &str) -> bool {
     serde_json::from_slice::<QueryFailure>(stdout).is_ok_and(|failure| failure.error.code == code)
 }
 
-/// Herdr's view of the agent in a tab; `Done` is a finished turn not yet seen.
+/// Herdr's view of an agent; `Done` is a finished turn not yet seen.
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 enum AgentStatus {

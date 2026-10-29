@@ -728,7 +728,9 @@ serves goes to `default_host`, zmx unless set to Rex, whose windows then join th
 session `rex.session_name` names; generic code reads the setting and renders
 the name, and a host only finds or creates a group by label. Shoal remembers
 every place as one host-neutral origin record: the host, its group and place,
-host-defined data, and whether Shoal created the place. Generic code passes the
+host-defined data, and whether Shoal created the place. The place is the one ID
+a host names it by, for its watcher as well: a Herdr place is the pane, whose
+tab Herdr finds to close, rename or focus. Generic code passes the
 record to the host that reads it and never interprets the data, which for Rex
 is how to reach the server and its CLI. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
@@ -750,7 +752,9 @@ exists is Shoal's, and each state directory knows only its own. An agent of
 another workspace that starts in a recorded block takes it over and a chat
 releases it from its workspace, as relabelling does for a zmx session, while a
 nested command takes nothing; place watchers close recorded places
-through the daemon, which reads the owner and closes under one lock. A close ends
+through the daemon, which reads the owner and closes under one lock, or forgets
+the record and leaves the close to the watcher for a host it cannot close
+places of, such as Herdr. A close ends
 only that block, leaving the user's other blocks in its window. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.
 

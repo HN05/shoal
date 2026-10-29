@@ -4,10 +4,9 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, bail};
-use serde::Deserialize;
 use tokio::process::Command;
 
-use super::{TabInfo, failed_with, herdr};
+use super::{Pane, TabInfo, herdr};
 use crate::{cli::terminal::Session, sessions::Origin, subprocess::Run};
 
 /// The variables naming the Herdr server a pane runs in, most specific first.
@@ -80,22 +79,7 @@ fn same_server(
 
 /// The pane at `place`, or `None` when Herdr reports it gone.
 async fn pane(place: &Origin) -> Result<Option<Pane>> {
-    let mut get = herdr(place);
-    get.args(["pane", "get", place.id()]);
-    let output = Run::new(get).capture().await.context("query Herdr pane")?;
-    if output.status.success() {
-        let info: PaneInfo =
-            serde_json::from_slice(&output.stdout).context("invalid Herdr pane response")?;
-        return Ok(Some(info.result.pane));
-    }
-    if failed_with(&output.stdout, "pane_not_found") {
-        return Ok(None);
-    }
-    bail!(
-        "herdr pane get {} failed: {}",
-        place.id(),
-        String::from_utf8_lossy(&output.stdout).trim()
-    )
+    super::pane(herdr(place), place.id()).await
 }
 
 /// The label of `tab` on the server of `place`.
@@ -130,19 +114,6 @@ async fn attach_client(session: &str) -> Result<()> {
         bail!("herdr exited with {status}");
     }
     Ok(())
-}
-
-#[derive(Deserialize)]
-struct PaneInfo {
-    result: PaneResult,
-}
-#[derive(Deserialize)]
-struct PaneResult {
-    pane: Pane,
-}
-#[derive(Deserialize)]
-struct Pane {
-    tab_id: String,
 }
 
 #[cfg(test)]

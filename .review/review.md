@@ -461,7 +461,8 @@ configured command for another agent, plus proven child
   beside zmx's socket directory serializes ownership checks, relabelling and
   closes across state directories. Relabelling must replace obsolete ownership
   before an in-place agent or chat launches; conflicting chat labels prevent
-  workspace cleanup. Herdr tabs keep closing through their place watcher. Rex
+  workspace cleanup. Herdr tabs keep closing through the watcher of their pane, the
+  place Herdr records. Rex
   blocks carry no labels: only blocks the daemon recorded Shoal creating close,
   through the same removal, sweep and retry path, and a close ends only that block.
   Places are host-neutral origin records whose host data generic code never reads.
