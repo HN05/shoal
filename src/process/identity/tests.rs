@@ -528,7 +528,14 @@ async fn an_adopted_job_with_a_hidden_environment_is_unreadable() -> Result<()> 
         visibility(&job, deadline)?,
         Visibility::Environment(environment) if environment.is_empty()
     ) && hides_environment(pid);
-    let scan = scan(HashSet::from(["unrelated-execution".into()])).await;
+    // Its own memory, which no other test's inventory can tell about the job.
+    let owners = Box::leak(Box::default());
+    let scan = scan_remembering(
+        owners,
+        Marker::Execution,
+        HashSet::from(["unrelated-execution".into()]),
+    )
+    .await;
     signal(&job, libc::SIGKILL)?;
     let unreadable = scan?.unreadable.iter().any(|u| u.identity == job);
     assert_eq!(unreadable, hidden);

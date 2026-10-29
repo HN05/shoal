@@ -338,6 +338,15 @@ pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identi
 /// Inventory processes whose environment sets `marker` to one of `ids`; each
 /// match records the value it carries.
 async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
+    scan_remembering(&owners::OWNERS, marker, ids).await
+}
+
+/// `scan_marked`, consulting and updating `owners`.
+async fn scan_remembering(
+    owners: &'static owners::Owners,
+    marker: Marker,
+    ids: HashSet<String>,
+) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
@@ -346,7 +355,7 @@ async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
     tokio::task::spawn_blocking(move || {
         let _turn = turn;
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        let mut inventory = Inventory::new(&owners::OWNERS);
+        let mut inventory = Inventory::new(owners);
         for pid in listing.own {
             if let Some(process) = observe(pid, settle_deadline)? {
                 inventory.observed.insert(pid, process);
