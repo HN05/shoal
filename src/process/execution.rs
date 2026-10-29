@@ -1,6 +1,7 @@
 //! Combine native process evidence for one execution. Callers decide whether
 //! uncertainty permits repair, ordinary stopping, or explicit manual removal.
 use anyhow::Result;
+use std::path::Path;
 
 use crate::{model::Execution, process::identity as process, protocol::timing};
 
@@ -15,7 +16,12 @@ pub struct Processes {
 impl Processes {
     /// Reuse a marker scan across executions, but recheck wrapper/child identity
     /// and ancestry each time. After signaling, callers must obtain a fresh scan.
-    pub async fn inspect(execution: &Execution, scan: &process::Scan) -> Result<Self> {
+    /// `workspace` is the directory of the execution's workspace.
+    pub async fn inspect(
+        execution: &Execution,
+        workspace: &Path,
+        scan: &process::Scan,
+    ) -> Result<Self> {
         let wrapper = match &execution.wrapper {
             Some(wrapper) if process::alive(wrapper)? => Some(wrapper.clone()),
             _ => None,
@@ -40,19 +46,7 @@ impl Processes {
         }
         owned.sort_by(|a, b| a.pid.cmp(&b.pid).then(a.birth.cmp(&b.birth)));
         owned.dedup();
-        let mut unreadable = Vec::new();
-        let settled = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        for process in &scan.unreadable {
-            if execution
-                .wrapper
-                .as_ref()
-                .is_none_or(|w| process.head.not_older_than(w))
-                && !owned.contains(&process.identity)
-                && process::stays_unattributed(&process.identity, &execution.id, settled).await?
-            {
-                unreadable.push(process.identity.clone());
-            }
-        }
+        let unreadable = unattributed_survivors(execution, workspace, &owned, scan).await?;
         Ok(Self {
             wrapper,
             owned,
@@ -137,6 +131,35 @@ impl Processes {
         process::stop_verified(&targets).await?;
         Ok(!targets.is_empty())
     }
+}
+
+/// The unattributed processes of `scan` that may survive `execution`: those
+/// working inside its workspace whose unattributed ancestry started no earlier
+/// than it and that stay unattributed. Any other process, such as one launchd
+/// adopted from a removed workspace, cannot be tied to it and does not keep
+/// its ownership from being proven.
+async fn unattributed_survivors(
+    execution: &Execution,
+    workspace: &Path,
+    owned: &[process::Identity],
+    scan: &process::Scan,
+) -> Result<Vec<process::Identity>> {
+    let workspace = std::fs::canonicalize(workspace).unwrap_or_else(|_| workspace.to_owned());
+    let mut survivors = Vec::new();
+    let settled = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    for process in &scan.unreadable {
+        if execution
+            .wrapper
+            .as_ref()
+            .is_none_or(|w| process.head.not_older_than(w))
+            && !owned.contains(&process.identity)
+            && process::works_in(&process.identity, &workspace)?
+            && process::stays_unattributed(&process.identity, &execution.id, settled).await?
+        {
+            survivors.push(process.identity.clone());
+        }
+    }
+    Ok(survivors)
 }
 
 #[cfg(test)]

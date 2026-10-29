@@ -352,7 +352,7 @@ impl Manager {
                 .ok_or_else(|| anyhow::anyhow!("execution no longer exists"))?;
             let scan = scan_processes(&record).await?;
             self.keep_stopped_turn(id, Some(&scan)).await;
-            crate::process::execution::Processes::inspect(&record, &scan)
+            self.inspect_execution(&record, &scan)
                 .await?
                 .stop_owned()
                 .await
@@ -365,7 +365,7 @@ impl Manager {
     /// Stop the execution's verified survivors and report what keeps its
     /// processes from being proven stopped, if anything does.
     async fn stop_agent_survivors(&self, record: &crate::model::Execution) -> Option<String> {
-        let processes = match inspect_processes(record).await {
+        let processes = match self.inspect_processes(record).await {
             Ok(processes) => processes,
             Err(error) => return Some(format!("process inspection failed: {error:#}")),
         };
@@ -382,6 +382,15 @@ impl Manager {
             record.wrapper.is_some() && record.child.is_none() && record.group_id.is_none();
         (!processes.visibility_complete() && !proven_before)
             .then(|| "its launch identity is incomplete".into())
+    }
+
+    /// Scan for the execution's processes and combine the evidence.
+    async fn inspect_processes(
+        &self,
+        record: &crate::model::Execution,
+    ) -> anyhow::Result<crate::process::execution::Processes> {
+        let scan = scan_processes(record).await?;
+        self.inspect_execution(record, &scan).await
     }
 
     /// Tell the user why a protection-stopped agent's automatic restore waits
@@ -884,14 +893,6 @@ async fn scan_processes(
 ) -> anyhow::Result<crate::process::identity::Scan> {
     let ids = std::collections::HashSet::from([record.id.clone()]);
     crate::process::identity::scan(ids).await
-}
-
-/// Scan for the execution's processes and combine the evidence.
-async fn inspect_processes(
-    record: &crate::model::Execution,
-) -> anyhow::Result<crate::process::execution::Processes> {
-    let scan = scan_processes(record).await?;
-    crate::process::execution::Processes::inspect(record, &scan).await
 }
 
 /// Probe until it finds nothing preventing proof or `patience` passes, and

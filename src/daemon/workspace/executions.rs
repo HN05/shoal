@@ -862,7 +862,7 @@ impl Manager {
         let Some(execution) = execution else {
             return Ok(Some("execution record is missing".into()));
         };
-        Ok(match Processes::inspect(&execution, &scan).await {
+        Ok(match self.inspect_execution(&execution, &scan).await {
             Ok(processes) => processes.completion_issue(),
             Err(error) => Some(format!("process inspection failed: {error:#}")),
         })
@@ -1036,7 +1036,7 @@ impl Manager {
         policy: StopPolicy,
     ) -> Result<()> {
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
-        let processes = Processes::inspect(execution, &scan).await?;
+        let processes = self.inspect_execution(execution, &scan).await?;
         processes.stop().await?;
         let after = process::scan(HashSet::from([execution.id.clone()])).await?;
         ensure!(
@@ -1054,7 +1054,7 @@ impl Manager {
             execution.id,
             pids(&processes.group_candidates)
         );
-        let after = Processes::inspect(execution, &after).await?;
+        let after = self.inspect_execution(execution, &after).await?;
         ensure!(
             !after.has_survivors(),
             "execution {} still has processes after stopping; check them, then run shoal stop again",
@@ -1081,6 +1081,16 @@ impl Manager {
 
     /// Fail while processes use the workspace's directory: an acknowledgement
     /// that an unprovable execution ended cannot cover a visible process.
+    /// Combine the process evidence of `execution` from `scan`.
+    pub(crate) async fn inspect_execution(
+        &self,
+        execution: &Execution,
+        scan: &process::Scan,
+    ) -> Result<Processes> {
+        let workspace = self.workspace(&execution.workspace_id).await?;
+        Processes::inspect(execution, &workspace.path, scan).await
+    }
+
     async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
         let path = self.workspace(workspace_id).await?.path;
         let users = if path.is_dir() {

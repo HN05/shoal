@@ -166,7 +166,13 @@ impl Manager {
         let ids: HashSet<_> = interrupted.iter().map(|i| i.execution.id.clone()).collect();
         let scan = process::scan(ids).await?;
         for interrupted in interrupted {
-            let outcome = match Processes::inspect(&interrupted.execution, &scan).await {
+            let outcome = match Processes::inspect(
+                &interrupted.execution,
+                &interrupted.workspace.path,
+                &scan,
+            )
+            .await
+            {
                 Ok(processes) => assess(&interrupted, &processes),
                 Err(error) => Outcome::Unresolved(format!("process inspection failed: {error:#}")),
             };

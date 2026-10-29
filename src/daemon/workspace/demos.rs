@@ -13,7 +13,7 @@ use super::{
 use crate::{
     demos::{Launch, Progress, Running},
     model::Execution,
-    process::{execution::Processes, identity as process},
+    process::identity as process,
 };
 
 impl Manager {
@@ -114,7 +114,7 @@ impl Manager {
             .await?;
         let scan = process::scan(HashSet::from([execution.id.clone()])).await?;
         ensure!(
-            Processes::inspect(execution, &scan)
+            self.inspect_execution(execution, &scan)
                 .await?
                 .command_stopped(),
             "process state of the demo remains uncertain; check its processes, then stop it again"

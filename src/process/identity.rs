@@ -386,6 +386,16 @@ pub async fn stays_unattributed(
     .context("process settle worker failed")?
 }
 
+/// Whether the live process `identity` works inside `directory`. One whose
+/// working directory cannot be read, or that has exited, does not.
+pub fn works_in(identity: &Identity, directory: &std::path::Path) -> Result<bool> {
+    let Some(working) = working_directory(identity.pid) else {
+        return Ok(false);
+    };
+    // The PID may have gone to another process since the read.
+    Ok(working.starts_with(directory) && alive(identity)?)
+}
+
 /// Whether `identity` was started with `variable` set. An environment that
 /// cannot be read counts as without it.
 pub fn started_with(identity: &Identity, variable: &str) -> bool {
@@ -840,6 +850,21 @@ fn platform_unreaped(identity: &Identity) -> Result<bool> {
         && format!("{}:{}", bsd.pbi_start_tvsec, bsd.pbi_start_tvusec) == identity.birth)
 }
 
+/// `pid`'s working directory, which macOS shows for a platform binary too.
+#[cfg(target_os = "macos")]
+fn working_directory(pid: u32) -> Option<PathBuf> {
+    let info = pid_info::<libc::proc_vnodepathinfo>(pid, libc::PROC_PIDVNODEPATHINFO, 0).ok()??;
+    let path: Vec<u8> = info
+        .pvi_cdir
+        .vip_path
+        .as_flattened()
+        .iter()
+        .map(|byte| *byte as u8)
+        .take_while(|byte| *byte != 0)
+        .collect();
+    (!path.is_empty()).then(|| PathBuf::from(OsStr::from_bytes(&path)))
+}
+
 #[cfg(target_os = "macos")]
 pub(super) fn parent(pid: u32) -> Option<u32> {
     bsd_info(pid, false)
@@ -1022,6 +1047,11 @@ fn platform_unreaped(identity: &Identity) -> Result<bool> {
     ensure!(fields.len() > 19, "incomplete process stat");
     let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
     Ok(fields[0] == "Z" && format!("{}:{}", boot.trim(), fields[19]) == identity.birth)
+}
+
+#[cfg(target_os = "linux")]
+fn working_directory(pid: u32) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
 }
 
 #[cfg(target_os = "linux")]

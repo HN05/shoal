@@ -2013,7 +2013,9 @@ reads that way when hidden. A hidden environment takes the attribution of the
 nearest ancestor whose environment tells, through any setuid program the user
 started, such as a terminal's `login`, which runs as another user and is never
 stopped itself; one launchd adopted after its parent exited has none and counts
-as unreadable. The reporting wrapper may remain alive
+as unreadable. An unreadable process counts only against executions of the
+workspace it works in; one working elsewhere, such as an orphan of a removed
+workspace, or whose working directory cannot be read blocks none. The reporting wrapper may remain alive
 awaiting acknowledgement; workspace stopping allows for child registration,
 stopping and completion verification; service termination and its command
 deadlines cover that drain. Managed stops signal only the daemon through its

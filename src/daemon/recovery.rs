@@ -324,9 +324,10 @@ impl Manager {
         ids: &HashSet<String>,
     ) -> Result<ExecutionReport> {
         let connected = self.executions.is_connected(&execution.id).await;
-        let mut processes = Processes::inspect(execution, scan).await?;
+        let mut processes = Processes::inspect(execution, &workspace.path, scan).await?;
         if options.stop && !connected {
-            processes = stop_survivors(execution, processes, report, scan, ids).await?;
+            processes =
+                stop_survivors(execution, &workspace.path, processes, report, scan, ids).await?;
         }
         let mut notes = execution_notes(connected, &processes);
         let mut cleared = false;
@@ -390,6 +391,7 @@ enum Clearance {
 /// Stop the recorded survivors of a disconnected execution and inspect again.
 async fn stop_survivors(
     execution: &crate::model::Execution,
+    workspace: &std::path::Path,
     processes: Processes,
     report: &mut Report,
     scan: &mut process::Scan,
@@ -404,7 +406,7 @@ async fn stop_survivors(
     // A surviving process can fork while stopping. Rescan rather than
     // assuming that signaling the original list completed the job.
     *scan = process::scan(ids.clone()).await?;
-    Processes::inspect(execution, scan).await
+    Processes::inspect(execution, workspace, scan).await
 }
 
 /// Whether the evidence proves the execution ended, so repair may clear it.

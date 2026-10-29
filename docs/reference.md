@@ -3574,7 +3574,8 @@ Shoal also stops its verified processes outside its process group, such as
 background shell commands. Detection is cooperative:
 hidden environments, cleared markers, and old records can leave it uncertain.
 A reported command exit retains an unknown execution and prevents setup readiness
-while child/group survivors or live unreadable environments remain. Exiting
+while child/group survivors or live unreadable environments remain; an
+unreadable process counts only when it works inside the workspace. Exiting
 processes do not count, and a process still publishing its environment after exec
 is read again for up to two seconds; a settled empty environment is readable and
 does not identify an execution. macOS hides the environments of its own
