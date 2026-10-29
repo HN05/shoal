@@ -59,10 +59,15 @@ class StopTests(unittest.TestCase):
             time.sleep(0.05)
         left = self.detached(self.run_dir, "left")
         unrelated = self.detached(self.elsewhere, "unrelated")
+        loop = self.detached(self.run_dir, "loop", "sh -c '(cd / && exec sleep 300); :'")
+        child = self.child_of(loop)
 
         found = {process.pid for process in processes.started_by_run(self.run_dir, since)}
 
         self.assertIn(left.pid, found)
+        self.assertIn(loop.pid, found)
+        # Working elsewhere, but started by what the run left.
+        self.assertIn(child.pid, found)
         self.assertNotIn(earlier.pid, found)
         self.assertNotIn(unrelated.pid, found)
         self.assertEqual(processes.stop([left]), [])

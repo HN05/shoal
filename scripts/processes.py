@@ -117,17 +117,24 @@ def inside(process, directory):
     return process.cwd is not None and process.cwd.is_relative_to(directory)
 
 
+def with_descendants(processes, roots):
+    """`roots` and every process descending from one of them."""
+    found = {process.pid: process for process in roots}
+    for root in roots:
+        found.update((process.pid, process) for process in descendants(processes, root.pid))
+    return list(found.values())
+
+
 def started_by_run(directory, since):
     """What a run that started at `since` from `directory` left running: this
     process's descendants, and the processes started since then that work in
-    `directory`, which a detached one does even after its parent exited."""
+    `directory`, which a detached one does even after its parent exited, with
+    their own descendants wherever they work."""
     directory = directory.resolve()
     processes = snapshot()
-    found = {process.pid: process for process in descendants(processes, os.getpid())}
-    for process in processes.values():
-        if process.started >= since and inside(process, directory):
-            found[process.pid] = process
-    return list(found.values())
+    detached = [process for process in processes.values()
+                if process.started >= since and inside(process, directory)]
+    return with_descendants(processes, descendants(processes, os.getpid()) + detached)
 
 
 def detached_in(directory):
@@ -136,12 +143,8 @@ def detached_in(directory):
     outside it keeps."""
     directory = directory.resolve()
     processes = snapshot()
-    roots = [process for process in processes.values()
-             if process.ppid == 1 and inside(process, directory)]
-    found = {process.pid: process for process in roots}
-    for root in roots:
-        found.update((process.pid, process) for process in descendants(processes, root.pid))
-    return list(found.values())
+    return with_descendants(processes, [process for process in processes.values()
+                                        if process.ppid == 1 and inside(process, directory)])
 
 
 def alive(process):
