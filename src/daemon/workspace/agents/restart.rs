@@ -152,6 +152,12 @@ impl Manager {
         if let Some(restart) = &mut agent.restart {
             return Ok(restart.answer());
         }
+        // Another command continuing the same run restarted it already.
+        if run.is_some() && agent.restarted_by == run {
+            let (done, answer) = oneshot::channel();
+            let _ = done.send(Ok(()));
+            return Ok(answer);
+        }
         ensure!(
             agent.recover,
             "{} has no command to resume its session; configure [agent_resume] for it",

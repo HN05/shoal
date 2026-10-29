@@ -404,3 +404,39 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
     let error = manager.join_restart(&id).await.unwrap_err();
     assert_eq!(format!("{error}"), "the restart was cancelled");
 }
+
+#[tokio::test]
+async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let restarted = manager
+        .request_restart(&id, Some("run".into()))
+        .await
+        .unwrap();
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    restarted.await.unwrap().unwrap();
+
+    // A later request of the same run, such as from another command that
+    // continues it, finds the agent restarted and does not stop it.
+    manager
+        .restart_agent(&id, Some("run".into()))
+        .await
+        .unwrap();
+    assert!(!manager.restart_requested(&id).await);
+    assert!(!*execution.stop.borrow());
+    // Another run restarts it again.
+    let again = manager
+        .request_restart(&id, Some("other".into()))
+        .await
+        .unwrap();
+    assert!(manager.restart_requested(&id).await);
+    manager.fail_restart(&id, "cancelled".into()).await;
+    assert!(again.await.unwrap().is_err());
+}
