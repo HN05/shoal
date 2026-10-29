@@ -123,14 +123,27 @@ pub fn provide_zmx(root: &Path, launch: &mut Command) {
         return;
     }
     let dir = root.join("daemon-bin");
-    fs::create_dir_all(&dir).unwrap();
+    write_zmx_stub(&dir);
+    let path = std::env::join_paths(std::env::split_paths(&path).chain([dir])).unwrap();
+    launch.env("PATH", path);
+}
+
+/// Write the stub `zmx` into `dir` once. A restarted daemon reuses it: the
+/// previous daemon's processes may still run it, and Linux refuses to write
+/// to a running executable. The stub is renamed into place complete, so no
+/// launch runs a partly written one.
+fn write_zmx_stub(dir: &Path) {
     let zmx = dir.join("zmx");
+    if zmx.is_file() {
+        return;
+    }
+    fs::create_dir_all(dir).unwrap();
+    let partial = dir.join("zmx.partial");
     fs::write(
-        &zmx,
+        &partial,
         "#!/bin/sh\nif [ \"$1\" = list ]; then exit 0; fi\necho 'zmx is not installed on this test runner' >&2\nexit 127\n",
     )
     .unwrap();
-    fs::set_permissions(&zmx, fs::Permissions::from_mode(0o755)).unwrap();
-    let path = std::env::join_paths(std::env::split_paths(&path).chain([dir])).unwrap();
-    launch.env("PATH", path);
+    fs::set_permissions(&partial, fs::Permissions::from_mode(0o755)).unwrap();
+    fs::rename(&partial, &zmx).unwrap();
 }
