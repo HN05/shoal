@@ -9,6 +9,7 @@ use crate::{
     forge::{
         ForgeRepo,
         account::Account,
+        capability::Capability,
         ci::{
             CiAction,
             checks::CheckLog,
@@ -115,6 +116,8 @@ impl Manager {
             "list the runs of a branch or of a PR, not both"
         );
         let (workspace, forge, account) = self.run_forge(selector).await?;
+        // Refuse a forge without runs before reading the PR.
+        forge.require(Capability::ReadRuns)?;
         match pr {
             Some(input) => {
                 let (_, url) = forge.pull(&input)?;
