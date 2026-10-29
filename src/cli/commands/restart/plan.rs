@@ -38,10 +38,20 @@ pub(super) struct Skipped {
 }
 
 impl Restart {
-    /// Whether the agent itself reported that its turn ended; another
-    /// agent's report in the same workspace does not count.
-    pub(super) fn idle(&self) -> bool {
-        self.agent.state == Some(AgentState::Idle)
+    /// Whether the agent can restart without interrupting a turn: it
+    /// reported itself that its turn ended, since another agent's report in
+    /// the same workspace does not count, or its restart is in progress.
+    pub(super) fn ready(&self) -> bool {
+        self.agent.state == Some(AgentState::Idle) || self.agent.restart.is_some()
+    }
+
+    /// The agent, skipped for `reason`.
+    pub(super) fn skipped(self, reason: impl Into<String>) -> Skipped {
+        Skipped {
+            workspace: self.workspace.name,
+            agent: self.agent.agent,
+            reason: reason.into(),
+        }
     }
 }
 
@@ -63,8 +73,8 @@ impl Selection {
         })
     }
 
-    /// The agents named `agent` to restart, idle ones first, and those that
-    /// cannot restart in place.
+    /// The agents named `agent` to restart, ready ones first, and those that
+    /// cannot restart in place or already run again.
     pub(super) fn plan(self, agent: Option<&str>) -> Plan {
         let mut plan = Plan {
             restarts: Vec::new(),
@@ -105,8 +115,37 @@ impl Selection {
                 }
             }
         }
-        plan.restarts.sort_by_key(|restart| !restart.idle());
+        plan.skip_started_since_restarts();
+        plan.restarts.sort_by_key(|restart| !restart.ready());
         plan
+    }
+}
+
+impl Plan {
+    /// Restarts in progress come from an earlier run, which this one
+    /// continues: an agent that started since the first of them was
+    /// requested, such as one that run restarted, already runs again.
+    fn skip_started_since_restarts(&mut self) {
+        let Some(since) = self
+            .restarts
+            .iter()
+            .filter_map(|restart| restart.agent.restart.as_ref())
+            .map(|pending| pending.requested_ms_ago)
+            .max()
+        else {
+            return;
+        };
+        let (again, restarts) =
+            std::mem::take(&mut self.restarts)
+                .into_iter()
+                .partition(|restart: &Restart| {
+                    restart.agent.restart.is_none()
+                        && restart.agent.started_ms_ago.is_some_and(|ago| ago < since)
+                });
+        self.restarts = restarts;
+        self.skipped.extend(again.into_iter().map(|restart| {
+            restart.skipped("it started after the restarts in progress were requested")
+        }));
     }
 }
 

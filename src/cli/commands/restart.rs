@@ -170,7 +170,7 @@ async fn restart_together(
             }
         }
         while running.len() < PARALLEL_RESTARTS
-            && let Some(index) = waiting.iter().position(|restart| !wait || restart.idle())
+            && let Some(index) = waiting.iter().position(|restart| !wait || restart.ready())
         {
             let restart = waiting.remove(index);
             running.push(async move {
@@ -195,7 +195,7 @@ async fn restart_together(
 fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
     let names: Vec<_> = restarts
         .iter()
-        .filter(|restart| !restart.idle())
+        .filter(|restart| !restart.ready())
         .map(|restart| restart.workspace.name.as_str())
         .collect();
     if !names.is_empty() && !ctx.json {
@@ -220,7 +220,7 @@ async fn next_idle(
         if restarts.is_empty() {
             return Ok(None);
         }
-        if let Some(index) = restarts.iter().position(Restart::idle) {
+        if let Some(index) = restarts.iter().position(Restart::ready) {
             return Ok(Some(restarts.remove(index)));
         }
         if !told {
@@ -234,26 +234,22 @@ async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
     request(&ctx.paths, ExecutionMethod::ListAgents).await
 }
 
-/// Take each agent's turn state from `running`, and drop the agents that no
-/// longer run or whose wrapper is gone, returning them.
+/// Take each agent's turn state and restart from `running`, and drop the
+/// agents that no longer run or whose wrapper is gone, returning them.
 fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent]) -> Vec<Skipped> {
     let mut ended = Vec::new();
     for mut restart in std::mem::take(restarts) {
-        let current = running
+        let Some(current) = running
             .iter()
-            .find(|agent| agent.execution == restart.agent.execution);
-        let reason = match current {
-            None => Some("the agent no longer runs".into()),
-            Some(current) => skip_reason(&restart.workspace, current),
+            .find(|agent| agent.execution == restart.agent.execution)
+        else {
+            ended.push(restart.skipped("the agent no longer runs"));
+            continue;
         };
-        match reason {
-            Some(reason) => ended.push(Skipped {
-                workspace: restart.workspace.name,
-                agent: restart.agent.agent,
-                reason,
-            }),
+        match skip_reason(&restart.workspace, current) {
+            Some(reason) => ended.push(restart.skipped(reason)),
             None => {
-                restart.agent.state = current.and_then(|agent| agent.state);
+                restart.agent = current.clone();
                 restarts.push(restart);
             }
         }

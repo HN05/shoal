@@ -1,5 +1,8 @@
 use super::*;
-use crate::{model::AgentStatus, state::WorkspaceState};
+use crate::{
+    model::{AgentStatus, PendingRestart},
+    state::WorkspaceState,
+};
 
 fn workspace(name: &str) -> Workspace {
     Workspace::new_record(
@@ -142,7 +145,56 @@ fn only_an_agents_own_report_makes_it_idle() {
     let order: Vec<_> = plan
         .restarts
         .iter()
-        .map(|restart| (restart.agent.execution.as_str(), restart.idle()))
+        .map(|restart| (restart.agent.execution.as_str(), restart.ready()))
         .collect();
     assert_eq!(order, [("idle", true), ("working", false)]);
+}
+
+/// An agent of `workspace` that started `started_ms_ago`, restarting since
+/// `requested_ms_ago` when that is given.
+fn started(
+    workspace: &Workspace,
+    started_ms_ago: u64,
+    requested_ms_ago: Option<u64>,
+) -> RunningAgent {
+    RunningAgent {
+        started_ms_ago: Some(started_ms_ago),
+        restart: requested_ms_ago.map(|requested_ms_ago| PendingRestart { requested_ms_ago }),
+        ..reporting(workspace, Some(AgentState::Working))
+    }
+}
+
+#[test]
+fn a_rerun_waits_for_restarts_in_progress_and_skips_agents_started_since() {
+    let [pending, again, earlier, launched] =
+        ["pending", "again", "earlier", "launched"].map(workspace);
+    let selection = Selection {
+        agents: vec![
+            started(&pending, 90_000, Some(60_000)),
+            started(&again, 30_000, None),
+            started(&earlier, 120_000, None),
+            started(&launched, 5_000, None),
+        ],
+        workspaces: vec![pending, again, earlier, launched],
+        named: false,
+    };
+    let plan = selection.plan(None);
+    // The restart in progress comes first, ready although its turn was
+    // working, since its agent is already stopped.
+    assert_eq!(restarted(&plan), ["pending", "earlier"]);
+    assert!(plan.restarts[0].ready());
+    assert!(!plan.restarts[1].ready());
+    let reason = "it started after the restarts in progress were requested";
+    assert_eq!(skipped(&plan), [("again", reason), ("launched", reason)]);
+}
+
+#[test]
+fn without_restarts_in_progress_recent_agents_restart_too() {
+    let recent = workspace("recent");
+    let selection = Selection {
+        agents: vec![started(&recent, 1_000, None)],
+        workspaces: vec![recent],
+        named: false,
+    };
+    assert_eq!(restarted(&selection.plan(None)), ["recent"]);
 }
