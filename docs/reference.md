@@ -2511,6 +2511,8 @@ shoal pr comment --body-file notes.md
 shoal pr comment --body-file notes.md --attach shot.png --attach 'demo.mp4#Login flow'
 shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
 shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
+shoal pr review 42 --comment --body-file review.md --line src/a.rs:7 'Why?'
+shoal pr review 42 --request-changes --body-file why.md --comments-file lines.json
 shoal pr close 12                   # reopen works the same way
 shoal pr merge --method rebase --delete-branch
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
@@ -2583,6 +2585,33 @@ thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 Resolving a thread that has no reply asks for confirmation; `--yes` skips it.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
+`review` submits one review with exactly one of `--comment`, `--approve` or
+`--request-changes`, a body from `--body` or `--body-file`, and comments on
+single lines of the PR's diff: repeated `--line PATH:LINE BODY` on a line of the
+PR's version of a file, and `--old-line PATH:LINE BODY` on a removed line,
+numbered in the base's version. `--comments-file` adds the comments of a JSON
+array, `-` reading standard input, whose objects have `path`, `line`, `body` and
+an optional `side` of `new`, the default, or `old`; other fields and values are
+refused:
+
+```json
+[{"path": "src/a.rs", "line": 42, "body": "Why?"},
+ {"path": "src/b.rs", "line": 7, "side": "old", "body": "Keep this"}]
+```
+
+Requesting changes needs a body; any other review needs a body, a line comment
+or both. Shoal reads the PR's diff at its head commit and refuses the whole
+review before sending anything when a comment is on a file the diff does not
+change or a line none of its hunks shows, listing each such comment; the review
+is then posted of that commit. Workspace processes can only comment, as the
+agent account, and their watches do not report the review back; `--approve`
+and `--request-changes` are refused to them like `merge`, and use your own
+login. A forge that refuses a verdict, such as on your own PR, fails with its
+message. GitHub, Forgejo and Gitea take a review in one request. GitLab drafts a
+note on each line, deleting the drafts when one fails, then publishes them with
+the body as a summary and requested changes as your reviewer state, then
+approves; Bitbucket posts each line comment, then the body, then the verdict.
+A failure after part of a review was posted says that it reached the forge.
 `issue list` and `pr list` list the repository's issues or PRs, newest first,
 through the forge's own search: words after the command are text it searches for
 in titles and descriptions, repeated `--label` keeps items with every label,

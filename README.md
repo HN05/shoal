@@ -196,6 +196,7 @@ shoal pr edit --draft         # Change the linked PR's text, labels, reviewers o
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
 shoal pr comment --attach demo.mp4 # Upload a file and show or link it in a comment
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
+shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too

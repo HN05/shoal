@@ -36,6 +36,8 @@ use crate::{
     protocol::{CiMethod, ItemMethod, WorkspaceMethod},
 };
 
+mod review;
+
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
         PrCommand::Ci { command } => return ci(ctx, command).await,
@@ -83,6 +85,10 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         }
         PrCommand::Comment { item, body, files } => {
             (item, comment(body, files)?, "Commented on PR")
+        }
+        PrCommand::Review { item, review } => {
+            let (action, outcome) = review::review(review)?;
+            (item, action, outcome)
         }
         PrCommand::Reply {
             comment,

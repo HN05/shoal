@@ -46,6 +46,13 @@ and videos and links other files where it references them as `![alt](FILE)`.
 Answer each review finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
+Review a PR with `shoal pr review [<number>] --comment --body-file F` and
+comments on lines of its diff: repeated `--line PATH:LINE 'text'`, `--old-line`
+for a removed line, or `--comments-file F` with a JSON array of `{"path",
+"line", "body"}` objects, adding `"side": "old"` for a removed line. A comment
+on a line the diff does not show refuses the whole review before anything is
+posted. Approving and requesting changes are the user's: `--approve` and
+`--request-changes` refuse workspace processes.
 They default to the linked item; pass a number or URL for another item in the
 repository. `shoal forge capabilities` lists what the repository's forge
 supports, such as resolving threads, rerunning jobs or reading job logs, with

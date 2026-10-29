@@ -1277,8 +1277,13 @@ declares the capabilities it has, and a request needing one it lacks is refused
 before anything is sent with one typed error naming the forge and the
 capability, so a backend gains a capability without changes elsewhere;
 `shoal forge capabilities` reports them so agents can check first. Actions run in the
-daemon, where scope applies: they act as the workspace's agent account, and
-merging stays the user's decision, so scoped callers cannot merge. Review
+daemon, where scope applies: they act as the workspace's agent account, while
+merging and a review's verdict stay the user's decisions, so scoped callers can
+comment in a review but not merge, approve or request changes, and those act as
+the user's own login. A forge that refuses a verdict, such as on its author's
+own PR, says so itself rather than Shoal guessing first. A review's line
+comments are checked against the PR's diff before anything is sent, so a
+review is refused whole rather than posted in part. Review
 threads are named by any of their comments' IDs. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and

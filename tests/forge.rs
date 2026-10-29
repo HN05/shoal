@@ -607,6 +607,84 @@ fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
 }
 
 #[test]
+fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let pull = |state: &str| {
+        let mut pull = pull(8, state, "Fix", &[]);
+        pull["head"]["sha"] = json!("head");
+        json!({"body": pull})
+    };
+    let reviews = |ids: &[u64]| {
+        json!({"body": ids.iter().map(|id| json!({"id": id, "body": "", "state": "COMMENT",
+            "comments_count": 2, "user": {"login": "dev"}})).collect::<Vec<_>>()})
+    };
+    let responses = |state: &str, reviewed: &[u64]| {
+        json!({
+            "GET repos/team/project/pulls/8": pull(state),
+            "GET repos/team/project/issues/8/comments?limit=50&page=1":
+                {"body": [{"id": 1, "body": "First"}]},
+            "GET repos/team/project/pulls/8/reviews?limit=50&page=1": reviews(reviewed),
+            "GET repos/team/project/commits/head/status?limit=50":
+                {"body": {"total_count": 0, "statuses": []}},
+            "GET repos/team/project/pulls/8.diff": {"body": "diff --git a/src/a.rs b/src/a.rs\n\
+                --- a/src/a.rs\n+++ b/src/a.rs\n@@ -1,2 +1,3 @@\n a\n+b\n c\n"},
+            "POST repos/team/project/pulls/8/reviews": {"body": {"id": 5}},
+        })
+    };
+    fixture.respond(responses("open", &[]));
+    fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
+    let first = fixture.ok(&["watch", "pr", "--workspace", "topic"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+    fixture.requests();
+
+    let unjudged = fixture.run(&["pr", "review", "--workspace", "topic", "--body", "Hm"]);
+    assert!(!unjudged.status.success());
+    assert!(String::from_utf8_lossy(&unjudged.stderr).contains("--comment"));
+    let file = fixture.root.path().join("comments.json");
+    fs::write(
+        &file,
+        r#"[{"path": "src/a.rs", "line": 1, "side": "old", "body": "Was a"}]"#,
+    )
+    .unwrap();
+    let reviewed = fixture.ok(&[
+        "pr",
+        "review",
+        "--workspace",
+        "topic",
+        "--comment",
+        "--line",
+        "src/a.rs:2",
+        "Why b?",
+        "--comments-file",
+        file.to_str().unwrap(),
+    ]);
+    assert_eq!(reviewed["number"], 8, "{reviewed}");
+    let posted: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0] == "POST repos/team/project/pulls/8/reviews")
+        .collect();
+    assert_eq!(
+        posted[0][1]["comments"],
+        json!([
+            {"path": "src/a.rs", "new_position": 2, "old_position": 0, "body": "Why b?"},
+            {"path": "src/a.rs", "new_position": 0, "old_position": 1, "body": "Was a"},
+        ])
+    );
+
+    // The agent's own review is not reported back beside the closing.
+    fixture.respond(responses("closed", &[5]));
+    let closed = fixture.ok(&["watch", "pr", "--workspace", "topic"]);
+    let kinds: Vec<_> = closed["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|update| update["kind"].clone())
+        .collect();
+    assert_eq!(kinds, ["closed"], "{closed}");
+}
+
+#[test]
 fn review_threads_take_replies_and_ask_before_resolving_without_one() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

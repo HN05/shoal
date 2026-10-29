@@ -1,5 +1,5 @@
 //! Arguments of commands for a workspace's changes, its PRs and issues, and landing it.
-use std::ffi::OsString;
+use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
 
@@ -143,6 +143,16 @@ pub enum PrCommand {
         body: BodyArgs,
         #[command(flatten)]
         files: AttachArgs,
+    },
+    /// Review a PR: a body, comments on lines of its diff and a verdict.
+    ///
+    /// Workspace processes can only comment; approving and requesting
+    /// changes use your own login.
+    Review {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        review: ReviewArgs,
     },
     /// Reply in the thread of a review comment.
     Reply {
@@ -307,6 +317,39 @@ pub struct ItemSelector {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+// A review's verdict, body and comments on lines of the PR's diff.
+#[derive(Debug, Args)]
+pub struct ReviewArgs {
+    #[command(flatten)]
+    pub verdict: VerdictArgs,
+    #[command(flatten)]
+    pub body: BodyArgs,
+    /// Comment on a line of the PR's version of a file; repeat for more.
+    #[arg(long = "line", num_args = 2, value_names = ["PATH:LINE", "BODY"])]
+    pub lines: Vec<String>,
+    /// Comment on a removed line, numbered in the base's version; repeat for more.
+    #[arg(long = "old-line", num_args = 2, value_names = ["PATH:LINE", "BODY"])]
+    pub old_lines: Vec<String>,
+    /// Read more line comments from a JSON array; `-` reads standard input.
+    #[arg(long, value_name = "PATH")]
+    pub comments_file: Option<PathBuf>,
+}
+
+// The verdict of a review; exactly one.
+#[derive(Debug, Args)]
+#[group(required = true, multiple = false)]
+pub struct VerdictArgs {
+    /// Comment without approving or requesting changes.
+    #[arg(long)]
+    pub comment: bool,
+    /// Approve the PR.
+    #[arg(long)]
+    pub approve: bool,
+    /// Request changes; needs a body.
+    #[arg(long)]
+    pub request_changes: bool,
 }
 
 // Title, description and label changes either kind of item takes.
