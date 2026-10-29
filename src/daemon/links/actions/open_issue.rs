@@ -25,7 +25,7 @@ use crate::{
 };
 
 /// Why `--link` is refused outside a workspace.
-pub(crate) const LINK_NEEDS_WORKSPACE: &str =
+const LINK_NEEDS_WORKSPACE: &str =
     "--link needs a workspace to assign the issue to; run this in one or pass --workspace";
 
 impl Manager {

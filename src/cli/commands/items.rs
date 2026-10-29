@@ -22,6 +22,7 @@ use crate::{
 
 mod ci;
 mod content;
+mod context;
 mod list;
 mod open;
 mod react;

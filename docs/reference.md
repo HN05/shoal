@@ -2714,7 +2714,10 @@ open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.
 `issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
-while another issue is assigned. A workspace being removed refuses it. Its JSON
+while another issue is assigned. A workspace being removed refuses it. Outside
+a workspace, such as in a chat, it opens the issue in the repository of the
+registered checkout it runs in, as that repository's agent account and under its
+settings, records it nowhere, and refuses `--link`. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings, a failure to label, attach files
 or read the issue once the forge opened it, which still records it as posted,

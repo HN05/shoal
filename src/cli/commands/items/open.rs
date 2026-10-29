@@ -2,7 +2,7 @@
 //! an issue, and report what the repository's approval rules made of it.
 use anyhow::{Result, ensure};
 
-use super::content::read_content;
+use super::{content::read_content, context::select_context};
 use crate::{
     cli::{args::changes::OpenPullArgs, client, context::Context, ui},
     daemon::links::proposals::{OpenOutcome, Proposed},
@@ -12,7 +12,7 @@ use crate::{
     },
     git,
     model::Workspace,
-    protocol::{ItemContext, ItemMethod, WorkspaceMethod},
+    protocol::{ItemMethod, WorkspaceMethod},
 };
 
 /// Verify the worktree before anything leaves it, push without forcing, then
@@ -87,11 +87,11 @@ pub(super) async fn open_issue(
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let context = select_context(ctx, workspace).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
         ItemMethod::OpenIssue {
-            context: ItemContext::Workspace(workspace),
+            context,
             issue,
             repository,
             link,

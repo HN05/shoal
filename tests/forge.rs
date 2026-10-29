@@ -3882,24 +3882,36 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
         "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
             "state": "open", "labels": [{"name": "type/bug"}]}},
     }));
-    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
-    let open = |labels: &[&str], link: bool| {
-        json!({"open_issue": {"checkout": repository, "repository": null, "link": link,
-            "issue": {"title": "Flaky", "body": "", "labels": labels}}})
+    let open_in = |directory: &Path, args: &[&str]| {
+        let open = ["issue", "open", "--title", "Flaky"];
+        let output = fixture
+            .command()
+            .current_dir(directory)
+            .args([&open[..], args].concat())
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        (output, stderr)
     };
 
-    // The repository's required labels apply as in a workspace.
-    let refused = fixture.request(open(&["bug"], false));
-    assert!(refused.to_string().contains("type/"), "{refused}");
-    // Opening from a checkout assigns the issue to no workspace.
-    let linked = fixture.request(open(&["type/bug"], true));
+    // Outside a workspace and a checkout, nothing names the repository.
+    let (_, stderr) = open_in(fixture.root.path(), &["--label", "type/bug"]);
     assert!(
-        linked.to_string().contains("--link needs a workspace"),
-        "{linked}"
+        stderr.contains("no current workspace or registered checkout"),
+        "{stderr}"
     );
+    // The repository's required labels apply as in a workspace.
+    let (_, stderr) = open_in(&fixture.repo, &["--label", "bug"]);
+    assert!(stderr.contains("type/"), "{stderr}");
+    // Opening from a checkout assigns the issue to no workspace.
+    let (_, stderr) = open_in(&fixture.repo, &["--label", "type/bug", "--link"]);
+    assert!(stderr.contains("--link needs a workspace"), "{stderr}");
     // A workspace process acts from its own workspace.
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let method = json!({"open_issue": {"checkout": repository, "repository": null,
+        "link": false, "issue": {"title": "Flaky", "body": "", "labels": ["type/bug"]}}});
     let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"].clone();
-    let scoped = fixture.request_as(open(&["type/bug"], false), scope.as_str());
+    let scoped = fixture.request_as(method, scope.as_str());
     assert!(
         scoped
             .to_string()
@@ -3909,10 +3921,11 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
     assert!(writes(&fixture).is_empty());
 
     // The user's chat opens directly, whatever `issue_open` says.
-    let opened = fixture.request(open(&["type/bug"], false));
-    assert_eq!(opened["type"], "opened", "{opened}");
-    assert_eq!(opened["data"]["linked"], false);
-    assert_eq!(opened["data"]["url"], format!("{}/issues/40", fixture.web));
+    let (output, stderr) = open_in(&fixture.repo, &["--label", "type/bug", "--json"]);
+    assert!(output.status.success(), "{stderr}");
+    let opened: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(opened["linked"], false);
+    assert_eq!(opened["url"], format!("{}/issues/40", fixture.web));
     assert_eq!(
         writes(&fixture),
         [json!(["POST repos/team/project/issues",
