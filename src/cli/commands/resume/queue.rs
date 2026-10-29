@@ -1,7 +1,8 @@
 //! `shoal resume` without `--now`: queue each stopped agent's restore, which
 //! the daemon starts as the agent limits allow.
 use anyhow::Result;
-use serde_json::json;
+use serde::Serialize;
+use serde_json::{Value, json};
 
 use super::{claim_commands, reconcile_stale_execution, report_commands};
 use crate::{
@@ -21,6 +22,35 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
         )?;
         return Ok(0);
     }
+    let queued = queue_each(ctx, stopped).await;
+    ctx.show(&queued, |queued| {
+        if let Some(summary) = queued.summary() {
+            outln!("{summary}");
+        }
+    })?;
+    Ok(if queued.failed.is_empty() { 0 } else { 1 })
+}
+
+/// What [`queue_each`] did: the restores it queued, the commands it reported
+/// and the workspaces it failed for.
+#[derive(Serialize)]
+pub(in crate::cli::commands) struct Queued {
+    queued: Vec<QueueEntry>,
+    commands: Vec<Value>,
+    failed: Vec<Value>,
+}
+
+impl Queued {
+    /// What the user reads once restores are queued, `None` without any.
+    pub(in crate::cli::commands) fn summary(&self) -> Option<String> {
+        (!self.queued.is_empty()).then(|| summary(self.queued.len()))
+    }
+}
+
+/// Queue the restore of every agent and last session `stopped` saves, and
+/// report the commands of workspaces without one, going on after one fails,
+/// which it reports.
+pub(super) async fn queue_each(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -> Queued {
     let mut queued = Vec::new();
     let mut commands = Vec::new();
     let mut failed = Vec::new();
@@ -39,13 +69,11 @@ pub(super) async fn queue_all(ctx: &Context, stopped: Vec<(Workspace, Saved)>) -
             }
         }
     }
-    let output = json!({"queued": queued, "commands": commands, "failed": failed});
-    ctx.show(&output, |_| {
-        if !queued.is_empty() {
-            outln!("{}", summary(queued.len()));
-        }
-    })?;
-    Ok(if failed.is_empty() { 0 } else { 1 })
+    Queued {
+        queued,
+        commands,
+        failed,
+    }
 }
 
 /// What the user reads once `count` restores are queued.
