@@ -153,6 +153,34 @@ impl Layout {
         Ok(())
     }
 
+    /// The copies kept for the workspace `workspace_id` outside its results:
+    /// the files two directories below its own, one directory per message and
+    /// one per file within it. Hidden entries are copies still being made.
+    pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Vec<PathBuf> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Vec::new();
+        }
+        let entries = |directory: &Path| -> Vec<PathBuf> {
+            std::fs::read_dir(directory)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+                .map(|entry| entry.path())
+                .collect()
+        };
+        let mut copies: Vec<PathBuf> = entries(&self.root.join(workspace_id))
+            .iter()
+            .filter(|message| message.is_dir())
+            .flat_map(|message| entries(message))
+            .filter(|file| file.is_dir())
+            .flat_map(|file| entries(&file))
+            .filter(|copy| copy.is_file())
+            .collect();
+        copies.sort();
+        copies
+    }
+
     /// Delete the files attached for the workspace `workspace_id`.
     pub(crate) fn remove_workspace(&self, workspace_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {

@@ -37,7 +37,7 @@ fn owner(row: &rusqlite::Row<'_>) -> rusqlite::Result<Owner> {
 /// `workspace_id` from `source`, in the caller's transaction. A copy already
 /// recorded, as when the same files are sent again, keeps its record.
 pub(crate) fn record(
-    tx: &Transaction<'_>,
+    tx: &Connection,
     workspace_id: &str,
     source: FileSource,
     paths: &[PathBuf],

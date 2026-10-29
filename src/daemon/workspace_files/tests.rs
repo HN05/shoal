@@ -551,3 +551,36 @@ async fn handing_back_a_changed_file_completes_again() {
     assert_eq!(revised.results[0].name, first.results[0].name);
     assert_ne!(revised.results[0].id, first.results[0].id);
 }
+
+#[tokio::test]
+async fn upgrading_records_the_copies_messages_attached_before() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    manager
+        .send_agent_message(&workspace.name, "See the log".into(), vec![file])
+        .await
+        .unwrap();
+    let copy = manager.workspace_files(&workspace.name).await.unwrap()[0]
+        .path
+        .clone();
+    // A state database from before Shoal recorded attached files.
+    manager
+        .store
+        .run(|db| {
+            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    let files = reopened.workspace_files(&workspace.name).await.unwrap();
+    let [recorded] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!(recorded.path, copy);
+    assert_eq!(recorded.source, FileSource::Message);
+    assert_eq!(recorded.bytes, 5);
+    reopened.store.shutdown().await;
+}
