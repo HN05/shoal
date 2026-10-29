@@ -15,32 +15,13 @@ use crate::{
     protocol::{ItemMethod, WorkspaceMethod},
 };
 
-/// Verify the worktree before anything leaves it, push without forcing, then
-/// let the daemon find or open the PR and link it.
 pub(super) async fn open_pr(
     ctx: &Context,
     workspace: Option<String>,
     options: PullOptions,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
-    let workspace: Workspace = client::request(
-        &ctx.paths,
-        WorkspaceMethod::VerifyWorkspace {
-            workspace,
-            on_branch: true,
-        },
-    )
-    .await?;
-    push(ctx, &workspace).await?;
-    let outcome: OpenOutcome = client::request(
-        &ctx.paths,
-        ItemMethod::OpenPull {
-            workspace: workspace.id,
-            options,
-        },
-    )
-    .await?;
-    let opened = match outcome {
+    let opened = match publish(ctx, workspace, options).await? {
         OpenOutcome::Opened(opened) => opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "PR", &proposed),
     };
@@ -60,6 +41,32 @@ pub(super) async fn open_pr(
     };
     ctx.emit(&message, &opened)?;
     Ok(0)
+}
+
+/// Verify the worktree before anything leaves it, push without forcing, then
+/// let the daemon find or open the PR and link it.
+pub(super) async fn publish(
+    ctx: &Context,
+    workspace: String,
+    options: PullOptions,
+) -> Result<OpenOutcome> {
+    let workspace: Workspace = client::request(
+        &ctx.paths,
+        WorkspaceMethod::VerifyWorkspace {
+            workspace,
+            on_branch: true,
+        },
+    )
+    .await?;
+    push(ctx, &workspace).await?;
+    client::request(
+        &ctx.paths,
+        ItemMethod::OpenPull {
+            workspace: workspace.id,
+            options,
+        },
+    )
+    .await
 }
 
 /// Push to the branch's push remote as a tracked command under the agent
@@ -113,7 +120,7 @@ pub(super) async fn open_issue(
 
 /// The repository requires approval: the agent continues its work and
 /// hears the decision as a message.
-fn report_proposed(ctx: &Context, kind: &str, proposed: &Proposed) -> Result<i32> {
+pub(super) fn report_proposed(ctx: &Context, kind: &str, proposed: &Proposed) -> Result<i32> {
     ctx.emit(
         &format!(
             "{kind} proposed for approval {}: the user decides whether Shoal opens it, and the decision arrives as a message.",
@@ -124,7 +131,7 @@ fn report_proposed(ctx: &Context, kind: &str, proposed: &Proposed) -> Result<i32
     Ok(0)
 }
 
-fn print_warnings(opened: &Opened) {
+pub(super) fn print_warnings(opened: &Opened) {
     for warning in &opened.warnings {
         eprintln!("{warning}");
     }
