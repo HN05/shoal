@@ -50,6 +50,7 @@ async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head(
 #[tokio::test]
 async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked() {
     use crate::{
+        forge::items::create::NewIssue,
         state::WorkspaceState,
         test_support::{manager, repository},
     };

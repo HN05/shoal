@@ -7,26 +7,24 @@ use super::{
     wait::{OwnChange, record_own_change},
 };
 use crate::{
-    config::{
-        Config,
-        repo::{Opening, OtherRepositories},
-        resolve::Effective,
-    },
+    config::{repo::Opening, resolve::Effective},
     daemon::{events, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
-        account::{Account, AgentLogins},
+        account::Account,
         conventions,
         items::{
             action::{Action, Edit, Sent},
-            create::{Created, NewIssue, NewPull, PullOptions},
+            create::{NewPull, PullOptions},
             item::{Item, ItemState, Opened},
             link::ItemKind,
         },
     },
-    fsutil::expand_home,
     model::{Relation, ReviewMark, Workspace},
 };
+
+mod accounts;
+mod open_issue;
 
 impl Manager {
     /// Apply `action` to the item `input` names in the workspace's repository,
@@ -122,24 +120,6 @@ impl Manager {
         }
     }
 
-    /// The forge of the workspace's `origin`.
-    pub(super) async fn workspace_forge(&self, workspace: &Workspace) -> Result<ForgeRepo> {
-        let remote = crate::repository::remote_url_from_path(&workspace.path)
-            .await?
-            .context("forge actions need an origin remote")?;
-        self.forge(&remote).await
-    }
-
-    pub(super) async fn workspace_forge_account(
-        &self,
-        workspace: &Workspace,
-    ) -> Result<(ForgeRepo, Account)> {
-        Ok((
-            self.workspace_forge(workspace).await?,
-            self.agent_account(workspace).await?,
-        ))
-    }
-
     /// Apply `action` and record it as the workspace's own change, as well as
     /// a comment it posted before failing. The caller holds the workspace's
     /// PR gate.
@@ -225,9 +205,6 @@ impl Manager {
     }
 }
 
-/// The forge memory of the user's own logins.
-const USER_LOGINS: &str = "user";
-
 /// The item an action changes.
 #[derive(Clone)]
 pub(super) struct Target {
@@ -260,178 +237,6 @@ fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
         Vec::new()
     } else {
         authored
-    }
-}
-
-impl Manager {
-    /// The user's own logins, which reads and the user's decisions use.
-    pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket).remembering(self.forge_memories.of(USER_LOGINS))
-    }
-
-    pub(super) async fn agent_account(&self, workspace: &Workspace) -> Result<Account> {
-        // One snapshot, so a reload cannot pair a profile with another map.
-        let config = self.config();
-        let settings = self.workspace_settings_from(&config, workspace).await?;
-        self.agent_account_from(&config, &settings)
-    }
-
-    /// The agent account `settings` select, with the Git profiles of
-    /// `config`, the snapshot they were resolved from.
-    pub(super) fn agent_account_from(
-        &self,
-        config: &Config,
-        settings: &Effective,
-    ) -> Result<Account> {
-        let auth = &settings.agent_auth;
-        let logins = AgentLogins {
-            launch: Box::new(auth.prepare(&self.paths, &config.git)?),
-            fj_home: (auth.fj_home.as_ref()).map(|home| expand_home(home, &self.paths.home)),
-            fj: auth.fj.is_some(),
-            tea: auth.tea.is_some(),
-        };
-        // An agent with the user's logins shares what the user's requests taught.
-        let identity = match auth.forge_identity()? {
-            Some(logins) => format!("agent {logins}"),
-            None => USER_LOGINS.to_owned(),
-        };
-        Ok(
-            Account::agent(logins, &config.bitbucket)
-                .remembering(self.forge_memories.of(&identity)),
-        )
-    }
-}
-
-impl Manager {
-    /// Open an issue as the workspace's agent account in its repository, or
-    /// the one `repository` names, and link it when `link` is set. A
-    /// workspace process's issue is recorded for the user's approval instead
-    /// when `[approvals] issue_open`, or for another repository
-    /// `[issue] other_repositories`, says so.
-    pub async fn open_issue(
-        &self,
-        selector: &str,
-        issue: NewIssue,
-        repository: Option<String>,
-        link: bool,
-        caller: Option<&Caller>,
-    ) -> Result<OpenOutcome> {
-        anyhow::ensure!(!issue.title.trim().is_empty(), "the issue needs a title");
-        let proposer = self.proposer(caller).await;
-        // Cleanup holds the workspace's gate, so it cannot remove the
-        // workspace between opening the issue and linking it.
-        let (workspace, _gate) = self.lock_pr_gate(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        // Refuse before creating anything that could not then be recorded
-        // or linked.
-        anyhow::ensure!(
-            workspace.state.accepts_links(),
-            "workspace cannot accept an issue in its current state"
-        );
-        anyhow::ensure!(
-            !link || workspace.links.issue.is_none(),
-            "the workspace already has a linked issue; open the issue without --link"
-        );
-        let settings = self.workspace_settings(&workspace).await?;
-        let (own, account) = self.workspace_forge_account(&workspace).await?;
-        let destination = self.issue_destination(own, repository.as_deref()).await?;
-        anyhow::ensure!(
-            !link || !destination.elsewhere,
-            "an issue in another repository cannot be linked; open it without --link"
-        );
-        let opening = match proposer {
-            Some(_) => destination.opening(&settings)?,
-            None => Opening::Direct,
-        };
-        let (forge, required) = (&destination.forge, destination.required(&settings));
-        conventions::require(forge, &account, ItemKind::Issue, required, &issue.labels).await?;
-        if let Some(proposer) = proposer.filter(|_| opening == Opening::Propose) {
-            forge.check_uploads(&account, &issue.attachments).await?;
-            let repository = destination.repository();
-            let proposed = self
-                .propose_issue(&workspace, issue, repository, link, proposer)
-                .await?;
-            return Ok(OpenOutcome::Proposed(proposed));
-        }
-        let Created { item, unfinished } = forge.create_issue(&account, &issue).await?;
-        let (linked, warning) = self
-            .keep_created(&workspace, ItemKind::Issue, &item, link)
-            .await?;
-        // The workspace's conventions do not apply to another repository,
-        // and its item commands cannot change an issue there.
-        let checked = if destination.elsewhere {
-            Vec::new()
-        } else {
-            let body = Some(issue.body.as_str());
-            conventions::warnings(forge, &account, &workspace.path, &item, body, required).await
-        };
-        Ok(OpenOutcome::Opened(Opened {
-            item,
-            created: true,
-            linked,
-            warnings: warning
-                .into_iter()
-                .chain(unfinished)
-                .chain(checked)
-                .collect(),
-        }))
-    }
-
-    /// The repository `named` names for a new issue, or the workspace's
-    /// repository `own` without one.
-    async fn issue_destination(
-        &self,
-        own: ForgeRepo,
-        named: Option<&str>,
-    ) -> Result<IssueDestination> {
-        let Some(named) = named else {
-            return Ok(IssueDestination {
-                forge: own,
-                elsewhere: false,
-            });
-        };
-        let forge = own.resolve_named(named, &self.forge_hosts()).await?;
-        let elsewhere = forge != own;
-        Ok(IssueDestination { forge, elsewhere })
-    }
-}
-
-/// The repository a new issue opens in, and whether it is another than the
-/// workspace's, whose settings and conventions then do not apply.
-struct IssueDestination {
-    forge: ForgeRepo,
-    elsewhere: bool,
-}
-
-impl IssueDestination {
-    /// How a scoped caller opens the issue here under `settings`, refusing
-    /// another repository they deny.
-    fn opening(&self, settings: &Effective) -> Result<Opening> {
-        if !self.elsewhere {
-            return Ok(settings.approvals.issue_open);
-        }
-        match settings.issue.other_repositories {
-            OtherRepositories::Deny => bail!(
-                "agents cannot open issues in {}: [issue] other_repositories is \"deny\"",
-                self.forge.repository_url()
-            ),
-            OtherRepositories::Propose => Ok(Opening::Propose),
-            OtherRepositories::Direct => Ok(Opening::Direct),
-        }
-    }
-
-    /// The labels `settings` require of the new issue; none elsewhere.
-    fn required<'a>(&self, settings: &'a Effective) -> &'a [String] {
-        if self.elsewhere {
-            &[]
-        } else {
-            &settings.issue.required_labels
-        }
-    }
-
-    /// The URL a proposal records for another repository.
-    fn repository(&self) -> Option<String> {
-        self.elsewhere.then(|| self.forge.repository_url())
     }
 }
 
