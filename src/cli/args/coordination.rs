@@ -35,6 +35,9 @@ pub enum CoordinationCommand {
         /// Print only the paths of Shoal's copies, one per line.
         #[arg(long)]
         path: bool,
+        /// Print the list instead of opening the picker on a terminal.
+        #[arg(long, conflicts_with = "path")]
+        print: bool,
     },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {

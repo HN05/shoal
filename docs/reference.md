@@ -3439,7 +3439,8 @@ messages and send messages only to the agents of the [workspaces below their own
 ### Attached files
 
 ```sh
-shoal files [workspace]          # The workspace's attached files, oldest first
+shoal files [workspace]          # Pick among the workspace's files, or list them
+shoal files [workspace] --print  # List them on a terminal too
 shoal files [workspace] --path   # Only the paths of Shoal's copies
 shoal done --attach report.md    # Hand back a file with the completion
 shoal files add notes.md [--workspace W]  # Attach files without a message
@@ -3447,7 +3448,13 @@ shoal files rm [FILE...] [--workspace W]  # Delete a workspace's files, or those
 shoal files rm --all                      # Delete the files of every idle workspace
 ```
 
-`shoal files` lists the files attached to a workspace: each one's name, size,
+`shoal files` lists the files attached to a workspace, or on a terminal opens a
+picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
+copy's path, Ctrl-O opens it in the application the desktop chooses and prints
+its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
+add row, asks for a file to add. Workspace processes cannot open files.
+`--print`, like `--json`, `--path` or output that is not a
+terminal, lists them: each one's name, size,
 how it came (`message` for a file sent with `shoal messages send --attach`,
 `added` for one from `shoal files add`, `result` for one handed back with
 `shoal done --attach`), when, and the path of Shoal's copy in the repository

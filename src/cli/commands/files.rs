@@ -1,5 +1,6 @@
-//! `shoal files` lists the files attached to a workspace; `add` attaches
-//! more without a message and `rm` deletes them.
+//! `shoal files` lists the files attached to a workspace, or on a terminal
+//! opens a picker over them; `add` attaches more without a message and `rm`
+//! deletes them.
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
@@ -16,11 +17,37 @@ use crate::{
     protocol::FileMethod,
 };
 
-/// Print the workspace's files, or with `paths` only where Shoal keeps them.
-pub(super) async fn list(ctx: &Context, workspace: Option<String>, paths: bool) -> Result<i32> {
+mod menu;
+
+/// How `shoal files` shows a workspace's files.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Listing {
+    /// A picker on a terminal, otherwise a list.
+    Menu,
+    /// A list.
+    Print,
+    /// Only where Shoal keeps them.
+    Paths,
+}
+
+/// Show the workspace's files as `listing` asks.
+pub(super) async fn list(
+    ctx: &Context,
+    workspace: Option<String>,
+    listing: Listing,
+) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let files =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::ListFiles { workspace }).await?;
+    let files = client::pages::<AttachedFile>(
+        &ctx.paths,
+        FileMethod::ListFiles {
+            workspace: workspace.clone(),
+        },
+    )
+    .await?;
+    if listing == Listing::Menu && ctx.interactive_output() {
+        return menu::choose(ctx, workspace, &files).await;
+    }
+    let paths = listing == Listing::Paths;
     ctx.show(&files, |files| {
         if paths {
             for file in files {

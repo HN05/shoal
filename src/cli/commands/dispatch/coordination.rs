@@ -88,7 +88,15 @@ pub(in crate::cli::commands) async fn run(
             command: None,
             workspace,
             path,
-        } => files::list(&ctx, workspace, path).await,
+            print,
+        } => {
+            let listing = match (path, print) {
+                (true, _) => files::Listing::Paths,
+                (false, true) => files::Listing::Print,
+                (false, false) => files::Listing::Menu,
+            };
+            files::list(&ctx, workspace, listing).await
+        }
         CoordinationCommand::Done {
             workspace,
             cleanup,
