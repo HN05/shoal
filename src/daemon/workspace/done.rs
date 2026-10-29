@@ -393,18 +393,28 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> Stri
         notice.push_str(&format!("; closed questions {}", numbers.join(", ")));
     }
     if !completion.results.is_empty() {
-        let names: Vec<_> = completion
-            .results
-            .iter()
-            .filter_map(|path| path.file_name())
-            .map(|name| name.to_string_lossy())
-            .collect();
         notice.push_str(&format!(
             "; results in shoal files {workspace}: {}",
-            names.join(", ")
+            results_preview(&completion.results)
         ));
     }
     notice
+}
+
+/// The results a notice names: the first few, then how many more, since
+/// `shoal files` lists them all.
+fn results_preview(results: &[PathBuf]) -> String {
+    const NAMED: usize = 3;
+    let names: Vec<_> = results
+        .iter()
+        .take(NAMED)
+        .filter_map(|path| path.file_name())
+        .map(|name| name.to_string_lossy())
+        .collect();
+    match results.len().saturating_sub(NAMED) {
+        0 => names.join(", "),
+        more => format!("{} and {more} more", names.join(", ")),
+    }
 }
 
 #[cfg(test)]
