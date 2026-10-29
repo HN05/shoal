@@ -118,10 +118,14 @@ state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux s
 How the daemon exits decides what becomes of tracked agents and commands:
 
 - `shoal daemon restart`, `shoal daemon install` when it replaces an
-  incompatible daemon, an update, SIGTERM or SIGINT, and a crash leave them
-  running.
+  incompatible daemon, an update, and a crash leave them running.
 - `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
   until `shoal resume`, then stops the daemon.
+- SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
+  stops them as the daemon does before a system shutdown: each wrapper saves its
+  agent first, and restores that need no user wait in the agent queue. The
+  service definition's `ExitTimeOut` (launchd) or `TimeoutStopSec` (systemd)
+  gives the stop time before the service manager kills the daemon.
 
 The service commands ask the daemon how to exit over its socket, whatever its
 release; one that does not answer gets SIGTERM. When work keeps running, its
@@ -300,7 +304,9 @@ cancelled; then it releases the lock, which logind
 honours for at most its `InhibitDelayMaxSec`. A `system_shutdown` notification
 names the `shoal resume` command the work needs, naming done workspaces, which
 `--all` skips, or says the agent queue restores it; a workspace that does not
-stop records `stop_failed`, and a refused lock `environment_problem`. An
+stop records `stop_failed`, and a refused lock `environment_problem`. A signal
+to the daemon stops work the same way unless a shutdown's stop already did, and
+records `daemon_stopped` instead of `system_shutdown`. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits

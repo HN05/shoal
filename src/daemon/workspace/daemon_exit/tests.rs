@@ -4,7 +4,10 @@ use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
 use super::*;
 use crate::{
-    daemon::execution_connection::{ExecutionContext, execute},
+    daemon::{
+        execution_connection::{ExecutionContext, execute},
+        notifications::NotificationKind,
+    },
     execution::recovery,
     model::Workspace,
     protocol::{self, Body, Control, ExecutionEvent, Response},
@@ -130,6 +133,35 @@ impl Running {
             .unwrap()
             .contains("earlier")
     }
+
+    async fn notifications(&self, kind: NotificationKind) -> Vec<String> {
+        let notifications = self.manager.notifications(true, 10).await.unwrap();
+        notifications
+            .into_iter()
+            .filter(|notification| notification.kind == kind)
+            .map(|notification| notification.message)
+            .collect()
+    }
+}
+
+#[tokio::test]
+async fn a_signal_stops_work_saved_first_keeping_its_restores() {
+    let (running, control) = Running::start().await.end(Ending::Save).await;
+    assert!(
+        matches!(
+            &control,
+            Control::Pause { reason: Some(reason), removed: false, shutdown: true }
+                if reason == "the Shoal daemon is stopping"
+        ),
+        "{control:?}"
+    );
+    assert!(running.queued_restore().await);
+    assert_eq!(
+        running.notifications(NotificationKind::DaemonStopped).await,
+        [
+            "Stopped work in 1 workspace before the Shoal daemon stopped; the agent queue restores its agents"
+        ]
+    );
 }
 
 #[tokio::test]
@@ -147,12 +179,21 @@ async fn daemon_stop_stops_work_as_stop_all_does() {
     assert!(!running.queued_restore().await);
     let saved = recovery::Saved::load(&running.manager.paths, &running.workspace.id).unwrap();
     assert!(saved.agents.is_empty(), "{:?}", saved.agents);
+    assert!(
+        running
+            .notifications(NotificationKind::DaemonStopped)
+            .await
+            .is_empty()
+    );
 }
 
 #[tokio::test]
-async fn a_restart_leaves_work_alone() {
+async fn a_restart_and_a_signal_after_a_system_shutdown_leave_work_alone() {
     let mut running = Running::start().await;
     bounded(running.manager.end_work(Ending::Detach)).await;
+    // The system shutdown's stop holds the queue.
+    running.manager.agent_queue.suspend(true).await;
+    bounded(running.manager.end_work(Ending::Save)).await;
     assert!(running.queued_restore().await);
     // The connection still runs: the next control answers its exit.
     let finished = ExecutionEvent::Finished { exit_code: 0 };
@@ -164,4 +205,10 @@ async fn a_restart_leaves_work_alone() {
         Control::Finished { complete: true }
     ));
     bounded(&mut running.executing).await.unwrap().unwrap();
+    assert!(
+        running
+            .notifications(NotificationKind::DaemonStopped)
+            .await
+            .is_empty()
+    );
 }

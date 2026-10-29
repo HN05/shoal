@@ -61,6 +61,8 @@ states!(NotificationKind {
     ForgeLimited => "forge_limited",
     /// The daemon stopped tracked work before the system shut down.
     SystemShutdown => "system_shutdown",
+    /// The daemon stopped tracked work before a signal ended it.
+    DaemonStopped => "daemon_stopped",
     /// The sleep inhibitor `keep_awake` holds could not start or ended.
     KeepAwakeFailed => "keep_awake_failed",
     /// The daemon removed a contribution repository nothing was left of.

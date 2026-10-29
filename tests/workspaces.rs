@@ -5782,7 +5782,7 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
 }
 
 #[test]
-fn daemon_stop_stops_tracked_agents() {
+fn daemon_stop_and_signals_stop_tracked_agents() {
     let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -5834,6 +5834,22 @@ fn daemon_stop_stops_tracked_agents() {
                 .iter()
                 .all(|name| name.ends_with(".last-session.json")),
         "{stopped:?}"
+    );
+    // A signal stops the agent saved first, as a system shutdown does.
+    fixture.restart();
+    let mut agent = start(&fixture);
+    assert_eq!(
+        unsafe { libc::kill(fixture.daemon.child.id() as i32, libc::SIGTERM) },
+        0
+    );
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    assert!(agent.wait().unwrap().success());
+    let saved = saved();
+    assert!(
+        saved
+            .iter()
+            .any(|name| !name.ends_with(".last-session.json")),
+        "{saved:?}"
     );
 }
 

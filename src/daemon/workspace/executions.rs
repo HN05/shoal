@@ -118,7 +118,8 @@ pub enum Save {
     /// Agent sessions, which the removed workspace's removal record keeps.
     RemovedAgents,
     /// Agent sessions and interrupted commands, saved before the stop since
-    /// the system shuts down, with restores that need no user queued.
+    /// the system or the daemon shuts down, with restores that need no user
+    /// queued.
     Shutdown,
 }
 
@@ -147,10 +148,10 @@ impl StopRequest {
         }
     }
 
-    /// The stop before the system shuts down.
-    pub(crate) fn system_shutdown() -> Self {
+    /// The stop before the system or the daemon shuts down, for `reason`.
+    pub(crate) fn shutdown(reason: &str) -> Self {
         Self {
-            reason: "the system is shutting down".into(),
+            reason: reason.into(),
             save: Save::Shutdown,
         }
     }

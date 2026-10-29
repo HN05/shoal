@@ -1,5 +1,5 @@
-//! Stopping tracked work before the system shuts down, as `shoal stop --all`
-//! does, while the daemon and wrappers still run to save it.
+//! Stopping tracked work before the system or the daemon shuts down, as
+//! `shoal stop --all` does, while the daemon and wrappers still run to save it.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -15,20 +15,59 @@ use crate::{
     model::Workspace,
 };
 
+/// What shuts down, which the stop and the user's notifications name.
+#[derive(Clone, Copy)]
+pub(crate) enum Shutdown {
+    System,
+    /// A signal ends the daemon, as a logout or a service manager's stop sends.
+    Daemon,
+}
+
+impl Shutdown {
+    fn request(self) -> StopRequest {
+        match self {
+            Self::System => StopRequest::shutdown("the system is shutting down"),
+            Self::Daemon => StopRequest::shutdown("the Shoal daemon is stopping"),
+        }
+    }
+
+    /// When the work stopped, as the user's notifications say it.
+    fn moment(self) -> &'static str {
+        match self {
+            Self::System => "before the system shut down",
+            Self::Daemon => "before the Shoal daemon stopped",
+        }
+    }
+
+    fn notification(self) -> NotificationKind {
+        match self {
+            Self::System => NotificationKind::SystemShutdown,
+            Self::Daemon => NotificationKind::DaemonStopped,
+        }
+    }
+}
+
 impl Manager {
+    /// Stop the workspaces `shoal stop --all` stops before the system shuts
+    /// down. See [`Manager::stop_for_shutdown_of`].
+    pub(crate) async fn stop_for_system_shutdown(&self) {
+        self.stop_for_shutdown_of(Shutdown::System).await;
+    }
+
     /// Stop the workspaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
     /// which the stop keeps with those already waiting, and hold the agent
-    /// queue until the shutdown is cancelled, so nothing starts again before
-    /// it. The user learns what to continue. An update waits for the stop.
-    pub(crate) async fn stop_for_system_shutdown(&self) {
+    /// queue until a system shutdown is cancelled, so nothing starts again
+    /// before it. The user learns what to continue. An update waits for the
+    /// stop.
+    pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
         let stopped = self
-            .stop_every_target("before the system shut down", |workspace| async move {
-                self.stop_keeping_restores(&workspace, StopRequest::system_shutdown())
+            .stop_every_target(shutdown.moment(), |workspace| async move {
+                self.stop_keeping_restores(&workspace, shutdown.request())
                     .await
             })
             .await;
-        self.notify_shutdown_stop(&stopped).await;
+        self.notify_shutdown_stop(shutdown, &stopped).await;
     }
 
     /// Admit queued agents again once the shutdown was cancelled.
@@ -76,7 +115,7 @@ impl Manager {
     }
 
     /// Tell the user what the stop of `stopped` saved and how it continues.
-    async fn notify_shutdown_stop(&self, stopped: &[Workspace]) {
+    async fn notify_shutdown_stop(&self, shutdown: Shutdown, stopped: &[Workspace]) {
         if stopped.is_empty() {
             return;
         }
@@ -84,7 +123,7 @@ impl Manager {
             .queued_stopped_restores()
             .await
             .unwrap_or_else(|error| {
-                log!("system shutdown: agent queue unavailable: {error:#}");
+                log!("shutdown stop: agent queue unavailable: {error:#}");
                 HashSet::new()
             });
         let waiting: Vec<&Workspace> = stopped
@@ -92,7 +131,7 @@ impl Manager {
             .filter(|workspace| {
                 waits_for_resume(&self.paths, workspace, &queued).unwrap_or_else(|error| {
                     log!(
-                        "system shutdown: stopped work of {} unreadable: {error:#}",
+                        "shutdown stop: stopped work of {} unreadable: {error:#}",
                         workspace.name
                     );
                     true
@@ -106,12 +145,11 @@ impl Manager {
         } else {
             "workspaces"
         };
+        let moment = shutdown.moment();
         self.notify(
             None,
-            NotificationKind::SystemShutdown,
-            format!(
-                "Stopped work in {count} {workspaces} before the system shut down; {continues}"
-            ),
+            shutdown.notification(),
+            format!("Stopped work in {count} {workspaces} {moment}; {continues}"),
         )
         .await;
     }

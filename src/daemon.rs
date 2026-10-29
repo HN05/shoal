@@ -163,10 +163,11 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     );
     let (listener, mut clients) = startup.finish(server.clone()).await;
     let mut quiescence = None;
+    // A signal may come from a shutdown or a logout, so it saves work.
     let result = loop {
         tokio::select! {
-            _ = terminate.recv() => break Ok(Ending::Detach),
-            _ = interrupt.recv() => break Ok(Ending::Detach),
+            _ = terminate.recv() => break Ok(Ending::Save),
+            _ = interrupt.recv() => break Ok(Ending::Save),
             Some(ending) = exit_requested.recv() => break Ok(ending),
             _ = update_tick.tick(), if update.is_some() => {
                 if update.as_ref().is_some_and(auto_update::Update::pending)

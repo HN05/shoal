@@ -103,16 +103,19 @@ scope token. The daemon verifies these against the record, restores scope and
 agent metadata, and serves the connection as before; a command that exits
 meanwhile reports once reattached. A refusal stops the command as manual stop
 does. Reattachment is a permanent protocol method accepted at every version, and
-wrappers advertise it when they register: a restart, an update or a signal detaches those and
+wrappers advertise it when they register: a restart or an update detaches those and
 stops the rest as manual stop does, within the workspace stop timeout. Setup and
 landing hold daemon gates, so they never reattach.
-The service commands ask the daemon over its socket how to exit:
-`shoal daemon restart` and an install that replaces an incompatible daemon ask
-it to detach its wrappers, and `shoal daemon stop` to stop work as `shoal stop
---all` does, so agents stay down until `shoal resume`. The request is permanent
-like reattachment and answered before the protocol check, since restarting is
-how an upgrade reaches a daemon of another release; a daemon that does not
-answer gets SIGTERM.
+Only a planned exit, a restart or an update, keeps work running. The daemon
+cannot tell a service command's SIGTERM from a shutdown's, a logout's or a
+`kill`, so a signal stops
+all work with the save-first shutdown stop below, and the service commands
+instead ask the daemon over its socket how to exit: `shoal daemon restart` and
+an install that replaces an incompatible daemon ask it to detach its wrappers,
+and `shoal daemon stop` to stop work as `shoal stop --all` does, so agents stay
+down until `shoal resume`. The request is permanent like reattachment and
+answered before the protocol check, since restarting is how an upgrade reaches
+a daemon of another release; a daemon that does not answer gets SIGTERM.
 
 Overload protection is configured machine-wide: memory is enabled by default,
 CPU is opt-in and requires sustained aggregate busy time. One `load` setting
@@ -231,7 +234,9 @@ session ends, so on Linux the daemon holds logind's shutdown delay lock and,
 once a shutdown starts, stops running work itself with the same save-first stop
 while it and the wrappers still run, then releases the lock. A delay lock, not
 a blocking one: a shutdown never waits on Shoal beyond logind's limit, and the
-records saved first survive a stop that outlasts it.
+records saved first survive a stop that outlasts it. Elsewhere the signal that
+ends the daemon starts the same stop, which the service definition's stop
+timeout bounds; after a logind stop the signal leaves work alone.
 As after a protection stop, an agent stopped between turns returns only for an
 update, counting processes still running outside its process group as a turn
 in flight, and its restore keeps its workspace from no cleanup meanwhile; `shoal resume` asks for the agent itself, so its restore waits for

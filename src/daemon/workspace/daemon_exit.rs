@@ -1,7 +1,7 @@
 //! What becomes of tracked work as the daemon exits: a restart or an update
-//! leaves it running, and `shoal daemon stop` stops it as `shoal stop --all`
-//! does.
-use super::Manager;
+//! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does,
+//! and a signal stops it saved first, since it may come from a shutdown.
+use super::{Manager, shutdown_stop::Shutdown};
 use crate::protocol::Exit;
 
 /// What becomes of running work as the daemon exits.
@@ -12,6 +12,9 @@ pub(crate) enum Ending {
     /// Work stops as `shoal stop --all` stops it and stays down until
     /// `shoal resume`.
     Stop,
+    /// Work stops saved first, with restores that need no user queued, as
+    /// before a system shutdown.
+    Save,
 }
 
 impl From<Exit> for Ending {
@@ -31,6 +34,9 @@ impl Manager {
         match ending {
             Ending::Detach => {}
             Ending::Stop => self.stop_all_for_exit().await,
+            // A system shutdown already stopped the work and holds the queue.
+            Ending::Save if self.agent_queue.suspended() => {}
+            Ending::Save => self.stop_for_shutdown_of(Shutdown::Daemon).await,
         }
     }
 
