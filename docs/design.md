@@ -227,7 +227,8 @@ stop and the daemon converts it once the stop finishes, so wrappers of earlier
 releases stop the same way. Taking agents down briefly is `shoal restart`. User commands
 save their arguments, which resume reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
-command is not known to be safe. Scoped callers cannot stop executions. A hangup
+command is not known to be safe. Scoped callers stop only the executions of the
+workspaces below theirs. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
 without the agent choosing to quit, and the daemon may already be gone. The

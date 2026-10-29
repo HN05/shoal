@@ -409,7 +409,7 @@ configured command for another agent, plus proven child
   queued restore of an agent stopped between turns, with no processes left
   outside its process group, waits for an update unless `shoal resume` asked
   for it.
-  Scoped callers cannot stop executions.
+  Scoped callers stop only the executions of the workspaces below theirs.
 - Command wrappers keep running when the daemon goes away and reattach only after
   the daemon verifies the record, scope token, wrapper and child identities and
   process group; the reattach request stays accepted at every protocol version.
