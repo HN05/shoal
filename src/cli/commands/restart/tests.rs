@@ -20,6 +20,8 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
         state: None,
         interrupted: false,
         origin: None,
+        started_ms_ago: Some(0),
+        restart: None,
     }
 }
 

@@ -790,6 +790,20 @@ pub struct RunningAgent {
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
+    /// How many milliseconds ago its wrapper started or restored it; `None`
+    /// for an execution whose wrapper is gone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_ms_ago: Option<u64>,
+    /// The `shoal restart` of it in progress.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restart: Option<PendingRestart>,
+}
+
+/// A `shoal restart` that has not started its agent again yet.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingRestart {
+    /// How many milliseconds ago the first request for it came.
+    pub requested_ms_ago: u64,
 }
 
 /// The session a workspace's agent reported last, which a new agent can

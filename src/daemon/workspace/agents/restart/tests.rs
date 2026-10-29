@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::{
     daemon::workspace::{ExecutionKind, Manager, RestartWaits},
     execution::recovery,
-    model::{RunningAgent, Workspace},
+    model::{PendingRestart, RunningAgent, Workspace},
     state::AgentState,
     test_support::{manager, repository},
 };
@@ -64,6 +64,9 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
 
     let mut agents = manager.running_agents().await.unwrap();
     agents.sort_by_key(|agent| agent.agent.is_none());
+    // A connected agent says how long it has run.
+    let started = agents[0].started_ms_ago;
+    assert!(started.is_some());
     assert_eq!(
         agents,
         [
@@ -75,6 +78,8 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 state: Some(AgentState::Idle),
                 interrupted: false,
                 origin: None,
+                started_ms_ago: started,
+                restart: None,
             },
             RunningAgent {
                 execution: gone.plan.id.clone(),
@@ -84,6 +89,8 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 state: None,
                 interrupted: false,
                 origin: None,
+                started_ms_ago: None,
+                restart: None,
             },
         ]
     );
@@ -272,4 +279,69 @@ async fn a_restart_waiting_for_processes_answers_at_once_and_still_resumes() {
     assert!(manager.resume_agent_execution(&id, None).await.unwrap());
     manager.agent_started(&id).await;
     assert!(!manager.restart_requested(&id).await);
+}
+
+#[tokio::test]
+async fn a_second_request_joins_the_restart_in_progress() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let first = tokio::spawn({
+        let manager = manager.clone();
+        let id = id.clone();
+        async move { manager.restart_agent(&id).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    // Registered before the agent starts again, which answers it.
+    let second = manager.request_restart(&id).await.unwrap();
+    // The listing shows the restart, requested since the agent started.
+    let listed = manager.running_agents().await.unwrap();
+    let Some(PendingRestart { requested_ms_ago }) = listed[0].restart else {
+        panic!("expected a pending restart: {listed:?}");
+    };
+    assert!(requested_ms_ago <= listed[0].started_ms_ago.unwrap());
+    // The agent's start answers both.
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    first.await.unwrap().unwrap();
+    second.await.unwrap().unwrap();
+    assert_eq!(manager.running_agents().await.unwrap()[0].restart, None);
+}
+
+#[tokio::test]
+async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_now() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let restarting = tokio::spawn({
+        let manager = manager.clone();
+        let id = id.clone();
+        async move { manager.restart_agent(&id).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+    manager.notify_restore_waits(&id, "PID 7 survives").await;
+    restarting.await.unwrap().unwrap_err();
+    // Other processes keep it waiting now.
+    manager.restart_waits(&id, "PID 8 survives").await;
+
+    let error = manager.restart_agent(&id).await.unwrap_err();
+    assert!(error.downcast_ref::<RestartWaits>().is_some());
+    assert_eq!(
+        format!("{error}"),
+        "claude restarts once its remaining processes exit: PID 8 survives; \
+         shoal stop agents cancels the restart"
+    );
+    assert!(manager.restart_requested(&id).await);
 }

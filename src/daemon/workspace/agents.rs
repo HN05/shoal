@@ -411,11 +411,7 @@ impl Manager {
             format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace} cancels the restore"),
         )
         .await;
-        self.restart_waits(
-            id,
-            format!("{name} restarts once its remaining processes exit: {issue}; shoal stop {workspace} cancels the restart"),
-        )
-        .await;
+        self.restart_waits(id, issue).await;
     }
 
     /// Resume the stopped agent `id`, which `grant` admitted when its

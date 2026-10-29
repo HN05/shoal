@@ -238,7 +238,8 @@ fn done_cancels_restore() -> Action {
 const SURVIVOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Wait until none of the stopped agent's processes survive, since a restore
-/// must not start beside them, and tell the user once what it waits for.
+/// must not start beside them, telling the user once what it waits for and a
+/// restart's requests what it waits for now.
 async fn await_stopped(
     manager: &Manager,
     execution_id: &str,
@@ -251,11 +252,12 @@ async fn await_stopped(
     manager.notify_restore_waits(execution_id, &issue).await;
     loop {
         tokio::time::sleep(SURVIVOR_POLL_INTERVAL).await;
-        if let Pause::Paused = manager
+        match manager
             .pause_agent_execution(execution_id, workspace_id, Duration::ZERO)
             .await?
         {
-            return Ok(());
+            Pause::Paused => return Ok(()),
+            Pause::Unproven(issue) => manager.restart_waits(execution_id, &issue).await,
         }
     }
 }

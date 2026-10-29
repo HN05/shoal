@@ -2,41 +2,70 @@
 //! in the same terminal, as after a protection stop, but at once and outside
 //! the agent queue, since the agent keeps its slot.
 use anyhow::{Context, Result, anyhow, ensure};
-use tokio::sync::oneshot;
+use tokio::{sync::oneshot, time::Instant};
 
 use super::{Agent, Manager};
 use crate::{
-    daemon::store, execution::recovery, model::RunningAgent, protocol::Protection,
+    daemon::store,
+    execution::recovery,
+    model::{PendingRestart, RunningAgent},
+    protocol::Protection,
     state::AgentState,
 };
 
-/// A restart in progress, which answers its request.
+/// A restart in progress, which answers each request for it.
 pub(super) struct Restart {
-    /// Taken by the answer, which may come before the restart ends.
-    done: Option<oneshot::Sender<Result<()>>>,
+    /// The requests still to answer; a request for an agent already
+    /// restarting joins them.
+    answers: Vec<oneshot::Sender<Result<()>>>,
+    requested: Instant,
     /// The stopped agent was resumed, so its wrapper's next start is the
     /// restarted agent rather than the first one.
     resumed: bool,
+    /// Why the restart waits for the stopped agent's processes, which
+    /// answers each request at once.
+    waits: Option<String>,
 }
 
 impl Restart {
-    fn new() -> (Self, oneshot::Receiver<Result<()>>) {
-        let (done, answer) = oneshot::channel();
-        let restart = Self {
-            done: Some(done),
+    /// A restart without requests to answer, such as one whose request ended
+    /// with the daemon that took it.
+    pub(super) fn unanswered() -> Self {
+        Self {
+            answers: Vec::new(),
+            requested: Instant::now(),
             resumed: false,
-        };
-        (restart, answer)
+            waits: None,
+        }
     }
 
-    /// A restart whose request ended with the daemon that took it.
-    pub(super) fn unanswered() -> Self {
-        Self::new().0
+    /// Answer one more request: at once while the restart waits for the
+    /// agent's processes, otherwise once it ends.
+    fn answer(&mut self) -> oneshot::Receiver<Result<()>> {
+        let (done, answer) = oneshot::channel();
+        match &self.waits {
+            Some(waits) => {
+                let _ = done.send(Err(RestartWaits(waits.clone()).into()));
+            }
+            None => self.answers.push(done),
+        }
+        answer
     }
 
     pub(super) fn resume(&mut self) {
         self.resumed = true;
+        self.waits = None;
     }
+
+    fn pending(&self) -> PendingRestart {
+        PendingRestart {
+            requested_ms_ago: millis(self.requested.elapsed()),
+        }
+    }
+}
+
+fn millis(duration: std::time::Duration) -> u64 {
+    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 impl Manager {
@@ -50,25 +79,22 @@ impl Manager {
                 executions
                     .into_iter()
                     .filter_map(|execution| {
-                        let (agent, restorable, state, interrupted) =
-                            match agents.get(&execution.id) {
-                                // Named as `--agent` and recovery records name it.
-                                Some(agent) => (
-                                    Some(agent.name.replace(' ', "-")),
-                                    agent.recover,
-                                    agent.turn,
-                                    agent.interrupted,
-                                ),
-                                None if connections.is_connected(&execution.id) => return None,
-                                None => (None, false, None, false),
-                            };
+                        let agent = agents.get(&execution.id);
+                        if agent.is_none() && connections.is_connected(&execution.id) {
+                            return None;
+                        }
                         Some(RunningAgent {
-                            state,
-                            interrupted,
+                            // Named as `--agent` and recovery records name it.
+                            agent: agent.map(|agent| agent.name.replace(' ', "-")),
+                            restorable: agent.is_some_and(|agent| agent.recover),
+                            state: agent.and_then(|agent| agent.turn),
+                            interrupted: agent.is_some_and(|agent| agent.interrupted),
+                            started_ms_ago: agent.map(|agent| millis(agent.started.elapsed())),
+                            restart: agent
+                                .and_then(|agent| agent.restart.as_ref())
+                                .map(Restart::pending),
                             execution: execution.id,
                             workspace_id: execution.workspace_id,
-                            agent,
-                            restorable,
                             origin: execution.origin,
                         })
                     })
@@ -93,23 +119,22 @@ impl Manager {
     }
 
     /// Save the handoff of `agent`, the agent of `id`, then stop it for a
-    /// restart.
+    /// restart, or join the restart already in progress.
     fn stop_for_restart(
         &self,
         id: &str,
         agent: Option<&mut Agent>,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
+        if let Some(restart) = &mut agent.restart {
+            return Ok(restart.answer());
+        }
         ensure!(
             agent.recover,
             "{} has no command to resume its session; configure [agent_resume] for it",
             agent.name
         );
-        ensure!(
-            !*agent.stop.borrow() && agent.restart.is_none(),
-            "{} is already stopping",
-            agent.name
-        );
+        ensure!(!*agent.stop.borrow(), "{} is already stopping", agent.name);
         // Save the handoff before the stop, so a wrapper that dies stopping
         // the agent leaves it for `shoal resume`.
         let handoff = recovery::save_record(
@@ -121,7 +146,8 @@ impl Manager {
             agent.turn,
         )
         .context("save the agent's recovery record")?;
-        let (restart, answer) = Restart::new();
+        let mut restart = Restart::unanswered();
+        let answer = restart.answer();
         agent.restart = Some(restart);
         if agent.stop.send(true).is_err() {
             agent.restart = None;
@@ -176,26 +202,37 @@ impl Manager {
 
     /// The restart of `id` ends without the agent running again.
     pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
-        self.answer_restart(id, false, Err(anyhow!(reason))).await;
+        self.answer_restart(id, false, Err(reason)).await;
     }
 
-    /// The restart of `id` waits for the stopped agent's processes to exit,
-    /// which may take until the user ends them. Its request is answered with
-    /// `issue` now, while the restart continues.
-    pub(crate) async fn restart_waits(&self, id: &str, issue: String) {
-        let done = self
+    /// The restart of `id` waits for the stopped agent's processes to exit
+    /// because of `issue`, which may last until the user ends them. Its
+    /// requests are answered with that now, and later ones at once, while the
+    /// restart continues.
+    pub(crate) async fn restart_waits(&self, id: &str, issue: &str) {
+        let answered = self
             .executions
-            .with_agent(id, |agent| agent.restart.as_mut()?.done.take())
+            .with_agent(id, |agent| {
+                let restart = agent.restart.as_mut()?;
+                let waits = format!(
+                    "{} restarts once its remaining processes exit: {issue}; shoal stop {} cancels the restart",
+                    agent.name, agent.workspace
+                );
+                restart.waits = Some(waits.clone());
+                Some((std::mem::take(&mut restart.answers), waits))
+            })
             .await
             .flatten();
-        if let Some(done) = done {
-            // The request may have gone with its client.
-            let _ = done.send(Err(RestartWaits(issue).into()));
+        if let Some((answers, waits)) = answered {
+            for done in answers {
+                // The request may have gone with its client.
+                let _ = done.send(Err(RestartWaits(waits.clone()).into()));
+            }
         }
     }
 
-    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<()>) {
-        let done = self
+    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<(), String>) {
+        let restart = self
             .executions
             .with_agent(id, |agent| {
                 agent
@@ -203,11 +240,10 @@ impl Manager {
                     .take_if(|restart| restart.resumed || !once_resumed)
             })
             .await
-            .flatten()
-            .and_then(|restart| restart.done);
-        if let Some(done) = done {
+            .flatten();
+        for done in restart.into_iter().flat_map(|restart| restart.answers) {
             // The request may have gone with its client.
-            let _ = done.send(outcome);
+            let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
         }
     }
 }

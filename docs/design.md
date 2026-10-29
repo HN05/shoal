@@ -178,7 +178,10 @@ agent stays in its terminal: the daemon sends the stop protection sends, with
 the reason `restarted by shoal restart` and recovery whatever the overload
 policy, so wrappers of earlier releases restore it too, and resumes the agent
 once its processes are proven stopped, outside the agent queue, since it keeps
-its slot. The restore command resolves the agent again, so an updated agent
+its slot. A restart outlives the requests that asked for it; a request for an
+agent already restarting joins that restart and is answered as the first one
+is, and the daemon lists each pending restart with when it was requested. The
+restore command resolves the agent again, so an updated agent
 binary runs. A wrapper whose binary an upgrade replaced execs the installed one
 when the daemon resumes its agent, keeping its process, terminal and daemon
 connection: the daemon sends nothing until the restored child starts, so no
