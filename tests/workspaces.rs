@@ -22634,7 +22634,10 @@ fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
 
 #[test]
 fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    // Without a watcher, nothing polls the tab after the fixture is gone.
+    let fixture = Fixture::with_config(Some(
+        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
     install_fake_herdr(&fixture);
     let args = [
         "add",
