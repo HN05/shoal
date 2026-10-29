@@ -229,17 +229,27 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
             .await
             .unwrap_or_default();
-    let places: Vec<_> = agents
+    // A connected agent runs in its place. The record of an execution whose
+    // wrapper is gone, or of a place Shoal created, outlives its session.
+    let (connected, unknown): (Vec<_>, Vec<_>) = agents
         .iter()
-        .filter_map(|agent| Some((agent.workspace_id.as_str(), agent.origin.as_ref()?)))
+        .filter_map(|agent| Some((agent, agent.origin.as_ref()?)))
+        .partition(|(agent, _)| agent.agent.is_some());
+    let connected: Vec<_> = connected
+        .into_iter()
+        .map(|(agent, place)| (agent.workspace_id.as_str(), place))
         .collect();
-    // A place Shoal created outlives its session in the daemon's records.
-    let owned: Vec<_> = owned
-        .iter()
-        .map(|place| (place.workspace_id.as_str(), &place.origin))
+    let recorded: Vec<_> = unknown
+        .into_iter()
+        .map(|(agent, place)| (agent.workspace_id.as_str(), place))
+        .chain(
+            owned
+                .iter()
+                .map(|place| (place.workspace_id.as_str(), &place.origin)),
+        )
         .collect();
-    let mut owners = terminal::session_owners(&places);
-    owners.extend(terminal::open_session_owners(&owned).await);
+    let mut owners = terminal::session_owners(&connected);
+    owners.extend(terminal::open_session_owners(&recorded).await);
     owners
 }
 

@@ -48,8 +48,8 @@ async fn attach_candidates_follow_recorded_places() -> Result<()> {
 fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let bin = root.join("bin");
     fs::create_dir(&bin)?;
-    // Only the session Shoal created for `second` is asked about; its
-    // record outlives `gone`'s.
+    // Only `retained` is open: the records of `gone` and `stale` outlive
+    // their sessions.
     let script = bin.join("zmx");
     fs::write(
         &script,
@@ -88,6 +88,7 @@ async fn attach_candidates_child() -> Result<()> {
         BTreeSet::from([
             OsStr::new("first"),
             OsStr::new("second"),
+            OsStr::new("fourth"),
             OsStr::new("chat")
         ])
     );
@@ -102,14 +103,24 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             request.method,
             Method::Operation(Operation::Execution(ExecutionMethod::ListAgents))
         ) {
-            Body::RunningAgents(vec![RunningAgent {
-                execution: "e1".into(),
-                workspace_id: "w1".into(),
-                agent: Some("claude".into()),
-                restorable: true,
-                state: None,
-                origin: Some(Origin::created(HostName::Zmx, "workspace-session".into())),
-            }])
+            // A connected agent counts as it is; executions whose wrapper
+            // is gone count only while their session is open.
+            Body::RunningAgents(
+                [
+                    ("w1", Some("claude"), "workspace-session"),
+                    ("w3", None, "stale"),
+                    ("w4", None, "retained"),
+                ]
+                .map(|(workspace, agent, session)| RunningAgent {
+                    execution: format!("{workspace}-execution"),
+                    workspace_id: workspace.into(),
+                    agent: agent.map(Into::into),
+                    restorable: agent.is_some(),
+                    state: None,
+                    origin: Some(Origin::created(HostName::Zmx, session.into())),
+                })
+                .into(),
+            )
         } else if matches!(
             request.method,
             Method::Operation(Operation::Workspace(WorkspaceMethod::OwnedPlaces))
@@ -148,18 +159,23 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
 }
 
 fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
-    [("w1", "first"), ("w2", "second"), ("w3", "third")]
-        .into_iter()
-        .map(|(id, name)| {
-            let mut workspace = Workspace::new_record(
-                "repo".into(),
-                name.into(),
-                root.join(name),
-                name.into(),
-                WorkspaceState::Ready,
-            );
-            workspace.id = id.into();
-            workspace
-        })
-        .collect()
+    [
+        ("w1", "first"),
+        ("w2", "second"),
+        ("w3", "third"),
+        ("w4", "fourth"),
+    ]
+    .into_iter()
+    .map(|(id, name)| {
+        let mut workspace = Workspace::new_record(
+            "repo".into(),
+            name.into(),
+            root.join(name),
+            name.into(),
+            WorkspaceState::Ready,
+        );
+        workspace.id = id.into();
+        workspace
+    })
+    .collect()
 }
