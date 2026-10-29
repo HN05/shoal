@@ -19581,6 +19581,22 @@ fn files_add_attaches_copies_without_a_message() {
     // A missing file fails before anything is picked or copied.
     let missing = fixture.run(&["files", "add", "missing.md", "--workspace", "receiver"]);
     assert!(!missing.status.success(), "{missing:?}");
+
+    // An idle workspace's files go without asking; every workspace's only
+    // once confirmed.
+    let deleted = fixture.ok(&["files", "rm", "receiver", "notes.md"]);
+    assert_eq!(deleted, added);
+    assert!(!copy.exists());
+    let unconfirmed = fixture.run(&["files", "rm", "--all"]);
+    assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
+    assert!(
+        String::from_utf8_lossy(&unconfirmed.stderr).contains("pass --yes"),
+        "{unconfirmed:?}"
+    );
+    assert_eq!(
+        fixture.ok(&["files", "rm", "--all", "--yes"]),
+        serde_json::json!([])
+    );
 }
 
 #[test]

@@ -3435,6 +3435,8 @@ messages and send messages only to the agents of the [workspaces below their own
 shoal files [workspace]          # The workspace's attached files, oldest first
 shoal files [workspace] --path   # Only the paths of Shoal's copies
 shoal files add notes.md [--workspace W]  # Attach files without a message
+shoal files rm [workspace] [file]         # Delete a workspace's files, or those with a name
+shoal files rm --all                      # Delete the files of every idle workspace
 ```
 
 `shoal files` lists the files attached to a workspace: each one's name, size,
@@ -3443,8 +3445,13 @@ how it came (`message` for a file sent with `shoal messages send --attach`,
 the repository directory's `.attachments`. `--json` gives each as a record with
 `source`, `path` and `bytes`. `shoal files add` copies files of at most 100 MiB
 there without telling the workspace's agents; adding the same file again keeps
-its copy. The copies stay until the workspace is removed. Scoped agents may
-list and add files for their own workspace and those split from it.
+its copy. The copies stay until the workspace is removed, or until
+`shoal files rm` deletes them sooner: all of a workspace's, or with a file name
+only the copies of that file. It asks first when an agent or command runs in
+the workspace. `--all` deletes the files of every workspace where none runs,
+after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
+again copies any deleted copy anew. Scoped agents may list, add and delete the
+files of their own workspace and those split from it, but not use `--all`.
 
 ### Questions
 

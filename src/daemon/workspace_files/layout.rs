@@ -160,6 +160,23 @@ pub(crate) fn check(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Delete Shoal's copy at `path`, and the directories that held only it.
+pub(crate) fn delete_copy(path: &Path) -> Result<()> {
+    match std::fs::remove_file(path) {
+        Err(error) if error.kind() != ErrorKind::NotFound => {
+            return Err(error).with_context(|| format!("delete {}", path.display()));
+        }
+        _ => {}
+    }
+    // A copy sits in a directory of its own, below the files attached with it.
+    for directory in path.ancestors().skip(1).take(2) {
+        if std::fs::remove_dir(directory).is_err() {
+            break;
+        }
+    }
+    Ok(())
+}
+
 fn remove_dir(directory: &Path) -> Result<()> {
     match std::fs::remove_dir_all(directory) {
         Err(error) if error.kind() != ErrorKind::NotFound => {

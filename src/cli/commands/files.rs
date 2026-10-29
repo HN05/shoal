@@ -1,12 +1,13 @@
 //! `shoal files` lists the files attached to a workspace; `add` attaches
-//! more without a message.
+//! more without a message and `rm` deletes them.
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{
-        client::request,
+        args::WorkspaceScope,
+        client::{self, request},
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
@@ -57,6 +58,53 @@ pub(super) async fn add(
         }
     })?;
     Ok(0)
+}
+
+/// Delete the files of the workspace `scope` selects, only those called
+/// `name` when given, or of every workspace without a running agent or
+/// command. Asks first for every workspace, or one where an agent or command
+/// runs, unless `yes`.
+pub(super) async fn remove(
+    ctx: &Context,
+    scope: WorkspaceScope,
+    name: Option<String>,
+    yes: bool,
+) -> Result<i32> {
+    let workspace = ui::select_workspace_filter(ctx, scope).await?;
+    if !yes && let Some(action) = confirmation(ctx, workspace.as_deref()).await? {
+        ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
+    }
+    let deleted: Vec<AttachedFile> =
+        request(&ctx.paths, FileMethod::RemoveFiles { workspace, name }).await?;
+    let text = match deleted.len() {
+        0 => "No files deleted".to_owned(),
+        1 => "Deleted 1 file".to_owned(),
+        n => format!("Deleted {n} files"),
+    };
+    ctx.emit(&text, &deleted)?;
+    Ok(0)
+}
+
+/// What deleting the files of `workspace`, or of every workspace, asks the
+/// user to confirm, if anything.
+async fn confirmation(ctx: &Context, workspace: Option<&str>) -> Result<Option<String>> {
+    let Some(workspace) = workspace else {
+        return Ok(Some(
+            "Delete the attached files of every workspace without a running agent or command"
+                .into(),
+        ));
+    };
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    Ok(workspaces
+        .iter()
+        .find(|listed| listed.id == workspace || listed.name == workspace)
+        .filter(|listed| listed.running)
+        .map(|listed| {
+            format!(
+                "An agent or command runs in {}. Delete its attached files",
+                listed.name
+            )
+        }))
 }
 
 /// The file's name, size, how it came, when, read at `now`, and Shoal's copy.

@@ -15,9 +15,10 @@ pub(crate) struct Copies {
 }
 
 /// The copies of `attachments` below `root`, in a directory named by the
-/// owner, text and files that attach them. An existing directory is reused
-/// unchanged; a new one is filled under a temporary name first, so a partial
-/// copy is never reused.
+/// owner, text and files that attach them. An existing directory that still
+/// holds every copy is reused unchanged, and one missing a copy someone
+/// deleted is made again; a new one is filled under a temporary name first,
+/// so a partial copy is never reused.
 pub(crate) fn keep_copies(
     root: &Path,
     owner: &str,
@@ -26,7 +27,17 @@ pub(crate) fn keep_copies(
 ) -> Result<Copies> {
     let directory = root.join(content_key(owner, body, attachments)?);
     let mut created = None;
-    if !directory.exists() {
+    let complete = attachments
+        .iter()
+        .enumerate()
+        .all(|(index, attachment)| copy_path(&directory, index, attachment).exists());
+    if !complete {
+        match std::fs::remove_dir_all(&directory) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(error).with_context(|| format!("delete {}", directory.display()));
+            }
+            _ => {}
+        }
         let staging = root.join(format!(".copying-{}", uuid::Uuid::new_v4()));
         let copied = copy_attachments(&staging, attachments)
             .and_then(|()| std::fs::rename(&staging, &directory).map_err(Into::into));

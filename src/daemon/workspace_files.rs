@@ -171,6 +171,89 @@ impl Manager {
             .await
     }
 
+    /// Delete the files attached to the workspace `selector` names, only the
+    /// copies of files called `name` when given, and return their records.
+    pub async fn remove_workspace_files(
+        &self,
+        selector: &str,
+        name: Option<String>,
+    ) -> Result<Vec<AttachedFile>> {
+        let workspace = self.workspace(selector).await?;
+        let _files = self
+            .gates
+            .lock_message_files(&workspace.repository_id)
+            .await;
+        let (id, wanted) = (workspace.id.clone(), name.clone());
+        let files: Vec<AttachedFile> = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT {COLUMNS} FROM workspace_files
+                            WHERE workspace_id=?1 AND (?2 IS NULL OR name=?2) ORDER BY id"
+                    ))?
+                    .query_map(params![id, wanted], row)?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await?;
+        if let Some(name) = &name {
+            ensure!(
+                !files.is_empty(),
+                "workspace {} has no attached file named {name}",
+                workspace.name
+            );
+        }
+        self.delete_files(files).await
+    }
+
+    /// Delete the attached files of every workspace without a running agent
+    /// or command, and return their records.
+    pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
+        let mut deleted = Vec::new();
+        for repo in self.repositories().await? {
+            let _files = self.gates.lock_message_files(&repo.id).await;
+            let id = repo.id.clone();
+            let files = self
+                .store
+                .run(move |db| {
+                    Ok(db
+                        .prepare(&format!(
+                            "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
+                                AND workspace_id NOT IN
+                                    (SELECT workspace_id FROM executions WHERE state=?2)
+                                ORDER BY id"
+                        ))?
+                        .query_map(params![id, crate::state::ExecutionState::Running], row)?
+                        .collect::<rusqlite::Result<Vec<_>>>()?)
+                })
+                .await?;
+            deleted.extend(self.delete_files(files).await?);
+        }
+        Ok(deleted)
+    }
+
+    /// Delete the copies `files` and then their records. Callers hold the
+    /// gate of their repository's attached files.
+    async fn delete_files(&self, files: Vec<AttachedFile>) -> Result<Vec<AttachedFile>> {
+        let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
+        tokio::task::spawn_blocking(move || {
+            paths.iter().try_for_each(|path| layout::delete_copy(path))
+        })
+        .await??;
+        let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                for id in ids {
+                    tx.execute("DELETE FROM workspace_files WHERE id=?1", [id])?;
+                }
+                tx.commit()?;
+                Ok(())
+            })
+            .await?;
+        Ok(files)
+    }
+
     /// Attach copies of `files` to the workspace `selector` names, without a
     /// message, and return their records. Adding the same files again keeps
     /// the copies they have.

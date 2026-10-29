@@ -72,6 +72,19 @@ pub(in crate::cli::commands) async fn run(
             ..
         } => files::add(&ctx, workspace, files).await,
         CoordinationCommand::Files {
+            command:
+                Some(FilesCommand::Rm {
+                    workspace,
+                    file,
+                    all,
+                    confirmation,
+                }),
+            ..
+        } => {
+            let scope = crate::cli::args::WorkspaceScope { workspace, all };
+            files::remove(&ctx, scope, file, confirmation.yes).await
+        }
+        CoordinationCommand::Files {
             command: None,
             workspace,
             path,

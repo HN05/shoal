@@ -106,3 +106,94 @@ async fn added_files_need_no_message() {
         "adding sends no message"
     );
 }
+
+#[tokio::test]
+async fn deleting_by_name_keeps_the_other_files() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let (log, shot) = (temp.path().join("crash.log"), temp.path().join("shot.png"));
+    std::fs::write(&log, "panic").unwrap();
+    std::fs::write(&shot, "image").unwrap();
+    manager
+        .send_agent_message(&workspace.name, "See".into(), vec![log.clone(), shot])
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace_files(&workspace.name, Some("missing.txt".into()))
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("no attached file named"),
+        "{error:#}"
+    );
+    let deleted = manager
+        .remove_workspace_files(&workspace.name, Some("crash.log".into()))
+        .await
+        .unwrap();
+    assert!(!deleted[0].path.exists());
+    let left = manager.workspace_files(&workspace.name).await.unwrap();
+    let [kept] = left.as_slice() else {
+        panic!("{left:?}");
+    };
+    assert_eq!(kept.name, "shot.png");
+    assert!(kept.path.exists());
+
+    // Sending the same files again copies the deleted one anew.
+    manager
+        .send_agent_message(
+            &workspace.name,
+            "See".into(),
+            vec![log, temp.path().join("shot.png")],
+        )
+        .await
+        .unwrap();
+    assert!(deleted[0].path.exists());
+    assert_eq!(
+        manager
+            .workspace_files(&workspace.name)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[tokio::test]
+async fn deleting_every_workspaces_files_spares_active_ones() {
+    let (temp, manager) = manager().await;
+    let idle = workspace(&temp, &manager).await;
+    let active = manager
+        .create_workspace(&idle.repository_id, "active".into(), None, None, None)
+        .await
+        .unwrap();
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    for workspace in [&idle, &active] {
+        manager
+            .add_workspace_files(&workspace.name, vec![file.clone()])
+            .await
+            .unwrap();
+    }
+    let id = active.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let deleted = manager.remove_idle_files().await.unwrap();
+    let [gone] = deleted.as_slice() else {
+        panic!("{deleted:?}");
+    };
+    assert_eq!(gone.workspace, "receiver");
+    assert!(!gone.path.exists());
+    assert_eq!(
+        manager.workspace_files(&active.name).await.unwrap().len(),
+        1
+    );
+}
