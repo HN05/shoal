@@ -764,10 +764,9 @@ fn cherry_pick(repo: &std::path::Path, revision: &str) {
 
 #[test]
 fn a_notice_names_the_first_results_and_counts_the_rest() {
-    let results: Vec<PathBuf> = ["report.md", "repro.sh", "trace.log", "a.png", "b.png"]
-        .iter()
-        .map(|name| PathBuf::from("/attachments/results/id/key/0").join(name))
-        .collect();
+    let results: Vec<String> = ["report.md", "repro.sh", "trace.log", "a.png", "b.png"]
+        .map(String::from)
+        .into();
     assert_eq!(
         results_preview(&results),
         "report.md, repro.sh, trace.log and 2 more"

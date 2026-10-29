@@ -492,7 +492,7 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
 }
 
 #[tokio::test]
-async fn messages_files_and_results_follow_their_copies_to_the_new_root() -> Result<()> {
+async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> {
     let (temp, manager, _repo, workspace, root) = cloned().await?;
     let file = temp.path().join("crash.log");
     fs::write(&file, "panic")?;
@@ -508,11 +508,7 @@ async fn messages_files_and_results_follow_their_copies_to_the_new_root() -> Res
         .completion(&workspace.id)
         .await?
         .context("no completion")?;
-    let [result] = completion.results.as_slice() else {
-        anyhow::bail!("expected one result: {completion:?}");
-    };
-    assert!(result.starts_with(root.join("origin")), "{result:?}");
-    assert_eq!(fs::read_to_string(result)?, "panic");
+    assert_eq!(completion.results, ["crash.log"]);
     let messages = manager.agent_messages(&workspace.id).await?;
     let [copy] = messages[0].attachments.as_slice() else {
         anyhow::bail!("expected one attachment: {messages:?}");
@@ -524,7 +520,9 @@ async fn messages_files_and_results_follow_their_copies_to_the_new_root() -> Res
     assert_eq!(fs::read_to_string(copy)?, "panic");
     let files = manager.workspace_files(&workspace.id).await?;
     assert_eq!(files[0].path, *copy);
-    assert_eq!(files[1].path, *result);
+    let result = &files[1].path;
+    assert!(result.starts_with(root.join("origin")), "{result:?}");
+    assert_eq!(fs::read_to_string(result)?, "panic");
     Ok(())
 }
 

@@ -88,7 +88,7 @@ impl Manager {
         head: String,
         cleanup: bool,
         integrated: bool,
-        results: Vec<PathBuf>,
+        results: Vec<String>,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
@@ -337,43 +337,6 @@ fn record_completion(
     Ok(recorded.as_ref() != Some(completion))
 }
 
-/// Point the results recorded in the completions of repository
-/// `repository_id`'s workspaces from `source` to `destination`, in the
-/// transaction that moves the repository's directory. Unreadable records
-/// stay as they are, for diagnosis.
-pub(crate) fn rebase_results(
-    tx: &rusqlite::Transaction,
-    repository_id: &str,
-    source: &Path,
-    destination: &Path,
-) -> Result<()> {
-    let recorded: Vec<(String, String)> = tx
-        .prepare(
-            "SELECT c.workspace_id,c.record FROM workspace_completion c
-                JOIN workspaces w ON w.id=c.workspace_id WHERE w.repository_id=?1",
-        )?
-        .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    for (id, record) in recorded {
-        let Ok(mut completion) = serde_json::from_str::<Completion>(&record) else {
-            continue;
-        };
-        if completion.results.is_empty() {
-            continue;
-        }
-        for path in &mut completion.results {
-            if let Ok(inside) = path.strip_prefix(source) {
-                *path = destination.join(inside);
-            }
-        }
-        tx.execute(
-            "UPDATE workspace_completion SET record=?2 WHERE workspace_id=?1",
-            rusqlite::params![id, serde_json::to_string(&completion)?],
-        )?;
-    }
-    Ok(())
-}
-
 /// What the user is told about a completion, the questions it closed and
 /// the files it handed back.
 fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> String {
@@ -403,14 +366,9 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> Stri
 
 /// The results a notice names: the first few, then how many more, since
 /// `shoal files` lists them all.
-fn results_preview(results: &[PathBuf]) -> String {
+fn results_preview(results: &[String]) -> String {
     const NAMED: usize = 3;
-    let names: Vec<_> = results
-        .iter()
-        .take(NAMED)
-        .filter_map(|path| path.file_name())
-        .map(|name| name.to_string_lossy())
-        .collect();
+    let names: Vec<_> = results.iter().take(NAMED).map(String::as_str).collect();
     match results.len().saturating_sub(NAMED) {
         0 => names.join(", "),
         more => format!("{} and {more} more", names.join(", ")),

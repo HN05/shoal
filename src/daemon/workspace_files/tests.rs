@@ -221,10 +221,11 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .mark_done(&child.id, false, false, vec![report])
         .await
         .unwrap();
-    let [result] = completion.results.as_slice() else {
-        panic!("{completion:?}");
-    };
-    assert_eq!(std::fs::read_to_string(result).unwrap(), "No leaks");
+    assert_eq!(completion.results, ["report.md"]);
+    let result = manager.workspace_files(&child.id).await.unwrap()[0]
+        .path
+        .clone();
+    assert_eq!(std::fs::read_to_string(&result).unwrap(), "No leaks");
     assert!(
         manager
             .notifications(true, 50)
@@ -377,10 +378,13 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     let audit = workspace(&temp, &manager).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
-    let completion = manager
+    manager
         .mark_done(&audit.id, false, false, vec![report])
         .await
         .unwrap();
+    let result = manager.workspace_files(&audit.id).await.unwrap()[0]
+        .path
+        .clone();
     manager
         .remove_workspace(
             &audit.id,
@@ -391,7 +395,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
         .unwrap();
     // The results directory now leads elsewhere, to a directory of the
     // workspace's ID.
-    let results = completion.results[0]
+    let results = result
         .ancestors()
         .find(|path| path.ends_with("results"))
         .unwrap()
@@ -518,24 +522,4 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     };
     assert_eq!(sent.source, FileSource::Message);
     assert!(sent.path.exists());
-}
-
-#[tokio::test]
-async fn results_whose_paths_overflow_a_completion_are_refused() {
-    let (temp, manager) = manager().await;
-    let audit = workspace(&temp, &manager).await;
-    let results: Vec<_> = (0..super::MAX_RESULTS)
-        .map(|n| {
-            let path = temp.path().join(format!("{n:0>3}{}.md", "x".repeat(230)));
-            std::fs::write(&path, "finding").unwrap();
-            path
-        })
-        .collect();
-    let error = manager
-        .mark_done(&audit.id, false, false, results)
-        .await
-        .unwrap_err();
-    assert!(error.to_string().contains("paths too long"), "{error:#}");
-    assert!(manager.completion(&audit.id).await.unwrap().is_none());
-    assert!(manager.workspace_files(&audit.id).await.unwrap().is_empty());
 }

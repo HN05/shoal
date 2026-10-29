@@ -19617,11 +19617,11 @@ fn done_hands_back_files_that_shoal_files_lists() {
         .unwrap();
     assert!(output.status.success(), "{output:?}");
     let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let result = completion["results"][0].as_str().unwrap();
-    assert_eq!(fs::read_to_string(result).unwrap(), "No leaks");
+    assert_eq!(completion["results"], serde_json::json!(["report.md"]));
     let files = fixture.ok(&["files", "audit"]);
     assert_eq!(files[0]["source"], "result", "{files}");
-    assert_eq!(files[0]["path"], result, "{files}");
+    let result = files[0]["path"].as_str().unwrap();
+    assert_eq!(fs::read_to_string(result).unwrap(), "No leaks");
     let status = fixture.run(&["status", "audit", "--text"]);
     assert!(
         String::from_utf8_lossy(&status.stdout).contains("Results:     report.md"),

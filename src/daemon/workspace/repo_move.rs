@@ -437,12 +437,6 @@ impl Manager {
                     Path::new(&source),
                     Path::new(&destination),
                 )?;
-                crate::daemon::workspace::done::rebase_results(
-                    &tx,
-                    &id,
-                    Path::new(&source),
-                    Path::new(&destination),
-                )?;
                 tx.execute(
                     "UPDATE repository_moves SET switched=1 WHERE repository_id=?1",
                     [&id],

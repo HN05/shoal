@@ -442,9 +442,10 @@ pub struct Completion {
     /// not wait for them to be pushed.
     #[serde(default)]
     pub integrated: bool,
-    /// Shoal's copies of the files the assignment handed back.
+    /// The names of the files the assignment handed back, which
+    /// `shoal files` lists with Shoal's copies.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub results: Vec<std::path::PathBuf>,
+    pub results: Vec<String>,
     pub error: Option<String>,
 }
 

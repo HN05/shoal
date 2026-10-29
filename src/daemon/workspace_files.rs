@@ -39,25 +39,11 @@ states!(FileSource {
 /// lists their copies to one protocol frame.
 pub const MAX_RESULTS: usize = 64;
 
-/// The most bytes the paths of one completion's results take in it, which
-/// the frame of a completion must hold however long the repository's path.
-const MAX_RESULT_PATH_BYTES: usize = 16 * 1024;
-
 /// Refuse more results than one completion hands back.
 pub fn check_results(results: &[PathBuf]) -> Result<()> {
     ensure!(
         results.len() <= MAX_RESULTS,
         "hand back at most {MAX_RESULTS} files with one completion"
-    );
-    Ok(())
-}
-
-/// Refuse copies whose paths would not fit the completion that lists them.
-fn check_result_paths(paths: &[PathBuf]) -> Result<()> {
-    let bytes = serde_json::to_vec(paths)?.len();
-    ensure!(
-        bytes <= MAX_RESULT_PATH_BYTES,
-        "the copies of these files have paths too long for one completion; hand back fewer files or shorter names"
     );
     Ok(())
 }
@@ -157,27 +143,24 @@ impl Manager {
     }
 
     /// Copies of the files `results` that `workspace` hands back with its
-    /// completion, recorded as its results, which outlive its removal.
+    /// completion, recorded as its results, which outlive its removal; returns
+    /// their names.
     pub(crate) async fn keep_results(
         &self,
         workspace: &Workspace,
         results: Vec<PathBuf>,
-    ) -> Result<Vec<PathBuf>> {
+    ) -> Result<Vec<String>> {
         if results.is_empty() {
-            return Ok(results);
+            return Ok(Vec::new());
         }
         let (layout, _files) = self.lock_files(workspace).await?;
         let id = workspace.id.clone();
         let kept =
             tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
-        if let Err(error) = check_result_paths(&kept.paths) {
-            discard(kept).await;
-            return Err(error);
-        }
         let records = self
             .record_or_discard(&workspace.id, FileSource::Result, kept)
             .await?;
-        Ok(records.into_iter().map(|file| file.path).collect())
+        Ok(records.into_iter().map(|file| file.name).collect())
     }
 
     /// Delete the files attached to the workspace `selector` names, only the

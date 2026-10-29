@@ -2457,8 +2457,9 @@ branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
 `status` shows it as integrated elsewhere. `--attach FILE`, repeated for up to
 64 files, hands back files such as a report: Shoal copies each, of at most 100 MiB, into
 the workspace's [attached files](#attached-files) as a result, the completion
-lists the copies in `results`, `status` names them, and the completion notice
-ends with `results in shoal files <workspace>:` and their names. A missing file
+lists their names in `results`, `status` names them, and the completion notice
+ends with `results in shoal files <workspace>:` and the first three names, then
+how many more. A missing file
 fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from

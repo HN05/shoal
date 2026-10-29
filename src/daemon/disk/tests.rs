@@ -239,10 +239,13 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .unwrap();
     let report = root.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
-    let completion = manager
+    manager
         .mark_done(&audit.id, false, false, vec![report])
         .await
         .unwrap();
+    let result = manager.workspace_files(&audit.id).await.unwrap()[0]
+        .path
+        .clone();
     manager
         .remove_workspace(
             &audit.id,
@@ -251,14 +254,14 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         )
         .await
         .unwrap();
-    assert!(completion.results[0].exists(), "removal keeps results");
+    assert!(result.exists(), "removal keeps results");
     // Above the stop threshold, so only cleanup runs.
     let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
     Monitor::default()
         .check(&manager, Instant::now(), |_: &Path| Ok(low))
         .await
         .unwrap();
-    assert!(!completion.results[0].exists());
+    assert!(!result.exists());
     let notifications = manager.notifications(true, 10).await.unwrap();
     let deleted = notifications
         .iter()
