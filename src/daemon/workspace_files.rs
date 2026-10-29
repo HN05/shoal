@@ -177,8 +177,8 @@ impl Manager {
     }
 
     /// Delete the attached files of every workspace without a running agent
-    /// or command, and return their records. No execution starts while a
-    /// repository's files are chosen and deleted.
+    /// or command, or one whose end is unresolved, and return their records.
+    /// No execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
         for repo in self.repositories().await? {

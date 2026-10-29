@@ -105,16 +105,16 @@ pub(super) fn list(
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The files of repository `repository_id` whose workspace has no running
-/// execution, oldest first.
+/// The files of repository `repository_id` whose workspace has no recorded
+/// execution, running or unresolved, oldest first.
 pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
-                AND workspace_id NOT IN (SELECT workspace_id FROM executions WHERE state=?2)
+                AND workspace_id NOT IN (SELECT workspace_id FROM executions)
                 ORDER BY id"
         ))?
-        .query_map(params![repository_id, crate::state::ExecutionState::Running], row)?
+        .query_map([repository_id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }
 

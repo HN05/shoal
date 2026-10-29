@@ -162,25 +162,27 @@ async fn deleting_by_name_keeps_the_other_files() {
 async fn deleting_every_workspaces_files_spares_active_ones() {
     let (temp, manager) = manager().await;
     let idle = workspace(&temp, &manager).await;
-    let active = manager
-        .create_workspace(&idle.repository_id, "active".into(), None, None, None)
-        .await
-        .unwrap();
+    let create =
+        |name: &str| manager.create_workspace(&idle.repository_id, name.into(), None, None, None);
+    let active = create("active").await.unwrap();
+    // An execution whose end the daemon could not confirm may still run.
+    let unresolved = create("unresolved").await.unwrap();
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
-    for workspace in [&idle, &active] {
+    for workspace in [&idle, &active, &unresolved] {
         manager
             .add_workspace_files(&workspace.name, vec![file.clone()])
             .await
             .unwrap();
     }
-    let id = active.id.clone();
+    let (active_id, unresolved_id) = (active.id.clone(), unresolved.id.clone());
     manager
         .store
         .run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running')",
-                [id],
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('agent',?1,'running'),
+                    ('command',?2,'unknown')",
+                [active_id, unresolved_id],
             )?;
             Ok(())
         })
@@ -192,10 +194,12 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     };
     assert_eq!(gone.workspace, "receiver");
     assert!(!gone.path.exists());
-    assert_eq!(
-        manager.workspace_files(&active.name).await.unwrap().len(),
-        1
-    );
+    for spared in [&active, &unresolved] {
+        assert_eq!(
+            manager.workspace_files(&spared.name).await.unwrap().len(),
+            1
+        );
+    }
 }
 
 #[tokio::test]
