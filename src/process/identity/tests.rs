@@ -204,7 +204,7 @@ fn inventory<const N: usize>(
 ) -> Inventory<'_> {
     Inventory {
         observed: HashMap::from(observed),
-        ..Inventory::new(owners)
+        ..Inventory::new(owners, std::time::Instant::now())
     }
 }
 
@@ -333,6 +333,24 @@ fn owners_are_forgotten_once_no_live_process_names_them() -> Result<()> {
     .attribute(Marker::Execution, &ids)?;
     assert_eq!(owners.len(), 0);
     Ok(())
+}
+
+#[test]
+fn an_inventory_keeps_owners_recorded_after_it_began() {
+    let owners = owners::Owners::default();
+    let marks = Marks {
+        execution: Some("execution".into()),
+        workspace: None,
+    };
+    let began = std::time::Instant::now();
+    // An overlapping inventory records a process this one's listing missed.
+    owners.update(
+        std::time::Instant::now(),
+        vec![(100, marks.clone())],
+        &HashSet::new(),
+    );
+    owners.update(began, Vec::new(), &HashSet::new());
+    assert_eq!(owners.recall(100), Some(marks));
 }
 
 /// An agent's job whose shell and agent were killed stays the agent's: the

@@ -341,10 +341,13 @@ async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
+    // Before the listing, so owners other inventories record for processes
+    // it misses outlast this one's update.
+    let started = std::time::Instant::now();
     let listing = list_processes().await?;
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        let mut inventory = Inventory::new(&owners::OWNERS);
+        let mut inventory = Inventory::new(&owners::OWNERS, started);
         for pid in listing.own {
             if let Some(process) = observe(pid, settle_deadline)? {
                 inventory.observed.insert(pid, process);
@@ -574,11 +577,11 @@ fn another_users(pid: u32) -> bool {
 }
 
 impl<'a> Inventory<'a> {
-    fn new(owners: &'a owners::Owners) -> Self {
+    fn new(owners: &'a owners::Owners, started: std::time::Instant) -> Self {
         Self {
             observed: HashMap::new(),
             owners,
-            started: std::time::Instant::now(),
+            started,
         }
     }
 
