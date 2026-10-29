@@ -296,6 +296,12 @@ impl Rex {
         Ok(true)
     }
 
+    /// How many connected apps show `session`, such as a Mac or iOS app
+    /// with it open.
+    pub async fn showing(&self, session: &str) -> Result<u32> {
+        Ok(self.clients().await?.showing(session))
+    }
+
     /// The clients connected to the server.
     async fn clients(&self) -> Result<Clients> {
         let output = self.run(&["client", "ls", "--json"]).await?;
@@ -607,6 +613,8 @@ struct Client {
     client_id: String,
     info: Option<ClientInfo>,
     connection_state: Option<String>,
+    #[serde(default)]
+    session_ids: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -627,6 +635,20 @@ impl Clients {
                     })
             })
             .map(|client| client.client_id.as_str())
+    }
+
+    /// How many connected apps show `session`.
+    fn showing(&self, session: &str) -> u32 {
+        let count = self
+            .clients
+            .iter()
+            .filter(|client| {
+                client.connection_state.as_deref() == Some("connected")
+                    && client.info.as_ref().is_some_and(|info| info.kind == "app")
+                    && client.session_ids.iter().any(|id| id == session)
+            })
+            .count();
+        u32::try_from(count).unwrap_or(u32::MAX)
     }
 }
 

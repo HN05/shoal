@@ -92,6 +92,17 @@ fn only_a_connected_mac_app_shows_selections() {
 }
 
 #[test]
+fn connected_apps_with_a_session_open_show_it() {
+    let clients: Clients = serde_json::from_str(
+        r#"{"clients":[{"client_id":"client:cli","info":{"kind":"cli"},"connection_state":"connected","session_ids":["session:a"]},{"client_id":"client:phone","info":{"kind":"app","platform":"ios"},"connection_state":"connected","session_ids":["session:a","session:b"]},{"client_id":"client:gone","info":{"kind":"app"},"connection_state":"disconnected","session_ids":["session:a"]},{"client_id":"client:mac","info":{"kind":"app","platform":"macos"},"connection_state":"connected"}]}"#,
+    )
+    .unwrap();
+    assert_eq!(clients.showing("session:a"), 1);
+    assert_eq!(clients.showing("session:b"), 1);
+    assert_eq!(clients.showing("session:c"), 0);
+}
+
+#[test]
 fn origins_record_how_to_reach_the_server_again() {
     let (_root, rex) = fake("{}");
     let recorded = Rex::recorded(&rex.data()).unwrap();

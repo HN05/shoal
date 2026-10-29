@@ -289,7 +289,8 @@ pub struct Session {
     pub name: String,
     /// The agent the daemon recorded running there, when one runs there.
     pub agent: Option<String>,
-    /// Terminals attached to the session.
+    /// Terminals attached to the session; a host that cannot count them
+    /// gives one while it shows the session.
     pub clients: u32,
     /// Where it was recorded, which names the host keeping it.
     #[serde(skip)]

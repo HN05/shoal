@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, bail};
 use tokio::process::Command;
 
-use super::{Pane, TabInfo, herdr};
+use super::{Pane, TabInfo, TabState, herdr};
 use crate::{
     cli::terminal::Session,
     sessions::{Origin, herdr::SERVER_VARS},
@@ -14,13 +14,16 @@ use crate::{
 };
 
 /// The session at `place`, named after its tab, while its pane is open.
+/// Herdr does not count its clients, so the session has one while its tab
+/// is the focused one, which a connected client shows.
 pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {
     let Some(pane) = pane(place).await? else {
         return Ok(None);
     };
-    let label = tab_label(place, &pane.tab_id).await?;
+    let tab = tab(place, &pane.tab_id).await?;
+    let label = tab.label.filter(|label| !label.is_empty());
     let name = label.unwrap_or(pane.tab_id);
-    Ok(Some(Session::open(name, 0, place)))
+    Ok(Some(Session::open(name, u32::from(tab.focused), place)))
 }
 
 /// Focus the tab of the pane at `place`, attaching this terminal to the
@@ -80,14 +83,14 @@ async fn pane(place: &Origin) -> Result<Option<Pane>> {
     super::pane(herdr(place), place.id()).await
 }
 
-/// The label of `tab` on the server of `place`.
-async fn tab_label(place: &Origin, tab: &str) -> Result<Option<String>> {
+/// `tab` on the server of `place`.
+async fn tab(place: &Origin, tab: &str) -> Result<TabState> {
     let mut get = herdr(place);
     get.args(["tab", "get", tab]);
     let output = Run::new(get).checked().await.context("query Herdr tab")?;
     let info: TabInfo =
         serde_json::from_slice(&output.stdout).context("invalid Herdr tab response")?;
-    Ok(info.result.tab.label.filter(|label| !label.is_empty()))
+    Ok(info.result.tab)
 }
 
 async fn focus_tab(place: &Origin, tab: &str) -> Result<()> {

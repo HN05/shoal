@@ -434,6 +434,9 @@ struct TabState {
     #[serde(default)]
     agent_status: AgentStatus,
     label: Option<String>,
+    /// Whether the tab is the one Herdr shows.
+    #[serde(default)]
+    focused: bool,
 }
 
 /// Herdr's view of an agent; `Done` is a finished turn not yet seen.
