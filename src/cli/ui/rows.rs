@@ -11,7 +11,7 @@ use crate::{
         list_status::ListStatus,
         output::{Palette, Style},
     },
-    forge::items::link::{self, ItemKind},
+    forge::items::link,
     model::{Chat, QueueEntry, Repository, ReviewMark, Workspace, WorkspaceUsage},
     state::{AgentState, QueueKind, QueueState},
 };
@@ -347,10 +347,7 @@ pub fn mark_label(mark: &ReviewMark) -> String {
     let (Some(kind), Some(url)) = (mark.kind, &mark.url) else {
         return "workspace".into();
     };
-    let name = match kind {
-        ItemKind::Pr => "PR",
-        ItemKind::Issue => "issue",
-    };
+    let name = kind.noun();
     match link::item(kind, url) {
         Ok((_, number)) => format!("{name} #{number}"),
         Err(_) => name.into(),

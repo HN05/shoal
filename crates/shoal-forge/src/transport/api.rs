@@ -480,8 +480,9 @@ fn error_message(text: &str) -> Option<String> {
 fn curl_unrun(error: std::io::Error, limit: usize) -> anyhow::Error {
     match error.kind() {
         std::io::ErrorKind::TimedOut => Transient::Interrupted(error.to_string()).into(),
-        std::io::ErrorKind::NotFound => anyhow::Error::new(error)
-            .context("curl is required for this forge's API requests"),
+        std::io::ErrorKind::NotFound => {
+            anyhow::Error::new(error).context("curl is required for this forge's API requests")
+        }
         _ => unrun(error, limit, "read curl's response"),
     }
 }

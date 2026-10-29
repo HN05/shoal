@@ -37,7 +37,7 @@ use crate::{
     },
     daemon::notifications::Notification,
     env,
-    forge::items::link::{self, ItemKind},
+    forge::items::link,
     model::LinkedItem,
     protocol::{ConfigTarget, NotificationMethod},
 };
@@ -776,10 +776,7 @@ fn linked_labels(items: &[LinkedItem]) -> Vec<String> {
     let cells = items
         .iter()
         .map(|item| {
-            let kind = match item.kind {
-                ItemKind::Issue => "Issue",
-                ItemKind::Pr => "PR",
-            };
+            let kind = item.kind.title();
             let number = link::item(item.kind, &item.url)
                 .map(|(_, number)| format!("#{number}"))
                 .unwrap_or_default();

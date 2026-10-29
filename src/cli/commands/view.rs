@@ -205,10 +205,7 @@ pub(super) fn render_log(log: &CheckLog) {
 }
 
 fn render(view: &ItemView, palette: Palette, emoji: bool) {
-    let kind = match view.kind {
-        ItemKind::Issue => "Issue",
-        ItemKind::Pr => "PR",
-    };
+    let kind = view.kind.title();
     match &view.details {
         Some(details) => {
             let heading = format!("{kind} #{}: {}", details.number, details.title);

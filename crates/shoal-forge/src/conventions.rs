@@ -77,8 +77,8 @@ fn missing<'a>(required: &'a [String], labels: &[String]) -> Vec<&'a str> {
 /// would satisfy each missing entry.
 fn refusal(kind: ItemKind, missing: &[&str], available: &[Label]) -> String {
     let mut message = format!(
-        "{} needs a label starting with {} ([{kind}] required_labels); pass --label",
-        new_item(kind),
+        "a new {} needs a label starting with {} ([{kind}] required_labels); pass --label",
+        kind.noun(),
         missing.join(", ")
     );
     let choices: Vec<&Label> = available
@@ -317,18 +317,8 @@ fn headings(text: &str) -> Vec<String> {
     found
 }
 
-fn new_item(kind: ItemKind) -> &'static str {
-    match kind {
-        ItemKind::Issue => "a new issue",
-        ItemKind::Pr => "a new PR",
-    }
-}
-
 fn name(item: &Item) -> String {
-    match item.kind {
-        ItemKind::Issue => format!("issue #{}", item.number),
-        ItemKind::Pr => format!("PR #{}", item.number),
-    }
+    format!("{} #{}", item.kind.noun(), item.number)
 }
 
 fn edit(item: &Item, flag: &str) -> String {

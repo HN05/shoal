@@ -273,10 +273,7 @@ impl ForgeRepo {
         number: u64,
         follow_up: &Edit,
     ) -> Result<Item> {
-        let opened = match kind {
-            ItemKind::Issue => format!("issue #{number} was opened"),
-            ItemKind::Pr => format!("PR #{number} was opened"),
-        };
+        let opened = format!("{} #{number} was opened", kind.noun());
         if *follow_up == Edit::default() {
             let read = self.read(account, kind, number).await;
             return read

@@ -1,5 +1,5 @@
 use super::*;
-use crate::state::WorkspaceState;
+use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 
 fn workspace(repository: &str, name: &str, branch: &str, state: WorkspaceState) -> Workspace {
     Workspace::new_record(

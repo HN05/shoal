@@ -10,6 +10,24 @@ crate::state::states!(ItemKind {
     Pr => "pr",
 });
 
+impl ItemKind {
+    /// The kind's name in a sentence, as in `PR #12` or `issue #3`.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Self::Issue => "issue",
+            Self::Pr => "PR",
+        }
+    }
+
+    /// The kind's name as a heading or a label of its own.
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Issue => "Issue",
+            Self::Pr => "PR",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Selection {
     /// Missing for every kind, or for a number the CLI has yet to classify.

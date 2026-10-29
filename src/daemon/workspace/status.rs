@@ -150,10 +150,7 @@ impl Manager {
         input: &str,
         within: Option<Vec<String>>,
     ) -> Result<Vec<String>> {
-        let label = match kind {
-            ItemKind::Pr => "PR",
-            ItemKind::Issue => "issue",
-        };
+        let label = kind.noun();
         let wanted = match IssueInput::parse(input) {
             IssueInput::Url => Some(link::item(kind, input)?),
             IssueInput::Number => None,
