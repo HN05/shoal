@@ -622,8 +622,9 @@ Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
 confines them to their own workspace and the child workspaces split from it:
 status, inspect, execute, setup, and resources.
-Creation other than splitting a child, removal, reconciliation, other workspaces, repository
-administration, and service control need an unscoped caller. A scoped `land` is an
+Creation other than splitting a child, removal other than of a descendant without holds,
+reconciliation, other workspaces, repository administration, and service control need an
+unscoped caller. A scoped `land` is an
 approval request bound to the branch and its HEAD unless `[land] requires_approval`
 is off; approval lets the agent's retry land that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,

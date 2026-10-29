@@ -3433,7 +3433,8 @@ exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.
-They `land` only with [approval](#land-into-the-default-branch) and cannot reach other worktrees, create or remove workspaces, read
+They `land` only with [approval](#land-into-the-default-branch) and cannot reach worktrees outside the workspaces split
+from theirs, create workspaces other than by `split`, remove workspaces other than those below theirs without holds, read
 notifications, or administer repositories or the daemon service; nested commands
 keep the scope. A command whose ancestor carries scope for the same state directory
 gets the CLI's scoped refusals even after the token is removed from its
