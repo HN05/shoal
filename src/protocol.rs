@@ -519,6 +519,7 @@ response_bodies! {
     AgentSession(crate::model::AgentSession),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::model::Selected),
+    MergedPull(crate::forge::items::revert::MergedPull),
     CheckLog(crate::forge::ci::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
     CiRunStarted(crate::forge::ci::run::StartedRun),

@@ -12,7 +12,7 @@ use crate::{
     items::{
         action::Edit,
         attach::Attachment,
-        create::{Created, pending_edit},
+        create::{Created, PullOptions, pending_edit},
         item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
     },
@@ -42,7 +42,44 @@ pub struct MergedPull {
     pub messages: Vec<String>,
 }
 
+/// `options` for the revert of `item`, filling what the caller left unset:
+/// GitHub's title for a revert, a reference to the reverted PR, and its
+/// labels, so a repository's required labels need no repeating.
+pub fn revert_options(item: &Item, options: PullOptions) -> PullOptions {
+    PullOptions {
+        title: Some(
+            options
+                .title
+                .unwrap_or_else(|| format!("Revert \"{}\"", item.title)),
+        ),
+        body: Some(
+            options
+                .body
+                .unwrap_or_else(|| format!("Reverts #{}", item.number)),
+        ),
+        labels: if options.labels.is_empty() {
+            item.labels.clone()
+        } else {
+            options.labels
+        },
+        ..options
+    }
+}
+
 impl NewRevert {
+    /// The revert `options` describe, after [`revert_options`] filled them;
+    /// `default_draft` applies unless they choose.
+    pub fn new(options: PullOptions, default_draft: bool) -> Self {
+        Self {
+            title: options.title.unwrap_or_default(),
+            body: options.body.unwrap_or_default(),
+            draft: options.draft.unwrap_or(default_draft),
+            labels: options.labels,
+            reviewers: options.reviewers,
+            attachments: options.attachments,
+        }
+    }
+
     /// The capabilities the forge needs to open the revert, besides
     /// attachments.
     fn needs(&self) -> Vec<Capability> {
@@ -57,16 +94,16 @@ impl NewRevert {
 }
 
 impl ForgeRepo {
-    /// Have the forge open `revert` for the merged PR `number`; only failing
-    /// to open it fails.
+    /// Have the forge open `revert` for `current`, a PR [`Self::merged`]
+    /// read; only failing to open it fails.
     pub async fn revert_pull(
         &self,
         account: &Account,
-        number: u64,
+        current: &Current,
         revert: &NewRevert,
     ) -> Result<Created> {
         self.require_all(revert.needs())?;
-        let current = self.merged(account, number).await?;
+        let number = current.item.number;
         let base = current
             .item
             .pr
@@ -84,7 +121,7 @@ impl ForgeRepo {
         };
         let (number, head) = self
             .kind
-            .revert(self, account, &current, &posted)
+            .revert(self, account, current, &posted)
             .await
             .with_context(|| format!("could not revert PR #{number}"))?;
         let posted = Item {
@@ -124,7 +161,7 @@ impl ForgeRepo {
     }
 
     /// The PR `number`, refused unless it has merged.
-    async fn merged(&self, account: &Account, number: u64) -> Result<Current> {
+    pub async fn merged(&self, account: &Account, number: u64) -> Result<Current> {
         let current = self.read(account, ItemKind::Pr, number).await?;
         ensure!(
             current.item.state == ItemState::Merged,

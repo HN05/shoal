@@ -73,6 +73,18 @@ pub(super) async fn handle(
         ItemMethod::OpenPull { workspace, options } => {
             Body::Opened(manager.open_pull(&workspace, options, caller).await?)
         }
+        ItemMethod::RevertPull {
+            workspace,
+            item,
+            options,
+        } => Body::Opened(
+            manager
+                .revert_pull(&workspace, item, options, caller)
+                .await?,
+        ),
+        ItemMethod::MergedPull { workspace, item } => {
+            Body::MergedPull(manager.merged_pull(&workspace, item).await?)
+        }
         ItemMethod::OpenIssue {
             context,
             issue,
@@ -164,6 +176,8 @@ impl Scoped for ItemMethod {
             | ItemMethod::PrWait { workspace, .. }
             | ItemMethod::WatchItems { workspace, .. }
             | ItemMethod::OpenPull { workspace, .. }
+            | ItemMethod::RevertPull { workspace, .. }
+            | ItemMethod::MergedPull { workspace, .. }
             | ItemMethod::ForgeApi { workspace, .. }
             | ItemMethod::SelectItems { workspace, .. } => Some(workspace),
         })

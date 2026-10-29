@@ -47,6 +47,18 @@ pub enum ItemMethod {
         workspace: String,
         options: crate::forge::items::create::PullOptions,
     },
+    /// Have the forge open the revert of a merged PR: the one `item` names,
+    /// or the workspace's linked one.
+    RevertPull {
+        workspace: String,
+        item: Option<String>,
+        options: crate::forge::items::create::PullOptions,
+    },
+    /// A merged PR with what reverting its merge with Git needs.
+    MergedPull {
+        workspace: String,
+        item: Option<String>,
+    },
     /// Open an issue in the context's repository, or the one `repository`
     /// names, linking it to the workspace when `link` is set.
     OpenIssue {
