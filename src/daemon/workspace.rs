@@ -44,6 +44,7 @@ pub(crate) mod spotlight;
 mod stack;
 mod status;
 mod stopped_work;
+mod title;
 mod tree;
 pub(crate) mod turn_retry;
 mod usage;

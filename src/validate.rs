@@ -5,6 +5,8 @@ pub const MAX_NAME_LEN: usize = 64;
 pub const MAX_REASON_LEN: usize = 256;
 pub const MAX_MESSAGE_LEN: usize = 512;
 pub const MAX_AGENT_MESSAGE_LEN: usize = 8 * 1024;
+/// Characters, so a title fits a tab whatever its script.
+pub const MAX_TITLE_LEN: usize = 40;
 
 /// Portable identifier: ASCII letters, digits, `-` or `_`, starting with a
 /// letter or digit. Used for workspaces, repositories, and simulator profiles.
@@ -69,6 +71,18 @@ pub fn agent_message(value: &str) -> Result<()> {
                 .chars()
                 .any(|c| c.is_control() && c != '\n' && c != '\t'),
         "agent messages must be nonempty text without control characters other than newlines and tabs (max {MAX_AGENT_MESSAGE_LEN} bytes)"
+    );
+    Ok(())
+}
+
+/// A workspace's title, which its tabs show: a single line without control
+/// characters, which would corrupt the terminals that show it.
+pub fn title(value: &str) -> Result<()> {
+    ensure!(
+        !value.trim().is_empty()
+            && value.chars().count() <= MAX_TITLE_LEN
+            && !value.chars().any(char::is_control),
+        "titles must be a nonempty single line without control characters (max {MAX_TITLE_LEN} characters)"
     );
     Ok(())
 }

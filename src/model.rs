@@ -62,6 +62,9 @@ pub struct Workspace {
     pub id: String,
     pub repository_id: String,
     pub name: String,
+    /// What its agent calls the work, which its tabs show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub path: PathBuf,
     pub branch: String,
     pub state: WorkspaceState,
@@ -336,6 +339,7 @@ impl Workspace {
             id: uuid::Uuid::new_v4().to_string(),
             repository_id,
             name,
+            title: None,
             path,
             branch,
             state,

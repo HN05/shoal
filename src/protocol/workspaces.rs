@@ -71,6 +71,15 @@ pub enum WorkspaceMethod {
     FindWorkspaces {
         target: crate::model::WorkspaceTarget,
     },
+    /// Give the workspace a title its places show, or clear it without one.
+    SetWorkspaceTitle {
+        workspace: String,
+        title: Option<String>,
+    },
+    /// The places Shoal created for the workspace.
+    WorkspacePlaces {
+        workspace: String,
+    },
     /// Record or clear the workspace whose branch this one builds on.
     SetBaseWorkspace {
         workspace: String,

@@ -18,6 +18,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         id: format!("id-{name}"),
         repository_id: "repo".into(),
         name: name.into(),
+        title: None,
         path: path.into(),
         branch: name.into(),
         state: WorkspaceState::Ready,

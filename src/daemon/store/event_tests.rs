@@ -223,6 +223,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("DROP TABLE repository_agent_environments;")?;
     db.execute_batch("DROP TABLE workspace_item_activity;")?;
     db.execute_batch("ALTER TABLE workspaces DROP COLUMN active_at;")?;
+    db.execute_batch("ALTER TABLE workspaces DROP COLUMN title;")?;
     db.execute_batch("DROP TABLE removed_workspaces;")?;
     db.execute_batch(
         "DROP INDEX questions_number; ALTER TABLE questions DROP COLUMN number;

@@ -292,6 +292,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 86 {
         db.execute_batch(QUIET_AGENT_MESSAGES)?;
     }
+    if version >= 87 {
+        db.execute_batch(WORKSPACE_TITLES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

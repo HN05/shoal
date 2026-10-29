@@ -117,6 +117,9 @@ pub(super) async fn handle(
         WorkspaceMethod::SetBaseWorkspace { workspace, base } => {
             Body::Workspace(manager.set_base_workspace(&workspace, base).await?)
         }
+        WorkspaceMethod::SetWorkspaceTitle { workspace, title } => {
+            Body::Workspace(manager.set_workspace_title(&workspace, title).await?)
+        }
         WorkspaceMethod::VerifyWorkspace {
             workspace,
             on_branch,
@@ -154,17 +157,11 @@ pub(super) async fn handle(
         WorkspaceMethod::PlaceOwnership { workspace, place } => {
             Body::PlaceOwnership(manager.place_ownership(&workspace, &place).await?)
         }
-        WorkspaceMethod::OwnedPlaces => Body::OwnedPlaces(
-            manager
-                .owned_places(None)
-                .await?
-                .into_iter()
-                .map(|(workspace_id, origin)| crate::model::OwnedPlace {
-                    workspace_id,
-                    origin,
-                })
-                .collect(),
-        ),
+        WorkspaceMethod::OwnedPlaces => owned_places(manager, None).await?,
+        WorkspaceMethod::WorkspacePlaces { workspace } => {
+            let workspace = manager.workspace(&workspace).await?.id;
+            owned_places(manager, Some(workspace)).await?
+        }
         WorkspaceMethod::RecordOwnedPlace { workspace, origin } => {
             manager.record_owned_place(&workspace, origin).await?;
             Body::Ok
@@ -187,11 +184,28 @@ pub(super) async fn handle(
     }))
 }
 
+/// The places Shoal created for `workspace`, or for every workspace.
+async fn owned_places(manager: &Manager, workspace: Option<String>) -> Result<Body> {
+    Ok(Body::OwnedPlaces(
+        manager
+            .owned_places(workspace)
+            .await?
+            .into_iter()
+            .map(|(workspace_id, origin)| crate::model::OwnedPlace {
+                workspace_id,
+                origin,
+            })
+            .collect(),
+    ))
+}
+
 impl Scoped for WorkspaceMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             WorkspaceMethod::ListWorkspaces | WorkspaceMethod::FindWorkspaces { .. } => None,
             WorkspaceMethod::SetBaseWorkspace { workspace, .. }
+            | WorkspaceMethod::SetWorkspaceTitle { workspace, .. }
+            | WorkspaceMethod::WorkspacePlaces { workspace }
             | WorkspaceMethod::RenameWorkspace { workspace, .. }
             | WorkspaceMethod::SplitWorkspace { workspace, .. }
             | WorkspaceMethod::InspectWorkspace { workspace }

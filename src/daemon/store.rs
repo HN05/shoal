@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 86;
+const SCHEMA_VERSION: i64 = 87;
 
 #[cfg(test)]
 mod benchmark;
@@ -429,6 +429,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (84, include_str!("store/simulator_events.sql"), None),
     (85, AGENT_MESSAGE_ATTACHMENTS, None),
     (86, QUIET_AGENT_MESSAGES, None),
+    (87, WORKSPACE_TITLES, None),
 ];
 
 /// The JSON array of paths of the files attached to an agent message.
@@ -438,6 +439,8 @@ const AGENT_MESSAGE_ATTACHMENTS: &str =
 /// next turn.
 const QUIET_AGENT_MESSAGES: &str = "ALTER TABLE agent_messages
     ADD COLUMN wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1));";
+/// What a workspace's agent calls its work.
+const WORKSPACE_TITLES: &str = "ALTER TABLE workspaces ADD COLUMN title TEXT;";
 
 /// Journal a running chat's new name, which a chat still starting keeps.
 const CHAT_RENAMES: &str = "ALTER TABLE chats ADD COLUMN starting INTEGER NOT NULL DEFAULT 0
@@ -892,7 +895,7 @@ pub fn repository(row: &Row<'_>) -> rusqlite::Result<Repository> {
 }
 
 pub const WORKSPACE_COLUMNS: &str =
-    "id,repository_id,name,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id";
+    "id,repository_id,name,title,path,branch,state,error,base_commit,base_ref,git_dir,git_dir_id";
 
 pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
     Ok(Workspace {
@@ -911,6 +914,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         id: row.get("id")?,
         repository_id: row.get("repository_id")?,
         name: row.get("name")?,
+        title: row.get("title")?,
         path: PathBuf::from(row.get::<_, String>("path")?),
         branch: row.get("branch")?,
         state: row.get("state")?,
