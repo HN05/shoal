@@ -1,6 +1,6 @@
 //! Requests that only read state, which the daemon cancels when their client
 //! hangs up. Cancelling one that changes state could leave it half done, so
-//! those finish instead.
+//! those finish instead, including reads that first finish or record work.
 use super::{
     AgentMethod, ApprovalMethod, ChatMethod, CiMethod, DaemonMethod, DemoMethod, ExecutionMethod,
     HoldMethod, ItemMethod, NotificationMethod, Operation, PortMethod, QuestionMethod, QueueMethod,
@@ -32,7 +32,7 @@ impl Operation {
                 | Self::Demo(DemoMethod::ListDemos { .. })
                 | Self::Execution(ExecutionMethod::CheckLanding | ExecutionMethod::ListAgents)
                 | Self::Hold(HoldMethod::HoldList { .. })
-                | Self::Item(ItemMethod::ListItems { .. } | ItemMethod::ForgeType { .. })
+                | Self::Item(ItemMethod::ListItems { .. })
                 | Self::Notification(NotificationMethod::ListNotifications { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Question(
@@ -46,7 +46,6 @@ impl Operation {
                 | Self::Repository(
                     RepositoryMethod::ListRepositories
                         | RepositoryMethod::RepositoryConfig { .. }
-                        | RepositoryMethod::PlanRepositoryMoves { .. }
                         | RepositoryMethod::ListBranches { .. }
                         | RepositoryMethod::KeptBranches { .. }
                         | RepositoryMethod::AgentEnvironments { .. }
@@ -77,3 +76,6 @@ impl Operation {
         )
     }
 }
+
+#[cfg(test)]
+mod tests;
