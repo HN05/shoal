@@ -13,7 +13,7 @@ use crate::{
     },
     forge::{IssueInput, items::link::Selection},
     model::{Chat, Workspace, WorkspaceStatus, WorkspaceTarget},
-    protocol::WorkspaceMethod,
+    protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 pub(in crate::cli::commands) async fn status(
@@ -72,11 +72,11 @@ impl StatusView {
             .iter()
             .filter_map(|execution| execution.origin.as_ref())
             .collect();
-        let owner = terminal::Owner::Workspace(&status.inspection.workspace.id);
-        let (sessions, sessions_error) = match terminal::sessions(owner, &places).await {
-            Ok(sessions) => (sessions, None),
-            Err(error) => (Vec::new(), Some(format!("{error:#}"))),
-        };
+        let (sessions, sessions_error) =
+            match sessions(ctx, &status.inspection.workspace, &places).await {
+                Ok(sessions) => (sessions, None),
+                Err(error) => (Vec::new(), Some(format!("{error:#}"))),
+            };
         Ok(Self {
             status,
             sessions,
@@ -84,6 +84,18 @@ impl StatusView {
             chat,
         })
     }
+}
+
+/// The agent sessions of `workspace`, in the hosts its settings enable and
+/// at the `places` its executions were recorded running in.
+async fn sessions(
+    ctx: &Context,
+    workspace: &Workspace,
+    places: &[&crate::sessions::Origin],
+) -> Result<Vec<terminal::Session>> {
+    let target = ConfigTarget::Workspace(workspace.id.clone());
+    let settings = client::settings(&ctx.paths, target).await?;
+    terminal::sessions(&settings, terminal::Owner::Workspace(&workspace.id), places).await
 }
 
 /// The listed chat that opened `workspace` with its agent, else its ID, which

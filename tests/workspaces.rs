@@ -24451,6 +24451,19 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
         "{transcript}"
     );
 
+    // Disabled, Herdr is never called and the pane is no session.
+    fs::remove_file(home.join("herdr-calls")).unwrap();
+    let config = home.join(".config/shoal/config.toml");
+    fs::write(&config, "[herdr]\nenabled = false\n").unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("talk has no session to attach"),
+        "{transcript}"
+    );
+    assert!(!home.join("herdr-calls").exists());
+    fs::remove_file(&config).unwrap();
+
     // A closed pane leaves nothing to attach.
     fs::write(home.join("closed-panes"), "w1:p4\n").unwrap();
     let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
