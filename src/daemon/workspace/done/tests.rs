@@ -764,9 +764,14 @@ fn cherry_pick(repo: &std::path::Path, revision: &str) {
 
 #[test]
 fn a_notice_names_the_first_results_and_counts_the_rest() {
-    let results: Vec<String> = ["report.md", "repro.sh", "trace.log", "a.png", "b.png"]
-        .map(String::from)
-        .into();
+    let results: Vec<_> = ["report.md", "repro.sh", "trace.log", "a.png", "b.png"]
+        .into_iter()
+        .zip(1..)
+        .map(|(name, id)| HandedBack {
+            id,
+            name: name.into(),
+        })
+        .collect();
     assert_eq!(
         results_preview(&results),
         "report.md, repro.sh, trace.log and 2 more"

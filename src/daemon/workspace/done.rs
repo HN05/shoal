@@ -8,7 +8,7 @@ use crate::{
     config::Effective,
     daemon::{events::EventCause, notifications::NotificationKind, questions, store},
     hooks::{self, Hook, HookKind},
-    model::{Completion, Workspace},
+    model::{Completion, HandedBack, Workspace},
     state::WorkspaceState,
 };
 
@@ -88,7 +88,7 @@ impl Manager {
         head: String,
         cleanup: bool,
         integrated: bool,
-        results: Vec<String>,
+        results: Vec<HandedBack>,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
@@ -366,9 +366,13 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> Stri
 
 /// The results a notice names: the first few, then how many more, since
 /// `shoal files` lists them all.
-fn results_preview(results: &[String]) -> String {
+fn results_preview(results: &[HandedBack]) -> String {
     const NAMED: usize = 3;
-    let names: Vec<_> = results.iter().take(NAMED).map(String::as_str).collect();
+    let names: Vec<_> = results
+        .iter()
+        .take(NAMED)
+        .map(|result| result.name.as_str())
+        .collect();
     match results.len().saturating_sub(NAMED) {
         0 => names.join(", "),
         more => format!("{} and {more} more", names.join(", ")),

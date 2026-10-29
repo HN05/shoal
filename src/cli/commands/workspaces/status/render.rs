@@ -192,7 +192,12 @@ fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
         };
         outln!("Completion:    done ({choice}{integrated})");
         if !completion.results.is_empty() {
-            outln!("  Results:     {}", completion.results.join(", "));
+            let names: Vec<_> = completion
+                .results
+                .iter()
+                .map(|result| result.name.as_str())
+                .collect();
+            outln!("  Results:     {}", names.join(", "));
         }
         if let Some(error) = &completion.error {
             outln!("  {}", palette.paint(Style::Warning, error));

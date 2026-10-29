@@ -10,7 +10,7 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::workspace::Manager,
-    model::{Repository, Workspace},
+    model::{HandedBack, Repository, Workspace},
     state::{WorkspaceState, states},
 };
 
@@ -149,7 +149,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         results: Vec<PathBuf>,
-    ) -> Result<Vec<String>> {
+    ) -> Result<Vec<HandedBack>> {
         if results.is_empty() {
             return Ok(Vec::new());
         }
@@ -160,7 +160,13 @@ impl Manager {
         let records = self
             .record_or_discard(&workspace.id, FileSource::Result, kept)
             .await?;
-        Ok(records.into_iter().map(|file| file.name).collect())
+        Ok(records
+            .into_iter()
+            .map(|file| HandedBack {
+                id: file.id,
+                name: file.name,
+            })
+            .collect())
     }
 
     /// Delete the files attached to the workspace `selector` names, only the

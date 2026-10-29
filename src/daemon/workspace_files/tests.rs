@@ -221,7 +221,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
         .mark_done(&child.id, false, false, vec![report])
         .await
         .unwrap();
-    assert_eq!(completion.results, ["report.md"]);
+    assert_eq!(completion.results[0].name, "report.md");
     let result = manager.workspace_files(&child.id).await.unwrap()[0]
         .path
         .clone();
@@ -522,4 +522,32 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     };
     assert_eq!(sent.source, FileSource::Message);
     assert!(sent.path.exists());
+}
+
+#[tokio::test]
+async fn handing_back_a_changed_file_completes_again() {
+    let (temp, manager) = manager().await;
+    let audit = workspace(&temp, &manager).await;
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "First draft").unwrap();
+    let first = manager
+        .mark_done(&audit.id, false, false, vec![report.clone()])
+        .await
+        .unwrap();
+    // The same file again changes nothing.
+    let error = manager
+        .mark_done(&audit.id, false, false, vec![report.clone()])
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("already marked done"),
+        "{error:#}"
+    );
+    std::fs::write(&report, "Revised").unwrap();
+    let revised = manager
+        .mark_done(&audit.id, false, false, vec![report])
+        .await
+        .unwrap();
+    assert_eq!(revised.results[0].name, first.results[0].name);
+    assert_ne!(revised.results[0].id, first.results[0].id);
 }
