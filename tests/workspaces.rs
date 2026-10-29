@@ -15860,6 +15860,49 @@ esac
     assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
     assert!(!transcript.contains("Same here"), "{transcript}");
 
+    // `--web` opens the selected items in the browser and prints each URL.
+    let opened = root.join("opened");
+    install_test_script(
+        bin.join(if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        }),
+        r#"#!/bin/sh
+printf '%s\n' "$1" >> "$HOME/opened"
+"#,
+    );
+    let mut web = fixture.command();
+    web.args(["view", "issue", "3", "--web", "--workspace", "view"]);
+    let (output, transcript) = fixture.terminal_command(&mut web, "", true);
+    assert!(output.status.success(), "{transcript}");
+    let issue = "https://github.com/team/project/issues/3";
+    assert_eq!(fs::read_to_string(&opened).unwrap(), format!("{issue}\n"));
+    assert!(
+        transcript.contains(&format!("Opened {issue}")),
+        "{transcript}"
+    );
+    let web = fixture.ok(&["view", "pr", "7", "--web", "--workspace", "view"]);
+    assert_eq!(
+        web,
+        serde_json::json!(["https://github.com/team/project/pull/7"])
+    );
+    // A workspace process cannot open windows on the user's screen.
+    let scoped = fixture.run(&[
+        "run",
+        "--workspace",
+        "view",
+        "--",
+        env!("CARGO_BIN_EXE_shoal"),
+        "view",
+        "--web",
+    ]);
+    assert!(!scoped.status.success());
+    assert!(
+        String::from_utf8_lossy(&scoped.stderr).contains("cannot open a browser"),
+        "{scoped:?}"
+    );
+
     // An unreadable item reports its error and fails the command.
     let missing = fixture.run(&["--json", "view", "issue", "9", "--workspace", "view"]);
     assert_eq!(missing.status.code(), Some(1));

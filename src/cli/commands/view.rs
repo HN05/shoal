@@ -1,14 +1,15 @@
 //! Show issues and PRs as the forge reports them, without gh or fj.
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{
         args::items::ItemArgs,
-        client,
+        browser, client,
         context::Context,
         forge_hosts::ForgeHosts,
         output::{self, Palette, Style},
     },
+    env,
     forge::{
         ForgeRepo,
         account::Account,
@@ -77,6 +78,34 @@ pub(super) async fn view(
         }
     })?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+}
+
+/// Open the selected items in the browser, printing each URL for a
+/// terminal elsewhere; workspace processes cannot.
+pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
+    ensure!(
+        !env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot open a browser; ask the user"
+    );
+    let (workspace, selection) = super::links::select(ctx, items).await?;
+    let selected: Selected = client::request(
+        &ctx.paths,
+        ItemMethod::SelectItems {
+            workspace,
+            selection,
+        },
+    )
+    .await?;
+    let urls: Vec<_> = selected.items.into_iter().map(|item| item.url).collect();
+    for url in &urls {
+        browser::open(url)?;
+    }
+    ctx.show(&urls, |urls| {
+        for url in urls {
+            outln!("Opened {url}");
+        }
+    })?;
+    Ok(0)
 }
 
 /// Each item as the forge reports it now, in selection order.

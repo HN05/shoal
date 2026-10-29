@@ -42,6 +42,9 @@ pub enum ItemsCommand {
         /// Show only this failed check's log, where the forge reads job logs.
         #[arg(long, value_name = "NAME")]
         check: Option<String>,
+        /// Open the items in the browser instead.
+        #[arg(long, conflicts_with_all = ["no_comments", "check"])]
+        web: bool,
     },
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {

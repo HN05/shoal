@@ -11,9 +11,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
         ItemsCommand::Link { items } => links::link(&ctx, items).await,
         ItemsCommand::Unlink { items } => links::unlink(&ctx, items).await,
         ItemsCommand::View {
+            items, web: true, ..
+        } => view::open(&ctx, items).await,
+        ItemsCommand::View {
             items,
             no_comments,
             check,
+            web: false,
         } => view::view(&ctx, items, no_comments, check).await,
         ItemsCommand::Watch {
             items,
