@@ -229,6 +229,7 @@ impl ForgeRepo {
         review: &NewReview,
     ) -> Result<Acted> {
         let current = self.read(account, ItemKind::Pr, number).await?;
+        self.kind.check_review(self, account, number).await?;
         let diff = if review.comments.is_empty() {
             Diff::default()
         } else {

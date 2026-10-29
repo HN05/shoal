@@ -332,6 +332,17 @@ pub(crate) trait Backend {
     async fn pr_diff(&self, repo: &ForgeRepo, account: &Account, current: &Current)
     -> Result<Diff>;
 
+    /// Refuse a review of PR `number` as `account` that submitting would
+    /// change more than the review on the forge.
+    async fn check_review(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _number: u64,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// The requests that submit `review` of PR `number`.
     fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission>;
 
@@ -897,6 +908,10 @@ impl Backend for ForgeKind {
         current: &Current,
     ) -> Result<Diff> {
         dispatch!(self, backend => backend.pr_diff(repo, account, current).await)
+    }
+
+    async fn check_review(&self, repo: &ForgeRepo, account: &Account, number: u64) -> Result<()> {
+        dispatch!(self, backend => backend.check_review(repo, account, number).await)
     }
 
     fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {

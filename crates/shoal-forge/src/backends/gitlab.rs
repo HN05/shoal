@@ -481,6 +481,11 @@ impl Backend for GitLab {
         review::diff(repo, account, current).await
     }
 
+    /// Publishing a review publishes every draft the account has pending.
+    async fn check_review(&self, repo: &ForgeRepo, account: &Account, number: u64) -> Result<()> {
+        review::check(repo, account, number).await
+    }
+
     fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
         review::review(repo, number, review)
     }

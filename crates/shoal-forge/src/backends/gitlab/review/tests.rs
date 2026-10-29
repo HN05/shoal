@@ -146,15 +146,18 @@ fn published_notes_are_the_newest_with_each_body_of_the_review() -> Result<()> {
     };
     let comments = [comment("Same"), comment("Same")];
     let review = placed_review(ReviewVerdict::Comment, "Summary", &diff, &comments)?;
+    let note = |id: u64, author: u64, body: &str| json!({"id": id, "author": {"id": author}, "body": body});
     let notes = json!([
-        {"id": 9, "body": "Summary"},
-        {"id": 8, "body": "Same"},
-        {"id": 7, "body": "Other"},
-        {"id": 6, "body": "Same"},
-        {"id": 5, "body": "Same"},
+        note(10, 2, "Same"),
+        note(9, 1, "Summary"),
+        note(8, 1, "Same"),
+        note(7, 1, "Other"),
+        note(6, 1, "Same"),
+        note(5, 1, "Same"),
     ]);
+    // Another reviewer's note with the same text stays theirs.
     assert_eq!(
-        published(&notes, &review),
+        published(&notes, &json!(1), &review),
         ["discussion:9", "discussion:8", "discussion:6"]
     );
     Ok(())

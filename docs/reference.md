@@ -2610,7 +2610,8 @@ login. A forge that refuses a verdict, such as on your own PR, fails with its
 message. GitHub, Forgejo and Gitea take a review in one request. GitLab drafts a
 note on each line, deleting the drafts when one fails, then publishes them with
 the body as a summary and requested changes as your reviewer state, then
-approves; Bitbucket posts each line comment, then the body, then the verdict.
+approves; since publishing takes every draft the account has on the merge
+request, a review is refused while others are pending; Bitbucket posts each line comment, then the body, then the verdict.
 A failure after part of a review was posted says that it reached the forge.
 `issue list` and `pr list` list the repository's issues or PRs, newest first,
 through the forge's own search: words after the command are text it searches for

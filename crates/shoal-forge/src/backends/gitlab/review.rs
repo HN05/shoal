@@ -1,7 +1,7 @@
 //! GitLab reviews: a merge request's diff as the version GitLab keeps of
 //! it at a head commit, and a review as draft notes on it that GitLab
 //! publishes together with the body and the requested changes.
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
 use crate::{
@@ -147,31 +147,50 @@ pub(super) fn discard_draft(repo: &ForgeRepo, number: u64, draft: &Value) -> Res
     Ok(Request::new(HttpMethod::Delete, endpoint, None))
 }
 
+/// Refuse a review while `account` has drafts pending on merge request
+/// `number`, which publishing the review would publish with it.
+pub(super) async fn check(repo: &ForgeRepo, account: &Account, number: u64) -> Result<()> {
+    let endpoint = format!("{}/draft_notes", repo.item_endpoint(ItemKind::Pr, number));
+    let drafts = repo.pages(account, &endpoint).await?;
+    ensure!(
+        drafts.is_empty(),
+        "you have {} unpublished draft comments on !{number}, which GitLab would publish with \
+         this review; submit or delete them on GitLab first",
+        drafts.len()
+    );
+    Ok(())
+}
+
 /// The activity keys of the notes `review` published. Publishing reports
-/// none, so they are the newest notes with the review's bodies; a note
-/// whose body GitLab rewrote is reported back like anyone else's.
+/// none, so they are the account's newest notes with the review's bodies;
+/// a note whose body GitLab rewrote is reported back like anyone else's.
 pub(super) async fn keys(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
     review: &PlacedReview<'_>,
 ) -> Result<Vec<String>> {
+    let user = repo.send(account, &Request::get("user".into())).await?;
+    let author = user
+        .get("id")
+        .context("GitLab did not report the account")?;
     let merge_request = repo.item_endpoint(ItemKind::Pr, number);
     let endpoint = format!("{merge_request}/notes?sort=desc&order_by=created_at&per_page=100");
     let notes = repo.send(account, &Request::get(endpoint)).await?;
-    Ok(published(&notes, review))
+    Ok(published(&notes, author, review))
 }
 
-/// The keys of the newest of `notes`, newest first, that have the bodies
-/// of `review`, one note for each.
-fn published(notes: &Value, review: &PlacedReview) -> Vec<String> {
+/// The keys of the newest of `notes`, newest first, that `author` wrote
+/// with the bodies of `review`, one note for each.
+fn published(notes: &Value, author: &Value, review: &PlacedReview) -> Vec<String> {
     let summary = (!review.body.is_empty()).then_some(review.body);
     let mut bodies: Vec<&str> = (review.comments.iter())
         .map(|placed| placed.comment.body.as_str())
         .chain(summary)
         .collect();
     let mut keys = Vec::new();
-    for note in notes.as_array().into_iter().flatten() {
+    let authored = notes.as_array().into_iter().flatten();
+    for note in authored.filter(|note| note["author"]["id"] == *author) {
         let Some(index) = bodies.iter().position(|body| note["body"] == *body) else {
             continue;
         };
