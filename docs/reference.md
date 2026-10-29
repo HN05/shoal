@@ -813,7 +813,9 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 The top-level `default_host` sets where launches from a terminal outside Herdr
 and Rex run: `"zmx"` (the default) or `"rex"`, which opens their windows in the
 `session_name` session on the local Rex server; `{repo}` is the only
-placeholder, and Shoal reuses the oldest session with that label or creates it.
+placeholder, and Shoal reuses the oldest session with that label or creates it;
+with `rex.enabled = false` these launches use zmx, and `new_window = false`
+keeps queued ones out of Rex.
 Rex has no terminal client, so a focused start there selects the window in the
 connected Mac Rex app and gives the terminal its shell back; without a
 connected app it says to open Rex. A start queued from Rex opens a background

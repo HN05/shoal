@@ -130,15 +130,21 @@ impl Configured {
             .unwrap_or_else(|| Self::plain(settings))
     }
 
-    /// The host `default_host` names for a terminal no host serves.
+    /// The host `default_host` names for a terminal no host serves, or zmx
+    /// where config turns that host off.
     fn default_host(settings: &Effective) -> Self {
-        Self::named(
+        let named = Self::named(
             settings,
             match settings.default_host {
                 DefaultHost::Zmx => HostName::Zmx,
                 DefaultHost::Rex => HostName::Rex,
             },
-        )
+        );
+        if named.options.enabled {
+            named
+        } else {
+            Self::named(settings, HostName::Zmx)
+        }
     }
 
     /// The plain terminal, which every terminal falls back to.

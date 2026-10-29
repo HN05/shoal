@@ -7,6 +7,17 @@ fn settings(global: &str) -> Effective {
         .unwrap()
 }
 
+/// Settings with `repository` as the repository's own config file.
+fn repository_settings(global: &str, repository: &str) -> Effective {
+    let config: crate::config::Config = toml::from_str(global).unwrap();
+    config
+        .resolve(&crate::config::repo::ConfigLayers {
+            worktree_file: crate::config::repo::parse(repository).unwrap(),
+            ..Default::default()
+        })
+        .unwrap()
+}
+
 fn origin(host: HostName) -> Origin {
     Origin {
         host,
@@ -54,4 +65,19 @@ fn hosts_without_groups_or_turned_off_go_straight_to_the_default_host() {
         [(Zmx, false), (Zmx, false)]
     );
     assert_eq!(order(&settings(""), None), [(Zmx, false), (Zmx, false)]);
+}
+
+#[test]
+fn a_default_host_config_turns_off_leaves_queued_starts_to_zmx() {
+    use HostName::*;
+    for repository in ["[rex]\nenabled = false", "[rex]\nnew_window = false"] {
+        let settings = repository_settings("default_host = 'rex'", repository);
+        let hosts = order(&settings, None);
+        assert!(
+            hosts.iter().all(|(host, _)| *host == Zmx),
+            "{repository}: {hosts:?}"
+        );
+    }
+    let disabled = repository_settings("default_host = 'rex'", "[rex]\nenabled = false");
+    assert_eq!(Configured::default_host(&disabled).host.name(), Zmx);
 }

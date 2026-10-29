@@ -153,6 +153,10 @@ fn fallbacks<'a>(settings: &Effective, origin: Option<&'a Origin>) -> Vec<Fallba
         Configured::default_host(settings),
         Configured::named(settings, HostName::Zmx),
     ] {
+        // Config that keeps a host from opening places keeps queued starts out.
+        if !host.options.opens_places {
+            continue;
+        }
         fallbacks.push(Fallback {
             host,
             group: Group::Configured(None),
