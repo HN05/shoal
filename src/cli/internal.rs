@@ -133,6 +133,16 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
     internal_command_for(&paths.state, json, worker)
 }
 
+/// [`internal_command`] as shell text, for a picker to run.
+pub fn shell_command(paths: &Paths, worker: Worker<'_>) -> Result<String> {
+    let words = internal_command(paths, false, worker)?
+        .into_iter()
+        .map(|word| word.into_string())
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| anyhow::anyhow!("the shoal executable or state path is not UTF-8"))?;
+    Ok(crate::shell::quote(&words))
+}
+
 /// [`internal_command`] for the state directory `state`.
 pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![

@@ -31,7 +31,7 @@ use crate::{
         client,
         client::request,
         context::Context,
-        internal::{Worker, internal_command},
+        internal::{self, Worker},
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
@@ -375,7 +375,7 @@ pub(super) async fn choose(ctx: &Context, start: Option<View>) -> Result<Choice>
         _ => None,
     };
     let next = (views.len() > 1)
-        .then(|| worker_command(ctx, Worker::MenuNext))
+        .then(|| internal::shell_command(&ctx.paths, Worker::MenuNext))
         .transpose()?;
     let picked = ui::pick_in_views(
         ctx,
@@ -445,8 +445,8 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
     let views = View::available(scoped);
     let next = *ui::next_picker_view(views, |view| view.prompt())?;
     let name = next.to_possible_value().context("views have names")?;
-    let reload = worker_command(
-        ctx,
+    let reload = internal::shell_command(
+        &ctx.paths,
         Worker::MenuRows {
             view: name.get_name(),
         },
@@ -457,17 +457,6 @@ pub(super) fn print_next(ctx: &Context) -> Result<i32> {
             .transition(&Key::ALL.map(Key::name), &reload)
     );
     Ok(0)
-}
-
-/// The `shoal internal` worker for the same executable and state
-/// directory, as shell text for fzf to run.
-fn worker_command(ctx: &Context, worker: Worker<'_>) -> Result<String> {
-    let words = internal_command(&ctx.paths, false, worker)?
-        .into_iter()
-        .map(|word| word.into_string())
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| anyhow::anyhow!("the shoal executable or state path is not UTF-8"))?;
-    Ok(crate::shell::quote(&words))
 }
 
 async fn rows(ctx: &Context, view: View, scoped: bool) -> Result<Entries> {
