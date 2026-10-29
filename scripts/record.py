@@ -23,6 +23,7 @@ state or zmx sessions.
 """
 import argparse
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -64,6 +65,25 @@ def pids(found):
     return ", ".join(str(process.pid) for process in found)
 
 
+def require_vhs():
+    if shutil.which("vhs") is None:
+        sys.exit("install VHS: https://github.com/charmbracelet/vhs")
+
+
+def unwind_on_termination():
+    """Make SIGTERM and SIGHUP exit through cleanup, as Ctrl-C does."""
+    for number in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(number, lambda received, _frame: sys.exit(128 + received))
+
+
+def prepare_sandbox(directory):
+    """A fresh sandbox in the tape's directory, with SANDBOX naming it."""
+    sandbox = Sandbox(directory / "sandbox")
+    sandbox.prepare(build(), "shoal-rec")
+    sandbox.env["SANDBOX"] = str(sandbox.path)
+    return sandbox
+
+
 def record(sandbox, tape, setup):
     sandbox.start_daemon()
     if setup is not None:
@@ -72,25 +92,31 @@ def record(sandbox, tape, setup):
     return subprocess.call(["vhs", str(tape)], env=sandbox.env, cwd=tape.parent)
 
 
+def clean_up(sandbox, directory, since):
+    """Stop the daemon and what the run started, returning what survives.
+    Another termination signal no longer cuts this short."""
+    for number in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(number, signal.SIG_IGN)
+    sandbox.stop_daemon()
+    return stop_leftovers(processes.started_by_run(directory, since),
+                          "processes the recording left running")
+
+
 def main():
     args = arguments()
     tape = args.tape.resolve()
     directory = tape_directory(tape)
     setup = args.setup.resolve() if args.setup else None
-    if shutil.which("vhs") is None:
-        sys.exit("install VHS: https://github.com/charmbracelet/vhs")
+    require_vhs()
+    unwind_on_termination()
     processes.become_subreaper()
     stop_leftovers(processes.detached_in(directory), "processes an earlier run left")
-    sandbox = Sandbox(directory / "sandbox")
-    sandbox.prepare(build(), "shoal-rec")
-    sandbox.env["SANDBOX"] = str(sandbox.path)
+    sandbox = prepare_sandbox(directory)
     since = processes.run_start()
     try:
         status = record(sandbox, tape, setup)
     finally:
-        sandbox.stop_daemon()
-        survivors = stop_leftovers(processes.started_by_run(directory, since),
-                                   "processes the recording left running")
+        survivors = clean_up(sandbox, directory, since)
     return status or (1 if survivors else 0)
 
 
