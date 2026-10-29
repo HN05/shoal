@@ -1,7 +1,8 @@
-//! Rex windows and blocks: Shoal opens a shell window per place and types
-//! its command into the shell, since Rex sets no environment for a new
-//! terminal. Rex keeps sessions running without a connected app, so agents
-//! run in place in their block and outlive the Mac app or the phone.
+//! Rex windows and blocks: Shoal opens a shell block per place, in a window
+//! of its own or splitting the caller's block, and types its command into
+//! the shell, since Rex sets no environment for a new terminal. Rex keeps
+//! sessions running without a connected app, so agents run in place in
+//! their block and outlive the Mac app or the phone.
 use std::{ffi::OsStr, ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -12,9 +13,12 @@ use super::{
     host::{Demos, Places, Prompts, Sessions, Watches},
     typed::Typed,
 };
-use crate::sessions::{
-    HostName, Origin,
-    rex::{Block, Rex as Server, Shell},
+use crate::{
+    config::repo::RexPlacement,
+    sessions::{
+        HostName, Origin,
+        rex::{Block, Rex as Server, Shell},
+    },
 };
 
 /// Rex serves the blocks it runs Shoal in, and runs windows for a terminal
@@ -73,14 +77,14 @@ impl Places for Rex {
 
     fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move {
-            open_window(start).await?;
+            open_block(start).await?;
             Ok(true)
         })
     }
 
-    /// A background window.
+    /// A background block.
     fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { open_window(start).await.map(drop) })
+        Box::pin(async move { open_block(start).await.map(drop) })
     }
 
     /// A block back at its shell prompt, as it is after the wrapper exits.
@@ -96,17 +100,17 @@ impl Places for Rex {
 
     fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
-            open_window(start).await?;
+            open_block(start).await?;
             Ok(ChatStart::Tab)
         })
     }
 
     fn background_places(&self) -> &'static str {
-        "Rex windows"
+        "Rex blocks"
     }
 
     fn background_note(&self, name: &str) -> String {
-        format!("Started {name} in a background Rex window")
+        format!("Started {name} in a background Rex block")
     }
 
     fn origin(&self) -> Option<Origin> {
@@ -161,7 +165,7 @@ impl Sessions for Rex {
             if in_rex() {
                 return Ok(None);
             }
-            let opened = open_window(start).await?;
+            let opened = open_block(start).await?;
             Ok(Some(opened.id().to_owned()))
         })
     }
@@ -235,14 +239,16 @@ impl Demos for Rex {
     }
 }
 
-/// What Rex's section sets: `rex.enabled`, whether it opens windows
-/// (`rex.new_window`), their names (`rex.window_name`), the session for a
+/// What Rex's section sets: `rex.enabled`, whether it opens places
+/// (`rex.new_window`) and splits the caller's block for them
+/// (`rex.placement`), their names (`rex.window_name`), the session for a
 /// terminal outside Rex (`rex.session_name`), and `rex.close_when_done`,
 /// which overrides the top-level option.
 pub(super) fn options(config: &crate::config::Rex) -> super::Options {
     super::Options {
         enabled: config.enabled,
         opens_places: config.new_window,
+        opens_splits: config.placement == RexPlacement::Split,
         name_template: config.window_name.clone(),
         group_template: Some(config.session_name.clone()),
         close_when_done: config.close_when_done,
@@ -298,9 +304,10 @@ async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origi
     })
 }
 
-/// Open a window for `start` in its origin's session and type its command
-/// there. A focused window outside Rex shows in the Mac app.
-async fn open_window(start: &Start<'_>) -> Result<Origin> {
+/// Open a block for `start` in its origin's session, in a window of its own
+/// or splitting the caller's block, and type its command there. A focused
+/// block outside Rex shows in the Mac app.
+async fn open_block(start: &Start<'_>) -> Result<Origin> {
     let origin = start
         .origin
         .context("Shoal has no Rex session to open a window in")?;
@@ -318,7 +325,7 @@ async fn open_window(start: &Start<'_>) -> Result<Origin> {
             cwd: start.cwd,
             focus: start.focus,
             input: Some(typed.text()),
-            beside: None,
+            beside: start.split,
         })
         .await?;
     typed.hand_over()?;

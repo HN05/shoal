@@ -795,13 +795,17 @@ workspace and leaves the tab open until that workspace is completed or removed.
 
 Inside a [Rex](https://www.superlogical.com/rex) terminal (`REX_SESSION` and
 `REX_BLOCK` are set), `shoal add`, chats, background resumes and demos open a
-new window in the current Rex session, never a split, placed and labelled as a
-Herdr tab would be, and agents run in place in their block. Rex keeps sessions
-running without a connected app, so an agent keeps running when the Mac app or
-the phone disconnects. Rex cannot set a new terminal's environment: Shoal types
-one short command into the window's shell, which loads the worker and its
-variables from a private file and deletes it, so nothing long shows on screen
-or in shell history. The shell stays after the worker exits, as in a Herdr tab.
+new window in the current Rex session, placed and labelled as a Herdr tab would
+be, and agents run in place in their block. With `placement = "split"`, a start
+from your block other than a demo splits that block instead, opening to its
+right in the same window; the new block takes the label and the window keeps
+its name. Starts queued from Rex and starts from outside Rex still open
+windows. Rex keeps sessions running without a connected app, so an agent keeps
+running when the Mac app or the phone disconnects. Rex cannot set a new
+terminal's environment: Shoal types one short command into the new block's
+shell, which loads the worker and its variables from a private file and deletes
+it, so nothing long shows on screen or in shell history. The shell stays after
+the worker exits, as in a Herdr tab.
 
 The `[rex]` table in global or repository config uses normal per-option
 precedence; with `enabled = false` Shoal treats a Rex terminal as a plain
@@ -811,6 +815,7 @@ terminal:
 [rex]
 enabled = true          # Use Rex windows and blocks
 new_window = true       # Open windows beside the caller
+placement = "window"    # "split" opens beside the caller's block instead
 session_name = "{repo}" # The session for windows Shoal opens outside one
 # window_name = "{repo}: {branch}" # Customize the window name, as tab_name
 # close_when_done = true # Close after done keeps the workspace, or at removal

@@ -191,6 +191,7 @@ pub(super) fn options(config: &config::Herdr) -> Options {
     Options {
         enabled: config.enabled,
         opens_places: config.new_tab,
+        opens_splits: false,
         name_template: config.tab_name.clone(),
         group_template: None,
         close_when_done: config.close_when_done,

@@ -109,6 +109,17 @@ impl RexServer {
             .collect()
     }
 
+    /// The labels of `session`'s blocks.
+    fn blocks(&self, session: &str) -> Vec<String> {
+        let input = serde_json::json!({"session_id": session}).to_string();
+        self.json(&["api", "call", "session.list_blocks", &input])["blocks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|block| block["label"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    }
+
     fn block_open(&self, block: &str) -> bool {
         self.rex(&["block", "inspect", block, "--json"])
             .status
@@ -208,6 +219,56 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
         !rex.windows(&session).contains(&"placed".to_owned())
     });
     assert!(rex.block_open(&users));
+}
+
+#[test]
+fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 'none'\n[rex]\nplacement = 'split'\n[commands]\npi = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
+    ));
+    let Some(rex) = RexServer::start(&fixture) else {
+        return;
+    };
+    let (session, users) = rex.session("caller", &fixture.repo);
+    let windows = rex.windows(&session);
+    let repo = fixture.repo.to_str().unwrap();
+    let launch = |args: &[&str]| {
+        let (output, transcript) = fixture.interactive_command(
+            rex.inside(
+                fixture.command().current_dir(&fixture.repo).args(args),
+                &session,
+                &users,
+            ),
+            "",
+        );
+        assert!(output.status.success(), "{output:?} {transcript}");
+    };
+    launch(&["add", repo, "placed", "--agent", "pi"]);
+    wait_until("setup to finish with the agent running", || {
+        fixture
+            .ok(&["work"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "placed")
+            && executions(&fixture, "placed") == 1
+            && fixture.ok(&["status", "placed"])["setup_finished"] == true
+    });
+    // The split names itself, never the caller's window.
+    assert_eq!(rex.windows(&session), windows);
+    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
+    launch(&["chat", repo, "--name", "talk", "--agent", "pi"]);
+    wait_until("the chat to open beside the caller", || {
+        rex.blocks(&session).len() == 3
+    });
+    assert_eq!(rex.windows(&session), windows);
+
+    fixture.ok(&["rm", "placed", "--yes"]);
+    wait_until("the split Shoal opened to close", || {
+        !rex.blocks(&session).contains(&"placed".to_owned())
+    });
+    assert!(rex.block_open(&users));
+    assert_eq!(rex.windows(&session), windows);
 }
 
 #[test]

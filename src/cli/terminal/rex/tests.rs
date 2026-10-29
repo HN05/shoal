@@ -11,10 +11,23 @@ fn the_rex_section_sets_windows_and_the_session_outside_rex() {
         close_when_done: Some(false),
     };
     let options = options(&config);
-    assert!(!options.enabled && !options.opens_places);
+    assert!(!options.enabled && !options.opens_places && !options.opens_splits);
     assert_eq!(options.name_template.as_deref(), Some("{branch}"));
     assert_eq!(options.group_template.as_deref(), Some("{repo}"));
     assert_eq!(options.close_when_done, Some(false));
+}
+
+#[test]
+fn split_placement_opens_splits() {
+    let config = crate::config::Rex {
+        enabled: true,
+        new_window: true,
+        placement: RexPlacement::Split,
+        window_name: None,
+        session_name: "{repo}".into(),
+        close_when_done: None,
+    };
+    assert!(options(&config).opens_splits);
 }
 
 #[test]

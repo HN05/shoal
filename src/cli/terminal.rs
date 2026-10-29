@@ -78,6 +78,9 @@ pub(in crate::cli) struct Options {
     pub enabled: bool,
     /// Whether it opens places, such as tabs, beside the caller.
     pub opens_places: bool,
+    /// Whether a place it opens from the caller's place splits that place
+    /// instead.
+    pub opens_splits: bool,
     /// The template for the names of the places it opens, in place of the
     /// default.
     pub name_template: Option<String>,
@@ -94,6 +97,7 @@ impl Options {
     const DEFAULT: Self = Self {
         enabled: true,
         opens_places: true,
+        opens_splits: false,
         name_template: None,
         group_template: None,
         close_when_done: None,
@@ -178,6 +182,37 @@ impl Configured {
             .opens_places
             .then(|| self.host.places())
             .flatten()
+    }
+
+    /// Where a start from this terminal goes in `origin`, the place it runs
+    /// in or the group it joins: splitting that place where config asks for
+    /// splits and there is one, otherwise in a place of its own.
+    fn beside<'a>(&self, origin: Option<&'a Origin>) -> Beside<'a> {
+        Beside {
+            origin,
+            split: origin
+                .and_then(|origin| origin.place.as_deref())
+                .filter(|_| self.options.opens_splits),
+        }
+    }
+}
+
+/// Where a new place goes: into `origin`'s group, splitting `split` when
+/// set.
+#[derive(Clone, Copy)]
+struct Beside<'a> {
+    origin: Option<&'a Origin>,
+    split: Option<&'a str>,
+}
+
+impl<'a> Beside<'a> {
+    /// A place of its own in `origin`'s group, as a start without the
+    /// caller's place opens.
+    fn opening(origin: Option<&'a Origin>) -> Self {
+        Self {
+            origin,
+            split: None,
+        }
     }
 }
 
@@ -305,7 +340,8 @@ pub(in crate::cli) async fn start_add(
     let cwd = std::env::current_dir()?;
     let repo = groups::Repo::Selected(plan.repository.clone());
     let origin = groups::beside(ctx, &host, &repo, &cwd).await?;
-    let started = run_add(ctx, &host, places, origin.as_ref(), plan, name, placement).await?;
+    let beside = host.beside(origin.as_ref());
+    let started = run_add(ctx, &host, places, beside, plan, name, placement).await?;
     if started && placement == Placement::Background {
         outln!("{}", places.background_note(name));
     }
@@ -334,7 +370,8 @@ pub(in crate::cli) async fn start_queued(
                 return Ok(None);
             };
             naming::name_plan(ctx, host.options.name_template.clone(), plan, None).await?;
-            run_add(ctx, host, places, group, plan, name, Placement::Background).await?;
+            let beside = Beside::opening(group);
+            run_add(ctx, host, places, beside, plan, name, Placement::Background).await?;
             Ok(Some(()))
         },
     )
@@ -345,7 +382,7 @@ pub(in crate::cli) async fn start_queued(
 const NO_QUEUED_HOST: &str = "no terminal host can start queued agents";
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
-/// in a new place of its `places` beside `origin` as `placement` asks,
+/// in a new place of its `places` `beside` as `placement` asks,
 /// returning whether it left this process. The worker reads the plan from
 /// the place's environment, and a place that keeps a shell gets the
 /// directive through which the worker has it enter the workspace.
@@ -353,7 +390,7 @@ async fn run_add(
     ctx: &Context,
     host: &Configured,
     places: &dyn Places,
-    origin: Option<&Origin>,
+    beside: Beside<'_>,
     plan: &AddPlan,
     name: &str,
     placement: Placement,
@@ -365,10 +402,11 @@ async fn run_add(
         .transpose()?;
     let start = Start {
         state: &ctx.paths.state,
-        origin,
+        origin: beside.origin,
         cwd: &std::env::current_dir()?,
         label: &add_label(host.host, plan, name),
         focus: placement == Placement::Focus,
+        split: beside.split,
         argv: &worker,
         env: &add_env(ctx, plan, directive.as_ref())?,
     };
@@ -584,7 +622,7 @@ pub(in crate::cli) async fn restore_queued(
             let Some(places) = host.places() else {
                 return Ok(None);
             };
-            start_in_background(ctx, host, places, group, workspace, args)
+            start_in_background(ctx, host, places, Beside::opening(group), workspace, args)
                 .await
                 .map(Some)
         },
@@ -607,18 +645,19 @@ pub(in crate::cli) async fn run_in_background(
     };
     let repo = groups::Repo::Id(&workspace.repository_id);
     let origin = groups::beside(ctx, &host, &repo, &workspace.path).await?;
-    start_in_background(ctx, &host, places, origin.as_ref(), workspace, args).await?;
+    let beside = host.beside(origin.as_ref());
+    start_in_background(ctx, &host, places, beside, workspace, args).await?;
     Ok(Some(places.background_places()))
 }
 
 /// Run Shoal with `args`, a restore of `workspace`, in a new background
-/// place of `host`'s `places` beside `origin`, telling the restore to close
+/// place of `host`'s `places` `beside`, telling the restore to close
 /// the place with the workspace when config says so.
 async fn start_in_background(
     ctx: &Context,
     host: &Configured,
     places: &dyn Places,
-    origin: Option<&Origin>,
+    beside: Beside<'_>,
     workspace: &Workspace,
     args: &[OsString],
 ) -> Result<()> {
@@ -633,10 +672,11 @@ async fn start_in_background(
     }
     let start = Start {
         state: &ctx.paths.state,
-        origin,
+        origin: beside.origin,
         cwd: &workspace.path,
         label: &label,
         focus: false,
+        split: beside.split,
         argv: &argv,
         env: &place_env(ctx)?,
     };
@@ -680,6 +720,7 @@ pub(in crate::cli) async fn run_agent(
     };
     let repo = groups::Repo::Id(&workspace.repository_id);
     let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
+    let beside = current.beside(origin.as_ref());
     let Configured {
         host,
         closes_when_done,
@@ -703,10 +744,11 @@ pub(in crate::cli) async fn run_agent(
     }
     let start = Start {
         state: &ctx.paths.state,
-        origin: origin.as_ref(),
+        origin: beside.origin,
         cwd: &workspace.path,
         label: &workspace.name,
         focus: true,
+        split: beside.split,
         argv: &worker,
         env: &env,
     };
@@ -773,12 +815,14 @@ pub(in crate::cli) async fn start_chat(
     };
     let repo = groups::Repo::Known(repository);
     let origin = groups::beside(ctx, &host, &repo, &repository.path).await?;
+    let beside = host.beside(origin.as_ref());
     let start = Start {
         state: &ctx.paths.state,
-        origin: origin.as_ref(),
+        origin: beside.origin,
         cwd: &repository.path,
         label: name,
         focus: true,
+        split: beside.split,
         argv: &shoal_command(ctx, args)?,
         env: &place_env(ctx)?,
     };

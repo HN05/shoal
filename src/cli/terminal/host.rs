@@ -278,6 +278,9 @@ pub(in crate::cli) struct Start<'a> {
     pub label: &'a str,
     /// Whether the place takes the caller's terminal.
     pub focus: bool,
+    /// The caller's place, which the new place splits; `None` opens a place
+    /// of its own.
+    pub split: Option<&'a str>,
     /// The command the place runs.
     pub argv: &'a [OsString],
     /// Variables the command needs from this process, since the place may

@@ -692,8 +692,13 @@ relabelling and closes hold a lock beside zmx's socket directory, shared by
 every state directory using that server.
 
 Rex is a terminal host as Herdr is: inside a Rex block, Shoal opens a window in
-the caller's session, never a split, and runs agents in place in their block,
-since Rex keeps sessions running without a connected client. A terminal no host
+the caller's session, or with `rex.placement = "split"` splits the caller's
+block, and runs agents in place in their block, since Rex keeps sessions
+running without a connected client. Generic code decides a split: only a start
+from the caller's own place passes it to the host, so queued starts and starts
+without one open windows. A block beside others carries its own label, and
+Shoal renames a window only while the block it opened is alone there, so a
+split never renames the user's window. A terminal no host
 serves goes to `default_host`, zmx unless set to Rex, whose windows then join the
 session `rex.session_name` names; generic code reads the setting and renders
 the name, and a host only finds or creates a group by label. Shoal remembers
@@ -711,7 +716,7 @@ server, then to `default_host`, then to zmx. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
 of shell history, and the shell stays as in a Herdr tab. Rex blocks carry no
-labels, so the daemon's records of the places Shoal created are the proof of
+ownership marks, so the daemon's records of the places Shoal created are the proof of
 ownership, closed through the same removal hook, orphan sweep and pending-close
 retries as zmx sessions; Rex never reuses IDs, so a recorded block that still
 exists is Shoal's, and each state directory knows only its own. An agent of

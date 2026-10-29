@@ -19,3 +19,30 @@ fn a_place_repeats_only_in_the_same_host_and_server() {
     let distinct = distinct_places(&[&work, &again, &other, &rex]);
     assert_eq!(distinct, [&work, &other, &rex]);
 }
+
+#[test]
+fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
+    let resolved = |global: &str| {
+        let config: crate::config::Config = toml::from_str(global).unwrap();
+        config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap()
+    };
+    let splits = resolved("[rex]\nplacement = 'split'\n");
+    let windows = resolved("");
+    let block = Origin {
+        group: Some("session:1".into()),
+        ..Origin::created(HostName::Rex, "block:1".into())
+    };
+    let session = Origin {
+        place: None,
+        ..block.clone()
+    };
+    let rex = |settings| Configured::named(settings, HostName::Rex);
+    assert_eq!(rex(&splits).beside(Some(&block)).split, Some("block:1"));
+    assert_eq!(rex(&splits).beside(Some(&session)).split, None);
+    assert_eq!(rex(&splits).beside(None).split, None);
+    assert_eq!(rex(&windows).beside(Some(&block)).split, None);
+    let herdr = Configured::named(&splits, HostName::Herdr);
+    assert_eq!(herdr.beside(Some(&block)).split, None);
+}
