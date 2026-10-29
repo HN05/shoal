@@ -597,8 +597,8 @@ impl Backend for GitHub {
         github_rest::listed_reaction(reaction)
     }
 
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
-        github_rest::own_login(repo, account).await
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        github_rest::own_login(repo, account).await.map(Some)
     }
 
     /// GitHub numbers a PR's inline comments apart from its comments.

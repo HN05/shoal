@@ -956,6 +956,23 @@ fn views_count_reactions_and_mark_the_logins_own() {
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(text.contains("Reactions: +1 2 (you), heart 1"), "{text}");
     assert!(text.contains("comment 9"), "{text}");
+
+    // Without a login, a public repository's reactions are still listed.
+    let keys = if cfg!(target_os = "macos") {
+        "Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        ".local/share/forgejo-cli/keys.json"
+    };
+    fs::remove_file(fixture.root.path().join(keys)).unwrap();
+    let view = &fixture.ok(&["view", "issue", "3", "--workspace", "topic"])[0];
+    assert_eq!(view["reactions"][0]["reacted"], false, "{view}");
+    assert!(view.get("errors").is_none(), "{view}");
+    assert!(
+        !fixture
+            .requests()
+            .iter()
+            .any(|request| request[0] == "GET user" && request[2].is_null()),
+    );
 }
 
 #[test]

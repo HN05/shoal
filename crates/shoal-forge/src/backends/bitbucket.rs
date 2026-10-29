@@ -533,7 +533,7 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 
-    async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
+    async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<String>> {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 

@@ -26,10 +26,15 @@ fn reactions_count_by_content_in_first_use_order_and_mark_the_login() {
         listed("+1", "ann"),
     ];
     assert_eq!(
-        tally(&listed, "bob"),
+        tally(&listed, Some("bob")),
         [reaction("heart", 2, false), reaction("+1", 2, true)]
     );
-    assert!(tally(&[], "bob").is_empty());
+    // An anonymous reader made none of them.
+    assert_eq!(
+        tally(&listed, None),
+        [reaction("heart", 2, false), reaction("+1", 2, false)]
+    );
+    assert!(tally(&[], Some("bob")).is_empty());
 }
 
 #[test]

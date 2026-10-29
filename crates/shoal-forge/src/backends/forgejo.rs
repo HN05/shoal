@@ -498,8 +498,15 @@ impl Backend for Forgejo {
         github_rest::listed_reaction(reaction)
     }
 
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
-        github_rest::own_login(repo, account).await.hint_login(self)
+    /// Public repositories are readable without a login, which has none.
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        if let ForgejoLogin::Anonymous = account.forgejo_login(&repo.host).await? {
+            return Ok(None);
+        }
+        github_rest::own_login(repo, account)
+            .await
+            .map(Some)
+            .hint_login(self)
     }
 
     fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {

@@ -595,8 +595,11 @@ impl Backend for GitLab {
         reactions::listed(reaction)
     }
 
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
-        reactions::own_login(repo, account).await.hint_login(self)
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        reactions::own_login(repo, account)
+            .await
+            .map(Some)
+            .hint_login(self)
     }
 
     fn reaction_content(&self, name: &str) -> String {

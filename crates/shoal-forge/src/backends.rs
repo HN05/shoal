@@ -437,8 +437,9 @@ pub(crate) trait Backend {
     /// A reaction as the forge lists it, with GitHub's name for its content.
     fn listed_reaction(&self, reaction: &Value) -> Result<Listed>;
 
-    /// The login `account` signs in to the forge as.
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
+    /// The login `account` signs in to the forge as; none when it reads
+    /// anonymously.
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
 
     /// What reacting to comment `comment` of item `number` reacts to: by
     /// default a comment, where the forge keeps inline comments with the
@@ -1056,7 +1057,7 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.listed_reaction(reaction))
     }
 
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         dispatch!(self, backend => backend.own_login(repo, account).await)
     }
 

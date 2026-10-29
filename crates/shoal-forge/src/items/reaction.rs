@@ -96,7 +96,7 @@ impl ForgeRepo {
         let subjects = subjects(details);
         let reactions: Vec<Vec<Reaction>> = futures_util::stream::iter(&subjects)
             .map(|&subject| {
-                let login = login.as_str();
+                let login = login.as_deref();
                 async move {
                     let listed = self
                         .listed_reactions(account, kind, number, subject)
@@ -156,7 +156,8 @@ impl ForgeRepo {
         change: &ReactionChange,
     ) -> Result<Option<Request>> {
         let content = self.kind.reaction_content(&change.content);
-        let login = self.kind.own_login(self, account).await?;
+        let login = (self.kind.own_login(self, account).await?)
+            .context("reacting needs a login on the forge")?;
         let listed = self
             .listed_reactions(account, kind, number, subject)
             .await?;
@@ -221,11 +222,11 @@ fn place(details: &mut Details, reactions: Vec<Vec<Reaction>>) {
 }
 
 /// `listed` counted by content, in the order each content was first used,
-/// marking those `login` is among.
-fn tally(listed: &[Listed], login: &str) -> Vec<Reaction> {
+/// marking those `login`, if any, is among.
+fn tally(listed: &[Listed], login: Option<&str>) -> Vec<Reaction> {
     let mut reactions: Vec<Reaction> = Vec::new();
     for reaction in listed {
-        let own = reaction.login.eq_ignore_ascii_case(login);
+        let own = login.is_some_and(|login| reaction.login.eq_ignore_ascii_case(login));
         match reactions
             .iter_mut()
             .find(|tallied| tallied.content == reaction.content)
