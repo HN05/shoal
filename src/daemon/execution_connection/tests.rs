@@ -254,3 +254,77 @@ async fn running_executions_leave_daemon_operations_idle() {
     assert_eq!(executions.len(), 1);
     assert!(!manager.executions.is_connected(&executions[0].id).await);
 }
+
+#[tokio::test]
+async fn a_wrapper_registers_again_from_where_it_runs() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "upgraded".into(), None, None, None)
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    // A wrapper of an earlier release reported no place.
+    let (client, server) = UnixStream::pair().unwrap();
+    let executing = tokio::spawn(execute(
+        server,
+        1,
+        manager.clone(),
+        ExecutionContext {
+            workspace: workspace.id.clone(),
+            wrapper,
+            kind: ExecutionKind::Command,
+            agent: None,
+            recover: false,
+            reattach: true,
+            caller: None,
+            queue_entry: None,
+            demo: None,
+            origin: None,
+        },
+        manager.gates.owned_operation().await,
+    ));
+    let mut wrapper_side = BufReader::new(client);
+    let response: Response = read(&mut wrapper_side).await;
+    let Body::Execution(registered) = response.body else {
+        panic!("execution was not registered: {:?}", response.body);
+    };
+    let origin = crate::sessions::Origin::created(crate::sessions::HostName::Zmx, "agent".into());
+    protocol::write(
+        wrapper_side.get_mut(),
+        &ExecutionEvent::Register {
+            origin: Some(Box::new(origin.clone())),
+        },
+    )
+    .await
+    .unwrap();
+    let Control::Registered { plan } = read(&mut wrapper_side).await else {
+        panic!("the wrapper did not register again");
+    };
+    assert_eq!(plan.id, registered.id);
+    assert_eq!(plan.scope_token, registered.scope_token);
+    assert_eq!(plan.environment, registered.environment);
+    let executions = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions;
+    assert_eq!(executions[0].origin, Some(origin));
+    protocol::write(
+        wrapper_side.get_mut(),
+        &ExecutionEvent::Finished { exit_code: 0 },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        read(&mut wrapper_side).await,
+        Control::Finished { .. }
+    ));
+    bounded(executing).await.unwrap().unwrap();
+}

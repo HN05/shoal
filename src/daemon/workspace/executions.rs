@@ -1,6 +1,7 @@
 //! Daemon-side execution registration and stopping. Terminal I/O stays in
 //! crate::execution, in the invoking CLI process.
 mod completion;
+mod reregistration;
 
 use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
 use crate::daemon::log;

@@ -736,6 +736,14 @@ pub enum ExecutionEvent {
     /// The child exited and the wrapper starts another, as a demo's does,
     /// once the daemon answers [`Control::ChildReleased`].
     ChildExited,
+    /// The wrapper continues from the installed binary, which an upgrade put
+    /// in place of its own, between [`Control::Resume`] and its next child's
+    /// start, and registers again from `origin`, the place it runs in. The
+    /// daemon answers [`Control::Registered`], or a stop.
+    Register {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        origin: Option<Box<crate::sessions::Origin>>,
+    },
 }
 
 /// Daemon → wrapper messages during an execution.
@@ -786,6 +794,10 @@ pub enum Control {
     ChildReleased,
     /// The daemon is shutting down; keep the command running and reattach.
     Detach,
+    /// The plan of an execution whose wrapper registered again.
+    Registered {
+        plan: Box<crate::model::ExecutionPlan>,
+    },
 }
 
 fn default_overload_reason() -> String {

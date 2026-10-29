@@ -411,6 +411,22 @@ async fn relay(
                 protocol::write(writer, &control).await?;
                 *unattachable = Some(operation);
             }
+            ExecutionEvent::Register { origin } => {
+                // As for a start, a daemon update waits until the next child
+                // runs, since the wrapper cannot reattach before it does.
+                let operation = match unattachable.take() {
+                    Some(operation) => operation,
+                    None => manager.gates.owned_operation().await,
+                };
+                let place = origin.map(|origin| ExecutionPlace {
+                    origin: *origin,
+                    agent: agent.is_some(),
+                });
+                let control = register_again(manager, execution_id, &workspace.id, place).await;
+                sent_stop |= matches!(control, Control::Stop { .. });
+                protocol::write(writer, &control).await?;
+                *unattachable = Some(operation);
+            }
             ExecutionEvent::Paused => {
                 *handoff_claimed = true;
                 // A wrapper whose own session ended saves its agent unasked,
@@ -456,6 +472,25 @@ async fn relay(
                 }
             }
         }
+    }
+}
+
+/// The plan of execution `id` of workspace `workspace_id`, whose wrapper
+/// registers again from `place`, or the stop that refuses it.
+async fn register_again(
+    manager: &Manager,
+    id: &str,
+    workspace_id: &str,
+    place: Option<ExecutionPlace>,
+) -> Control {
+    match manager.reregister_execution(id, workspace_id, place).await {
+        Ok(plan) => Control::Registered {
+            plan: Box::new(plan),
+        },
+        Err(error) => Control::Stop {
+            reason: Some(format!("{error:#}")),
+            removed: false,
+        },
     }
 }
 
