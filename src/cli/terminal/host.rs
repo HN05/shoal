@@ -70,15 +70,11 @@ pub(in crate::cli) trait Places: Sync {
     /// here.
     fn takes_queued(&self, origin: Option<&Origin>) -> bool;
 
-    /// Run `start`, a workspace addition, in a new place, returning whether
-    /// it left this process.
-    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>>;
-
-    /// Run `start`, Shoal for a workspace, in a new background place.
-    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>>;
-
-    /// Run `start`, a chat, beside this terminal.
-    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>>;
+    /// Run `start` in a new place, returning the place: one of its own in
+    /// the group of `start`'s origin, or splitting the place `start` names.
+    /// A focused place becomes the host's current one; generic code shows
+    /// it to a terminal the host does not serve.
+    fn open<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>>;
 
     /// What several background starts run in.
     fn background_places(&self) -> &'static str;
@@ -183,13 +179,21 @@ pub(in crate::cli) trait Closes: Sync {
 pub(in crate::cli) trait Sessions: Sync {
     /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
     /// attach this terminal to it, returning the session once the terminal
-    /// left it. `None` means the agent runs in place.
+    /// left it, where [`Sessions::keeps_agents_in_sessions`].
     fn run_agent<'a>(
         &'a self,
-        start: &'a Start<'a>,
-        owner: Owner<'a>,
-        agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>>;
+        _start: &'a Start<'a>,
+        _owner: Owner<'a>,
+        _agent: &'a str,
+    ) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async { anyhow::bail!("this host runs no agents in sessions of its own") })
+    }
+
+    /// Run `start`, a chat, in a new session and attach this terminal to
+    /// it, as [`Sessions::run_agent`] runs an agent.
+    fn run_chat<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
+        Box::pin(async { anyhow::bail!("this host runs no chats in sessions of its own") })
+    }
 
     /// Whether `session`, which this host attached this terminal to, still
     /// runs after the terminal left it. A host that shows its sessions
@@ -209,8 +213,9 @@ pub(in crate::cli) trait Sessions: Sync {
         Box::pin(async { Ok(()) })
     }
 
-    /// Whether agents launched here run in sessions their wrapper can type
-    /// prompts into.
+    /// Whether agents and chats launched here run in sessions this terminal
+    /// attaches to, which their wrapper can type prompts into, and a focused
+    /// addition stays here to start its agent so.
     fn keeps_agents_in_sessions(&self) -> bool {
         false
     }
@@ -311,13 +316,4 @@ pub(in crate::cli) struct Demo<'a> {
     pub label: &'a str,
     pub env: &'a [(&'a str, String)],
     pub worker: &'a DemoWorker<'a>,
-}
-
-/// Where a host started a chat beside this terminal.
-pub(in crate::cli) enum ChatStart {
-    /// In a new tab.
-    Tab,
-    /// In this new session, which this terminal stayed attached to until the
-    /// user detached or the chat ended.
-    Session(String),
 }

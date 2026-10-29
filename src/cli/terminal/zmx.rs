@@ -17,7 +17,7 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{
-    ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
+    Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
     host::{Closes, Demos, Places, Prompts, Sessions, Watches},
 };
 use crate::{
@@ -86,24 +86,13 @@ impl Places for Zmx {
         origin.is_none_or(|origin| origin.host != HostName::Zmx)
     }
 
-    /// A focused start stays here, where its agent runs in a session this
-    /// terminal attaches to.
-    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
+    /// A detached session; a focused start runs in one this terminal
+    /// attaches to instead.
+    fn open<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>> {
         Box::pin(async move {
-            if start.focus {
-                return Ok(false);
-            }
-            start_detached(start).await?;
-            Ok(true)
+            let session = start_detached(start).await?;
+            Ok(Origin::created(HostName::Zmx, session))
         })
-    }
-
-    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(start_detached(start))
-    }
-
-    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
-        Box::pin(async move { run_chat(start).await.map(ChatStart::Session) })
     }
 
     /// The session, attached to this terminal until the user detaches or it
@@ -186,8 +175,12 @@ impl Sessions for Zmx {
         start: &'a Start<'a>,
         owner: Owner<'a>,
         agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move { run(start, owner, agent).await.map(Some) })
+    ) -> BoxFuture<'a, Result<String>> {
+        Box::pin(run(start, owner, agent))
+    }
+
+    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
+        Box::pin(run_chat(start))
     }
 
     fn label_current<'a>(&'a self, state: &'a Path, owner: Owner<'a>) -> BoxFuture<'a, Result<()>> {
@@ -308,8 +301,8 @@ async fn unused_name(label: &str) -> Result<String> {
 /// bash, so the session ends once the command succeeds, which it does once
 /// its agent or workspace shell has run, and otherwise becomes the user's
 /// login shell to show why it failed. `start`'s variables reach that shell,
-/// inert there.
-async fn start_detached(start: &Start<'_>) -> Result<()> {
+/// inert there. Returns the session's name.
+async fn start_detached(start: &Start<'_>) -> Result<String> {
     ensure_program("background launch", Tool::Zmx.program())?;
     let name = unused_name(start.label).await?;
     run_in_new_session(
@@ -326,7 +319,8 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
             ..Default::default()
         },
     )
-    .await
+    .await?;
+    Ok(name)
 }
 
 /// Start `demo` in a new detached session, whose worker ends the session

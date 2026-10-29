@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
 use super::{
-    ChatStart, Demo, Host, PlaceState, Session, Start, Watched,
+    Demo, Host, PlaceState, Session, Start, Watched,
     host::{Demos, Places, Prompts, Sessions, Watches},
     typed::Typed,
 };
@@ -75,16 +75,9 @@ impl Places for Rex {
         Box::pin(async move { session(near, label, cwd).await.map(Some) })
     }
 
-    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async move {
-            open_block(start).await?;
-            Ok(true)
-        })
-    }
-
-    /// A background block.
-    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { open_block(start).await.map(drop) })
+    /// A block in a window of its own, or splitting the caller's block.
+    fn open<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(open_block(start))
     }
 
     /// A block back at its shell prompt, as it is after the wrapper exits.
@@ -96,13 +89,6 @@ impl Places for Rex {
         env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(run_at_prompt(state, place, argv, env))
-    }
-
-    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
-        Box::pin(async move {
-            open_block(start).await?;
-            Ok(ChatStart::Tab)
-        })
     }
 
     fn show<'a>(&'a self, place: &'a Origin, name: &'a str) -> BoxFuture<'a, Result<()>> {
@@ -159,24 +145,8 @@ impl Watches for Rex {
     }
 }
 
+/// Agents in Rex run in place in their block.
 impl Sessions for Rex {
-    /// Outside Rex, a focused window in the default session; inside it the
-    /// agent runs in place in its block.
-    fn run_agent<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-        _owner: super::Owner<'a>,
-        _agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move {
-            if in_rex() {
-                return Ok(None);
-            }
-            let opened = open_block(start).await?;
-            Ok(Some(opened.id().to_owned()))
-        })
-    }
-
     /// The block, under the name it shows, while it is open.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(session_at(place))
@@ -288,8 +258,7 @@ async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origi
 }
 
 /// Open a block for `start` in its origin's session, in a window of its own
-/// or splitting the caller's block, and type its command there. A focused
-/// block outside Rex shows in the Mac app.
+/// or splitting the caller's block, and type its command there.
 async fn open_block(start: &Start<'_>) -> Result<Origin> {
     let origin = start
         .origin
@@ -312,19 +281,11 @@ async fn open_block(start: &Start<'_>) -> Result<Origin> {
         })
         .await?;
     typed.hand_over()?;
-    let place = Origin {
-        place: Some(opened.block.clone()),
+    Ok(Origin {
+        place: Some(opened.block),
         owned: true,
         ..origin.clone()
-    };
-    if start.focus && !in_rex() {
-        let block = Block {
-            session: session.to_owned(),
-            window: opened.window,
-        };
-        reveal(&server, &block, &opened.block, start.label).await?;
-    }
-    Ok(place)
+    })
 }
 
 /// Bring `id`, `name`'s block, forward: in Rex, its window becomes the

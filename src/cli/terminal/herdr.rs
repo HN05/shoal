@@ -8,7 +8,7 @@ use tokio::process::Command;
 use futures_util::future::BoxFuture;
 
 use super::{
-    ChatStart, Demo, Host, Options, Owner, PlaceState, Session, Start, Watched,
+    Demo, Host, Options, PlaceState, Session, Start, Watched,
     host::{Closes, Demos, Places, Sessions, Watches},
 };
 
@@ -25,8 +25,7 @@ use crate::{
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place. As the default host,
-/// it opens tabs for a terminal no host serves in a workspace of its own,
-/// and attaches that terminal to Herdr to show a focused one.
+/// it opens tabs for a terminal no host serves in a workspace of its own.
 pub(super) struct Herdr;
 
 impl Host for Herdr {
@@ -79,16 +78,9 @@ impl Places for Herdr {
         Box::pin(async move { workspaces::labelled(near, label, cwd).await.map(Some) })
     }
 
-    fn start_add<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async move {
-            open_tab(start).await?;
-            Ok(true)
-        })
-    }
-
-    /// A background tab.
-    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { open_tab(start).await.map(drop) })
+    /// A tab, whose pane is the place.
+    fn open<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(open_tab(start))
     }
 
     /// A pane back at its shell prompt, as it is after the wrapper exits.
@@ -100,13 +92,6 @@ impl Places for Herdr {
         env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(run_at_prompt(place, argv, env))
-    }
-
-    fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
-        Box::pin(async move {
-            open_tab(start).await?;
-            Ok(ChatStart::Tab)
-        })
     }
 
     /// Its tab, focused; from a terminal outside Herdr, shown in a Herdr
@@ -162,23 +147,6 @@ impl Closes for Herdr {
 /// Herdr keeps no sessions of its own: an agent or chat in one of its panes
 /// is reached through its tab.
 impl Sessions for Herdr {
-    /// Outside Herdr, a focused tab this terminal attaches to; agents in a
-    /// Herdr pane run in place.
-    fn run_agent<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-        _owner: Owner<'a>,
-        _agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move {
-            if in_herdr() {
-                return Ok(None);
-            }
-            let opened = open_tab(start).await?;
-            Ok(Some(opened.id().to_owned()))
-        })
-    }
-
     /// The pane, under its tab's label, while it is open.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(attach::session_at(place))
@@ -294,9 +262,7 @@ fn current_pane() -> Option<String> {
         .filter(|pane| !pane.is_empty())
 }
 
-/// Run `start` in a new tab, returning its pane. A focused tab opened from
-/// outside Herdr shows in this terminal, attached to the tab's Herdr
-/// session until the user detaches.
+/// Run `start` in a new tab, returning its pane.
 async fn open_tab(start: &Start<'_>) -> Result<Origin> {
     let origin = start
         .origin
@@ -315,9 +281,6 @@ async fn open_tab(start: &Start<'_>) -> Result<Origin> {
         ..origin.clone()
     };
     run_in_pane(origin, place.id(), start.argv).await?;
-    if start.focus && !in_herdr() {
-        attach::reveal(&place).await?;
-    }
     Ok(place)
 }
 

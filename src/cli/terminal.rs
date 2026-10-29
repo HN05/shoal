@@ -39,7 +39,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
-use host::{ChatStart, Demo, DemoWorker, Host, Places, Prompts, Sessions, Start};
+use host::{Demo, DemoWorker, Host, Places, Prompts, Sessions, Start};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 pub(in crate::cli) use typed::run as run_launch;
 
@@ -430,9 +430,11 @@ const NO_QUEUED_HOST: &str = "no terminal host can start queued agents";
 
 /// Have `host` run the add worker for `plan`, the planned workspace `name`,
 /// in a new place of its `places` `beside` as `placement` asks,
-/// returning whether it left this process. The worker reads the plan from
-/// the place's environment, and a place that keeps a shell gets the
-/// directive through which the worker has it enter the workspace.
+/// returning whether it left this process. A focused start stays here where
+/// the host keeps agents in sessions this terminal attaches to, so its agent
+/// starts in one. The worker reads the plan from the place's environment,
+/// and a place that keeps a shell gets the directive through which the
+/// worker has it enter the workspace.
 async fn run_add(
     ctx: &Context,
     host: &Configured,
@@ -442,6 +444,9 @@ async fn run_add(
     name: &str,
     placement: Placement,
 ) -> Result<bool> {
+    if placement == Placement::Focus && attached_sessions(host.host).is_some() {
+        return Ok(false);
+    }
     let worker = add_worker_argv(ctx, host)?;
     let directive = places
         .places_keep_shells()
@@ -457,11 +462,35 @@ async fn run_add(
         argv: &worker,
         env: &add_env(ctx, plan, directive.as_ref())?,
     };
-    let started = places.start_add(&start).await?;
-    if let (true, Some(directive)) = (started, directive) {
+    let place = places.open(&start).await?;
+    if let Some(directive) = directive {
         directive.hand_over()?;
     }
-    Ok(started)
+    if start.focus {
+        show_opened(host, places, &place, start.label).await?;
+    }
+    Ok(true)
+}
+
+/// Show `place`, which `host` opened focused, in this terminal when the
+/// host does not serve it; a terminal it serves shows its focused place.
+async fn show_opened(
+    host: &Configured,
+    places: &dyn Places,
+    place: &Origin,
+    name: &str,
+) -> Result<()> {
+    if host.serves() {
+        return Ok(());
+    }
+    places.show(place, name).await
+}
+
+/// The sessions of `host`, where it keeps agents in sessions this terminal
+/// attaches to.
+fn attached_sessions(host: &'static dyn Host) -> Option<&'static dyn Sessions> {
+    host.sessions()
+        .filter(|sessions| sessions.keeps_agents_in_sessions())
 }
 
 /// What the place `host` opens for `plan` is called: the plan's label where
@@ -806,7 +835,7 @@ async fn start_in_background(
         argv: &argv,
         env: &place_env(ctx)?,
     };
-    places.run_in_background(&start).await
+    places.open(&start).await.map(drop)
 }
 
 /// Record `place`, one Shoal created for `workspace`, so the daemon closes
@@ -836,10 +865,32 @@ pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspa
     }
 }
 
-/// Run a tracked agent's `command` in a new session and attach this terminal
-/// to it, when this terminal keeps agents in sessions. `None` means the agent
-/// runs in place in this process. `records` are recovery records the launch
-/// consumes once it starts.
+/// Where a tracked agent launched from this terminal runs apart from this
+/// process.
+enum AgentRun {
+    /// In a new session of a host that keeps agents in sessions this
+    /// terminal attaches to.
+    Session(&'static dyn Sessions),
+    /// In a new place of a host that does not serve this terminal, shown
+    /// here.
+    Place(&'static dyn Places),
+}
+
+impl AgentRun {
+    /// Where `host` runs the agent, or `None` for in place, as in a place
+    /// of a host serving this terminal.
+    fn of(host: &Configured) -> Option<Self> {
+        if let Some(sessions) = attached_sessions(host.host) {
+            return Some(Self::Session(sessions));
+        }
+        host.places().filter(|_| !host.serves()).map(Self::Place)
+    }
+}
+
+/// Run a tracked agent's `command` apart from this process, where the host
+/// for this terminal runs agents so, and show it here. `None` means the
+/// agent runs in place in this process. `records` are recovery records the
+/// launch consumes once it starts.
 pub(in crate::cli) async fn run_agent(
     ctx: &Context,
     settings: &Effective,
@@ -849,29 +900,13 @@ pub(in crate::cli) async fn run_agent(
     command: &[OsString],
 ) -> Result<Option<i32>> {
     let current = current(settings);
-    let Some(sessions) = current.host.sessions() else {
+    let Some(run) = AgentRun::of(&current) else {
         return Ok(None);
     };
     let repo = groups::Repo::Id(&workspace.repository_id);
     let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
     let beside = current.beside(origin.as_ref());
-    let Configured {
-        host,
-        closes_when_done,
-        ..
-    } = current;
-    let worker = crate::cli::internal::internal_command(
-        &ctx.paths,
-        false,
-        crate::cli::internal::Worker::Session {
-            workspace: &workspace.id,
-            agent,
-            records,
-            command,
-            host: host.name().as_str(),
-            close_in: closes_when_done.then(|| host.name().as_str()),
-        },
-    )?;
+    let worker = agent_worker(ctx, &current, workspace, agent, records, command)?;
     let mut env = place_env(ctx)?;
     if let Some(entry) = env::queue_entry() {
         env.push((env::QUEUE_ENTRY, entry.to_owned()));
@@ -886,12 +921,43 @@ pub(in crate::cli) async fn run_agent(
         argv: &worker,
         env: &env,
     };
-    let owner = Owner::Workspace(&workspace.id);
-    let Some(session) = sessions.run_agent(&start, owner, agent).await? else {
-        return Ok(None);
-    };
-    report_detach(sessions, &workspace.name, &session).await?;
+    match run {
+        AgentRun::Session(sessions) => {
+            let owner = Owner::Workspace(&workspace.id);
+            let session = sessions.run_agent(&start, owner, agent).await?;
+            report_detach(sessions, &workspace.name, &session).await?;
+        }
+        AgentRun::Place(places) => {
+            let place = places.open(&start).await?;
+            places.show(&place, &workspace.name).await?;
+        }
+    }
     Ok(Some(0))
+}
+
+/// The worker that runs `agent`'s tracked `command` for `workspace` in a
+/// place `host` opens, closing it with the workspace when config says so.
+fn agent_worker(
+    ctx: &Context,
+    host: &Configured,
+    workspace: &Workspace,
+    agent: &str,
+    records: &[PathBuf],
+    command: &[OsString],
+) -> Result<Vec<OsString>> {
+    let name = host.host.name().as_str();
+    crate::cli::internal::internal_command(
+        &ctx.paths,
+        false,
+        crate::cli::internal::Worker::Session {
+            workspace: &workspace.id,
+            agent,
+            records,
+            command,
+            host: name,
+            close_in: host.closes_when_done.then_some(name),
+        },
+    )
 }
 
 /// Close the place of the host named `host` that this process runs in once
@@ -933,8 +999,9 @@ async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> 
 }
 
 /// Run Shoal with `args` for the chat `name` at the repository's checkout:
-/// in a new focused tab, or in a new session this terminal attaches to, as
-/// `run_agent` does for tracked agents. Returns whether it ran there; `false`
+/// in a new session this terminal attaches to, as `run_agent` does for
+/// tracked agents, otherwise in a new focused place, shown here when its
+/// host does not serve this terminal. Returns whether it ran there; `false`
 /// means the chat runs in place.
 pub(in crate::cli) async fn start_chat(
     ctx: &Context,
@@ -960,16 +1027,14 @@ pub(in crate::cli) async fn start_chat(
         argv: &shoal_command(ctx, args)?,
         env: &place_env(ctx)?,
     };
-    let started = places.start_chat(&start).await?;
-    match started {
-        ChatStart::Tab => Ok(true),
-        ChatStart::Session(session) => {
-            if let Some(sessions) = host.host.sessions() {
-                report_detach(sessions, name, &session).await?;
-            }
-            Ok(true)
-        }
+    if let Some(sessions) = attached_sessions(host.host) {
+        let session = sessions.run_chat(&start).await?;
+        report_detach(sessions, name, &session).await?;
+        return Ok(true);
     }
+    let place = places.open(&start).await?;
+    show_opened(&host, places, &place, name).await?;
+    Ok(true)
 }
 
 /// The agent sessions still open at `places` in the hosts `settings`
