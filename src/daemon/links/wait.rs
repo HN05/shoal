@@ -472,6 +472,7 @@ impl Manager {
         }
         drop(guard);
         let observed_at = crate::time::unix_seconds();
+        let items = self.items_to_look_up(&workspace, items).await?;
         let items = self.item_activity(&workspace, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
@@ -514,6 +515,28 @@ impl Manager {
             .record_observed(id, observations, selection, observed_at)
             .await?;
         self.fit_response(own_batch(id, updates), 0).await
+    }
+
+    /// The `items` whose activity is still to come: a merged PR has none,
+    /// and once the workspace's assignment is done neither has an item seen
+    /// closed, so a forge that cannot be reached fails no poll for them.
+    async fn items_to_look_up(
+        &self,
+        workspace: &Workspace,
+        items: Vec<(String, ItemKind)>,
+    ) -> Result<Vec<(String, ItemKind)>> {
+        let (id, done) = (workspace.id.clone(), workspace.done);
+        self.store
+            .run(move |db| {
+                let mut open = Vec::new();
+                for (url, kind) in items {
+                    if !activity_ended(db, &id, &url, done)? {
+                        open.push((url, kind));
+                    }
+                }
+                Ok(open)
+            })
+            .await
     }
 
     /// The activity of `items`, each read from the forge its URL names, so
@@ -607,6 +630,7 @@ impl Manager {
         items: Vec<(String, ItemKind)>,
     ) -> Result<()> {
         let observed_at = crate::time::unix_seconds();
+        let items = self.items_to_look_up(workspace, items).await?;
         let observations = self
             .item_activity(workspace, items, &Selection::default())
             .await?;
@@ -1232,6 +1256,23 @@ fn observed_item(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Optio
     Ok(record
         .map(|record| serde_json::from_str(&record))
         .transpose()?)
+}
+
+/// Whether the workspace's watch saw the item's activity end: a PR merged,
+/// or, once the assignment is `done`, an item closed.
+fn activity_ended(db: &rusqlite::Connection, id: &str, url: &str, done: bool) -> Result<bool> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            params![id, url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(record) = record else {
+        return Ok(false);
+    };
+    let snapshot = serde_json::from_str::<ActivityRecord>(&record)?.snapshot;
+    Ok(snapshot.state() == ItemState::Merged.as_str() || (done && concluded(&snapshot)))
 }
 
 /// Whether the item was seen merged or closed, ending its activity.

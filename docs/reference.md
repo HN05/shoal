@@ -3054,7 +3054,9 @@ supersedes a running one, which returns an empty array and `superseded: true`
 without taking updates; updates acknowledged while a newer watch runs stay pending
 for it. Scoped callers can watch only in their own workspace and its child
 workspaces; a watch also reports the activity its agent receives from
-[child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Linked items are read
+[child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. A PR
+seen merged is not looked up again, nor, once the assignment is done, an item seen
+closed. Linked items are read
 from the forge their URLs name, so Git failing in the worktree holds back only the
 branch conflict check; a watch of an item named on the command line still reads
 the origin remote with Git. Lookup failures report errors or `lookup_failed` updates; a source

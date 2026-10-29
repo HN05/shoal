@@ -1974,7 +1974,9 @@ leaves the updates pending for it; competing waits would consume updates the age
 never reads.
 Unavailable activity sources are explicit failures, never successful checks or
 proof of mergeability; a persisting failure is reported again on an interval so it
-cannot silence a wait while hiding a new conflict. Waiting does not resume stopped
+cannot silence a wait while hiding a new conflict. An item whose activity has ended,
+a merged PR or, once the assignment is done, a closed item, is not looked up again,
+so an unreachable forge cannot fail or wake the wait of a finished workspace. Waiting does not resume stopped
 agents or grant merge permission; agent instructions direct agents to handle
 updates and wait again.
 When completion requests cleanup, confirmed merges stop tracked agents through shared removal,

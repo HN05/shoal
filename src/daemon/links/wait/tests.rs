@@ -1065,6 +1065,77 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
 }
 
 #[tokio::test]
+async fn polls_stop_looking_up_items_whose_activity_ended() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "ended".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_issue(workspace_id,url) VALUES (?1,'issue')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    // Neither URL names a forge, so looking one up fails.
+    let unfiltered = Selection::default();
+    let poll = || manager.poll_item_activity(&workspace.id, &unfiltered);
+    assert!(poll().await.is_err());
+
+    let ended = |state: &str| {
+        serde_json::from_value::<Snapshot>(
+            json!({"comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {}}),
+        )
+        .unwrap()
+    };
+    let updates = manager
+        .record_activity(
+            &workspace.id,
+            vec![
+                ("pr".into(), ended("merged")),
+                ("issue".into(), ended("closed")),
+            ],
+            &Selection::default(),
+        )
+        .await
+        .unwrap();
+    let deliveries = updates.into_iter().map(|update| update.delivery).collect();
+    manager
+        .acknowledge_pr_updates(&workspace.id, deliveries)
+        .await
+        .unwrap();
+    // A closed issue may reopen while the assignment goes on.
+    assert!(poll().await.is_err());
+
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'{}')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(poll().await.unwrap().is_empty());
+    manager.poll_linked_item_activity().await.unwrap();
+}
+
+#[tokio::test]
 async fn quiet_messages_come_with_the_next_updates() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");
