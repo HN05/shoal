@@ -21,10 +21,7 @@ impl Merge {
     /// their messages, as the base's latest first-parent commits; anything
     /// else is one squashed commit.
     pub async fn of(repo: &Path, merge_commit: &str, messages: &[String]) -> Result<Self> {
-        let parents = git::run(repo, &["rev-list", "--parents", "-n", "1", merge_commit])
-            .await
-            .with_context(|| format!("the merge commit {merge_commit} is not in the repository"))?;
-        if parents.split_whitespace().count() > 2 {
+        if parent_count(repo, merge_commit).await? > 1 {
             return Ok(Self::Commit(merge_commit.to_owned()));
         }
         if messages.len() > 1 {
@@ -59,33 +56,71 @@ pub enum Reverted {
 }
 
 /// Revert `merge` in the worktree at `repo` and commit the result with
-/// `message`, using the caller's Git configuration and hooks; a revert that
-/// changes nothing fails.
+/// `message`, using the caller's Git configuration and hooks. Changes to
+/// tracked files, such as a setup's, would join the revert, so they refuse
+/// it, as does a revert that changes nothing.
 pub async fn revert(repo: &Path, merge: &Merge, message: &str) -> Result<Reverted> {
-    let mut command = git::command(repo);
-    command.args(merge.revert_args());
-    let output = git::bounded(command).capture().await?;
-    if !output.status.success() {
-        let conflicts = conflicted_paths(repo).await?;
-        ensure!(
-            !conflicts.is_empty(),
-            "git revert failed: {}",
-            crate::subprocess::diagnostic(&output.stderr)
-        );
+    ensure!(
+        !has_tracked_changes(repo).await?,
+        "the worktree has changes to tracked files, which the revert would include"
+    );
+    if let Some(conflicts) = apply_inverse(repo, merge).await? {
         return Ok(Reverted::Conflicts(conflicts));
     }
-    let staged = git::run(repo, &["diff", "--cached", "--name-only"]).await?;
     ensure!(
-        !staged.trim().is_empty(),
+        has_staged_changes(repo).await?,
         "the base branch no longer has the merge's changes, so there is nothing to revert"
     );
-    git::run(repo, &["commit", "--no-edit", "-m", message]).await?;
+    commit(repo, message).await?;
     Ok(Reverted::Committed)
 }
 
 /// Abandon a revert [`revert`] left in conflict, restoring the worktree.
 pub async fn abort(repo: &Path) -> Result<()> {
     git::run(repo, &["revert", "--abort"]).await.map(drop)
+}
+
+/// The number of parents `commit` has.
+async fn parent_count(repo: &Path, commit: &str) -> Result<usize> {
+    let line = git::run(repo, &["rev-list", "--parents", "-n", "1", commit])
+        .await
+        .with_context(|| format!("the merge commit {commit} is not in the repository"))?;
+    // The commit itself comes first.
+    Ok(line.split_whitespace().count().saturating_sub(1))
+}
+
+/// Apply the inverse of `merge` to the index and worktree, returning the
+/// paths in conflict when it stops on them.
+async fn apply_inverse(repo: &Path, merge: &Merge) -> Result<Option<Vec<String>>> {
+    let mut command = git::command(repo);
+    command.args(merge.revert_args());
+    let output = git::bounded(command).capture().await?;
+    if output.status.success() {
+        return Ok(None);
+    }
+    let conflicts = conflicted_paths(repo).await?;
+    ensure!(
+        !conflicts.is_empty(),
+        "git revert failed: {}",
+        crate::subprocess::diagnostic(&output.stderr)
+    );
+    Ok(Some(conflicts))
+}
+
+async fn has_tracked_changes(repo: &Path) -> Result<bool> {
+    let status = git::run(repo, &["status", "--porcelain", "--untracked-files=no"]).await?;
+    Ok(!status.trim().is_empty())
+}
+
+async fn has_staged_changes(repo: &Path) -> Result<bool> {
+    let staged = git::run(repo, &["diff", "--cached", "--name-only"]).await?;
+    Ok(!staged.trim().is_empty())
+}
+
+async fn commit(repo: &Path, message: &str) -> Result<()> {
+    git::run(repo, &["commit", "--no-edit", "-m", message])
+        .await
+        .map(drop)
 }
 
 /// The latest `count` first-parent commits up to `commit`, newest first,
@@ -108,6 +143,11 @@ async fn first_parent_commits(
         ],
     )
     .await?;
+    log_entries(&log)
+}
+
+/// The commits and messages of `git log -z --format=%H%n%B` output.
+fn log_entries(log: &str) -> Result<Vec<(String, String)>> {
     log.split('\0')
         .filter(|entry| !entry.is_empty())
         .map(|entry| {

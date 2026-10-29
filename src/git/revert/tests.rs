@@ -1,12 +1,40 @@
 use super::*;
-use crate::test_support::{git, repository};
+use crate::test_support::{git, isolated_test, repository};
 use std::fs;
+
+/// The production Git calls use the caller's configuration and hooks, so the
+/// cases run in a process without the user's.
+#[tokio::test]
+async fn reverts_run_without_the_users_git_configuration() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        isolated_test(root.path(), "git::revert::tests::revert_cases").output(),
+    )
+    .await
+    .expect("the revert cases stalled")
+    .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("1 passed"), "{stdout}");
+}
+
+#[tokio::test]
+#[ignore = "isolated environment launched by reverts_run_without_the_users_git_configuration"]
+async fn revert_cases() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    merge_commits_revert_against_their_first_parent().await;
+    rebased_commits_revert_together_and_a_squash_alone().await;
+    conflicting_reverts_report_their_paths_and_abort_cleanly().await;
+    changes_to_tracked_files_refuse_the_revert().await;
+}
 
 /// A repository whose `topic` branch adds `a` and then `b` to `main`.
 fn with_topic() -> (tempfile::TempDir, std::path::PathBuf) {
     let root = tempfile::tempdir().unwrap();
     let repo = repository(root.path(), "repo");
-    git(&repo, &["config", "commit.gpgsign", "false"]);
     git(&repo, &["switch", "-c", "topic"]);
     for file in ["a", "b"] {
         fs::write(repo.join(file), "topic\n").unwrap();
@@ -28,7 +56,6 @@ fn head(repo: &Path) -> String {
     git(repo, &["rev-parse", "HEAD"]).trim().to_owned()
 }
 
-#[tokio::test]
 async fn merge_commits_revert_against_their_first_parent() {
     let (_root, repo) = with_topic();
     git(&repo, &["merge", "--no-ff", "-m", "Merge topic", "topic"]);
@@ -46,7 +73,6 @@ async fn merge_commits_revert_against_their_first_parent() {
     assert!(error.to_string().contains("nothing to revert"), "{error:#}");
 }
 
-#[tokio::test]
 async fn rebased_commits_revert_together_and_a_squash_alone() {
     let (_root, repo) = with_topic();
     git(&repo, &["merge", "--ff-only", "topic"]);
@@ -69,7 +95,6 @@ async fn rebased_commits_revert_together_and_a_squash_alone() {
     assert_eq!(merge, Merge::Commits(vec![squashed]));
 }
 
-#[tokio::test]
 async fn conflicting_reverts_report_their_paths_and_abort_cleanly() {
     let (_root, repo) = with_topic();
     git(&repo, &["merge", "--no-ff", "-m", "Merge topic", "topic"]);
@@ -84,6 +109,18 @@ async fn conflicting_reverts_report_their_paths_and_abort_cleanly() {
     assert_eq!(git(&repo, &["status", "--porcelain"]), "");
 }
 
+async fn changes_to_tracked_files_refuse_the_revert() {
+    let (_root, repo) = with_topic();
+    git(&repo, &["merge", "--no-ff", "-m", "Merge topic", "topic"]);
+    let merge = Merge::of(&repo, &head(&repo), &messages()).await.unwrap();
+    // As a setup that formats or regenerates a tracked file might leave it.
+    fs::write(repo.join("tracked"), "set up\n").unwrap();
+    git(&repo, &["add", "tracked"]);
+    let error = revert(&repo, &merge, "Revert").await.unwrap_err();
+    assert!(error.to_string().contains("tracked files"), "{error:#}");
+    assert_eq!(git(&repo, &["log", "-1", "--format=%s"]), "Merge topic\n");
+}
+
 #[test]
 fn messages_match_in_any_order_and_line_ending() {
     let listed = messages();
@@ -95,4 +132,17 @@ fn messages_match_in_any_order_and_line_ending() {
         ["Add a\n\nWhy a", "Topic (#7)"].into_iter(),
         &listed
     ));
+}
+
+#[test]
+fn log_entries_split_commits_from_their_messages() {
+    let log = "abc\nAdd a\n\nWhy a\n\0def\nAdd b\n\0";
+    assert_eq!(
+        log_entries(log).unwrap(),
+        [
+            ("abc".into(), "Add a\n\nWhy a\n".into()),
+            ("def".into(), "Add b\n".into())
+        ]
+    );
+    assert!(log_entries("abc").is_err());
 }
