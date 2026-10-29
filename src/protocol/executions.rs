@@ -37,12 +37,12 @@ pub enum ExecutionMethod {
     ListAgents,
     /// Stop the agent of `execution` and start its session again in its
     /// terminal, answering once the restarted agent runs. With `join`, only
-    /// wait for the restart in progress, which may have ended already.
+    /// wait for that restart the run selected, which may have ended already.
     /// `run` names the `shoal restart` run that asks.
     RestartAgent {
         execution: String,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        join: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        join: Option<crate::model::PendingRestart>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         run: Option<String>,
     },

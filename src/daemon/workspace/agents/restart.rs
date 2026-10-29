@@ -121,11 +121,17 @@ impl Manager {
         restarted(self.request_restart(execution, run).await?).await
     }
 
-    /// Wait for the restart of `execution` that `run` asked for as
+    /// Wait for the restart of `execution` that `of_run` asked for as
     /// [`Self::restart_agent`] does, or answer as it did if it ended, even
-    /// when another run restarts the agent now. A restart whose run a
-    /// daemon before this one forgot matches whichever is in progress.
-    pub(crate) async fn join_restart(&self, execution: &str, run: Option<String>) -> Result<()> {
+    /// when another run restarts the agent now; it restarts the agent for
+    /// `run` too. A restart whose run a daemon before this one forgot
+    /// matches whichever is in progress.
+    pub(crate) async fn join_restart(
+        &self,
+        execution: &str,
+        of_run: Option<String>,
+        run: Option<String>,
+    ) -> Result<()> {
         let joined = self
             .executions
             .with_agents(|agents| {
@@ -133,12 +139,10 @@ impl Manager {
                     .get_mut(execution)
                     .with_context(|| format!("no connected agent runs execution {execution}"))?;
                 anyhow::Ok(match &mut agent.restart {
-                    Some(restart) if run.is_none() || restart.run == run => {
-                        Ok(restart.answer(None))
+                    Some(restart) if of_run.is_none() || restart.run == of_run => {
+                        Ok(restart.answer(run))
                     }
-                    _ => Err(agent.ended_restarts.get(&run).cloned().unwrap_or_else(|| {
-                        Err(format!("no restart of {} is in progress", agent.name))
-                    })),
+                    _ => Err(agent.joined_late(&of_run, run)),
                 })
             })
             .await?;
@@ -312,6 +316,20 @@ impl Agent {
         for run in restart.runs() {
             self.ended_restarts.insert(run, outcome.clone());
         }
+    }
+
+    /// How the restart of `of_run` that ended did, which also counts for
+    /// `run`, joining it late.
+    fn joined_late(&mut self, of_run: &Option<String>, run: Option<String>) -> Result<(), String> {
+        let outcome = self
+            .ended_restarts
+            .get(of_run)
+            .cloned()
+            .unwrap_or_else(|| Err(format!("no restart of {} is in progress", self.name)));
+        if run.is_some() {
+            self.ended_restarts.insert(run, outcome.clone());
+        }
+        outcome
     }
 
     /// The runs a restart started the agent again for.

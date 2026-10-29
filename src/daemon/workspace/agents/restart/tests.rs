@@ -326,7 +326,7 @@ async fn a_second_request_joins_the_restart_in_progress() {
     // Joining once the restart ended finds the agent running again, and
     // starts no other restart.
     manager
-        .join_restart(&id, Some("first".into()))
+        .join_restart(&id, Some("first".into()), Some("first".into()))
         .await
         .unwrap();
     assert!(!manager.restart_requested(&id).await);
@@ -375,7 +375,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
         .unwrap();
     let id = execution.plan.id.clone();
     track(&manager, &workspace, &id, "claude", true).await;
-    let error = manager.join_restart(&id, None).await.unwrap_err();
+    let error = manager.join_restart(&id, None, None).await.unwrap_err();
     assert_eq!(format!("{error}"), "no restart of claude is in progress");
 
     let failed = manager.request_restart(&id, None).await.unwrap();
@@ -383,7 +383,7 @@ async fn a_late_join_answers_as_the_restart_ended() {
         .fail_restart(&id, "automatic restore failed".into())
         .await;
     assert!(failed.await.unwrap().is_err());
-    let error = manager.join_restart(&id, None).await.unwrap_err();
+    let error = manager.join_restart(&id, None, None).await.unwrap_err();
     assert_eq!(format!("{error}"), "automatic restore failed");
     assert!(!manager.restart_requested(&id).await);
 }
@@ -405,7 +405,7 @@ async fn a_late_join_of_a_cancelled_restart_fails() {
         .await;
     // The request in progress learns it too.
     assert!(cancelled.await.is_err());
-    let error = manager.join_restart(&id, None).await.unwrap_err();
+    let error = manager.join_restart(&id, None, None).await.unwrap_err();
     assert_eq!(format!("{error}"), "the restart was cancelled");
 }
 
@@ -483,14 +483,18 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     // The first run's late join finds its restart ended well, and does not
     // wait for the second.
     manager
-        .join_restart(&id, Some("first".into()))
+        .join_restart(&id, Some("first".into()), Some("first".into()))
         .await
         .unwrap();
     // The second run's join waits for its own, which then fails.
     let joined = tokio::spawn({
         let manager = manager.clone();
         let id = id.clone();
-        async move { manager.join_restart(&id, Some("second".into())).await }
+        async move {
+            manager
+                .join_restart(&id, Some("second".into()), Some("second".into()))
+                .await
+        }
     });
     manager.fail_restart(&id, "cancelled".into()).await;
     assert!(second.await.unwrap().is_err());
@@ -498,7 +502,45 @@ async fn a_late_join_answers_for_the_restart_of_its_run_while_another_runs() {
     assert_eq!(format!("{error}"), "cancelled");
     // The first run's outcome stays its own.
     manager
-        .join_restart(&id, Some("first".into()))
+        .join_restart(&id, Some("first".into()), Some("first".into()))
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn a_join_counts_the_restart_for_the_run_that_continues() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let restarted = manager
+        .request_restart(&id, Some("b".into()))
+        .await
+        .unwrap();
+    // A run continuing as `a` joins the restart `b` asked for, before or
+    // after it ends; either way it counts for `a`.
+    let joined = tokio::spawn({
+        let manager = manager.clone();
+        let id = id.clone();
+        async move {
+            manager
+                .join_restart(&id, Some("b".into()), Some("a".into()))
+                .await
+        }
+    });
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    restarted.await.unwrap().unwrap();
+    joined.await.unwrap().unwrap();
+    // Joining it once it ended counts it for that run as well.
+    manager
+        .join_restart(&id, Some("b".into()), Some("c".into()))
+        .await
+        .unwrap();
+    let listed = manager.running_agents().await.unwrap();
+    assert_eq!(listed[0].restarted_by, ["a", "b", "c"]);
 }
