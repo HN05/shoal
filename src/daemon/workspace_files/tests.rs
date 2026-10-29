@@ -419,3 +419,35 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     );
     assert!(elsewhere.join(&audit.id).join("keep.md").exists());
 }
+
+#[tokio::test]
+async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let (notes, shot) = (temp.path().join("notes.md"), temp.path().join("shot.png"));
+    std::fs::write(&notes, "plan").unwrap();
+    std::fs::write(&shot, "image").unwrap();
+    let files = vec![notes, shot];
+    let added = manager
+        .add_workspace_files(&workspace.name, files.clone())
+        .await
+        .unwrap();
+    // The workspace's directory now leads elsewhere, where a copy is gone.
+    let directory = added[0].path.ancestors().nth(3).unwrap().to_owned();
+    let elsewhere = temp.path().join("elsewhere");
+    std::fs::rename(&directory, &elsewhere).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &directory).unwrap();
+    let inside = added[1].path.strip_prefix(&directory).unwrap();
+    std::fs::remove_file(elsewhere.join(added[0].path.strip_prefix(&directory).unwrap())).unwrap();
+    let error = manager
+        .add_workspace_files(&workspace.name, files)
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("is not among the repository's attached files"),
+        "{error:#}"
+    );
+    assert!(elsewhere.join(inside).exists());
+}

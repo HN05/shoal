@@ -10,7 +10,7 @@ use std::{
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    daemon::file_copies::keep_copies,
+    daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
     fsutil::{create_marked_dir, is_marked_dir},
     model::Repository,
@@ -86,6 +86,11 @@ impl Layout {
         );
         std::fs::create_dir_all(directory)
             .with_context(|| format!("create {}", directory.display()))?;
+        ensure!(
+            self.resolves_inside(directory),
+            "{} is not among the repository's attached files",
+            directory.display()
+        );
         let attachments: Vec<_> = files
             .iter()
             .map(|path| Attachment {
@@ -93,6 +98,10 @@ impl Layout {
                 alt: None,
             })
             .collect();
+        // A copy someone deleted is made again with the others.
+        if let Some(stale) = incomplete_copies(directory, workspace_id, message, &attachments)? {
+            remove_dir(&stale)?;
+        }
         let copies = keep_copies(directory, workspace_id, message, &attachments)?;
         let paths: Vec<_> = copies
             .attachments
@@ -179,12 +188,18 @@ impl Layout {
             && path
                 .parent()
                 .is_some_and(|parent| match parent.canonicalize() {
-                    Ok(parent) => self
-                        .root
-                        .canonicalize()
-                        .is_ok_and(|root| parent.starts_with(root)),
+                    Ok(_) => self.resolves_inside(parent),
                     Err(error) => error.kind() == ErrorKind::NotFound,
                 })
+    }
+
+    /// Whether the existing `directory` resolves inside this repository's
+    /// attached files through any symbolic link.
+    fn resolves_inside(&self, directory: &Path) -> bool {
+        match (directory.canonicalize(), self.root.canonicalize()) {
+            (Ok(directory), Ok(root)) => directory.starts_with(root),
+            _ => false,
+        }
     }
 
     /// Delete the directory with every attached file, when the repository
