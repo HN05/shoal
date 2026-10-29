@@ -25,11 +25,7 @@ pub(super) async fn send(
     attach: Vec<PathBuf>,
 ) -> Result<i32> {
     let message = message_text(message, body_file, !attach.is_empty())?;
-    // The daemon reads the files, so it gets their absolute paths.
-    let attachments = attach
-        .iter()
-        .map(|path| std::path::absolute(path).with_context(|| format!("read {}", path.display())))
-        .collect::<Result<_>>()?;
+    let attachments = attachment_paths(&attach)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
@@ -42,6 +38,20 @@ pub(super) async fn send(
     .await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;
     Ok(0)
+}
+
+/// The absolute paths of the files to attach, which the daemon reads, each
+/// checked before a workspace is picked.
+fn attachment_paths(files: &[PathBuf]) -> Result<Vec<PathBuf>> {
+    files
+        .iter()
+        .map(|file| {
+            let path =
+                std::path::absolute(file).with_context(|| format!("read {}", file.display()))?;
+            crate::daemon::agent_messages::files::check(&path)?;
+            Ok(path)
+        })
+        .collect()
 }
 
 /// The message given inline or read from `body_file`, without the file's

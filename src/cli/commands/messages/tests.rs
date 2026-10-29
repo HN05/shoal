@@ -33,6 +33,20 @@ fn attached_files_follow_the_message_text() {
 }
 
 #[test]
+fn attachments_are_checked_before_sending() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    assert_eq!(
+        attachment_paths(std::slice::from_ref(&file)).unwrap(),
+        [file]
+    );
+    for refused in [dir.path().to_path_buf(), dir.path().join("missing.png")] {
+        assert!(attachment_paths(&[refused]).is_err());
+    }
+}
+
+#[test]
 fn files_alone_may_be_the_message() {
     assert_eq!(message_text(None, None, true).unwrap(), "");
     assert_eq!(
