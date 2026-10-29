@@ -131,11 +131,17 @@ def started_by_run(directory, since):
 
 
 def detached_in(directory):
-    """Processes init or launchd adopted that work in `directory`: what an
-    interrupted run left there, which no live process outside it keeps."""
+    """Processes init or launchd adopted that work in `directory`, with their
+    descendants: what an interrupted run left there, which no live process
+    outside it keeps."""
     directory = directory.resolve()
-    return [process for process in snapshot().values()
-            if process.ppid == 1 and inside(process, directory)]
+    processes = snapshot()
+    roots = [process for process in processes.values()
+             if process.ppid == 1 and inside(process, directory)]
+    found = {process.pid: process for process in roots}
+    for root in roots:
+        found.update((process.pid, process) for process in descendants(processes, root.pid))
+    return list(found.values())
 
 
 def alive(process):
