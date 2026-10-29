@@ -5910,13 +5910,14 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
             .stderr(slave.try_clone().unwrap());
         let output = command.output().unwrap();
         drop(command);
+        // macOS discards unread output once the last slave closes.
+        use std::io::Read;
+        let mut transcript = String::new();
+        let _ = master.read_to_string(&mut transcript);
         drop(slave);
         assert!(output.status.success(), "{output:?}");
         assert!(output.stderr.is_empty(), "{output:?}");
         let stdout = String::from_utf8(output.stdout).unwrap();
-        use std::io::Read;
-        let mut transcript = String::new();
-        let _ = master.read_to_string(&mut transcript);
         if args[0] == "attach" {
             let attached = zmx_calls(&fixture)
                 .into_iter()
