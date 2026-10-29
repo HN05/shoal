@@ -27,6 +27,7 @@ fn hook_output_names_the_event_it_answers() {
         }],
         timed_out: false,
         superseded: false,
+        attached: None,
     };
     let context = Inbox::Workspace("worker".into()).hook_context(&updates);
     assert_eq!(
@@ -43,6 +44,26 @@ fn hook_output_names_the_event_it_answers() {
     assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
     assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
     assert_eq!(hook_output("", &context), context);
+}
+
+#[test]
+fn hook_context_tells_the_agent_where_to_ask_the_user() {
+    let attached = |attached| Updates {
+        updates: Vec::new(),
+        messages: Vec::new(),
+        timed_out: false,
+        superseded: false,
+        attached: Some(attached),
+    };
+    let inbox = Inbox::Workspace("worker".into());
+    assert_eq!(
+        inbox.hook_context(&attached(true)),
+        "The user is attached to this session: ask questions here in the chat instead of with shoal questions ask."
+    );
+    assert_eq!(
+        inbox.hook_context(&attached(false)),
+        "The user is not attached to this session: ask questions with shoal questions ask."
+    );
 }
 
 #[test]

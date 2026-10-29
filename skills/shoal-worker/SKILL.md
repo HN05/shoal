@@ -183,7 +183,8 @@ message is shown once. Follow it.
 ## Questions
 
 When you need the user to decide something, ask a question rather than
-notifying:
+notifying. When Shoal tells you the user is attached to your session, ask in the
+chat instead and end your turn to wait for the reply. Otherwise ask with:
 
 ```sh
 shoal questions ask "Which database should the cache use?" --recommend SQLite \

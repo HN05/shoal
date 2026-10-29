@@ -99,7 +99,7 @@ async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
     let (inbox, updates) = tokio::time::timeout_at(deadline, hook_updates(ctx))
         .await
         .context("the daemon did not answer in time")??;
-    if updates.updates.is_empty() && updates.messages.is_empty() {
+    if updates.updates.is_empty() && updates.messages.is_empty() && updates.attached.is_none() {
         return Ok(());
     }
     outln!("{}", hook_output(input, &inbox.hook_context(&updates)));
@@ -358,7 +358,17 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
         lines.push("New activity on this workspace's issues and PRs:".to_owned());
         lines.extend(updates.updates.iter().map(|update| format!("- {update}")));
     }
+    lines.extend(updates.attached.map(attachment_notice).map(str::to_owned));
     lines.join("\n")
+}
+
+/// Where the agent asks the user, by whether a terminal shows its session.
+fn attachment_notice(attached: bool) -> &'static str {
+    if attached {
+        "The user is attached to this session: ask questions here in the chat instead of with shoal questions ask."
+    } else {
+        "The user is not attached to this session: ask questions with shoal questions ask."
+    }
 }
 
 /// `text` with its later lines indented by `indent`, so a multi-line message
@@ -411,6 +421,7 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
+            attached: updates.attached,
         },
     )
     .await

@@ -40,6 +40,8 @@ pub(crate) struct Agent {
     /// Whether a terminal shows the agent, as its wrapper reported last;
     /// `None` until it reports.
     attached: Option<bool>,
+    /// What the agent's hooks last told it of [`Self::attached`].
+    told_attached: Option<bool>,
 }
 
 impl Agent {
@@ -267,6 +269,7 @@ impl Manager {
             restart: None,
             turn: None,
             attached: None,
+            told_attached: None,
         };
         connections
             .with_agents(|agents| agents.insert(id.into(), agent))

@@ -48,6 +48,10 @@ pub struct Updates {
     /// updates; they stay pending for the newer wait.
     #[serde(default)]
     pub superseded: bool,
+    /// Whether a terminal shows the agent asking, when that changed since
+    /// its hooks last told it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attached: Option<bool>,
 }
 
 /// The running wait of each workspace or chat, identified by its
@@ -234,6 +238,7 @@ impl Manager {
             updates,
             timed_out: false,
             superseded: false,
+            attached: None,
         })
     }
 
@@ -1215,6 +1220,7 @@ impl Updates {
             messages: Vec::new(),
             timed_out: false,
             superseded: true,
+            attached: None,
         }
     }
 
@@ -1224,6 +1230,7 @@ impl Updates {
             messages,
             timed_out: false,
             superseded: false,
+            attached: None,
         }
     }
 }
@@ -1258,6 +1265,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                         messages: Vec::new(),
                         timed_out: true,
                         superseded: false,
+                        attached: None,
                     });
                 }
             },
@@ -1270,6 +1278,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                 messages: Vec::new(),
                 timed_out: false,
                 superseded: false,
+                attached: None,
             });
         }
         let sleep_for = if let Some(deadline) = deadline {
@@ -1280,6 +1289,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
                     messages: Vec::new(),
                     timed_out: true,
                     superseded: false,
+                    attached: None,
                 });
             }
             interval.min(deadline - now)

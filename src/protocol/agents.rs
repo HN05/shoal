@@ -87,6 +87,10 @@ pub enum AgentMethod {
         /// Agent messages the watch printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         messages: Vec<i64>,
+        /// Whether a terminal shows the caller's agent, as the delivery
+        /// told it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        attached: Option<bool>,
     },
 }
 
