@@ -198,11 +198,12 @@ impl Manager {
                     self.poll_item_activity(&workspace.id, selection)
                 }) => {
                     let updates = updates?;
+                    // Including those queued while the wait ran. A newer
+                    // delivery may take them and the updates meanwhile.
+                    let unread = self.agent_messages(&workspace.id).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
-                    // Including those queued while the wait ran.
-                    let unread = self.agent_messages(&workspace.id).await?;
                     return with_unread_messages(updates, unread);
                 }
                 next = self.next_agent_messages(&workspace.id, &mut queued) => messages = next?,
