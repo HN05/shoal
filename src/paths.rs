@@ -6,6 +6,12 @@ use anyhow::{Context, Result, ensure};
 
 const DEFAULT_STATE: &str = ".local/state/shoal";
 
+/// The extension of a detached session's log, beside its other files.
+pub const SESSION_LOG: &str = "log";
+/// The extension of a detached session's first message, kept for the user
+/// to send.
+pub const SESSION_PROMPT: &str = "prompt.md";
+
 /// macOS limits `sun_path`; it is the more restrictive supported platform.
 const MAX_SOCKET_PATH_LEN: usize = 104;
 

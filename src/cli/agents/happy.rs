@@ -162,7 +162,7 @@ fn warn_without_daemon(home: &Path) -> bool {
 /// Keep `prompt` beside the session's other `files`, for the user to send
 /// when Happy cannot deliver it.
 fn save_prompt(files: &Path, prompt: &str) -> Result<PathBuf> {
-    let path = files.with_extension("prompt.md");
+    let path = files.with_extension(crate::paths::SESSION_PROMPT);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
     }

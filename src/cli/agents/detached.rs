@@ -138,7 +138,7 @@ async fn launch_session(
     let launched = execution::launch_detached(
         &ctx.paths,
         workspace,
-        files.with_extension("log"),
+        files.with_extension(crate::paths::SESSION_LOG),
         prepared.command(),
         app.not_inherited(),
         &prepared.env(),
@@ -280,7 +280,7 @@ pub(super) async fn start_chat(
         args,
     };
     let prepared = app.prepare(session).await?;
-    let log = files.with_extension("log");
+    let log = files.with_extension(crate::paths::SESSION_LOG);
     let (record, prepared) = hand_to_session(ctx, app, repository, &record, &log, prepared).await?;
     let delivered = prepared.deliver().await;
     report_chat(ctx, app, repository, &record, &log, delivered)?;
