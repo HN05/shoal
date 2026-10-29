@@ -36,6 +36,7 @@ use crate::{
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
+        reviewers::Reviewer,
         status::PrStatus,
         submit::{PlacedReview, Submission},
         thread::Thread,
@@ -295,6 +296,9 @@ pub(crate) trait Backend {
     /// `owner/repository` of `account`'s fork of the repository, which the
     /// forge creates when the account has none.
     async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
+
+    /// The users and teams the repository's PRs can ask for a review.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>>;
 
     /// The request that opens `pull`.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
@@ -868,6 +872,10 @@ impl Backend for ForgeKind {
 
     async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
         dispatch!(self, backend => backend.fork(repo, account).await)
+    }
+
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        dispatch!(self, backend => backend.reviewers(repo, account).await)
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

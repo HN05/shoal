@@ -24,6 +24,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         node_id: Some("PR_1".into()),
         head_repository: Some("team/repo".into()),
         body: String::new(),
+        author: None,
         head_sha: None,
         base_sha: None,
         conflict: None,

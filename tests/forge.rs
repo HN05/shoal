@@ -333,14 +333,21 @@ fn user_owned() -> Value {
 }
 
 #[test]
-fn forgejo_lists_an_organizations_labels_with_the_repositorys() {
+fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut pr = pull(8, "open", "Fix", &[]);
+    pr["user"] = json!({"login": "sam"});
     let teams = "GET repos/team/project/teams";
     let mut responses = json!({
         "GET repos/team/project/labels?limit=50&page=1": {"body": [{"name": "bug"}]},
         "GET orgs/team/labels?limit=50&page=1":
             {"body": [{"name": "priority/high", "exclusive": true}]},
         teams: {"body": [{"name": "core"}]},
+        "GET repos/team/project/reviewers": {"body": [
+            {"login": "kim", "full_name": "Kim Lee"},
+            {"login": "sam", "full_name": ""},
+        ]},
+        "GET repos/team/project/pulls/8": {"body": pr},
     });
     fixture.respond(responses.clone());
     let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
@@ -351,12 +358,48 @@ fn forgejo_lists_an_organizations_labels_with_the_repositorys() {
             {"name": "priority/high", "description": "", "exclusive": true},
         ])
     );
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    assert_eq!(
+        reviewers,
+        json!([
+            {"name": "kim", "display_name": "Kim Lee", "team": false},
+            {"name": "team/core", "display_name": "", "team": true},
+        ])
+    );
 
-    // A repository a user owns has no organization labels.
+    // A repository a user owns has neither teams nor organization labels.
     responses[teams] = user_owned();
     fixture.respond(responses);
     let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
     assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    assert_eq!(
+        reviewers,
+        json!([{"name": "kim", "display_name": "Kim Lee", "team": false}])
+    );
+}
+
+#[test]
+fn github_lists_assignable_users_and_an_organizations_teams_as_reviewers() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let mut pr = pull(8, "open", "Fix", &[]);
+    pr["user"] = json!({"login": "sam"});
+    fixture.respond(json!({
+        "GET repos/team/project": {"body": {"owner": {"login": "team", "type": "Organization"}}},
+        "GET repos/team/project/assignees?per_page=100&page=1":
+            {"body": [{"login": "kim"}, {"login": "sam"}]},
+        "GET repos/team/project/teams?per_page=100&page=1":
+            {"body": [{"slug": "core", "name": "Core"}]},
+        "GET repos/team/project/pulls/8": {"body": pr},
+    }));
+    let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
+    assert_eq!(
+        reviewers,
+        json!([
+            {"name": "kim", "display_name": "", "team": false},
+            {"name": "team/core", "display_name": "Core", "team": true},
+        ])
+    );
 }
 
 /// Add the label `ready` to PR 8 of the workspace's repository.

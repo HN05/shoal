@@ -39,7 +39,8 @@ Opening refuses an item without a label `required_labels` asks for; `pr open`,
 headings, which you fix with `edit`. Change your PR or issue through Shoal,
 which acts as your agent account and records the change: `shoal pr edit`
 (`--title`, `--body-file`, `--add-label`, `--add-reviewer`,
-`--draft`/`--no-draft`), `pr comment --body-file`, `pr close`, and the same
+`--draft`/`--no-draft`), where `shoal pr reviewers` lists who can review,
+`pr comment --body-file`, `pr close`, and the same
 `issue` commands. `open`, `edit` and `comment` take `--attach FILE` for
 screenshots, videos and other files the forge accepts; the body shows images
 and videos and links other files where it references them as `![alt](FILE)`.

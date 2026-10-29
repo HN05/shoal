@@ -31,6 +31,7 @@ use crate::{
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
+        reviewers::Reviewer,
         status::{PrStatus, Verdict},
         submit::{PlacedReview, Submission},
         thread::{Target, Thread},
@@ -196,6 +197,7 @@ impl Backend for Bitbucket {
             node_id: None,
             head_repository: text(&value["source"]["repository"]["full_name"]),
             body: text(body).unwrap_or_default(),
+            author: text(&value["author"]["account_id"]),
             head_sha: text(&value["source"]["commit"]["hash"]),
             base_sha: text(&value["destination"]["commit"]["hash"]),
             // Bitbucket does not report whether a pull request conflicts.
@@ -364,6 +366,22 @@ impl Backend for Bitbucket {
 
     async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
         Err(capability::unsupported(self, Capability::Forks))
+    }
+
+    /// The members of the repository's workspace, by Atlassian account ID.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        let endpoint = format!("workspaces/{}/members", repo.owner());
+        let members = repo.pages(account, &endpoint).await?;
+        Ok(members
+            .iter()
+            .filter_map(|member| {
+                let user = &member["user"];
+                Some(Reviewer::user(
+                    text(&user["account_id"])?,
+                    user["display_name"].as_str(),
+                ))
+            })
+            .collect())
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

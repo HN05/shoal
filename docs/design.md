@@ -1346,7 +1346,9 @@ before it exists, and missing labels or template headings come back as warnings
 that never fail a change that already happened. Shoal never fills a template in,
 because an unfilled template says less than a closing reference.
 Its options are modeled rather than passed through to a CLI, so they mean the
-same on every forge.
+same on every forge. Label and reviewer choices are listed under the names
+those options take, a team as `owner/team`, so a client can offer them without
+forge API calls of its own.
 
 Ready-for-review marks are the agent's status signal for integrations, separate
 from messages and completion: they never notify, complete, or change cleanup. A

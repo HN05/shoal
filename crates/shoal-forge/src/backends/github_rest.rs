@@ -88,6 +88,7 @@ pub(crate) fn current(
         node_id: text(&value["node_id"]),
         head_repository: text(&value["head"]["repo"]["full_name"]),
         body: text(&value["body"]).unwrap_or_default(),
+        author: text(&value["user"]["login"]),
         head_sha: text(&value["head"]["sha"]),
         base_sha: text(&value["base"]["sha"]),
         conflict,

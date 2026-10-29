@@ -20,6 +20,7 @@ fn pull(head_repository: Option<&str>) -> Current {
         node_id: None,
         head_repository: head_repository.map(str::to_owned),
         body: String::new(),
+        author: None,
         head_sha: None,
         base_sha: None,
         conflict: None,

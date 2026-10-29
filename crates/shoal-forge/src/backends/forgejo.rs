@@ -42,6 +42,7 @@ use crate::{
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
+        reviewers::Reviewer,
         status::{PrStatus, Verdict, forgejo_reviews},
         submit::{PlacedReview, Submission},
         thread::{Target, Thread},
@@ -299,6 +300,29 @@ impl Backend for Forgejo {
             Some(fork) => Ok(fork),
             None => github_rest::create_fork(repo, account).await,
         }
+    }
+
+    /// The users Forgejo offers as reviewers, and the teams of an
+    /// organization's repository.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        let request = Request::get(repo.repo_endpoint("reviewers"));
+        let (users, teams) = tokio::try_join!(
+            repo.send(account, &request),
+            organization_teams(repo, account),
+        )?;
+        let users = users.as_array().context("reviewers are not a list")?;
+        let owner = repo.owner();
+        let users = users.iter().filter_map(|user| {
+            Some(Reviewer::user(
+                text(&user["login"])?,
+                user["full_name"].as_str(),
+            ))
+        });
+        let teams = teams
+            .iter()
+            .flatten()
+            .filter_map(|team| Some(Reviewer::team(owner, team["name"].as_str()?, None)));
+        Ok(users.chain(teams).collect())
     }
 
     /// Forgejo keeps draft state in the title.

@@ -38,6 +38,7 @@ use crate::{
 };
 
 mod review;
+mod reviewers;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
@@ -47,6 +48,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             return open_pr(ctx, workspace, pull_options(pull)?).await;
         }
         PrCommand::Edit { item, edit } => (item, Action::Edit(pr_edit(edit)?), "PR updated"),
+        PrCommand::Reviewers { item } => return reviewers::reviewers(ctx, &item).await,
         PrCommand::Comment { item, body, files } => {
             (item, comment(body, files)?, "Commented on PR")
         }

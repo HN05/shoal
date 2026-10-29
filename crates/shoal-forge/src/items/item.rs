@@ -56,6 +56,8 @@ pub struct Current {
     /// `owner/repository` of a PR's head branch.
     pub head_repository: Option<String>,
     pub body: String,
+    /// Who opened the item, named as reviewer changes name users.
+    pub author: Option<String>,
     /// The commit a PR's head branch points to.
     pub head_sha: Option<String>,
     /// The commit a PR's base branch points to, where the forge reports it.

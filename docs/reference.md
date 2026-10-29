@@ -2530,6 +2530,7 @@ shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr review 42 --comment --body-file review.md --line src/a.rs:7 'Why?'
 shoal pr review 42 --request-changes --body-file why.md --comments-file lines.json
 shoal pr close 12                   # reopen works the same way
+shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr merge --method rebase --delete-branch
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
@@ -2578,6 +2579,12 @@ label of its scope, and an edit whose added labels the item then lacks,
 or whose removed labels it still has, fails naming them and the item's labels;
 Forgejo's draft state is the title's `WIP: ` prefix,
 and GitLab's its `Draft: ` prefix.
+`shoal pr reviewers` lists the users and teams a PR can ask for a review,
+except its author, by the `name` that `--add-reviewer` takes, with the forge's
+`display_name` and whether it is a `team`. Users are GitHub's assignable
+users, Forgejo's review candidates, GitLab's project members and the members
+of a Bitbucket workspace, named by account ID; teams are those with access to
+an organization's repository on GitHub and Forgejo.
 `open`, `edit` and `comment` also take repeated `--attach FILE` or
 `--attach 'FILE#ALT TEXT'`: a non-empty file of at most 10 MiB for an image and
 100 MiB otherwise, checked before anything is sent; the forge decides which types

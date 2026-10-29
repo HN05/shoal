@@ -100,6 +100,11 @@ pub enum PrCommand {
         #[command(flatten)]
         edit: PrEditArgs,
     },
+    /// List the users and teams who can review a PR, named as --add-reviewer takes them.
+    Reviewers {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
     /// Comment on a PR.
     Comment {
         #[command(flatten)]

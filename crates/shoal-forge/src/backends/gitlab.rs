@@ -30,6 +30,7 @@ use crate::{
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
+        reviewers::Reviewer,
         status::{PrStatus, Verdict},
         submit::{PlacedReview, Submission},
         thread::{Target, Thread},
@@ -206,6 +207,7 @@ impl Backend for GitLab {
             node_id: None,
             head_repository: (kind == ItemKind::Pr && same_project).then(|| repo.path.clone()),
             body: text(&value["description"]).unwrap_or_default(),
+            author: text(&value["author"]["username"]),
             head_sha: text(&value["sha"]),
             base_sha: None,
             conflict,
@@ -386,6 +388,21 @@ impl Backend for GitLab {
 
     async fn fork(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
         Err(capability::unsupported(self, Capability::Forks))
+    }
+
+    /// The project's members, inherited ones included; GitLab asks no
+    /// group for a review.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        let users = repo.pages(account, &repo.repo_endpoint("users")).await?;
+        Ok(users
+            .iter()
+            .filter_map(|user| {
+                Some(Reviewer::user(
+                    text(&user["username"])?,
+                    user["name"].as_str(),
+                ))
+            })
+            .collect())
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {

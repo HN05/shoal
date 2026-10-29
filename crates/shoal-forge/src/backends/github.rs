@@ -39,6 +39,7 @@ use crate::{
     repo::locator::ItemRoute,
     review::{
         diff::Diff,
+        reviewers::Reviewer,
         status::PrStatus,
         submit::{PlacedReview, Submission},
         thread::{Target, Thread},
@@ -416,6 +417,28 @@ impl Backend for GitHub {
     /// GitHub answers with the account's existing fork when it has one.
     async fn fork(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
         github_rest::create_fork(repo, account).await
+    }
+
+    /// The users GitHub can assign the repository's items to, and the
+    /// teams of an organization's repository.
+    async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
+        let endpoint = repo.repo_endpoint("assignees");
+        let (users, teams) = tokio::try_join!(
+            repo.pages(account, &endpoint),
+            organization_teams(repo, account),
+        )?;
+        let owner = repo.owner();
+        let users = users
+            .iter()
+            .filter_map(|user| Some(Reviewer::user(text(&user["login"])?, None)));
+        let teams = teams.iter().filter_map(|team| {
+            Some(Reviewer::team(
+                owner,
+                team["slug"].as_str()?,
+                team["name"].as_str(),
+            ))
+        });
+        Ok(users.chain(teams).collect())
     }
 
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request {
@@ -933,6 +956,18 @@ fn draft_request(current: &Current, draft: bool) -> Result<Request> {
             "variables": { "id": id },
         })),
     ))
+}
+
+/// The teams with access to the repository when an organization owns it;
+/// a user's repository has none.
+async fn organization_teams(repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
+    let read = repo
+        .send(account, &Request::get(format!("repos/{}", repo.path)))
+        .await?;
+    if read["owner"]["type"] != "Organization" {
+        return Ok(Vec::new());
+    }
+    repo.pages(account, &repo.repo_endpoint("teams")).await
 }
 
 /// The messages of a GraphQL response's `errors`, when it has any.
