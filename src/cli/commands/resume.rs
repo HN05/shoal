@@ -21,13 +21,15 @@ use std::{
 };
 
 /// `shoal resume`: the selected workspaces, or every one for `--all` or when
-/// no workspace has stopped work. Their restores queue unless `now`.
+/// no workspace has stopped work. Their restores queue unless `now`, or
+/// `focus`, which restores one agent in this terminal.
 pub async fn select(
     ctx: &Context,
     targets: WorkspaceTargets,
     execution: Option<String>,
     discard: bool,
     now: bool,
+    focus: bool,
 ) -> Result<i32> {
     // The daemon checks that the workspace is below the caller's, which
     // needs the scope token: a process that cleared it stays refused.
@@ -41,17 +43,18 @@ pub async fn select(
     } else {
         ui::select_stopped_workspaces(ctx, targets.workspace).await?
     };
-    if !(discard || now) {
+    if !(discard || now || focus) {
         return queue_selected(ctx, selected, execution).await;
     }
     match selected.as_deref() {
         None => run_all(ctx, None, discard).await,
-        Some([workspace]) => run(ctx, workspace.clone(), execution, discard).await,
+        Some([workspace]) => run(ctx, workspace.clone(), execution, discard, focus).await,
         Some(workspaces) => {
             ensure!(
                 execution.is_none(),
                 "--execution selects a stopped execution of one workspace"
             );
+            ensure!(!focus, "--focus restores the agent of one workspace");
             let workspaces = stopped_in(ctx, workspaces).await?;
             run_all(ctx, Some(workspaces), discard).await
         }
@@ -80,7 +83,8 @@ async fn queue_selected(
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
 /// when given. Without stopped agents, a last session continues at once, as
-/// resuming the workspace by itself does not wait for a slot it never held.
+/// resuming the workspace by itself does not wait for a slot it never held,
+/// where it stopped or in the background.
 async fn queue_workspace(
     ctx: &Context,
     workspace: String,
@@ -96,7 +100,7 @@ async fn queue_workspace(
         "no stopped agents or commands for this workspace"
     );
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        return continue_last_session(ctx, &workspace, saved).await;
+        return continue_last_session(ctx, &workspace, saved, false).await;
     }
     queue::queue_all(ctx, vec![(workspace, saved)]).await
 }
@@ -125,7 +129,7 @@ pub async fn start_entry(
         .iter()
         .any(|queued| queued.id == entry && queued.state == QueueState::Starting);
     ensure!(admitted, "the queued restore was cancelled");
-    let restored = run(ctx, workspace.clone(), Some(execution), false).await;
+    let restored = run(ctx, workspace.clone(), Some(execution), false, true).await;
     if let Err(error) = &restored {
         super::agent_queue::fail(ctx, &entry, error).await;
     }
@@ -150,7 +154,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
         &workspace.id,
         "--execution",
         execution,
-        "--now",
+        "--focus",
         "--queue-entry",
         &entry.id,
     ]
@@ -174,11 +178,15 @@ pub async fn close_place_when_done(ctx: &Context, host: &str, targets: &Workspac
     }
 }
 
+/// Resume `workspace`'s stopped agent, the `execution` one when given, or
+/// forget its stopped work for `discard`. The agent restores in this
+/// terminal when `here`, otherwise where it stopped or in the background.
 pub async fn run(
     ctx: &Context,
     workspace: String,
     execution: Option<String>,
     discard: bool,
+    here: bool,
 ) -> Result<i32> {
     if discard {
         return discard_work(ctx, workspace, execution).await;
@@ -194,7 +202,7 @@ pub async fn run(
         "no stopped agents or commands for this workspace"
     );
     if saved.agents.is_empty() && !saved.sessions.is_empty() {
-        return continue_last_session(ctx, &inspection.workspace, saved).await;
+        return continue_last_session(ctx, &inspection.workspace, saved, here).await;
     }
     let recovery_id = execution
         .as_deref()
@@ -203,19 +211,24 @@ pub async fn run(
     inspection = client::inspect(&ctx.paths, workspace_id).await?;
     let workspace = &inspection.workspace;
     let active = |id: &str| inspection.executions.iter().any(|e| e.id == id);
-    let _commands = claim_commands(&mut saved.commands);
-    let (selected_id, selected) = match saved.agents.as_slice() {
-        [] => {
-            let report = report_commands(ctx, workspace, &saved.commands)?;
-            ctx.show(&report, |_| {})?;
-            return Ok(0);
-        }
-        agents => select_agent(ctx, agents, agent_label)?,
-    };
+    if saved.agents.is_empty() {
+        let _commands = claim_commands(&mut saved.commands);
+        let report = report_commands(ctx, workspace, &saved.commands)?;
+        ctx.show(&report, |_| {})?;
+        return Ok(0);
+    }
+    let (selected_id, selected) = select_agent(ctx, &saved.agents, agent_label)?;
     ensure!(
         !active(&selected_id),
         "selected execution is active or unknown; stop or reconcile it first"
     );
+    if !here {
+        let session = (workspace.clone(), selected_id, selected);
+        return start_sessions(ctx, vec![session], true, Vec::new(), Vec::new()).await;
+    }
+    // The restore claims the commands it reports, which a restore started
+    // elsewhere claims for itself.
+    let _commands = claim_commands(&mut saved.commands);
     let _claim = claim(&selected)?;
     let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
     if let Some(reason) = &recorded.stop_reason {
@@ -247,9 +260,19 @@ async fn discard_work(ctx: &Context, workspace: String, execution: Option<String
 
 /// Continue one of the workspace's last sessions that `saved` keeps, the
 /// only one or one picked on a terminal, telling it about the stopped
-/// commands.
-async fn continue_last_session(ctx: &Context, workspace: &Workspace, saved: Saved) -> Result<i32> {
-    let (_, path) = select_agent(ctx, &saved.sessions, session_label)?;
+/// commands: in this terminal when `here`, otherwise where it stopped or in
+/// the background.
+async fn continue_last_session(
+    ctx: &Context,
+    workspace: &Workspace,
+    saved: Saved,
+    here: bool,
+) -> Result<i32> {
+    let (id, path) = select_agent(ctx, &saved.sessions, session_label)?;
+    if !here {
+        let session = (workspace.clone(), id, path);
+        return start_sessions(ctx, vec![session], true, Vec::new(), Vec::new()).await;
+    }
     let _claim = claim(&path)?;
     let last = LastSession::load(&path)?.context("last session was already continued")?;
     let mut commands = saved.commands;
@@ -491,9 +514,9 @@ async fn reconcile_stale_execution(
 
 /// Resume each workspace's stopped work. Commands without an agent are
 /// reported here. An agent resumes where it stopped when the terminal backend
-/// can reuse that place; otherwise one agent resumes in this terminal, several
-/// in the backend's background, and without a backend each is listed for its
-/// own terminal.
+/// can reuse that place, otherwise in the backend's background; without a
+/// backend one agent resumes in this terminal and several are listed for
+/// their own terminals.
 async fn run_all(
     ctx: &Context,
     selected: Option<Vec<(Workspace, Saved)>>,
@@ -534,13 +557,30 @@ async fn run_all(
         }
     }
     let single = sessions.len() == 1 && ctx.interactive();
+    start_sessions(ctx, sessions, single, commands, failed).await
+}
+
+/// Start each of the stopped agents `sessions` lists, by workspace,
+/// execution and saved file, where it stopped or in the background; `single`
+/// resumes the only one in this terminal when neither is possible. Reports
+/// them with the stopped `commands` reported and the resumes already
+/// `failed`.
+async fn start_sessions(
+    ctx: &Context,
+    sessions: Vec<(Workspace, String, PathBuf)>,
+    single: bool,
+    commands: Vec<serde_json::Value>,
+    mut failed: Vec<serde_json::Value>,
+) -> Result<i32> {
     let mut agents = Vec::new();
     let mut listed = Vec::new();
     let mut place = None;
     for (workspace, id, record) in &sessions {
         let (reused, started) = match start_session(ctx, workspace, id, record, single).await {
             Ok(Started::Here) => {
-                return run(ctx, workspace.id.clone(), Some(id.clone()), false).await;
+                // Boxed, since `run` calls back into this function.
+                let id = Some(id.clone());
+                return Box::pin(run(ctx, workspace.id.clone(), id, false, true)).await;
             }
             Ok(Started::Elsewhere { reused, place }) => (reused, place),
             Err(error) => {
@@ -563,7 +603,8 @@ async fn run_all(
     ctx.show(&output, |_| {
         if let Some(place) = place {
             let started = agents.len() - listed.len();
-            outln!("Resuming {started} agents in {place}");
+            let noun = if started == 1 { "agent" } else { "agents" };
+            outln!("Resuming {started} {noun} in {place}");
         }
         if !listed.is_empty() {
             outln!("Resume each agent in its own terminal:");
@@ -575,7 +616,7 @@ async fn run_all(
                 &workspace.name,
                 "--execution",
                 id,
-                "--now",
+                "--focus",
             ];
             outln!("  {}", crate::shell::quote(&words));
         }
@@ -585,7 +626,8 @@ async fn run_all(
 
 /// Where a stopped agent resumes.
 enum Started {
-    /// In this terminal, as the only agent to resume.
+    /// In this terminal, as the only agent to resume where the backend can
+    /// start nothing elsewhere.
     Here,
     /// Where it stopped when `reused`, in the backend's background, or, when
     /// `place` is `None`, in a terminal of the user's own.
@@ -596,7 +638,8 @@ enum Started {
 }
 
 /// Start the stopped agent `id` of `workspace` where it stopped or in the
-/// background; `single` resumes the only one in this terminal instead.
+/// background; when neither is possible, `single` resumes the only one in
+/// this terminal.
 async fn start_session(
     ctx: &Context,
     workspace: &Workspace,
@@ -606,17 +649,19 @@ async fn start_session(
 ) -> Result<Started> {
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-    let args = ["resume", &workspace.id, "--execution", id, "--now"].map(OsString::from);
-    let reused = terminal::rerun_where_stopped(ctx, &settings, record, &args).await?;
-    if single && reused.is_none() {
+    let args = ["resume", &workspace.id, "--execution", id, "--focus"].map(OsString::from);
+    if let Some(places) = terminal::rerun_where_stopped(ctx, &settings, record, &args).await? {
+        return Ok(Started::Elsewhere {
+            reused: true,
+            place: Some(places),
+        });
+    }
+    let place = terminal::run_in_background(ctx, &settings, workspace, &args).await?;
+    if single && place.is_none() {
         return Ok(Started::Here);
     }
-    let place = match reused {
-        Some(places) => Some(places),
-        None => terminal::run_in_background(ctx, &settings, workspace, &args).await?,
-    };
     Ok(Started::Elsewhere {
-        reused: reused.is_some(),
+        reused: false,
         place,
     })
 }

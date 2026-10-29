@@ -170,7 +170,8 @@ shoal restart --all --agent claude  # Restart Claude agents in place, such as af
 shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Queue the restore of stopped agents; report stopped commands
 shoal resume fix-login        # Continue its stopped agent
-shoal resume fix-login --now  # Restore its stopped agent at once
+shoal resume fix-login --now  # Restore its stopped agent at once in the background
+shoal resume fix-login --focus # Restore its stopped agent in this terminal
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
 shoal done fix-login --undo        # Withdraw a recorded done
@@ -273,7 +274,8 @@ they stay down, holding no agent slot and no workspace from cleanup, until
 `shoal resume` continues them, as it continues an agent that exited on its own,
 such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
 resume --all` queues the restores to start as `max_agents` allows; `--now`
-starts them at once. Agents whose terminal closed, or that a logout or reboot
+starts them at once in the background, and `--focus` restores one agent in this
+terminal. Agents whose terminal closed, or that a logout or reboot
 stopped, come back through the same queue on their own. Codex and Claude automatically continue
 the workspace session after load recovers; `[agent_resume]` overrides their restore
 command or enables recovery for other agents.

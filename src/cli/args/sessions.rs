@@ -26,21 +26,25 @@ pub enum SessionsCommand {
         /// Forget the saved agents and commands instead of resuming them.
         #[arg(long)]
         discard: bool,
-        /// Start at once regardless of the agent limits; one agent restores
-        /// in this terminal.
+        /// Start at once regardless of the agent limits, where each agent
+        /// stopped or in the background.
         #[arg(long, conflicts_with = "discard")]
         now: bool,
+        /// Restore one agent in this terminal at once, regardless of the
+        /// agent limits.
+        #[arg(long, conflicts_with_all = ["discard", "all"])]
+        focus: bool,
         /// The queue entry whose slot the restored agent takes, for the
         /// daemon's start of a queued restore.
-        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
         queue_entry: Option<String>,
         /// The host that opened this place in the background for this
         /// restore, which records it as the workspace's before restoring.
-        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
         opened_in: Option<String>,
         /// The host whose place, opened in the background for this restore,
         /// closes once the workspace is done.
-        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        #[arg(long, hide = true, requires_all = ["execution", "focus"])]
         close_in: Option<String>,
     },
     /// Restart running agents in their terminals, resuming their sessions.

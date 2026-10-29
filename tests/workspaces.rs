@@ -21797,7 +21797,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
                 id.as_str(),
                 "--execution",
                 execution.as_str(),
-                "--now",
+                "--focus",
             ];
             assert_eq!(
                 worker[worker.len() - 5 - close.len()..],
@@ -21856,7 +21856,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
     assert!(output.status.success(), "{output:?} {transcript}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Resuming 1 agents in Herdr tabs"),
+        stdout.contains("Resuming 1 agent in Herdr tabs"),
         "{stdout}"
     );
     assert!(stdout.contains("--execution second-agent"), "{stdout}");
@@ -24071,7 +24071,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .unwrap();
         assert!(
             send[2].ends_with(&format!(
-                " resume {id} --execution {execution} --now --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
+                " resume {id} --execution {execution} --focus --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
             )),
             "{send:?}"
         );
@@ -24085,6 +24085,64 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
         fs::read_to_string(fixture.root.path().join("login-shells")).unwrap_or_default(),
         "-l\n-l\n"
     );
+}
+
+#[test]
+fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("single");
+    let id = workspace["id"].as_str().unwrap().to_owned();
+    let state = fixture.root.path().join("state/workspaces").join(&id);
+    fs::create_dir_all(&state).unwrap();
+    let record = state.join("single-agent.recovery.json");
+    fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+    let shell = fixture.root.path().join("bin/test-shell");
+    install_test_script(&shell, "#!/bin/sh\necho \"$@\" >> \"$HOME/login-shells\"\n");
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHELL", &shell)
+            .args(["resume", "single", "--now"]),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("Resuming 1 agent in detached zmx sessions"),
+        "{transcript}"
+    );
+    let calls = zmx_calls(&fixture);
+    assert!(calls.iter().all(|call| call[0] != "attach"), "{calls:?}");
+    let send = calls
+        .iter()
+        .find(|call| call.starts_with(&["send".into(), "single".into()]))
+        .unwrap();
+    assert!(
+        send[2].contains(&format!(" resume {id} --execution single-agent --focus ")),
+        "{send:?}"
+    );
+
+    // The restore fails without a configured restore command, leaving the
+    // login shell, before the next one starts.
+    wait_until("the failed restore's login shell", || {
+        fixture.root.path().join("login-shells").exists()
+    });
+
+    // Focused, the agent's session takes this terminal.
+    fs::remove_file(fixture.root.path().join("zmx-calls")).unwrap();
+    fs::write(&record, r#"{"agent":"claude"}"#).unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .env("SHELL", &shell)
+            .args(["resume", "single", "--focus"]),
+        "",
+        true,
+    );
+    assert!(!transcript.contains("Resuming"), "{output:?}\n{transcript}");
+    let calls = zmx_calls(&fixture);
+    assert!(calls.iter().any(|call| call[0] == "attach"), "{calls:?}");
+    assert!(calls.iter().all(|call| call[0] != "send"), "{calls:?}");
 }
 
 #[test]
@@ -24687,7 +24745,7 @@ fn resume_queues_restores_that_start_as_agent_slots_free() {
         .find(|call| call.starts_with(&["send".into(), "first".into()]))
         .unwrap();
     assert!(
-        sent[2].contains(" --execution first-agent --now --queue-entry "),
+        sent[2].contains(" --execution first-agent --focus --queue-entry "),
         "{sent:?}"
     );
 

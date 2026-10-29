@@ -124,7 +124,7 @@ fn assert_failed_labelling_refuses_launches(
         .ok_or_else(|| anyhow::anyhow!("repository path"))?;
     for args in [
         vec!["claude", "new-owner"],
-        vec!["resume", "new-owner", "--now"],
+        vec!["resume", "new-owner", "--focus"],
         vec![
             "chat",
             "--here",

@@ -644,7 +644,8 @@ it out, so focus behaves alike everywhere and another backend plugs in with
 its own primitives without touching commands: Herdr focuses a tab or
 opens it in the background, and outside Herdr zmx attaches the caller or starts
 a detached session running the plan, which it receives in its environment as a
-tab does.
+tab does. A resume takes no new input, so it restores agents where they stopped
+or in the background; only `--focus` restores one in the caller's terminal.
 The worker drops the plan before starting children; a retained tab's shell keeps
 it, inert, while a non-default state directory is passed only to the worker.
 Herdr tabs remain open after tracked agent exits, and the tab's shell enters the

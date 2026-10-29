@@ -21,6 +21,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             execution,
             discard,
             now,
+            focus,
             queue_entry,
             opened_in,
             close_in,
@@ -32,7 +33,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
                 resume::close_place_when_done(&ctx, &host, &targets).await;
             }
             match queue_entry {
-                None => resume::select(&ctx, targets, execution, discard, now).await,
+                None => resume::select(&ctx, targets, execution, discard, now, focus).await,
                 Some(entry) => resume::start_entry(&ctx, targets, execution, entry).await,
             }
         }

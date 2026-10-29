@@ -324,10 +324,10 @@ workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
 Completion describes each workspace the same way.
-A workspace without stopped agents continues one of its last sessions at once
-when resumed by itself, left by `shoal stop` or by an agent that exited on its
-own, such as one the user quit, picked as stopped agents are, or the
-`--execution` one. A workspace keeps one per agent; the next new agent started
+A workspace without stopped agents continues one of its last sessions at once,
+placed as `--now` places an agent, when resumed by itself, left by `shoal stop`
+or by an agent that exited on its own, such as one the user quit, picked as
+stopped agents are, or the `--execution` one. A workspace keeps one per agent; the next new agent started
 there or `shoal done` replaces them. Unlike stopped work they use no agent slot and never delay
 cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
@@ -344,12 +344,13 @@ and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
 interactive Herdr pane with `herdr.enabled` or Rex block with `rex.enabled`, it
 restores each agent in the pane or block it stopped in once that is back at its
-prompt. Otherwise it restores a
-single agent in the current terminal and starts several in the background, as
-`shoal add` does: a tab per agent where `herdr.new_tab` allows, labelled as
-`shoal add` labels it, or a detached zmx session per agent on a terminal outside
-Herdr. Without a terminal it lists them as `shoal resume --now` commands to run in
-separate terminals.
+prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
+per agent where `herdr.new_tab` allows, labelled as `shoal add` labels it, or a
+detached zmx session per agent on a terminal outside Herdr. Where nothing can
+start in the background, such as without a terminal, it restores a single agent
+here and lists several as `shoal resume --focus` commands to run in separate
+terminals. `--focus` restores one agent in the current terminal at once,
+regardless of the limits.
 Use `--discard` to forget the workspace's stopped agents, last sessions and commands, every
 workspace's with `--all`, or the `--execution` one, without launching anything, allowing normal idle cleanup again.
 When a stopped agent's execution is unknown, after a daemon restart or a stop
