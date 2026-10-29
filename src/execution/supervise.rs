@@ -90,8 +90,9 @@ impl Outcome {
             },
             Ok(Control::Stop {
                 reason: Some(reason),
+                ..
             }) => Self::Stopped { code, reason },
-            Ok(Control::Stop { reason: None }) => Self::Exited(code),
+            Ok(Control::Stop { reason: None, .. }) => Self::Exited(code),
             Ok(_) => bail!("unexpected execution control"),
             Err(error) => {
                 return Err(error.context(

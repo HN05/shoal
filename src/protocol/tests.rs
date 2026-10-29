@@ -209,7 +209,13 @@ fn pause_reasons_are_optional_on_the_wire() {
         }
     ));
     let control: Control = serde_json::from_value(json!({"type": "stop"})).unwrap();
-    assert!(matches!(control, Control::Stop { reason: None }));
+    assert!(matches!(
+        control,
+        Control::Stop {
+            reason: None,
+            removed: false
+        }
+    ));
     let wire = serde_json::to_value(Control::Pause {
         reason: Some("shoal stop".into()),
         removed: false,
@@ -226,6 +232,34 @@ fn pause_reasons_are_optional_on_the_wire() {
         serde_json::from_value::<Legacy>(wire).unwrap(),
         Legacy::Pause
     ));
+}
+
+#[test]
+fn wrappers_from_before_removed_stops_read_them_as_stops() {
+    let wire = serde_json::to_value(Control::Stop {
+        reason: Some("the workspace is being removed".into()),
+        removed: true,
+    })
+    .unwrap();
+    assert_eq!(
+        wire,
+        json!({"type": "stop", "reason": "the workspace is being removed", "removed": true})
+    );
+    #[derive(Deserialize)]
+    #[serde(tag = "type", rename_all = "snake_case")]
+    enum Legacy {
+        Stop { reason: Option<String> },
+    }
+    assert!(matches!(
+        serde_json::from_value::<Legacy>(wire).unwrap(),
+        Legacy::Stop { reason: Some(reason) } if reason == "the workspace is being removed"
+    ));
+    let wire = serde_json::to_value(Control::Stop {
+        reason: None,
+        removed: false,
+    })
+    .unwrap();
+    assert_eq!(wire, json!({"type": "stop"}));
 }
 
 #[test]

@@ -61,7 +61,8 @@ async fn adjacent_controls_child() {
             resumes_when: "system load is healthy".into(),
         },
         Control::Stop {
-            reason: Some("stopped by shoal stop".into()),
+            reason: Some("the workspace is being removed".into()),
+            removed: true,
         },
     ] {
         protocol::write(&mut bytes, &control).await.unwrap();
@@ -113,7 +114,8 @@ async fn adjacent_controls_child() {
         ));
         assert!(matches!(
             recovery::wait(&mut link).await.unwrap(),
-            recovery::Waited::Cancelled(Some(reason)) if reason == "stopped by shoal stop"
+            recovery::Waited::Cancelled { reason: Some(reason), removed: true }
+                if reason == "the workspace is being removed"
         ));
         assert!(
             report_completion(&mut link, 143, &Mode::Command { record: false })
@@ -272,6 +274,7 @@ async fn reattachment_child() {
             daemon.get_mut(),
             &Control::Stop {
                 reason: Some("the workspace is being removed".into()),
+                removed: false,
             },
         )
         .await

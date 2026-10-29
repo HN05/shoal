@@ -15,8 +15,8 @@ use super::{
     execution_recovery,
     scope::Caller,
     workspace::{
-        Completing, ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution,
-        StopRequest, places::ExecutionPlace,
+        Completing, ExecutionKind, Manager, ReattachedExecution, StartedExecution, StopRequest,
+        places::ExecutionPlace,
     },
 };
 use crate::{
@@ -404,6 +404,7 @@ async fn relay(
                         sent_stop = true;
                         Control::Stop {
                             reason: Some(format!("{error:#}")),
+                            removed: false,
                         }
                     }
                 };
@@ -447,9 +448,7 @@ async fn relay(
                         protocol::write(writer, &Control::Detach).await?;
                         return Ok(Ended::Detached);
                     }
-                    Action::Stop(reason) => {
-                        protocol::write(writer, &Control::Stop { reason }).await?
-                    }
+                    Action::Stop(cancel) => protocol::write(writer, &cancel.control()).await?,
                     Action::Finished(exit_code) => {
                         *stopped = true;
                         return Ok(Ended::Finished(exit_code));
@@ -564,12 +563,13 @@ fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Contr
             if stopping.kind == ExecutionKind::Command && request.saves(stopping.agent) =>
         {
             Control::Pause {
-                removed: request.save == Save::RemovedAgents,
+                removed: request.keeps_removed_agents(),
                 reason: Some(request.reason),
             }
         }
         request => Control::Stop {
             reason: request.map(|request| request.reason),
+            removed: false,
         },
     }
 }

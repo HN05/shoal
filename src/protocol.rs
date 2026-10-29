@@ -728,10 +728,15 @@ pub enum ExecutionEvent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Control {
     Started,
-    /// Stop without saving anything to resume. Older wrappers ignore the reason.
+    /// Stop without saving anything to resume. Older wrappers ignore the
+    /// reason and `removed`.
     Stop {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
+        /// The workspace is being removed; its removal record keeps the agent
+        /// whose restore this cancels.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        removed: bool,
     },
     /// Stop and save what `shoal resume` restores. Older wrappers ignore the
     /// reason.

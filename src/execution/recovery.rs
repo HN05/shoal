@@ -826,7 +826,20 @@ pub(super) fn save_command(
 pub(super) enum Waited {
     Resume(Vec<crate::model::PortReservation>),
     /// The restore was cancelled, with the daemon's reason if it gave one.
-    Cancelled(Option<String>),
+    Cancelled {
+        reason: Option<String>,
+        /// Removal cancelled it, and the removal record keeps the agent.
+        removed: bool,
+    },
+}
+
+impl Waited {
+    fn cancelled(reason: impl Into<String>) -> Self {
+        Self::Cancelled {
+            reason: Some(reason.into()),
+            removed: false,
+        }
+    }
 }
 
 /// Wait for the daemon's verdict. While the daemon restarts, the link
@@ -838,7 +851,7 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
     let mut interrupt = signal(SignalKind::interrupt())?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut quit = signal(SignalKind::quit())?;
-    let signalled = || Ok(Waited::Cancelled(Some("interrupted".into())));
+    let signalled = || Ok(Waited::cancelled("interrupted"));
     loop {
         tokio::select! {
             received = link.recv() => match received {
@@ -848,12 +861,12 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
                     link.disarm();
                     return Ok(Waited::Resume(ports));
                 }
-                Ok(Received::Control(Control::Stop { reason })) => {
-                    return Ok(Waited::Cancelled(reason));
+                Ok(Received::Control(Control::Stop { reason, removed })) => {
+                    return Ok(Waited::Cancelled { reason, removed });
                 }
                 Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
                 Err(error) if error.is::<Refused>() => {
-                    return Ok(Waited::Cancelled(Some(error.to_string())));
+                    return Ok(Waited::cancelled(error.to_string()));
                 }
                 Err(error) => return Err(error),
             },

@@ -6,19 +6,53 @@ use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
 
-use super::workspace::{Grant, Manager, Pause};
+use super::workspace::{Grant, Manager, Pause, StopRequest};
 use crate::daemon::log;
 use crate::{
     execution::recovery,
     model::PortReservation,
-    protocol::{ExecutionEvent, timing},
+    protocol::{Control, ExecutionEvent, timing},
 };
 
 pub(super) enum Action {
     Resume(Vec<PortReservation>),
-    /// Cancel the restore, with the reason the wrapper shows.
-    Stop(Option<String>),
+    Stop(Cancel),
     Finished(i32),
+}
+
+/// A cancelled restore, as the wrapper reports it.
+pub(super) struct Cancel {
+    /// The reason the wrapper shows, if there is one.
+    pub reason: Option<String>,
+    /// Removal cancelled it, and the removal record keeps the agent.
+    pub removed: bool,
+}
+
+impl Cancel {
+    fn because(reason: impl Into<String>) -> Self {
+        Self {
+            reason: Some(reason.into()),
+            removed: false,
+        }
+    }
+
+    /// The cancellation of a stop request, such as `shoal stop` or removal.
+    fn requested(request: Option<StopRequest>) -> Self {
+        Self {
+            removed: request
+                .as_ref()
+                .is_some_and(StopRequest::keeps_removed_agents),
+            reason: request.map(|request| request.reason),
+        }
+    }
+
+    /// The control that tells the waiting wrapper.
+    pub(super) fn control(self) -> Control {
+        Control::Stop {
+            reason: self.reason,
+            removed: self.removed,
+        }
+    }
 }
 
 /// `hold` is the operation guard that holds back a daemon update while the
@@ -37,7 +71,7 @@ pub(super) async fn pause(
         return restart(manager, execution_id, workspace_id, incoming, stop).await;
     }
     let Some(protection) = manager.agent_overload(execution_id).await else {
-        return Ok(Action::Stop(requested_reason(manager, execution_id).await));
+        return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
     };
     // The user sent the agent to the queue, so the overload policy does not
     // apply to its restore.
@@ -66,7 +100,7 @@ pub(super) async fn pause(
         biased;
         action = interrupted(manager, execution_id, incoming, stop) => return action,
         () = recovery_disabled(manager), if !moved => {
-            return Ok(Action::Stop(Some("automatic recovery was disabled".into())));
+            return Ok(Action::Stop(Cancel::because("automatic recovery was disabled")));
         }
         ready = async {
             await_stopped(manager, execution_id, workspace_id, stopped).await?;
@@ -97,8 +131,9 @@ async fn restart(
     stop: &mut watch::Receiver<bool>,
 ) -> Result<Action> {
     let action = restart_once_stopped(manager, execution_id, workspace_id, incoming, stop).await;
-    if let Ok(Action::Stop(reason)) = &action {
-        let reason = reason
+    if let Ok(Action::Stop(cancel)) = &action {
+        let reason = cancel
+            .reason
             .clone()
             .unwrap_or_else(|| "the restart was cancelled".into());
         manager.fail_restart(execution_id, reason).await;
@@ -153,7 +188,7 @@ async fn interrupted(
         },
         changed = stop.changed() => {
             changed?;
-            Ok(Action::Stop(requested_reason(manager, execution_id).await))
+            Ok(Action::Stop(requested_cancel(manager, execution_id).await))
         }
     }
 }
@@ -184,7 +219,9 @@ async fn admit_restore(
 
 fn restore_failed(error: anyhow::Error) -> Action {
     log!("agent recovery cancelled: {error:#}");
-    Action::Stop(Some(format!("automatic restore failed: {error:#}")))
+    Action::Stop(Cancel::because(format!(
+        "automatic restore failed: {error:#}"
+    )))
 }
 
 /// Whether `shoal done` finished the workspace's assignment, which leaves its
@@ -194,7 +231,7 @@ async fn assignment_done(manager: &Manager, workspace_id: &str) -> Result<bool> 
 }
 
 fn done_cancels_restore() -> Action {
-    Action::Stop(Some("the assignment is done".into()))
+    Action::Stop(Cancel::because("the assignment is done"))
 }
 
 /// How often a waiting restore checks again for survivors it could not stop.
@@ -250,13 +287,9 @@ pub(super) fn discard_handoff(manager: &Manager, workspace_id: &str, execution_i
     }
 }
 
-/// Why a stop cancelled the restore, such as `shoal stop`.
-async fn requested_reason(manager: &Manager, execution_id: &str) -> Option<String> {
-    manager
-        .executions
-        .stop_request(execution_id)
-        .await
-        .map(|request| request.reason)
+/// How a stop, such as `shoal stop`, cancelled the restore.
+async fn requested_cancel(manager: &Manager, execution_id: &str) -> Cancel {
+    Cancel::requested(manager.executions.stop_request(execution_id).await)
 }
 
 /// Resolves once a reload disables overload recovery, so a waiting agent
@@ -296,6 +329,6 @@ async fn resume(
     if manager.resume_agent_execution(execution_id, grant).await? {
         Ok(Action::Resume(ports))
     } else {
-        Ok(Action::Stop(requested_reason(manager, execution_id).await))
+        Ok(Action::Stop(requested_cancel(manager, execution_id).await))
     }
 }

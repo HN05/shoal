@@ -65,7 +65,9 @@ async fn release_child(link: &mut Link) -> Result<Option<String>> {
             loop {
                 match link.recv().await? {
                     Received::Control(Control::ChildReleased) => return Ok(Some(None)),
-                    Received::Control(Control::Stop { reason } | Control::Pause { reason, .. }) => {
+                    Received::Control(
+                        Control::Stop { reason, .. } | Control::Pause { reason, .. },
+                    ) => {
                         return Ok(Some(Some(reason.unwrap_or_else(|| "stopped".into()))));
                     }
                     Received::Control(Control::OverloadStop { reason, .. }) => {
@@ -104,7 +106,7 @@ async fn await_restart(link: &mut Link, delay: Duration) -> Result<Option<String
             received = link.recv() => match received? {
                 Received::Detached | Received::Reattached => {}
                 Received::Control(
-                    Control::Stop { reason }
+                    Control::Stop { reason, .. }
                     | Control::Pause { reason, .. },
                 ) => return Ok(Some(reason.unwrap_or_else(|| "stopped".into()))),
                 Received::Control(Control::OverloadStop { reason, .. }) => return Ok(Some(reason)),

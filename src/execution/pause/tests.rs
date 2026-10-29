@@ -33,6 +33,12 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
         removal.manual_restore("worker", "id"),
         "shoal: agent stopped: the workspace is being removed; restore with shoal work restore worker, then shoal resume worker --execution id"
     );
+    // A wrapper waiting to restore its agent learns of the removal only from
+    // the cancellation.
+    assert_eq!(
+        restore_steps("worker", "id", true),
+        "restore with shoal work restore worker, then shoal resume worker --execution id"
+    );
     let pause = Halt::Pause {
         reason: None,
         removed: false,

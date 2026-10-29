@@ -160,6 +160,11 @@ impl StopRequest {
         }
     }
 
+    /// Whether the stop is a removal whose removal record keeps the agents.
+    pub(crate) fn keeps_removed_agents(&self) -> bool {
+        self.save == Save::RemovedAgents
+    }
+
     /// Whether the wrapper saves its agent's session, or its interrupted
     /// command when it runs no agent.
     pub(crate) fn saves(&self, agent: bool) -> bool {

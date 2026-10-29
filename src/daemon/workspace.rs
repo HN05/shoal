@@ -51,7 +51,7 @@ pub(crate) use agent_queue::Grant;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use executions::{Completing, ReattachedExecution, StartedExecution};
-pub use executions::{ExecutionKind, Save, StopRequest, UnprovenStop};
+pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;

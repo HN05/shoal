@@ -101,14 +101,14 @@ async fn await_restore(
                 record,
             })
         }
-        recovery::Waited::Cancelled(cancelled) => {
+        recovery::Waited::Cancelled { reason, removed } => {
             if record.is_ok() {
-                let cancelled = cancelled.map(|reason| format!(": {reason}"));
+                let cancelled = reason.map(|reason| format!(": {reason}"));
                 eprintln!(
                     "shoal: agent stopped{}; automatic restore cancelled{}; {}",
                     stop.stated_reason(),
                     cancelled.unwrap_or_default(),
-                    stop.restore(&plan.workspace.name, &plan.id)
+                    restore_steps(&plan.workspace.name, &plan.id, removed)
                 );
             }
             Ok(AfterPause::Finish)
@@ -263,18 +263,6 @@ impl Halt {
         }
     }
 
-    /// How to restore the agent by hand: resume it, once its workspace is
-    /// restored when removal stopped it.
-    fn restore(&self, workspace: &str, execution: &str) -> String {
-        let resume = format!("shoal resume {workspace} --execution {execution}");
-        match self {
-            Self::Pause { removed: true, .. } => {
-                format!("restore with shoal work restore {workspace}, then {resume}")
-            }
-            _ => format!("restore with {resume}"),
-        }
-    }
-
     /// The line for an agent that does not restore itself.
     fn manual_restore(&self, workspace: &str, execution: &str) -> String {
         let condition = match self {
@@ -284,8 +272,23 @@ impl Halt {
         format!(
             "shoal: agent stopped{}; {condition}{}",
             self.stated_reason(),
-            self.restore(workspace, execution)
+            restore_steps(
+                workspace,
+                execution,
+                matches!(self, Self::Pause { removed: true, .. })
+            )
         )
+    }
+}
+
+/// How to restore the agent by hand: resume it, once its workspace is
+/// restored when it was `removed`.
+fn restore_steps(workspace: &str, execution: &str, removed: bool) -> String {
+    let resume = format!("shoal resume {workspace} --execution {execution}");
+    if removed {
+        format!("restore with shoal work restore {workspace}, then {resume}")
+    } else {
+        format!("restore with {resume}")
     }
 }
 
