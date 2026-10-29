@@ -45,6 +45,73 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
 }
 
 #[tokio::test]
+async fn an_update_during_removal_keeps_the_workspace_of_a_cancelled_restore() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    ignore_fixture_files(&workspace);
+    let home = &manager.paths.home;
+    let (started, release) = (home.join("hook-started"), home.join("release"));
+    let hook = home.join("wait-for-release");
+    fs::write(
+        &hook,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
+            started.display(),
+            release.display()
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    manager
+        .set_repository_config(
+            &workspace.repository_id,
+            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+        )
+        .await
+        .unwrap();
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let id = stop_agent_in(&manager, &workspace, AgentState::Idle).await;
+    wait_restore_waits(&manager, &id).await;
+    let snapshot = manager
+        .cleanup_candidacy(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let removal = tokio::spawn({
+        let (manager, id) = (manager.clone(), workspace.id.clone());
+        async move { manager.remove_on_request(&id, snapshot).await }
+    });
+    // The hook runs once removal has cancelled the restore.
+    bounded(async {
+        while !started.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    manager
+        .send_agent_message(&workspace.name, "Review requested".into())
+        .await
+        .unwrap();
+    fs::write(&release, "").unwrap();
+    let error = bounded(removal).await.unwrap().unwrap_err();
+    assert!(
+        format!("{error:#}").contains("an update for its stopped agent arrived"),
+        "{error:#}"
+    );
+    bounded(launched).await.unwrap().unwrap();
+    assert!(workspace.path.is_dir());
+    assert_eq!(
+        manager.agent_messages(&workspace.name).await.unwrap().len(),
+        1
+    );
+    assert_eq!(
+        manager.cleanup_candidacy(&workspace.id).await.unwrap(),
+        Err(CleanupReason::Recovering)
+    );
+    serving.abort();
+}
+
+#[tokio::test]
 async fn a_restore_of_an_agent_stopped_mid_turn_keeps_its_workspace() {
     let (_root, manager, workspace, serving) = fixture().await;
     ignore_fixture_files(&workspace);
