@@ -1125,10 +1125,16 @@ impl Manager {
 
     /// Stop the detached processes running from the workspace's directory,
     /// such as scripts a recording left behind, whose environment may not
-    /// show the workspace's identity. Each round also stops those its
-    /// predecessor started meanwhile, which stopping their parent detaches.
-    pub(super) async fn stop_detached_directory_processes(&self, path: &Path) -> Result<()> {
+    /// show the workspace's identity, once the directory is verified to be
+    /// its worktree still. Each round also stops those its predecessor
+    /// started meanwhile, which stopping their parent detaches.
+    pub(super) async fn stop_detached_directory_processes(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<()> {
         const ROUNDS: usize = 3;
+        self.verify_worktree(workspace).await?;
+        let path = &workspace.path;
         for _ in 0..ROUNDS {
             let detached = crate::process::detached_in_directory(path).await?;
             if detached.is_empty() {

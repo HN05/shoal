@@ -1027,8 +1027,7 @@ impl Manager {
         // and the checkpoint must include.
         self.stop_workspace_processes(&workspace.id).await?;
         if removal.stops_detached_processes() {
-            self.stop_detached_directory_processes(&workspace.path)
-                .await?;
+            self.stop_detached_directory_processes(workspace).await?;
         }
         let check = self
             .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)

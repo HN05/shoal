@@ -1066,3 +1066,37 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
     assert!(identity::alive(&attached_identity).unwrap());
     attached.kill().await.unwrap();
 }
+
+#[tokio::test]
+async fn removal_leaves_detached_processes_in_a_replaced_worktree_alone() {
+    // The hook replaces the worktree and leaves a detached process running in
+    // the replacement, without the workspace identity hooks pass on.
+    let (root, manager, workspace) = fixture_with_hook("pre_remove_cmd", |root| {
+        format!(
+            r#"common=$(git rev-parse --path-format=absolute --git-common-dir)
+branch=$(git symbolic-ref --short HEAD)
+cd /
+git --git-dir="$common" worktree remove --force "$SHOAL_WORKSPACE_PATH"
+git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch"
+cd "$SHOAL_WORKSPACE_PATH"
+env -i PATH="$PATH" sh -c 'sleep 300 & echo $$ $! > {pids}.tmp; mv {pids}.tmp {pids}; wait' >/dev/null 2>&1 &
+while [ ! -e '{pids}' ]; do sleep 1; done"#,
+            pids = root.join("pids").display()
+        )
+    })
+    .await;
+
+    let error = manager
+        .remove_workspace(
+            &workspace.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+
+    let detached = crate::test_support::Detached::recorded(&root.path().join("pids")).await;
+    assert!(error.to_string().contains("ownership"), "{error:#}");
+    assert!(identity::alive(&detached.shell).unwrap());
+    assert!(identity::alive(&detached.child).unwrap());
+}

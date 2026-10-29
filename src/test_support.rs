@@ -154,6 +154,12 @@ impl Detached {
             .await
             .unwrap();
         assert!(status.success());
+        Self::recorded(pids).await
+    }
+
+    /// The pair whose PIDs a shell started elsewhere records in `pids`,
+    /// once it has.
+    pub async fn recorded(pids: &Path) -> Self {
         // A generous hang guard; the shell writes the file once both run.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         while !pids.exists() {
