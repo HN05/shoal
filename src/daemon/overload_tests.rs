@@ -102,7 +102,7 @@ fn serve_fixture(manager: Arc<Manager>) -> tokio::task::JoinHandle<()> {
         manager,
         started: Instant::now(),
         managed: false,
-        shutdown: watch::channel(false).0,
+        exit: tokio::sync::mpsc::channel(1).0,
         capacity: Arc::new(connections::Capacity::new(128, 128)),
     };
     tokio::spawn(async move {

@@ -42,8 +42,8 @@ states!(NotificationKind {
     /// An automatic removal was attempted and the workspace retained, or a
     /// cleanup pass failed.
     CleanupFailed => "cleanup_failed",
-    /// Disk protection or a system shutdown could not stop a workspace's
-    /// tracked executions.
+    /// Disk protection, a system shutdown or the daemon's exit could not
+    /// stop a workspace's tracked executions.
     StopFailed => "stop_failed",
     /// A best-effort event hook failed.
     HookFailed => "hook_failed",

@@ -182,6 +182,18 @@ fn pr_actions_reject_conflicting_wire_fields() {
 }
 
 #[test]
+fn exit_requests_keep_their_wire_spelling() {
+    for (exit, wire) in [(Exit::Stop, "stop"), (Exit::Restart, "restart")] {
+        let method = serde_json::to_value(Method::from(exit)).unwrap();
+        assert_eq!(method, json!({"exit": wire}));
+        let Method::Exit(request) = serde_json::from_value(method).unwrap() else {
+            panic!("an exit request must keep its method name");
+        };
+        assert_eq!(request.exit, exit);
+    }
+}
+
+#[test]
 fn reattachment_keeps_its_wire_spelling() {
     let wire = json!({"reattach": {
         "execution": "execution", "wrapper": {"pid": 2, "birth": "wrapper"},

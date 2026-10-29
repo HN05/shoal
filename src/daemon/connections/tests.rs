@@ -1,9 +1,6 @@
 use std::time::Instant;
 
-use tokio::{
-    io::{AsyncReadExt, BufReader},
-    sync::watch,
-};
+use tokio::io::{AsyncReadExt, BufReader};
 
 use super::*;
 use crate::protocol::RepositoryMethod::ListRepositories;
@@ -70,7 +67,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         manager: manager.clone(),
         started: Instant::now(),
         managed: false,
-        shutdown: watch::channel(false).0,
+        exit: tokio::sync::mpsc::channel(1).0,
         capacity: capacity.clone(),
     };
     let serving = tokio::spawn(async move {
@@ -196,7 +193,7 @@ async fn connections_are_accepted_and_answered_while_requests_hold_every_slot() 
         manager: manager.clone(),
         started: Instant::now(),
         managed: false,
-        shutdown: watch::channel(false).0,
+        exit: tokio::sync::mpsc::channel(1).0,
         capacity: Arc::new(Capacity::new(1, 1)),
     };
     let _held = server.capacity.admit(&ListRepositories.into()).unwrap();

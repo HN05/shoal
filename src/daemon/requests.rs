@@ -4,7 +4,7 @@ mod approvals;
 mod assignments;
 mod chats;
 mod ci;
-mod daemon;
+pub(super) mod daemon;
 mod demos;
 mod executions;
 mod holds;

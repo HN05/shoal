@@ -55,13 +55,59 @@ async fn reattachment_is_served_at_every_protocol_version_without_scope() {
     served.await.unwrap().unwrap();
 }
 
+#[tokio::test]
+async fn an_exit_request_is_served_at_every_protocol_version_except_to_scopes() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let (_root, manager) = crate::test_support::manager().await;
+    let (exit, mut requested) = tokio::sync::mpsc::channel(1);
+    let server = Server {
+        exit,
+        ..server(manager)
+    };
+    let ask = |scope: Option<&str>| {
+        // The spelling a service command of another release sends.
+        let request = serde_json::json!({
+            "protocol": 1, "id": 4, "scope": scope, "method": {"exit": "restart"}
+        });
+        let server = server.clone();
+        async move {
+            let (client, stream) = UnixStream::pair().unwrap();
+            let operation = server.manager.gates.owned_operation().await;
+            let served = tokio::spawn(serve(stream, server, operation));
+            let mut client = BufReader::new(client);
+            client
+                .get_mut()
+                .write_all(format!("{request}\n").as_bytes())
+                .await
+                .unwrap();
+            let mut response = String::new();
+            timeout(Duration::from_secs(60), client.read_line(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            served.await.unwrap().unwrap();
+            serde_json::from_str::<serde_json::Value>(&response).unwrap()
+        }
+    };
+    let refused = ask(Some("unknown")).await;
+    assert_eq!(refused["data"]["code"], "scope_denied", "{refused}");
+    assert!(
+        requested.try_recv().is_err(),
+        "a refused request ends nothing"
+    );
+    let answered = ask(None).await;
+    assert_eq!(answered["id"], 4);
+    assert_eq!(answered["type"], "ok", "{answered}");
+    assert_eq!(requested.try_recv().unwrap(), Ending::Detach);
+}
+
 /// A server for `manager`, as the daemon runs it unmanaged.
 pub(super) fn server(manager: Arc<Manager>) -> Server {
     Server {
         manager,
         started: Instant::now(),
         managed: false,
-        shutdown: watch::channel(false).0,
+        exit: tokio::sync::mpsc::channel(1).0,
         capacity: Arc::new(connections::Capacity::new(1, 1)),
     }
 }

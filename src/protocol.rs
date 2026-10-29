@@ -51,7 +51,7 @@ pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
 pub use chats::ChatMethod;
 pub use ci::CiMethod;
-pub use daemon::DaemonMethod;
+pub use daemon::{DaemonMethod, Exit, ExitRequest};
 pub use demos::DemoMethod;
 pub use executions::ExecutionMethod;
 pub use holds::HoldMethod;
@@ -199,6 +199,8 @@ impl Request {
 pub enum Method {
     /// Answered before the protocol check and authorization.
     Reattach(Reattachment),
+    /// Answered before the protocol check.
+    Exit(ExitRequest),
     Operation(Operation),
 }
 
@@ -255,6 +257,7 @@ impl Method {
     pub fn controls_daemon(&self) -> bool {
         match self {
             Self::Reattach(_) => false,
+            Self::Exit(_) => true,
             Self::Operation(operation) => operation.controls_daemon(),
         }
     }
@@ -263,6 +266,7 @@ impl Method {
     pub fn lifetime(&self) -> Lifetime {
         match self {
             Self::Reattach(_) => Lifetime::Resumed,
+            Self::Exit(_) => Lifetime::Reply,
             Self::Operation(operation) => operation.lifetime(),
         }
     }
@@ -310,6 +314,12 @@ impl Operation {
             | Self::Resource(_)
             | Self::Simulator(_) => Lifetime::Reply,
         }
+    }
+}
+
+impl From<Exit> for Method {
+    fn from(exit: Exit) -> Self {
+        Self::Exit(ExitRequest { exit })
     }
 }
 

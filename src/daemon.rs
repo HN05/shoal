@@ -58,7 +58,7 @@ use futures_util::FutureExt;
 use tokio::{
     net::UnixStream,
     signal::unix::{SignalKind, signal},
-    sync::watch,
+    sync::mpsc,
     task::JoinSet,
     time::timeout,
 };
@@ -67,7 +67,7 @@ use answer::OperationGuard;
 pub(crate) use log::log;
 use ownership::Ownership;
 use scope::Caller;
-use workspace::Manager;
+use workspace::{Ending, Manager};
 
 use crate::{
     paths::Paths,
@@ -86,7 +86,8 @@ struct Server {
     started: Instant,
     /// Running under the OS service manager, which owns shutdown.
     managed: bool,
-    shutdown: watch::Sender<bool>,
+    /// Ends the daemon, with what becomes of running work.
+    exit: mpsc::Sender<Ending>,
     capacity: Arc<connections::Capacity>,
 }
 
@@ -100,13 +101,13 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let manager = start(&startup, &paths).await?;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
-    let (shutdown, mut shutdown_rx) = watch::channel(false);
+    let (exit, mut exit_requested) = mpsc::channel(1);
     let mut update_tick = tokio::time::interval(Duration::from_secs(1));
     let server = Server {
         manager: manager.clone(),
         started: Instant::now(),
         managed,
-        shutdown,
+        exit,
         capacity: Arc::new(connections::Capacity::for_descriptors(descriptors)),
     };
     let mut background = JoinSet::new();
@@ -164,15 +165,15 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let mut quiescence = None;
     let result = loop {
         tokio::select! {
-            _ = terminate.recv() => break Ok(()),
-            _ = interrupt.recv() => break Ok(()),
-            _ = shutdown_rx.changed() => break Ok(()),
+            _ = terminate.recv() => break Ok(Ending::Detach),
+            _ = interrupt.recv() => break Ok(Ending::Detach),
+            Some(ending) = exit_requested.recv() => break Ok(ending),
             _ = update_tick.tick(), if update.is_some() => {
                 if update.as_ref().is_some_and(auto_update::Update::pending)
                     && let Some(guard) = auto_update::quiesce(&manager)
                 {
                     quiescence = Some(guard);
-                    break Ok(());
+                    break Ok(Ending::Detach);
                 }
             },
             Some(_) = clients.join_next(), if !clients.is_empty() => {},
@@ -195,6 +196,11 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         }
     };
     background.shutdown().await;
+    // A daemon that stops accepting connections fails and leaves work
+    // running for the next daemon the service manager starts.
+    manager
+        .end_work(*result.as_ref().unwrap_or(&Ending::Detach))
+        .await;
     manager.stop_for_shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;
@@ -202,7 +208,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         log!("daemon executable was updated; restarting");
         return ownership.hand_off(&update.expect("update monitor enabled").path, &listener);
     }
-    result
+    result.map(|_| ())
 }
 
 /// Open the daemon's state and reconcile it with what changed while it was
@@ -319,6 +325,19 @@ async fn serve_request(
                 request.id,
                 server.manager,
                 reattach,
+                operation_guard,
+            )
+            .await;
+        }
+        // Service commands end a daemon of any release.
+        Method::Exit(exit) => {
+            let scope = request.scope.as_deref();
+            return requests::daemon::exit(
+                stream,
+                request.id,
+                &server,
+                scope,
+                exit,
                 operation_guard,
             )
             .await;
