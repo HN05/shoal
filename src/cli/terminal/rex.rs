@@ -127,8 +127,8 @@ impl Places for Rex {
 
     fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
         Box::pin(async move {
-            if let Err(error) = rename_window(place, label).await {
-                eprintln!("warning: cannot rename the Rex window of {place}: {error:#}");
+            if let Err(error) = rename_block(place, label).await {
+                eprintln!("warning: cannot rename Rex block {place}: {error:#}");
             }
         })
     }
@@ -166,7 +166,7 @@ impl Sessions for Rex {
         })
     }
 
-    /// The block, under its window's name, while it is open.
+    /// The block, under the name it shows, while it is open.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(session_at(place))
     }
@@ -406,14 +406,14 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
     Ok(place)
 }
 
-/// The session at `place`, named after the window that holds its block
-/// now, while the block is open.
+/// The session at `place`, named as its block is now, while the block is
+/// open.
 async fn session_at(place: &Origin) -> Result<Option<Session>> {
     let server = Server::recorded(&place.data)?;
     let Some(block) = server.block(place.id()).await? else {
         return Ok(None);
     };
-    let name = server.window_label(&block).await?;
+    let name = server.name(place.id(), &block).await?;
     Ok(Some(Session {
         name: name.unwrap_or_else(|| place.id().to_owned()),
         agent: None,
@@ -423,10 +423,10 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
     }))
 }
 
-async fn rename_window(place: &str, label: &str) -> Result<()> {
+async fn rename_block(place: &str, label: &str) -> Result<()> {
     let server = Server::here()?;
     let block = server.block(place).await?.context("the block is gone")?;
-    server.rename_window(&block, label).await
+    server.rename(place, &block, label).await
 }
 
 #[cfg(test)]

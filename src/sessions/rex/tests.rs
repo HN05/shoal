@@ -178,9 +178,69 @@ async fn a_new_window_types_its_input_into_a_shell() {
     let input: serde_json::Value = serde_json::from_str(call.last().unwrap()).unwrap();
     assert_eq!(input["focus"], false);
     assert_eq!(input["window_label"], "shoal#1");
+    assert_eq!(input["layout"]["block"]["label"], "shoal#1");
     let options = &input["layout"]["block"]["options"];
     assert_eq!(options["cwd"], "/work");
     assert_eq!(options["initial_input"], " shoal internal launch /tmp/f\r");
+}
+
+/// A `window ls` answer: window:1 holds block:1 alone, window:2 holds
+/// block:2 beside the user's block:3 in a floating layer.
+const WINDOWS: &str = r#"{"windows": [{"window_id": "window:1", "label": "alone", "layers": [{"blocks": [{"block_id": "block:1", "label": "shell"}]}]}, {"window_id": "window:2", "label": "mine", "layers": [{"blocks": [{"block_id": "block:2", "label": "beside"}]}, {"blocks": [{"block_id": "block:3", "label": "shell"}]}]}]}"#;
+
+fn at(window: &str) -> Block {
+    Block {
+        session: "session:1".into(),
+        window: Some(window.into()),
+    }
+}
+
+#[test]
+fn a_block_alone_in_its_window_goes_by_the_windows_name_and_others_by_their_own() {
+    let windows: Windows = serde_json::from_str(WINDOWS).unwrap();
+    let [alone, shared] = &windows.windows[..] else {
+        panic!("two windows");
+    };
+    assert_eq!(alone.name_of("block:1").as_deref(), Some("alone"));
+    assert_eq!(shared.name_of("block:2").as_deref(), Some("beside"));
+    assert_eq!(shared.name_of("block:9"), None);
+}
+
+#[tokio::test]
+async fn renaming_a_block_beside_others_leaves_their_window_alone() {
+    let answers = format!(
+        "{{('window', 'ls'): (0, '{WINDOWS}'), ('api', 'call'): (0, '{{\"revision\": 3}}')}}"
+    );
+    let renames = |root: &tempfile::TempDir| -> Vec<serde_json::Value> {
+        calls(root)
+            .into_iter()
+            .filter(|call| call.contains(&"call".to_owned()))
+            .map(|call| {
+                let mut input: serde_json::Value =
+                    serde_json::from_str(call.last().unwrap()).unwrap();
+                input["method"] = call[call.len() - 2].clone().into();
+                input
+            })
+            .collect()
+    };
+    let (root, rex) = fake(&answers);
+    rex.rename("block:2", &at("window:2"), "placed")
+        .await
+        .unwrap();
+    let renamed = renames(&root);
+    assert_eq!(renamed.len(), 1, "{renamed:?}");
+    assert_eq!(renamed[0]["method"], "session.set_block_label");
+    assert_eq!(renamed[0]["block_id"], "block:2");
+    assert_eq!(renamed[0]["label"], "placed");
+    let (root, rex) = fake(&answers);
+    rex.rename("block:1", &at("window:1"), "placed")
+        .await
+        .unwrap();
+    let renamed = renames(&root);
+    assert_eq!(renamed.len(), 2, "{renamed:?}");
+    assert_eq!(renamed[1]["method"], "session.set_window_label");
+    assert_eq!(renamed[1]["window_id"], "window:1");
+    assert_eq!(renamed[1]["label"], "placed");
 }
 
 #[tokio::test]

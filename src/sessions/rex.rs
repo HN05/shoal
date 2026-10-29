@@ -180,7 +180,7 @@ impl Rex {
             "session_id": window.session,
             "focus": window.focus,
             "window_label": window.label,
-            "layout": {"block": {"flavor": SHELL_FLAVOR, "options": options}},
+            "layout": {"block": {"flavor": SHELL_FLAVOR, "label": window.label, "options": options}},
         });
         let opened: NewWindow =
             serde_json::from_slice(&self.call("session.new_window", input).await?)
@@ -277,8 +277,33 @@ impl Rex {
         Ok(())
     }
 
-    /// The label of `block`'s window.
-    pub async fn window_label(&self, block: &Block) -> Result<Option<String>> {
+    /// What names `id`, a block that sits at `block`: its window's label
+    /// while it is alone there, otherwise its own label.
+    pub async fn name(&self, id: &str, block: &Block) -> Result<Option<String>> {
+        Ok(self
+            .window_of(block)
+            .await?
+            .and_then(|window| window.name_of(id)))
+    }
+
+    /// Name `id`, a block that sits at `block`, `label`, and its window too
+    /// while the block is alone there, as [`Self::name`] reads it.
+    pub async fn rename(&self, id: &str, block: &Block, label: &str) -> Result<()> {
+        let input = json!({"session_id": block.session, "block_id": id, "label": label});
+        self.call("session.set_block_label", input).await?;
+        let Some(window) = self.window_of(block).await? else {
+            return Ok(());
+        };
+        if window.holds_only(id) {
+            let input =
+                json!({"session_id": block.session, "window_id": window.window_id, "label": label});
+            self.call("session.set_window_label", input).await?;
+        }
+        Ok(())
+    }
+
+    /// The window `block` sits in, while it is open.
+    async fn window_of(&self, block: &Block) -> Result<Option<WindowInfo>> {
         let Some(window) = &block.window else {
             return Ok(None);
         };
@@ -293,16 +318,7 @@ impl Rex {
         Ok(windows
             .windows
             .into_iter()
-            .find(|open| open.window_id == *window)
-            .and_then(|open| open.label))
-    }
-
-    /// Name `block`'s window `label`.
-    pub async fn rename_window(&self, block: &Block, label: &str) -> Result<()> {
-        let window = block.window.as_deref().context("the block has no window")?;
-        let input = json!({"session_id": block.session, "window_id": window, "label": label});
-        self.call("session.set_window_label", input).await?;
-        Ok(())
+            .find(|open| open.window_id == *window))
     }
 
     /// Close `block` and nothing else; Rex removes a window once its last
@@ -431,6 +447,44 @@ struct Windows {
 struct WindowInfo {
     window_id: String,
     label: Option<String>,
+    #[serde(default)]
+    layers: Vec<Layer>,
+}
+
+#[derive(Deserialize)]
+struct Layer {
+    #[serde(default)]
+    blocks: Vec<LabelledBlock>,
+}
+
+#[derive(Deserialize)]
+struct LabelledBlock {
+    block_id: String,
+    label: Option<String>,
+}
+
+impl WindowInfo {
+    /// Every block in the window, whatever layer holds it.
+    fn blocks(&self) -> impl Iterator<Item = &LabelledBlock> {
+        self.layers.iter().flat_map(|layer| &layer.blocks)
+    }
+
+    /// Whether block `id` is the window's only block.
+    fn holds_only(&self, id: &str) -> bool {
+        let mut blocks = self.blocks();
+        blocks.next().is_some_and(|block| block.block_id == id) && blocks.next().is_none()
+    }
+
+    /// What names block `id` here: the window's label while the block is
+    /// alone in it, otherwise the block's own label.
+    fn name_of(&self, id: &str) -> Option<String> {
+        if self.holds_only(id) {
+            return self.label.clone();
+        }
+        self.blocks()
+            .find(|block| block.block_id == id)
+            .and_then(|block| block.label.clone())
+    }
 }
 
 #[derive(Deserialize)]
