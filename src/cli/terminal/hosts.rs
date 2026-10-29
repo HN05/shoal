@@ -12,23 +12,31 @@ use crate::{
     sessions::{HostName, Origin},
 };
 
-/// Hosts in the order they claim a terminal, each with the options its own
-/// config section gives; a terminal none of them serves runs everything in
-/// place.
-const HOSTS: &[Registered] = &[
-    Registered {
-        host: &herdr::Herdr,
-        options: |settings| herdr::options(&settings.herdr),
-    },
-    Registered {
-        host: &rex::Rex,
-        options: |settings| rex::options(&settings.rex),
-    },
-    Registered {
-        host: &zmx::Zmx,
-        options: |_| Options::DEFAULT,
-    },
-];
+/// Hosts in the order they claim a terminal, which is [`HostName`]'s; a
+/// terminal none of them serves runs everything in place.
+fn registered() -> impl Iterator<Item = Registered> {
+    HostName::ALL.iter().copied().filter_map(registration)
+}
+
+/// The host named `name` with the options its own config section gives;
+/// none for the plain terminal.
+fn registration(name: HostName) -> Option<Registered> {
+    Some(match name {
+        HostName::Herdr => Registered {
+            host: &herdr::Herdr,
+            options: |settings| herdr::options(&settings.herdr),
+        },
+        HostName::Rex => Registered {
+            host: &rex::Rex,
+            options: |settings| rex::options(&settings.rex),
+        },
+        HostName::Zmx => Registered {
+            host: &zmx::Zmx,
+            options: |_| Options::DEFAULT,
+        },
+        HostName::Terminal => return None,
+    })
+}
 
 /// A host with the options `settings` give it.
 struct Registered {
@@ -38,7 +46,7 @@ struct Registered {
 
 /// Every host, for what it does whatever config says.
 pub(super) fn hosts() -> impl Iterator<Item = &'static dyn Host> {
-    HOSTS.iter().map(|registered| registered.host)
+    registered().map(|registered| registered.host)
 }
 
 /// What config sets for a host, from the section of its own it may have.
@@ -93,8 +101,7 @@ impl Configured {
 
     /// Every host as `settings` set it up, in the order they claim a terminal.
     pub(super) fn all(settings: &Effective) -> impl Iterator<Item = Self> + '_ {
-        HOSTS
-            .iter()
+        registered()
             .map(|registered| Self::new(registered.host, (registered.options)(settings), settings))
     }
 

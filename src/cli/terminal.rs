@@ -1,10 +1,11 @@
 //! Where Shoal runs work for the caller's terminal. Commands say what they
 //! launch; this module chooses whether it takes the terminal or runs in the
 //! background, and the [`Host`] that carries that out with its own
-//! primitives. Commands never name a host; adding one means implementing
-//! [`Host`] and the capability traits in [`host`] it supports, and listing
-//! it in [`hosts::HOSTS`]; a `default_host` value of its name makes it the
-//! host for terminals no host serves.
+//! primitives. Commands never name a host; adding one means naming it in
+//! [`HostName`](crate::sessions::HostName), implementing [`Host`] and the
+//! capability traits in [`host`] it supports, and registering it where the
+//! compiler then asks; a `default_host` value of its name makes it the host
+//! for terminals no host serves.
 mod add_place;
 mod background;
 mod closing;

@@ -78,10 +78,20 @@ pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
     if cfg!(test) {
         Vec::new()
     } else {
-        vec![
-            Arc::new(zmx::Zmx),
-            Arc::new(rex::Cleanup),
-            Arc::new(herdr::Cleanup),
-        ]
+        HostName::ALL.iter().copied().filter_map(host).collect()
     }
 }
+
+/// The sessions of the host named `name`; none for the plain terminal,
+/// which keeps no sessions.
+fn host(name: HostName) -> Option<Arc<dyn Host>> {
+    match name {
+        HostName::Herdr => Some(Arc::new(herdr::Cleanup)),
+        HostName::Rex => Some(Arc::new(rex::Cleanup)),
+        HostName::Zmx => Some(Arc::new(zmx::Zmx)),
+        HostName::Terminal => None,
+    }
+}
+
+#[cfg(test)]
+mod tests;

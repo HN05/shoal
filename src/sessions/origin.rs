@@ -8,12 +8,14 @@ use serde::{Deserialize, Serialize};
 use crate::state::states;
 
 states!(
-    /// The terminal hosts Shoal runs work in; a plain terminal is none.
+    /// The terminal hosts Shoal runs work in, in the order they claim a
+    /// terminal; a plain terminal is none, and every terminal falls back to
+    /// it.
     HostName: Variants {
-        Terminal => "terminal",
         Herdr => "herdr",
         Rex => "rex",
         Zmx => "zmx",
+        Terminal => "terminal",
     }
 );
 
