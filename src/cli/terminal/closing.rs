@@ -16,7 +16,7 @@ use std::{
 
 use anyhow::{Context as _, Result};
 
-use super::{Host, host::Watches, hosts};
+use super::{Host, host::Watches, hosts::hosts};
 use crate::{
     cli::{client, context::Context, installed, internal},
     env,
@@ -125,12 +125,12 @@ pub async fn watch(
     place: Watched,
     kept_at: Option<String>,
 ) -> Result<i32> {
-    let host = super::named(host);
+    let host = super::hosts::named(host);
     let watches = host
         .watches()
         .with_context(|| format!("{} cannot read places", host.name()))?;
     // The daemon's record of the place, as its environment names it.
-    let record = super::origin_here(host)
+    let record = super::here::origin_here(host)
         .filter(|origin| origin.place.is_some())
         .unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
     let executable = installed::Executable::current();
@@ -362,7 +362,7 @@ impl Drop for Marker {
 /// removed: one a watcher closes, or that closing a watched place ends.
 pub(super) async fn closes_with(paths: &Paths, workspace: &str) -> bool {
     for host in hosts() {
-        let (Some(here), Some(watches)) = (super::place_here(host), host.watches()) else {
+        let (Some(here), Some(watches)) = (super::here::place_here(host), host.watches()) else {
             continue;
         };
         for place in Marker::watched(paths, host.name().as_str(), workspace) {

@@ -41,7 +41,7 @@ pub(super) fn start_demo(
         .stdout(output.try_clone()?)
         .stderr(output)
         .process_group(0);
-    for name in super::NOT_INHERITED_BY_DEMOS {
+    for name in super::demos::NOT_INHERITED_BY_DEMOS {
         command.env_remove(name);
     }
     command

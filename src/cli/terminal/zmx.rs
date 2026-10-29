@@ -268,7 +268,7 @@ fn attach_new(zmx: &mut Command, name: &str, start: &Start<'_>) {
         .current_dir(start.cwd)
         .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
-    for variable in super::foreign_place_variables(HostName::Zmx) {
+    for variable in super::hosts::foreign_place_variables(HostName::Zmx) {
         zmx.env_remove(variable);
     }
 }
@@ -318,7 +318,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         &(demo.worker)(&place)?,
         &NewSession {
             environment: demo.env,
-            clear: super::NOT_INHERITED_BY_DEMOS,
+            clear: super::demos::NOT_INHERITED_BY_DEMOS,
             labels: vec![
                 owner_label(Owner::Workspace(demo.workspace)),
                 CREATED.into(),
@@ -401,7 +401,7 @@ async fn create_session(name: &str, cwd: &Path, launch: &NewSession<'_>) -> Resu
         .clear
         .iter()
         .copied()
-        .chain(super::foreign_place_variables(HostName::Zmx))
+        .chain(super::hosts::foreign_place_variables(HostName::Zmx))
     {
         create.env_remove(name);
     }

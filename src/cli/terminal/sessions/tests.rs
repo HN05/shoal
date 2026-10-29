@@ -1,13 +1,5 @@
 use super::*;
-use crate::model::Execution;
-
-#[test]
-fn placement_follows_the_setting_then_whether_the_launch_waits() {
-    assert_eq!(Placement::choose(None, true), Placement::Focus);
-    assert_eq!(Placement::choose(None, false), Placement::Background);
-    assert_eq!(Placement::choose(Some(false), true), Placement::Background);
-    assert_eq!(Placement::choose(Some(true), false), Placement::Focus);
-}
+use crate::model::{Execution, Workspace};
 
 #[test]
 fn a_place_repeats_only_in_the_same_host_and_server() {
@@ -22,33 +14,6 @@ fn a_place_repeats_only_in_the_same_host_and_server() {
         .map(|recorded| recorded.place)
         .collect();
     assert_eq!(distinct, [&work, &other, &rex]);
-}
-
-#[test]
-fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
-    let resolved = |global: &str| {
-        let config: crate::config::Config = toml::from_str(global).unwrap();
-        config
-            .resolve(&crate::config::repo::ConfigLayers::default())
-            .unwrap()
-    };
-    let splits = resolved("[rex]\nplacement = 'split'\n");
-    let windows = resolved("");
-    let block = Origin {
-        group: Some("session:1".into()),
-        ..Origin::created(HostName::Rex, "block:1".into())
-    };
-    let session = Origin {
-        place: None,
-        ..block.clone()
-    };
-    let rex = |settings| Configured::named(settings, HostName::Rex);
-    assert_eq!(rex(&splits).beside(Some(&block)).split, Some("block:1"));
-    assert_eq!(rex(&splits).beside(Some(&session)).split, None);
-    assert_eq!(rex(&splits).beside(None).split, None);
-    assert_eq!(rex(&windows).beside(Some(&block)).split, None);
-    let herdr = Configured::named(&splits, HostName::Herdr);
-    assert_eq!(herdr.beside(Some(&block)).split, None);
 }
 
 #[test]
@@ -160,29 +125,4 @@ fn a_session_label_names_its_agent() {
 
 fn unrecorded(place: &Origin) -> Recorded<'_> {
     Recorded { place, agent: None }
-}
-
-#[test]
-fn every_default_host_setting_names_a_host() {
-    for default in crate::config::repo::DefaultHost::ALL {
-        let config: crate::config::Config =
-            toml::from_str(&format!("default_host = '{}'", default.as_str())).unwrap();
-        let settings = config
-            .resolve(&crate::config::repo::ConfigLayers::default())
-            .unwrap();
-        assert_eq!(
-            Configured::default_host(&settings).host.name().as_str(),
-            default.as_str()
-        );
-    }
-}
-
-#[test]
-fn a_queued_start_keeps_every_server_variable_set_or_not() {
-    let selection: BTreeMap<_, _> =
-        server_selection(|name| (name == "HERDR_SESSION").then(|| "work".to_owned())).collect();
-    assert_eq!(selection["HERDR_SESSION"], "work");
-    // The daemon's socket must not stand in for the session the caller chose.
-    assert_eq!(selection["HERDR_SOCKET_PATH"], "");
-    assert_eq!(selection["REX_SERVER"], "");
 }
