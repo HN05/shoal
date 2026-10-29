@@ -18,7 +18,7 @@ fn restart(name: &str) -> Restart {
             state: None,
             interrupted: false,
             origin: None,
-            restarted_by: None,
+            restarted_by: Vec::new(),
             restart: None,
         },
         workspace,

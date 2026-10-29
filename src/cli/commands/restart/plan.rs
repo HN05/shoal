@@ -150,8 +150,8 @@ impl Plan {
                         && restart
                             .agent
                             .restarted_by
-                            .as_ref()
-                            .is_some_and(|run| runs.contains(run))
+                            .iter()
+                            .any(|run| runs.contains(run))
                 });
         self.restarts = restarts;
         self.skipped.extend(

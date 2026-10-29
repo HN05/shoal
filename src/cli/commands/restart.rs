@@ -146,7 +146,7 @@ async fn restart_in_turn(
             sleep_until(previous + STAGGER).await;
         }
         let restart = if wait {
-            let Some(restart) = next_idle(ctx, progress, &mut restarts).await? else {
+            let Some(restart) = next_idle(ctx, progress, &mut restarts, run).await? else {
                 break;
             };
             restart
@@ -175,7 +175,7 @@ async fn restart_together(
     let mut told = false;
     loop {
         if wait {
-            for gone in refresh(&mut waiting, &list_agents(ctx).await?) {
+            for gone in refresh(&mut waiting, &list_agents(ctx).await?, run) {
                 progress.skip(ctx, gone);
             }
         }
@@ -216,15 +216,17 @@ fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
 
 /// Take the first of `restarts` whose turn ended, from states read now,
 /// waiting until one has; an agent waiting for the user or without turn
-/// reports works. Agents that stopped running are reported as skipped.
+/// reports works. Agents that stopped running, or that another command of
+/// `run` restarted, are reported as skipped.
 async fn next_idle(
     ctx: &Context,
     progress: &mut Progress,
     restarts: &mut Vec<Restart>,
+    run: &str,
 ) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
-        for gone in refresh(restarts, &list_agents(ctx).await?) {
+        for gone in refresh(restarts, &list_agents(ctx).await?, run) {
             progress.skip(ctx, gone);
         }
         if restarts.is_empty() {
@@ -245,8 +247,9 @@ async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
 }
 
 /// Take each agent's turn state and restart from `running`, and drop the
-/// agents that no longer run or whose wrapper is gone, returning them.
-fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent]) -> Vec<Skipped> {
+/// agents that no longer run, whose wrapper is gone, or that another command
+/// of `run` restarted meanwhile, returning them.
+fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent], run: &str) -> Vec<Skipped> {
     let mut ended = Vec::new();
     for mut restart in std::mem::take(restarts) {
         let Some(current) = running
@@ -256,8 +259,12 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent]) -> Vec<Skipped
             ended.push(restart.skipped("the agent no longer runs"));
             continue;
         };
+        let restarted = restart.joins.is_none() && current.restarted_by.iter().any(|by| by == run);
         match skip_reason(&restart.workspace, current) {
             Some(reason) => ended.push(restart.skipped(reason)),
+            None if restarted => {
+                ended.push(restart.skipped("another command of this run restarted it already"));
+            }
             None => {
                 restart.agent = current.clone();
                 restarts.push(restart);

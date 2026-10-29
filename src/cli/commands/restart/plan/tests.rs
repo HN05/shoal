@@ -23,7 +23,7 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
         state: None,
         interrupted: false,
         origin: None,
-        restarted_by: None,
+        restarted_by: Vec::new(),
         restart: None,
     }
 }
@@ -150,7 +150,7 @@ fn only_an_agents_own_report_makes_it_idle() {
     assert_eq!(order, [("idle", true), ("working", false)]);
 }
 
-/// An agent of `workspace` the run `restarted_by` restarted last, restarting
+/// An agent of `workspace` the run `restarted_by` restarted, restarting
 /// for the run `restarting` when that is given.
 fn restarted_in(
     workspace: &Workspace,
@@ -158,7 +158,7 @@ fn restarted_in(
     restarting: Option<&str>,
 ) -> RunningAgent {
     RunningAgent {
-        restarted_by: restarted_by.map(Into::into),
+        restarted_by: restarted_by.map(Into::into).into_iter().collect(),
         restart: restarting.map(|run| PendingRestart {
             run: Some(run.into()),
         }),
