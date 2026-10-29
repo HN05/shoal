@@ -23,7 +23,6 @@ use crate::{
     cli::{
         client,
         internal::{Worker, internal_command},
-        terminal::PromptSession,
     },
     daemon::approvals::Undecided,
     env,
@@ -86,7 +85,7 @@ pub(super) async fn run_tracked(
 
 impl TrackedLaunch {
     /// The terminal session to wake the agent in when it is idle.
-    fn wake_session(&self, mode: &Mode) -> Option<PromptSession> {
+    fn wake_session(&self, mode: &Mode) -> Option<wake::Wake> {
         let integration = self.auth.as_ref().and_then(|auth| auth.integration);
         wake::session(integration, mode)
     }
@@ -103,13 +102,13 @@ impl TrackedLaunch {
         &mut self,
         paths: &Paths,
         mode: &Mode,
-        wake: Option<PromptSession>,
+        wake: Option<wake::Wake>,
     ) -> Result<Outcome> {
         if mode.is_setup() && self.command.is_empty() {
             return Ok(Outcome::Exited(0));
         }
         // Prompts only while this child runs, which reports its state.
-        let _waker = wake.map(|session| wake::start(paths, &self.plan.workspace.id, session));
+        let _waker = wake.map(|wake| wake::start(paths, &self.plan, wake));
         let _attachment = self.attachment(paths);
         let (plan, recovery) = (&self.plan, self.recovery.as_ref());
         supervise(

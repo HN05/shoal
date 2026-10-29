@@ -118,6 +118,12 @@ pub(in crate::cli) trait Integration: Sync {
         Wake::Never
     }
 
+    /// The key that cancels the agent's running turn in its terminal and
+    /// leaves it waiting for the next message, unless Shoal knows none.
+    fn interrupt_key(&self) -> Option<&'static str> {
+        None
+    }
+
     /// The programs a launch starts, when not its configured command's.
     fn programs(&self) -> Option<Vec<&'static str>> {
         None
@@ -802,10 +808,25 @@ pub(in crate::cli) async fn start_chat(
     }
 }
 
-/// Whether the wrapper of an agent with integration `kind` wakes it by
-/// typing a prompt.
-pub(crate) fn wakes_by_prompt(kind: IntegrationKind) -> bool {
-    integration(kind).wakes() == Wake::Prompt
+/// When the wrapper of an agent wakes it by typing a prompt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PromptWake {
+    /// Whenever it idles: no hook of its own starts its turn.
+    Always,
+    /// While it idles after an interrupted turn, after which the hook that
+    /// wakes it otherwise does not run.
+    AfterInterrupt,
+}
+
+/// When the wrapper of an agent with integration `kind` wakes it by typing
+/// a prompt, unless it never does.
+pub(crate) fn prompt_wake(kind: IntegrationKind) -> Option<PromptWake> {
+    let integration = integration(kind);
+    match integration.wakes() {
+        Wake::Prompt => Some(PromptWake::Always),
+        Wake::Hook if integration.interrupt_key().is_some() => Some(PromptWake::AfterInterrupt),
+        Wake::Hook | Wake::Never => None,
+    }
 }
 
 /// The failure an agent with integration `kind` reports in `event`.

@@ -72,6 +72,11 @@ impl Integration for Codex {
         Wake::Prompt
     }
 
+    /// Ctrl-C, which quits Codex only when pressed again.
+    fn interrupt_key(&self) -> Option<&'static str> {
+        Some("\x03")
+    }
+
     fn app(&self) -> Option<&'static App> {
         Some(&APP)
     }

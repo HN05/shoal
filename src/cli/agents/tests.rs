@@ -59,6 +59,14 @@ fn integrations_serve_only_the_names_they_list() {
     assert!(integration(IntegrationKind::Claude).trust_file().is_some());
     assert_eq!(integration(IntegrationKind::Codex).wakes(), Wake::Prompt);
     assert_eq!(integration(IntegrationKind::Claude).wakes(), Wake::Hook);
+    assert_eq!(
+        prompt_wake(IntegrationKind::Codex),
+        Some(PromptWake::Always)
+    );
+    assert_eq!(
+        prompt_wake(IntegrationKind::Claude),
+        Some(PromptWake::AfterInterrupt)
+    );
     let configured = integration(IntegrationKind::None);
     assert!(configured.trust_file().is_none());
     assert!(configured.hook_args(false).unwrap().is_empty());

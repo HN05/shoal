@@ -83,6 +83,11 @@ impl Integration for Claude {
         Wake::Hook
     }
 
+    /// Esc.
+    fn interrupt_key(&self) -> Option<&'static str> {
+        Some("\x1b")
+    }
+
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CLAUDE_CODE)
     }
