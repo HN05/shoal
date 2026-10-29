@@ -45,8 +45,9 @@ impl Host for Zmx {
         HostName::Zmx
     }
 
+    /// A zmx session.
     fn serves(&self) -> bool {
-        on_terminal()
+        in_session()
     }
 
     fn ensure_installed(&self) -> Result<()> {
@@ -129,6 +130,11 @@ impl Places for Zmx {
 
     /// A detached session ends with its agent, leaving no shell.
     fn places_keep_shells(&self) -> bool {
+        false
+    }
+
+    /// A session cannot show another session to its terminal.
+    fn opens_beside_own(&self) -> bool {
         false
     }
 }
@@ -226,9 +232,12 @@ impl Types for Zmx {
 
 /// Whether this process could attach a new session: a terminal outside zmx.
 fn on_terminal() -> bool {
-    std::io::stdin().is_terminal()
-        && std::io::stdout().is_terminal()
-        && std::env::var_os(SESSION_VAR).is_none()
+    std::io::stdin().is_terminal() && std::io::stdout().is_terminal() && !in_session()
+}
+
+/// Whether this process runs in a zmx session.
+fn in_session() -> bool {
+    std::env::var_os(SESSION_VAR).is_some()
 }
 
 /// Start `start`, `agent`'s tracked execution for `owner`, in a new session

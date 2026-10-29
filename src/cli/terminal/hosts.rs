@@ -1,6 +1,8 @@
 //! The terminal hosts Shoal knows, in the order they claim a terminal, and
 //! how config sets each up: which one serves this terminal, which one is the
 //! default, and where a new place goes beside the caller.
+use std::io::IsTerminal;
+
 use super::{
     herdr,
     host::{Host, Places},
@@ -13,7 +15,7 @@ use crate::{
 };
 
 /// Hosts in the order they claim a terminal, which is [`HostName`]'s; a
-/// terminal none of them serves runs everything in place.
+/// terminal none of them serves goes to the default host.
 fn registered() -> impl Iterator<Item = Registered> {
     HostName::ALL.iter().copied().filter_map(registration)
 }
@@ -134,6 +136,19 @@ impl Configured {
         self.options.enabled && self.host.serves()
     }
 
+    /// The host as it serves a place of its own: one that opens no places
+    /// beside its own keeps starts there in place.
+    fn serving(mut self) -> Self {
+        if self
+            .host
+            .places()
+            .is_some_and(|places| !places.opens_beside_own())
+        {
+            self.options.opens_places = false;
+        }
+        self
+    }
+
     /// Whether a queued start from `origin`, the place that queued it, joins
     /// its group here: a place of this host in a group, such as a Herdr tab
     /// in its workspace. A zmx session is in none, so a start queued from it
@@ -198,14 +213,20 @@ impl Host for Plain {
     }
 }
 
-/// The host serving this terminal under `settings`. zmx claims a terminal
-/// that no other host serves, which goes to the default host.
+/// The host serving this terminal under `settings`. A terminal no host
+/// serves goes to the default host, and a process without a terminal runs
+/// in place.
 pub(super) fn current(settings: &Effective) -> Configured {
     match Configured::all(settings).find(Configured::serves) {
-        Some(host) if host.host.name() == HostName::Zmx => Configured::default_host(settings),
-        Some(host) => host,
+        Some(host) => host.serving(),
+        None if on_terminal() => Configured::default_host(settings),
         None => Configured::plain(settings),
     }
+}
+
+/// Whether this process runs on a terminal.
+fn on_terminal() -> bool {
+    std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
 
 /// The host that starts work beside this terminal. A place a host opened for

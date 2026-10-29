@@ -43,3 +43,26 @@ fn every_host_but_the_plain_terminal_can_be_the_default() {
         assert_eq!(registered.host.name(), name);
     }
 }
+
+#[test]
+fn a_host_serving_a_place_of_its_own_opens_places_beside_it_unless_it_cannot() {
+    let config: crate::config::Config = toml::from_str("").unwrap();
+    let settings = config
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
+    let serving = |name| {
+        Configured::named(&settings, name)
+            .serving()
+            .places()
+            .is_some()
+    };
+    assert!(serving(HostName::Herdr));
+    assert!(serving(HostName::Rex));
+    // Starts in a zmx session run in place.
+    assert!(!serving(HostName::Zmx));
+    assert!(
+        Configured::named(&settings, HostName::Zmx)
+            .places()
+            .is_some()
+    );
+}

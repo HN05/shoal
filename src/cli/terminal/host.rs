@@ -150,6 +150,12 @@ pub(in crate::cli) trait Places: Sync {
     fn places_keep_shells(&self) -> bool {
         true
     }
+
+    /// Whether a start from a place of this host opens another place beside
+    /// it; otherwise the start runs in place there.
+    fn opens_beside_own(&self) -> bool {
+        true
+    }
 }
 
 /// A host that reads the places it opened for workspaces, so a watcher
