@@ -1279,11 +1279,19 @@ pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
 
 /// Type `keys` into the demo `launch` describes.
 pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
-    let place = &launch.origin;
-    match kept_by(place).demos() {
-        Some(demos) => demos.send_demo_keys(place, keys).await,
+    match kept_by(&launch.origin).types() {
+        Some(_) => send_keys(&launch.origin, keys).await,
         None => background::send_demo_keys(),
     }
+}
+
+/// Type `keys` into `place`, as they are, through the host that keeps it.
+pub(in crate::cli) async fn send_keys(place: &Origin, keys: &str) -> Result<()> {
+    let host = kept_by(place);
+    let types = host
+        .types()
+        .with_context(|| format!("Shoal cannot type into places of {}", host.name()))?;
+    types.send_keys(place, keys).await
 }
 
 /// The ID of the place of `host` this process runs in, from its origin record.

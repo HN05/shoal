@@ -10,7 +10,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     Demo, Host, PlaceState, Session, Start, Watched,
-    host::{Demos, Places, Prompts, Sessions, Watches},
+    host::{Demos, Places, Prompts, Sessions, Types, Watches},
     typed::Typed,
 };
 use crate::{
@@ -56,6 +56,10 @@ impl Host for Rex {
     }
 
     fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn types(&self) -> Option<&dyn Types> {
         Some(self)
     }
 }
@@ -183,8 +187,10 @@ impl Demos for Rex {
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
         Box::pin(async move { Server::recorded(&place.data)?.capture(place.id()).await })
     }
+}
 
-    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+impl Types for Rex {
+    fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move { Server::recorded(&place.data)?.send(place.id(), keys).await })
     }
 }

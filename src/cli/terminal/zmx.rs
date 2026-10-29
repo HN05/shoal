@@ -18,7 +18,7 @@ use tokio::process::Command;
 
 use super::{
     Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Closes, Demos, Places, Prompts, Sessions, Watches},
+    host::{Closes, Demos, Places, Prompts, Sessions, Types, Watches},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -74,6 +74,10 @@ impl Host for Zmx {
     }
 
     fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn types(&self) -> Option<&dyn Types> {
         Some(self)
     }
 }
@@ -228,8 +232,10 @@ impl Demos for Zmx {
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
         Box::pin(demo_screen(place.id()))
     }
+}
 
-    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+impl Types for Zmx {
+    fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(send_keys(place.id(), keys))
     }
 }

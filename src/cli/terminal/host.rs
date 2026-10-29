@@ -59,6 +59,12 @@ pub(in crate::cli) trait Host: Sync {
     fn demos(&self) -> Option<&dyn Demos> {
         None
     }
+
+    /// How this host types into the places it records, unless it types
+    /// into none.
+    fn types(&self) -> Option<&dyn Types> {
+        None
+    }
 }
 
 /// A host that opens places, such as tabs, windows or sessions, beside the
@@ -267,8 +273,16 @@ pub(in crate::cli) trait Prompts: Sync {
     fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
+/// A host that types into the places it records, such as a demo's or the
+/// place an agent runs in, for a process anywhere on its server.
+pub(in crate::cli) trait Types: Sync {
+    /// Type `keys` into `place` as they are, control characters included.
+    fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>>;
+}
+
 /// A host that keeps demos in places of its own, which the user opens as
-/// [`Places::show`] shows a place, reads and types into.
+/// [`Places::show`] shows a place and reads, and types into as [`Types`]
+/// does.
 pub(in crate::cli) trait Demos: Sync {
     /// Start `demo` in a new background place of this host, returning the
     /// place.
@@ -276,9 +290,6 @@ pub(in crate::cli) trait Demos: Sync {
 
     /// What the demo at `place` shows, oldest line first.
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>>;
-
-    /// Type `keys` into the demo at `place`.
-    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The demo worker's argv for the place it runs in.

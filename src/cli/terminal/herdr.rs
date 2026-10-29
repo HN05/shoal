@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     Demo, Host, Options, PlaceState, Session, Start, Watched,
-    host::{Closes, Demos, Places, Sessions, Watches},
+    host::{Closes, Demos, Places, Sessions, Types, Watches},
 };
 
 mod attach;
@@ -60,6 +60,10 @@ impl Host for Herdr {
     }
 
     fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn types(&self) -> Option<&dyn Types> {
         Some(self)
     }
 }
@@ -165,8 +169,10 @@ impl Demos for Herdr {
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
         Box::pin(demo::screen(place))
     }
+}
 
-    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
+impl Types for Herdr {
+    fn send_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(demo::send(place, keys))
     }
 }
