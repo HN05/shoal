@@ -760,10 +760,30 @@ async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>>
         .collect())
 }
 
-/// The URL of one of `items`, listed by kind, number and title, which
-/// Shoal does not record for every item, and whether to open it in the
-/// browser, which workspace processes cannot.
+/// The URL of one of `items` and whether to open it in the browser, which
+/// workspace processes cannot.
 fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<(String, bool)> {
+    let entries = items
+        .iter()
+        .map(|item| item.url.clone())
+        .zip(linked_labels(items))
+        .collect();
+    let bindings: &[_] = &[
+        ("enter", "view", false),
+        ("ctrl-o", "open in browser", true),
+    ];
+    let bindings = if env::inherits_scope(&ctx.paths.state) {
+        &bindings[..1]
+    } else {
+        bindings
+    };
+    let picked = ui::pick_with_keys(ctx, "View> ", entries, KeyBindings(bindings))?;
+    Ok((picked.id, picked.action))
+}
+
+/// One aligned row per item: its kind, number, title, which Shoal does not
+/// record for every item, and URL.
+fn linked_labels(items: &[LinkedItem]) -> Vec<String> {
     let cells = items
         .iter()
         .map(|item| {
@@ -783,19 +803,7 @@ fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<(String, bool)> {
         })
         .collect();
     let limit = ui::picker_width().map(|width| WidthLimit { column: 2, width });
-    let labels = ui::aligned_to(cells, Palette::picker(), limit);
-    let entries = items.iter().map(|item| item.url.clone()).zip(labels);
-    let bindings: &[_] = &[
-        ("enter", "view", false),
-        ("ctrl-o", "open in browser", true),
-    ];
-    let bindings = if env::inherits_scope(&ctx.paths.state) {
-        &bindings[..1]
-    } else {
-        bindings
-    };
-    let picked = ui::pick_with_keys(ctx, "View> ", entries.collect(), KeyBindings(bindings))?;
-    Ok((picked.id, picked.action))
+    ui::aligned_to(cells, Palette::picker(), limit)
 }
 
 #[derive(Clone)]
