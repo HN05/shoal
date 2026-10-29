@@ -24681,7 +24681,10 @@ fn a_later_session_under_a_recorded_name_is_not_the_recorded_one() {
     fs::write(&sessions, "  name=persist\tpid=1\tcreated=10\tclients=0\n").unwrap();
     let agent = agent_in_session(&fixture, "persist", "persist");
     let listed = || fixture.ok(&["status", "persist"])["sessions"].clone();
-    assert_eq!(listed(), serde_json::json!([{"name": "persist", "clients": 0}]));
+    assert_eq!(
+        listed(),
+        serde_json::json!([{"name": "persist", "clients": 0}])
+    );
     // A record left by a wrapper that crashed outlives its session; another
     // session under the name is not the recorded one.
     fs::write(&sessions, "  name=persist\tpid=2\tcreated=20\tclients=0\n").unwrap();
