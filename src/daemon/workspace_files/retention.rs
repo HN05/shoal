@@ -19,13 +19,13 @@ impl Manager {
             .gates
             .lock_message_files(&workspace.repository_id)
             .await;
-        let id = workspace.id.clone();
+        let (id, name) = (workspace.id.clone(), workspace.name.clone());
         let parent = workspace
             .parent_workspace
             .as_ref()
             .map(|parent| parent.id.clone());
         self.store
-            .run(move |db| records::forget_removed(db, &id, parent.as_deref()))
+            .run(move |db| records::forget_removed(db, &id, &name, parent.as_deref()))
             .await?;
         let repo = self.repository(&workspace.repository_id).await?;
         let Some(layout) = Layout::of(&repo) else {

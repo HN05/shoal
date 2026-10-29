@@ -436,6 +436,32 @@ async fn a_completion_hands_back_a_bounded_number_of_files() {
 }
 
 #[tokio::test]
+async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
+    let (temp, manager) = manager().await;
+    let audit = workspace(&temp, &manager).await;
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    manager
+        .mark_done(&audit.id, false, false, vec![report])
+        .await
+        .unwrap();
+    let renamed = manager
+        .rename_workspace(&audit.id, "renamed", None)
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &audit.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    let files = manager.workspace_files(&renamed.name).await.unwrap();
+    assert_eq!(files[0].workspace, renamed.name);
+}
+
+#[tokio::test]
 async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;

@@ -172,16 +172,22 @@ pub(super) fn forget_workspace(db: &Connection, workspace_id: &str) -> Result<()
 }
 
 /// Forget the records of the removed workspace `workspace_id` but its
-/// results, and move the results it was the parent of to `parent`.
+/// results, which keep its last `name`, and move the results it was the
+/// parent of to `parent`.
 pub(super) fn forget_removed(
     db: &mut Connection,
     workspace_id: &str,
+    name: &str,
     parent: Option<&str>,
 ) -> Result<()> {
     let tx = db.transaction()?;
     tx.execute(
         "DELETE FROM workspace_files WHERE workspace_id=?1 AND source!=?2",
         params![workspace_id, FileSource::Result],
+    )?;
+    tx.execute(
+        "UPDATE workspace_files SET workspace=?2 WHERE workspace_id=?1",
+        params![workspace_id, name],
     )?;
     tx.execute(
         "UPDATE workspace_files SET parent_id=?2 WHERE parent_id=?1",
