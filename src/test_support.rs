@@ -6,7 +6,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::{daemon::workspace::Manager, paths::Paths};
+use crate::{
+    daemon::workspace::Manager,
+    paths::Paths,
+    process::identity::{self, Identity},
+};
 
 pub fn git(repo: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
@@ -132,8 +136,8 @@ pub async fn assert_pending(future: impl std::future::Future) {
 /// A shell left running from `dir` after its parent exited, as a recording's
 /// setup script is, with a `sleep` it started there. Dropping it kills both.
 pub struct Detached {
-    pub shell: u32,
-    pub child: u32,
+    pub shell: Identity,
+    pub child: Identity,
 }
 
 impl Detached {
@@ -144,9 +148,8 @@ impl Detached {
              >/dev/null 2>&1 &",
             pids = pids.display()
         );
-        let status = tokio::process::Command::new("sh")
+        let status = isolated_command("sh", dir)
             .args(["-c", &script])
-            .current_dir(dir)
             .status()
             .await
             .unwrap();
@@ -161,20 +164,34 @@ impl Detached {
             tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         }
         let text = fs::read_to_string(pids).unwrap();
-        let mut fields = text.split_whitespace().map(|pid| pid.parse().unwrap());
+        let mut identities = text
+            .split_whitespace()
+            .map(|pid| identity::capture(pid.parse().unwrap()).unwrap().unwrap());
         Self {
-            shell: fields.next().unwrap(),
-            child: fields.next().unwrap(),
+            shell: identities.next().unwrap(),
+            child: identities.next().unwrap(),
         }
     }
 }
 
 impl Drop for Detached {
     fn drop(&mut self) {
-        for pid in [self.child, self.shell] {
-            if crate::process::identity::capture(pid).is_ok_and(|live| live.is_some()) {
-                unsafe { libc::kill(pid as i32, libc::SIGKILL) };
-            }
+        for process in [&self.child, &self.shell] {
+            let _ = identity::signal(process, libc::SIGKILL);
         }
     }
+}
+
+/// `program` run from `dir` without the runner's Shoal variables or
+/// configuration locations.
+pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(program);
+    command
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env("HOME", dir)
+        .current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .kill_on_drop(true);
+    command
 }

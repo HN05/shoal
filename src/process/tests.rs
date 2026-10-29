@@ -24,10 +24,8 @@ async fn detached_in_directory_finds_adopted_processes_and_their_children_there(
     let dir = root.path().join("worktree");
     std::fs::create_dir(&dir).unwrap();
     let detached = crate::test_support::Detached::start(&dir, &root.path().join("pids")).await;
-    let mut attached = Command::new("sleep")
+    let mut attached = crate::test_support::isolated_command("sleep", &dir)
         .arg("60")
-        .current_dir(&dir)
-        .kill_on_drop(true)
         .spawn()
         .unwrap();
 
@@ -38,8 +36,8 @@ async fn detached_in_directory_finds_adopted_processes_and_their_children_there(
         .map(|identity| identity.pid)
         .collect();
 
-    assert!(found.contains(&detached.shell), "{found:?}");
-    assert!(found.contains(&detached.child), "{found:?}");
+    assert!(found.contains(&detached.shell.pid), "{found:?}");
+    assert!(found.contains(&detached.child.pid), "{found:?}");
     assert!(!found.contains(&attached.id().unwrap()), "{found:?}");
     attached.kill().await.unwrap();
 }
