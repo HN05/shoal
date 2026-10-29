@@ -170,7 +170,7 @@ fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     // The daemon's worker opens the tab on the session the caller chose.
     let sessions = fixture.root.path().join("herdr-list-sessions");
     wait_until("the queued start to look up its workspace", || {
-        sessions.exists()
+        fs::read_to_string(&sessions).is_ok_and(|looked_up| looked_up.ends_with('\n'))
     });
     assert_eq!(fs::read_to_string(&sessions).unwrap(), "work\n");
     wait_until("the queued start to open its tab", || {

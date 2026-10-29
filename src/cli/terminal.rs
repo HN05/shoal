@@ -577,18 +577,21 @@ pub(crate) fn start_environment() -> BTreeMap<String, String> {
     if let Some(origin) = current_origin().and_then(|origin| serde_json::to_string(&origin).ok()) {
         env.insert(env::ORIGIN.to_owned(), origin);
     }
-    env.extend(server_selection());
+    env.extend(server_selection(|name| std::env::var(name).ok()));
     env
 }
 
-/// The variables of this process that choose a host's server, so a start
-/// queued outside the host's places opens its place on that server.
-fn server_selection() -> impl Iterator<Item = (String, String)> {
+/// The variables that choose a host's server, with the values `var` gives
+/// them, so a start queued outside the host's places opens its place on
+/// that server. An unset one is empty, which hosts read as unset, so the
+/// daemon's own value does not stand in for it.
+fn server_selection(
+    var: impl Fn(&str) -> Option<String>,
+) -> impl Iterator<Item = (String, String)> {
     hosts()
         .filter_map(Host::places)
         .flat_map(Places::server_variables)
-        .filter_map(|name| Some(((*name).to_owned(), std::env::var(name).ok()?)))
-        .filter(|(_, value)| !value.is_empty())
+        .map(move |name| ((*name).to_owned(), var(name).unwrap_or_default()))
 }
 
 /// The place a start the daemon runs for this worker comes from: the one
