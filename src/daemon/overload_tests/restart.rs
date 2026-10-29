@@ -171,16 +171,26 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     )
     .await;
     interrupted(&manager, &workspace, "unrecorded", &earlier, None, None).await;
+    // A pass interrupted after keeping its session, which is gone.
+    interrupted(&manager, &workspace, "kept", &earlier, None, None).await;
+    let kept_session = LastSession {
+        execution: "kept".into(),
+        agent: "fixture".into(),
+        session: Some("kept-session".into()),
+        moved: false,
+        origin: None,
+    };
+    kept_session.write(&manager.paths, &workspace.id).unwrap();
     let wrapper = exited().await;
     interrupted(&manager, &workspace, "this-boot", &wrapper, None, None).await;
-    for id in ["unrecorded", "this-boot"] {
+    for id in ["unrecorded", "kept", "this-boot"] {
         fs::remove_file(record_path(&manager.paths, &workspace.id, id)).unwrap();
     }
     manager
         .store
         .run(|db| {
             db.execute(
-                "UPDATE executions SET agent='fixture' WHERE id='unrecorded'",
+                "UPDATE executions SET agent='fixture' WHERE id IN ('unrecorded','kept')",
                 [],
             )?;
             Ok(())
@@ -212,13 +222,16 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     let last = LastSession::all(&reopened.paths, &workspace.id).unwrap();
     assert_eq!(
         last,
-        [LastSession {
-            execution: "unrecorded".into(),
-            agent: "fixture".into(),
-            session: Some("rebooted-session".into()),
-            moved: false,
-            origin: None,
-        }]
+        [
+            kept_session,
+            LastSession {
+                execution: "unrecorded".into(),
+                agent: "fixture".into(),
+                session: Some("rebooted-session".into()),
+                moved: false,
+                origin: None,
+            }
+        ]
     );
     assert!(blocked(&reopened).await.is_empty());
     reopened.store.shutdown().await;

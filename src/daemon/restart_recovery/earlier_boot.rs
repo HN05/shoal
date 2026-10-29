@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use super::{Manager, store};
 use crate::{
-    daemon::log, execution::recovery::record_path, model::Execution, state::ExecutionState,
+    daemon::log, execution::recovery::saved_path, model::Execution, state::ExecutionState,
 };
 
 impl Manager {
@@ -33,7 +33,9 @@ impl Manager {
     /// Keep the session of an agent that ended without saving a recovery
     /// record as `shoal resume` continues one that exited on its own.
     async fn keep_unsaved_session(&self, execution: &Execution) -> Result<()> {
-        if record_path(&self.paths, &execution.workspace_id, &execution.id).exists() {
+        // Its record, or the last session an interrupted pass kept, which
+        // keeping it again would replace once its reported session is gone.
+        if saved_path(&self.paths, &execution.workspace_id, &execution.id).exists() {
             return Ok(());
         }
         let id = execution.id.clone();
