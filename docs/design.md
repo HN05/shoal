@@ -154,7 +154,14 @@ may last indefinitely; that wrapper reattaches to the updated daemon. Restores w
 and manual recovery persists across restarts. Saved recovery represents
 unfinished work until restored or explicitly discarded, except that a done
 assignment needs no agent, so a done workspace's agent is restored neither
-automatically nor by `shoal resume --all`, only by resuming that workspace. A
+automatically nor by `shoal resume --all`, only by resuming that workspace.
+An idle agent of a done workspace whose cleanup is held could run until the
+workspace goes, so the cleanup sweep stops it as protection stops an agent
+between turns, and an update restores it although the assignment is done,
+since Shoal rather than the agent ended it. Load plays no part, so the recovery
+policy does not apply. It stops only once its prompt cache has expired, since
+a resumed session's first request writes most of the cache again; timers the
+agent keeps itself end with it, which a done assignment leaves nothing to do. A
 record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an

@@ -323,6 +323,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     step("completion cleanup", manager.sweep_completed().await);
     step("PR cleanup", manager.sweep_prs().await);
     step("idle cleanup", sweep_idle(manager, timers).await);
+    step("idle agents", manager.stop_idle_agents().await);
     step(
         "merged cleanup",
         merged::sweep(manager, &mut timers.merged).await,

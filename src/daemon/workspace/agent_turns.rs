@@ -20,11 +20,24 @@ use crate::{
 pub(crate) struct Turn {
     pub state: AgentState,
     pub since: i64,
+    /// When an idle agent's prompt cache expires, in Unix seconds, for an AI
+    /// tool whose cache lifetime is known.
+    pub cache_expires_at: Option<i64>,
 }
 
 impl Turn {
     pub(crate) fn idle(&self) -> bool {
         self.state == AgentState::Idle
+    }
+
+    /// Whether the agent is idle with no prompt cache left at `now`, so
+    /// restoring it costs no more than its next turn would. An unknown cache
+    /// lifetime counts as expired.
+    pub(crate) fn idle_without_cache(&self, now: i64) -> bool {
+        self.idle()
+            && self
+                .cache_expires_at
+                .is_none_or(|expires_at| expires_at <= now)
     }
 }
 
@@ -32,7 +45,7 @@ impl Turn {
 fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> {
     let turns: HashMap<String, Turn> = db
         .prepare(
-            "SELECT execution_id,state,since FROM workspace_agent_state
+            "SELECT execution_id,state,since,prompt_cache_expires_at FROM workspace_agent_state
              WHERE execution_id IS NOT NULL",
         )?
         .query_map([], |row| {
@@ -41,6 +54,7 @@ fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> 
                 Turn {
                     state: row.get(1)?,
                     since: row.get(2)?,
+                    cache_expires_at: row.get(3)?,
                 },
             ))
         })?

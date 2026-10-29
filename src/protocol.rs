@@ -716,10 +716,33 @@ impl Protection {
         self.reason == MOVE_REASON
     }
 
+    /// An idle agent of a done workspace whose cleanup is held, which Shoal
+    /// stops to free memory. Its restore waits for an update; wrappers handle
+    /// it as any protection stop they restore.
+    pub(crate) fn idle_held() -> Self {
+        Self {
+            reason: IDLE_HELD_REASON.into(),
+            resumes_when: "an update arrives for it".into(),
+        }
+    }
+
+    /// Whether Shoal stopped the agent for being idle, not for load.
+    pub(crate) fn is_idle(&self) -> bool {
+        self.reason == IDLE_HELD_REASON
+    }
+
     /// Whether `[overload.recovery]` decides its restore, as for a stop that
-    /// load or disk space caused; `shoal queue move` restores whatever it says.
+    /// load or disk space caused; `shoal queue move` and idle stops restore
+    /// whatever it says.
     pub(crate) fn follows_overload_recovery(&self) -> bool {
-        !self.is_queue_move()
+        !self.is_queue_move() && !self.is_idle()
+    }
+
+    /// Whether a done assignment cancels its restore. An idle stop's restore
+    /// waits for an update all the same, since the agent ran until Shoal
+    /// stopped it.
+    pub(crate) fn ends_with_assignment(&self) -> bool {
+        !self.is_idle()
     }
 }
 
@@ -728,6 +751,9 @@ const RESTART_REASON: &str = "restarted by shoal restart";
 
 /// The stop reason of an agent `shoal queue move` sent to the queue.
 const MOVE_REASON: &str = "moved in the agent queue by shoal queue move";
+
+/// The stop reason of an idle agent of a done workspace whose cleanup is held.
+const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]

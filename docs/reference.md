@@ -283,7 +283,7 @@ positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
 a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
-or a done assignment prevent recovery. Surviving processes Shoal cannot stop, or cannot prove stopped,
+or a done assignment prevent recovery, except from an [idle stop](#idle-agents). Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` notification names them, and the wrapper keeps
 waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
@@ -455,6 +455,22 @@ but a closed lid still sleeps a Mac that is not in closed-display mode. The
 inhibitor ends with the daemon. When it cannot start or ends on its own, such as
 when polkit refuses the lock, the daemon records a `keep_awake_failed`
 notification and tries again only once agents have no work or the config reloads.
+
+### Idle agents
+
+An idle agent keeps its memory while it waits for its next update. Each
+[cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of
+done workspaces that something keeps from cleanup, such as a
+[hold](#workspace-holds), an open [question](#questions) or a
+[child workspace](#child-workspaces). Only an agent idle with no processes running
+outside its process group, with a restore command, and whose
+[prompt cache](#agent-state) has expired stops: a resumed agent's first request
+writes most of its cache again, which an expired cache costs anyway. An agent
+whose cache lifetime is unknown counts as expired. The stop saves the agent as
+[overload protection](#overload-protection) does, records an `agent_stopped`
+notification, and restores the agent once an update arrives for it, though its
+assignment is done and whatever `[overload.recovery]` says. Timers the agent
+keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it.
 
 ## Workspaces
 

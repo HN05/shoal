@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
 
-use super::workspace::{Grant, Manager, Pause, StopRequest};
+use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
 use crate::daemon::log;
 use crate::{
     execution::recovery,
@@ -85,7 +85,7 @@ pub(super) async fn pause(
         Ok(stopped) => stopped,
         Err(error) => return Ok(restore_failed(error)),
     };
-    match assignment_done(manager, workspace_id).await {
+    match assignment_done(manager, workspace_id, &protection).await {
         Ok(false) => {}
         Ok(true) => return Ok(done_cancels_restore()),
         Err(error) => return Ok(restore_failed(error)),
@@ -114,7 +114,7 @@ pub(super) async fn pause(
             !follows_policy || manager.config().overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
-        prepare_resume(manager, execution_id, workspace_id, grant).await
+        prepare_resume(manager, execution_id, workspace_id, grant, &protection).await
     }
     .await;
     Ok(resume.unwrap_or_else(restore_failed))
@@ -223,10 +223,14 @@ fn restore_failed(error: anyhow::Error) -> Action {
     )))
 }
 
-/// Whether `shoal done` finished the workspace's assignment, which leaves its
-/// stopped agent nothing to do.
-async fn assignment_done(manager: &Manager, workspace_id: &str) -> Result<bool> {
-    Ok(manager.completion(workspace_id).await?.is_some())
+/// Whether `shoal done` finished the workspace's assignment, which leaves an
+/// agent `protection` stopped nothing to do.
+async fn assignment_done(
+    manager: &Manager,
+    workspace_id: &str,
+    protection: &Protection,
+) -> Result<bool> {
+    Ok(protection.ends_with_assignment() && manager.completion(workspace_id).await?.is_some())
 }
 
 fn done_cancels_restore() -> Action {
@@ -311,8 +315,9 @@ async fn prepare_resume(
     execution_id: &str,
     workspace_id: &str,
     grant: Grant,
+    protection: &Protection,
 ) -> Result<Action> {
-    if assignment_done(manager, workspace_id).await? {
+    if assignment_done(manager, workspace_id, protection).await? {
         return Ok(done_cancels_restore());
     }
     resume(manager, execution_id, workspace_id, Some(grant)).await

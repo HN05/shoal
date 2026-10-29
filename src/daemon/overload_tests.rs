@@ -14,6 +14,7 @@ use tokio::net::UnixListener;
 
 mod agent_restart;
 mod idle_cleanup;
+mod idle_stop;
 mod queue_move;
 mod restart;
 

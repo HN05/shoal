@@ -1,0 +1,172 @@
+use super::*;
+use crate::{
+    daemon::{
+        notifications::NotificationKind,
+        workspace::{ExecutionKind, StartedExecution},
+    },
+    execution::recovery::Record,
+    model::Workspace,
+    test_support::{manager, repository},
+};
+
+/// How a test workspace keeps its agent.
+#[derive(Clone, Copy)]
+struct Setup {
+    state: AgentState,
+    done: bool,
+    held: bool,
+    recover: bool,
+}
+
+const HELD_DONE_IDLE: Setup = Setup {
+    state: AgentState::Idle,
+    done: true,
+    held: true,
+    recover: true,
+};
+
+/// A workspace named `name` whose agent `setup` describes.
+async fn agent(
+    manager: &Manager,
+    repository_id: &str,
+    name: &str,
+    setup: Setup,
+) -> (Workspace, StartedExecution) {
+    let workspace = manager
+        .create_workspace(repository_id, name.into(), None, None, None)
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &execution.plan.id,
+            "claude",
+            &workspace.id,
+            &workspace.name,
+            setup.recover,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    manager
+        .set_agent_state(
+            &workspace.name,
+            setup.state,
+            Some(execution.plan.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    if setup.held {
+        manager
+            .acquire_hold(&workspace.id, "app".into(), None)
+            .await
+            .unwrap();
+    }
+    if setup.done {
+        manager.mark_done(&workspace.id, true, false).await.unwrap();
+    }
+    (workspace, execution)
+}
+
+/// Set when the workspace's prompt cache expires, `offset` seconds from now.
+async fn cache_expires_in(manager: &Manager, workspace: &Workspace, offset: i64) {
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspace_agent_state
+                 SET prompt_cache_expires_at=unixepoch()+?2 WHERE workspace_id=?1",
+                rusqlite::params![id, offset],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_held_done_workspaces_idle_agent_stops_once_its_cache_expires() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    cache_expires_in(&manager, &workspace, 600).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
+
+    cache_expires_in(&manager, &workspace, 0).await;
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
+    let path =
+        crate::execution::recovery::record_path(&manager.paths, &workspace.id, &execution.plan.id);
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.turn, Some(AgentState::Idle));
+    let notifications = manager.notifications(false, 10).await.unwrap();
+    let stopped: Vec<_> = notifications
+        .iter()
+        .filter(|event| event.kind == NotificationKind::AgentStopped)
+        .collect();
+    assert_eq!(stopped.len(), 1);
+    assert!(
+        stopped[0].message.contains(
+            "idle in a done workspace whose cleanup is held; \
+             automatic session restore waits until an update arrives for it"
+        ),
+        "{}",
+        stopped[0].message
+    );
+}
+
+#[tokio::test]
+async fn other_agents_keep_running() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut executions = Vec::new();
+    for (name, setup) in [
+        (
+            "working",
+            Setup {
+                state: AgentState::Working,
+                ..HELD_DONE_IDLE
+            },
+        ),
+        (
+            "unheld",
+            Setup {
+                held: false,
+                ..HELD_DONE_IDLE
+            },
+        ),
+        (
+            "unfinished",
+            Setup {
+                done: false,
+                ..HELD_DONE_IDLE
+            },
+        ),
+        (
+            "unrestorable",
+            Setup {
+                recover: false,
+                ..HELD_DONE_IDLE
+            },
+        ),
+    ] {
+        executions.push((name, agent(&manager, &repo.id, name, setup).await.1));
+    }
+    manager.stop_idle_agents().await.unwrap();
+    for (name, execution) in executions {
+        assert!(!*execution.stop.borrow(), "{name} keeps running");
+    }
+}

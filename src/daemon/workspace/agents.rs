@@ -18,6 +18,7 @@ use crate::{
 
 mod attachment;
 mod forks;
+mod idle_stop;
 mod interrupts;
 mod queue_move;
 mod restart;
@@ -64,6 +65,11 @@ impl Agent {
     /// Whether protection stopped the agent and it awaits automatic recovery.
     pub(super) fn protected(&self) -> bool {
         self.overload.is_some()
+    }
+
+    /// Whether the agent is connected and nothing is stopping it.
+    fn running(&self) -> bool {
+        !self.stop.is_closed() && !*self.stop.borrow()
     }
 }
 
@@ -624,7 +630,7 @@ impl Manager {
             .with_agents(|agents| {
                 agents
                     .values()
-                    .filter(|agent| !agent.stop.is_closed() && !*agent.stop.borrow())
+                    .filter(|agent| agent.running())
                     .map(|agent| agent.workspace_id.clone())
                     .collect()
             })
@@ -685,14 +691,15 @@ impl Manager {
             .executions
             .with_agents(|agents| {
                 still_idle(&mut turns, agents);
-                let running = agents
-                    .iter()
-                    .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
-                    .map(|(id, agent)| Running {
-                        id,
-                        started: agent.started,
-                        attached: agent.attached == Some(true),
-                    });
+                let running =
+                    agents
+                        .iter()
+                        .filter(|(_, agent)| agent.running())
+                        .map(|(id, agent)| Running {
+                            id,
+                            started: agent.started,
+                            attached: agent.attached == Some(true),
+                        });
                 let selected: Vec<String> = match select {
                     Select::One => first_to_stop(running, &turns)
                         .into_iter()
@@ -737,6 +744,11 @@ impl Manager {
         );
         if let Err(error) = &handoff {
             log!("overload recovery handoff not saved: {error:#}");
+            // Nothing presses an idle stop, so it waits for a record that
+            // restores the agent.
+            if protection.is_idle() {
+                return None;
+            }
         }
         let protection = restored_after(protection, turn);
         agent.overload = Some(protection.clone());
