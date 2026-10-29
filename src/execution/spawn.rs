@@ -230,10 +230,9 @@ pub(super) fn spawn(
         Some(auth) => auth.route(command, &plan.environment, &plan.workspace.path)?,
         None => command.to_vec(),
     };
-    let mut process = Command::new(&command[0]);
-    process
-        .args(&command[1..])
-        .current_dir(&plan.workspace.path);
+    let (program, args) = command.split_first().context("no command to run")?;
+    let mut process = Command::new(program);
+    process.args(args).current_dir(&plan.workspace.path);
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
         auth.apply(&mut process, &plan.environment);

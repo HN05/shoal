@@ -403,6 +403,7 @@ async fn prepare_restore(
         let auth =
             prepare_agent_launch(paths, workspace, mode, Some(agent), place.as_ref()).await?;
         let recovery = recovery::Recovery::for_launch(paths, workspace, agent).await;
+        takeover::ensure_restorable(&recovery)?;
         Ok((place, auth, recovery))
     })
     .await

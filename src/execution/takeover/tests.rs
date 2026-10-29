@@ -33,3 +33,17 @@ async fn a_preparation_that_hangs_gives_up_at_its_limit() {
     assert_eq!(started.elapsed(), PREPARATION_LIMIT);
     assert!(format!("{error}").contains("shoal resume"), "{error}");
 }
+
+#[test]
+fn an_agent_without_a_resume_command_is_not_taken_over() {
+    let recovery = |command: Vec<std::ffi::OsString>, automatic| super::super::recovery::Recovery {
+        agent: "custom".into(),
+        command,
+        automatic,
+        handoff_delivered: false,
+        proxy: None,
+    };
+    let error = ensure_restorable(&recovery(vec![], false)).unwrap_err();
+    assert!(format!("{error}").contains("shoal resume"), "{error}");
+    assert!(ensure_restorable(&recovery(vec!["./resume.sh".into()], true)).is_ok());
+}

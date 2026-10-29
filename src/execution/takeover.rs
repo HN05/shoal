@@ -62,6 +62,17 @@ pub(super) async fn within_preparation_limit<T>(
         })?
 }
 
+/// Refuse an agent that `recovery` cannot restore, as when its
+/// `[agent_resume]` entry went while it ran; its record stays.
+pub(super) fn ensure_restorable(recovery: &super::recovery::Recovery) -> Result<()> {
+    ensure!(
+        recovery.automatic && !recovery.command.is_empty(),
+        "{} has no command to resume its session; configure [agent_resume] for it, then restore it with shoal resume",
+        recovery.agent
+    );
+    Ok(())
+}
+
 /// The agent a wrapper hands over, which the binary it continues from
 /// restores.
 pub(super) struct Handover<'a> {
