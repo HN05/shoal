@@ -46,6 +46,28 @@ pub(crate) fn insert(
     message: &str,
     attachments: &[PathBuf],
 ) -> Result<Option<i64>> {
+    insert_delivered(tx, workspace_id, message, attachments, Delivery::Wake)
+}
+
+/// How a queued message reaches an idle agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Delivery {
+    /// It starts the agent's next turn.
+    Wake,
+    /// It waits for the agent's next turn or update.
+    Quiet,
+}
+
+/// [`insert`] with `delivery`. An identical unread message that would not
+/// wake the agent wakes it once queued again with [`Delivery::Wake`],
+/// which returns its ID.
+pub(crate) fn insert_delivered(
+    tx: &Transaction<'_>,
+    workspace_id: &str,
+    message: &str,
+    attachments: &[PathBuf],
+    delivery: Delivery,
+) -> Result<Option<i64>> {
     let attachments = serde_json::to_string(attachments)?;
     let removing: Option<bool> = tx
         .query_row(
@@ -55,15 +77,21 @@ pub(crate) fn insert(
         )
         .optional()?;
     ensure!(removing != Some(true), "the workspace is being removed");
-    let pending: Option<i64> = tx
+    let wakes = delivery == Delivery::Wake;
+    let pending: Option<(i64, bool)> = tx
         .query_row(
-            "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2 AND attachments=?3",
+            "SELECT id,wakes FROM agent_messages
+                WHERE workspace_id=?1 AND message=?2 AND attachments=?3",
             params![workspace_id, message, attachments],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    if pending.is_some() {
-        return Ok(None);
+    if let Some((id, woke)) = pending {
+        if woke || !wakes {
+            return Ok(None);
+        }
+        tx.execute("UPDATE agent_messages SET wakes=1 WHERE id=?1", [id])?;
+        return Ok(Some(id));
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
         "SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(message||attachments AS BLOB))),0)
@@ -80,13 +108,14 @@ pub(crate) fn insert(
         "the workspace's unread agent messages would exceed {MAX_UNREAD_BYTES} bytes"
     );
     tx.execute(
-        "INSERT INTO agent_messages(workspace_id,created_at,message,attachments)
-            VALUES (?1,?2,?3,?4)",
+        "INSERT INTO agent_messages(workspace_id,created_at,message,attachments,wakes)
+            VALUES (?1,?2,?3,?4,?5)",
         params![
             workspace_id,
             i64::try_from(crate::time::unix_seconds())?,
             message,
-            attachments
+            attachments,
+            wakes
         ],
     )?;
     Ok(Some(tx.last_insert_rowid()))
@@ -151,6 +180,14 @@ pub(crate) fn rebase_attachments(
     Ok(())
 }
 
+/// A workspace's unread messages.
+#[derive(Debug, Default)]
+pub(crate) struct Unread {
+    pub messages: Vec<AgentMessage>,
+    /// Whether one of them starts an idle agent's next turn.
+    pub wakes: bool,
+}
+
 impl Manager {
     /// Queue a message for the workspace's agents with copies of the files
     /// `attachments`; without text, the files are the message. An identical
@@ -171,7 +208,7 @@ impl Manager {
         let (layout, _files) = self.lock_message_files(&workspace).await?;
         let kept = keep_message_files(layout, &workspace.id, &message, attachments).await?;
         let queued = self
-            .queue_attached_message(&workspace.id, message, kept.paths.clone())
+            .queue_attached_message(&workspace.id, message, kept.paths.clone(), Delivery::Wake)
             .await;
         if queued.is_err() {
             discard_message_files(kept).await;
@@ -235,7 +272,17 @@ impl Manager {
         workspace_id: &str,
         message: String,
     ) -> Result<()> {
-        self.queue_attached_message(workspace_id, message, Vec::new())
+        self.queue_agent_message_delivered(workspace_id, message, Delivery::Wake)
+            .await
+    }
+
+    pub(crate) async fn queue_agent_message_delivered(
+        &self,
+        workspace_id: &str,
+        message: String,
+        delivery: Delivery,
+    ) -> Result<()> {
+        self.queue_attached_message(workspace_id, message, Vec::new(), delivery)
             .await
     }
 
@@ -244,13 +291,15 @@ impl Manager {
         workspace_id: &str,
         message: String,
         attachments: Vec<PathBuf>,
+        delivery: Delivery,
     ) -> Result<()> {
         let workspace_id = workspace_id.to_owned();
         let queued = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let queued = insert(&tx, &workspace_id, &message, &attachments)?;
+                let queued =
+                    insert_delivered(&tx, &workspace_id, &message, &attachments, delivery)?;
                 tx.commit()?;
                 Ok(queued.is_some())
             })
@@ -263,24 +312,32 @@ impl Manager {
 
     /// Unread messages, oldest first. They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
+        Ok(self.unread_agent_messages(selector).await?.messages)
+    }
+
+    /// Unread messages, oldest first, and whether one of them wakes an idle
+    /// agent.
+    pub(crate) async fn unread_agent_messages(&self, selector: &str) -> Result<Unread> {
         let workspace = self.workspace(selector).await?;
         self.store
             .run(move |db| {
-                Ok(db
-                    .prepare(
-                        "SELECT id,created_at,message,attachments FROM agent_messages
-                            WHERE workspace_id=?1 ORDER BY id",
-                    )?
-                    .query_map([workspace.id], |row| {
-                        Ok(AgentMessage {
-                            id: row.get("id")?,
-                            created_at: row.get("created_at")?,
-                            message: row.get("message")?,
-                            attachments: crate::daemon::store::json_column(row, "attachments")?
-                                .unwrap_or_default(),
-                        })
-                    })?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
+                let mut unread = Unread::default();
+                let mut rows = db.prepare(
+                    "SELECT id,created_at,message,attachments,wakes FROM agent_messages
+                        WHERE workspace_id=?1 ORDER BY id",
+                )?;
+                let mut rows = rows.query([workspace.id])?;
+                while let Some(row) = rows.next()? {
+                    unread.messages.push(AgentMessage {
+                        id: row.get("id")?,
+                        created_at: row.get("created_at")?,
+                        message: row.get("message")?,
+                        attachments: crate::daemon::store::json_column(row, "attachments")?
+                            .unwrap_or_default(),
+                    });
+                    unread.wakes |= row.get::<_, bool>("wakes")?;
+                }
+                Ok(unread)
             })
             .await
     }

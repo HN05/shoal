@@ -194,7 +194,11 @@ to a shared server or container runtime, count for the machine only.
 Warnings come first: below each enabled protection's stop threshold, the daemon
 queues an agent message for every workspace with a running agent, so agents can
 reduce load before anything stops. Warnings repeat per signal and workspace only
-after an interval and never stop, clean up or notify. Their thresholds are not
+after an interval and never stop, clean up or notify. A memory or CPU warning
+does not wake an idle agent when nothing else runs in its workspace, since it has
+nothing to stop and each woken turn costs tokens; it waits for the agent's next
+update or turn. A disk warning still wakes it, since deleting files frees space.
+Their thresholds are not
 validated against stop thresholds, so lowering a stop threshold never invalidates
 an existing configuration.
 Disk protection reads available space on filesystems holding workspaces or

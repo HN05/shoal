@@ -1065,6 +1065,39 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
 }
 
 #[tokio::test]
+async fn quiet_messages_come_with_the_next_updates() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "quiet".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    manager
+        .queue_agent_message_delivered(
+            &workspace.id,
+            "Memory is low".into(),
+            crate::daemon::agent_messages::Delivery::Quiet,
+        )
+        .await
+        .unwrap();
+    assert!(!manager.updates_waiting(&workspace.id).await.unwrap());
+    assert!(!manager.agent_updates_recorded(&workspace.id).await.unwrap());
+    manager
+        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .await
+        .unwrap();
+    // A message that wakes the agent would end the wait on its own.
+    let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
+    assert_eq!(updates.updates.len(), 1);
+    assert_eq!(updates.messages[0].message, "Memory is low");
+}
+
+#[tokio::test]
 async fn recorded_updates_count_while_the_pr_gate_is_held() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

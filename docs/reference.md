@@ -187,7 +187,10 @@ enabled, the daemon queues an [agent message](#agent-messages) for each
 workspace with a running agent, naming the threshold and asking it to reduce
 load. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
 Each workspace hears about each signal at most once per `repeat_minutes`, and
-agents started later are warned at the next sample. Warnings stop and remove
+agents started later are warned at the next sample. A memory or CPU warning
+for a workspace where only idle agents run, with no tracked command, demo or
+background process, does not wake the agent: it arrives with the agent's next
+update or turn. Warnings stop and remove
 nothing; a failed reading warns about nothing. Warning thresholds are not checked
 against stop thresholds; a warning at or above one arrives with the stop.
 

@@ -1,3 +1,4 @@
+use super::Delivery;
 use crate::{
     daemon::{
         scope::{self, Caller},
@@ -78,6 +79,37 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert_eq!(
         manager.agent_messages(&workspace.name).await.unwrap().len(),
         3
+    );
+}
+
+#[tokio::test]
+async fn a_quiet_message_wakes_once_queued_again_to_wake() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let queue = |delivery| {
+        manager.queue_agent_message_delivered(&workspace.id, "Memory is low".into(), delivery)
+    };
+    queue(Delivery::Quiet).await.unwrap();
+    let unread = manager.unread_agent_messages(&workspace.id).await.unwrap();
+    assert_eq!(unread.messages.len(), 1);
+    assert!(!unread.wakes);
+    let mut changed = manager.signals.watch_agent_messages();
+    changed.borrow_and_update();
+    queue(Delivery::Quiet).await.unwrap();
+    assert!(!changed.has_changed().unwrap());
+    queue(Delivery::Wake).await.unwrap();
+    assert!(changed.has_changed().unwrap());
+    let unread = manager.unread_agent_messages(&workspace.id).await.unwrap();
+    assert_eq!(unread.messages.len(), 1);
+    assert!(unread.wakes);
+    // Queued again quietly, it still wakes.
+    queue(Delivery::Quiet).await.unwrap();
+    assert!(
+        manager
+            .unread_agent_messages(&workspace.id)
+            .await
+            .unwrap()
+            .wakes
     );
 }
 

@@ -1,7 +1,7 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     time::{Duration, Instant},
 };
 use tokio::sync::{OwnedRwLockReadGuard, watch};
@@ -13,7 +13,7 @@ use crate::daemon::log;
 use crate::{
     daemon::notifications::NotificationKind,
     protocol::timing,
-    state::{AgentState, WorkspaceState},
+    state::{AgentState, ExecutionState, WorkspaceState},
 };
 
 mod attachment;
@@ -612,6 +612,21 @@ impl Manager {
         workspaces
     }
 
+    /// Workspaces where only idle agents run: no tracked command, demo or
+    /// background process an agent started, so nothing there uses memory or
+    /// CPU that its agent could free.
+    pub(crate) async fn resting_agent_workspaces(&self) -> anyhow::Result<HashSet<String>> {
+        let mut turns = self.agent_turns().await?;
+        let running = self.store.run(|db| running_executions(db)).await?;
+        Ok(self
+            .executions
+            .with_agents(|agents| {
+                still_idle(&mut turns, agents);
+                resting(running, agents, &turns)
+            })
+            .await)
+    }
+
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
         !self
             .stop_agents(&Protection::load(reason), Select::One)
@@ -761,6 +776,36 @@ fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>
             turn.state = AgentState::Working;
         }
     }
+}
+
+/// Each running execution with its workspace.
+fn running_executions(db: &rusqlite::Connection) -> anyhow::Result<Vec<(String, String)>> {
+    Ok(db
+        .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
+        .query_map([ExecutionState::Running], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The workspaces of the `running` executions where each is an idle agent.
+fn resting(
+    running: Vec<(String, String)>,
+    agents: &HashMap<String, Agent>,
+    turns: &HashMap<String, Turn>,
+) -> HashSet<String> {
+    let mut busy = HashSet::new();
+    let mut workspaces = HashSet::new();
+    for (execution, workspace) in running {
+        let idle_agent =
+            agents.contains_key(&execution) && turns.get(&execution).is_some_and(Turn::idle);
+        if !idle_agent {
+            busy.insert(workspace.clone());
+        }
+        workspaces.insert(workspace);
+    }
+    workspaces.retain(|workspace| !busy.contains(workspace));
+    workspaces
 }
 
 /// A running agent protection may stop.

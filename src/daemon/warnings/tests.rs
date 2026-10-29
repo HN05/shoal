@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     daemon::workspace::ExecutionKind,
+    state::AgentState,
     test_support::{manager, repository},
 };
 
@@ -78,6 +79,72 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
         .warn(&manager, start + repeat, Signal::Memory, &memory(&settings))
         .await;
     assert_eq!(count("first").await, 2);
+}
+
+#[tokio::test]
+async fn idle_agents_with_nothing_running_are_warned_without_waking() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut executions = Vec::new();
+    for name in ["resting", "busy"] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap();
+        let id = execution.plan.id.clone();
+        manager
+            .track_agent(&id, "claude", &workspace.id, name, false, Duration::ZERO)
+            .await;
+        manager
+            .set_agent_state(name, AgentState::Idle, Some(id), None)
+            .await
+            .unwrap();
+        executions.push(execution);
+    }
+    // A tracked command runs beside the busy workspace's idle agent.
+    let busy = manager.workspace("busy").await.unwrap();
+    executions.push(
+        manager
+            .begin_execution(&busy.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap(),
+    );
+    let wakes = |name: &'static str| {
+        let manager = manager.clone();
+        async move { manager.unread_agent_messages(name).await.unwrap().wakes }
+    };
+    let settings = Overload::default();
+    let mut warnings = Warnings::default();
+    let now = Instant::now();
+    warnings
+        .warn(&manager, now, Signal::Memory, &memory(&settings))
+        .await;
+    assert_eq!(manager.agent_messages("resting").await.unwrap().len(), 1);
+    assert!(!wakes("resting").await);
+    assert!(wakes("busy").await);
+    // An agent can free disk space without running anything.
+    let resting = manager.agent_messages("resting").await.unwrap();
+    manager
+        .mark_agent_messages_delivered("resting", vec![resting[0].id])
+        .await
+        .unwrap();
+    warnings
+        .warn(
+            &manager,
+            now,
+            Signal::Disk,
+            &disk(&settings, "1.0 GiB available at /"),
+        )
+        .await;
+    assert!(wakes("resting").await);
 }
 
 #[test]

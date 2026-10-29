@@ -32,6 +32,10 @@ mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
+/// The bytes a response's updates and messages may take, leaving room for
+/// its other fields.
+const RESPONSE_LIMIT: usize = crate::protocol::MAX_FRAME - 256;
+
 /// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
 const MAX_LISTED_FILES: usize = 10;
 
@@ -185,8 +189,9 @@ impl Manager {
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_agent_messages();
         let mut background = self.signals.watch_item_updates();
-        let mut messages = self.agent_messages(&workspace.id).await?;
-        if messages.is_empty() {
+        let unread = self.unread_agent_messages(&workspace.id).await?;
+        let mut messages = unread.messages;
+        if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
                 updates = wait_for_updates(seconds, &mut background, || {
@@ -196,7 +201,7 @@ impl Manager {
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
-                    return Ok(updates);
+                    return with_quiet_messages(updates, messages);
                 }
                 next = self.next_agent_messages(&workspace.id, &mut queued) => messages = next?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
@@ -280,7 +285,7 @@ impl Manager {
     /// new delivery and stays pending once the sent part is acknowledged. The
     /// caller holds the PR gates of the workspaces in `batch`.
     async fn fit_response(&self, mut batch: Batch, reserved: usize) -> Result<Vec<Update>> {
-        let limit = (crate::protocol::MAX_FRAME - 256).saturating_sub(reserved);
+        let limit = RESPONSE_LIMIT.saturating_sub(reserved);
         match frame_cut(&batch, limit) {
             Cut::Between(fitting) => batch.truncate(fitting),
             Cut::Inside(fitting) => {
@@ -339,8 +344,9 @@ impl Manager {
     }
 
     /// Return once whether the workspace's agent is idle with undelivered
-    /// messages or queued updates matches `due`, so a launcher can prompt an
-    /// agent that has no hook to wake it, then wait for it to take them.
+    /// messages that wake it or queued updates matches `due`, so a launcher
+    /// can prompt an agent that has no hook to wake it, then wait for it to
+    /// take them.
     pub async fn wait_agent_wake(&self, selector: &str, due: bool) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         // Subscribe before reading, so a change in between still wakes.
@@ -360,12 +366,13 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether messages or queued updates wait for the workspace's agent.
-    /// While cleanup or an item change holds the PR gates of the workspaces
-    /// whose activity it receives, only messages count, as in a hook delivery.
+    /// Whether messages that wake an idle agent or queued updates wait for
+    /// the workspace's agent. While cleanup or an item change holds the PR
+    /// gates of the workspaces whose activity it receives, only messages
+    /// count, as in a hook delivery.
     pub(crate) async fn updates_waiting(&self, selector: &str) -> Result<bool> {
         let workspace = self.workspace(selector).await?;
-        if !self.agent_messages(&workspace.id).await?.is_empty() {
+        if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
         let children = self.delegated_workspaces(&workspace.id).await?;
@@ -378,12 +385,13 @@ impl Manager {
             .is_empty())
     }
 
-    /// Whether messages or queued updates are recorded for the workspace's
-    /// agent, read without the PR gates, so a caller holding them, as
-    /// cleanup does, sees every update their holders queued.
+    /// Whether messages that wake an idle agent or queued updates are
+    /// recorded for the workspace's agent, read without the PR gates, so a
+    /// caller holding them, as cleanup does, sees every update their holders
+    /// queued.
     pub(crate) async fn agent_updates_recorded(&self, workspace_id: &str) -> Result<bool> {
         let workspace = self.workspace(workspace_id).await?;
-        if !self.agent_messages(&workspace.id).await?.is_empty() {
+        if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
         let children = self.delegated_workspaces(&workspace.id).await?;
@@ -400,13 +408,14 @@ impl Manager {
         if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
             return Ok(false);
         }
-        Ok(!self.agent_messages(&workspace.id).await?.is_empty()
+        Ok(self.unread_agent_messages(&workspace.id).await?.wakes
             || !self
                 .agent_queued_updates(workspace.clone(), 0)
                 .await?
                 .is_empty())
     }
 
+    /// The unread messages once one that wakes an idle agent is queued.
     async fn next_agent_messages(
         &self,
         id: &str,
@@ -414,9 +423,9 @@ impl Manager {
     ) -> Result<Vec<AgentMessage>> {
         loop {
             queued.changed().await?;
-            let messages = self.agent_messages(id).await?;
-            if !messages.is_empty() {
-                return Ok(messages);
+            let unread = self.unread_agent_messages(id).await?;
+            if unread.wakes {
+                return Ok(unread.messages);
             }
         }
     }
@@ -1233,6 +1242,20 @@ impl Updates {
             attached: None,
         }
     }
+}
+
+/// `updates` with the unread `messages`, none of which wakes an agent, when
+/// the wait found updates and both fit one response; otherwise the messages
+/// wait for a later delivery.
+fn with_quiet_messages(mut updates: Updates, messages: Vec<AgentMessage>) -> Result<Updates> {
+    if updates.updates.is_empty() || messages.is_empty() {
+        return Ok(updates);
+    }
+    let size = serde_json::to_vec(&updates)?.len() + serde_json::to_vec(&messages)?.len();
+    if size <= RESPONSE_LIMIT {
+        updates.messages = messages;
+    }
+    Ok(updates)
 }
 
 /// Whether a wait also reports the workspace branch's local conflicts with
