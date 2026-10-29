@@ -45,9 +45,8 @@ impl Manager {
             return Ok(());
         };
         let workspace = self.workspace(&execution.workspace_id).await?;
-        self.end_agent_session(&workspace, &agent, &execution.id, true)
-            .await;
-        Ok(())
+        self.keep_agent_session(&workspace, &agent, &execution.id)
+            .await
     }
 }
 
