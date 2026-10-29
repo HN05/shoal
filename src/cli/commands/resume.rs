@@ -38,35 +38,22 @@ pub async fn select(
     if scoped {
         ensure_below(&targets, now || focus)?;
     }
-    // A named workspace whose agent idles after an interrupt continues its
-    // turn once the rest resumed their stopped work, so a refusal of one
-    // leaves every agent as it was.
-    let mut continuation = Continuation::default();
+    // Named workspaces whose agents idle after an interrupt continue their
+    // turns instead, which a request that also resumes stopped work would
+    // report apart from it.
     if !discard && execution.is_none() && !targets.workspace.is_empty() {
         let named = ui::select_workspaces(ctx, targets.workspace).await?;
-        (continuation, targets.workspace) = Continuation::plan(ctx, named).await?;
+        let (continuation, rest) = Continuation::plan(ctx, named).await?;
+        if !continuation.is_empty() {
+            ensure!(
+                rest.is_empty(),
+                "resume interrupted turns and stopped work separately"
+            );
+            return continuation.submit(ctx).await;
+        }
+        targets.workspace = rest;
     }
-    let code = if continuation.is_empty() || !targets.workspace.is_empty() {
-        resume_stopped(ctx, targets, execution, discard, now, focus).await?
-    } else {
-        0
-    };
-    if code == 0 {
-        continuation.submit(ctx).await?;
-    }
-    Ok(code)
-}
-
-/// Resume the stopped work of the selected workspaces, as [`select`] does.
-async fn resume_stopped(
-    ctx: &Context,
-    targets: WorkspaceTargets,
-    execution: Option<String>,
-    discard: bool,
-    now: bool,
-    focus: bool,
-) -> Result<i32> {
-    if crate::env::inherits_scope(&ctx.paths.state) && !discard {
+    if scoped && !discard {
         return queue_below(ctx, targets.workspace, execution).await;
     }
     let selected = if targets.all {

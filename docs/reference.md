@@ -349,7 +349,10 @@ alone. An agent that runs outside a terminal host, such as in Happy, or that
 Shoal knows no interrupt key for fails the command. Messages and item activity
 reach an interrupted agent as they reach any idle one, and
 `shoal resume <workspace>` continues its turn: it submits `Continue where you
-left off.` in the session, until the agent starts another turn. A workspace
+left off.` in the session, until the agent starts another turn. A resume that
+names workspaces with interrupted turns and others with stopped work refuses
+both; resume them separately. Several workspaces are interrupted or continued
+together, reporting each failure without keeping the others from it. A workspace
 process interrupts and continues only the agents of the workspaces below its
 own.
 

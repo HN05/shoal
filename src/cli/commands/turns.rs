@@ -2,7 +2,8 @@
 //! the turn an interrupt ended: Shoal types the agent's own interrupt key, or
 //! a prompt to continue, into the place it runs in, through that place's
 //! terminal host, and the daemon records that the interrupt ended the turn.
-//! Every target is resolved before Shoal types into any.
+//! Every target is resolved before Shoal types into any; a target Shoal then
+//! fails to type into does not keep it from the others.
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::json;
@@ -12,7 +13,6 @@ use crate::{
         agents,
         client::{self, request},
         context::Context,
-        output::Style,
         terminal, ui,
     },
     config::Effective,
@@ -33,15 +33,24 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i3
         super::stop::ensure_below(ctx, &selected).await?;
     }
     let interruptions = running_turns(ctx, selected).await?;
+    let mut report = ui::Report::new("interrupted", "interrupt");
     for interruption in &interruptions {
-        interrupt_turn(ctx, interruption).await?;
+        let target = &interruption.target;
+        match interrupt_turn(ctx, interruption).await {
+            Ok(()) => report.done(
+                ctx,
+                &format!("Interrupted the turn of {}", target.described()),
+                json!(target),
+            ),
+            Err(error) => report.failed(ctx, &target.workspace, &error),
+        }
     }
-    let interrupted: Vec<_> = interruptions
-        .into_iter()
-        .map(|interruption| interruption.target)
-        .collect();
-    report_interrupted(ctx, &interrupted)?;
-    Ok(0)
+    let summary = if interruptions.is_empty() {
+        "No running agent turns"
+    } else {
+        ""
+    };
+    report.finish(ctx, summary)
 }
 
 /// A running turn and the key that interrupts it.
@@ -82,21 +91,7 @@ async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()
     Ok(())
 }
 
-fn report_interrupted(ctx: &Context, interrupted: &[Target]) -> Result<()> {
-    let value = json!({"interrupted": interrupted});
-    if interrupted.is_empty() {
-        return ctx.emit("No running agent turns", value);
-    }
-    let message = interrupted
-        .iter()
-        .map(|target| format!("Interrupted the turn of {}", target.described()))
-        .collect::<Vec<_>>()
-        .join("\n");
-    ctx.emit_styled(Style::Success, &message, value)
-}
-
 /// The turns an interrupt ended that `shoal resume` continues.
-#[derive(Default)]
 pub(super) struct Continuation(Vec<Target>);
 
 impl Continuation {
@@ -125,22 +120,21 @@ impl Continuation {
         self.0.is_empty()
     }
 
-    /// Submit the prompt that continues each turn.
-    pub(super) async fn submit(self, ctx: &Context) -> Result<()> {
+    /// Submit the prompt that continues each turn, returning the exit code.
+    pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
+        let mut report = ui::Report::new("continued", "continue");
         for target in &self.0 {
-            continue_turn(ctx, target).await?;
+            match terminal::submit_prompt(&target.place, CONTINUE_PROMPT).await {
+                Ok(()) => report.done(
+                    ctx,
+                    &format!("Continued the turn of {}", target.described()),
+                    json!(target),
+                ),
+                Err(error) => report.failed(ctx, &target.workspace, &error),
+            }
         }
-        Ok(())
+        report.finish(ctx, "")
     }
-}
-
-async fn continue_turn(ctx: &Context, target: &Target) -> Result<()> {
-    terminal::submit_prompt(&target.place, CONTINUE_PROMPT).await?;
-    ctx.emit_styled(
-        Style::Success,
-        &format!("Continued the turn of {}", target.described()),
-        json!({"continued": target}),
-    )
 }
 
 /// Whether `agent` idles after an interrupt ended its turn.
