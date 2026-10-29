@@ -368,6 +368,19 @@ impl Manager {
             .is_empty())
     }
 
+    /// Whether messages or queued updates are recorded for the workspace's
+    /// agent, read without the PR gates, so a caller holding them, as
+    /// cleanup does, sees every update their holders queued.
+    pub(crate) async fn agent_updates_recorded(&self, workspace_id: &str) -> Result<bool> {
+        let workspace = self.workspace(workspace_id).await?;
+        if !self.agent_messages(&workspace.id).await?.is_empty() {
+            return Ok(true);
+        }
+        let children = self.delegated_workspaces(&workspace.id).await?;
+        Ok(!self.queued_updates(workspace).await?.is_empty()
+            || !self.delegated_pending(&children, None).await?.is_empty())
+    }
+
     async fn agent_wake_due(&self, workspace: &Workspace) -> Result<bool> {
         let id = workspace.id.clone();
         let state = self

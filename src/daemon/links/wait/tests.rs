@@ -944,6 +944,30 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
 }
 
 #[tokio::test]
+async fn recorded_updates_count_while_the_pr_gate_is_held() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "gated".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    assert!(!manager.agent_updates_recorded(&workspace.id).await.unwrap());
+    manager
+        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .await
+        .unwrap();
+    // Cleanup holds the gate while it decides whether updates wait.
+    let _gate = manager.gates.lock_prs([&workspace.id]).await;
+    assert!(!manager.updates_waiting(&workspace.id).await.unwrap());
+    assert!(manager.agent_updates_recorded(&workspace.id).await.unwrap());
+}
+
+#[tokio::test]
 async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activity() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

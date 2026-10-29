@@ -83,8 +83,9 @@ fn queued_restores(db: &Connection, workspace_id: &str) -> Result<Vec<QueuedRest
 
 impl Manager {
     /// The executions of the workspace whose agent, stopped between turns
-    /// with every process, waits in the queue for an update that has not
-    /// arrived, in its wrapper or for the daemon to start it.
+    /// with every process, waits in the queue for an update, in its wrapper
+    /// or for the daemon to start it, while none is recorded for it. Disk
+    /// space may still hold back one that is, which has work all the same.
     pub(crate) async fn idle_restores(&self, workspace_id: &str) -> Result<HashSet<String>> {
         let id = workspace_id.to_owned();
         let queued = self.store.run(move |db| queued_restores(db, &id)).await?;
@@ -100,14 +101,17 @@ impl Manager {
                     Work::Launch => continue,
                 }
             } else if waiters.contains(&restore.execution) {
-                self.restore_wake(workspace_id, &restore.execution, true)
+                self.restore_wake(workspace_id, &restore.execution, false)
                     .await?
             } else {
                 continue;
             };
-            if wake == (Wake::Update { due: false }) {
+            if matches!(wake, Wake::Update { .. }) {
                 idle.insert(restore.execution);
             }
+        }
+        if !idle.is_empty() && self.agent_updates_recorded(workspace_id).await? {
+            idle.clear();
         }
         Ok(idle)
     }

@@ -230,6 +230,20 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
         manager.cleanup_candidacy(&working.id).await.unwrap(),
         Err(crate::model::CleanupReason::Recovering)
     );
+
+    // An update gives the agent work, though no reading has found free disk
+    // space for the new configuration, which holds its restore back.
+    manager.publish_config(global_config(""));
+    manager
+        .send_agent_message("idle", "Review requested".into())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(entry(&manager, "idle-agent").await.state, Queued);
+    assert_eq!(
+        manager.cleanup_candidacy(&idle.id).await.unwrap(),
+        Err(crate::model::CleanupReason::Recovering)
+    );
 }
 
 #[tokio::test]
