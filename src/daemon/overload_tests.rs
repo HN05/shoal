@@ -418,16 +418,19 @@ async fn tracked_agent_child() {
     run_tracked_agent("trap 'exit 0' TERM; touch started; while :; do sleep 1; done").await;
 }
 
-/// An agent that keeps running when stopped, writing `terminated` once the
-/// stop reaches it.
+/// An agent that keeps running when stopped. Once the stop reaches it, it
+/// suspends its parent, the wrapper, and writes `terminated`, so the wrapper
+/// stays where the stop reached the agent.
 #[tokio::test]
 #[ignore = "isolated tracked wrapper launched by overload tests"]
 async fn tracked_agent_holding_on() {
     if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
         return;
     }
-    run_tracked_agent("trap 'touch terminated' TERM; touch started; while :; do sleep 1; done")
-        .await;
+    run_tracked_agent(
+        "trap 'kill -STOP $PPID; touch terminated' TERM; touch started; while :; do sleep 1; done",
+    )
+    .await;
 }
 
 /// Like `tracked_agent_child`, with a background command in its own process
@@ -898,7 +901,8 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
     assert_eq!(agent_name.as_deref(), Some("fixture"));
     let wrapper = execution.wrapper.clone().unwrap();
     crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
-    // The agent traps the stop the wrapper sends it, which follows the save.
+    // The agent traps the stop the wrapper sends it, which follows the save,
+    // and suspends the wrapper before it could save once the agent stopped.
     bounded(async {
         while !workspace.path.join("terminated").is_file() {
             tokio::time::sleep(Duration::from_millis(10)).await;
