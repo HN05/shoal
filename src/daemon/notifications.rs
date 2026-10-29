@@ -57,6 +57,8 @@ states!(NotificationKind {
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.
     CachesEmptied => "caches_emptied",
+    /// Disk space cleanup deleted the results a removed workspace handed back.
+    ResultsDeleted => "results_deleted",
     /// A forge limits the requests Shoal sends it, so polling waits.
     ForgeLimited => "forge_limited",
     /// The daemon stopped tracked work before the system shut down.
@@ -99,6 +101,7 @@ impl NotificationKind {
                 | Self::AgentResumed
                 | Self::WorkspaceRemoved
                 | Self::CachesEmptied
+                | Self::ResultsDeleted
                 | Self::HookFailed
                 | Self::QueueStarted
                 | Self::QueueFailed

@@ -1,8 +1,9 @@
 //! Keep free space on the filesystems holding workspaces and daemon state by
 //! deleting Xcode data that removed workspaces left, then removing
 //! workspaces idle cleanup would remove, without their idle delay,
-//! then emptying shared caches nothing is using, then stopping tracked
-//! executions when that cannot free enough space.
+//! then emptying shared caches nothing is using, then deleting the results
+//! removed workspaces handed back, then stopping tracked executions when
+//! that cannot free enough space.
 use anyhow::Result;
 use std::{
     io,
@@ -213,7 +214,8 @@ async fn clean_up(
     let cleaned = async {
         delete_xcode_leftovers(manager, filesystem, &available).await?;
         free_space(manager, settings, workspaces, filesystem, &available).await?;
-        empty_caches(manager, settings, filesystem, &available).await
+        empty_caches(manager, settings, filesystem, &available).await?;
+        delete_results(manager, settings, filesystem, &available).await
     }
     .await;
     let Err(error) = cleaned else {
@@ -334,6 +336,51 @@ async fn empty_caches(
             manager.notify(None, kind, message).await;
         }
         // Even caches it reports as busy or absent may have had leftovers purged.
+        filesystem.free = available(&filesystem.path)?;
+    }
+    Ok(())
+}
+
+/// Delete the results removed workspaces handed back on the filesystem, the
+/// oldest first, until it has enough space. They go last: unlike what the
+/// steps before delete, they may exist nowhere else.
+async fn delete_results(
+    manager: &Manager,
+    settings: &Disk,
+    filesystem: &mut Filesystem,
+    available: impl Fn(&Path) -> io::Result<u64>,
+) -> Result<()> {
+    for owner in manager.kept_results().await? {
+        if filesystem.free >= settings.cleanup_free_bytes() {
+            break;
+        }
+        let repo = manager.repository(&owner.repository_id).await?;
+        let on_filesystem = crate::daemon::workspace_files::layout::Layout::of(&repo)
+            .is_some_and(|layout| filesystem.holds(&layout.results(&owner.id)));
+        if !on_filesystem {
+            continue;
+        }
+        let (kind, message) = match manager.delete_results(&owner).await {
+            Ok(()) => {
+                log!("disk space cleanup deleted the results of {}", owner.name);
+                (
+                    NotificationKind::ResultsDeleted,
+                    format!(
+                        "Deleted the results removed workspace {} handed back, for disk space; {}",
+                        owner.name,
+                        filesystem.describe()
+                    ),
+                )
+            }
+            Err(error) => (
+                NotificationKind::CleanupFailed,
+                format!(
+                    "Disk space cleanup could not delete the results of {}: {error:#}",
+                    owner.name
+                ),
+            ),
+        };
+        manager.notify(None, kind, message).await;
         filesystem.free = available(&filesystem.path)?;
     }
     Ok(())

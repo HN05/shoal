@@ -226,6 +226,54 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
 }
 
 #[tokio::test]
+async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let audit = manager
+        .create_workspace(&repo.id, "audit".into(), None, None, None)
+        .await
+        .unwrap();
+    let report = root.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    let completion = manager
+        .mark_done(&audit.id, false, false, vec![report])
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &audit.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert!(completion.results[0].exists(), "removal keeps results");
+    // Above the stop threshold, so only cleanup runs.
+    let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+    Monitor::default()
+        .check(&manager, Instant::now(), |_: &Path| Ok(low))
+        .await
+        .unwrap();
+    assert!(!completion.results[0].exists());
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    let deleted = notifications
+        .iter()
+        .find(|notification| notification.kind == NotificationKind::ResultsDeleted)
+        .expect("results deleted notification");
+    assert!(
+        deleted.message.starts_with(
+            "Deleted the results removed workspace audit handed back, for disk space; "
+        ),
+        "{}",
+        deleted.message
+    );
+}
+
+#[tokio::test]
 async fn cleanup_reads_space_again_after_purging_leftover_caches() {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");

@@ -169,7 +169,9 @@ the [`xcode` preset](#build-tool-presets) deletes, for every worktree in the
 repository's directory that no longer exists,
 removes the workspaces there that idle cleanup would remove, without waiting for
 their idle delay, then empties [shared caches](#shared-caches) there nothing is
-using, until enough space is available. A repository with idle
+using, then deletes the [results](#attached-files) removed workspaces handed
+back there, oldest first and recording `results_deleted` notifications, until
+enough space is available. A repository with idle
 cleanup disabled keeps its workspaces. Removals record `workspace_removed`
 notifications and the `disk_space` event cause; a pass that cannot free enough
 space, or fails, repeats at most every 30 seconds. While space stays below
@@ -3452,7 +3454,8 @@ how it came (`message` for a file sent with `shoal messages send --attach`,
 directory's `.attachments`. Results outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
-them, with when they go, and deletes them with `rm`. `--json` gives each as a record with
+them, with when they go, and deletes them with `rm`. Disk space cleanup
+deletes them sooner when nothing else frees enough space. `--json` gives each as a record with
 `source`, `path` and `bytes`. `shoal files add` copies files of at most 100 MiB
 there without telling the workspace's agents; adding the same file again keeps
 its copy. The other copies stay until the workspace is removed, or until

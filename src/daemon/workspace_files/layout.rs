@@ -123,12 +123,17 @@ impl Layout {
         remove_dir(&self.root.join(workspace_id))
     }
 
+    /// The directory of the files the workspace `workspace_id` handed back.
+    pub(crate) fn results(&self, workspace_id: &str) -> PathBuf {
+        self.root.join(RESULTS).join(workspace_id)
+    }
+
     /// Delete the files the workspace `workspace_id` handed back.
     pub(crate) fn remove_results(&self, workspace_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        remove_dir(&self.root.join(RESULTS).join(workspace_id))
+        remove_dir(&self.results(workspace_id))
     }
 
     /// Delete the directory with every attached file, when the repository
