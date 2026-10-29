@@ -33,7 +33,7 @@ use crate::{
         context::Context,
         internal::{Worker, internal_command},
         output::{Palette, Style},
-        ui::{self, Entries, PickerView, ViewPicker, WidthLimit},
+        ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
     daemon::notifications::Notification,
     env,
@@ -720,16 +720,13 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
     })
 }
 
-/// View one of the issues and PRs `workspace` links, choosing it when
-/// there are several.
+/// View one of the issues and PRs `workspace` links, or open it in the
+/// browser, as chosen.
 async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Command> {
     let workspace = workspace.context("select a workspace to view its issues and PRs")?;
     let items = linked_items(ctx, &workspace).await?;
-    let url = match items.as_slice() {
-        [] => anyhow::bail!("the workspace links no issue or PR"),
-        [item] => item.url.clone(),
-        items => pick_linked(ctx, items)?,
-    };
+    ensure!(!items.is_empty(), "the workspace links no issue or PR");
+    let (url, web) = pick_linked(ctx, &items)?;
     Ok(Command::Items(ItemsCommand::View {
         items: ItemArgs {
             kind_or_url: Some(url),
@@ -738,7 +735,7 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
         },
         no_comments: false,
         check: None,
-        web: false,
+        web,
     }))
 }
 
@@ -764,8 +761,9 @@ async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>>
 }
 
 /// The URL of one of `items`, listed by kind, number and title, which
-/// Shoal does not record for every item.
-fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<String> {
+/// Shoal does not record for every item, and whether to open it in the
+/// browser, which workspace processes cannot.
+fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<(String, bool)> {
     let cells = items
         .iter()
         .map(|item| {
@@ -786,12 +784,18 @@ fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<String> {
         .collect();
     let limit = ui::picker_width().map(|width| WidthLimit { column: 2, width });
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
-    let choices: Vec<_> = items
-        .iter()
-        .map(|item| item.url.clone())
-        .zip(labels.iter().map(String::as_str))
-        .collect();
-    ui::pick_choice(ctx, "View> ", &choices)
+    let entries = items.iter().map(|item| item.url.clone()).zip(labels);
+    let bindings: &[_] = &[
+        ("enter", "view", false),
+        ("ctrl-o", "open in browser", true),
+    ];
+    let bindings = if env::inherits_scope(&ctx.paths.state) {
+        &bindings[..1]
+    } else {
+        bindings
+    };
+    let picked = ui::pick_with_keys(ctx, "View> ", entries.collect(), KeyBindings(bindings))?;
+    Ok((picked.id, picked.action))
 }
 
 #[derive(Clone)]

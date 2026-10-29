@@ -15838,13 +15838,17 @@ fn view_shows_linked_items_with_status_and_discussion() {
     );
 
     // Ctrl-V in the picker views one of the workspace's items, chosen
-    // among them.
+    // among them with Enter, or with $VIEW_KEY.
     install_test_script(
         bin.join("fzf"),
         r#"#!/bin/sh
 cat > "$HOME/picker-input"
 case "$*" in
-*'View> '*) cp "$HOME/picker-input" "$HOME/view-rows"; grep /pull/ "$HOME/picker-input" ;;
+*'View> '*)
+  cp "$HOME/picker-input" "$HOME/view-rows"
+  printf '%s\n' "$*" > "$HOME/view-args"
+  printf '%s\n' "$VIEW_KEY"
+  grep /pull/ "$HOME/picker-input" ;;
 *) echo ctrl-v; head -n 1 "$HOME/picker-input" ;;
 esac
 "#,
@@ -15859,6 +15863,11 @@ esac
     );
     assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
     assert!(!transcript.contains("Same here"), "{transcript}");
+    let args = fs::read_to_string(root.join("view-args")).unwrap();
+    assert!(
+        args.contains("enter: view   ctrl-o: open in browser"),
+        "{args}"
+    );
 
     // `--web` opens the selected items in the browser and prints each URL,
     // without waiting for an opener that runs the browser until it closes.
@@ -15904,9 +15913,19 @@ cat "$HOME/release" > /dev/null
     assert_eq!(web, serde_json::json!([pr]));
     wait_until("the opener's second URL", || opened_lines() == 2);
     fs::write(&release, "").unwrap();
+    // Ctrl-O in the chooser opens the chosen item instead.
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().arg("work").env("VIEW_KEY", "ctrl-o"),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{transcript}");
+    assert!(!transcript.contains("PR #7: Fix crash"), "{transcript}");
+    wait_until("the chooser's URL", || opened_lines() == 3);
+    fs::write(&release, "").unwrap();
     assert_eq!(
         fs::read_to_string(&opened).unwrap(),
-        format!("{issue}\n{pr}\n")
+        format!("{issue}\n{pr}\n{pr}\n")
     );
     // Without an opener the URL is still printed, and the command fails.
     let nothing = root.join("no-programs");

@@ -555,8 +555,9 @@ state unless ready; for a ready workspace it is, in order of precedence,
 `ready (outdated)`, or `inactive`. Branches and paths are in `shoal status`.
 The header names the keys the list binds, most used first, on as many lines as
 the terminal needs. Enter enters the selection; Ctrl-T attaches, Ctrl-F shows
-the diff, Ctrl-V shows a linked issue or PR of the workspace's repository with
-`shoal view`, choosing one when the workspace links several, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
+the diff, Ctrl-V lists the workspace's linked issues and PRs in its repository,
+where Enter shows one with `shoal view` and Ctrl-O opens it in the browser with
+`shoal view --web`, Ctrl-A adds, Ctrl-E runs Claude/Codex CLI, starts a Happy session,
 opens Codex/T3 apps, or runs a shell command, Ctrl-O shows status, Ctrl-S stops,
 Ctrl-D deletes. Each action returns to your shell.
 `shoal work --print`, like a filter, `--json` or output that is not a terminal,
