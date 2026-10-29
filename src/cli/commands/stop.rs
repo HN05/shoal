@@ -1,6 +1,6 @@
 //! Stopping keeps agent sessions and commands for `shoal resume`; agents
 //! stay down until it continues them.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
 
@@ -30,6 +30,9 @@ pub(super) async fn run(
     let mut selected = ui::select_workspaces(ctx, targets.workspace).await?;
     if !skip_children {
         selected = with_children(ctx, selected).await?;
+    }
+    if crate::env::inherits_scope(&ctx.paths.state) {
+        ensure_below(ctx, &selected).await?;
     }
     match selected.as_slice() {
         [workspace] => stop_one(ctx, workspace.clone(), yes).await,
@@ -122,6 +125,24 @@ async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<Stri
         next += 1;
     }
     Ok(ids)
+}
+
+/// Refuse a stop in a workspace process that `selected` includes its own
+/// workspace in. The daemon refuses each workspace not below the caller's,
+/// which needs the scope token; refusing its own here, before any stops,
+/// keeps the stop from taking the workspaces below it alone.
+async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
+    const REFUSAL: &str = "workspace processes stop only the workspaces below theirs; finish their own with shoal done";
+    let own = std::env::var(crate::env::WORKSPACE_ID).context(REFUSAL)?;
+    ensure!(crate::env::is_scoped(), "{REFUSAL}");
+    for selector in selected {
+        let id = client::inspect(&ctx.paths, selector.clone())
+            .await?
+            .workspace
+            .id;
+        ensure!(id != own, "{REFUSAL}");
+    }
+    Ok(())
 }
 
 /// The workspaces `selectors` name, refusing them all before any stops when

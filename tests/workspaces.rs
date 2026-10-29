@@ -5256,8 +5256,12 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     for args in [
         &["resume", "parent", "--discard"][..],
         &["resume", "other", "--discard"],
+        &["resume", "other"],
+        // A stopped agent the parent did not stop is the user's.
         &["resume", "child"],
+        &["resume", "child", "--now"],
         &["resume", "--all", "--discard"],
+        &["resume"],
     ] {
         let output = scoped_command(&fixture, "parent", args);
         assert!(!output.status.success(), "{args:?}: {output:?}");
@@ -5278,6 +5282,74 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     assert_eq!(discarded["discarded"], serde_json::json!(["child-agent"]));
     assert!(!records[2].exists());
     assert!(records[..2].iter().all(|record| record.exists()));
+}
+
+/// A parent's stop of its child stops the workspaces below it too, and the
+/// parent resumes what it stopped, which the daemon starts outside the
+/// parent; what the user stopped stays the user's to resume.
+#[test]
+fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fixture.add("parent");
+    fixture.add("other");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let split = scoped_command(&fixture, "child", &["split", "grandchild"]);
+    assert!(split.status.success(), "{split:?}");
+    let paths = ["child", "grandchild"].map(|name| {
+        let workspace = fixture.ok(&["status", name])["workspace"].clone();
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.last-session.json")),
+            r#"{"agent":"waiter"}"#,
+        )
+        .unwrap();
+        PathBuf::from(workspace["path"].as_str().unwrap())
+    });
+    let restored = || paths.iter().all(|path| path.join("restored").exists());
+    fixture.ok(&["resume", "child", "grandchild"]);
+    wait_until("the user's restores", restored);
+    // The user's stops are not the parent's to resume.
+    for workspace in ["parent", "other"] {
+        let output = scoped_command(&fixture, "parent", &["stop", workspace]);
+        assert!(!output.status.success(), "{workspace}: {output:?}");
+    }
+    fixture.ok(&["stop", "child"]);
+    for args in [&["resume", "child"][..], &["resume", "grandchild"]] {
+        let output = scoped_command(&fixture, "parent", args);
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+    }
+
+    for path in &paths {
+        fs::remove_file(path.join("restored")).unwrap();
+    }
+    fixture.ok(&["resume", "child", "grandchild"]);
+    wait_until("the user's second restores", restored);
+    let output = scoped_command(&fixture, "parent", &["stop", "child"]);
+    assert!(output.status.success(), "{output:?}");
+    let stopped: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        stopped["stopped"],
+        serde_json::json!(["child", "grandchild"]),
+        "{stopped}"
+    );
+    for path in &paths {
+        fs::remove_file(path.join("restored")).unwrap();
+    }
+    let output = scoped_command(&fixture, "parent", &["resume", "child", "grandchild"]);
+    assert!(output.status.success(), "{output:?}");
+    let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(queued["queued"].as_array().unwrap().len(), 2, "{queued}");
+    wait_until("the parent's restores", restored);
+    fixture.ok(&["stop", "child"]);
 }
 
 /// Stopping a workspace stops the workspaces split from it, whose agents work

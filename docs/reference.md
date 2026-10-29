@@ -331,8 +331,12 @@ of cannot be proven ended even then, so stop asks you to confirm it did, and
 restore and requires explicit resume even with `[agent_resume]` configured;
 a stop that fails keeps the agents it stopped as stopped work.
 Run stop, restart and resume outside scoped executions, except that a workspace
-process may discard the stopped work of a workspace below its own with
-`shoal resume <workspace> --discard`.
+process may stop the workspaces below its own with `shoal stop <workspace>`,
+without `--yes`, discard their stopped work with `shoal resume <workspace>
+--discard`, and queue with `shoal resume <workspace>` the restores of the
+agents that it or a workspace below it stopped, which the daemon starts
+detached. An agent the user or Shoal stopped, or that exited on its own, is the
+user's to resume.
 
 `shoal restart [workspace...]` restarts running agents in place: the wrapper
 stops the agent and starts its saved session again in the same terminal with the

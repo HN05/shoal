@@ -312,6 +312,9 @@ with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal questions ask` when the decision is theirs. Send it instructions with
 `shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for
 several lines; `--attach FILE` hands it a file such as a log or screenshot.
+`shoal stop <child>` stops its agent and those below it, keeping their sessions
+(`--skip-children` stops only the child), and `shoal resume <child>` queues the
+agents you stopped to continue; the user resumes the ones the user stopped.
 When a stopped child agent should not come back, such as one whose work is
 done, forget its saved session with `shoal resume <child> --discard`.
 

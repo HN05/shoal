@@ -31,13 +31,12 @@ pub async fn select(
     now: bool,
     focus: bool,
 ) -> Result<i32> {
-    // The daemon checks that the workspace is below the caller's, which
-    // needs the scope token: a process that cleared it stays refused.
-    let checked_discard = crate::env::is_scoped() && discard && targets.workspace.len() == 1;
-    ensure!(
-        !crate::env::inherits_scope(&ctx.paths.state) || checked_discard,
-        "resume agents outside scoped executions; workspace processes can only discard the stopped work of a workspace below theirs with shoal resume <workspace> --discard"
-    );
+    if crate::env::inherits_scope(&ctx.paths.state) {
+        ensure_below(&targets, now || focus)?;
+        if !discard {
+            return queue_below(ctx, targets.workspace, execution).await;
+        }
+    }
     let selected = if targets.all {
         None
     } else {
@@ -61,6 +60,20 @@ pub async fn select(
     }
 }
 
+/// Refuse a resume in a workspace process that does not name the workspaces
+/// below its own or restores in this terminal, `here`: it only queues the
+/// restores of the agents it stopped there, which the daemon starts, or
+/// discards their stopped work.
+fn ensure_below(targets: &WorkspaceTargets, here: bool) -> Result<()> {
+    // The daemon checks that each workspace is below the caller's, which
+    // needs the scope token: a process that cleared it stays refused.
+    ensure!(
+        crate::env::is_scoped() && !targets.all && !targets.workspace.is_empty() && !here,
+        "workspace processes resume only the workspaces below theirs, by name and without --now or --focus: shoal resume <workspace> [--discard]"
+    );
+    Ok(())
+}
+
 /// Queue the restores of the `selected` workspaces' stopped agents, of
 /// every workspace's for `None`.
 async fn queue_selected(
@@ -79,6 +92,45 @@ async fn queue_selected(
             queue::queue_all(ctx, stopped_in(ctx, workspaces).await?).await
         }
     }
+}
+
+/// Queue the restores of the stopped agents and last sessions of the
+/// workspaces below this process's that `selectors` name, only `execution`'s
+/// when given; the daemon refuses those this process or one below it did
+/// not stop, and starts the rest detached.
+async fn queue_below(
+    ctx: &Context,
+    selectors: Vec<String>,
+    execution: Option<String>,
+) -> Result<i32> {
+    let mut stopped = Vec::new();
+    for selector in selectors {
+        stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
+    }
+    queue::queue_all(ctx, stopped).await
+}
+
+/// The stopped agents and last sessions of the workspace `selector` names,
+/// only `execution`'s when given, refusing one without any. Its stopped
+/// commands go to the restored agents.
+async fn stopped_agents(
+    ctx: &Context,
+    selector: String,
+    execution: Option<&str>,
+) -> Result<(Workspace, Saved)> {
+    let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
+    let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+    if let Some(execution) = execution {
+        saved.retain_execution(execution, true);
+    }
+    saved.retain_unattended();
+    saved.commands.clear();
+    ensure!(
+        !(saved.agents.is_empty() && saved.sessions.is_empty()),
+        "{} has no stopped agent to resume",
+        workspace.name
+    );
+    Ok((workspace, saved))
 }
 
 /// Queue the restores of `workspace`'s stopped agents, only `execution`'s
