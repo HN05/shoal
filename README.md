@@ -27,7 +27,9 @@ skills current after upgrades.
 
 On macOS, when workspaces or `root_dir` are on an external volume, grant the
 `shoal` binary Full Disk Access or Removable Volumes once under System Settings >
-Privacy & Security, then run `shoal daemon restart`. The grant survives upgrades.
+Privacy & Security, then run `shoal daemon restart`. The grant survives upgrades
+and covers the agents Shoal starts through zmx, Herdr or Rex or in the
+background, with the commands they run.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:

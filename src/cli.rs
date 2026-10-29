@@ -218,6 +218,21 @@ impl Command {
         })
     }
 
+    /// Whether the command runs an execution wrapper in a place a terminal
+    /// host or the daemon started for it, which outlives what it runs and
+    /// never replaces itself with another program.
+    pub fn wraps_execution(&self) -> bool {
+        matches!(
+            self,
+            Command::Internal {
+                command: InternalCommand::Add { .. }
+                    | InternalCommand::Session { .. }
+                    | InternalCommand::Detached { .. }
+                    | InternalCommand::Demo { .. }
+            }
+        )
+    }
+
     /// Lifecycle and service administration is denied to scoped workspace
     /// processes; everything else is ordinary workspace work.
     pub fn is_administrative(&self) -> bool {

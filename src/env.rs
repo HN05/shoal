@@ -29,6 +29,10 @@ pub const QUEUE_ENTRY: &str = "SHOAL_QUEUE_ENTRY";
 /// Set on the command a detached zmx session's shell runs, which ends the
 /// session once its agent or workspace shell has run; removed at startup.
 pub const ENDS_SESSION: &str = "SHOAL_ENDS_SESSION";
+/// Set on the image an execution wrapper replaces itself with to become
+/// responsible for macOS privacy access; removed at startup.
+#[cfg(target_os = "macos")]
+pub const RESPONSIBILITY_CLAIMED: &str = "SHOAL_RESPONSIBILITY_CLAIMED";
 /// The chat whose agent this process runs under; workspaces opened here belong
 /// to that chat.
 pub const CHAT: &str = "SHOAL_CHAT";

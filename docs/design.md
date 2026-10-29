@@ -330,6 +330,19 @@ its unified PEM is the `MACOS_SIGNING_PEM` Actions secret, and the maintainer
 keeps a copy outside Forgejo. A new certificate changes the requirement, so
 every user grants access again.
 
+Privacy grants of agents: macOS asks the process responsible for an access,
+which a process inherits from whatever started it, for grants such as removable
+volume access. A zmx session's processes inherit one that has exited, so macOS
+judges each new program by itself and a restarted agent asks for its own grant
+(Claude Code's). Execution wrappers started in a place a host or the daemon
+opened (`internal add`, `session`, `detached` and `demo`) therefore replace
+themselves at startup with their own binary, started with responsibility
+disclaimed: the agent and everything it starts use Shoal's grant while the
+wrapper runs, whatever started it. Only certificate-signed builds claim, since
+an ad-hoc build's grant lasts one build and test builds would prompt. A process
+that replaces itself with another program, such as `internal launch` or
+`chat`, never claims: that program would take the responsibility over.
+
 ## Workspaces and Git
 
 Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces

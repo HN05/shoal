@@ -52,6 +52,15 @@ fn main() {
         .var(env::COMPLETE)
         .complete();
     let mut cli = Cli::from_args();
+    if cli
+        .command
+        .as_ref()
+        .is_some_and(cli::Command::wraps_execution)
+    {
+        // SAFETY: no other threads exist before the runtime starts, and the
+        // startup variables removed below still reach the replacement.
+        unsafe { process::responsibility::claim() };
+    }
     cli.daemon_handoff = daemon::handoff::Handoff::take().unwrap_or_else(|error| {
         eprintln!("error: {error:#}");
         std::process::exit(1);

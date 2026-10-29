@@ -602,3 +602,29 @@ fn unknown_input_fails_at_every_built_in_level() {
     }
     assert!(failures.is_empty(), "{failures:#?}");
 }
+
+#[test]
+fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
+    let wraps = |args: &[&str]| {
+        let cli = Cli::try_parse_from(["shoal", "internal"].iter().chain(args)).unwrap();
+        cli.command.as_ref().is_some_and(Command::wraps_execution)
+    };
+    assert!(wraps(&["add", "--host", "zmx", "{}"]));
+    assert!(wraps(&[
+        "session", "w", "claude", "--host", "zmx", "--", "claude"
+    ]));
+    assert!(wraps(&["detached", "w", "--log", "l", "--", "claude"]));
+    assert!(wraps(&["demo", "w", "--launch", "{}", "--", "npm"]));
+    // `launch` and `secret-tool` replace themselves with the program they
+    // start; `queue-start` ends once the agent it starts runs elsewhere.
+    assert!(!wraps(&["launch", "file"]));
+    assert!(!wraps(&["secret-tool", "launchers", "gh", "--", "pr"]));
+    assert!(!wraps(&["queue-start", "entry"]));
+    assert!(
+        !Cli::try_parse_from(["shoal", "status"])
+            .unwrap()
+            .command
+            .as_ref()
+            .is_some_and(Command::wraps_execution)
+    );
+}
