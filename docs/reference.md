@@ -2791,7 +2791,8 @@ two polls in a row see it at the same head and base commits, and again when it
 persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
-branch and the conflicted paths; with nothing linked, it waits for that alone.
+branch and the conflicted paths, unless that target already has HEAD's changes as
+[removal](#remove-a-workspace) decides merges; with nothing linked, it waits for that alone.
 A new [agent message](#agent-messages) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; a comment update counts the

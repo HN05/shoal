@@ -1767,7 +1767,9 @@ reported once two polls in a row see it at the same commits, because Forgejo sho
 the previous result until it rechecks and a PR it is still checking as not
 mergeable. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
-cursor item named by the branch, so work without a PR still learns of conflicts; a
+cursor item named by the branch, so work without a PR still learns of conflicts. It
+leaves out conflicts with a target that already has HEAD's changes, as merged cleanup
+decides, since merging could only repeat them; `conflicts` still reports them. A
 linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads
 come from its REST API rather than fj's output, which has no structured form,
 and work anonymously for public repositories. The watch shares a

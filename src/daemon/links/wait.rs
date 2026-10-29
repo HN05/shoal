@@ -439,7 +439,7 @@ impl Manager {
         let items = self.item_activity(&workspace, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
-            let check = self.check_conflicts(id, None).await;
+            let check = self.watched_conflicts(id).await;
             observations.push((branch, branch_conflicts(check)));
         }
         match items {

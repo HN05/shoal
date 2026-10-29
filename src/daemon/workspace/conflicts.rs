@@ -17,10 +17,35 @@ impl Manager {
     ) -> Result<ConflictCheck> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
+        self.conflicts_with(&workspace, target).await
+    }
+
+    /// The conflicts a workspace watch reports: those of
+    /// [`Self::check_conflicts`] with the default target, unless that target
+    /// already has HEAD's changes and a merge could only repeat them.
+    pub(crate) async fn watched_conflicts(&self, selector: &str) -> Result<ConflictCheck> {
+        let workspace = self.workspace(selector).await?;
+        self.verify_worktree(&workspace).await?;
+        let mut check = self.conflicts_with(&workspace, None).await?;
+        if check.conflicts
+            && git::status::merged_into(&workspace.path, &check.head, &check.target_commit).await?
+        {
+            check.conflicts = false;
+            check.files.clear();
+        }
+        Ok(check)
+    }
+
+    /// The conflicts of `workspace`'s committed HEAD with `target`.
+    async fn conflicts_with(
+        &self,
+        workspace: &Workspace,
+        target: Option<String>,
+    ) -> Result<ConflictCheck> {
         let (target, reference) = match target {
             Some(target) => (target.clone(), target),
             None => {
-                let branch = self.conflict_target(&workspace).await?;
+                let branch = self.conflict_target(workspace).await?;
                 let reference = git::local_ref(&branch);
                 (branch, reference)
             }
@@ -31,7 +56,7 @@ impl Manager {
             .with_context(|| format!("cannot resolve {target}"))?;
         let files = merge_conflicts(&workspace.path, &head, &target_commit).await?;
         Ok(ConflictCheck {
-            workspace_id: workspace.id,
+            workspace_id: workspace.id.clone(),
             target,
             target_commit,
             head,

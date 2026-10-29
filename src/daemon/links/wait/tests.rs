@@ -1389,6 +1389,53 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
     assert_eq!(updates[0].message, "Conflicts with main: other, tracked");
 }
 
+#[tokio::test]
+async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "branch".into(), None, None, None)
+        .await
+        .unwrap();
+    std::fs::write(workspace.path.join("tracked"), "workspace\n").unwrap();
+    crate::test_support::commit(&workspace.path, "tracked");
+    // The default branch takes the commit under a new SHA, then edits it.
+    std::fs::write(repo_path.join("other"), "main\n").unwrap();
+    crate::test_support::commit(&repo_path, "other");
+    crate::test_support::git(
+        &repo_path,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "cherry-pick",
+            "branch",
+        ],
+    );
+    std::fs::write(repo_path.join("tracked"), "main\n").unwrap();
+    crate::test_support::commit(&repo_path, "tracked");
+    assert!(
+        manager
+            .check_conflicts(&workspace.id, None)
+            .await
+            .unwrap()
+            .conflicts
+    );
+    let all = Selection::default();
+    assert!(
+        manager
+            .poll_item_activity(&workspace.id, &all)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
 fn resolved_branch(workspace_id: &str) -> Snapshot {
     branch_conflicts(Ok(crate::model::ConflictCheck {
         workspace_id: workspace_id.into(),
