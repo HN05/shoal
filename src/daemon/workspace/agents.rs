@@ -44,6 +44,9 @@ pub(crate) struct Agent {
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
+    /// How many turns its reports have started, so a stop that read its
+    /// turn state before an await can tell that a turn came between.
+    turns_started: u64,
     /// Whether an interrupt ended its last turn, which leaves it idle
     /// without the hook that ends its other turns, until a turn starts or
     /// ends again.
@@ -285,6 +288,7 @@ impl Manager {
             restart: None,
             ended_restarts: HashMap::new(),
             turn: None,
+            turns_started: 0,
             interrupted: false,
             attached: None,
             told_attached: None,

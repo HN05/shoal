@@ -13,6 +13,14 @@ struct Candidate {
     execution: String,
     workspace_id: String,
     workspace: String,
+    /// The agent's [`super::Agent::turns_started`] when it was chosen.
+    turns_started: u64,
+}
+
+/// An agent to stop, and the turns it had started when it was chosen.
+struct Chosen {
+    protection: Protection,
+    turns_started: u64,
 }
 
 impl Manager {
@@ -30,7 +38,12 @@ impl Manager {
         for candidate in self.idle_candidates(&turns, now).await {
             match self.idle_stop(&candidate).await {
                 Ok(Some(protection)) => {
-                    chosen.insert(candidate.execution, protection);
+                    let turns_started = candidate.turns_started;
+                    let stop = Chosen {
+                        protection,
+                        turns_started,
+                    };
+                    chosen.insert(candidate.execution, stop);
                 }
                 Ok(None) => {}
                 Err(error) => failed.push(format!("{}: {error:#}", candidate.workspace)),
@@ -63,6 +76,7 @@ impl Manager {
                         execution: id.clone(),
                         workspace_id: agent.workspace_id.clone(),
                         workspace: agent.workspace.clone(),
+                        turns_started: agent.turns_started,
                     })
                     .collect()
             })
@@ -81,12 +95,13 @@ impl Manager {
 
     /// Stop the `chosen` agents that are still running and idle with no
     /// prompt cache left at `now`, as `turns` read before taking the agents
-    /// lock and their own reports since show: a turn that ended since they
-    /// were chosen renewed the cache.
+    /// lock and their own reports since show: a turn that came since they
+    /// were chosen renewed the cache, even one that ended while `turns`
+    /// were read.
     async fn stop_idle(
         &self,
         mut turns: HashMap<String, Turn>,
-        chosen: HashMap<String, Protection>,
+        chosen: HashMap<String, Chosen>,
         now: i64,
     ) {
         let stopped: Vec<StoppedAgent> = self
@@ -100,9 +115,11 @@ impl Manager {
                             .get(id)
                             .is_some_and(|turn| turn.idle_without_cache(now))
                     })
-                    .filter_map(|(id, protection)| {
-                        let agent = agents.get_mut(&id).filter(|agent| agent.running())?;
-                        self.protect(&id, agent, &protection, Some(AgentState::Idle))
+                    .filter_map(|(id, stop)| {
+                        let agent = agents.get_mut(&id).filter(|agent| {
+                            agent.running() && agent.turns_started == stop.turns_started
+                        })?;
+                        self.protect(&id, agent, &stop.protection, Some(AgentState::Idle))
                     })
                     .collect()
             })

@@ -234,6 +234,9 @@ impl Manager {
     ) {
         self.executions
             .with_agent(id, |agent| {
+                if state != AgentState::Idle {
+                    agent.turns_started += 1;
+                }
                 agent.turn = Some(state);
                 agent.interrupted = interrupted.unwrap_or(agent.interrupted);
             })

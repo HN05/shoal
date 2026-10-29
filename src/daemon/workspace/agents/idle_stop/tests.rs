@@ -218,11 +218,48 @@ async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
         .await
         .unwrap();
     let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
-    let chosen = HashMap::from([(execution.plan.id.clone(), Protection::idle_held())]);
+    let chosen = chosen_held(&execution.plan.id, 0);
     // A turn ended after the sweep chose the agent.
     cache_expires_in(&manager, &workspace, 600).await;
     let turns = manager.agent_turns().await.unwrap();
-    let now = i64::try_from(crate::time::unix_seconds()).unwrap();
-    manager.stop_idle(turns, chosen, now).await;
+    manager.stop_idle(turns, chosen, unix_now()).await;
     assert!(!*execution.stop.borrow());
+}
+
+#[tokio::test]
+async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    let chosen = chosen_held(&id, 0);
+    let turns = manager.agent_turns().await.unwrap();
+    // A whole turn passes after the turns were read, so they show the agent
+    // idle with the cache it had before.
+    for state in [AgentState::Working, AgentState::Idle] {
+        manager
+            .set_agent_state(&workspace.name, state, Some(id.clone()), None)
+            .await
+            .unwrap();
+    }
+    manager.stop_idle(turns, chosen, unix_now()).await;
+    assert!(!*execution.stop.borrow());
+}
+
+/// The sweep's choice to stop `execution` as idle in a held done workspace
+/// when it had started `turns_started` turns.
+fn chosen_held(execution: &str, turns_started: u64) -> HashMap<String, Chosen> {
+    let stop = Chosen {
+        protection: Protection::idle_held(),
+        turns_started,
+    };
+    HashMap::from([(execution.to_owned(), stop)])
+}
+
+fn unix_now() -> i64 {
+    i64::try_from(crate::time::unix_seconds()).unwrap()
 }
