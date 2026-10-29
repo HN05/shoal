@@ -23,7 +23,9 @@ impl Manager {
     /// workspace goes, or idle longer than its workspace's `[idle_stop]`
     /// allows. A failure in one workspace does not skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
-        let turns = self.agent_turns().await?;
+        // The process scan that tells agents with work in flight waits until
+        // some agent would stop.
+        let turns = self.reported_turns().await?;
         let now = i64::try_from(crate::time::unix_seconds())?;
         let mut chosen = HashMap::new();
         let mut failed = Vec::new();
@@ -37,7 +39,7 @@ impl Manager {
             }
         }
         if !chosen.is_empty() {
-            self.stop_idle(turns, chosen).await;
+            self.stop_idle(self.agent_turns().await?, chosen).await;
         }
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())

@@ -67,6 +67,12 @@ fn reported(db: &Connection) -> Result<(HashMap<String, Turn>, Vec<Execution>)> 
 }
 
 impl Manager {
+    /// The turn each execution reported last, without the process scan
+    /// that tells an idle one with work in flight.
+    pub(crate) async fn reported_turns(&self) -> Result<HashMap<String, Turn>> {
+        Ok(self.store.run(|db| reported(db)).await?.0)
+    }
+
     /// The turn of each execution that reported one.
     pub(crate) async fn agent_turns(&self) -> Result<HashMap<String, Turn>> {
         let (mut turns, idle) = self.store.run(|db| reported(db)).await?;
