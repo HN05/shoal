@@ -2,10 +2,9 @@
 //! agents. Each repository keeps Shoal's copies beside its workspaces, in a
 //! directory its agents are given as a working directory, and the store
 //! records each copy with how it came, so `shoal files` lists them.
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
-use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
@@ -16,7 +15,10 @@ use crate::{
 };
 
 pub(crate) mod layout;
+mod records;
 mod retention;
+
+pub(crate) use records::{rebase, record};
 
 use layout::{Kept, Layout};
 
@@ -52,23 +54,6 @@ pub struct AttachedFile {
     pub expires_at: Option<i64>,
 }
 
-const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at,
-    (SELECT expires_at FROM removed_workspaces r WHERE r.workspace_id=workspace_files.workspace_id
-        AND workspace_files.workspace_id NOT IN (SELECT id FROM workspaces))";
-
-fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
-    Ok(AttachedFile {
-        id: row.get(0)?,
-        workspace: row.get(1)?,
-        source: row.get(2)?,
-        name: row.get(3)?,
-        path: PathBuf::from(row.get::<_, String>(4)?),
-        bytes: row.get::<_, i64>(5)?.try_into().unwrap_or_default(),
-        created_at: row.get(6)?,
-        expires_at: row.get(7)?,
-    })
-}
-
 /// The workspace whose attached files a request names: one that exists, or
 /// a removed one whose results are kept.
 #[derive(Debug, Clone)]
@@ -91,75 +76,9 @@ impl From<Workspace> for Owner {
     }
 }
 
-/// Record the copies `kept` as attached to the workspace `workspace_id` from
-/// `source`, in the caller's transaction. A copy already recorded, as when
-/// the same files are sent again, keeps its record.
-pub(crate) fn record(
-    tx: &Transaction<'_>,
-    workspace_id: &str,
-    source: FileSource,
-    paths: &[PathBuf],
-    bytes: &[u64],
-) -> Result<()> {
-    for (path, bytes) in paths.iter().zip(bytes) {
-        let name = path
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        tx.execute(
-            "INSERT OR IGNORE INTO workspace_files
-                (workspace_id,workspace,parent_id,repository_id,source,name,path,bytes,created_at)
-                SELECT id,name,parent_workspace_id,repository_id,?2,?3,?4,?5,unixepoch()
-                FROM workspaces WHERE id=?1",
-            params![
-                workspace_id,
-                source,
-                name,
-                path.to_string_lossy(),
-                i64::try_from(*bytes)?
-            ],
-        )?;
-    }
-    Ok(())
-}
-
 /// The text copies of added files are kept under, which tells them from a
 /// message that is only its files.
 const ADDED: &str = "shoal files add";
-
-/// The records of the copies `paths`, in their order.
-fn recorded(tx: &Transaction<'_>, paths: &[PathBuf]) -> Result<Vec<AttachedFile>> {
-    let mut statement = tx.prepare(&format!(
-        "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"
-    ))?;
-    paths
-        .iter()
-        .map(|path| Ok(statement.query_row([path.to_string_lossy()], row)?))
-        .collect()
-}
-
-/// Point the recorded copies of repository `repository_id` from `source` to
-/// `destination`, in the transaction that moves the repository's directory.
-pub(crate) fn rebase(
-    tx: &Transaction<'_>,
-    repository_id: &str,
-    source: &Path,
-    destination: &Path,
-) -> Result<()> {
-    let recorded: Vec<(i64, String)> = tx
-        .prepare("SELECT id,path FROM workspace_files WHERE repository_id=?1")?
-        .query_map([repository_id], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    for (id, path) in recorded {
-        if let Ok(inside) = Path::new(&path).strip_prefix(source) {
-            tx.execute(
-                "UPDATE workspace_files SET path=?2 WHERE id=?1",
-                params![id, destination.join(inside).to_string_lossy()],
-            )?;
-        }
-    }
-    Ok(())
-}
 
 /// Copies of `files`, attached to `message` for the workspace
 /// `workspace_id`, made off the async runtime. Callers hold the gate of the
@@ -193,14 +112,7 @@ impl Manager {
     pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
         self.store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {COLUMNS} FROM workspace_files WHERE workspace_id=?1 ORDER BY id"
-                    ))?
-                    .query_map([&owner.id], row)?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
+            .run(move |db| records::list(db, &owner.id, None))
             .await
     }
 
@@ -214,25 +126,7 @@ impl Manager {
         let selector = selector.to_owned();
         let removed = self
             .store
-            .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT workspace_id,workspace,repository_id,parent_id FROM workspace_files
-                            WHERE (workspace_id=?1 OR workspace=?1)
-                                AND workspace_id NOT IN (SELECT id FROM workspaces)
-                            ORDER BY id DESC LIMIT 1",
-                        [selector],
-                        |row| {
-                            Ok(Owner {
-                                id: row.get(0)?,
-                                name: row.get(1)?,
-                                repository_id: row.get(2)?,
-                                parent_id: row.get(3)?,
-                            })
-                        },
-                    )
-                    .optional()?)
-            })
+            .run(move |db| records::removed_owner(db, &selector))
             .await?;
         removed.ok_or(error)
     }
@@ -268,17 +162,9 @@ impl Manager {
         let repo = self.repository(&owner.repository_id).await?;
         let _files = self.gates.lock_message_files(&repo.id).await;
         let (id, wanted) = (owner.id.clone(), name.clone());
-        let files: Vec<AttachedFile> = self
+        let files = self
             .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {COLUMNS} FROM workspace_files
-                            WHERE workspace_id=?1 AND (?2 IS NULL OR name=?2) ORDER BY id"
-                    ))?
-                    .query_map(params![id, wanted], row)?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
+            .run(move |db| records::list(db, &id, wanted.as_deref()))
             .await?;
         if let Some(name) = &name {
             ensure!(
@@ -301,20 +187,7 @@ impl Manager {
             let _admission = self.executions.connections().await;
             let _files = self.gates.lock_message_files(&repo.id).await;
             let id = repo.id.clone();
-            let files = self
-                .store
-                .run(move |db| {
-                    Ok(db
-                        .prepare(&format!(
-                            "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
-                                AND workspace_id NOT IN
-                                    (SELECT workspace_id FROM executions WHERE state=?2)
-                                ORDER BY id"
-                        ))?
-                        .query_map(params![id, crate::state::ExecutionState::Running], row)?
-                        .collect::<rusqlite::Result<Vec<_>>>()?)
-                })
-                .await?;
+            let files = self.store.run(move |db| records::idle(db, &id)).await?;
             deleted.extend(self.delete_files(&repo, files).await?);
         }
         Ok(deleted)
@@ -334,16 +207,7 @@ impl Manager {
         })
         .await??;
         let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                for id in ids {
-                    tx.execute("DELETE FROM workspace_files WHERE id=?1", [id])?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await?;
+        self.store.run(move |db| records::forget(db, &ids)).await?;
         Ok(files)
     }
 
@@ -390,13 +254,7 @@ impl Manager {
         let id = workspace_id.to_owned();
         let (paths, bytes) = (kept.paths.clone(), kept.bytes.clone());
         self.store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                record(&tx, &id, source, &paths, &bytes)?;
-                let records = recorded(&tx, &paths)?;
-                tx.commit()?;
-                Ok(records)
-            })
+            .run(move |db| records::record_all(db, &id, source, &paths, &bytes))
             .await
     }
 

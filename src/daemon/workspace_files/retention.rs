@@ -2,9 +2,8 @@
 //! results, which stay as long as its removal record, and every file goes
 //! with its repository.
 use anyhow::{Result, ensure};
-use rusqlite::params;
 
-use super::{FileSource, Owner, layout::Layout};
+use super::{Owner, layout::Layout, records};
 use crate::{
     daemon::workspace::Manager,
     model::{Repository, Workspace},
@@ -26,19 +25,7 @@ impl Manager {
             .as_ref()
             .map(|parent| parent.id.clone());
         self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                tx.execute(
-                    "DELETE FROM workspace_files WHERE workspace_id=?1 AND source!=?2",
-                    params![id, FileSource::Result],
-                )?;
-                tx.execute(
-                    "UPDATE workspace_files SET parent_id=?2 WHERE parent_id=?1",
-                    params![id, parent],
-                )?;
-                tx.commit()?;
-                Ok(())
-            })
+            .run(move |db| records::forget_removed(db, &id, parent.as_deref()))
             .await?;
         let repo = self.repository(&workspace.repository_id).await?;
         let Some(layout) = Layout::of(&repo) else {
@@ -54,10 +41,7 @@ impl Manager {
         let _files = self.gates.lock_message_files(&repo.id).await;
         let id = repo.id.clone();
         self.store
-            .run(move |db| {
-                db.execute("DELETE FROM workspace_files WHERE repository_id=?1", [id])?;
-                Ok(())
-            })
+            .run(move |db| records::forget_repository(db, &id))
             .await?;
         let Some(layout) = Layout::of(repo) else {
             return Ok(());
@@ -82,19 +66,7 @@ impl Manager {
     async fn expire_repository_results(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
         let id = repo.id.clone();
-        let expired: Vec<String> = self
-            .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(
-                        "SELECT DISTINCT workspace_id FROM workspace_files WHERE repository_id=?1
-                            AND workspace_id NOT IN (SELECT id FROM workspaces)
-                            AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)",
-                    )?
-                    .query_map([id], |row| row.get(0))?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await?;
+        let expired = self.store.run(move |db| records::expired(db, &id)).await?;
         for workspace_id in expired {
             self.delete_results_of(repo, workspace_id).await?;
         }
@@ -104,25 +76,7 @@ impl Manager {
     /// The removed workspaces whose results are kept, those that handed them
     /// back first oldest first.
     pub(crate) async fn kept_results(&self) -> Result<Vec<Owner>> {
-        self.store
-            .run(|db| {
-                Ok(db
-                    .prepare(
-                        "SELECT workspace_id,workspace,repository_id,parent_id FROM workspace_files
-                            WHERE workspace_id NOT IN (SELECT id FROM workspaces)
-                            GROUP BY workspace_id ORDER BY MIN(id)",
-                    )?
-                    .query_map([], |row| {
-                        Ok(Owner {
-                            id: row.get(0)?,
-                            name: row.get(1)?,
-                            repository_id: row.get(2)?,
-                            parent_id: row.get(3)?,
-                        })
-                    })?
-                    .collect::<rusqlite::Result<_>>()?)
-            })
-            .await
+        self.store.run(|db| records::kept(db)).await
     }
 
     /// Delete the results that the removed workspace `owner` handed back.
@@ -140,13 +94,7 @@ impl Manager {
             tokio::task::spawn_blocking(move || layout.remove_results(&id)).await??;
         }
         self.store
-            .run(move |db| {
-                db.execute(
-                    "DELETE FROM workspace_files WHERE workspace_id=?1",
-                    [workspace_id],
-                )?;
-                Ok(())
-            })
+            .run(move |db| records::forget_workspace(db, &workspace_id))
             .await
     }
 }
