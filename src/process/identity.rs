@@ -313,21 +313,21 @@ fn descends_from_detached(lineage: &Lineage, lineages: &HashMap<u32, Lineage>) -
 
 /// Live same-user processes carrying one of the execution markers `ids`.
 pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
-    scan_marked(crate::env::EXECUTION_ID, ids).await
+    scan_marked(Marker::Execution, ids).await
 }
 
 /// Live same-user processes carrying the workspace's identity: its tracked
 /// executions, hooks and processes started with its exported environment.
 /// Unreadable environments cannot be attributed and are left out.
 pub async fn scan_workspace(id: &str) -> Result<Vec<Identity>> {
-    let scan = scan_marked(crate::env::WORKSPACE_ID, HashSet::from([id.to_owned()])).await?;
+    let scan = scan_marked(Marker::Workspace, HashSet::from([id.to_owned()])).await?;
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
 /// `scan_workspace` for each of the workspaces `ids`, pairing every process
 /// with the workspace it carries.
 pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identity)>> {
-    let scan = scan_marked(crate::env::WORKSPACE_ID, ids).await?;
+    let scan = scan_marked(Marker::Workspace, ids).await?;
     Ok(scan
         .processes
         .into_iter()
@@ -337,19 +337,16 @@ pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identi
 
 /// Inventory processes whose environment sets `marker` to one of `ids`; each
 /// match records the value it carries.
-async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
+async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
     let listing = list_processes().await?;
-    let marker = format!("{marker}=").into_bytes();
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        let mut inventory = Inventory {
-            observed: HashMap::new(),
-        };
+        let mut inventory = Inventory::new();
         for pid in listing.own {
-            if let Some(process) = observe(pid, &marker, &ids, settle_deadline)? {
+            if let Some(process) = observe(pid, settle_deadline)? {
                 inventory.observed.insert(pid, process);
             }
         }
@@ -358,7 +355,7 @@ async fn scan_marked(marker: &str, ids: HashSet<String>) -> Result<Scan> {
                 inventory.observed.insert(pid, process);
             }
         }
-        inventory.attribute()
+        inventory.attribute(marker, &ids)
     })
     .await
     .context("process inventory worker failed")?
@@ -414,8 +411,50 @@ struct Observed {
     evidence: Evidence,
 }
 
+/// The markers of Shoal's identity an environment carries.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Marks {
+    execution: Option<String>,
+    workspace: Option<String>,
+}
+
+/// The marker a scan attributes processes by.
+#[derive(Clone, Copy)]
+enum Marker {
+    Execution,
+    Workspace,
+}
+
+impl Marks {
+    fn read(environment: &[Vec<u8>]) -> Self {
+        let value = |variable: &str| {
+            let prefix = format!("{variable}=");
+            environment
+                .iter()
+                .find_map(|entry| entry.strip_prefix(prefix.as_bytes()))
+                .and_then(|value| std::str::from_utf8(value).ok())
+                .map(str::to_owned)
+        };
+        Self {
+            execution: value(crate::env::EXECUTION_ID),
+            workspace: value(crate::env::WORKSPACE_ID),
+        }
+    }
+
+    fn get(&self, marker: Marker) -> Option<&str> {
+        match marker {
+            Marker::Execution => self.execution.as_deref(),
+            Marker::Workspace => self.workspace.as_deref(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.execution.is_none() && self.workspace.is_none()
+    }
+}
+
 enum Evidence {
-    Marked(String),
+    Marked(Marks),
     Unmarked,
     Unreadable,
     /// Settled empty, which a platform binary's hidden environment also reads as.
@@ -437,16 +476,17 @@ pub async fn stays_unattributed(
     deadline: std::time::Instant,
 ) -> Result<bool> {
     let identity = identity.clone();
-    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
-    let ids = HashSet::from([execution.to_owned()]);
+    let execution = execution.to_owned();
     tokio::task::spawn_blocking(move || {
         loop {
-            let evidence = observe(identity.pid, &marker, &ids, deadline)?
+            let evidence = observe(identity.pid, deadline)?
                 .filter(|observed| observed.lineage.identity == identity)
                 .map(|observed| observed.evidence);
             match evidence {
                 None | Some(Evidence::Unmarked) => return Ok(false),
-                Some(Evidence::Marked(_)) => return Ok(true),
+                Some(Evidence::Marked(marks)) => {
+                    return Ok(marks.get(Marker::Execution) == Some(execution.as_str()));
+                }
                 _ if std::time::Instant::now() >= deadline => return Ok(true),
                 _ => std::thread::sleep(Duration::from_millis(10)),
             }
@@ -478,13 +518,8 @@ pub fn started_with(identity: &Identity, variable: &str) -> bool {
     )
 }
 
-/// Read `pid`'s environment for `marker`, unless it has exited.
-fn observe(
-    pid: u32,
-    marker: &[u8],
-    ids: &HashSet<String>,
-    deadline: std::time::Instant,
-) -> Result<Option<Observed>> {
+/// Read `pid`'s environment for Shoal's markers, unless it has exited.
+fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
     let Some(lineage) = lineage(pid)? else {
         return Ok(None);
     };
@@ -494,12 +529,14 @@ fn observe(
         {
             Evidence::Hidden
         }
-        Visibility::Environment(environment) => environment
-            .iter()
-            .find_map(|entry| entry.strip_prefix(marker))
-            .and_then(|id| std::str::from_utf8(id).ok())
-            .filter(|id| ids.contains(*id))
-            .map_or(Evidence::Unmarked, |id| Evidence::Marked(id.into())),
+        Visibility::Environment(environment) => {
+            let marks = Marks::read(&environment);
+            if marks.is_empty() {
+                Evidence::Unmarked
+            } else {
+                Evidence::Marked(marks)
+            }
+        }
         Visibility::Unreadable => Evidence::Unreadable,
         Visibility::Gone => return Ok(None),
     };
@@ -516,7 +553,7 @@ fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
 
 #[derive(Clone)]
 enum Attribution {
-    Owned(String),
+    Owned(Marks),
     Foreign,
     /// Its owner cannot be told; the identity heads the processes it covers.
     Unknown(Identity),
@@ -534,9 +571,15 @@ fn another_users(pid: u32) -> bool {
 }
 
 impl Inventory {
-    /// Attribute every observed process and collect the scan, checking that
-    /// owned processes still live.
-    fn attribute(&self) -> Result<Scan> {
+    fn new() -> Self {
+        Self {
+            observed: HashMap::new(),
+        }
+    }
+
+    /// Attribute every observed process and collect the scan of those whose
+    /// `marker` is one of `ids`, checking that owned processes still live.
+    fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
         for (pid, process) in &self.observed {
@@ -545,17 +588,21 @@ impl Inventory {
             }
             let identity = &process.lineage.identity;
             match self.resolve(*pid, &mut attributions) {
-                Attribution::Owned(execution_id) if alive(identity)? => {
-                    scan.processes.push(OwnedProcess {
-                        execution_id,
-                        identity: identity.clone(),
-                    });
+                Attribution::Owned(marks) => {
+                    if let Some(id) = marks.get(marker).filter(|id| ids.contains(*id))
+                        && alive(identity)?
+                    {
+                        scan.processes.push(OwnedProcess {
+                            execution_id: id.to_owned(),
+                            identity: identity.clone(),
+                        });
+                    }
                 }
                 Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
                     identity: identity.clone(),
                     head,
                 }),
-                _ => {}
+                Attribution::Foreign => {}
             }
         }
         Ok(scan)
@@ -584,7 +631,7 @@ impl Inventory {
             };
             let lineage = &process.lineage;
             match &process.evidence {
-                Evidence::Marked(id) => break Attribution::Owned(id.clone()),
+                Evidence::Marked(marks) => break Attribution::Owned(marks.clone()),
                 Evidence::Unmarked => break Attribution::Foreign,
                 Evidence::Unreadable => break Attribution::Unknown(lineage.identity.clone()),
                 Evidence::Hidden | Evidence::Elevated => hidden.push(process),
@@ -1331,11 +1378,9 @@ fn descended_from(
     let Some(execution) = execution else {
         return lineage_descendants(root, lineages, |_| Ok(false));
     };
-    let marker = format!("{}=", crate::env::EXECUTION_ID).into_bytes();
-    let ids = HashSet::from([execution]);
     let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
     lineage_descendants(root, lineages, |identity| {
-        left_execution(identity, &marker, &ids, deadline)
+        left_execution(identity, &execution, deadline)
     })
 }
 
@@ -1344,16 +1389,17 @@ fn descended_from(
 /// no longer belongs to the execution, nor do its descendants.
 fn left_execution(
     identity: &Identity,
-    marker: &[u8],
-    ids: &HashSet<String>,
+    execution: &str,
     deadline: std::time::Instant,
 ) -> Result<bool> {
-    Ok(
-        observe(identity.pid, marker, ids, deadline)?.is_some_and(|observed| {
-            observed.lineage.identity == *identity
-                && matches!(observed.evidence, Evidence::Unmarked)
-        }),
-    )
+    Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
+        observed.lineage.identity == *identity
+            && match &observed.evidence {
+                Evidence::Unmarked => true,
+                Evidence::Marked(marks) => marks.get(Marker::Execution) != Some(execution),
+                _ => false,
+            }
+    }))
 }
 
 /// A parent's unique ID is lower than its children's, since the kernel

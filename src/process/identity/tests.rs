@@ -184,44 +184,59 @@ fn observed(pid: u32, parent: u32, adopted: bool, evidence: Evidence) -> (u32, O
     (pid, Observed { lineage, evidence })
 }
 
+fn marked(execution: &str) -> Evidence {
+    Evidence::Marked(Marks {
+        execution: Some(execution.into()),
+        workspace: None,
+    })
+}
+
+fn inventory<const N: usize>(observed: [(u32, Observed); N]) -> Inventory {
+    Inventory {
+        observed: HashMap::from(observed),
+    }
+}
+
+fn describe(attribution: Attribution) -> String {
+    match attribution {
+        Attribution::Owned(marks) => format!("owned by {}", marks.execution.unwrap_or_default()),
+        Attribution::Foreign => "foreign".into(),
+        Attribution::Unknown(head) => format!("unknown under {}", head.pid),
+    }
+}
+
 #[test]
 fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells() -> Result<()> {
-    use Evidence::{Hidden, Marked, Unmarked};
+    use Evidence::{Hidden, Unmarked};
     // A live parent the inventory missed, which `cat` keeps until its stdin closes.
     let mut unlisted = std::process::Command::new("cat")
         .stdin(std::process::Stdio::piped())
         .spawn()?;
-    let inventory = Inventory {
-        observed: HashMap::from([
-            // A shell and its job under a marked agent.
-            observed(10, 9, false, Marked("execution".into())),
-            observed(11, 10, false, Hidden),
-            observed(12, 11, false, Hidden),
-            // A shell under an unmarked terminal.
-            observed(20, 1, false, Unmarked),
-            observed(21, 20, false, Hidden),
-            // A job launchd adopted after its shell exited, and its child.
-            observed(31, 1, true, Hidden),
-            observed(32, 31, false, Hidden),
-            // A job launchd started.
-            observed(30, 1, false, Hidden),
-            // A shell whose listed parent exited before it was observed.
-            // Above every system's highest PID, so no process has it.
-            observed(41, 4_194_305, false, Hidden),
-            // A shell whose parent exited and left its PID to a later
-            // marked process.
-            observed(51, 60, false, Hidden),
-            observed(60, 9, false, Marked("execution".into())),
-            // A shell whose live parent is missing from the inventory.
-            observed(u32::MAX >> 1, unlisted.id(), false, Hidden),
-        ]),
-    };
+    let inventory = inventory([
+        // A shell and its job under a marked agent.
+        observed(10, 9, false, marked("execution")),
+        observed(11, 10, false, Hidden),
+        observed(12, 11, false, Hidden),
+        // A shell under an unmarked terminal.
+        observed(20, 1, false, Unmarked),
+        observed(21, 20, false, Hidden),
+        // A job launchd adopted after its shell exited, and its child.
+        observed(31, 1, true, Hidden),
+        observed(32, 31, false, Hidden),
+        // A job launchd started.
+        observed(30, 1, false, Hidden),
+        // A shell whose listed parent exited before it was observed.
+        // Above every system's highest PID, so no process has it.
+        observed(41, 4_194_305, false, Hidden),
+        // A shell whose parent exited and left its PID to a later
+        // marked process.
+        observed(51, 60, false, Hidden),
+        observed(60, 9, false, marked("execution")),
+        // A shell whose live parent is missing from the inventory.
+        observed(u32::MAX >> 1, unlisted.id(), false, Hidden),
+    ]);
     let mut attributions = HashMap::new();
-    let mut resolve = |pid| match inventory.resolve(pid, &mut attributions) {
-        Attribution::Owned(id) => format!("owned by {id}"),
-        Attribution::Foreign => "foreign".into(),
-        Attribution::Unknown(head) => format!("unknown under {}", head.pid),
-    };
+    let mut resolve = |pid| describe(inventory.resolve(pid, &mut attributions));
     assert_eq!(resolve(12), "owned by execution");
     assert_eq!(resolve(11), "owned by execution");
     assert_eq!(resolve(21), "foreign");
@@ -243,7 +258,7 @@ fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells
 #[cfg(target_os = "macos")]
 #[test]
 fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Result<()> {
-    use Evidence::{Hidden, Marked, Unmarked};
+    use Evidence::{Hidden, Unmarked};
     // `top` runs setuid root like `login`; it samples until killed.
     let mut setuid = std::process::Command::new("/usr/bin/top")
         .args(["-l", "0", "-s", "60"])
@@ -261,8 +276,8 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
         shell.lineage.identity.birth = format!("{}:0", u32::MAX);
         (pid, shell)
     };
-    let starter = |evidence| Inventory {
-        observed: HashMap::from([
+    let starter = |evidence| {
+        inventory([
             shell(),
             (
                 elevated.lineage.identity.pid,
@@ -272,21 +287,15 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
                 },
             ),
             observed(std::process::id(), 1, false, evidence),
-        ]),
+        ])
     };
-    let resolve = |inventory: Inventory| match inventory.resolve(u32::MAX >> 1, &mut HashMap::new())
-    {
-        Attribution::Owned(id) => format!("owned by {id}"),
-        Attribution::Foreign => "foreign".into(),
-        Attribution::Unknown(head) => format!("unknown under {}", head.pid),
-    };
+    let resolve =
+        |inventory: Inventory| describe(inventory.resolve(u32::MAX >> 1, &mut HashMap::new()));
     assert_eq!(resolve(starter(Unmarked)), "foreign");
-    assert_eq!(
-        resolve(starter(Marked("execution".into()))),
-        "owned by execution"
-    );
+    assert_eq!(resolve(starter(marked("execution"))), "owned by execution");
     // The setuid program is never reported itself.
-    let scan = starter(Marked("execution".into())).attribute()?;
+    let scan = starter(marked("execution"))
+        .attribute(Marker::Execution, &HashSet::from(["execution".into()]))?;
     assert!(scan.unreadable.is_empty());
     assert!(
         scan.processes
