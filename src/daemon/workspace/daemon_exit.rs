@@ -34,15 +34,15 @@ impl Manager {
         match ending {
             Ending::Detach => {}
             Ending::Stop => self.stop_all_for_exit().await,
-            // A system shutdown already stopped the work and holds the queue.
-            Ending::Save if self.agent_queue.suspended() => {}
             Ending::Save => self.stop_for_shutdown_of(Shutdown::Daemon).await,
         }
     }
 
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
-    /// agents down until `shoal resume`.
+    /// agents down until `shoal resume`, after a stop before a shutdown
+    /// that is under way.
     async fn stop_all_for_exit(&self) {
+        let _shutdown_stop = self.shutdown_stopped.lock().await;
         self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
             self.stop_workspace_manually(&workspace, false).await
         })

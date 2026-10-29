@@ -118,6 +118,9 @@ pub struct Manager {
     pub(crate) executions: executions::Executions,
     pub(crate) overload_recovery: overload_recovery::OverloadRecovery,
     pub(crate) agent_queue: agent_queue::AgentQueue,
+    /// Held through a stop before a shutdown; true once one finished, until
+    /// a system shutdown is cancelled, so later ones leave the work alone.
+    pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,
     pub(crate) signals: signals::Signals,
     pub(crate) usage: usage::Usage,
     pub(crate) seeds: super::seed::Seeds,
@@ -147,6 +150,7 @@ impl Manager {
             executions: Default::default(),
             overload_recovery: Default::default(),
             agent_queue: Default::default(),
+            shutdown_stopped: Default::default(),
             signals: Default::default(),
             usage: Default::default(),
             seeds: Default::default(),

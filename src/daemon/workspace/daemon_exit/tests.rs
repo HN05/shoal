@@ -7,6 +7,7 @@ use crate::{
     daemon::{
         execution_connection::{ExecutionContext, execute},
         notifications::NotificationKind,
+        workspace::ExecutionKind,
     },
     execution::recovery,
     model::Workspace,
@@ -57,7 +58,7 @@ impl Running {
             ExecutionContext {
                 workspace: workspace.id.clone(),
                 wrapper: wrapper.clone(),
-                kind: super::super::ExecutionKind::Command,
+                kind: ExecutionKind::Command,
                 agent: None,
                 recover: false,
                 reattach: false,
@@ -188,12 +189,17 @@ async fn daemon_stop_stops_work_as_stop_all_does() {
 }
 
 #[tokio::test]
-async fn a_restart_and_a_signal_after_a_system_shutdown_leave_work_alone() {
+async fn a_restart_and_a_signal_after_a_system_shutdown_stop_leave_work_alone() {
+    use futures_util::FutureExt;
     let mut running = Running::start().await;
     bounded(running.manager.end_work(Ending::Detach)).await;
-    // The system shutdown's stop holds the queue.
-    running.manager.agent_queue.suspend(true).await;
-    bounded(running.manager.end_work(Ending::Save)).await;
+    // A signal during a system shutdown's stop waits for that stop.
+    let mut stopping = running.manager.shutdown_stopped.lock().await;
+    let mut signaled = Box::pin(running.manager.end_work(Ending::Save));
+    assert!(signaled.as_mut().now_or_never().is_none());
+    *stopping = true;
+    drop(stopping);
+    bounded(signaled).await;
     assert!(running.queued_restore().await);
     // The connection still runs: the next control answers its exit.
     let finished = ExecutionEvent::Finished { exit_code: 0 };

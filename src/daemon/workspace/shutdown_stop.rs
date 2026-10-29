@@ -59,8 +59,13 @@ impl Manager {
     /// which the stop keeps with those already waiting, and hold the agent
     /// queue until a system shutdown is cancelled, so nothing starts again
     /// before it. The user learns what to continue. An update waits for the
-    /// stop.
+    /// stop. Once a stop before a shutdown finished, later ones wait for it
+    /// and leave the work alone.
     pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
+        let mut finished = self.shutdown_stopped.lock().await;
+        if *finished {
+            return;
+        }
         let stopped = self
             .stop_every_target(shutdown.moment(), |workspace| async move {
                 self.stop_keeping_restores(&workspace, shutdown.request())
@@ -68,10 +73,13 @@ impl Manager {
             })
             .await;
         self.notify_shutdown_stop(shutdown, &stopped).await;
+        *finished = true;
     }
 
-    /// Admit queued agents again once the shutdown was cancelled.
+    /// Admit queued agents again once the shutdown was cancelled, and stop
+    /// work again before the next one.
     pub(crate) async fn system_shutdown_cancelled(&self) {
+        *self.shutdown_stopped.lock().await = false;
         self.agent_queue.suspend(false).await;
     }
 

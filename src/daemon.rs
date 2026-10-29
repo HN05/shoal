@@ -196,12 +196,13 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
             }
         }
     };
-    background.shutdown().await;
     // A daemon that stops accepting connections fails and leaves work
-    // running for the next daemon the service manager starts.
+    // running for the next daemon the service manager starts. Background
+    // loops run on meanwhile, so a stop the shutdown lock started finishes.
     manager
         .end_work(*result.as_ref().unwrap_or(&Ending::Detach))
         .await;
+    background.shutdown().await;
     manager.stop_for_shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;
