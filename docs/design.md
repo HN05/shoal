@@ -123,9 +123,11 @@ CPU is opt-in and requires sustained aggregate busy time. One `load` setting
 user chooses how hard to load the machine without tuning each percentage;
 explicit thresholds override it. Linux memory defaults rise with swap, which
 makes the OOM killer a later risk. Stop connected tracked
-agents through their execution wrappers, preserving work and leases: the agent
-idle longest first, since an idle agent loses no turn, and a working one, newest
-first, only when no idle one is left. An idle agent with processes outside its
+agents through their execution wrappers, preserving work and leases: agents no
+terminal shows first, since the user is likely working with a shown one, then
+the agent idle longest, since an idle agent loses no turn, and a working one,
+newest first, only when no idle one is left. Shown agents still stop once no
+other is left, since a host such as Herdr may count every agent as shown. An idle agent with processes outside its
 process group counts as working, since their completion may start its next
 turn, and so does one without turn reports. Once the
 wrapper reports the stop, the daemon also stops the agent's identity-verified

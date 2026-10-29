@@ -357,6 +357,62 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
 }
 
 #[tokio::test]
+async fn overload_stops_attached_agents_only_after_the_others() {
+    use crate::state::AgentState;
+    let (_root, manager) = manager().await;
+    let repo = repository(_root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut executions = Vec::new();
+    for (name, attached) in [("attached", true), ("working", false), ("detached", false)] {
+        let workspace = manager
+            .create_workspace(&repo.id, name.into(), None, None, None)
+            .await
+            .unwrap();
+        let execution = manager
+            .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .unwrap();
+        let id = execution.plan.id.clone();
+        manager
+            .track_agent(
+                &id,
+                name,
+                &workspace.id,
+                &workspace.name,
+                false,
+                Duration::ZERO,
+            )
+            .await;
+        let state = match name {
+            "working" => AgentState::Working,
+            _ => AgentState::Idle,
+        };
+        manager
+            .set_agent_state(&workspace.name, state, Some(id.clone()), None)
+            .await
+            .unwrap();
+        manager
+            .report_attached(&workspace.name, &id, attached)
+            .await
+            .unwrap();
+        executions.push(execution);
+    }
+    // Idle, the attached agent would stop before the working one but for
+    // its attachment.
+    for index in [2, 1, 0] {
+        assert!(
+            manager
+                .stop_agent_for_overload("critical memory pressure")
+                .await
+        );
+        assert!(*executions[index].stop.borrow(), "agent {index} stops next");
+    }
+}
+
+#[tokio::test]
 async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
     use crate::{execution::recovery::Record, state::AgentState};
     let (_root, manager) = manager().await;

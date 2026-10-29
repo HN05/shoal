@@ -3,6 +3,7 @@
 //! completion. The daemon never touches terminal I/O. A detached launch runs
 //! the same wrapper in a background `shoal` process with a log file instead
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
+mod attachment;
 mod completion;
 mod demo;
 mod detached;

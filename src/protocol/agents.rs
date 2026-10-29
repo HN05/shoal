@@ -48,6 +48,14 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resets_at: Option<i64>,
     },
+    /// Whether a terminal shows the agent `execution` runs, which its
+    /// wrapper reads from the place it runs in and reports again
+    /// periodically, so a restarted daemon learns it too.
+    ReportAttached {
+        workspace: String,
+        execution: String,
+        attached: bool,
+    },
     /// Long-lived: answers once whether the workspace's agent is idle with
     /// undelivered messages or queued item updates matches `due`.
     AwaitAgentWake {

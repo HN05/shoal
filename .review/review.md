@@ -362,8 +362,9 @@ instead of the PR delivery guidance below.
 - Machine-wide memory overload protection is opt-out; sustained CPU protection is
   opt-in. The machine-only `load` level sets the CPU and memory thresholds the
   file leaves out; explicit values win. Stop one connected tracked
-  agent at a time through its wrapper, the one idle longest first and otherwise
-  the newest, with configurable thresholds
+  agent at a time through its wrapper: agents no terminal shows before shown ones,
+  which still stop once no other is left, then the one idle longest first and
+  otherwise the newest, with configurable thresholds
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.

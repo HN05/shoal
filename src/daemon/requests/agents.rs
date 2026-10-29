@@ -91,6 +91,16 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        AgentMethod::ReportAttached {
+            workspace,
+            execution,
+            attached,
+        } => {
+            manager
+                .report_attached(&workspace, &execution, attached)
+                .await?;
+            Body::Ok
+        }
         AgentMethod::SendAgentMessage { workspace, message } => {
             manager.send_agent_message(&workspace, message).await?;
             Body::Ok
@@ -124,6 +134,10 @@ impl Scoped for AgentMethod {
             // Only the agent's wrapper, which runs its proxy, reports it.
             AgentMethod::ReportProxyRetry { .. } | AgentMethod::ReportUpstreamReset { .. } => {
                 bail!("workspace processes cannot report what a proxy learns")
+            }
+            // Only the agent's wrapper reads the place the agent runs in.
+            AgentMethod::ReportAttached { .. } => {
+                bail!("workspace processes cannot report whether a terminal shows an agent")
             }
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.

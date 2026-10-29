@@ -16,6 +16,7 @@ use crate::{
     state::{AgentState, WorkspaceState},
 };
 
+mod attachment;
 mod queue_move;
 mod restart;
 
@@ -36,6 +37,9 @@ pub(crate) struct Agent {
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
+    /// Whether a terminal shows the agent, as its wrapper reported last;
+    /// `None` until it reports.
+    attached: Option<bool>,
 }
 
 impl Agent {
@@ -262,6 +266,7 @@ impl Manager {
             update_hold: None,
             restart: None,
             turn: None,
+            attached: None,
         };
         connections
             .with_agents(|agents| agents.insert(id.into(), agent))
@@ -643,13 +648,17 @@ impl Manager {
                 let running = agents
                     .iter()
                     .filter(|(_, agent)| !agent.stop.is_closed() && !*agent.stop.borrow())
-                    .map(|(id, agent)| (id, agent.started));
+                    .map(|(id, agent)| Running {
+                        id,
+                        started: agent.started,
+                        attached: agent.attached == Some(true),
+                    });
                 let selected: Vec<String> = match select {
                     Select::One => first_to_stop(running, &turns)
                         .into_iter()
                         .cloned()
                         .collect(),
-                    Select::All => running.map(|(id, _)| id.clone()).collect(),
+                    Select::All => running.map(|agent| agent.id.clone()).collect(),
                 };
                 selected
                     .into_iter()
@@ -751,21 +760,36 @@ fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>
     }
 }
 
-/// Of the `running` agents, by execution and start, the one whose stop costs
-/// the least work: the one idle longest, otherwise the newest, which has the
-/// least progress to lose.
+/// A running agent protection may stop.
+struct Running<'a> {
+    id: &'a String,
+    started: Instant,
+    /// Whether a terminal shows it, so the user may be working with it.
+    attached: bool,
+}
+
+/// Of the `running` agents, one nobody is attached to while there is one,
+/// whose stop costs the least work.
 fn first_to_stop<'a>(
-    running: impl Iterator<Item = (&'a String, Instant)>,
+    running: impl Iterator<Item = Running<'a>>,
     turns: &HashMap<String, Turn>,
 ) -> Option<&'a String> {
-    let (idle, working): (Vec<_>, Vec<_>) =
-        running.partition(|(id, _)| turns.get(*id).is_some_and(Turn::idle));
-    match idle.into_iter().min_by_key(|(id, _)| turns[*id].since) {
-        Some((id, _)) => Some(id),
+    let (attached, unattached): (Vec<_>, Vec<_>) = running.partition(|agent| agent.attached);
+    least_work(unattached, turns).or_else(|| least_work(attached, turns))
+}
+
+/// Of `agents`, the one idle longest, otherwise the newest, which has the
+/// least progress to lose.
+fn least_work<'a>(agents: Vec<Running<'a>>, turns: &HashMap<String, Turn>) -> Option<&'a String> {
+    let (idle, working): (Vec<_>, Vec<_>) = agents
+        .into_iter()
+        .partition(|agent| turns.get(agent.id).is_some_and(Turn::idle));
+    match idle.into_iter().min_by_key(|agent| turns[agent.id].since) {
+        Some(agent) => Some(agent.id),
         None => working
             .into_iter()
-            .max_by_key(|(_, started)| *started)
-            .map(|(id, _)| id),
+            .max_by_key(|agent| agent.started)
+            .map(|agent| agent.id),
     }
 }
 

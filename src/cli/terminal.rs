@@ -606,6 +606,21 @@ pub(crate) async fn current_place() -> Option<Origin> {
     None
 }
 
+/// Whether a terminal shows `place`, where an agent runs, as its host tells;
+/// `None` for a host that keeps no sessions there. A place that is gone
+/// shows nothing.
+pub(crate) async fn attached(place: &Origin) -> Result<Option<bool>> {
+    let Some(sessions) = hosts()
+        .find(|host| host.name() == place.host)
+        .and_then(Host::sessions)
+        .filter(|sessions| sessions.attaches_places())
+    else {
+        return Ok(None);
+    };
+    let session = sessions.session_at(place).await?;
+    Ok(Some(session.is_some_and(|session| session.clients > 0)))
+}
+
 /// `place` of `host` with what tells it apart from a later place under its
 /// ID, for a host that reuses IDs.
 async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {

@@ -147,7 +147,11 @@ then suggests `shoal resume --all`.
 ### Overload protection
 
 At the configured memory threshold, the daemon asks one connected tracked agent
-to stop: the one idle longest, otherwise the newest. An agent is idle when its
+to stop: one you are not attached to while there is one, and of those the one
+idle longest, otherwise the newest. Each agent's wrapper reports every 10
+seconds whether a terminal shows the agent, as `shoal status` marks its session
+`attached`; one running in a terminal no host serves always counts as attached.
+An agent is idle when its
 hooks last reported a finished turn and none of its processes run outside its
 process group, such as a background command whose completion would start its
 next turn; an agent without turn reports counts as working. Linux measures usage from `MemAvailable`, including reclaimable

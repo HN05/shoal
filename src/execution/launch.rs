@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Result};
 
 use super::{
-    Mode,
+    Mode, attachment,
     completion::report_completion,
     demo,
     link::Link,
@@ -31,6 +31,7 @@ use crate::{
     paths::Paths,
     process,
     protocol::{Body, ExecutionMethod, Reattach},
+    sessions::Origin,
 };
 
 /// A tracked execution the daemon recorded, with the command it runs next and
@@ -43,6 +44,8 @@ struct TrackedLaunch {
     recovery: Option<recovery::Recovery>,
     /// The saved record a restored agent consumes once it is registered.
     record: Option<PathBuf>,
+    /// The host's place the command runs in, when one serves its terminal.
+    place: Option<Origin>,
 }
 
 pub(super) async fn run_tracked(
@@ -90,6 +93,13 @@ impl TrackedLaunch {
         wake::session(integration, mode)
     }
 
+    /// Report whether a terminal shows the agent while it runs.
+    fn attachment(&self, paths: &Paths) -> Option<attachment::Monitor> {
+        self.recovery.as_ref()?;
+        let shown = attachment::Shown::of(self.place.clone())?;
+        Some(attachment::start(paths, &self.plan, shown))
+    }
+
     /// Run the command once; a setup without a configured command has
     /// nothing to run.
     async fn run(
@@ -103,6 +113,7 @@ impl TrackedLaunch {
         }
         // Prompts only while this child runs, which reports its state.
         let _waker = wake.map(|session| wake::start(paths, &self.plan.workspace.id, session));
+        let _attachment = self.attachment(paths);
         let (plan, recovery) = (&self.plan, self.recovery.as_ref());
         supervise(
             &mut self.link,
@@ -258,7 +269,13 @@ async fn prepare_tracked_launch(
         None
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
-    let (mut link, plan) = open_execution(paths, workspace, mode, agent, recover).await?;
+    // A detached command or a demo never runs in the caller's terminal.
+    let place = match mode {
+        Mode::Detached { .. } | Mode::Demo { .. } => None,
+        _ => crate::cli::terminal::current_place().await,
+    };
+    let (mut link, plan) =
+        open_execution(paths, workspace, mode, agent, recover, place.clone()).await?;
     // The daemon has registered the execution, so a launch that fails from
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
@@ -277,6 +294,7 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
+        place,
     })
 }
 
@@ -302,6 +320,7 @@ async fn open_execution(
     mode: &Mode,
     agent: Option<String>,
     recover: bool,
+    place: Option<Origin>,
 ) -> Result<(Link, ExecutionPlan)> {
     let wrapper = process::identity::capture(std::process::id())?
         .context("cannot identify execution wrapper")?;
@@ -321,11 +340,7 @@ async fn open_execution(
             Mode::Demo { launch } => Some(launch.clone()),
             _ => None,
         },
-        // A detached command or a demo never runs in the caller's terminal.
-        origin: match mode {
-            Mode::Detached { .. } | Mode::Demo { .. } => None,
-            _ => crate::cli::terminal::current_place().await.map(Box::new),
-        },
+        origin: place.map(Box::new),
     };
     let kind = mode.kind();
     let (mut link, body) = Link::open(paths, method, kind.start_timeout()).await?;
