@@ -269,7 +269,6 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
                 crate::sessions::zmx::state_label(start.state)?,
             ],
             keep_failed_shell: true,
-            ..Default::default()
         },
     )
     .await
