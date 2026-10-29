@@ -15,13 +15,6 @@ use crate::{
 /// The branch the setup agent commits the config on.
 const BRANCH: &str = "shoal-setup";
 
-/// The configuration reference for this release.
-const REFERENCE: &str = concat!(
-    "https://github.com/HN05/shoal/blob/v",
-    env!("CARGO_PKG_VERSION"),
-    "/docs/reference.md"
-);
-
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -106,7 +99,8 @@ fn prompt(repo: &Repository, workspace: &Workspace) -> String {
          project needs: a `setup_cmd` script that prepares a new worktree, named ports \
          for servers that several workspaces run at once, `[commands]` for frequent \
          tasks, and resource pools for services or devices that tasks must not use at \
-         the same time. The options are described in {REFERENCE}.\n\n\
+         the same time. `shoal config reference --text` prints the reference that \
+         describes the options.\n\n\
          Check the result with `shoal config show` and test the setup script with \
          `shoal work setup`, then commit the config and any scripts it runs.",
         name = repository::name(repo),
