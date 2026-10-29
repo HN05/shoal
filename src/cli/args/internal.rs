@@ -157,6 +157,23 @@ pub enum InternalCommand {
     /// that cannot set a place's environment type it into the place.
     #[command(name = internal::LAUNCH)]
     Launch { file: PathBuf },
+    /// Continue an agent's wrapper from the installed binary, which an
+    /// upgrade put in place of its own, over the daemon connection it hands over.
+    #[command(name = internal::TAKE_OVER)]
+    TakeOver {
+        workspace: String,
+        #[arg(long)]
+        agent: String,
+        /// The descriptor of the wrapper's daemon connection.
+        #[arg(long)]
+        connection: i32,
+        /// The recovery record the agent resumes from.
+        #[arg(long)]
+        record: Option<PathBuf>,
+        /// The log a detached agent writes to.
+        #[arg(long)]
+        log: Option<PathBuf>,
+    },
     /// Copy the main checkout's ignored files inside tracked setup, then run setup.
     #[command(name = internal::COPY_IGNORED)]
     CopyIgnored {

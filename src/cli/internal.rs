@@ -23,6 +23,7 @@ pub const COPY_IGNORED: &str = "copy-ignored";
 pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
 pub const PROXY_REPORT: &str = "proxy-report";
+pub const TAKE_OVER: &str = "take-over";
 
 pub enum Worker<'a> {
     /// Close `place` of `host` once `workspace` completes or is removed,

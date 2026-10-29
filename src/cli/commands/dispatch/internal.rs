@@ -75,6 +75,22 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Launch { file } => terminal::run_launch(&file),
+        InternalCommand::TakeOver {
+            workspace,
+            agent,
+            connection,
+            record,
+            log,
+        } => {
+            let taken = crate::execution::TakenOver {
+                workspace,
+                agent,
+                connection,
+                record,
+                log,
+            };
+            crate::execution::take_over(&ctx.paths, taken).await
+        }
         InternalCommand::Add {
             host,
             close_when_done,

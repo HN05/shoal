@@ -14,6 +14,7 @@ mod pause;
 pub mod recovery;
 mod spawn;
 mod supervise;
+mod takeover;
 mod terminal;
 mod wake;
 
@@ -23,7 +24,7 @@ use std::{ffi::OsString, path::PathBuf};
 use crate::{env, paths::Paths};
 pub use completion::SetupVerificationFailure;
 pub use detached::{DetachedLaunch, launch_detached};
-use launch::run_tracked;
+use launch::{run_taken_over, run_tracked};
 use mode::Mode;
 pub use supervise::exit_code;
 use terminal::clear_terminal;
@@ -116,6 +117,28 @@ pub async fn run_demo(
     run_tracked(paths, workspace, command, mode, None)
         .await
         .map(|_| 0)
+}
+
+/// What an agent's wrapper whose binary an upgrade replaced hands the
+/// installed one.
+pub struct TakenOver {
+    pub workspace: String,
+    /// The agent, as the execution registered it.
+    pub agent: String,
+    /// The descriptor of the wrapper's daemon connection.
+    pub connection: i32,
+    /// The recovery record the agent resumes from.
+    pub record: Option<PathBuf>,
+    /// The log a detached agent writes to.
+    pub log: Option<PathBuf>,
+}
+
+/// Continue an agent's wrapper whose binary an upgrade replaced with this
+/// one: register its execution again and restore the agent.
+pub async fn take_over(paths: &Paths, taken: TakenOver) -> Result<i32> {
+    run_taken_over(paths, taken)
+        .await
+        .map(env::session_exit_code)
 }
 
 pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -> Result<i32> {

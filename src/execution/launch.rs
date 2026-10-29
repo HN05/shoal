@@ -17,7 +17,7 @@ use super::{
     recovery,
     spawn::AgentLaunch,
     supervise::{Outcome, Saving, supervise},
-    wake,
+    takeover, wake,
 };
 use crate::{
     cli::{
@@ -53,6 +53,16 @@ pub(super) async fn run_tracked(
     agent: Option<String>,
 ) -> Result<i32> {
     let launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
+    launch.run_to_end(paths, &mode).await
+}
+
+/// Restore the agent of a wrapper that continues from this binary.
+pub(super) async fn run_taken_over(paths: &Paths, taken: super::TakenOver) -> Result<i32> {
+    let mode = match taken.log.clone() {
+        Some(log) => Mode::Detached { log },
+        None => Mode::Command { record: false },
+    };
+    let launch = prepare_taken_over_launch(paths, taken, &mode).await?;
     launch.run_to_end(paths, &mode).await
 }
 
@@ -285,6 +295,66 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
+    })
+}
+
+/// The launch of a wrapper that continues from this binary: it registers
+/// again over the connection it was handed, then restores its agent from the
+/// record.
+async fn prepare_taken_over_launch(
+    paths: &Paths,
+    taken: super::TakenOver,
+    mode: &Mode,
+) -> Result<TrackedLaunch> {
+    crate::cli::installed::remember_started();
+    let super::TakenOver {
+        workspace,
+        agent,
+        connection,
+        record,
+        ..
+    } = taken;
+    let mut link = takeover::connection(connection)?;
+    let place = terminal_place(mode).await;
+    let registered = async {
+        let auth =
+            prepare_agent_launch(paths, &workspace, mode, Some(&agent), place.as_ref()).await?;
+        let recovery = recovery::Recovery::for_launch(paths, &workspace, &agent).await;
+        let plan = takeover::register_again(&mut link, place).await?;
+        anyhow::Ok((auth, recovery, plan, this_wrapper()?))
+    }
+    .await;
+    let (mut auth, recovery, plan, wrapper) = match registered {
+        Ok(registered) => registered,
+        Err(error) => return Err(fail_launch(&mut link, mode, error).await),
+    };
+    allow_reattach(
+        &mut link,
+        paths,
+        &plan,
+        wrapper,
+        Some(agent.clone()),
+        recovery.automatic,
+    );
+    let (command, proxy) = recovery
+        .restore_command(paths, &plan.workspace, record.as_deref())
+        .await;
+    // The restore command was resolved to go through `proxy`, from the same
+    // settings.
+    if let Some(auth) = auth.as_mut() {
+        auth.routed = proxy;
+    }
+    let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
+        Ok(command) => command,
+        Err(error) => return Err(fail_launch(&mut link, mode, error).await),
+    };
+    Ok(TrackedLaunch {
+        link,
+        plan,
+        command,
+        auth,
+        recovery: Some(recovery),
+        record,
     })
 }
 

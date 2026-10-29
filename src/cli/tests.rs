@@ -620,6 +620,16 @@ fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
     assert!(!wraps(&["launch", "file"]));
     assert!(!wraps(&["secret-tool", "launchers", "gh", "--", "pr"]));
     assert!(!wraps(&["queue-start", "entry"]));
+    // `take-over` continues a wrapper in its process, which keeps the
+    // responsibility it had.
+    assert!(!wraps(&[
+        "take-over",
+        "w",
+        "--agent",
+        "claude",
+        "--connection",
+        "3"
+    ]));
     assert!(
         !Cli::try_parse_from(["shoal", "status"])
             .unwrap()
