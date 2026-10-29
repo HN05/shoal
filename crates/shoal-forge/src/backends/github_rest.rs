@@ -16,6 +16,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
     },
+    review::reviewers::team_name,
     transport::api::{HttpMethod, Request},
 };
 
@@ -172,11 +173,25 @@ pub(crate) fn edit(
             requests.push(Request::new(
                 method,
                 reviewers.clone(),
-                Some(json!({ "reviewers": reviewers_list })),
+                Some(review_requests(reviewers_list)),
             ));
         }
     }
     requests
+}
+
+/// The body that requests or withdraws reviews from `names`, where
+/// `owner/team` names a team.
+fn review_requests(names: &[String]) -> Value {
+    let mut users = Vec::new();
+    let mut teams = Vec::new();
+    for name in names {
+        match team_name(name) {
+            Some((_, team)) => teams.push(team),
+            None => users.push(name.as_str()),
+        }
+    }
+    json!({ "reviewers": users, "team_reviewers": teams })
 }
 
 /// The draft state `edit` changes the PR to, if it changes it.

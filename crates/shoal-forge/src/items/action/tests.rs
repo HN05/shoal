@@ -102,7 +102,7 @@ fn edits_patch_fields_replace_labels_and_change_reviewers() {
             base: Some("next".into()),
             add_labels: vec!["a".into(), "bug".into()],
             remove_labels: vec!["old".into()],
-            add_reviewers: vec!["sam".into()],
+            add_reviewers: vec!["sam".into(), "team/core".into()],
             remove_reviewers: vec!["kim".into()],
             ..Edit::default()
         };
@@ -123,12 +123,12 @@ fn edits_patch_fields_replace_labels_and_change_reviewers() {
                 (
                     "POST".into(),
                     "repos/team/repo/pulls/7/requested_reviewers".into(),
-                    json!({"reviewers": ["sam"]})
+                    json!({"reviewers": ["sam"], "team_reviewers": ["core"]})
                 ),
                 (
                     "DELETE".into(),
                     "repos/team/repo/pulls/7/requested_reviewers".into(),
-                    json!({"reviewers": ["kim"]})
+                    json!({"reviewers": ["kim"], "team_reviewers": []})
                 ),
             ]
         );

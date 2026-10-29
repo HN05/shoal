@@ -2570,7 +2570,8 @@ required_labels = ["area/", "type/"] # Default: []
 number or URL given, otherwise the linked issue or the only linked PR. `edit`
 takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
-`--remove-reviewer`, and `--draft` or `--no-draft`. Edits apply in that order,
+`--remove-reviewer`, which take a team as `owner/team` on GitHub and Forgejo,
+and `--draft` or `--no-draft`. Edits apply in that order,
 and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name, an added exclusive label replacing the item's
 label of its scope, and an edit whose added labels the item then lacks,
