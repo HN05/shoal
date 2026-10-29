@@ -124,7 +124,7 @@ impl Manager {
         verify_directory(&repo.path, identity, true)?;
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
-        self.delete_repository_message_files(&repo).await?;
+        self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;

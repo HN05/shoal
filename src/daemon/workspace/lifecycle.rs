@@ -932,7 +932,7 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
-        if let Err(error) = self.delete_message_files(workspace).await {
+        if let Err(error) = self.delete_workspace_files(workspace).await {
             crate::daemon::log!(
                 "files attached to messages of {} not deleted: {error:#}",
                 workspace.name

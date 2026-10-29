@@ -48,7 +48,7 @@ fn attachment_paths(files: &[PathBuf]) -> Result<Vec<PathBuf>> {
         .map(|file| {
             let path =
                 std::path::absolute(file).with_context(|| format!("read {}", file.display()))?;
-            crate::daemon::agent_messages::files::check(&path)?;
+            crate::daemon::workspace_files::layout::check(&path)?;
             Ok(path)
         })
         .collect()

@@ -1,4 +1,4 @@
-//! Files attached to agent messages. Each repository keeps them beside its
+//! Where a repository keeps the files attached to its workspaces: beside the
 //! workspaces, in a directory its agents are given as a working directory, so
 //! they read the files where any sandbox lets them; they stay until their
 //! workspace is removed.
