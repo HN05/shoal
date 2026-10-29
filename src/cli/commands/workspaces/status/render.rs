@@ -191,6 +191,15 @@ fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
             ""
         };
         outln!("Completion:    done ({choice}{integrated})");
+        if !completion.results.is_empty() {
+            let names: Vec<_> = completion
+                .results
+                .iter()
+                .filter_map(|path| path.file_name())
+                .map(|name| name.to_string_lossy())
+                .collect();
+            outln!("  Results:     {}", names.join(", "));
+        }
         if let Some(error) = &completion.error {
             outln!("  {}", palette.paint(Style::Warning, error));
         }

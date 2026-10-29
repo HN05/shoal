@@ -842,7 +842,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     // forgets it.
     assert!(!last().is_empty());
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     assert_eq!(last(), []);
@@ -1438,7 +1438,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     assert!(
@@ -1466,7 +1466,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     publish_recovery(&manager);

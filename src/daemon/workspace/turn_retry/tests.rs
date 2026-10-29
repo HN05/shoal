@@ -202,7 +202,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     manager
-        .mark_done(&workspace.name, false, false)
+        .mark_done(&workspace.name, false, false, vec![])
         .await
         .unwrap();
     assert_eq!(retry(&manager, &workspace).await, None);

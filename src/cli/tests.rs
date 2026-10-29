@@ -402,12 +402,13 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
             workspace,
             undo,
             keep_demos,
+            attach,
         }) = command
         else {
             panic!("wrong command");
         };
         assert_eq!(cleanup, expected);
-        assert!(!integrated && !undo && !keep_demos);
+        assert!(!integrated && !undo && !keep_demos && attach.is_empty());
         assert!(workspace.is_none());
     }
     assert!(Cli::try_parse_from(["shoal", "done", "--keep"]).is_err());

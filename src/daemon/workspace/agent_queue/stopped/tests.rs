@@ -125,7 +125,10 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     signal_stop(&manager, &open, &running);
     signal_stop(&manager, &open, "ended");
     stop(&manager, &open, "manual", STOPPED);
-    manager.mark_done(&done.id, false, false).await.unwrap();
+    manager
+        .mark_done(&done.id, false, false, vec![])
+        .await
+        .unwrap();
     signal_stop(&manager, &done, "finished");
 
     manager.dispatch_queue().await.unwrap();
@@ -339,7 +342,10 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
         .queue_stopped_restore("finished", "waiting", herdr())
         .await
         .unwrap();
-    manager.mark_done(&finished.id, false, false).await.unwrap();
+    manager
+        .mark_done(&finished.id, false, false, vec![])
+        .await
+        .unwrap();
     assert!(queue(&manager).await.is_empty());
     assert!(record_path(&manager.paths, &finished.id, "waiting").exists());
 }

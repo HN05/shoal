@@ -316,7 +316,7 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     assert!(!started(&second.id));
 
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();

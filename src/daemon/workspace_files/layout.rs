@@ -16,6 +16,10 @@ use crate::{
     model::Repository,
 };
 
+/// The directory below a repository's attached files that keeps what
+/// workspaces handed back, which no workspace ID names.
+const RESULTS: &str = "results";
+
 /// The largest file a message may attach.
 pub(crate) const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
 
@@ -51,6 +55,25 @@ impl Layout {
         message: &str,
         files: &[PathBuf],
     ) -> Result<Kept> {
+        self.keep_in(&self.root.join(workspace_id), workspace_id, message, files)
+    }
+
+    /// Copies of the files `files` that the workspace `workspace_id` hands
+    /// back with its completion, apart from its other files since they
+    /// outlive its removal.
+    pub(crate) fn keep_results(&self, workspace_id: &str, files: &[PathBuf]) -> Result<Kept> {
+        let directory = self.root.join(RESULTS).join(workspace_id);
+        self.keep_in(&directory, workspace_id, "shoal done", files)
+    }
+
+    /// Copies of `files` in `directory`, for the workspace `workspace_id`.
+    fn keep_in(
+        &self,
+        directory: &Path,
+        workspace_id: &str,
+        message: &str,
+        files: &[PathBuf],
+    ) -> Result<Kept> {
         for file in files {
             check(file)?;
         }
@@ -61,8 +84,7 @@ impl Layout {
             "{} is not a directory Shoal created for attached files; move it away",
             self.root.display()
         );
-        let directory = self.root.join(workspace_id);
-        std::fs::create_dir_all(&directory)
+        std::fs::create_dir_all(directory)
             .with_context(|| format!("create {}", directory.display()))?;
         let attachments: Vec<_> = files
             .iter()
@@ -71,7 +93,7 @@ impl Layout {
                 alt: None,
             })
             .collect();
-        let copies = keep_copies(&directory, workspace_id, message, &attachments)?;
+        let copies = keep_copies(directory, workspace_id, message, &attachments)?;
         let paths: Vec<_> = copies
             .attachments
             .into_iter()
@@ -89,7 +111,7 @@ impl Layout {
             paths,
             bytes,
             created: copies.created,
-            workspace: directory,
+            workspace: directory.to_owned(),
         })
     }
 
@@ -99,6 +121,14 @@ impl Layout {
             return Ok(());
         }
         remove_dir(&self.root.join(workspace_id))
+    }
+
+    /// Delete the files the workspace `workspace_id` handed back.
+    pub(crate) fn remove_results(&self, workspace_id: &str) -> Result<()> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(());
+        }
+        remove_dir(&self.root.join(RESULTS).join(workspace_id))
     }
 
     /// Delete the directory with every attached file, when the repository

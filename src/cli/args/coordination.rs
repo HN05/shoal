@@ -53,6 +53,10 @@ pub enum CoordinationCommand {
         /// Leave the workspace's demos running until cleanup removes it.
         #[arg(long, conflicts_with = "undo")]
         keep_demos: bool,
+        /// Hand back a file, such as a report; repeat for more. shoal files
+        /// lists it, after cleanup too.
+        #[arg(long, value_name = "FILE", conflicts_with = "undo")]
+        attach: Vec<PathBuf>,
     },
 }
 

@@ -197,3 +197,91 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
         1
     );
 }
+
+#[tokio::test]
+async fn results_outlive_removal_as_long_as_its_record() {
+    use crate::daemon::{
+        notifications::NotificationKind,
+        scope::{self, Caller},
+    };
+    use crate::protocol::FileMethod;
+    let (temp, manager) = manager().await;
+    let parent = workspace(&temp, &manager).await;
+    let child = manager
+        .split_workspace(&parent.id, "audit".into(), None)
+        .await
+        .unwrap();
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    let completion = manager
+        .mark_done(&child.id, false, false, vec![report])
+        .await
+        .unwrap();
+    let [result] = completion.results.as_slice() else {
+        panic!("{completion:?}");
+    };
+    assert_eq!(std::fs::read_to_string(result).unwrap(), "No leaks");
+    assert!(
+        manager
+            .notifications(true, 50)
+            .await
+            .unwrap()
+            .iter()
+            .any(|n| n.kind == NotificationKind::WorkspaceDone
+                && n.message
+                    .ends_with("; results in shoal files audit: report.md")),
+    );
+
+    manager
+        .remove_workspace(
+            &child.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    let files = manager.workspace_files("audit").await.unwrap();
+    let [kept] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!(kept.source, FileSource::Result);
+    assert!(kept.expires_at.is_some(), "{kept:?}");
+    assert!(result.exists());
+
+    // The parent's processes reach the removed child's results; others do not.
+    let sibling = manager
+        .create_workspace(&parent.repository_id, "sibling".into(), None, None, None)
+        .await
+        .unwrap();
+    for (token, workspace, allowed) in [("parent", &parent, true), ("sibling", &sibling, false)] {
+        manager
+            .executions
+            .issue_scope(
+                token.into(),
+                Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                },
+            )
+            .await;
+        let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
+            workspace: "audit".into(),
+        });
+        let authorized = scope::authorize(&manager, Some(token), &mut list).await;
+        assert_eq!(authorized.is_ok(), allowed, "{token}");
+    }
+
+    let id = child.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.expire_results().await.unwrap();
+    assert!(!result.exists());
+    assert!(manager.workspace_files("audit").await.is_err());
+}

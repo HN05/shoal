@@ -107,8 +107,12 @@ async fn confirmation(ctx: &Context, workspace: Option<&str>) -> Result<Option<S
         }))
 }
 
-/// The file's name, size, how it came, when, read at `now`, and Shoal's copy.
-fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 5] {
+/// The file's name, size, how it came, when, read at `now`, when a removed
+/// workspace's file is deleted, and Shoal's copy.
+fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 6] {
+    let expiry = file
+        .expires_at
+        .map(|expires_at| format!("until {}", crate::time::local_minutes(expires_at)));
     [
         (file.name.clone(), Some(Style::Heading)),
         (ui::size_label(file.bytes), None),
@@ -117,6 +121,7 @@ fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 5] {
             crate::time::local_ago(file.created_at, now),
             Some(Style::Muted),
         ),
+        (expiry.unwrap_or_default(), Some(Style::Warning)),
         (file.path.display().to_string(), Some(Style::Muted)),
     ]
 }
@@ -125,5 +130,6 @@ fn source_label(source: FileSource) -> &'static str {
     match source {
         FileSource::Message => "message",
         FileSource::Added => "added",
+        FileSource::Result => "result",
     }
 }

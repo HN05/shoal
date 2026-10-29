@@ -1752,7 +1752,12 @@ Agent instructions make `done` the last step of every assignment. Completion
 is persisted separately from lifecycle readiness, binds to HEAD, and notifies the
 user; it does not assert that work was merged. A `done` that would change
 nothing and an `undone` without a completion fail, so a misplaced signal is
-reported instead of passing silently. Own-workspace withdrawal removes a
+reported instead of passing silently. An assignment that ends with a finding
+rather than something to merge hands back files with its completion. They are
+the workspace's results among its attached files, which stay when cleanup
+removes it, for as long as its removal record, so the user or the parent's
+agent can read them after the worktree is gone; the workspace's other attached
+files go with it. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: only holds, open questions, a pending PR proposal, child workspaces
 and queued agent launches keep a workspace.

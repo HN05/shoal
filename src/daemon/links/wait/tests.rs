@@ -1743,7 +1743,10 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         std::fs::write(repo.join("tracked"), content).unwrap();
         crate::test_support::commit(repo, "tracked");
     }
-    manager.mark_done(&workspace.id, false, true).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, true, vec![])
+        .await
+        .unwrap();
     let all = Selection::default();
     let poll = || manager.poll_item_activity(&workspace.id, &all);
     assert!(poll().await.unwrap().is_empty());

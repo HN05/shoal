@@ -346,6 +346,7 @@ async fn inspect(
                 head: "head".into(),
                 cleanup,
                 integrated: false,
+                results: vec![],
                 error: None,
             }),
             executions,

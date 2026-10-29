@@ -5,17 +5,18 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::workspace::Manager,
-    model::{Repository, Workspace},
+    model::Workspace,
     state::{WorkspaceState, states},
 };
 
 pub(crate) mod layout;
+mod retention;
 
 use layout::{Kept, Layout};
 
@@ -27,6 +28,9 @@ states!(FileSource {
     Message => "message",
     /// Added with `shoal files add`.
     Added => "added",
+    /// Handed back with `shoal done`; kept after the workspace's removal for
+    /// as long as its removal record.
+    Result => "result",
 });
 
 /// A file attached to a workspace: Shoal's copy and how it came.
@@ -43,9 +47,14 @@ pub struct AttachedFile {
     pub bytes: u64,
     /// Unix seconds.
     pub created_at: i64,
+    /// When a removed workspace's file is deleted, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
 }
 
-const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at";
+const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at,
+    (SELECT expires_at FROM removed_workspaces r WHERE r.workspace_id=workspace_files.workspace_id
+        AND workspace_files.workspace_id NOT IN (SELECT id FROM workspaces))";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
     Ok(AttachedFile {
@@ -56,7 +65,30 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
         path: PathBuf::from(row.get::<_, String>(4)?),
         bytes: row.get::<_, i64>(5)?.try_into().unwrap_or_default(),
         created_at: row.get(6)?,
+        expires_at: row.get(7)?,
     })
+}
+
+/// The workspace whose attached files a request names: one that exists, or
+/// a removed one whose results are kept.
+#[derive(Debug, Clone)]
+pub(crate) struct Owner {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) repository_id: String,
+    /// The workspace's parent when it attached the files.
+    pub(crate) parent_id: Option<String>,
+}
+
+impl From<Workspace> for Owner {
+    fn from(workspace: Workspace) -> Self {
+        Self {
+            id: workspace.id,
+            name: workspace.name,
+            repository_id: workspace.repository_id,
+            parent_id: workspace.parent_workspace.map(|parent| parent.id),
+        }
+    }
 }
 
 /// Record the copies `kept` as attached to the workspace `workspace_id` from
@@ -156,19 +188,84 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
-    /// The files attached to the workspace `selector` names, oldest first.
+    /// The files attached to the workspace `selector` names, or that a
+    /// removed workspace of that name handed back, oldest first.
     pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
-        let workspace = self.workspace(selector).await?;
+        let owner = self.file_owner(selector).await?;
         self.store
             .run(move |db| {
                 Ok(db
                     .prepare(&format!(
                         "SELECT {COLUMNS} FROM workspace_files WHERE workspace_id=?1 ORDER BY id"
                     ))?
-                    .query_map([&workspace.id], row)?
+                    .query_map([&owner.id], row)?
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await
+    }
+
+    /// The workspace `selector` names, or else the latest removed one of
+    /// that name or ID whose results are kept.
+    pub(crate) async fn file_owner(&self, selector: &str) -> Result<Owner> {
+        let error = match self.workspace(selector).await {
+            Ok(workspace) => return Ok(workspace.into()),
+            Err(error) => error,
+        };
+        let selector = selector.to_owned();
+        let removed = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT workspace_id,workspace,repository_id,parent_id FROM workspace_files
+                            WHERE (workspace_id=?1 OR workspace=?1)
+                                AND workspace_id NOT IN (SELECT id FROM workspaces)
+                            ORDER BY id DESC LIMIT 1",
+                        [selector],
+                        |row| {
+                            Ok(Owner {
+                                id: row.get(0)?,
+                                name: row.get(1)?,
+                                repository_id: row.get(2)?,
+                                parent_id: row.get(3)?,
+                            })
+                        },
+                    )
+                    .optional()?)
+            })
+            .await?;
+        removed.ok_or(error)
+    }
+
+    /// Copies of the files `results` that `workspace` hands back with its
+    /// completion, recorded as its results, which outlive its removal.
+    pub(crate) async fn keep_results(
+        &self,
+        workspace: &Workspace,
+        results: Vec<PathBuf>,
+    ) -> Result<Vec<PathBuf>> {
+        if results.is_empty() {
+            return Ok(results);
+        }
+        let (layout, _files) = self.lock_files(workspace).await?;
+        let id = workspace.id.clone();
+        let kept =
+            tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
+        let (id, paths, bytes) = (workspace.id.clone(), kept.paths.clone(), kept.bytes.clone());
+        let recorded = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                record(&tx, &id, FileSource::Result, &paths, &bytes)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = recorded {
+            discard(kept).await;
+            return Err(error);
+        }
+        Ok(kept.paths)
     }
 
     /// Delete the files attached to the workspace `selector` names, only the
@@ -178,12 +275,9 @@ impl Manager {
         selector: &str,
         name: Option<String>,
     ) -> Result<Vec<AttachedFile>> {
-        let workspace = self.workspace(selector).await?;
-        let _files = self
-            .gates
-            .lock_message_files(&workspace.repository_id)
-            .await;
-        let (id, wanted) = (workspace.id.clone(), name.clone());
+        let owner = self.file_owner(selector).await?;
+        let _files = self.gates.lock_message_files(&owner.repository_id).await;
+        let (id, wanted) = (owner.id.clone(), name.clone());
         let files: Vec<AttachedFile> = self
             .store
             .run(move |db| {
@@ -200,7 +294,7 @@ impl Manager {
             ensure!(
                 !files.is_empty(),
                 "workspace {} has no attached file named {name}",
-                workspace.name
+                owner.name
             );
         }
         self.delete_files(files).await
@@ -307,44 +401,5 @@ impl Manager {
         let repo = self.repository(&repo.id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         Ok((layout, guard))
-    }
-
-    /// Delete the files attached to `workspace` once it is removed, with
-    /// their records.
-    pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
-        let _files = self
-            .gates
-            .lock_message_files(&workspace.repository_id)
-            .await;
-        let id = workspace.id.clone();
-        self.store
-            .run(move |db| {
-                db.execute("DELETE FROM workspace_files WHERE workspace_id=?1", [id])?;
-                Ok(())
-            })
-            .await?;
-        let repo = self.repository(&workspace.repository_id).await?;
-        let Some(layout) = Layout::of(&repo) else {
-            return Ok(());
-        };
-        let id = workspace.id.clone();
-        tokio::task::spawn_blocking(move || layout.remove_workspace(&id)).await?
-    }
-
-    /// Delete the directory of attached files with the repository, once its
-    /// workspaces are gone.
-    pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
-        let _files = self.gates.lock_message_files(&repo.id).await;
-        let id = repo.id.clone();
-        self.store
-            .run(move |db| {
-                db.execute("DELETE FROM workspace_files WHERE repository_id=?1", [id])?;
-                Ok(())
-            })
-            .await?;
-        let Some(layout) = Layout::of(repo) else {
-            return Ok(());
-        };
-        tokio::task::spawn_blocking(move || layout.remove()).await?
     }
 }

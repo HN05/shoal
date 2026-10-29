@@ -32,7 +32,12 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: AssignmentMethod) -> 
             workspace,
             cleanup,
             integrated,
-        } => Body::Completion(manager.mark_done(&workspace, cleanup, integrated).await?),
+            results,
+        } => Body::Completion(
+            manager
+                .mark_done(&workspace, cleanup, integrated, results)
+                .await?,
+        ),
     }))
 }
 

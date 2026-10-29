@@ -95,6 +95,7 @@ pub(in crate::cli::commands) async fn run(
             integrated,
             undo,
             keep_demos,
+            attach,
         } => {
             if undo {
                 workspaces::undone(&ctx, workspace).await
@@ -103,6 +104,7 @@ pub(in crate::cli::commands) async fn run(
                     cleanup,
                     integrated,
                     keep_demos,
+                    results: messages::attachment_paths(&attach)?,
                 };
                 workspaces::done(&ctx, workspace, options).await
             }

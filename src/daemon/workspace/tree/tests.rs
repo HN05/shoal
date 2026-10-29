@@ -158,6 +158,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
         workspace: grandchild.name.clone(),
         cleanup: false,
         integrated: false,
+        results: vec![],
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)
         .await

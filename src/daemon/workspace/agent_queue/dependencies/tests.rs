@@ -59,7 +59,10 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     let ui = add_after(&manager, &repo, "ui", vec![work("api")]).await;
     assert_eq!(ui.waiting_for, ["api"]);
 
-    manager.mark_done(&api.id, false, false).await.unwrap();
+    manager
+        .mark_done(&api.id, false, false, vec![])
+        .await
+        .unwrap();
     std::fs::write(api.path.join("more"), "more\n").unwrap();
     commit(&api.path, "more");
     // A commit after completion is work in progress again.
@@ -67,7 +70,10 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     assert!(!started(&ui.id));
     assert_eq!(entry(&manager, &ui.id).await.waiting_for, ["api"]);
 
-    manager.mark_done(&api.id, false, false).await.unwrap();
+    manager
+        .mark_done(&api.id, false, false, vec![])
+        .await
+        .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&ui.id));
     let ui = entry(&manager, &ui.id).await;
@@ -140,7 +146,10 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
         entry(&manager, &launch.id).await.waiting_for,
         ["fix or pending"]
     );
-    manager.mark_done(&fix.id, false, false).await.unwrap();
+    manager
+        .mark_done(&fix.id, false, false, vec![])
+        .await
+        .unwrap();
     manager.dispatch_queue().await.unwrap();
     assert!(started(&launch.id));
     assert_eq!(
@@ -183,7 +192,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     .await;
     for workspace in [&lower, &separate, &upper] {
         manager
-            .mark_done(&workspace.id, false, false)
+            .mark_done(&workspace.id, false, false, vec![])
             .await
             .unwrap();
     }

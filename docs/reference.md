@@ -2443,7 +2443,7 @@ starts a new one, telling it the workspace moved, instead of running
 
 `shoal done [workspace]` records that the assignment is finished and notifies the
 user. It replaces a recorded completion at another HEAD, with another cleanup
-choice, another `--integrated` choice or a cleanup error, and fails when it would change nothing: the same
+choice, another `--integrated` choice, other results or a cleanup error, and fails when it would change nothing: the same
 completion with no open question to close and no `post_done_cmd` to rerun.
 `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
@@ -2452,7 +2452,12 @@ work under new commits, as after a cherry-pick or a rebase that edited them: unt
 HEAD moves, commits no remote or default branch has no longer keep the workspace
 from completion cleanup, and the [watch](#linked-items-and-cleanup) stops reporting its
 branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
-`status` shows it as integrated elsewhere. The setting follows normal repository and worktree configuration
+`status` shows it as integrated elsewhere. `--attach FILE`, repeated for more,
+hands back files such as a report: Shoal copies each, of at most 100 MiB, into
+the workspace's [attached files](#attached-files) as a result, the completion
+lists the copies in `results`, `status` names them, and the completion notice
+ends with `results in shoal files <workspace>:` and their names. A missing file
+fails before anything is stopped or recorded. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
@@ -2472,7 +2477,7 @@ cleanup = true    # Default: true
 ```
 
 `shoal done --undo [workspace]` withdraws a recorded completion and fails when none
-is recorded; `--json` returns `{"withdrawn": <completion>}`. Scoped agents may mark only their own workspace or a child workspace undone.
+is recorded, leaving its results among the attached files; `--json` returns `{"withdrawn": <completion>}`. Scoped agents may mark only their own workspace or a child workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.
 
@@ -3434,6 +3439,7 @@ messages and send messages only to the agents of the [workspaces below their own
 ```sh
 shoal files [workspace]          # The workspace's attached files, oldest first
 shoal files [workspace] --path   # Only the paths of Shoal's copies
+shoal done --attach report.md    # Hand back a file with the completion
 shoal files add notes.md [--workspace W]  # Attach files without a message
 shoal files rm [workspace] [file]         # Delete a workspace's files, or those with a name
 shoal files rm --all                      # Delete the files of every idle workspace
@@ -3441,17 +3447,22 @@ shoal files rm --all                      # Delete the files of every idle works
 
 `shoal files` lists the files attached to a workspace: each one's name, size,
 how it came (`message` for a file sent with `shoal messages send --attach`,
-`added` for one from `shoal files add`), when, and the path of Shoal's copy in
-the repository directory's `.attachments`. `--json` gives each as a record with
+`added` for one from `shoal files add`, `result` for one handed back with
+`shoal done --attach`), when, and the path of Shoal's copy in the repository
+directory's `.attachments`. Results outlive the workspace: they stay for as
+long as its removal record, `cleanup.restore.retention_days` like its
+[checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
+them, with when they go, and deletes them with `rm`. `--json` gives each as a record with
 `source`, `path` and `bytes`. `shoal files add` copies files of at most 100 MiB
 there without telling the workspace's agents; adding the same file again keeps
-its copy. The copies stay until the workspace is removed, or until
+its copy. The other copies stay until the workspace is removed, or until
 `shoal files rm` deletes them sooner: all of a workspace's, or with a file name
 only the copies of that file. It asks first when an agent or command runs in
 the workspace. `--all` deletes the files of every workspace where none runs,
 after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
 again copies any deleted copy anew. Scoped agents may list, add and delete the
-files of their own workspace and those split from it, but not use `--all`.
+files of their own workspace and those split from it, and the results of a
+removed workspace that was split from one of those, but not use `--all`.
 
 ### Questions
 

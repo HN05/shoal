@@ -54,7 +54,7 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -88,7 +88,7 @@ async fn pr_cleanup_waits_for_the_grace_period() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -103,7 +103,7 @@ async fn pr_cleanup_waits_for_the_grace_period() {
 async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     sweep(&manager).await;
@@ -114,7 +114,7 @@ async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     assert!(workspace.path.exists());
     // A later completion starts a new grace period rather than inheriting one.
     manager
-        .mark_done(&workspace.id, false, false)
+        .mark_done(&workspace.id, false, false, vec![])
         .await
         .unwrap();
     sweep(&manager).await;

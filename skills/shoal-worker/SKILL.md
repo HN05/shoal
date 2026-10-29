@@ -25,7 +25,11 @@ merged and nothing has used it for hours; issue closure and merged PRs do not
 end the assignment. Run `shoal done` as your last command once the
 assignment is finished: every watched PR merged, or no PR needed, in your
 workspace and in the child workspaces you split from it. Never end a
-session without it.
+session without it. When the work ends with a finding instead of a PR, such
+as an investigation or an audit, hand back files with it:
+`shoal done --attach report.md`, repeated for more. The agent coordinating
+your workspace, or else the user, reads them with `shoal files <workspace>`,
+also after cleanup removes the workspace.
 
 Open your PR with `shoal pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
@@ -320,7 +324,8 @@ issue and PR activity goes to it rather than to you. `--fork` starts your own
 agent there from a fork of your session, so it begins with your conversation
 and needs only its task after `--`. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
-messages naming the child instead of reaching the user. Answer its questions
+messages naming the child instead of reaching the user; `shoal files <child>`
+shows the files it hands back with `done --attach`. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal questions ask` when the decision is theirs. Send it instructions with
 `shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for

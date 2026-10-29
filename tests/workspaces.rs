@@ -19600,6 +19600,36 @@ fn files_add_attaches_copies_without_a_message() {
 }
 
 #[test]
+fn done_hands_back_files_that_shoal_files_lists() {
+    // Kept, so the workspace stays to show its completion.
+    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    fixture.add("audit");
+    fs::write(fixture.root.path().join("report.md"), "No leaks").unwrap();
+    let missing = fixture.run(&["done", "audit", "--attach", "/missing/report.md"]);
+    assert!(!missing.status.success(), "{missing:?}");
+    assert!(fixture.ok(&["status", "audit"])["completion"].is_null());
+
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["--json", "done", "audit", "--attach", "report.md"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let result = completion["results"][0].as_str().unwrap();
+    assert_eq!(fs::read_to_string(result).unwrap(), "No leaks");
+    let files = fixture.ok(&["files", "audit"]);
+    assert_eq!(files[0]["source"], "result", "{files}");
+    assert_eq!(files[0]["path"], result, "{files}");
+    let status = fixture.run(&["status", "audit", "--text"]);
+    assert!(
+        String::from_utf8_lossy(&status.stdout).contains("Results:     report.md"),
+        "{status:?}"
+    );
+}
+
+#[test]
 fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
     let fixture = Fixture::new();
     fixture.add("cached");

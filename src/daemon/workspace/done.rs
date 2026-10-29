@@ -61,29 +61,33 @@ impl Manager {
 
     /// `cleanup` requests cleanup even when `[done] cleanup` is false;
     /// `integrated` records that another branch has HEAD's work under other
-    /// commits.
+    /// commits; copies of the files `results` are handed back, which the
+    /// workspace's attached files keep after its removal.
     pub async fn mark_done(
         &self,
         selector: &str,
         cleanup: bool,
         integrated: bool,
+        results: Vec<PathBuf>,
     ) -> Result<Completion> {
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        self.record_done(&workspace, head, cleanup, integrated)
+        let results = self.keep_results(&workspace, results).await?;
+        self.record_done(&workspace, head, cleanup, integrated, results)
             .await
     }
 
     /// Caller holds the workspace's PR gate and has verified ownership and
     /// this HEAD.
-    pub(crate) async fn record_done(
+    async fn record_done(
         &self,
         workspace: &Workspace,
         head: String,
         cleanup: bool,
         integrated: bool,
+        results: Vec<PathBuf>,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
@@ -92,6 +96,7 @@ impl Manager {
             head,
             cleanup: cleanup || settings.done.cleanup,
             integrated,
+            results,
             error: None,
         };
         let persisted = self.persist_completion(&workspace.id, &completion).await?;
@@ -110,7 +115,7 @@ impl Manager {
         self.notify(
             Some(&workspace.name),
             NotificationKind::WorkspaceDone,
-            done_notice(&completion, &closed),
+            done_notice(&workspace.name, &completion, &closed),
         )
         .await;
         if let Some((command, _resources)) = hook {
@@ -331,8 +336,9 @@ fn record_completion(
     Ok(recorded.as_ref() != Some(completion))
 }
 
-/// What the user is told about a completion and the questions it closed.
-fn done_notice(completion: &Completion, closed: &[i64]) -> String {
+/// What the user is told about a completion, the questions it closed and
+/// the files it handed back.
+fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> String {
     let mut notice = String::from("assignment finished");
     if completion.integrated {
         notice.push_str("; integrated elsewhere");
@@ -347,6 +353,18 @@ fn done_notice(completion: &Completion, closed: &[i64]) -> String {
     } else if !closed.is_empty() {
         let numbers: Vec<_> = closed.iter().map(ToString::to_string).collect();
         notice.push_str(&format!("; closed questions {}", numbers.join(", ")));
+    }
+    if !completion.results.is_empty() {
+        let names: Vec<_> = completion
+            .results
+            .iter()
+            .filter_map(|path| path.file_name())
+            .map(|name| name.to_string_lossy())
+            .collect();
+        notice.push_str(&format!(
+            "; results in shoal files {workspace}: {}",
+            names.join(", ")
+        ));
     }
     notice
 }
