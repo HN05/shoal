@@ -380,6 +380,9 @@ pub struct Execution {
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
+    /// The agent it runs, when it runs one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
 }
 
 /// An assignment completion signal, bound to the workspace's HEAD.

@@ -737,9 +737,9 @@ fn mappers_use_named_columns() -> Result<()> {
                     'abc','refs/heads/main','/git/worktrees/worker','1:2',1);
             INSERT INTO ports(workspace_id,name,port,env_var,reason)
                 VALUES ('workspace','web',12345,'WEB_PORT',NULL);
-            INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id)
+            INSERT INTO executions(id,workspace_id,state,wrapper,child,group_id,agent)
                 VALUES ('execution','workspace','unknown','{"pid":123,"birth":"wrapper"}',
-                    '{"pid":456,"birth":"child"}',456);"#,
+                    '{"pid":456,"birth":"child"}',456,'claude');"#,
     )?;
     check_columns(
         &db,
@@ -783,7 +783,8 @@ fn mappers_use_named_columns() -> Result<()> {
         serde_json::json!({
             "id": "execution", "workspace_id": "workspace", "state": "unknown",
             "wrapper": {"pid": 123, "birth": "wrapper"},
-            "child": {"pid": 456, "birth": "child"}, "group_id": 456
+            "child": {"pid": 456, "birth": "child"}, "group_id": 456,
+            "agent": "claude"
         }),
     )?;
     assert!(setup_finished(&db, "workspace")?);

@@ -969,7 +969,7 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id,origin";
+const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id,origin,agent";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -980,6 +980,7 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
         child: json_column(row, "child")?,
         group_id: row.get("group_id")?,
         origin: json_column(row, "origin")?,
+        agent: row.get("agent")?,
     })
 }
 
