@@ -64,7 +64,7 @@ pub(in crate::cli::commands) async fn add(
     options: AddOptions,
 ) -> Result<i32> {
     let mut creation = creation.absolute(ctx)?;
-    let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
+    let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
     check_add_creation(ctx, &target, &creation).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);

@@ -1,7 +1,6 @@
 //! The repository an addition goes to.
 use anyhow::Result;
 
-use super::agent::AgentLaunch;
 use crate::{
     cli::{
         client,
@@ -32,7 +31,6 @@ pub(super) async fn resolve_add_target(
     ctx: &Context,
     repository: Option<String>,
     issue: Option<&str>,
-    agent: &AgentLaunch,
 ) -> Result<AddTarget> {
     // Load on first use so explicit targets keep their original failure order.
     let mut repositories = None;
@@ -45,22 +43,22 @@ pub(super) async fn resolve_add_target(
         }
         None => {
             let repos = repositories.insert(client::repositories(&ctx.paths).await?);
-            let issue_command = matches!(agent, AgentLaunch::IssueDefault(_));
-            match issue.map(|input| (input, IssueInput::parse(input))) {
-                Some((_, IssueInput::Number)) if issue_command => {
-                    issues::current_repository(ctx, repos.clone(), issues::REPO_OR_URL)
-                        .await?
-                        .into()
-                }
-                Some((url, kind)) if issue_command || kind == IssueInput::Url => {
+            match issue {
+                Some(url) if IssueInput::parse(url) == IssueInput::Url => {
                     issues::repository_for(ctx, repos, url).await?.into()
                 }
-                _ => ui::pick(
-                    ctx,
-                    "Repository> ",
-                    ui::repository_choices(repos.clone()).await?,
-                )?
-                .into(),
+                Some(_) => issues::current_repository(ctx, repos.clone(), issues::REPO_OR_URL)
+                    .await?
+                    .into(),
+                None => {
+                    ui::require_argument(ctx, "repository", "<repository>")?;
+                    ui::pick(
+                        ctx,
+                        "Repository> ",
+                        ui::repository_choices(repos.clone()).await?,
+                    )?
+                    .into()
+                }
             }
         }
     };

@@ -3775,6 +3775,46 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
 }
 
 #[test]
+fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+    ));
+    forge_origin(&fixture);
+    let bin = fixture.root.path().join("issue-bin");
+    install_forgejo_curl(&bin);
+    forgejo_api(
+        fixture.root.path(),
+        "repos/team/project/issues/12",
+        &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
+            "body": "", "labels": [], "pull_request": null}),
+    );
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    // No terminal, as in a planning chat's tool call: no picker may run.
+    let add = |cwd: &Path| {
+        let output = fixture
+            .command()
+            .args(["--json", "add", "--issue", "12", "--agent", "reviewer"])
+            .current_dir(cwd)
+            .env("PATH", &path)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_str::<Value>(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    let created = add(&fixture.repo);
+    assert_eq!(created["name"], "12-clarify-retries");
+    let workspace = PathBuf::from(created["path"].as_str().unwrap());
+    assert_eq!(add(&workspace)["id"], created["id"]);
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
         "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
@@ -6431,7 +6471,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
     fixture.add("available");
     let workspace = "missing workspace; pass it explicitly";
     for (args, refusal) in [
-        (&["add"][..], "missing repository; pass it explicitly"),
+        (&["add"][..], "missing repository; pass <repository>"),
         (&["run", "--", "true"], workspace),
         (&["rm"], "missing workspaces; pass it explicitly"),
         (&["status"], workspace),
@@ -14322,7 +14362,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             vec!["add", "--issue", "https://github.com/team/other/issues/4"],
             "shoal repo add",
         ),
-        (vec!["add", "--issue", "4"], "missing repository"),
+        (vec!["add", "--issue", "4"], "pass --repo"),
         (
             vec!["add", "https://github.com/team/project/issues/4"],
             "no agent selected",
