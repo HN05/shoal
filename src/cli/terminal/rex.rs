@@ -111,6 +111,10 @@ impl Host for Rex {
         origin()
     }
 
+    fn place_variables(&self) -> &'static [&'static str] {
+        &["REX_SESSION", "REX_BLOCK"]
+    }
+
     fn this_place(&self) -> Option<String> {
         var("REX_BLOCK")
     }

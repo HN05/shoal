@@ -237,6 +237,9 @@ fn attach_new(zmx: &mut Command, name: &str, start: &Start<'_>) {
         .current_dir(start.cwd)
         .envs(start.env.iter().map(|(name, value)| (name, value)))
         .env_remove(env::SHELL_DIRECTIVE);
+    for variable in super::foreign_place_variables(HostName::Zmx) {
+        zmx.env_remove(variable);
+    }
 }
 
 /// A name for a new session called `label` that no session zmx keeps has.
@@ -260,6 +263,7 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
         start.argv,
         &NewSession {
             environment: start.env,
+            clear: &super::foreign_place_variables(HostName::Zmx),
             labels: vec![
                 CREATED.into(),
                 crate::sessions::zmx::state_label(start.state)?,
@@ -283,7 +287,11 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         &(demo.worker)(&place)?,
         &NewSession {
             environment: demo.env,
-            clear: super::NOT_INHERITED_BY_DEMOS,
+            clear: &[
+                super::NOT_INHERITED_BY_DEMOS,
+                &super::foreign_place_variables(HostName::Zmx),
+            ]
+            .concat(),
             labels: vec![
                 labels(Owner::Workspace(demo.workspace), ""),
                 CREATED.into(),

@@ -85,6 +85,10 @@ impl Host for Herdr {
         origin()
     }
 
+    fn place_variables(&self) -> &'static [&'static str] {
+        &["HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID"]
+    }
+
     fn this_place(&self) -> Option<String> {
         current_tab()
     }

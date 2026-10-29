@@ -695,7 +695,9 @@ record to the host that reads it and never interprets the data, which for Rex
 is how to reach the server and its CLI. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
 and the daemon the place each execution and chat runs in, which `attach` and
-`status` ask the host about; the host never calls the daemon. A queued start
+`status` ask the host about; the host never calls the daemon. A host
+declares the variables naming its places, and a zmx session drops the
+other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
 server, then to `default_host`, then to zmx. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its

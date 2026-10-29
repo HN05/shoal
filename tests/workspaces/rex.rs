@@ -301,9 +301,19 @@ fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() 
         return;
     };
     fixture.add("plain");
+    fixture.add("owner");
     let (session, block) = rex.session("mine", &fixture.repo);
-    // With Rex off, the agent runs in a zmx session, which inherits the
-    // block's Rex variables.
+    // Shoal created the block for another workspace.
+    let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+        "workspace": "owner",
+        "origin": {"host": "rex", "place": block, "data": {
+            "server": rex.socket.to_str().unwrap(),
+            "bin_dir": rex.program.parent().unwrap().to_str().unwrap(),
+        }},
+    }}));
+    assert!(recorded.get("error").is_none(), "{recorded}");
+    // With Rex off, the agent runs in a zmx session, which must not take
+    // the block's Rex variables for its own place.
     let (output, transcript) = fixture.terminal_command(
         rex.inside(fixture.command().args(["pi", "plain"]), &session, &block),
         "",

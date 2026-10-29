@@ -274,6 +274,12 @@ pub(in crate::cli) trait Host: Sync {
         None
     }
 
+    /// The variables that name this host's place for a process in it, which
+    /// a place another host opens must not inherit.
+    fn place_variables(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// The place this process runs in, as [`Host::close_place`] names it.
     fn this_place(&self) -> Option<String> {
         None
@@ -782,6 +788,16 @@ fn queued_origin() -> Result<Option<Origin>> {
         )),
         Err(_) => Ok(current_origin()),
     }
+}
+
+/// The variables naming places of hosts other than `host`, which a place
+/// `host` opens must drop: Shoal there would take the caller's place for its
+/// own, and record or close it.
+fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
+    hosts()
+        .filter(|other| other.name() != host)
+        .flat_map(|other| other.place_variables().iter().copied())
+        .collect()
 }
 
 /// The place this process runs in, as the host serving it names it.
