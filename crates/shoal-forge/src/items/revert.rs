@@ -44,9 +44,11 @@ pub struct MergedPull {
 
 /// `options` for the revert of `item`, filling what the caller left unset:
 /// GitHub's title for a revert, a reference to the reverted PR, and its
-/// labels, so a repository's required labels need no repeating.
+/// labels, so a repository's required labels need no repeating. Its base is
+/// always the reverted PR's.
 pub fn revert_options(item: &Item, options: PullOptions) -> PullOptions {
     PullOptions {
+        base: item.pr.as_ref().map(|pr| pr.base.clone()),
         title: Some(
             options
                 .title
