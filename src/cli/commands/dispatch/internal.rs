@@ -1,13 +1,16 @@
 use anyhow::Result;
 
-use crate::cli::{
-    args::internal::InternalCommand,
-    commands::{
-        agent_queue, agent_state, approvals, events, menu, messages, subagents, workspaces,
-        worktree_hooks,
+use crate::{
+    cli::{
+        args::internal::InternalCommand,
+        commands::{
+            agent_queue, agent_state, approvals, events, menu, messages, subagents, workspaces,
+            worktree_hooks,
+        },
+        context::Context,
+        terminal,
     },
-    context::Context,
-    terminal,
+    sessions::HostName,
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand) -> Result<i32> {
@@ -59,7 +62,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
                 workspace,
                 instance: None,
             };
-            terminal::watch_place(&ctx, "herdr".into(), place, None).await
+            terminal::watch_place(&ctx, HostName::Herdr, place, None).await
         }
         InternalCommand::Land { push, plan } => workspaces::land_worker(&ctx, plan, push).await,
         InternalCommand::CopyIgnored { setup_cmd } => {
@@ -100,7 +103,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             host,
             close_when_done,
             plan,
-        } => terminal::add_worker(ctx, &host, close_when_done, &plan).await,
+        } => terminal::add_worker(ctx, host, close_when_done, &plan).await,
         InternalCommand::Demo {
             workspace,
             launch,
@@ -119,9 +122,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             close_in,
         } => {
             // `host` opened this place for the agent.
-            terminal::record_owned_here(&ctx, &host, &workspace).await;
+            terminal::record_owned_here(&ctx, host, &workspace).await;
             if let Some(host) = close_in {
-                terminal::close_here_when_done(&ctx, &host, &workspace).await;
+                terminal::close_here_when_done(&ctx, host, &workspace).await;
             }
             run_session(&ctx, workspace, agent, records, command).await
         }

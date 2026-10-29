@@ -14,6 +14,7 @@ use crate::{
     },
     model::{Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
+    sessions::HostName,
     state::{ExecutionState, QueueState},
 };
 use anyhow::{Context as _, Result, ensure};
@@ -256,7 +257,7 @@ pub(super) async fn start_queued(ctx: &Context, entry: &QueueEntry) -> Result<()
 
 /// Record the place this restore runs in, one `host` opened in the
 /// background for it, as the workspace's, before anything runs there.
-pub async fn record_place(ctx: &Context, host: &str, targets: &WorkspaceTargets) {
+pub async fn record_place(ctx: &Context, host: HostName, targets: &WorkspaceTargets) {
     if let [workspace] = targets.workspace.as_slice() {
         terminal::record_owned_here(ctx, host, workspace).await;
     }
@@ -264,7 +265,7 @@ pub async fn record_place(ctx: &Context, host: &str, targets: &WorkspaceTargets)
 
 /// Close the place this restore runs in, one `host` opened in the
 /// background for it, once the one workspace `targets` names is done.
-pub async fn close_place_when_done(ctx: &Context, host: &str, targets: &WorkspaceTargets) {
+pub async fn close_place_when_done(ctx: &Context, host: HostName, targets: &WorkspaceTargets) {
     if let [workspace] = targets.workspace.as_slice() {
         terminal::close_background_place_when_done(ctx, host, workspace).await;
     }

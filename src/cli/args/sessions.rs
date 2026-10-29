@@ -7,6 +7,7 @@ use crate::{
     agent::Agent,
     cli::args::{AgentParser, WorkspaceTargets},
     model::QueuePlace,
+    sessions::HostName,
 };
 
 #[derive(Debug, Subcommand)]
@@ -42,11 +43,11 @@ pub enum SessionsCommand {
         /// The host that opened this place in the background for this
         /// restore, which records it as the workspace's before restoring.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        opened_in: Option<String>,
+        opened_in: Option<HostName>,
         /// The host whose place, opened in the background for this restore,
         /// closes once the workspace is done.
         #[arg(long, hide = true, requires_all = ["execution", "focus"])]
-        close_in: Option<String>,
+        close_in: Option<HostName>,
     },
     /// Restart running agents in their terminals, resuming their sessions.
     ///

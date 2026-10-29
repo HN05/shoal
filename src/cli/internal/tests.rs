@@ -37,7 +37,7 @@ fn add_round_trips_host_and_close_when_done() {
     let paths = Paths::for_test(root.path());
     for close_when_done in [false, true] {
         let worker = Worker::Add {
-            host: "herdr",
+            host: HostName::Herdr,
             close_when_done,
         };
         // The plan normally arrives in the place's environment.
@@ -56,7 +56,7 @@ fn add_round_trips_host_and_close_when_done() {
         else {
             panic!("expected the add worker");
         };
-        assert_eq!(host, "herdr");
+        assert_eq!(host, HostName::Herdr);
         assert_eq!(parsed, close_when_done);
         assert_eq!(plan, "plan");
     }
@@ -76,7 +76,7 @@ fn place_watch_round_trips_its_place_and_baseline() {
             kept_at: parsed_kept_at,
         } = parse(
             Worker::PlaceWatch {
-                host: "zmx",
+                host: HostName::Zmx,
                 workspace: "workspace-id",
                 place: "fix-login",
                 instance,
@@ -280,7 +280,7 @@ fn session_round_trips_records_and_literal_arguments() {
         (vec![], None),
         (
             vec![PathBuf::from("/state/a record.json"), "/b".into()],
-            Some("zmx"),
+            Some(HostName::Zmx),
         ),
     ] {
         let InternalCommand::Session {
@@ -296,7 +296,7 @@ fn session_round_trips_records_and_literal_arguments() {
                 agent: "claude",
                 records: &records,
                 command: &command,
-                host: "rex",
+                host: HostName::Rex,
                 close_in,
             },
             false,
@@ -308,8 +308,8 @@ fn session_round_trips_records_and_literal_arguments() {
         assert_eq!(agent, "claude");
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
-        assert_eq!(host, "rex");
-        assert_eq!(parsed_close_in.as_deref(), close_in);
+        assert_eq!(host, HostName::Rex);
+        assert_eq!(parsed_close_in, close_in);
     }
 }
 

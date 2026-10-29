@@ -22,7 +22,7 @@ use crate::{
     env,
     model::Inspection,
     paths::Paths,
-    sessions::{Origin, PlaceClose, PlaceOwnership},
+    sessions::{HostName, Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
 };
 
@@ -73,7 +73,7 @@ pub(super) async fn start_watcher(
         &ctx.paths,
         ctx.json,
         internal::Worker::PlaceWatch {
-            host: host.name().as_str(),
+            host: host.name(),
             workspace,
             place,
             instance: instance.as_deref(),
@@ -121,17 +121,18 @@ async fn kept_completion(ctx: &Context, workspace: &str) -> Result<Option<String
 /// once an upgrade replaced this one.
 pub async fn watch(
     ctx: &Context,
-    host: String,
+    host: HostName,
     place: Watched,
     kept_at: Option<String>,
 ) -> Result<i32> {
-    let host = super::named(&host).with_context(|| format!("unknown terminal host {host}"))?;
+    let host = super::named(host);
     let watches = host
         .watches()
         .with_context(|| format!("{} cannot read places", host.name()))?;
     // The daemon's record of the place, as its environment names it.
-    let record =
-        super::record_here(host).unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
+    let record = super::origin_here(host)
+        .filter(|origin| origin.place.is_some())
+        .unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
     let executable = installed::Executable::current();
     let lifecycle = || async {
         match workspace_lifecycle(ctx, &place.workspace).await {

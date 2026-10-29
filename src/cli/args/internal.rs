@@ -3,7 +3,10 @@ use std::{ffi::OsString, path::PathBuf};
 
 use clap::Subcommand;
 
-use crate::cli::{commands, internal};
+use crate::{
+    cli::{commands, internal},
+    sessions::HostName,
+};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -93,7 +96,7 @@ pub enum InternalCommand {
     /// Close a terminal host's place once its workspace completes or is removed.
     #[command(name = internal::PLACE_WATCH)]
     PlaceWatch {
-        host: String,
+        host: HostName,
         workspace: String,
         place: String,
         /// What told the place apart when the watch began.
@@ -133,7 +136,7 @@ pub enum InternalCommand {
     #[command(name = internal::ADD)]
     Add {
         #[arg(long)]
-        host: String,
+        host: HostName,
         /// Close the place once the workspace is done.
         #[arg(long)]
         close_when_done: bool,
@@ -149,10 +152,10 @@ pub enum InternalCommand {
         records: Vec<PathBuf>,
         /// The host that opened the place.
         #[arg(long)]
-        host: String,
+        host: HostName,
         /// Close the place of this host once the workspace is done.
         #[arg(long)]
-        close_in: Option<String>,
+        close_in: Option<HostName>,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },

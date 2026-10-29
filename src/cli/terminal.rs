@@ -612,7 +612,13 @@ fn foreign_place_variables(host: HostName) -> Vec<&'static str> {
 
 /// The place this process runs in, as the host serving it names it.
 pub(crate) fn current_origin() -> Option<Origin> {
-    hosts().filter_map(Host::places).find_map(Places::origin)
+    hosts().find_map(origin_here)
+}
+
+/// The place of `host` this process runs in, as `host` names it, with what
+/// a later start needs to open a place beside it.
+fn origin_here(host: &dyn Host) -> Option<Origin> {
+    host.places().and_then(Places::origin)
 }
 
 /// The place this process runs in, as [`current_origin`] names it, with what
@@ -622,7 +628,7 @@ pub(crate) fn current_origin() -> Option<Origin> {
 /// tell leaves it out, with a warning.
 pub(crate) async fn current_place() -> Option<Origin> {
     for host in hosts() {
-        if let Some(origin) = host.places().and_then(Places::origin) {
+        if let Some(origin) = origin_here(host) {
             return Some(match with_instance(host, origin.clone()).await {
                 Ok(place) => place,
                 Err(error) => {
@@ -688,14 +694,6 @@ pub(in crate::cli) async fn closes_with(
         ),
         None => Ok(false),
     }
-}
-
-/// The place of `host` this process runs in as the daemon records it, with
-/// the server its data names.
-fn record_here(host: &dyn Host) -> Option<Origin> {
-    host.places()
-        .and_then(Places::origin)
-        .filter(|origin| origin.place.is_some())
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that
@@ -848,15 +846,18 @@ async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
 }
 
 /// Record the place this process runs in, one the host named `host`
-/// created for `workspace`, as [`record_owned`] does. Only that host names
-/// it: another host's variables this process inherited name a place Shoal
-/// did not create. A host that reuses IDs tells this place apart from an
-/// earlier one under its ID, whose record it replaces.
-pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspace: &str) {
-    let Some(host) = named(host) else {
-        return;
-    };
-    let Some(place) = host.places().and_then(Places::origin) else {
+/// created for `workspace`, as [`record_owned`] does.
+pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: HostName, workspace: &str) {
+    record_owned_in(ctx, named(host), workspace).await;
+}
+
+/// Record the place of `host` this process runs in, one `host` created for
+/// `workspace`, as [`record_owned`] does. Only that host names it: another
+/// host's variables this process inherited name a place Shoal did not
+/// create. A host that reuses IDs tells this place apart from an earlier one
+/// under its ID, whose record it replaces.
+async fn record_owned_in(ctx: &Context, host: &dyn Host, workspace: &str) {
+    let Some(place) = origin_here(host) else {
         return;
     };
     match with_instance(host, place).await {
@@ -944,7 +945,7 @@ fn agent_worker(
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Vec<OsString>> {
-    let name = host.host.name().as_str();
+    let name = host.host.name();
     crate::cli::internal::internal_command(
         &ctx.paths,
         false,
@@ -962,7 +963,7 @@ fn agent_worker(
 /// Close the place of the host named `host` that this process runs in once
 /// `workspace` is done. Without a watcher the place stays open, so a
 /// failure only warns.
-pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: &str, workspace: &str) {
+pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: HostName, workspace: &str) {
     if let Err(error) = watch_here(ctx, host, workspace, false).await {
         eprintln!("warning: {error:#}");
     }
@@ -975,7 +976,7 @@ pub(in crate::cli) async fn close_here_when_done(ctx: &Context, host: &str, work
 /// agent that starts there adds its own name.
 pub(in crate::cli) async fn close_background_place_when_done(
     ctx: &Context,
-    host: &str,
+    host: HostName,
     workspace: &str,
 ) {
     if let Err(error) = watch_here(ctx, host, workspace, true).await {
@@ -985,8 +986,8 @@ pub(in crate::cli) async fn close_background_place_when_done(
 
 /// Watch the place of the host named `host` that this process runs in,
 /// labelling it with `workspace` first when `label`.
-async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> Result<()> {
-    let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
+async fn watch_here(ctx: &Context, host: HostName, workspace: &str, label: bool) -> Result<()> {
+    let host = named(host);
     let place = place_here(host)
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
     if label && let Some(sessions) = host.sessions() {
@@ -1126,7 +1127,7 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
 pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
     places
         .iter()
-        .filter(|(_, place)| kept_by(place).sessions().is_some())
+        .filter(|(_, place)| named(place.host).sessions().is_some())
         .map(|(owner, _)| (*owner).to_owned())
         .collect()
 }
@@ -1148,7 +1149,7 @@ pub(in crate::cli) async fn open_session_owners(
         })
         .collect();
     let origins: Vec<&Origin> = places.iter().map(|(_, place)| *place).collect();
-    let (found, _) = open_at(&origins, |host| kept_by_host(host).sessions()).await;
+    let (found, _) = open_at(&origins, |host| named(host).sessions()).await;
     places
         .iter()
         .zip(found)
@@ -1161,7 +1162,7 @@ pub(in crate::cli) async fn open_session_owners(
 /// say how to return to it by `name` when it outlives the attach. Returns
 /// whether its place still has a session once shown.
 pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<bool> {
-    let host = kept_by(&session.place);
+    let host = named(session.place.host);
     let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
         anyhow::bail!("{} keeps no sessions", host.name());
     };
@@ -1248,7 +1249,7 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
 /// Show the demo `launch` describes in this terminal.
 pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
     let place = &launch.origin;
-    match kept_by(place).places() {
+    match named(place.host).places() {
         Some(places) => places.show(place, "the demo").await,
         None => background::open_demo(place.id()).await,
     }
@@ -1257,7 +1258,7 @@ pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
 /// What the demo `launch` describes shows.
 pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
     let place = &launch.origin;
-    match kept_by(place).demos() {
+    match named(place.host).demos() {
         Some(demos) => demos.demo_screen(place).await,
         None => background::demo_screen(place.id()),
     }
@@ -1265,8 +1266,8 @@ pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
 
 /// Type `keys` into the demo `launch` describes.
 pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
-    match kept_by(&launch.origin).types() {
-        Some(_) => send_keys(&launch.origin, keys).await,
+    match named(launch.origin.host).types() {
+        Some(types) => types.send_keys(&launch.origin, keys).await,
         None => background::send_demo_keys(),
     }
 }
@@ -1280,7 +1281,7 @@ pub(in crate::cli) async fn submit_prompt(place: &Origin, text: &str) -> Result<
 
 /// Type `keys` into `place`, as they are, through the host that keeps it.
 pub(in crate::cli) async fn send_keys(place: &Origin, keys: &str) -> Result<()> {
-    let host = kept_by(place);
+    let host = named(place.host);
     let types = host
         .types()
         .with_context(|| format!("Shoal cannot type into places of {}", host.name()))?;
@@ -1289,9 +1290,7 @@ pub(in crate::cli) async fn send_keys(place: &Origin, keys: &str) -> Result<()> 
 
 /// The ID of the place of `host` this process runs in, from its origin record.
 fn place_here(host: &dyn Host) -> Option<String> {
-    host.places()
-        .and_then(Places::origin)
-        .and_then(|origin| origin.place)
+    origin_here(host).and_then(|origin| origin.place)
 }
 
 /// Whether the places `host` opens show a name.
@@ -1299,24 +1298,10 @@ fn names_places(host: &dyn Host) -> bool {
     host.places().is_some_and(Places::names_places)
 }
 
-/// The host, or the plain terminal, that keeps `place`.
-fn kept_by(place: &Origin) -> &'static dyn Host {
-    kept_by_host(place.host)
-}
-
-/// The host named `name`, or the plain terminal.
-fn kept_by_host(name: HostName) -> &'static dyn Host {
-    hosts()
-        .chain([&Plain as &dyn Host])
-        .find(|host| host.name() == name)
-        .unwrap_or(&Plain)
-}
-
-/// The host, or the plain terminal, that goes by `name`.
-fn named(name: &str) -> Option<&'static dyn Host> {
-    hosts()
-        .chain([&Plain as &dyn Host])
-        .find(|host| host.name().as_str() == name)
+/// The host named `name`, or the plain terminal, which keeps places no
+/// host does.
+fn named(name: HostName) -> &'static dyn Host {
+    hosts().find(|host| host.name() == name).unwrap_or(&Plain)
 }
 
 /// The place a host opened for this process to add a workspace in, hosting
@@ -1336,7 +1321,7 @@ fn add_worker_argv(ctx: &Context, host: &Configured) -> Result<Vec<OsString>> {
         &ctx.paths,
         false,
         crate::cli::internal::Worker::Add {
-            host: host.host.name().as_str(),
+            host: host.host.name(),
             close_when_done: host.closes_when_done,
         },
     )
@@ -1346,12 +1331,12 @@ fn add_worker_argv(ctx: &Context, host: &Configured) -> Result<Vec<OsString>> {
 /// host named `host` this process runs in.
 pub(in crate::cli) async fn add_worker(
     mut ctx: Context,
-    host: &str,
+    host: HostName,
     closes_when_done: bool,
     payload: &str,
 ) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
-    let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
+    let host = named(host);
     let id = place_here(host)
         .with_context(|| format!("{} did not name the place this worker runs in", host.name()))?;
     ctx.place = Some(Place {
@@ -1384,7 +1369,7 @@ pub(in crate::cli) async fn host_workspace(
             if let Some(places) = place.host.places() {
                 places.rename_place(&place.id, label).await;
             }
-            record_owned_here(ctx, place.host.name().as_str(), &workspace.id).await;
+            record_owned_in(ctx, place.host, &workspace.id).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }
@@ -1459,7 +1444,7 @@ pub(crate) struct PromptSession {
 impl PromptSession {
     pub(crate) fn current() -> Option<Self> {
         let place = current_origin().filter(|place| place.place.is_some())?;
-        kept_by(&place).types()?;
+        named(place.host).types()?;
         Some(Self { place })
     }
 

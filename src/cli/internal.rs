@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{cli::args::approvals::Decision, paths::Paths};
+use crate::{cli::args::approvals::Decision, paths::Paths, sessions::HostName};
 
 /// The hidden command that holds every worker below.
 pub const GROUP: &str = "internal";
@@ -32,7 +32,7 @@ pub enum Worker<'a> {
     /// while it is the `instance` the watch began with; the completion at
     /// `kept_at` predates the watch.
     PlaceWatch {
-        host: &'a str,
+        host: HostName,
         workspace: &'a str,
         place: &'a str,
         instance: Option<&'a str>,
@@ -63,8 +63,8 @@ pub enum Worker<'a> {
         records: &'a [PathBuf],
         command: &'a [OsString],
         /// The host that opened the place.
-        host: &'a str,
-        close_in: Option<&'a str>,
+        host: HostName,
+        close_in: Option<HostName>,
     },
     /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
     Demo {
@@ -80,7 +80,7 @@ pub enum Worker<'a> {
     /// opened for it, closing it once the workspace is done when
     /// `close_when_done` is set.
     Add {
-        host: &'a str,
+        host: HostName,
         close_when_done: bool,
     },
     /// Copy the checkout's ignored files, then run setup.
@@ -172,7 +172,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         } => {
             args.extend([
                 PLACE_WATCH.into(),
-                host.into(),
+                host.as_str().into(),
                 workspace.into(),
                 place.into(),
             ]);
@@ -225,12 +225,12 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             close_in,
         } => {
             args.extend([SESSION.into(), workspace.into(), agent.into()]);
-            args.extend(["--host".into(), host.into()]);
+            args.extend(["--host".into(), host.as_str().into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
             }
             if let Some(host) = close_in {
-                args.extend(["--close-in".into(), host.into()]);
+                args.extend(["--close-in".into(), host.as_str().into()]);
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -254,7 +254,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             host,
             close_when_done,
         } => {
-            args.extend([ADD.into(), "--host".into(), host.into()]);
+            args.extend([ADD.into(), "--host".into(), host.as_str().into()]);
             if close_when_done {
                 args.push("--close-when-done".into());
             }
