@@ -291,7 +291,6 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
             {"name": "complexity/medium", "exclusive": true},
         ]},
         put: {"body": []},
-        "GET repos/team/project/teams": user_owned(),
     }));
     let response = edit("complexity/medium");
     assert_eq!(response["type"], "item", "{response}");
@@ -337,11 +336,13 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let mut pr = pull(8, "open", "Fix", &[]);
     pr["user"] = json!({"login": "sam"});
+    let organization = "GET orgs/team";
     let teams = "GET repos/team/project/teams";
     let mut responses = json!({
         "GET repos/team/project/labels?limit=50&page=1": {"body": [{"name": "bug"}]},
         "GET orgs/team/labels?limit=50&page=1":
             {"body": [{"name": "priority/high", "exclusive": true}]},
+        organization: {"body": {"username": "team"}},
         teams: {"body": [{"name": "core"}]},
         "GET repos/team/project/reviewers": {"body": [
             {"login": "kim", "full_name": "Kim Lee"},
@@ -367,7 +368,17 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
         ])
     );
 
-    // A repository a user owns has neither teams nor organization labels.
+    // Without a login, Forgejo shows no organization for a user, and refuses
+    // the repository's teams.
+    responses[organization] = json!({"status": 404, "body": {"message": "GetOrgByName"}});
+    responses[teams] = json!({"status": 401, "body": {"message": "token is required"}});
+    fixture.respond(responses.clone());
+    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
+
+    // A token without the read:organization scope learns that a user owns the
+    // repository from its teams, which Forgejo then refuses to list.
+    responses[organization] = json!({"status": 403, "body": {"message": "token scope"}});
     responses[teams] = user_owned();
     fixture.respond(responses);
     let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);

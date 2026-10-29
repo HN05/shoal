@@ -6,6 +6,7 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Value, json};
 
 mod actions;
+mod organization;
 mod review;
 mod sniff;
 pub(crate) mod tea;
@@ -308,7 +309,7 @@ impl Backend for Forgejo {
         let request = Request::get(repo.repo_endpoint("reviewers"));
         let (users, teams) = tokio::try_join!(
             repo.send(account, &request),
-            organization_teams(repo, account),
+            organization::teams(repo, account),
         )?;
         let users = users.as_array().context("reviewers are not a list")?;
         let owner = repo.owner();
@@ -729,36 +730,16 @@ impl Backend for Forgejo {
     /// items take too, apart from the repository's own.
     async fn labels(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
         let endpoint = repo.repo_endpoint("labels");
-        let (mut labels, teams) = tokio::try_join!(
+        let (mut labels, organization) = tokio::try_join!(
             repo.pages(account, &endpoint),
-            organization_teams(repo, account),
+            organization::labels(repo, account),
         )?;
-        if teams.is_some() {
-            let owner = repo.owner();
-            let endpoint = format!("orgs/{owner}/labels");
-            let organization = repo.pages(account, &endpoint).await.with_context(|| {
-                format!("the labels of organization {owner} need the read:organization scope")
-            })?;
-            labels.extend(organization);
-        }
+        labels.extend(organization);
         Ok(labels)
     }
 
     fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
         label["exclusive"].as_bool().unwrap_or(false)
-    }
-}
-
-/// The teams with access to the repository when an organization owns it;
-/// none when a user does, for which Forgejo refuses the list.
-async fn organization_teams(repo: &ForgeRepo, account: &Account) -> Result<Option<Vec<Value>>> {
-    let request = Request::get(repo.repo_endpoint("teams"));
-    let Some(teams) = repo.read_unless(account, &request, 405).await? else {
-        return Ok(None);
-    };
-    match teams {
-        Value::Array(teams) => Ok(Some(teams)),
-        _ => bail!("teams are not a list"),
     }
 }
 

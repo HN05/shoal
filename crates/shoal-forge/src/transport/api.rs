@@ -194,21 +194,22 @@ impl ForgeRepo {
         Ok(body)
     }
 
-    /// The body of the read `request`, or none when the forge answers it
-    /// with `status`, as one refuses an endpoint that does not apply to the
-    /// repository. It is not remembered for a conditional read.
-    pub(crate) async fn read_unless(
+    /// The body of the read `request`, or the status of a refusal among
+    /// `refusals`, which tells the caller something about the repository,
+    /// such as an endpoint that does not apply to it. It is not remembered
+    /// for a conditional read.
+    pub(crate) async fn read_refusable(
         &self,
         account: &Account,
         request: &Request,
-        status: u16,
-    ) -> Result<Option<Value>> {
+        refusals: &[u16],
+    ) -> Result<Result<Value, u16>> {
         async {
             let response = self.within_limit(account, request).await?;
-            if response.status == status {
-                return Ok(None);
+            if refusals.contains(&response.status) {
+                return Ok(Err(response.status));
             }
-            json_body(response.success_body()?).map(Some)
+            json_body(response.success_body()?).map(Ok)
         }
         .await
         .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
