@@ -68,6 +68,21 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         .unwrap();
     assert!(matches!(read(&mut connection).await, Control::Started));
 
+    // An agent stopped earlier whose restore is already in the queue.
+    recovery::save_record(
+        &manager.paths,
+        &workspace.id,
+        "earlier",
+        "claude",
+        None,
+        None,
+    )
+    .unwrap();
+    manager
+        .queue_stopped_restore(&workspace.id, "earlier", Default::default())
+        .await
+        .unwrap();
+
     let stopping = tokio::spawn({
         let manager = manager.clone();
         async move { manager.stop_for_system_shutdown().await }
@@ -122,23 +137,28 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     );
     // The stopped agent stays stopped work with its request, not a last session.
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
-    assert_eq!(saved.agents.len(), 1);
+    assert_eq!(saved.agents.len(), 2);
     assert!(saved.sessions.is_empty());
     assert!(request.exists());
 
-    // The restore queues but starts only once the shutdown is cancelled.
-    let restore = async || {
+    // Both restores queue, but the queue starts them only once the shutdown
+    // is cancelled, the earlier first.
+    let restores = async || {
         manager.dispatch_queue().await.unwrap();
         let entries = manager.queue_entries().await.unwrap();
-        let entry = entries
-            .into_iter()
-            .find(|entry| entry.execution.as_deref() == Some(plan.id.as_str()));
-        entry.expect("the requested restore was not queued").state
+        let state = |execution: &str| {
+            let entry = entries
+                .iter()
+                .find(|entry| entry.execution.as_deref() == Some(execution));
+            entry.expect("the restore was not queued").state
+        };
+        (state("earlier"), state(&plan.id))
     };
-    assert_eq!(restore().await, crate::state::QueueState::Queued);
+    use crate::state::QueueState::{Queued, Starting};
+    assert_eq!(restores().await, (Queued, Queued));
     manager.system_shutdown_cancelled().await;
     assert!(!manager.agent_queue.suspended());
-    assert_eq!(restore().await, crate::state::QueueState::Starting);
+    assert_eq!(restores().await.0, Starting);
 }
 
 #[tokio::test]
@@ -155,16 +175,19 @@ async fn suspending_waits_for_an_admission_pass_in_progress() {
 }
 
 #[test]
-fn only_requested_restores_continue_without_the_user() {
+fn only_requested_or_queued_restores_continue_without_the_user() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
-    assert!(!waits_for_resume(&paths, "workspace").unwrap());
+    let none = HashSet::new();
+    assert!(!waits_for_resume(&paths, "workspace", &none).unwrap());
     recovery::save_record(&paths, "workspace", "requested", "claude", None, None).unwrap();
     let request = paths
         .workspace_state("workspace")
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
-    assert!(!waits_for_resume(&paths, "workspace").unwrap());
+    assert!(!waits_for_resume(&paths, "workspace", &none).unwrap());
     recovery::save_record(&paths, "workspace", "unattended", "claude", None, None).unwrap();
-    assert!(waits_for_resume(&paths, "workspace").unwrap());
+    assert!(waits_for_resume(&paths, "workspace", &none).unwrap());
+    let queued = HashSet::from(["unattended".to_owned()]);
+    assert!(!waits_for_resume(&paths, "workspace", &queued).unwrap());
 }

@@ -65,8 +65,12 @@ impl Manager {
         if stopped.is_empty() {
             return;
         }
+        let queued = self.queued_restores().await.unwrap_or_else(|error| {
+            log!("system shutdown: agent queue unavailable: {error:#}");
+            HashSet::new()
+        });
         let waits = stopped.iter().any(|workspace| {
-            waits_for_resume(&self.paths, &workspace.id).unwrap_or_else(|error| {
+            waits_for_resume(&self.paths, &workspace.id, &queued).unwrap_or_else(|error| {
                 log!(
                     "system shutdown: stopped work of {} unreadable: {error:#}",
                     workspace.name
@@ -94,11 +98,25 @@ impl Manager {
         )
         .await;
     }
+
+    /// The executions of stopped agents whose restore is in the agent queue.
+    async fn queued_restores(&self) -> Result<HashSet<String>> {
+        Ok(self
+            .queue_entries()
+            .await?
+            .into_iter()
+            .filter_map(|entry| entry.execution)
+            .collect())
+    }
 }
 
 /// Whether the workspace saved work only `shoal resume` continues: a
-/// command, or an agent whose restore no request queues.
-fn waits_for_resume(paths: &crate::paths::Paths, workspace_id: &str) -> Result<bool> {
+/// command, or an agent whose restore is neither `queued` nor requested.
+fn waits_for_resume(
+    paths: &crate::paths::Paths,
+    workspace_id: &str,
+    queued: &HashSet<String>,
+) -> Result<bool> {
     let saved = Saved::load(paths, workspace_id)?;
     let requested: HashSet<String> = recovery::restore_requests(paths, workspace_id)?
         .into_iter()
@@ -108,7 +126,7 @@ fn waits_for_resume(paths: &crate::paths::Paths, workspace_id: &str) -> Result<b
         || saved
             .agents
             .iter()
-            .any(|(execution, _)| !requested.contains(execution)))
+            .any(|(execution, _)| !requested.contains(execution) && !queued.contains(execution)))
 }
 
 #[cfg(test)]
