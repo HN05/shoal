@@ -189,8 +189,8 @@ impl Manager {
         self.store
             .run(move |db| movable_records(db, &id, running).map(drop))
             .await?;
-        let stopping = self.stopping_processes(&repo.id, running).await?;
-        let processes = process::in_directory_except(directory, &stopping).await?;
+        let stopping = self.stopping_processes(&repo.id, running);
+        let processes = process::in_directory_besides(directory, stopping).await?;
         ensure!(
             processes.is_empty(),
             "processes are using {}: {}; stop them or leave the directory first",

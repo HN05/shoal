@@ -28,6 +28,25 @@ pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<St
         .collect())
 }
 
+/// The processes using the directory other than those `excluded` names,
+/// which is read after they are listed: a process started meanwhile that
+/// it covers is among them, and one that has exited since no longer uses
+/// the directory.
+pub async fn in_directory_besides(
+    root: &Path,
+    excluded: impl Future<Output = Result<Vec<u32>>>,
+) -> Result<Vec<String>> {
+    let users = directory_users(root).await?;
+    let excluded = excluded.await?;
+    Ok(users
+        .into_iter()
+        .filter(|(pid, _)| {
+            !excluded.contains(pid) && identity::capture(*pid).is_ok_and(|p| p.is_some())
+        })
+        .map(|(pid, name)| format!("{name} (PID {pid})"))
+        .collect())
+}
+
 /// The detached processes running from the directory: those launchd or init
 /// adopted when their parent exited, with the descendants they started there.
 /// No terminal or other process outside the directory keeps them, so they
