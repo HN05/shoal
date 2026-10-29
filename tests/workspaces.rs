@@ -5260,6 +5260,40 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 }
 
 #[test]
+fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    fixture.add("other");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    // The split was interrupted before the child's setup started.
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE workspaces SET state='preparing' WHERE name='child'",
+        [],
+    )
+    .unwrap();
+    let again = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(!again.status.success(), "{again:?}");
+    for name in ["parent", "other"] {
+        let output = scoped_command(&fixture, "parent", &["rm", name, "--yes"]);
+        assert!(!output.status.success(), "{name}: {output:?}");
+    }
+    let removed = scoped_command(&fixture, "parent", &["rm", "child", "--yes"]);
+    assert!(removed.status.success(), "{removed:?}");
+    let again = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(again.status.success(), "{again:?}");
+    assert_eq!(
+        fixture.ok(&["status", "child"])["workspace"]["parent_workspace"]["name"],
+        "parent"
+    );
+    assert_eq!(
+        fixture.ok(&["status", "other"])["workspace"]["name"],
+        "other"
+    );
+}
+
+#[test]
 fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     // Completion without cleanup keeps the finished child to inspect.
     let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));

@@ -69,6 +69,24 @@ impl Manager {
         Ok(workspace)
     }
 
+    /// `workspace`, which must be one below the caller's that nothing holds:
+    /// removing it releases its holds, which are the user's and host apps'.
+    pub(in crate::daemon) async fn unheld_workspace_below<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut String,
+        refusal: &str,
+    ) -> Result<&'a mut String> {
+        let workspace = self.workspace_below(caller, workspace, refusal).await?;
+        let held = self.workspace(workspace).await?;
+        ensure!(
+            held.holds.is_empty(),
+            "{} has holds, which are the user's; ask the user to remove it",
+            held.name
+        );
+        Ok(workspace)
+    }
+
     /// Approval request `id`, which must be routed to the caller to decide.
     /// Only the stored routing counts; the decision rechecks it with its grant.
     pub(in crate::daemon) async fn routed_approval(

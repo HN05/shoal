@@ -271,8 +271,10 @@ there open, mark and complete the child's work. Your hooks keep reporting for
 your own workspace, and the child's issue and PR activity reaches you like your
 own, each update naming the child workspace. Run `shoal done` in each child once
 its work is finished; Shoal cleans up your workspace only after its children are
-removed. You can split children from children; each workspace process reaches
-its own workspace and those below it.
+removed. To discard a child, or one a split left `preparing` when it was
+interrupted, run `shoal rm <child>`, then split again; a child with holds is
+the user's to remove. You can split children from children; each workspace
+process reaches its own workspace and those below it.
 
 To have work done in parallel, give it to a subagent where your instructions
 allow delegation. A subagent you run in its own worktree gets a child split from

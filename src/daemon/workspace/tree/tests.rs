@@ -5,7 +5,8 @@ use crate::{
     },
     model::{CleanupReason, Workspace, WorkspaceRef},
     protocol::{
-        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, WorkspaceMethod,
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, RemovalMethod,
+        WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
@@ -165,6 +166,72 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     assert!(
         matches!(&done, AssignmentMethod::WorkspaceDone { workspace, .. } if *workspace == grandchild.id)
     );
+}
+
+#[tokio::test]
+async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_holds() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    manager
+        .executions
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    let check = |workspace: &str| RemovalMethod::CheckRemoval {
+        workspace: workspace.into(),
+        include_changes: false,
+    };
+    let remove = |workspace: &str| RemovalMethod::RemoveWorkspace {
+        workspace: workspace.into(),
+        unsaved: UnsavedWork::default(),
+    };
+    for (target, allowed) in [
+        (&child.name, true),
+        (&parent.name, false),
+        (&sibling.name, false),
+    ] {
+        for mut method in [check(target), remove(target)] {
+            let authorized =
+                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
+        }
+    }
+    let mut own = remove(&parent.name);
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut own)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("shoal done"), "{error:#}");
+
+    // Removal would release the user's holds.
+    manager
+        .acquire_hold(&child.id, "editor".into(), None)
+        .await
+        .unwrap();
+    let mut held = remove(&child.name);
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut held)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("has holds"), "{error:#}");
+    let mut checked = check(&child.name);
+    crate::daemon::scope::authorize(&manager, Some("scope"), &mut checked)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

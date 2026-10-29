@@ -63,7 +63,7 @@ when behavior changes, distinguishing decisions from proposals.
   ancestry for the same state directory, so a cleared token does not unscope. A scope covers its
   workspace and the child workspaces split from it, recursively; targets name one of them, and
   the agent's hooks report for its own. Enforce own-worktree resource access
-  in the daemon and deny workspace allocation/removal/recovery other than splitting a child, and shared
+  in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one without holds, and shared
   repository/service administration. For the workspaces below their own, scoped callers may queue
   agents, which the daemon starts detached, cancel their queue entries or move them back, send agent messages, answer questions, and discard
   stopped work; the agent

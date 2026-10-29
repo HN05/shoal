@@ -1640,8 +1640,9 @@ runs its setup, and records the parent, so work that needs its own PR gets its
 own branch and worktree. The parent must be ready. `--base` works as for
 `shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
-from their own workspace and act on every workspace below it, which is the only
-workspace creation scope allows; other creation and removal stay with the user.
+from their own workspace, act on every workspace below it and `shoal rm` one
+without holds, which is the only workspace creation and removal scope allows;
+the rest stays with the user.
 
 The parent's agent receives the issue and PR activity of its children that have
 no agent of their own, and of their children in turn, through its hooks and an

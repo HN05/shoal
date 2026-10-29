@@ -77,7 +77,18 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: RemovalMethod) -> Res
 }
 
 impl Scoped for RemovalMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
-        Err(denied())
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+        const REFUSAL: &str = "workspace processes remove only the workspaces split from theirs; finish their own with shoal done";
+        match self {
+            RemovalMethod::CheckRemoval { workspace, .. } => manager
+                .workspace_below(caller, workspace, REFUSAL)
+                .await
+                .map(Some),
+            RemovalMethod::RemoveWorkspace { workspace, .. } => manager
+                .unheld_workspace_below(caller, workspace, REFUSAL)
+                .await
+                .map(Some),
+            _ => Err(denied()),
+        }
     }
 }

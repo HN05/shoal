@@ -456,8 +456,9 @@ there, as it tracks custom and Happy agents that report none, takes over its
 subtree, and so does one whose restore is queued, since it receives what
 arrived once it starts. A parent stays until its children are removed, through every unattended
 removal like a hold, so one `done` at the top leaves the tree until its PRs
-merge; each child completes on its own. Removing a parent moves its children up
-to its own parent and journals the change. `work` lists children below their
+merge; each child completes on its own. The parent owns its children, so its
+processes may remove them, except one with holds, which are the user's. Removing
+a parent moves its children up to its own parent and journals the change. `work` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
 own through the agent queue; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and

@@ -99,8 +99,8 @@ instead of the PR delivery guidance below.
   child workspaces split from it, recursively, only (CLI refusals also follow ancestry
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
-  Workspace allocation other than `split`, removal, recovery and shared repository/service
-  administration stay denied. For the workspaces below their own, scoped callers queue agents,
+  Workspace allocation other than `split`, removal other than of a workspace below their own
+  without holds, recovery and shared repository/service administration stay denied. For the workspaces below their own, scoped callers queue agents,
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries or move them back, send agent messages,
   answer questions and discard stopped work; the nearest ancestor with an agent receives a child agent's messages,
