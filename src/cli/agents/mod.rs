@@ -28,8 +28,10 @@ use crate::{
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
     config::{Config, Effective, named_commands::Commands},
+    execution::recovery,
     fsutil,
     model::{RemovedWorkspace, Repository, Workspace},
+    paths::Paths,
     protocol::{ConfigTarget, RepositoryMethod},
     tools::Tool,
 };
@@ -851,25 +853,59 @@ pub(in crate::cli) async fn trust_resumed(
     workspace: &Workspace,
     removed: &RemovedWorkspace,
 ) {
-    let settings =
-        match client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await {
-            Ok(settings) => settings,
-            Err(error) => {
-                eprintln!("warning: cannot trust the restored workspace for its agents: {error:#}");
-                return;
-            }
-        };
     let stopped = removed
         .agents
         .iter()
         .filter(|agent| agent.record.session.is_some())
-        .map(|agent| agent.record.agent.as_str());
+        .map(|agent| agent.record.agent.clone());
     let last = removed
         .last_sessions
         .iter()
         .filter(|last| last.session.is_some())
-        .map(|last| last.agent.as_str());
-    for name in stopped.chain(last) {
+        .map(|last| last.agent.clone());
+    trust_for(ctx, workspace, stopped.chain(last).collect()).await;
+}
+
+/// Trust the path of `workspace`, which moved, for each agent it saves for
+/// `shoal resume`, which restores them there without trusting it.
+pub(in crate::cli) async fn trust_saved(ctx: &Context, workspace: &Workspace) {
+    match saved_agents(&ctx.paths, &workspace.id) {
+        Ok(agents) => trust_for(ctx, workspace, agents).await,
+        Err(error) => eprintln!(
+            "warning: cannot trust {} for its agents: {error:#}",
+            workspace.path.display()
+        ),
+    }
+}
+
+/// The agents the workspace saves for `shoal resume`.
+fn saved_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<String>> {
+    let saved = recovery::Saved::load(paths, workspace_id)?;
+    let mut agents = Vec::new();
+    for (_, path) in &saved.agents {
+        agents.extend(recovery::Record::load(path)?.map(|record| record.agent));
+    }
+    for (_, path) in &saved.sessions {
+        agents.extend(recovery::LastSession::load(path)?.map(|last| last.agent));
+    }
+    Ok(agents)
+}
+
+/// Trust the path of `workspace` for each of `agents` as a tracked launch
+/// does. Failures only warn.
+async fn trust_for(ctx: &Context, workspace: &Workspace, agents: Vec<String>) {
+    let settings =
+        match client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await {
+            Ok(settings) => settings,
+            Err(error) => {
+                eprintln!(
+                    "warning: cannot trust {} for its agents: {error:#}",
+                    workspace.path.display()
+                );
+                return;
+            }
+        };
+    for name in &agents {
         if let Some(trust) = agent_integration(&settings, name).trust_file() {
             let profile = &settings.launch(name).environment;
             trust.trust_tracked(ctx, workspace, profile).await;

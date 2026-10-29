@@ -2622,6 +2622,66 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     );
 }
 
+/// Migrating stops the agents running in the moving repositories, then
+/// restores them in their workspaces' new paths, which it trusts for them.
+#[test]
+fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
+    let fixture = Fixture::with_config(Some(
+        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agent_resume]\nclaude = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    let claude_config = fixture.root.path().join(".claude.json");
+    fs::write(&claude_config, r#"{"projects": {}}"#).unwrap();
+    let workspace = fixture.add("moving");
+    let old = PathBuf::from(workspace["path"].as_str().unwrap());
+    let agent = fixture
+        .command()
+        .args(["claude", "moving"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("agent started", || old.join("started").exists());
+    let trusted = fs::read_to_string(&claude_config).unwrap();
+    assert!(
+        trusted.contains(old.parent().unwrap().to_str().unwrap()),
+        "{trusted}"
+    );
+
+    // Without confirmation nothing stops.
+    let output = fixture.run(&["repo", "migrate", "~/moved"]);
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("confirmation required"), "{error}");
+    let running = fixture.ok(&["status", "moving"]);
+    assert!(
+        !running["executions"].as_array().unwrap().is_empty(),
+        "{running}"
+    );
+
+    let moved = fixture.ok(&["repo", "migrate", "~/moved", "--yes"]);
+    assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
+    assert!(agent.wait_with_output().unwrap().status.success());
+    let path = fs::canonicalize(fixture.root.path())
+        .unwrap()
+        .join("moved")
+        .join(old.parent().unwrap().file_name().unwrap())
+        .join("moving");
+    assert!(!old.exists());
+    wait_until("agent restored", || path.join("restored").exists());
+    // Trusting the repository directory trusts the workspaces in it.
+    let trusted: Value =
+        serde_json::from_str(&fs::read_to_string(&claude_config).unwrap()).unwrap();
+    let directory = path.parent().unwrap().to_str().unwrap();
+    assert_eq!(
+        trusted["projects"][directory]["hasTrustDialogAccepted"], true,
+        "{trusted}"
+    );
+    let old_directory = old.parent().unwrap().to_str().unwrap();
+    assert!(trusted["projects"][old_directory].is_null(), "{trusted}");
+    fixture.ok(&["stop", "moving"]);
+}
+
 #[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
     let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));

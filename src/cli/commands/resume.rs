@@ -12,7 +12,7 @@ use crate::{
     execution::recovery::{
         LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume,
     },
-    model::{Inspection, QueueEntry, Workspace},
+    model::{Execution, Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
     state::{ExecutionState, QueueState},
 };
@@ -127,6 +127,29 @@ async fn queue_below(
         stopped.push(stopped_agents(ctx, selector, execution.as_deref()).await?);
     }
     queue::queue_all(ctx, stopped).await
+}
+
+/// Queue the restores of the agents among `executions`, which were stopped
+/// so their workspaces could move, and report the stopped commands of
+/// workspaces without one.
+pub(super) async fn queue_stopped(
+    ctx: &Context,
+    executions: &[Execution],
+) -> Result<queue::Queued> {
+    let mut stopped = Vec::new();
+    let workspaces: std::collections::BTreeSet<_> =
+        executions.iter().map(|e| &e.workspace_id).collect();
+    for workspace in workspaces {
+        let workspace = client::inspect(&ctx.paths, workspace.clone())
+            .await?
+            .workspace;
+        let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
+        saved.retain(|id| executions.iter().any(|execution| execution.id == id));
+        if !saved.is_empty() {
+            stopped.push((workspace, saved));
+        }
+    }
+    Ok(queue::queue_each(ctx, stopped).await)
 }
 
 /// The stopped agents and last sessions of the workspace `selector` names,
@@ -871,6 +894,7 @@ fn handoff(commands: &[SavedCommand]) -> Option<String> {
 }
 
 mod queue;
+pub(super) use queue::Queued;
 
 #[cfg(test)]
 mod tests;

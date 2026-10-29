@@ -394,7 +394,10 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 `root_dir`, while nothing runs or uses it: its workspaces are reserved and the
 move is recorded before anything moves, then the records switch and Git's
 worktree links are repaired, so a stopped daemon finishes a completed move and
-rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay. Registration is idempotent by normalized origin URL,
+rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
+`repo migrate` stops the commands and agents running there as `shoal stop`
+does and queues the agents' restores after the move, trusting the new paths
+for them: a stop keeps sessions, which resume by ID from any directory. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
 display name. Repository selectors preserve the caller's argument alongside its
 canonical path. IDs and sources win before path lookup; a registered name survives

@@ -1975,18 +1975,23 @@ and moving the repositories back. A root on another filesystem is copied, then t
 checkout or workspace placed outside the repository directory stays where it is.
 A path argument is saved as the global `root_dir` and the daemon reloads it first.
 Interactive calls run the checks below, then list the directories to move and
-ask; `-y`/`--yes` skips the prompt and is required for scripts and `--json`, which returns each moved
+the commands and agents running in them, and ask; `-y`/`--yes` skips the prompt
+and is required for scripts and `--json`, which returns each moved
 `repository`, its old directory as `from` and its old `workspace_paths`.
+Those commands and agents stop as [`shoal stop`](#recovery) stops them,
+and once the move is done, or has failed, their agents' restores queue as
+`shoal resume` queues them, continuing their sessions in the new paths.
 
 Every repository is checked before the first moves: none may have a running
-command, agent or chat, queued agent launches, a workspace in another lifecycle
+chat, queued agent launches, a workspace in another lifecycle
 operation, a checkout leased as a repository resource, another repository's
-checkout or workspace or Shoal's state inside its directory, or a process whose
-working directory is inside it, so leave those
-directories first. The move is recorded before anything moves; a failed or
+checkout or workspace or Shoal's state inside its directory, or a process
+other than those commands and agents whose working directory is inside it, so
+leave those directories first. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
 repository refuses other changes until the next `repo migrate` or daemon start
-completes it. Agent trust for the old paths is removed.
+completes it. Agent trust for the old paths is removed, and the new paths are
+trusted for the agents their workspaces keep for `shoal resume`.
 
 ### Merge into your workspace branch
 

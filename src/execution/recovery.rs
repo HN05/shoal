@@ -996,6 +996,13 @@ impl Saved {
         }
     }
 
+    /// Keep only the records of the executions `keep` selects.
+    pub fn retain(&mut self, keep: impl Fn(&str) -> bool) {
+        self.agents.retain(|(id, _)| keep(id));
+        self.sessions.retain(|(id, _)| keep(id));
+        self.commands.retain(|command| keep(&command.id));
+    }
+
     pub fn is_empty(&self) -> bool {
         self.sessions.is_empty() && !self.is_unfinished()
     }

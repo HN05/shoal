@@ -72,7 +72,7 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
 
 /// Stop `workspace`. An execution Shoal cannot prove ended stops only once
 /// the user confirms it did, or with `yes`.
-async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
+pub(super) async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
     let request_stop = |acknowledge_unproven| {
         request::<()>(
             &ctx.paths,
