@@ -24737,6 +24737,18 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
+    // An invalid name is refused before a picker would ask for the chat.
+    let output = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["chat", "rename", "bad/name"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("chat names must"),
+        "{output:?}"
+    );
     let (output, rows) = fixture.pick_in(&fixture.repo, &["chat", "rename", "picked"], &talk, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");

@@ -18,6 +18,8 @@ pub(in crate::cli::commands) async fn rename(
     name: String,
 ) -> Result<i32> {
     super::ensure_unscoped(ctx)?;
+    // Refuse an invalid name before a picker asks for the chat.
+    crate::validate::name("chat", &name)?;
     let chat = select(ctx, chat).await?;
     let renamed = request::<Chat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;
     ctx.show(&renamed, |chat| outln!("Renamed chat to {}", chat.name))?;
