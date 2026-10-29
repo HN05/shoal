@@ -25391,6 +25391,31 @@ fn attach_previous_returns_to_the_session_last_detached_from() {
 }
 
 #[test]
+fn attach_previous_returns_to_a_herdr_tab_after_its_client_detaches() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    fixture.add("tabbed");
+    let recorded = fixture.request(serde_json::json!({"record_owned_place": {
+        "workspace": "tabbed",
+        "origin": {"host": "herdr", "group": "w1", "place": "w1:p4",
+                   "data": {"HERDR_SESSION": "work"}},
+    }}));
+    assert!(recorded.get("error").is_none(), "{recorded}");
+    let attached = || {
+        herdr_calls(&fixture)
+            .iter()
+            .filter(|call| call[..] == ["session", "attach", "work"])
+            .count()
+    };
+    let (output, transcript) = fixture.interactive(&["attach", "tabbed"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), 1);
+    let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), 2);
+}
+
+#[test]
 fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
     let fixture = Fixture::new();
     let workspace = fixture.add("failed");

@@ -1172,25 +1172,34 @@ pub(in crate::cli) async fn open_session_owners(
 }
 
 /// Show `session` in this terminal through the host that keeps it, then
-/// say how to return to it by `name` when it outlives the attach, which
-/// this returns.
+/// say how to return to it by `name` when it outlives the attach. Returns
+/// whether its place still has a session once shown.
 pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<bool> {
     let host = kept_by(&session.place);
     let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
         anyhow::bail!("{} keeps no sessions", host.name());
     };
     places.show(&session.place, &session.name).await?;
-    report_detach(sessions, name, &session.name).await
+    report_detach(sessions, name, &session.name).await?;
+    Ok(still_open(sessions, &session.place).await)
 }
 
 /// Say how to return to `session`, one `host` attached this terminal to, by
-/// `name` when it still runs after this terminal left it, and whether it does.
-async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<bool> {
-    let running = host.left_running(session).await?;
-    if running {
+/// `name` when it still runs after this terminal left it.
+async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<()> {
+    if host.left_running(session).await? {
         eprintln!("shoal: detached from {session}; run `shoal attach {name}` to return");
     }
-    Ok(running)
+    Ok(())
+}
+
+/// Whether `place` has a session in `host`, which may have attached this
+/// terminal until a detach or shown the place elsewhere. A failed lookup
+/// counts as closed.
+async fn still_open(host: &dyn Sessions, place: &Origin) -> bool {
+    host.sessions_at(&[place])
+        .await
+        .is_ok_and(|found| found.into_iter().flatten().next().is_some())
 }
 
 /// Start a demo of `workspace` in the first host that runs queued starts and

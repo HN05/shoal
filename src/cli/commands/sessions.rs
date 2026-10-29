@@ -106,7 +106,7 @@ impl Target {
         Self::inspected(ctx, id).await
     }
 
-    /// Remember a workspace once this terminal left its session running, so
+    /// Remember a workspace once its session was shown and still runs, so
     /// `attach -` returns to the session last detached from rather than the
     /// one last attached, which another terminal may still show.
     async fn record_detach(&self, ctx: &Context) {
