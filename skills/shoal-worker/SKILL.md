@@ -437,8 +437,11 @@ one.
 
 To show how a terminal interface looks, record it with a
 [VHS](https://github.com/charmbracelet/vhs) tape that types the keys a user
-would: `Screenshot` captures a screen, `Output <file>.mp4` records a video,
-never a GIF, and `Output <file>.txt` writes each frame as text. Pace a video so
+would and shows what each command prints. Leave that output whole, without
+piping it through `grep`, `head` or the like, unless the rest buries what the
+recording shows; then keep enough of it to read in context. `Screenshot`
+captures a screen, `Output <file>.mp4` records a video, never a GIF, and
+`Output <file>.txt` writes each frame as text. Pace a video so
 the viewer can read each screen before the next key, about two to three seconds
 on a screen and longer on a dense one, without idle stretches. VHS renders
 headlessly, so look at the screenshots yourself before sharing them. Keep the
