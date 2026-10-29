@@ -44,9 +44,10 @@ impl ForgeRepo {
     /// The users and teams PR `number` can ask for a review, in the forge's
     /// order, leaving out its author.
     pub async fn reviewers(&self, account: &Account, number: u64) -> Result<Vec<Reviewer>> {
+        // Boxed so each forge's user and team reads stay off the caller's stack.
         let (pr, candidates) = tokio::try_join!(
             self.read(account, ItemKind::Pr, number),
-            self.kind.reviewers(self, account),
+            Box::pin(self.kind.reviewers(self, account)),
         )?;
         Ok(candidates
             .into_iter()

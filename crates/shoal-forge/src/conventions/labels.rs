@@ -21,7 +21,9 @@ impl ForgeRepo {
         if !self.supports(Capability::Labels) {
             return Ok(Vec::new());
         }
-        let listed = self.kind.labels(self, account).await?;
+        // Boxed so a forge's further reads, such as a Forgejo organization's
+        // labels, do not grow the future of every action that checks labels.
+        let listed = Box::pin(self.kind.labels(self, account)).await?;
         Ok(listed
             .iter()
             .filter_map(|label| self.label(label))
