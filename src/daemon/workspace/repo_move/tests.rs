@@ -100,6 +100,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
             "codex".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .err()

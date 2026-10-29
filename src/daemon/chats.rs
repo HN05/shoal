@@ -3,7 +3,7 @@
 //! pressure or resume; a chat lasts while its process lives.
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
 use uuid::Uuid;
 
@@ -31,7 +31,8 @@ pub(super) async fn run(manager: Arc<Manager>) {
 
 impl Manager {
     /// Record the chat `name` whose agent replaces process `pid` in the
-    /// repository's checkout.
+    /// repository's checkout, or when `hands_over`, runs in a session `pid`
+    /// starts and [`Self::move_chat`] names.
     pub async fn start_chat(
         &self,
         repository: crate::repository::Selector,
@@ -39,6 +40,7 @@ impl Manager {
         agent: String,
         pid: u32,
         origin: Option<crate::sessions::Origin>,
+        hands_over: bool,
     ) -> Result<Chat> {
         crate::validate::name("chat", &name)?;
         let repository = self.repository(repository).await?.id;
@@ -59,7 +61,7 @@ impl Manager {
             origin,
         };
         self.store
-            .run(move |db| insert(db, chat, &process.birth))
+            .run(move |db| insert(db, chat, &process.birth, hands_over))
             .await
     }
 
@@ -178,8 +180,9 @@ impl Manager {
     }
 }
 
-/// Insert `chat` unless its name is taken or the repository is being removed.
-fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
+/// Insert `chat` unless its name is taken or the repository is being removed,
+/// starting until it is moved when it `hands_over`.
+fn insert(db: &mut Connection, chat: Chat, birth: &str, hands_over: bool) -> Result<Chat> {
     let tx = db.transaction()?;
     anyhow::ensure!(
         !store::repository_removing(&tx, &chat.repository_id)?,
@@ -189,8 +192,8 @@ fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
     store::ensure_repository_not_moving(&tx, &chat.repository_id)?;
     store::ensure_name_available(&tx, &chat.name, None)?;
     tx.execute(
-        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO chats(id,repository_id,name,agent,pid,birth,started_at,origin,starting)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
         params![
             chat.id,
             chat.repository_id,
@@ -202,7 +205,8 @@ fn insert(db: &mut Connection, chat: Chat, birth: &str) -> Result<Chat> {
             chat.origin
                 .as_ref()
                 .map(serde_json::to_string)
-                .transpose()?
+                .transpose()?,
+            hands_over
         ],
     )?;
     tx.commit()?;
@@ -242,6 +246,16 @@ fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
         .find(|running| running.id == chat || running.name == chat)
         .with_context(|| format!("no running chat {chat}"))?;
     if old.name != name {
+        // The starting chat's files are not open yet under its name.
+        ensure!(
+            !store::exists(
+                &tx,
+                "SELECT 1 FROM chats WHERE id=?1 AND starting",
+                [&old.id]
+            )?,
+            "chat {} is still starting; rename it once it runs",
+            old.name
+        );
         store::ensure_name_available(&tx, name, None)?;
         tx.execute(
             "UPDATE chats SET name=?2 WHERE id=?1",
@@ -273,7 +287,7 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
 
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
-        "UPDATE chats SET pid=?2,birth=?3 WHERE id=?1",
+        "UPDATE chats SET pid=?2,birth=?3,starting=0 WHERE id=?1",
         params![chat, process.pid, process.birth],
     )?;
     anyhow::ensure!(moved == 1, "unknown chat {chat}");

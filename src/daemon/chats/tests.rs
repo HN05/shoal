@@ -44,6 +44,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "claude".into(),
             process.id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -54,6 +55,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "codex".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -98,6 +100,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
             "claude".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -129,7 +132,14 @@ async fn a_chat_needs_a_running_process() {
     let pid = process.id();
     process.wait().unwrap();
     let error = manager
-        .start_chat(repo.id.into(), "chat-4".into(), "claude".into(), pid, None)
+        .start_chat(
+            repo.id.into(),
+            "chat-4".into(),
+            "claude".into(),
+            pid,
+            None,
+            false,
+        )
         .await
         .unwrap_err();
     assert!(error.to_string().contains("not running"), "{error:#}");
@@ -151,6 +161,7 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
             "happy-claude".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -198,6 +209,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
             "happy-claude".into(),
             recording.id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -239,6 +251,7 @@ async fn chats_and_workspaces_share_one_namespace() {
             "claude".into(),
             pid,
             None,
+            false,
         )
     };
     let refusal = |result: Result<Chat>| format!("{:#}", result.unwrap_err());
@@ -323,6 +336,7 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
             "happy-claude".into(),
             std::process::id(),
             None,
+            false,
         )
     };
     let talk = start("talk").await.unwrap();
@@ -374,6 +388,45 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
 }
 
 #[tokio::test]
+async fn a_chat_keeps_its_name_until_its_session_takes_it_over() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "happy-claude".into(),
+            std::process::id(),
+            None,
+            true,
+        )
+        .await
+        .unwrap();
+    // Its launcher has yet to open the files named after it.
+    let error = manager
+        .rename_chat(chat.id.clone(), "topic".into())
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("talk is still starting"),
+        "{error:#}"
+    );
+    manager
+        .move_chat(&chat.id, std::process::id())
+        .await
+        .unwrap();
+    let renamed = manager
+        .rename_chat(chat.id.clone(), "topic".into())
+        .await
+        .unwrap();
+    assert_eq!(renamed.name, "topic");
+}
+
+#[tokio::test]
 async fn concurrent_renames_keep_each_chats_files_under_its_name() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -391,6 +444,7 @@ async fn concurrent_renames_keep_each_chats_files_under_its_name() {
                     "happy-claude".into(),
                     std::process::id(),
                     None,
+                    false,
                 )
                 .await
                 .unwrap();

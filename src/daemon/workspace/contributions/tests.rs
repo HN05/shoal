@@ -129,6 +129,7 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
             "claude".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .unwrap_err();

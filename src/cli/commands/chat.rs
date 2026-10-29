@@ -161,6 +161,7 @@ pub(super) async fn begin(
         &name,
         agent.name(),
         terminal::current_place().await,
+        false,
     )
     .await?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;

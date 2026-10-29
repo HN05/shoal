@@ -261,13 +261,15 @@ pub async fn workspaces(paths: &Paths) -> Result<Vec<Workspace>> {
 }
 
 /// Record the chat `name` whose agent replaces this process, running at
-/// `origin` in a terminal host when it runs in one.
+/// `origin` in a terminal host when it runs in one, or when `hands_over`
+/// runs in a session this process starts and [`move_chat`] names.
 pub async fn start_chat(
     paths: &Paths,
     repository: &Repository,
     name: &str,
     agent: &str,
     origin: Option<crate::sessions::Origin>,
+    hands_over: bool,
 ) -> Result<Chat> {
     request(
         paths,
@@ -277,6 +279,7 @@ pub async fn start_chat(
             agent: agent.to_owned(),
             pid: std::process::id(),
             origin,
+            hands_over,
         },
     )
     .await

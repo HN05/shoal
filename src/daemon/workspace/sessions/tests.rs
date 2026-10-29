@@ -640,6 +640,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
             "claude".into(),
             std::process::id(),
             Some(chat_place),
+            false,
         )
         .await?;
     manager.close_owned_places(Some(workspace.id.clone())).await;

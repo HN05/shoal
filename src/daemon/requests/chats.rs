@@ -28,9 +28,10 @@ pub(super) async fn handle(
             agent,
             pid,
             origin,
+            hands_over,
         } => Body::Chat(
             manager
-                .start_chat(repository, name, agent, pid, origin)
+                .start_chat(repository, name, agent, pid, origin, hands_over)
                 .await?,
         ),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),

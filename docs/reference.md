@@ -1215,7 +1215,7 @@ chat's name. The name frees once the chat's process ends.
 included, a new name that is free as a new chat's would be, and frees the old
 one. Without a chat it renames the chat it runs in, else the current checkout's
 only running chat, else offers a picker. A Happy chat's log and saved first
-message move to the new name. The zmx session keeps the name it started with,
+message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs, and the Herdr
 tab keeps its label. Workspace processes cannot rename chats.
 

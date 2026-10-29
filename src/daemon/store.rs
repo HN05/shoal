@@ -427,8 +427,10 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (82, CHAT_RENAMES, None),
 ];
 
-/// Journal a running chat's new name.
-const CHAT_RENAMES: &str = "CREATE TRIGGER chat_renamed AFTER UPDATE OF name ON chats
+/// Journal a running chat's new name, which a chat still starting keeps.
+const CHAT_RENAMES: &str = "ALTER TABLE chats ADD COLUMN starting INTEGER NOT NULL DEFAULT 0
+    CHECK (starting IN (0,1));
+CREATE TRIGGER chat_renamed AFTER UPDATE OF name ON chats
 WHEN NEW.name IS NOT OLD.name BEGIN
     INSERT INTO workspace_events(record) VALUES (json_object(
         'kind','chat_renamed','chat',json_object('id',NEW.id,'repository_id',NEW.repository_id,

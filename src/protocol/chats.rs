@@ -15,6 +15,10 @@ pub enum ChatMethod {
         /// Where the chat runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<crate::sessions::Origin>,
+        /// The recording process hands the chat to a session it starts,
+        /// with [`Self::MoveChat`]; until then the chat keeps its name.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        hands_over: bool,
     },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.

@@ -27,6 +27,7 @@ async fn chat_and_worker(temp: &tempfile::TempDir, manager: &Manager) -> (Chat, 
             "claude".into(),
             std::process::id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -187,6 +188,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
             "codex".into(),
             process.id(),
             None,
+            false,
         )
         .await
         .unwrap();
@@ -263,6 +265,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
             "codex".into(),
             process.id(),
             None,
+            false,
         )
         .await
         .unwrap();
