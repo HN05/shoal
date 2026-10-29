@@ -1137,6 +1137,34 @@ fn watches_read_every_page_of_a_discussion() {
 }
 
 #[test]
+fn watches_deliver_item_activity_while_git_fails_in_the_worktree() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+            "state": "open", "body": "", "labels": [], "pull_request": null}},
+        "GET repos/team/project/issues/8/comments?limit=50&page=1":
+            {"body": [{"id": 1, "body": "Hello?"}]},
+    }));
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+    let workspace = fixture.ok(&["status", "topic"])["workspace"].clone();
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(path.join(".git"), "gitdir: missing\n").unwrap();
+    let result = fixture.ok(&["watch", "--workspace", "topic", "--timeout", "600"]);
+    let updates = result["updates"].as_array().unwrap();
+    assert!(
+        updates.iter().any(|update| update["kind"] == "comment"),
+        "{result}"
+    );
+    // The branch's conflict check needs Git, so it alone reports a failure.
+    assert!(
+        updates
+            .iter()
+            .any(|update| update["kind"] == "lookup_failed" && update["url"] == "topic"),
+        "{result}"
+    );
+}
+
+#[test]
 fn watches_do_not_report_the_agents_own_comments_back() {
     let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
     let issue = |state: &str| {

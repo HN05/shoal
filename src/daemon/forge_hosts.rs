@@ -61,6 +61,11 @@ impl Manager {
         ForgeRepo::resolve_pull_url(url, &self.forge_hosts()).await
     }
 
+    /// The forge an issue URL's repository is on.
+    pub(crate) async fn issue_url_forge(&self, url: &str) -> Result<ForgeRepo> {
+        ForgeRepo::resolve_issue_url(url, &self.forge_hosts()).await
+    }
+
     /// The forge `host` serves and what decided it, asking it over
     /// `scheme` when nothing says.
     pub(crate) async fn host_type(&self, host: &str, scheme: &'static str) -> Result<HostType> {

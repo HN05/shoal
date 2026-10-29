@@ -1373,7 +1373,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         .await
         .unwrap();
     let error = poll().await.unwrap_err();
-    assert!(error.to_string().contains("origin remote"));
+    assert!(error.to_string().contains("issue URL"));
     std::fs::write(repo_path.join("other"), "main\n").unwrap();
     crate::test_support::commit(&repo_path, "other");
     std::fs::write(workspace.path.join("other"), "workspace\n").unwrap();

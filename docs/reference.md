@@ -2827,7 +2827,9 @@ supersedes a running one, which returns an empty array and `superseded: true`
 without taking updates; updates acknowledged while a newer watch runs stay pending
 for it. Scoped callers can watch only in their own workspace and its child
 workspaces; a watch also reports the activity its agent receives from
-[child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Lookup failures report errors or `lookup_failed` updates; a source
+[child workspaces](#child-workspaces). Activity polling continues when PR cleanup is disabled. Items are read from the
+forge their URLs name, so Git failing in the worktree holds back only the branch
+conflict check. Lookup failures report errors or `lookup_failed` updates; a source
 that keeps failing with the same error is reported again every 10 minutes. A
 forge that refuses a request for its rate limit (`429`, or `403` with
 `Retry-After` or no requests remaining), or reports no requests remaining, is

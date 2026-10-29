@@ -10,7 +10,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
-use super::pr::{RegistrationKind, current_head};
+use super::pr::RegistrationKind;
 use crate::{
     daemon::{
         agent_messages::AgentMessage, notifications::NotificationKind, store, workspace::Manager,
@@ -419,8 +419,6 @@ impl Manager {
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
         let workspace = self.workspace(id).await?;
-        self.verify_worktree(&workspace).await?;
-        current_head(&workspace).await?;
         let items = self.watched_items(&workspace, selection).await?;
         let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
@@ -465,28 +463,25 @@ impl Manager {
         }
     }
 
+    /// The activity of `items`, each read from the forge its URL names, so
+    /// a worktree Git cannot read holds none of it back.
     async fn item_activity(
         &self,
         workspace: &Workspace,
         items: Vec<(String, ItemKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
-        if items.is_empty() {
-            return Ok(Vec::new());
-        }
-        let remote = repository::remote_url_from_path(&workspace.path)
-            .await?
-            .context("watch needs an origin remote")?;
-        let forge = self.forge(&remote).await?;
         let account = self.user_account();
         let mut observations = Vec::new();
         for (url, kind) in items {
             let snapshot = match kind {
                 ItemKind::Issue => {
+                    let forge = self.issue_url_forge(&url).await?;
                     let (number, _) = forge.issue(&url)?;
                     forge.issue_activity(&account, number).await?
                 }
                 ItemKind::Pr => {
+                    let forge = self.pull_forge(&url).await?;
                     let (number, _) = forge.pull(&url)?;
                     let branch = selection
                         .input
@@ -558,7 +553,6 @@ impl Manager {
         workspace: &Workspace,
         items: Vec<(String, ItemKind)>,
     ) -> Result<()> {
-        self.verify_worktree(workspace).await?;
         let observed_at = crate::time::unix_seconds();
         let observations = self
             .item_activity(workspace, items, &Selection::default())
