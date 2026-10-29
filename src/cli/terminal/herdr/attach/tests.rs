@@ -33,7 +33,13 @@ fn the_socket_decides_the_server_before_the_session_name() {
         ])
     ));
     assert!(!same_server(&recorded, here(&[("HERDR_SESSION", "other")])));
-    // A pane that recorded neither shares the current server.
+    // Without a variable to compare, only a pane that recorded neither
+    // shares the current server.
+    let session_only = vars(&[("HERDR_SESSION", "work")]);
+    assert!(!same_server(
+        &session_only,
+        here(&[("HERDR_SOCKET_PATH", "/h/work/herdr.sock")])
+    ));
     assert!(same_server(&vars(&[]), here(&[("HERDR_SESSION", "other")])));
 }
 

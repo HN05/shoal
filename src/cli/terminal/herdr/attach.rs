@@ -66,15 +66,19 @@ fn client_session(place: &Origin) -> Result<Option<&str>> {
 }
 
 /// Whether `current` names the server `recorded` does, by the first
-/// variable both have; a pane recording none shares the current server.
+/// variable both have. A pane that recorded none shares the current server;
+/// one that recorded a variable the current process lacks does not.
 fn same_server(
     recorded: &BTreeMap<String, String>,
     current: impl Fn(&str) -> Option<String>,
 ) -> bool {
-    SERVER_VARS
+    match SERVER_VARS
         .iter()
         .find_map(|name| Some((recorded.get(*name)?, current(name)?)))
-        .is_none_or(|(recorded, current)| *recorded == current)
+    {
+        Some((recorded, current)) => *recorded == current,
+        None => !SERVER_VARS.iter().any(|name| recorded.contains_key(*name)),
+    }
 }
 
 /// The pane at `place`, or `None` when Herdr reports it gone.
