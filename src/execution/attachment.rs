@@ -3,12 +3,8 @@
 use std::{io::IsTerminal, time::Duration};
 
 use crate::{
-    cli::{client, terminal::Attachment},
-    config::Effective,
-    model::ExecutionPlan,
-    paths::Paths,
-    protocol::AgentMethod,
-    sessions::Origin,
+    cli::terminal::Attachment, config::Effective, model::ExecutionPlan, paths::Paths,
+    protocol::AgentMethod, sessions::Origin,
 };
 
 /// How often the wrapper reads whether a terminal shows the agent and
@@ -68,8 +64,9 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, shown: Shown) -> Monito
                     attached,
                 };
                 // The agent owns the terminal, so a failed report stays
-                // quiet; the next one repeats it.
-                let _ = client::call(&paths, report).await;
+                // quiet; the next one repeats it. After an upgrade, the
+                // installed release relays it.
+                crate::proxy::send_report(&paths, report).await;
             }
             tokio::time::sleep(INTERVAL).await;
         }

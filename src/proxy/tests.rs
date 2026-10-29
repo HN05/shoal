@@ -260,7 +260,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
 }
 
 #[tokio::test]
-async fn the_proxy_report_worker_sends_only_a_proxys_reports() {
+async fn the_proxy_report_worker_sends_only_a_wrappers_reports() {
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
     for report in [
@@ -269,11 +269,16 @@ async fn the_proxy_report_worker_sends_only_a_proxys_reports() {
     ] {
         let error = send_relayed(&paths, report).await.unwrap_err();
         assert!(
-            format!("{error:#}").contains("only a proxy's reports"),
+            format!("{error:#}").contains("only a wrapper's reports"),
             "{error:#}"
         );
     }
     assert!(send_relayed(&paths, "not json").await.is_err());
+    // After an upgrade, attachment reports reach the daemon this way too.
+    let (_daemon, methods) = daemon_speaking(&paths, crate::protocol::VERSION);
+    let attached = r#"{"report_attached":{"workspace":"w","execution":"e","attached":true}}"#;
+    assert_eq!(send_relayed(&paths, attached).await.unwrap(), 0);
+    assert_eq!(*methods.lock().unwrap(), ["report_attached"]);
 }
 
 #[test]

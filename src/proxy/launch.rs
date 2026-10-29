@@ -99,11 +99,14 @@ impl Origin {
 /// Send a wrapper's `report` to the daemon, through the installed release
 /// when an upgrade changed the daemon's protocol under this wrapper;
 /// whether the daemon took it.
-async fn send(paths: &crate::paths::Paths, report: crate::protocol::AgentMethod) -> bool {
+pub async fn send_report(
+    paths: &crate::paths::Paths,
+    report: crate::protocol::AgentMethod,
+) -> bool {
     send_from(paths, origin(), report).await
 }
 
-/// [`send`] from the wrapper `origin` describes.
+/// [`send_report`] from the wrapper `origin` describes.
 pub(super) async fn send_from(
     paths: &crate::paths::Paths,
     origin: &Origin,
@@ -165,9 +168,9 @@ async fn relay(
         .is_ok_and(|status| status.success())
 }
 
-/// Send `report`, the JSON of a proxy report a wrapper of an older release
-/// could not, as the `proxy-report` worker does. Only the wrapper's own
-/// reports go through it.
+/// Send `report`, the JSON of a report a wrapper of an older release could
+/// not, as the `proxy-report` worker does. Only the wrapper's own reports,
+/// its proxy's and whether a terminal shows its agent, go through it.
 pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i32> {
     use crate::protocol::AgentMethod;
     let report: AgentMethod = serde_json::from_str(report).map_err(anyhow::Error::from)?;
@@ -180,8 +183,9 @@ pub async fn send_relayed(paths: &crate::paths::Paths, report: &str) -> Result<i
                     execution: Some(_),
                     ..
                 }
+                | AgentMethod::ReportAttached { .. }
         ),
-        "the proxy-report worker sends only a proxy's reports"
+        "the proxy-report worker sends only a wrapper's reports"
     );
     crate::cli::client::call(paths, report).await?;
     Ok(0)
@@ -203,7 +207,7 @@ pub async fn forget_reports(paths: &crate::paths::Paths, workspace: &str, execut
         execution: execution.to_owned(),
         resets_at: None,
     };
-    let (retry, reset) = tokio::join!(send(paths, retry), send(paths, reset));
+    let (retry, reset) = tokio::join!(send_report(paths, retry), send_report(paths, reset));
     retry && reset
 }
 
@@ -369,7 +373,7 @@ impl Reporter {
     /// upgraded daemon refuses for its protocol goes through the installed
     /// release instead.
     async fn send(&self, report: crate::protocol::AgentMethod) -> bool {
-        send(&self.paths, report).await
+        send_report(&self.paths, report).await
     }
 }
 
