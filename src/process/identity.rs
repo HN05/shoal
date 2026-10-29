@@ -341,13 +341,12 @@ async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
     if ids.is_empty() {
         return Ok(Scan::default());
     }
-    // Before the listing, so owners other inventories record for processes
-    // it misses outlast this one's update.
-    let started = std::time::Instant::now();
+    let turn = owners::TURN.lock().await;
     let listing = list_processes().await?;
     tokio::task::spawn_blocking(move || {
+        let _turn = turn;
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        let mut inventory = Inventory::new(&owners::OWNERS, started);
+        let mut inventory = Inventory::new(&owners::OWNERS);
         for pid in listing.own {
             if let Some(process) = observe(pid, settle_deadline)? {
                 inventory.observed.insert(pid, process);
@@ -412,8 +411,6 @@ async fn list_processes() -> Result<Listing> {
 struct Observed {
     lineage: Lineage,
     evidence: Evidence,
-    /// When its evidence was read, which orders it against other readings.
-    read: std::time::Instant,
 }
 
 /// The markers of Shoal's identity an environment carries.
@@ -545,11 +542,7 @@ fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
         Visibility::Unreadable => Evidence::Unreadable,
         Visibility::Gone => return Ok(None),
     };
-    Ok(Some(Observed {
-        lineage,
-        evidence,
-        read: std::time::Instant::now(),
-    }))
+    Ok(Some(Observed { lineage, evidence }))
 }
 
 /// Observe `pid`, a setuid program this user started, unless it has exited.
@@ -557,7 +550,6 @@ fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
     Ok(elevated_lineage(pid)?.map(|lineage| Observed {
         lineage,
         evidence: Evidence::Elevated,
-        read: std::time::Instant::now(),
     }))
 }
 
@@ -576,7 +568,6 @@ enum Attribution {
 struct Inventory<'a> {
     observed: HashMap<u32, Observed>,
     owners: &'a owners::Owners,
-    started: std::time::Instant,
 }
 
 /// Signalling is refused only for a live process of another user.
@@ -586,11 +577,10 @@ fn another_users(pid: u32) -> bool {
 }
 
 impl<'a> Inventory<'a> {
-    fn new(owners: &'a owners::Owners, started: std::time::Instant) -> Self {
+    fn new(owners: &'a owners::Owners) -> Self {
         Self {
             observed: HashMap::new(),
             owners,
-            started,
         }
     }
 
@@ -627,27 +617,25 @@ impl<'a> Inventory<'a> {
             }
             told.extend(process.lineage.unique.map(|unique| (unique, evidence)));
         }
-        self.owners.update(self.started, told, &self.named());
+        self.owners.update(told, &self.named());
         Ok(scan)
     }
 
-    /// What `attribution` tells about the owner of `process`, observed when
-    /// this inventory read it unless it was remembered, or the head of the
-    /// processes it leaves unknown.
+    /// What `attribution` tells about the owner of `process`, or the head of
+    /// the processes it leaves unknown.
     fn evidence(
         &self,
         attribution: Attribution,
         process: &Observed,
     ) -> Result<owners::Evidence, Identity> {
-        let (told, observed) = match attribution {
-            Attribution::Remembered(evidence) => (evidence.told, evidence.observed),
+        let told = match attribution {
+            Attribution::Remembered(evidence) => evidence.told,
             Attribution::Unknown(head) => return Err(head),
-            Attribution::Owned(marks) => (owners::Told::Owner(marks), process.read),
-            Attribution::Foreign => (owners::Told::NoExecution, process.read),
+            Attribution::Owned(marks) => owners::Told::Owner(marks),
+            Attribution::Foreign => owners::Told::NoExecution,
         };
         Ok(owners::Evidence {
             told,
-            observed,
             direct: matches!(process.evidence, Evidence::Marked(_) | Evidence::Unmarked),
         })
     }
