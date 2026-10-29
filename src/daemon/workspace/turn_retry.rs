@@ -337,7 +337,12 @@ fn deliver(db: &mut Connection, workspace_id: &str, now: i64) -> Result<bool> {
         return Ok(false);
     };
     if due.deliverable {
-        agent_messages::insert(&tx, workspace_id, &continuation(due.failure, due.attempt))?;
+        agent_messages::insert(
+            &tx,
+            workspace_id,
+            &continuation(due.failure, due.attempt),
+            &[],
+        )?;
         tx.execute(
             "UPDATE workspace_turn_retries SET delivered=1 WHERE workspace_id=?1",
             [workspace_id],

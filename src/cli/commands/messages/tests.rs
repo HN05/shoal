@@ -24,6 +24,7 @@ fn hook_output_names_the_event_it_answers() {
             id: 1,
             created_at: 0,
             message: "Stop the dev server".into(),
+            attachments: Vec::new(),
         }],
         timed_out: false,
         superseded: false,

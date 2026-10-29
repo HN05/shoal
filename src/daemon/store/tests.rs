@@ -286,6 +286,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 84 {
         db.execute_batch(include_str!("simulator_events.sql"))?;
     }
+    if version >= 85 {
+        db.execute_batch(AGENT_MESSAGE_ATTACHMENTS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

@@ -578,6 +578,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         let mut message = AgentMethod::SendAgentMessage {
             workspace: workspace.name.clone(),
             message: "Rebase onto main".into(),
+            attachments: Vec::new(),
         };
         let authorized =
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut message).await;
@@ -1092,7 +1093,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
-        .send_agent_message(&parent.id, format!("note {n}"))
+        .send_agent_message(&parent.id, format!("note {n}"), Vec::new())
         .await
         .is_ok()
     {

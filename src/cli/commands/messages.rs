@@ -27,7 +27,11 @@ pub(super) async fn send(
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
-        AgentMethod::SendAgentMessage { workspace, message },
+        AgentMethod::SendAgentMessage {
+            workspace,
+            message,
+            attachments: Vec::new(),
+        },
     )
     .await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;

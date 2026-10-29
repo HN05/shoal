@@ -1212,6 +1212,13 @@ per idle stretch, and the prompt's hook delivers them. That is the only input
 Shoal writes to an agent's terminal: the daemon never does, the prompt carries
 no forge text, and it is appended to anything typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse.
+A message may attach files, which the daemon copies from paths the CLI checked
+into the repository directory beside its workspaces: agents get that directory
+as a working directory, so a sandboxed agent reads them there without a
+prompt, and a copy in the worktree would be an untracked file that holds up
+cleanup. A copy outlives its message, whose path the agent's transcript keeps,
+until the workspace is removed, and is named by the message and the files'
+contents, so an identical message with the same files still collapses.
 A workspace being removed takes no message, since removal decides from the
 messages it has and deletes them with the workspace.
 `messages` reads new messages while `messages send` sends them. Scoped

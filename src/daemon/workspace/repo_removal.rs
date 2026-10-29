@@ -124,6 +124,7 @@ impl Manager {
         verify_directory(&repo.path, identity, true)?;
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
+        delete_message_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;
@@ -418,6 +419,13 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
         return Ok(());
     };
     tokio::task::spawn_blocking(move || caches.remove()).await?
+}
+
+async fn delete_message_files(repo: &Repository) -> Result<()> {
+    let Some(files) = crate::daemon::agent_messages::files::Layout::of(repo) else {
+        return Ok(());
+    };
+    tokio::task::spawn_blocking(move || files.remove()).await?
 }
 
 async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {

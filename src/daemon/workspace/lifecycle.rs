@@ -926,6 +926,12 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
+        if let Err(error) = self.delete_message_files(workspace).await {
+            crate::daemon::log!(
+                "files attached to messages of {} not deleted: {error:#}",
+                workspace.name
+            );
+        }
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             // The hook runs with the workspace identity after removal's sweep.

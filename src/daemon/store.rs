@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 84;
+const SCHEMA_VERSION: i64 = 85;
 
 #[cfg(test)]
 mod benchmark;
@@ -427,7 +427,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (82, CHAT_RENAMES, None),
     (83, include_str!("store/demo_events.sql"), None),
     (84, include_str!("store/simulator_events.sql"), None),
+    (85, AGENT_MESSAGE_ATTACHMENTS, None),
 ];
+
+/// The JSON array of paths of the files attached to an agent message.
+const AGENT_MESSAGE_ATTACHMENTS: &str =
+    "ALTER TABLE agent_messages ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]';";
 
 /// Journal a running chat's new name, which a chat still starting keeps.
 const CHAT_RENAMES: &str = "ALTER TABLE chats ADD COLUMN starting INTEGER NOT NULL DEFAULT 0

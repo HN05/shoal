@@ -1,15 +1,20 @@
 //! Messages for the agents working in a workspace, from the user or the
 //! daemon. The daemon never writes to an agent's terminal: agents receive
 //! messages through `shoal messages`, watches and agent hooks, and a delivered
-//! message is deleted.
+//! message is deleted. Files attached to a message outlive it, until their
+//! workspace is removed.
+use std::path::PathBuf;
+
 use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
-use crate::{daemon::workspace::Manager, state::WorkspaceState};
+use crate::{daemon::workspace::Manager, model::Workspace, state::WorkspaceState};
 
-/// Unread messages one workspace may hold, and their total size; together
-/// they fit one response.
+pub(crate) mod files;
+
+/// Unread messages one workspace may hold, and their total size, attached
+/// paths included; together they fit one response.
 pub(crate) const MAX_UNREAD: i64 = 50;
 pub(crate) const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
 
@@ -18,18 +23,25 @@ pub struct AgentMessage {
     pub id: i64,
     /// Unix seconds.
     pub created_at: i64,
+    /// Empty when the message is only its attachments.
     pub message: String,
+    /// Shoal's copies of the files attached to the message.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<PathBuf>,
 }
 
-/// Queue `message` in the caller's transaction, returning its ID, or `None`
-/// when an identical message is still unread. Callers wake watches with
+/// Queue `message` with the files `attachments`, which Shoal has copied, in
+/// the caller's transaction, returning its ID, or `None` when an identical
+/// message is still unread. Callers wake watches with
 /// `agent_messages_changed` after committing. A workspace being removed
 /// takes none, since removal decides from the messages it has.
 pub(crate) fn insert(
     tx: &Transaction<'_>,
     workspace_id: &str,
     message: &str,
+    attachments: &[PathBuf],
 ) -> Result<Option<i64>> {
+    let attachments = serde_json::to_string(attachments)?;
     let removing: Option<bool> = tx
         .query_row(
             "SELECT state=?2 FROM workspaces WHERE id=?1",
@@ -40,8 +52,8 @@ pub(crate) fn insert(
     ensure!(removing != Some(true), "the workspace is being removed");
     let pending: Option<i64> = tx
         .query_row(
-            "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2",
-            params![workspace_id, message],
+            "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2 AND attachments=?3",
+            params![workspace_id, message, attachments],
             |row| row.get(0),
         )
         .optional()?;
@@ -49,7 +61,7 @@ pub(crate) fn insert(
         return Ok(None);
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
-        "SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(message AS BLOB))),0)
+        "SELECT COUNT(*),COALESCE(SUM(LENGTH(CAST(message||attachments AS BLOB))),0)
             FROM agent_messages WHERE workspace_id=?1",
         [workspace_id],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -59,27 +71,81 @@ pub(crate) fn insert(
         "the workspace already has {MAX_UNREAD} unread agent messages"
     );
     ensure!(
-        usize::try_from(bytes)? + message.len() <= MAX_UNREAD_BYTES,
+        usize::try_from(bytes)? + message.len() + attachments.len() <= MAX_UNREAD_BYTES,
         "the workspace's unread agent messages would exceed {MAX_UNREAD_BYTES} bytes"
     );
     tx.execute(
-        "INSERT INTO agent_messages(workspace_id,created_at,message) VALUES (?1,?2,?3)",
+        "INSERT INTO agent_messages(workspace_id,created_at,message,attachments)
+            VALUES (?1,?2,?3,?4)",
         params![
             workspace_id,
             i64::try_from(crate::time::unix_seconds())?,
-            message
+            message,
+            attachments
         ],
     )?;
     Ok(Some(tx.last_insert_rowid()))
 }
 
 impl Manager {
-    /// Queue a message for the workspace's agents. An identical unread message
-    /// is not repeated.
-    pub async fn send_agent_message(&self, selector: &str, message: String) -> Result<()> {
-        crate::validate::agent_message(&message)?;
+    /// Queue a message for the workspace's agents with copies of the files
+    /// `attachments`; without text, the files are the message. An identical
+    /// unread message is not repeated.
+    pub async fn send_agent_message(
+        &self,
+        selector: &str,
+        message: String,
+        attachments: Vec<PathBuf>,
+    ) -> Result<()> {
+        if !message.is_empty() || attachments.is_empty() {
+            crate::validate::agent_message(&message)?;
+        }
         let workspace = self.workspace(selector).await?;
-        self.queue_agent_message(&workspace.id, message).await
+        let attachments = self
+            .keep_message_files(&workspace, &message, attachments)
+            .await?;
+        self.queue_attached_message(&workspace.id, message, attachments)
+            .await
+    }
+
+    /// Copies of `files`, attached to `message` for `workspace`'s agents.
+    async fn keep_message_files(
+        &self,
+        workspace: &Workspace,
+        message: &str,
+        files: Vec<PathBuf>,
+    ) -> Result<Vec<PathBuf>> {
+        if files.is_empty() {
+            return Ok(files);
+        }
+        let layout = self.message_files(workspace).await?;
+        let (id, message) = (workspace.id.clone(), message.to_owned());
+        tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
+    }
+
+    /// Where `workspace`'s repository keeps attached files, reserving the
+    /// repository's directory for a registration older than it.
+    async fn message_files(&self, workspace: &Workspace) -> Result<files::Layout> {
+        let repo = self.repository(&workspace.repository_id).await?;
+        if let Some(layout) = files::Layout::of(&repo) {
+            return Ok(layout);
+        }
+        let (repo, _git) = self.lock_repository(&repo.id).await?;
+        Ok(files::Layout::new(
+            &self.workspaces_dir(&repo).await?,
+            &repo.id,
+        ))
+    }
+
+    /// Delete the files attached to `workspace`'s messages once it is
+    /// removed.
+    pub(crate) async fn delete_message_files(&self, workspace: &Workspace) -> Result<()> {
+        let repo = self.repository(&workspace.repository_id).await?;
+        let Some(layout) = files::Layout::of(&repo) else {
+            return Ok(());
+        };
+        let id = workspace.id.clone();
+        tokio::task::spawn_blocking(move || layout.remove_workspace(&id)).await?
     }
 
     pub(crate) async fn queue_agent_message(
@@ -87,12 +153,22 @@ impl Manager {
         workspace_id: &str,
         message: String,
     ) -> Result<()> {
+        self.queue_attached_message(workspace_id, message, Vec::new())
+            .await
+    }
+
+    async fn queue_attached_message(
+        &self,
+        workspace_id: &str,
+        message: String,
+        attachments: Vec<PathBuf>,
+    ) -> Result<()> {
         let workspace_id = workspace_id.to_owned();
         let queued = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let queued = insert(&tx, &workspace_id, &message)?;
+                let queued = insert(&tx, &workspace_id, &message, &attachments)?;
                 tx.commit()?;
                 Ok(queued.is_some())
             })
@@ -110,13 +186,16 @@ impl Manager {
             .run(move |db| {
                 Ok(db
                     .prepare(
-                        "SELECT id,created_at,message FROM agent_messages WHERE workspace_id=?1 ORDER BY id",
+                        "SELECT id,created_at,message,attachments FROM agent_messages
+                            WHERE workspace_id=?1 ORDER BY id",
                     )?
                     .query_map([workspace.id], |row| {
                         Ok(AgentMessage {
-                            id: row.get(0)?,
-                            created_at: row.get(1)?,
-                            message: row.get(2)?,
+                            id: row.get("id")?,
+                            created_at: row.get("created_at")?,
+                            message: row.get("message")?,
+                            attachments: crate::daemon::store::json_column(row, "attachments")?
+                                .unwrap_or_default(),
                         })
                     })?
                     .collect::<rusqlite::Result<Vec<_>>>()?)

@@ -218,7 +218,7 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     let (open, open_execution, _open) = another_agent(&manager, "open").await;
     for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
         manager
-            .send_agent_message(&full.name, format!("unread {n}"))
+            .send_agent_message(&full.name, format!("unread {n}"), Vec::new())
             .await
             .unwrap();
     }

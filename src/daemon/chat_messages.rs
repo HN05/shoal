@@ -65,6 +65,7 @@ impl Manager {
                                 row.get::<_, String>(2)?,
                                 row.get::<_, String>(3)?
                             ),
+                            attachments: Vec::new(),
                         })
                     })?
                     .collect::<rusqlite::Result<_>>()?)

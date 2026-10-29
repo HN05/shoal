@@ -18,7 +18,7 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into())
+        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
         .await
         .unwrap();
     let wait = |manager: Arc<Manager>| {

@@ -105,8 +105,14 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        AgentMethod::SendAgentMessage { workspace, message } => {
-            manager.send_agent_message(&workspace, message).await?;
+        AgentMethod::SendAgentMessage {
+            workspace,
+            message,
+            attachments,
+        } => {
+            manager
+                .send_agent_message(&workspace, message, attachments)
+                .await?;
             Body::Ok
         }
         AgentMethod::AgentMessages { workspace } => {

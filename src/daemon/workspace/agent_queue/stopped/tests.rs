@@ -207,7 +207,7 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     ))
     .unwrap();
     manager
-        .send_agent_message("idle", "Review requested".into())
+        .send_agent_message("idle", "Review requested".into(), Vec::new())
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -235,7 +235,7 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     // space for the new configuration, which holds its restore back.
     manager.publish_config(global_config(""));
     manager
-        .send_agent_message("idle", "Review requested".into())
+        .send_agent_message("idle", "Review requested".into(), Vec::new())
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();

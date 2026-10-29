@@ -347,7 +347,7 @@ fn record_answer(
     );
     let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
-    let message_id = agent_messages::insert(tx, &question.workspace_id, &message)?;
+    let message_id = agent_messages::insert(tx, &question.workspace_id, &message, &[])?;
     store_answer(tx, &mut question, answer, message_id)?;
     Ok(question)
 }
