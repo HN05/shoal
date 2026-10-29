@@ -58,6 +58,7 @@ impl Host for Herdr {
     /// A pane back at its shell prompt, as it is after the wrapper exits.
     fn run_in_place<'a>(
         &'a self,
+        _state: &'a Path,
         place: &'a Origin,
         argv: &'a [OsString],
         env: &'a [(&'a str, String)],

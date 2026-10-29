@@ -93,6 +93,11 @@ pub enum Worker<'a> {
     ProxyReport {
         report: &'a str,
     },
+    /// Run the command a launch file carries, for a place whose host cannot
+    /// set its environment.
+    Launch {
+        file: &'a Path,
+    },
 }
 
 /// This executable for a command a terminal or session runs as typed,
@@ -111,10 +116,15 @@ pub fn shoal_argv(paths: &Paths) -> Result<Vec<OsString>> {
 /// Build an argv for this executable, preserving the caller's resolved globals.
 /// The output format is explicit, so an inherited `SHOAL_OUTPUT` cannot change it.
 pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
+    internal_command_for(&paths.state, json, worker)
+}
+
+/// [`internal_command`] for the state directory `state`.
+pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
     let mut args = vec![
         crate::fsutil::invoked_executable()?.into_os_string(),
         "--state-dir".into(),
-        paths.state.as_os_str().to_owned(),
+        state.as_os_str().to_owned(),
         if json { "--json" } else { "--text" }.into(),
     ];
     args.push(GROUP.into());
@@ -222,6 +232,7 @@ pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result
         Worker::MenuRows { view } => args.extend([MENU_ROWS.into(), view.into()]),
         Worker::MenuNext => args.push(MENU_NEXT.into()),
         Worker::ProxyReport { report } => args.extend([PROXY_REPORT.into(), report.into()]),
+        Worker::Launch { file } => args.extend([LAUNCH.into(), file.as_os_str().to_owned()]),
     }
     Ok(args)
 }

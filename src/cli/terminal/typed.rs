@@ -26,9 +26,9 @@ struct Launch {
 }
 
 impl Typed {
-    /// Write `argv` and `env` to a new private file and name the command
-    /// that runs them from it.
-    pub fn new(argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
+    /// Write `argv` and `env` to a new private file and name the command,
+    /// for the state directory `state`, that runs them from it.
+    pub fn new(state: &Path, argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
         let launch = Launch {
             argv: argv
                 .iter()
@@ -50,7 +50,7 @@ impl Typed {
             .iter()
             .find(|(name, _)| *name == env::SHELL_DIRECTIVE)
             .map(|(_, path)| path.as_str());
-        let text = typed_text(&launch_argv(&file)?, directive);
+        let text = typed_text(&launch_argv(state, &file)?, directive);
         Ok(Self { text, file })
     }
 
@@ -66,19 +66,14 @@ impl Typed {
     }
 }
 
-/// This executable's launch step for `file`.
-fn launch_argv(file: &Path) -> Result<Vec<String>> {
-    let shoal = crate::fsutil::invoked_executable()?;
-    [
-        shoal.as_path(),
-        Path::new(internal::GROUP),
-        Path::new(internal::LAUNCH),
-        file,
-    ]
-    .iter()
-    .map(|word| word.to_str().map(str::to_owned))
-    .collect::<Option<_>>()
-    .context("Shoal's launch path is not UTF-8")
+/// This executable's launch step for `file`, naming the state directory
+/// `state` and the output as every worker does.
+fn launch_argv(state: &Path, file: &Path) -> Result<Vec<String>> {
+    internal::internal_command_for(state, false, internal::Worker::Launch { file })?
+        .into_iter()
+        .map(|word| word.into_string().ok())
+        .collect::<Option<_>>()
+        .context("Shoal's launch path is not UTF-8")
 }
 
 /// The line to type: a leading space keeps it out of shells' history, and

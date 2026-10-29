@@ -229,9 +229,10 @@ pub(in crate::cli) trait Host: Sync {
     }
 
     /// Run `argv` with `env` in `place`, an earlier place of this host, when
-    /// it is idle. Returns whether it ran.
+    /// it is idle, for the state directory `state`. Returns whether it ran.
     fn run_in_place<'a>(
         &'a self,
+        _state: &'a Path,
         _place: &'a Origin,
         _argv: &'a [OsString],
         _env: &'a [(&'a str, String)],
@@ -819,7 +820,8 @@ async fn rerun_in_host(
         return Ok(false);
     };
     let argv = shoal_command(ctx, args)?;
-    host.run_in_place(&place, &argv, &place_env(ctx)?).await
+    host.run_in_place(&ctx.paths.state, &place, &argv, &place_env(ctx)?)
+        .await
 }
 
 /// Where the agent of `record` stopped, unless that is where this process

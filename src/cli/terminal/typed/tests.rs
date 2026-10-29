@@ -21,6 +21,7 @@ fn the_typed_line_stays_out_of_history_and_keeps_the_directive_in_the_shell() {
 #[test]
 fn the_launch_file_carries_the_command_and_goes_once_read() {
     let typed = Typed::new(
+        Path::new("/state"),
         &["/opt/shoal".into(), "a b".into()],
         &[("SHOAL_ADD_PLAN", "{\"secret\":1}".into())],
     )
@@ -37,7 +38,23 @@ fn the_launch_file_carries_the_command_and_goes_once_read() {
 #[test]
 fn a_launch_file_is_private() {
     use std::os::unix::fs::PermissionsExt;
-    let typed = Typed::new(&["/opt/shoal".into()], &[]).unwrap();
+    let typed = Typed::new(Path::new("/state"), &["/opt/shoal".into()], &[]).unwrap();
     let mode = std::fs::metadata(&typed.file).unwrap().permissions().mode();
     assert_eq!(mode & 0o077, 0);
+}
+
+#[test]
+fn the_launch_step_names_the_state_directory_and_output_as_workers_do() {
+    let launch = launch_argv(Path::new("/state dir"), Path::new("/tmp/f")).unwrap();
+    assert_eq!(
+        &launch[1..],
+        [
+            "--state-dir",
+            "/state dir",
+            "--text",
+            "internal",
+            "launch",
+            "/tmp/f"
+        ]
+    );
 }

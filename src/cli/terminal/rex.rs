@@ -67,11 +67,12 @@ impl Host for Rex {
     /// A block back at its shell prompt, as it is after the wrapper exits.
     fn run_in_place<'a>(
         &'a self,
+        state: &'a Path,
         place: &'a Origin,
         argv: &'a [OsString],
         env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(run_at_prompt(place, argv, env))
+        Box::pin(run_at_prompt(state, place, argv, env))
     }
 
     /// Outside Rex, a focused window in the default session; inside it the
@@ -280,7 +281,7 @@ async fn open_window(start: &Start<'_>) -> Result<Origin> {
         .group
         .as_deref()
         .context("the Rex origin names no session")?;
-    let typed = Typed::new(start.argv, start.env)?;
+    let typed = Typed::new(start.state, start.argv, start.env)?;
     let opened = server
         .open(&Window {
             session,
@@ -324,12 +325,17 @@ async fn reveal(server: &Server, block: &Block, id: &str, name: &str) -> Result<
 
 /// Type `argv` into the block of `place` once its shell is back at its
 /// prompt.
-async fn run_at_prompt(place: &Origin, argv: &[OsString], env: &[(&str, String)]) -> Result<bool> {
+async fn run_at_prompt(
+    state: &Path,
+    place: &Origin,
+    argv: &[OsString],
+    env: &[(&str, String)],
+) -> Result<bool> {
     let server = Server::recorded(&place.data)?;
     if !server.at_prompt(place.id()).await {
         return Ok(false);
     }
-    let typed = Typed::new(argv, env)?;
+    let typed = Typed::new(state, argv, env)?;
     server.send(place.id(), typed.text()).await?;
     typed.hand_over()?;
     Ok(true)
@@ -361,7 +367,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         owned: true,
         ..origin.clone()
     };
-    let typed = Typed::new(&(demo.worker)(&place)?, demo.env)?;
+    let typed = Typed::new(demo.state, &(demo.worker)(&place)?, demo.env)?;
     server.send(place.id(), typed.text()).await?;
     typed.hand_over()?;
     Ok(place)
