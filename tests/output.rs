@@ -134,6 +134,26 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
     assert!(!root.path().join("state").exists());
 }
 
+// Agents without network access read the options from the binary itself.
+#[test]
+fn config_reference_prints_the_bundled_reference_without_a_daemon() {
+    let root = tempfile::tempdir().unwrap();
+    let reference = include_str!("../docs/reference.md");
+    let output = support::cli(root.path())
+        .args(["--text", "config", "reference"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), reference);
+    let output = support::cli(root.path())
+        .args(["--json", "config", "reference"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["reference"], reference);
+}
+
 // A reader that has already gone, like `head` after its lines, ends text,
 // JSON and help output with the status a shell reports for SIGPIPE.
 #[test]

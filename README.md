@@ -142,6 +142,7 @@ shoal work --status needs-input,failed  # Only rows with these statuses
 shoal status fix-login        # Workspace activity, changes, resources, issue and PR state
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value
+shoal config reference        # This release's command and configuration reference
 shoal config set default_agent codex
 shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
 shoal config set default_agent claude --repo my-project

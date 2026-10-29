@@ -13,6 +13,9 @@ use crate::{
     protocol::ConfigTarget,
 };
 
+/// The reference bundled with this release, readable without network access.
+const REFERENCE: &str = include_str!("../../../docs/reference.md");
+
 /// `KEY VALUE` pairs as the changes they set.
 pub(super) fn sets(assignments: Vec<String>) -> Result<Vec<Change>> {
     ensure!(
@@ -101,6 +104,13 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
                 palette.paint(Style::Muted, format_args!("({})", entry.layer))
             );
         }
+    })?;
+    Ok(0)
+}
+
+pub(super) fn reference(ctx: &Context) -> Result<i32> {
+    ctx.show(&serde_json::json!({"reference": REFERENCE}), |_| {
+        out!("{REFERENCE}")
     })?;
     Ok(0)
 }

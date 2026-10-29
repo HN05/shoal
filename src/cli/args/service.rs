@@ -42,6 +42,8 @@ pub enum ConfigCommand {
     },
     /// Show effective repository settings and the layer each value came from.
     Show { workspace: Option<String> },
+    /// Print the command and configuration reference for this release.
+    Reference,
     /// Install a packaged global config, keeping the old file as config.toml.backup.
     Install {
         /// Packaged config; omit to choose one.

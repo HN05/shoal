@@ -24,6 +24,7 @@ pub(in crate::cli::commands) async fn run(
                 configuration::edit(&ctx, configuration::unsets(keys), repository).await
             }
             ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
+            ConfigCommand::Reference => configuration::reference(&ctx),
             ConfigCommand::Reset => service::install_config(&ctx, None).await,
             ConfigCommand::Install { name } => {
                 let name = service::packaged_config(&ctx, name)?;

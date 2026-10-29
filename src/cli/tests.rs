@@ -468,7 +468,7 @@ fn review_selects_a_workspace_or_a_pr() {
 }
 
 #[test]
-fn config_show_is_available_to_workspace_processes() {
+fn config_show_and_reference_are_available_to_workspace_processes() {
     let show = Cli::try_parse_from(["shoal", "config", "show", "workspace"]).unwrap();
     assert!(matches!(
         &show.command,
@@ -477,6 +477,8 @@ fn config_show_is_available_to_workspace_processes() {
         })) if workspace.as_deref() == Some("workspace")
     ));
     assert!(!show.command.unwrap().is_administrative());
+    let reference = Cli::try_parse_from(["shoal", "config", "reference"]).unwrap();
+    assert!(!reference.command.unwrap().is_administrative());
     let reset = Cli::try_parse_from(["shoal", "config", "reset"]).unwrap();
     assert!(reset.command.unwrap().is_administrative());
 }
