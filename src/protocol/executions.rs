@@ -36,8 +36,13 @@ pub enum ExecutionMethod {
     /// Connected agents, and executions whose wrapper is gone, which may run one.
     ListAgents,
     /// Stop the agent of `execution` and start its session again in its
-    /// terminal, answering once the restarted agent runs.
-    RestartAgent { execution: String },
+    /// terminal, answering once the restarted agent runs. With `join`, only
+    /// wait for the restart in progress, which may have ended already.
+    RestartAgent {
+        execution: String,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        join: bool,
+    },
 }
 
 impl ExecutionMethod {

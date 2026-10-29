@@ -28,6 +28,9 @@ pub(super) struct Plan {
 pub(super) struct Restart {
     pub(super) workspace: Workspace,
     pub(super) agent: RunningAgent,
+    /// Its restart was in progress when the run selected it, so the run
+    /// waits for that restart instead of starting another, even once it ends.
+    pub(super) joins: bool,
 }
 
 /// A workspace whose agent cannot restart in place.
@@ -40,9 +43,9 @@ pub(super) struct Skipped {
 impl Restart {
     /// Whether the agent can restart without interrupting a turn: it
     /// reported itself that its turn ended, since another agent's report in
-    /// the same workspace does not count, or its restart is in progress.
+    /// the same workspace does not count, or the run joins its restart.
     pub(super) fn ready(&self) -> bool {
-        self.agent.state == Some(AgentState::Idle) || self.agent.restart.is_some()
+        self.agent.state == Some(AgentState::Idle) || self.joins
     }
 
     /// The agent, skipped for `reason`.
@@ -110,6 +113,7 @@ impl Selection {
                     }),
                     None => plan.restarts.push(Restart {
                         workspace: workspace.clone(),
+                        joins: running.restart.is_some(),
                         agent: running,
                     }),
                 }

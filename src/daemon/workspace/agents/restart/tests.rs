@@ -312,6 +312,11 @@ async fn a_second_request_joins_the_restart_in_progress() {
     first.await.unwrap().unwrap();
     second.await.unwrap().unwrap();
     assert_eq!(manager.running_agents().await.unwrap()[0].restart, None);
+    // Joining once the restart ended finds the agent running again, and
+    // starts no other restart.
+    manager.join_restart(&id).await.unwrap();
+    assert!(!manager.restart_requested(&id).await);
+    assert!(!*stop.borrow());
 }
 
 #[tokio::test]

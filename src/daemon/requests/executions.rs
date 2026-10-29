@@ -50,8 +50,12 @@ pub(super) async fn handle(
             Body::Ok
         }
         ExecutionMethod::ListAgents => Body::RunningAgents(manager.running_agents().await?),
-        ExecutionMethod::RestartAgent { execution } => {
-            manager.restart_agent(&execution).await?;
+        ExecutionMethod::RestartAgent { execution, join } => {
+            if join {
+                manager.join_restart(&execution).await?;
+            } else {
+                manager.restart_agent(&execution).await?;
+            }
             Body::Ok
         }
     }))

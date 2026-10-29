@@ -97,6 +97,7 @@ impl Restart {
             &ctx.paths,
             ExecutionMethod::RestartAgent {
                 execution: self.agent.execution.clone(),
+                join: self.joins,
             },
         )
         .await;
@@ -256,3 +257,6 @@ fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent]) -> Vec<Skipped
     }
     ended
 }
+
+#[cfg(test)]
+mod tests;

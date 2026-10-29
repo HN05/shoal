@@ -105,10 +105,26 @@ impl Manager {
 
     /// Restart the agent of `execution`, returning once it runs again.
     pub(crate) async fn restart_agent(&self, execution: &str) -> Result<()> {
-        let restarted = self.request_restart(execution).await?;
-        restarted
-            .await
-            .unwrap_or_else(|_| Err(anyhow!("the agent did not start again")))
+        restarted(self.request_restart(execution).await?).await
+    }
+
+    /// Wait for the restart of `execution` in progress as [`Self::restart_agent`]
+    /// does; a restart that ended already left its agent running again, since
+    /// one that failed ends with the agent's wrapper.
+    pub(crate) async fn join_restart(&self, execution: &str) -> Result<()> {
+        let joined = self
+            .executions
+            .with_agents(|agents| {
+                let agent = agents
+                    .get_mut(execution)
+                    .with_context(|| format!("no connected agent runs execution {execution}"))?;
+                anyhow::Ok(agent.restart.as_mut().map(Restart::answer))
+            })
+            .await?;
+        match joined {
+            Some(answer) => restarted(answer).await,
+            None => Ok(()),
+        }
     }
 
     /// Ask the agent's wrapper to stop it for a restart.
@@ -246,6 +262,13 @@ impl Manager {
             let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
         }
     }
+}
+
+/// How the restart `answer` answers ended.
+async fn restarted(answer: oneshot::Receiver<Result<()>>) -> Result<()> {
+    answer
+        .await
+        .unwrap_or_else(|_| Err(anyhow!("the agent did not start again")))
 }
 
 /// A restart that continues after its request was answered, once the

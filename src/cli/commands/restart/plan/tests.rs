@@ -182,8 +182,8 @@ fn a_rerun_waits_for_restarts_in_progress_and_skips_agents_started_since() {
     // The restart in progress comes first, ready although its turn was
     // working, since its agent is already stopped.
     assert_eq!(restarted(&plan), ["pending", "earlier"]);
-    assert!(plan.restarts[0].ready());
-    assert!(!plan.restarts[1].ready());
+    assert!(plan.restarts[0].joins && plan.restarts[0].ready());
+    assert!(!plan.restarts[1].joins && !plan.restarts[1].ready());
     let reason = "it started after the restarts in progress were requested";
     assert_eq!(skipped(&plan), [("again", reason), ("launched", reason)]);
 }

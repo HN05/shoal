@@ -22,6 +22,7 @@ fn restart(name: &str) -> Restart {
             restart: None,
         },
         workspace,
+        joins: false,
     }
 }
 
