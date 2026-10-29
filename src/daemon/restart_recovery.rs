@@ -3,7 +3,8 @@
 //! names the stop Shoal started; once its wrapper is gone and no process of
 //! the execution survives, the record alone represents the agent and
 //! `shoal resume` restores it. Survivors and incomplete evidence keep the
-//! execution, are checked again, and only they notify the user.
+//! execution, are checked again, and only they notify the user. Executions
+//! of an earlier boot need no evidence.
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -23,6 +24,8 @@ const WRAPPER_POLL_INTERVAL: Duration = Duration::from_secs(1);
 const RETRY_INTERVAL: Duration = Duration::from_secs(30);
 /// How often to look again at executions whose processes survive.
 const UNRESOLVED_RECHECK_INTERVAL: Duration = Duration::from_secs(30);
+
+mod earlier_boot;
 
 /// An unknown execution of an agent whose stop saved a recovery record.
 struct Interrupted {
@@ -147,10 +150,11 @@ async fn still_unknown(manager: &Manager, waiting: Vec<Waiting>) -> Vec<Waiting>
 }
 
 impl Manager {
-    /// Forget unknown executions of stopped agents whose processes are gone,
-    /// keeping their recovery records, and notify about the ones that remain
-    /// uncertain.
+    /// Forget unknown executions of an earlier boot and of stopped agents
+    /// whose processes are gone, keeping their recovery records, and notify
+    /// about the ones that remain uncertain.
     pub(crate) async fn reconcile_interrupted_agents(&self) -> Result<Pending> {
+        self.forget_earlier_boot().await?;
         let (interrupted, unreadable) = self.interrupted_agents().await?;
         for unreadable in &unreadable {
             self.notify_unreadable(unreadable).await;

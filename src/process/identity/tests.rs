@@ -65,6 +65,24 @@ fn a_unique_id_recorded_in_another_boot_roots_no_lineage() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn only_a_process_recorded_in_another_boot_is_of_an_earlier_one() -> Result<()> {
+    let this = capture(std::process::id())?.context("identify this process")?;
+    assert!(!this.of_earlier_boot());
+    assert!(
+        this.clone()
+            .recorded_in("an-earlier-boot")
+            .of_earlier_boot()
+    );
+    let unnamed = Identity {
+        pid: this.pid,
+        birth: "1".into(),
+        unique: None,
+    };
+    assert!(!unnamed.of_earlier_boot());
+    Ok(())
+}
+
 /// A group member whose parent exited, with a child that left the group,
 /// while the leader lives.
 #[tokio::test]

@@ -40,6 +40,39 @@ impl Identity {
         let unique = self.unique.as_ref()?;
         (Some(&unique.boot) == boot_session()).then_some(unique.id)
     }
+
+    /// Whether the process ran in an earlier boot, so it has ended. One whose
+    /// record does not name its boot may run in this one.
+    pub fn of_earlier_boot(&self) -> bool {
+        recorded_boot(self)
+            .zip(current_boot())
+            .is_some_and(|(then, now)| then != now)
+    }
+
+    /// This identity as recorded in `boot`.
+    #[cfg(test)]
+    pub(crate) fn recorded_in(self, boot: &str) -> Self {
+        #[cfg(target_os = "linux")]
+        let identity = {
+            let start = self.birth.split_once(':').map_or("", |(_, start)| start);
+            Self {
+                birth: format!("{boot}:{start}"),
+                ..self
+            }
+        };
+        #[cfg(target_os = "macos")]
+        let identity = {
+            let id = self.unique.as_ref().map_or(1, |unique| unique.id);
+            Self {
+                unique: Some(UniqueId {
+                    boot: boot.into(),
+                    id,
+                }),
+                ..self
+            }
+        };
+        identity
+    }
 }
 
 /// PID and birth name the process; records made before `unique` existed
@@ -604,6 +637,33 @@ fn hides_environment(_pid: u32) -> bool {
 #[cfg(target_os = "linux")]
 fn boot_session() -> Option<&'static String> {
     None
+}
+
+/// The boot `identity` was recorded in, which starts its birth.
+#[cfg(target_os = "linux")]
+fn recorded_boot(identity: &Identity) -> Option<&str> {
+    identity.birth.split_once(':').map(|(boot, _)| boot)
+}
+
+#[cfg(target_os = "linux")]
+fn current_boot() -> Option<&'static str> {
+    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    BOOT.get_or_init(|| {
+        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+        Some(boot.trim().to_owned())
+    })
+    .as_deref()
+}
+
+/// The boot `identity` was recorded in, which its unique ID names.
+#[cfg(target_os = "macos")]
+fn recorded_boot(identity: &Identity) -> Option<&str> {
+    identity.unique.as_ref().map(|unique| unique.boot.as_str())
+}
+
+#[cfg(target_os = "macos")]
+fn current_boot() -> Option<&'static str> {
+    boot_session().map(String::as_str)
 }
 
 #[cfg(target_os = "macos")]

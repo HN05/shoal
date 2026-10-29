@@ -152,6 +152,48 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
     serving.abort();
 }
 
+/// Restarting the machine ended every process of an earlier boot, though
+/// their recorded process group IDs may name processes of this one.
+#[tokio::test]
+async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_their_records() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (_alive, live) = sleeper();
+    let earlier = live.recorded_in("an-earlier-boot");
+    interrupted(
+        &manager,
+        &workspace,
+        "rebooted",
+        &earlier,
+        Some(&earlier),
+        Some(Stage::Stopping),
+    )
+    .await;
+    interrupted(&manager, &workspace, "unrecorded", &earlier, None, None).await;
+    let wrapper = exited().await;
+    interrupted(&manager, &workspace, "this-boot", &wrapper, None, None).await;
+    for id in ["unrecorded", "this-boot"] {
+        fs::remove_file(record_path(&manager.paths, &workspace.id, id)).unwrap();
+    }
+    let reopened = restart(&manager).await;
+    reopened.reconcile_interrupted_agents().await.unwrap();
+    let kept: Vec<_> = executions(&reopened, &workspace)
+        .await
+        .into_iter()
+        .map(|execution| execution.id)
+        .collect();
+    assert_eq!(kept, ["this-boot"]);
+    assert_eq!(
+        record(&reopened, &workspace, "rebooted")
+            .unwrap()
+            .stop_reason
+            .as_deref(),
+        Some("test memory pressure")
+    );
+    assert!(blocked(&reopened).await.is_empty());
+    reopened.store.shutdown().await;
+    serving.abort();
+}
+
 #[tokio::test]
 async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
     let (_root, manager, workspace, serving) = fixture().await;
