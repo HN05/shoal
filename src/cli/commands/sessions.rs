@@ -6,8 +6,7 @@ use crate::{
     cli::{
         agents, client,
         context::Context,
-        recent,
-        terminal::{self, Owner, OwnerKind},
+        recent, terminal,
         ui::{self, Fallback, NoCurrentWorkspace},
     },
     model::{Chat, Workspace},
@@ -27,7 +26,7 @@ pub(super) async fn attach(
     ensure!(ctx.interactive(), "attach requires a terminal");
     let target = Target::resolve(ctx, target).await?;
     let settings = client::settings(&ctx.paths, target.config()).await?;
-    let sessions = terminal::sessions(&settings, target.owner(), &target.places()).await?;
+    let sessions = terminal::sessions(&settings, &target.places()).await?;
     let session = match (session, sessions.as_slice()) {
         (Some(name), _) => sessions
             .iter()
@@ -45,12 +44,13 @@ pub(super) async fn attach(
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
     };
-    terminal::attach(&settings, target.owner(), target.name(), session).await
+    terminal::attach(target.name(), session).await
 }
 
 /// What `shoal attach` returns to.
 enum Target {
-    /// A workspace with the places its executions were recorded running in.
+    /// A workspace with the places its executions were recorded running in
+    /// and those Shoal created for it.
     Workspace(Box<Workspace>, Vec<Origin>),
     Chat(Chat),
 }
@@ -88,13 +88,14 @@ impl Target {
             .executions
             .into_iter()
             .filter_map(|execution| execution.origin)
+            .chain(inspection.places)
             .collect();
         Ok(Self::Workspace(Box::new(inspection.workspace), places))
     }
 
     /// A workspace or one of `chats`, each with an agent session, from a picker.
     async fn picked(ctx: &Context, chats: Vec<Chat>) -> Result<Self> {
-        let attachable = terminal::session_owners(OwnerKind::Chat, &chat_places(&chats)).await?;
+        let attachable = terminal::session_owners(&chat_places(&chats));
         let chats: Vec<_> = chats
             .into_iter()
             .filter(|chat| attachable.contains(&chat.id))
@@ -106,13 +107,6 @@ impl Target {
         }
         recent::record(ctx, &id).await;
         Self::inspected(ctx, id).await
-    }
-
-    fn owner(&self) -> Owner<'_> {
-        match self {
-            Self::Workspace(workspace, _) => Owner::Workspace(&workspace.id),
-            Self::Chat(chat) => Owner::Chat(&chat.id),
-        }
     }
 
     /// Whose settings choose the hosts to look in.

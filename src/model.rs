@@ -401,6 +401,10 @@ pub struct Inspection {
     pub pr_cleanup: Option<crate::daemon::links::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
+    /// The places Shoal created for the workspace, such as a session whose
+    /// launch failed and left its shell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub places: Vec<crate::sessions::Origin>,
     pub ports: Vec<PortReservation>,
     pub resources: Vec<ResourceLease>,
     pub simulators: Vec<Simulator>,

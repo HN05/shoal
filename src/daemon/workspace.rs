@@ -335,6 +335,10 @@ impl Manager {
                     completion,
                     pr_cleanup,
                     executions: store::executions(db, &workspace.id)?,
+                    places: places::owned(db, Some(&workspace.id))?
+                        .into_iter()
+                        .map(|(_, place)| place)
+                        .collect(),
                     ports: store::ports(db, Some(&workspace.id))?,
                     resources: crate::daemon::resources::leases(db, Some(&workspace.id))?,
                     simulators,

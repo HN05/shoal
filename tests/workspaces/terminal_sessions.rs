@@ -368,7 +368,8 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         r#"{"agent":"pi"}"#,
     )?;
     fixture.ok(&["resume", "resumed"]);
-    let watched = || fs::read_to_string(home.join("zmx-watch-calls")).unwrap_or_default();
+    // The watcher has the daemon close the session Shoal recorded creating.
+    let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
     wait_until("the session's end", || {
         watched()
             .lines()

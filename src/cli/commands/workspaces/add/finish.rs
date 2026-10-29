@@ -85,7 +85,7 @@ async fn add_planned(
         (None, None) => opened.workspace.branch.clone(),
     };
     let agent_name = agent.agent.clone().map(String::from);
-    terminal::host_workspace(ctx, &opened.workspace, agent_name.as_deref(), &label).await?;
+    terminal::host_workspace(ctx, &opened.workspace, agent_name.is_some(), &label).await?;
     if let Some(issue) = &issue {
         request::<()>(
             &ctx.paths,

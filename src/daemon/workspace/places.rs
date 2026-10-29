@@ -137,7 +137,7 @@ fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()>
     Ok(())
 }
 
-fn owned(db: &Connection, workspace: Option<&str>) -> Result<Vec<(String, Origin)>> {
+pub(super) fn owned(db: &Connection, workspace: Option<&str>) -> Result<Vec<(String, Origin)>> {
     let mut statement = db.prepare(
         "SELECT workspace_id,origin FROM owned_places
          WHERE workspace_id IS NOT NULL AND (?1 IS NULL OR workspace_id=?1)

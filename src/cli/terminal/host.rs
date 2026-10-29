@@ -1,6 +1,5 @@
 //! What a terminal host does, and the work generic code hands it.
 use std::{
-    collections::HashSet,
     ffi::{OsStr, OsString},
     path::Path,
 };
@@ -8,7 +7,7 @@ use std::{
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 
-use super::{Owner, OwnerKind, PlaceState, Session, Watched};
+use super::{Owner, PlaceState, Session, Watched};
 use crate::sessions::{HostName, Origin};
 
 /// A terminal host: a multiplexer or terminal app that runs Shoal work beside
@@ -171,7 +170,7 @@ pub(in crate::cli) trait Closes: Sync {
 }
 
 /// A host that keeps agents in sessions of its own, which `shoal attach`
-/// finds and attaches this terminal to.
+/// finds where the daemon recorded them and attaches this terminal to.
 pub(in crate::cli) trait Sessions: Sync {
     /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
     /// attach this terminal to it, returning the session once the terminal
@@ -183,17 +182,24 @@ pub(in crate::cli) trait Sessions: Sync {
         agent: &'a str,
     ) -> BoxFuture<'a, Result<Option<String>>>;
 
-    /// Attach this terminal to `session`, one of [`Sessions::running`] or
-    /// [`Sessions::session_at`], until the user detaches or the session ends.
+    /// Attach this terminal to `session`, one [`Sessions::session_at`]
+    /// found, until the user detaches or the session ends.
     fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>>;
 
-    /// Label the session this process runs in, when it runs in one, so
-    /// `shoal attach` finds `owner`'s agent there.
+    /// Whether `session`, which this host attached this terminal to, still
+    /// runs after the terminal left it. A host that shows its sessions
+    /// elsewhere never attaches the terminal.
+    fn left_running<'a>(&'a self, _session: &'a str) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async { Ok(false) })
+    }
+
+    /// Mark the session this process runs in, when it runs in one, as
+    /// `owner`'s, so cleanup closes it with `owner` rather than with the
+    /// owner it was created for.
     fn label_current<'a>(
         &'a self,
         _state: &'a Path,
         _owner: Owner<'a>,
-        _agent: &'a str,
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
@@ -207,17 +213,6 @@ pub(in crate::cli) trait Sessions: Sync {
     /// The program an agent launch here needs besides the agent's own.
     fn launcher_program(&self) -> Option<&'static str> {
         None
-    }
-
-    /// `owner`'s running agent sessions, for a host that finds them by
-    /// their owner.
-    fn running<'a>(&'a self, _owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-
-    /// The IDs of the owners of `kind` with at least one agent session.
-    fn session_owners(&self, _kind: OwnerKind) -> BoxFuture<'_, Result<HashSet<String>>> {
-        Box::pin(async { Ok(HashSet::new()) })
     }
 
     /// The session at `place`, where an agent or chat was recorded running,

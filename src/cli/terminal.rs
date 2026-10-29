@@ -253,8 +253,8 @@ fn beside(ctx: &Context, settings: &Effective) -> Configured {
     }
 }
 
-/// What an agent session runs for, by ID; `shoal attach` finds a
-/// workspace's or a chat's sessions by it.
+/// What an agent session runs for, by ID; a host that keeps ownership in its
+/// sessions labels them with it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(in crate::cli) enum Owner<'a> {
     Workspace(&'a str),
@@ -287,24 +287,17 @@ impl<'a> Owner<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Session {
     pub name: String,
-    pub agent: Option<String>,
     /// Terminals attached to the session.
     pub clients: u32,
-    /// The host keeping the session.
+    /// Where it was recorded, which names the host keeping it.
     #[serde(skip)]
-    host: &'static str,
-    /// Where it was recorded, for a session found there.
-    #[serde(skip)]
-    place: Option<Origin>,
+    place: Origin,
 }
 
 impl Session {
-    /// The name, agent, and whether a terminal is attached.
+    /// The name, and whether a terminal is attached.
     pub fn label(&self) -> String {
         let mut label = self.name.clone();
-        if let Some(agent) = &self.agent {
-            label.push_str(&format!("  {agent}"));
-        }
         if self.clients > 0 {
             label.push_str("  attached");
         }
@@ -756,7 +749,7 @@ pub(in crate::cli) async fn run_agent(
     let Some(session) = sessions.run_agent(&start, owner, agent).await? else {
         return Ok(None);
     };
-    report_detach(settings, owner, &workspace.name, &session).await?;
+    report_detach(sessions, &workspace.name, &session).await?;
     Ok(Some(0))
 }
 
@@ -792,7 +785,7 @@ async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> 
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
     if label && let Some(sessions) = host.sessions() {
         sessions
-            .label_current(&ctx.paths.state, Owner::Workspace(workspace), "")
+            .label_current(&ctx.paths.state, Owner::Workspace(workspace))
             .await?;
     }
     closing::start_watcher(ctx, host, &place, workspace).await
@@ -830,29 +823,22 @@ pub(in crate::cli) async fn start_chat(
     match started {
         ChatStart::Tab => Ok(true),
         ChatStart::Session(session) => {
-            let chats = super::client::chats(&ctx.paths).await?;
-            if let Some(chat) = chats.iter().find(|chat| chat.name == name) {
-                report_detach(settings, Owner::Chat(&chat.id), name, &session).await?;
+            if let Some(sessions) = host.host.sessions() {
+                report_detach(sessions, name, &session).await?;
             }
             Ok(true)
         }
     }
 }
 
-/// The running agent sessions for `owner` of every host `settings` enable,
-/// with those still open at the `places` the daemon recorded for it.
+/// The agent sessions still open at `places` in the hosts `settings`
+/// enable, where the daemon recorded a workspace's executions or a chat
+/// running, or the places Shoal created for a workspace.
 pub(in crate::cli) async fn sessions(
     settings: &Effective,
-    owner: Owner<'_>,
     places: &[&Origin],
 ) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
-    for host in Configured::all(settings)
-        .filter(|host| host.options.enabled)
-        .filter_map(|host| host.host.sessions())
-    {
-        sessions.extend(host.running(owner).await?);
-    }
     for place in distinct_places(places) {
         if let Some(host) = enabled_host(settings, place.host).and_then(Host::sessions) {
             sessions.extend(host.session_at(place).await?);
@@ -872,59 +858,36 @@ fn distinct_places<'a>(places: &[&'a Origin]) -> Vec<&'a Origin> {
         .collect()
 }
 
-/// The IDs of the owners of `kind` with at least one agent session in any
-/// host, counting `places` recorded for owners by ID whose hosts attach them.
-pub(in crate::cli) async fn session_owners(
-    kind: OwnerKind,
-    places: &[(&str, &Origin)],
-) -> Result<HashSet<String>> {
-    let mut owners = HashSet::new();
-    for host in hosts().filter_map(Host::sessions) {
-        owners.extend(host.session_owners(kind).await?);
-    }
-    owners.extend(
-        places
-            .iter()
-            .filter(|(_, place)| {
-                kept_by(place)
-                    .sessions()
-                    .is_some_and(Sessions::attaches_places)
-            })
-            .map(|(owner, _)| (*owner).to_owned()),
-    );
-    Ok(owners)
+/// The IDs of the owners with an agent session: those of `places`, recorded
+/// for owners by ID, whose hosts attach them.
+pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
+    places
+        .iter()
+        .filter(|(_, place)| {
+            kept_by(place)
+                .sessions()
+                .is_some_and(Sessions::attaches_places)
+        })
+        .map(|(owner, _)| (*owner).to_owned())
+        .collect()
 }
 
-/// Attach this terminal to `session` of `owner` through the host that keeps
-/// it, then say how to return to it by `name` when it outlives the attach.
-pub(in crate::cli) async fn attach(
-    settings: &Effective,
-    owner: Owner<'_>,
-    name: &str,
-    session: &Session,
-) -> Result<i32> {
-    let host = named(session.host).context("the session's host is unknown")?;
+/// Attach this terminal to `session` through the host that keeps it, then
+/// say how to return to it by `name` when it outlives the attach.
+pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<i32> {
+    let host = kept_by(&session.place);
     let sessions = host
         .sessions()
         .with_context(|| format!("{} keeps no sessions", host.name()))?;
     sessions.attach(session).await?;
-    report_detach(settings, owner, name, &session.name).await?;
+    report_detach(sessions, name, &session.name).await?;
     Ok(0)
 }
 
-/// Say how to return to `owner`, named `name`, when its `session` still runs
-/// after this terminal left it.
-async fn report_detach(
-    settings: &Effective,
-    owner: Owner<'_>,
-    name: &str,
-    session: &str,
-) -> Result<()> {
-    if sessions(settings, owner, &[])
-        .await?
-        .iter()
-        .any(|running| running.name == session)
-    {
+/// Say how to return to `session`, one `host` attached this terminal to, by
+/// `name` when it still runs after this terminal left it.
+async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<()> {
+    if host.left_running(session).await? {
         eprintln!("shoal: detached from {session}; run `shoal attach {name}` to return");
     }
     Ok(())
@@ -1083,26 +1046,22 @@ pub(in crate::cli) async fn add_worker(
 }
 
 /// Tell the place this process runs in that it hosts `workspace`, whose
-/// `agent` starts there: it takes `label`, and closes with the workspace
-/// when it should. A session the user opened is labelled once an agent
-/// starts in it.
+/// agent starts there when `runs_agent`: it takes `label`, and closes with the
+/// workspace when it should. A session the user opened is labelled once an
+/// agent starts in it.
 pub(in crate::cli) async fn host_workspace(
     ctx: &Context,
     workspace: &Workspace,
-    agent: Option<&str>,
+    runs_agent: bool,
     label: &str,
 ) -> Result<()> {
-    match (&ctx.place, agent) {
+    match (&ctx.place, runs_agent) {
         // A place is labelled before it is watched, since the watcher only
         // closes a place it finds hosting the workspace.
         (Some(place), _) => {
             if let Some(sessions) = place.host.sessions() {
                 sessions
-                    .label_current(
-                        &ctx.paths.state,
-                        Owner::Workspace(&workspace.id),
-                        agent.unwrap_or_default(),
-                    )
+                    .label_current(&ctx.paths.state, Owner::Workspace(&workspace.id))
                     .await?;
             }
             if let Some(places) = place.host.places() {
@@ -1114,10 +1073,8 @@ pub(in crate::cli) async fn host_workspace(
             }
             Ok(())
         }
-        (None, Some(agent)) => {
-            label_current(&ctx.paths, Owner::Workspace(&workspace.id), agent).await
-        }
-        (None, None) => Ok(()),
+        (None, true) => label_current(&ctx.paths, Owner::Workspace(&workspace.id)).await,
+        (None, false) => Ok(()),
     }
 }
 
@@ -1158,15 +1115,14 @@ pub(in crate::cli) async fn open_shell(ctx: &Context, cwd: &Path) -> Result<i32>
     Ok(env::session_exit_code(crate::execution::exit_code(status)))
 }
 
-/// Label the session this process runs in, when it runs in one, so
-/// `shoal attach` finds `owner`'s agent there.
+/// Mark the session this process runs in, when it runs in one, as
+/// `owner`'s, so cleanup closes it with `owner`.
 pub(in crate::cli) async fn label_current(
     paths: &crate::paths::Paths,
     owner: Owner<'_>,
-    agent: &str,
 ) -> Result<()> {
     for host in hosts().filter_map(Host::sessions) {
-        host.label_current(&paths.state, owner, agent).await?;
+        host.label_current(&paths.state, owner).await?;
     }
     Ok(())
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::HostName;
 
 fn vars(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
     pairs

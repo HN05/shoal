@@ -181,10 +181,7 @@ impl Sessions for Rex {
 
     fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            let place = session
-                .place
-                .as_ref()
-                .context("the session has no Rex block")?;
+            let place = &session.place;
             let server = Server::recorded(&place.data)?;
             let block = server
                 .block(place.id())
@@ -425,10 +422,8 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
     let name = server.name(place.id(), &block).await?;
     Ok(Some(Session {
         name: name.unwrap_or_else(|| place.id().to_owned()),
-        agent: None,
         clients: 0,
-        host: HostName::Rex.as_str(),
-        place: Some(place.clone()),
+        place: place.clone(),
     }))
 }
 

@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
-    model::Chat,
+    model::{Chat, RunningAgent},
     protocol::{self, Body, ChatMethod, ExecutionMethod, Method, Operation, Request, Response},
+    sessions::{HostName, Origin},
     state::WorkspaceState,
 };
 use std::{fs, os::unix::fs::PermissionsExt};
@@ -26,7 +27,7 @@ async fn live_lookups_keep_the_interactive_budget() {
 }
 
 #[tokio::test]
-async fn attach_candidates_follow_workspace_and_chat_session_labels() -> Result<()> {
+async fn attach_candidates_follow_recorded_places() -> Result<()> {
     let root = tempfile::tempdir_in("/tmp")?;
     install_session_fixture(root.path())?;
     let output = tokio::time::timeout(
@@ -47,11 +48,9 @@ async fn attach_candidates_follow_workspace_and_chat_session_labels() -> Result<
 fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let bin = root.join("bin");
     fs::create_dir(&bin)?;
+    // Candidates come from the daemon's records alone, never from zmx.
     let script = bin.join("zmx");
-    fs::write(
-        &script,
-        "#!/bin/sh\n[ \"$*\" = list ] || exit 1\nprintf '  name=workspace-session\\tpid=1\\tclients=0\\tshoal.workspace=w1\\n  name=chat-session\\tpid=2\\tclients=0\\tshoal.chat=c1\\n'\n",
-    )?;
+    fs::write(&script, "#!/bin/sh\nexit 1\n")?;
     fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
     Ok(())
 }
@@ -95,8 +94,14 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             request.method,
             Method::Operation(Operation::Execution(ExecutionMethod::ListAgents))
         ) {
-            // No agent runs in a recorded place.
-            Body::RunningAgents(Vec::new())
+            Body::RunningAgents(vec![RunningAgent {
+                execution: "e1".into(),
+                workspace_id: "w1".into(),
+                agent: Some("claude".into()),
+                restorable: true,
+                state: None,
+                origin: Some(Origin::created(HostName::Zmx, "workspace-session".into())),
+            }])
         } else if matches!(
             request.method,
             Method::Operation(Operation::Chat(ChatMethod::ListChats))
@@ -108,7 +113,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 agent: "codex".into(),
                 pid: 1,
                 started_at: 0,
-                origin: None,
+                origin: Some(Origin::created(HostName::Zmx, "chat-session".into())),
             }])
         } else {
             assert!(matches!(

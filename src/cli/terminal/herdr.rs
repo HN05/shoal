@@ -156,13 +156,7 @@ impl Sessions for Herdr {
     }
 
     fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            let place = session
-                .place
-                .as_ref()
-                .context("the session has no Herdr pane")?;
-            attach::reveal(place).await
-        })
+        Box::pin(attach::reveal(&session.place))
     }
 }
 

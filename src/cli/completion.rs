@@ -603,7 +603,7 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
     let chats = client::chats(paths).await?;
     let places = super::commands::sessions::chat_places(&chats);
-    let attachable = terminal::session_owners(terminal::OwnerKind::Chat, &places).await?;
+    let attachable = terminal::session_owners(&places);
     Ok(chats
         .into_iter()
         .filter(|chat| attachable.contains(&chat.id))

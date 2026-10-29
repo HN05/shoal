@@ -745,11 +745,14 @@ a Herdr pane counts as a session named after its tab: attaching focuses the
 tab and, from a terminal outside Herdr, attaches a Herdr client to the tab's
 Herdr session, and inside another Herdr session it is refused. A chat running
 in the Happy app or a terminal outside zmx has no session, and attaching says
-where it runs instead. Sessions are named after the workspace or chat,
-suffixed `-2`, `-3`, ... when the name is in use, and labelled
-`shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
-`zmx ls` and `zmx attach` work as well. Sessions Shoal creates are also labelled
-`shoal.created=1`. Removing a workspace ends the sessions Shoal created for it,
+where it runs instead. Attach finds a session where the daemon recorded the
+workspace's agent or the chat running, or one Shoal opened for the workspace,
+such as a detached session left at its shell after a failed setup. Sessions
+are named after the workspace or chat, suffixed `-2`, `-3`, ... when the name
+is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
+owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
+Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
+workspace ends the sessions Shoal created for it,
 regardless of `close_when_done`, and daemon startup and `shoal cleanup` end those
 whose workspace is gone. A session you opened yourself stays open, even after a
 Shoal agent ran in it, as do sessions from Shoal versions without the label. An
@@ -1251,7 +1254,7 @@ starts, from the then-current default branch. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
 records a `queue_started` notification. An entry queued from Herdr opens a
 background tab in the same Herdr workspace; otherwise it runs in a detached zmx
-session labelled for `shoal attach`. A start keeps its slot through setup until
+session that `shoal attach` reaches. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the
 workspace for two minutes, records a `queue_failed` notification with the reason
 and frees the slot. Deleting the workspace during setup frees it without one.

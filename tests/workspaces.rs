@@ -5877,18 +5877,17 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
     let fzf = bin.join("fzf");
     // Bash reports getcwd failures at startup if the picker inherits a deleted cwd.
     install_test_script(&fzf, "#!/bin/bash\npwd -P > \"$HOME/picked\"\ncat\n");
-    install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
-    let workspace = &fixture.ok(&["work"])[0];
     fs::write(
         fixture.root.path().join("zmx-sessions"),
-        format!(
-            "  name=available\tclients=0\tshoal.workspace={}\n",
-            workspace["id"].as_str().unwrap()
-        ),
+        "  name=available\tclients=0\n",
     )
     .unwrap();
+    let mut agent = Some(agent_in_session(&fixture, "available", "available"));
 
     for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
+        if args[0] == "rm" {
+            stop_agents(&fixture, "available", agent.take());
+        }
         let deleted = fixture.root.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
         let path = CString::new(deleted.as_os_str().as_encoded_bytes()).unwrap();
@@ -22839,7 +22838,7 @@ fn terminal_agents_run_tracked_in_a_labelled_zmx_session_unless_nested_or_detach
     assert!(output.status.success(), "{output:?}\n{transcript}");
     let calls = zmx_calls(&fixture);
     assert_eq!(calls[0], ["list"]);
-    let labels = format!("shoal.workspace={id} shoal.agent=claude");
+    let labels = format!("shoal.workspace={id}");
     assert_eq!(calls[1][..2], ["attach", "--labels"]);
     assert!(calls[1][2].starts_with(&format!("{labels} shoal.created=1 shoal.state=")));
     assert_eq!(calls[1][3], "persist");
@@ -22992,7 +22991,7 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
             "set",
             session,
             &format!("shoal.chat={chat_id}"),
-            "shoal.agent=claude"
+            "shoal.workspace="
         ]
     );
     assert_eq!(
@@ -23137,10 +23136,13 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         .unwrap();
     assert_eq!((&changed["name"], &changed["chat"]), (&added["name"], chat));
 
-    // While it runs, `work` lists the chat with its workspaces under it.
+    // While it runs, `work` lists the chat with its workspaces under it, and
+    // the zmx session it runs in.
     let chats: Value =
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
-    assert_eq!(chats, serde_json::json!([started["chat"]]));
+    let mut listed = started["chat"].clone();
+    listed["origin"] = serde_json::json!({"host": "zmx", "place": "outer"});
+    assert_eq!(chats, serde_json::json!([listed]));
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
         .lines()
@@ -23856,7 +23858,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
         "set",
         "background",
         &format!("shoal.workspace={id}"),
-        "shoal.agent=pi",
+        "shoal.chat=",
     ];
     assert!(
         calls
@@ -24158,6 +24160,8 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
         "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n[done]\ncleanup = false\n",
     ));
     let home = fixture.root.path();
+    // The daemon closes the session, so it needs the fake zmx too.
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
     // The fake session outlives its agent, as one with a shell would.
     fs::write(home.join("zmx-keep-sessions"), "").unwrap();
     let (output, transcript) = fixture.terminal_command(
@@ -24177,7 +24181,8 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
         true,
     );
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let watched = || fs::read_to_string(home.join("zmx-watch-calls")).unwrap_or_default();
+    // The watcher has the daemon close the session Shoal recorded creating.
+    let watched = || fs::read_to_string(home.join("zmx-calls")).unwrap_or_default();
     wait_until("the session's end", || {
         watched().lines().any(|call| call == r#"["kill", "kept"]"#)
     });
@@ -24317,24 +24322,23 @@ fn attach_returns_to_chats_by_name() {
     let other = init_repo(home, "other", &[("tracked", "committed\n")]);
     let other_repository = fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     // The chats last while this test's process runs.
-    let start = |repository: &Value, name: &str| {
+    let start = |repository: &Value, name: &str, session: Option<&str>| {
+        let origin = session.map(|session| serde_json::json!({"host": "zmx", "place": session}));
         let response = fixture.request(serde_json::json!({"start_chat":{
             "repository": repository["id"], "name": name, "agent": "claude",
-            "pid": std::process::id()
+            "pid": std::process::id(), "origin": origin
         }}));
         assert_eq!(response["type"], "chat", "{response}");
         response["data"]["id"].as_str().unwrap().to_owned()
     };
-    let talk = start(&repository, "talk");
-    let plan = start(&repository, "plan-7");
-    start(&other_repository, "quiet");
-    // Sessions are found by their label, whatever their name.
-    let session = |name: &str, chat: &str| {
-        format!("  name={name}\tpid=1\tclients=0\tshoal.agent=claude\tshoal.chat={chat}\n")
-    };
+    // Sessions are found where the chat was recorded, whatever their name.
+    let talk = start(&repository, "talk", Some("second"));
+    let plan = start(&repository, "plan-7", Some("first"));
+    start(&other_repository, "quiet", None);
+    let session = |name: &str| format!("  name={name}\tpid=1\tclients=0\n");
     fs::write(
         home.join("zmx-sessions"),
-        session("first", &plan) + &session("second", &talk),
+        session("first") + &session("second"),
     )
     .unwrap();
     let attached = || {
@@ -24385,6 +24389,49 @@ fn attach_returns_to_chats_by_name() {
             ),
             "{transcript}"
         );
+    }
+}
+
+/// Run a Claude that waits to be stopped for `workspace` inside the fake zmx
+/// session `session`, returning once the daemon recorded it there.
+fn agent_in_session(fixture: &Fixture, workspace: &str, session: &str) -> Child {
+    let bin = fixture.root.path().join("bin");
+    install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
+    install_test_script(
+        bin.join("claude"),
+        "#!/bin/sh\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    );
+    let errors = fixture.root.path().join(format!("agent-{session}.err"));
+    let mut agent = fixture
+        .command()
+        .env("ZMX_SESSION", session)
+        .args(["claude", workspace])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(fs::File::create(&errors).unwrap())
+        .spawn()
+        .unwrap();
+    wait_until("the agent's recorded session", || {
+        if let Some(status) = agent.try_wait().unwrap() {
+            panic!(
+                "the agent exited with {status}: {}",
+                fs::read_to_string(&errors).unwrap()
+            );
+        }
+        fixture.ok(&["status", workspace])["executions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|execution| execution["origin"]["place"] == session)
+    });
+    agent
+}
+
+/// Stop the agents `agent_in_session` started for `workspace`.
+fn stop_agents(fixture: &Fixture, workspace: &str, agents: impl IntoIterator<Item = Child>) {
+    fixture.ok(&["stop", workspace]);
+    for mut agent in agents {
+        agent.wait().unwrap();
     }
 }
 
@@ -24479,7 +24526,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
 fn attach_selects_a_session_of_the_workspace() {
     let fixture = Fixture::new();
     let workspace = fixture.add("persist");
-    let other = fixture.add("other");
+    fixture.add("other");
     let home = fixture.root.path();
     let attached = || {
         zmx_calls(&fixture)
@@ -24501,20 +24548,24 @@ fn attach_selects_a_session_of_the_workspace() {
         "{transcript}"
     );
 
-    let session = |name: &str, workspace: &Value| {
-        format!(
-            "  name={name}\tpid=1\tclients=0\tshoal.agent=claude\tshoal.workspace={}\n",
-            workspace["id"].as_str().unwrap()
-        )
-    };
+    // Sessions are found where the daemon recorded the agents, whatever
+    // their labels say.
+    let session = |name: &str| format!("  name={name}\tpid=1\tclients=0\tshoal.workspace=w0\n");
     fs::write(
         home.join("zmx-sessions"),
-        session("persist", &workspace) + &session("other", &other),
+        session("persist") + &session("other"),
     )
     .unwrap();
+    let persist = agent_in_session(&fixture, "persist", "persist");
+    let other = agent_in_session(&fixture, "other", "other");
     let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
     assert_eq!(attached(), ["attach", "persist"]);
+    // The fake session is still listed afterwards, as after a detach.
+    assert!(
+        transcript.contains("detached from persist; run `shoal attach persist` to return"),
+        "{transcript}"
+    );
     // The picker leaves out a workspace without a session.
     let idle = fixture.add("idle");
     let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
@@ -24523,21 +24574,16 @@ fn attach_selects_a_session_of_the_workspace() {
     assert_eq!(rows.len(), 2, "{rows:?}");
     let idle = idle["id"].as_str().unwrap();
     assert!(!rows.iter().any(|row| row.starts_with(idle)), "{rows:?}");
-    assert_eq!(attached(), ["attach", "persist"]);
-    // The fake session is still listed afterwards, as after a detach.
-    assert!(
-        transcript.contains("detached from persist; run `shoal attach persist` to return"),
-        "{transcript}"
-    );
 
+    let second = agent_in_session(&fixture, "persist", "persist-2");
     fs::write(
         home.join("zmx-sessions"),
-        session("persist", &workspace) + &session("persist-2", &workspace),
+        session("persist") + &session("persist-2"),
     )
     .unwrap();
     let (output, rows) = fixture.pick(&["attach", "persist"], "1", "");
     assert!(output.status.success(), "{output:?}");
-    assert!(rows.contains("persist-2  claude"), "{rows}");
+    assert!(rows.contains("persist-2"), "{rows}");
     assert_eq!(attached(), ["attach", "persist-2"]);
     let (output, transcript) =
         fixture.interactive(&["attach", "persist", "--session", "persist"], "");
@@ -24554,34 +24600,58 @@ fn attach_selects_a_session_of_the_workspace() {
     let output = fixture.run(&["attach", "persist"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
+    stop_agents(&fixture, "persist", [persist, second]);
+    stop_agents(&fixture, "other", [other]);
+}
+
+#[test]
+fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
+    let fixture = Fixture::new();
+    fixture.add("failed");
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    // A detached launch whose setup failed keeps its shell, which no
+    // execution records.
+    let response = fixture.request(serde_json::json!({"record_owned_place":{
+        "workspace": "failed", "origin": {"host": "zmx", "place": "failed"}
+    }}));
+    assert_eq!(response["type"], "ok", "{response}");
+    fs::write(
+        fixture.root.path().join("zmx-sessions"),
+        "  name=failed\tpid=1\tclients=0\n",
+    )
+    .unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "failed"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let attached = zmx_calls(&fixture)
+        .into_iter()
+        .rfind(|call| call[0] == "attach");
+    assert_eq!(attached.unwrap(), ["attach", "failed"]);
+    assert_eq!(
+        fixture.ok(&["status", "failed"])["sessions"],
+        serde_json::json!([{"name": "failed", "clients": 0}])
+    );
 }
 
 #[test]
 fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
     let fixture = Fixture::new();
-    let workspace = fixture.add("persist");
-    let other = fixture.add("other");
+    fixture.add("persist");
     let home = fixture.root.path();
-    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
     fs::write(
         home.join("zmx-sessions"),
-        format!(
-            "  name=persist\tpid=1\tclients=1\tshoal.agent=claude\tshoal.workspace={}\n  \
-             name=other\tpid=2\tclients=0\tshoal.workspace={}\n",
-            workspace["id"].as_str().unwrap(),
-            other["id"].as_str().unwrap()
-        ),
+        "  name=persist\tpid=1\tclients=1\n  name=other\tpid=2\tclients=0\n",
     )
     .unwrap();
+    let agent = agent_in_session(&fixture, "persist", "persist");
     let status = fixture.ok(&["status", "persist"]);
     assert_eq!(
         status["sessions"],
-        serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
+        serde_json::json!([{"name": "persist", "clients": 1}])
     );
     let output = fixture.run(&["status", "persist"]);
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
-        text.contains("Sessions:      1\n  persist  claude  attached\n"),
+        text.contains("Sessions:      1\n  persist  attached\n"),
         "{text}"
     );
 
@@ -24595,6 +24665,8 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
             .contains("list zmx sessions"),
         "{status}"
     );
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    stop_agents(&fixture, "persist", [agent]);
 }
 
 #[test]

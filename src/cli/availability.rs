@@ -231,9 +231,7 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         .iter()
         .filter_map(|agent| Some((agent.workspace_id.as_str(), agent.origin.as_ref()?)))
         .collect();
-    terminal::session_owners(terminal::OwnerKind::Workspace, &places)
-        .await
-        .unwrap_or_default()
+    terminal::session_owners(&places)
 }
 
 async fn busy_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {

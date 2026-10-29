@@ -698,7 +698,11 @@ binary, once another binary is installed there, so tabs opened before an upgrade
 still close.
 
 Shoal closes only the zmx sessions it created; a session the user opened stays
-theirs even after an agent ran in it. Creation
+theirs even after an agent ran in it. The daemon records the sessions Shoal
+creates as it does other hosts' places, so `attach` still finds one whose launch
+failed and left its shell, but labels carry ownership: zmx reuses session names,
+so a recorded name does not prove a later session under it Shoal's, while a
+label goes with the session, and a close from the record checks it. Creation
 sets `shoal.created=1`, which relabelling never adds. The daemon closes a
 workspace's sessions when it removes the workspace, whatever `close_when_done`
 says, and startup and cleanup sweeps close those whose workspace record is gone,
@@ -707,7 +711,8 @@ have no known origin and are left alone. Relabelling replaces obsolete ownership
 before any in-place agent or chat can launch, so removal preserves a session
 reused by another owner. zmx has no conditional kill, so ownership checks,
 relabelling and closes hold a lock beside zmx's socket directory, shared by
-every state directory using that server.
+every state directory using that server. Finding sessions needs neither: the
+labels and the lock exist only for cleanup.
 
 Rex is a terminal host as Herdr is: inside a Rex block, Shoal opens a window in
 the caller's session, or with `rex.placement = "split"` splits the caller's
@@ -725,8 +730,10 @@ host-defined data, and whether Shoal created the place. Generic code passes the
 record to the host that reads it and never interprets the data, which for Rex
 is how to reach the server and its CLI. Queued entries carry the queuing
 terminal's origin, recovery records the stopped agent's, demos their launch's,
-and the daemon the place each execution and chat runs in, which `attach` and
-`status` ask the host about; the host never calls the daemon. A host
+and the daemon the place each execution and chat runs in, which `attach`, `status`
+and attach completion ask the host about for every host, `attach` and `status`
+together with the places Shoal created for the workspace; the host never calls
+the daemon. A host
 declares the variables naming its places, and a zmx session drops the
 other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
@@ -759,9 +766,9 @@ terminal, and an addition whose agent ran in the session leaves the caller's
 shell where it was: the workspace is the session's, and detaching returns to
 the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
-so daemons sharing zmx can distinguish their sessions. `attach` and `status`
-look sessions up through `zmx list`. A detached session that Shoal
-starts labels itself once its workspace exists. Launches without a terminal, inside a zmx session, or in
+so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
+starts labels itself once its workspace exists. A start queued from a zmx
+session joins no group, so it goes to `default_host` first. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
@@ -1347,9 +1354,10 @@ may decide them. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 ends. The process the user runs chooses the name, so the tab or session that
-hosts the chat carries it before the chat is recorded; the recorded chat then
-labels its zmx session with its ID, so `shoal attach` finds the session by the
-chat's record, not by a session name zmx may have suffixed. A chat waits for the user to speak first unless it opens on a
+hosts the chat carries it before the chat is recorded; the chat's record names
+the session it runs in, so `shoal attach` finds it there, not by a session name
+zmx may have suffixed, and the chat labels the session with its ID so no
+workspace's end closes it. A chat waits for the user to speak first unless it opens on a
 task: an agent that takes instructions apart from the first message gets them
 so, and another gets them as its first message, which starts a turn and so asks
 only for a short reply or carries the task.

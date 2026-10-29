@@ -71,6 +71,7 @@ impl StatusView {
             .executions
             .iter()
             .filter_map(|execution| execution.origin.as_ref())
+            .chain(&status.inspection.places)
             .collect();
         let (sessions, sessions_error) =
             match sessions(ctx, &status.inspection.workspace, &places).await {
@@ -95,7 +96,7 @@ async fn sessions(
 ) -> Result<Vec<terminal::Session>> {
     let target = ConfigTarget::Workspace(workspace.id.clone());
     let settings = client::settings(&ctx.paths, target).await?;
-    terminal::sessions(&settings, terminal::Owner::Workspace(&workspace.id), places).await
+    terminal::sessions(&settings, places).await
 }
 
 /// The listed chat that opened `workspace` with its agent, else its ID, which

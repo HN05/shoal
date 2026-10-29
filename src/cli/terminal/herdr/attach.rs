@@ -8,11 +8,7 @@ use serde::Deserialize;
 use tokio::process::Command;
 
 use super::{TabInfo, failed_with, herdr};
-use crate::{
-    cli::terminal::Session,
-    sessions::{HostName, Origin},
-    subprocess::Run,
-};
+use crate::{cli::terminal::Session, sessions::Origin, subprocess::Run};
 
 /// The variables naming the Herdr server a pane runs in, most specific first.
 const SERVER_VARS: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION"];
@@ -25,10 +21,8 @@ pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {
     let label = tab_label(place, &pane.tab_id).await?;
     Ok(Some(Session {
         name: label.unwrap_or(pane.tab_id),
-        agent: None,
         clients: 0,
-        host: HostName::Herdr.as_str(),
-        place: Some(place.clone()),
+        place: place.clone(),
     }))
 }
 

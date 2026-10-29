@@ -159,7 +159,7 @@ pub(super) async fn begin(
         terminal::current_origin(),
     )
     .await?;
-    terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id), agent.name()).await?;
+    terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
     run_here(
         ctx,
         &repo,

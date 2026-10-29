@@ -324,6 +324,7 @@ async fn inspect(
                 error: None,
             }),
             executions,
+            places: vec![],
             issue: None,
             pr_cleanup: None,
             ports: vec![],

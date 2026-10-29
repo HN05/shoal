@@ -10,19 +10,22 @@ fn names_fit_the_socket_path_and_skip_taken_ones() {
 }
 
 #[test]
-fn labels_leave_out_agent_names_zmx_cannot_hold() {
+fn relabelling_replaces_the_other_owner_kind_and_a_demo() {
     assert_eq!(
-        labels(Owner::Workspace("w1"), "claude"),
-        "shoal.workspace=w1 shoal.agent=claude"
+        replacement_labels(Owner::Workspace("w1")),
+        "shoal.workspace=w1 shoal.chat= shoal.demo="
     );
     assert_eq!(
-        labels(Owner::Workspace("w1"), "my agent"),
-        "shoal.workspace=w1"
+        replacement_labels(Owner::Chat("c1")),
+        "shoal.chat=c1 shoal.workspace= shoal.demo="
     );
-    assert_eq!(
-        labels(Owner::Chat("c1"), "codex"),
-        "shoal.chat=c1 shoal.agent=codex"
-    );
+}
+
+#[test]
+fn a_queued_start_from_a_session_goes_to_the_default_host_first() {
+    assert!(Zmx.takes_queued(None));
+    assert!(!Zmx.takes_queued(Some(&Origin::created(HostName::Zmx, "s".into()))));
+    assert!(Zmx.takes_queued(Some(&Origin::created(HostName::Rex, "b".into()))));
 }
 
 #[test]

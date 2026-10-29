@@ -1,10 +1,11 @@
 //! zmx sessions keep terminal agents running after their terminal closes. zmx
 //! owns the pty, passes output through unchanged while attached, and restores
-//! the screen on attach; Shoal names each session after its workspace or chat
-//! and labels it with the workspace's or chat's ID so `shoal attach` can find
-//! it.
+//! the screen on attach. Shoal names each session after its workspace or chat,
+//! and `shoal attach` finds it where the daemon recorded the agent or chat
+//! running; labels with the workspace's or chat's ID only decide which owner's
+//! cleanup closes it.
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     ffi::{OsStr, OsString},
     io::IsTerminal,
     path::Path,
@@ -32,7 +33,6 @@ use crate::{
 
 /// zmx sets this inside a session; a launch there runs in place.
 const SESSION_VAR: &str = "ZMX_SESSION";
-const AGENT_LABEL: &str = "shoal.agent";
 /// zmx names its socket after the session, and `sun_path` is short on macOS.
 const MAX_NAME_LEN: usize = 32;
 
@@ -80,8 +80,10 @@ impl Host for Zmx {
 
 impl Places for Zmx {
     /// A detached session needs no terminal, so it takes any queued start.
-    fn takes_queued(&self, _origin: Option<&Origin>) -> bool {
-        true
+    /// A session is no group a later place joins, so a start queued from
+    /// one goes to the default host first.
+    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
+        origin.is_none_or(|origin| origin.host != HostName::Zmx)
     }
 
     /// A focused start stays here, where its agent runs in a session this
@@ -116,6 +118,22 @@ impl Places for Zmx {
         std::env::var(SESSION_VAR)
             .ok()
             .filter(|session| !session.is_empty())
+    }
+
+    /// The session this process runs in, which the daemon records for its
+    /// executions and chats so `shoal attach` finds them there.
+    fn origin(&self) -> Option<Origin> {
+        Some(Origin {
+            host: HostName::Zmx,
+            group: None,
+            place: Some(self.this_place()?),
+            data: BTreeMap::new(),
+            owned: false,
+        })
+    }
+
+    fn place_variables(&self) -> &'static [&'static str] {
+        &[SESSION_VAR]
     }
 
     /// A detached session ends with its agent, leaving no shell.
@@ -167,13 +185,8 @@ impl Sessions for Zmx {
         Box::pin(async move { run(start, owner, agent).await.map(Some) })
     }
 
-    fn label_current<'a>(
-        &'a self,
-        state: &'a Path,
-        owner: Owner<'a>,
-        agent: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(label_current(state, owner, agent))
+    fn label_current<'a>(&'a self, state: &'a Path, owner: Owner<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(label_current(state, owner))
     }
 
     fn keeps_agents_in_sessions(&self) -> bool {
@@ -184,16 +197,21 @@ impl Sessions for Zmx {
         on_terminal().then(|| Tool::Zmx.program())
     }
 
-    fn running<'a>(&'a self, owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
-        Box::pin(sessions(owner))
+    /// The session under the recorded name, while zmx keeps it.
+    fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
+        Box::pin(session_at(place))
     }
 
-    fn session_owners(&self, kind: OwnerKind) -> BoxFuture<'_, Result<HashSet<String>>> {
-        Box::pin(session_owners(kind))
+    fn attaches_places(&self) -> bool {
+        true
     }
 
     fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(attach(&session.name))
+    }
+
+    fn left_running<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<bool>> {
+        Box::pin(async move { Ok(list().await?.iter().any(|(name, _)| name == session)) })
     }
 }
 
@@ -242,7 +260,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
     let mut zmx = Command::new(Tool::Zmx.program());
     zmx.arg("attach").arg("--labels").arg(format!(
         "{} {CREATED} {}",
-        labels(owner, agent),
+        owner_label(owner),
         crate::sessions::zmx::state_label(start.state)?
     ));
     attach_new(&mut zmx, &name, start);
@@ -251,7 +269,7 @@ async fn run(start: &Start<'_>, owner: Owner<'_>, agent: &str) -> Result<String>
 }
 
 /// Run `start`, a chat, in a new session and attach this terminal to it.
-/// The session's Shoal records the chat, labels the session with it and
+/// The session's Shoal records the chat there, labels the session with it and
 /// becomes its agent, as it would in place. Returns the session's name.
 async fn run_chat(start: &Start<'_>) -> Result<String> {
     let name = unused_name(start.label).await?;
@@ -320,7 +338,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
             environment: demo.env,
             clear: super::NOT_INHERITED_BY_DEMOS,
             labels: vec![
-                labels(Owner::Workspace(demo.workspace), ""),
+                owner_label(Owner::Workspace(demo.workspace)),
                 CREATED.into(),
                 format!("shoal.demo={}", demo.launch),
                 crate::sessions::zmx::state_label(demo.state)?,
@@ -515,9 +533,10 @@ async fn submit_prompt(session: &OsStr, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Label the zmx session this process runs in, when it runs in one, so
-/// `shoal attach` finds `owner`'s agent there.
-async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()> {
+/// Label the zmx session this process runs in, when it runs in one, as
+/// `owner`'s, so cleanup closes it with `owner` and not with the owner it was
+/// created for, which would end `owner`'s agent.
+async fn label_current(state: &Path, owner: Owner<'_>) -> Result<()> {
     let Some(session) = std::env::var_os(SESSION_VAR) else {
         return Ok(());
     };
@@ -525,7 +544,7 @@ async fn label_current(state: &Path, owner: Owner<'_>, agent: &str) -> Result<()
     let mut set = Command::new(Tool::Zmx.program());
     set.arg("set")
         .arg(session)
-        .args(replacement_labels(owner, agent).split(' '))
+        .args(replacement_labels(owner).split(' '))
         .arg(crate::sessions::zmx::state_label(state)?);
     Run::new(set)
         .checked()
@@ -554,35 +573,20 @@ fn ended(status: ExitStatus) -> Result<()> {
     Ok(())
 }
 
-/// `owner`'s running sessions, oldest name first.
-async fn sessions(owner: Owner<'_>) -> Result<Vec<Session>> {
-    let label = owner_label(owner.kind());
-    let mut sessions: Vec<_> = list()
+/// The session `place` names, with its attached terminals, while zmx keeps
+/// it.
+async fn session_at(place: &Origin) -> Result<Option<Session>> {
+    Ok(list()
         .await?
         .into_iter()
-        .filter(|(_, fields)| field(fields, label) == Some(owner.id()))
+        .find(|(name, _)| name == place.id())
         .map(|(name, fields)| Session {
-            agent: field(&fields, AGENT_LABEL).map(str::to_owned),
             clients: field(&fields, "clients")
                 .and_then(|clients| clients.parse().ok())
                 .unwrap_or(0),
             name,
-            host: HostName::Zmx.as_str(),
-            place: None,
-        })
-        .collect();
-    sessions.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(sessions)
-}
-
-/// The IDs of the owners of `kind` with at least one agent session.
-async fn session_owners(kind: OwnerKind) -> Result<HashSet<String>> {
-    let label = owner_label(kind);
-    Ok(list()
-        .await?
-        .into_iter()
-        .filter_map(|(_, fields)| field(&fields, label).map(str::to_owned))
-        .collect())
+            place: place.clone(),
+        }))
 }
 
 /// Whether `sessions` list the watched session: under its name, labelled
@@ -604,35 +608,23 @@ fn instance(fields: &Fields) -> String {
     format!("{}:{}", value("pid"), value("created"))
 }
 
-/// The label that names a session's owner of `kind`.
-fn owner_label(kind: OwnerKind) -> &'static str {
-    match kind {
+/// The label naming `owner` as a session's owner.
+fn owner_label(owner: Owner<'_>) -> String {
+    let key = match owner.kind() {
         OwnerKind::Workspace => WORKSPACE_LABEL,
         OwnerKind::Chat => CHAT_LABEL,
-    }
-}
-
-/// zmx separates labels with spaces, so an agent name containing one is left out.
-fn labels(owner: Owner<'_>, agent: &str) -> String {
-    let mut labels = format!("{}={}", owner_label(owner.kind()), owner.id());
-    if !agent.is_empty() && !agent.contains(char::is_whitespace) {
-        labels.push_str(&format!(" {AGENT_LABEL}={agent}"));
-    }
-    labels
+    };
+    format!("{key}={}", owner.id())
 }
 
 /// Replace Shoal ownership in a reused session without touching user labels.
 /// Empty values remove labels in the same zmx set request.
-fn replacement_labels(owner: Owner<'_>, agent: &str) -> String {
+fn replacement_labels(owner: Owner<'_>) -> String {
     let obsolete = match owner.kind() {
         OwnerKind::Workspace => CHAT_LABEL,
         OwnerKind::Chat => WORKSPACE_LABEL,
     };
-    let mut labels = format!("{} {obsolete}= shoal.demo=", labels(owner, agent));
-    if agent.is_empty() || agent.contains(char::is_whitespace) {
-        labels.push_str(&format!(" {AGENT_LABEL}="));
-    }
-    labels
+    format!("{} {obsolete}= shoal.demo=", owner_label(owner))
 }
 
 /// The workspace's or chat's name, shortened to fit a socket path, then
