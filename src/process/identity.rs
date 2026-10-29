@@ -378,6 +378,18 @@ pub async fn stays_unattributed(
     .context("process settle worker failed")?
 }
 
+/// Whether `identity` was started with `variable` set. An environment that
+/// cannot be read counts as without it.
+pub fn started_with(identity: &Identity, variable: &str) -> bool {
+    let prefix = format!("{variable}=");
+    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    matches!(
+        visibility(identity, deadline),
+        Ok(Visibility::Environment(environment))
+            if environment.iter().any(|entry| entry.starts_with(prefix.as_bytes()))
+    )
+}
+
 /// Read `pid`'s environment for `marker`, unless it has exited.
 fn observe(
     pid: u32,

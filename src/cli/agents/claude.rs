@@ -279,11 +279,15 @@ const WAKE_TIMEOUT_SECS: u64 = 7 * 24 * 60 * 60;
 /// The groups that wait in the background for the next update and wake the
 /// idle agent with it, after a turn that ends normally and after one an API
 /// error ends, which fires `StopFailure` instead of `Stop`. Claude Code runs
-/// the command in a shell it starts, whose parent is the agent.
+/// the command in a shell it starts, whose parent is the agent; the shell
+/// becomes the hook, marked as one that waits rather than works.
 fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
     let group = json!({"hooks": [{
         "type": "command",
-        "command": format!("{shoal} internal wake --agent \"$PPID\""),
+        "command": format!(
+            "exec env {}=1 {shoal} internal wake --agent \"$PPID\"",
+            crate::env::WAITING_HOOK
+        ),
         "asyncRewake": true,
         "timeout": WAKE_TIMEOUT_SECS,
     }]});

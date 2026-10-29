@@ -60,6 +60,9 @@ pub const SECRET_TOOLS: &str = "SHOAL_SECRET_TOOLS";
 pub const PATH_PREFIX: &str = "SHOAL_PATH_PREFIX";
 /// Which hook is running, using the configuration key without `_cmd`.
 pub const HOOK: &str = "SHOAL_HOOK";
+/// Set on an agent hook that waits in the background for the agent's next
+/// update, outside the agent's process group, without doing work.
+pub const WAITING_HOOK: &str = "SHOAL_WAITING_HOOK";
 /// Recorded worktree path, including after removal.
 pub const WORKSPACE_PATH: &str = "SHOAL_WORKSPACE_PATH";
 /// JSON resource lease passed to permit hooks.

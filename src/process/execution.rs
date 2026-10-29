@@ -64,14 +64,15 @@ impl Processes {
 
     /// Whether the scan found a process carrying the execution's marker
     /// outside its process group, such as a background command an agent
-    /// started, whose completion may start its next turn. The wrapper is not
-    /// one.
+    /// started, whose completion may start its next turn. Neither the wrapper
+    /// nor an agent hook waiting for the next update is one.
     pub fn runs_outside_group(execution: &Execution, scan: &process::Scan) -> bool {
         scan.processes.iter().any(|owned| {
             owned.execution_id == execution.id
                 && execution.wrapper.as_ref() != Some(&owned.identity)
                 && process::group_of(&owned.identity)
                     .is_some_and(|group| execution.group_id.is_none_or(|own| group != own))
+                && !process::started_with(&owned.identity, crate::env::WAITING_HOOK)
         })
     }
 

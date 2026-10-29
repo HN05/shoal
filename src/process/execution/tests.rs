@@ -154,4 +154,29 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
     background.kill().await.unwrap();
     background.wait().await.unwrap();
     assert!(!Processes::runs_outside_group(&execution, &marked("agent")));
+
+    // An agent hook waiting for the next update does no work.
+    let mut hook = tokio::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "process::identity::tests::marked_child",
+            "--ignored",
+        ])
+        .stdout(std::process::Stdio::null())
+        .env(crate::env::WAITING_HOOK, "1")
+        .process_group(0)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let hook_identity = process::capture(hook.id().unwrap()).unwrap().unwrap();
+    let waiting = process::Scan {
+        processes: vec![process::OwnedProcess {
+            execution_id: "agent".into(),
+            identity: hook_identity,
+        }],
+        ..Default::default()
+    };
+    assert!(!Processes::runs_outside_group(&execution, &waiting));
+    hook.kill().await.unwrap();
+    hook.wait().await.unwrap();
 }

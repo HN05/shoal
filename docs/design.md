@@ -129,7 +129,8 @@ the agent idle longest, since an idle agent loses no turn, and a working one,
 newest first, only when no idle one is left. Shown agents still stop once no
 other is left, since a host such as Herdr may count every agent as shown. An idle agent with processes outside its
 process group counts as working, since their completion may start its next
-turn, and so does one without turn reports. Once the
+turn, and so does one without turn reports. Its hook waiting for the next
+update runs there too, marked so that it does not count. Once the
 wrapper reports the stop, the daemon also stops the agent's identity-verified
 processes outside its process group, such as background shell commands, since
 automatic and manual restores both require the execution proven stopped. When
