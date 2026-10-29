@@ -150,10 +150,6 @@ impl Sessions for Rex {
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(session_at(place))
     }
-
-    fn attaches_places(&self) -> bool {
-        true
-    }
 }
 
 impl Demos for Rex {

@@ -40,7 +40,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
-use host::{Demo, DemoWorker, Host, Places, Sessions, Start};
+use host::{Attaches, Demo, DemoWorker, Host, Places, Sessions, Start};
 pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_places};
 pub(in crate::cli) use typed::run as run_launch;
 
@@ -438,7 +438,7 @@ async fn run_add(
     name: &str,
     placement: Placement,
 ) -> Result<bool> {
-    if placement == Placement::Focus && attached_sessions(host.host).is_some() {
+    if placement == Placement::Focus && host.host.attaches().is_some() {
         return Ok(false);
     }
     let worker = add_worker_argv(ctx, host)?;
@@ -478,13 +478,6 @@ async fn show_opened(
         return Ok(());
     }
     places.show(place, name).await
-}
-
-/// The sessions of `host`, where it keeps agents in sessions this terminal
-/// attaches to.
-fn attached_sessions(host: &'static dyn Host) -> Option<&'static dyn Sessions> {
-    host.sessions()
-        .filter(|sessions| sessions.keeps_agents_in_sessions())
 }
 
 /// What the place `host` opens for `plan` is called: the plan's label where
@@ -655,11 +648,9 @@ pub(crate) struct Attachment {
 
 impl Attachment {
     /// What reads whether a terminal shows `place`, unless its host is
-    /// disabled in `settings` or keeps no sessions there.
+    /// disabled in `settings` or keeps no sessions.
     pub(crate) fn of(settings: &Effective, place: Origin) -> Option<Self> {
-        let sessions = enabled_host(settings, place.host)
-            .and_then(Host::sessions)
-            .filter(|sessions| sessions.attaches_places())?;
+        let sessions = enabled_host(settings, place.host).and_then(Host::sessions)?;
         Some(Self { sessions, place })
     }
 
@@ -877,9 +868,8 @@ pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspa
 /// Where a tracked agent launched from this terminal runs apart from this
 /// process.
 enum AgentRun {
-    /// In a new session of a host that keeps agents in sessions this
-    /// terminal attaches to.
-    Session(&'static dyn Sessions),
+    /// In a new session this terminal attaches to.
+    Session(&'static dyn Attaches),
     /// In a new place of a host that does not serve this terminal, shown
     /// here.
     Place(&'static dyn Places),
@@ -889,8 +879,8 @@ impl AgentRun {
     /// Where `host` runs the agent, or `None` for in place, as in a place
     /// of a host serving this terminal.
     fn of(host: &Configured) -> Option<Self> {
-        if let Some(sessions) = attached_sessions(host.host) {
-            return Some(Self::Session(sessions));
+        if let Some(attaches) = host.host.attaches() {
+            return Some(Self::Session(attaches));
         }
         host.places().filter(|_| !host.serves()).map(Self::Place)
     }
@@ -931,10 +921,10 @@ pub(in crate::cli) async fn run_agent(
         env: &env,
     };
     match run {
-        AgentRun::Session(sessions) => {
+        AgentRun::Session(attaches) => {
             let owner = Owner::Workspace(&workspace.id);
-            let session = sessions.run_agent(&start, owner, agent).await?;
-            report_detach(sessions, &workspace.name, &session).await?;
+            let session = attaches.run_agent(&start, owner, agent).await?;
+            report_detach(attaches, &workspace.name, &session).await?;
         }
         AgentRun::Place(places) => {
             let place = places.open(&start).await?;
@@ -1036,9 +1026,9 @@ pub(in crate::cli) async fn start_chat(
         argv: &shoal_command(ctx, args)?,
         env: &place_env(ctx)?,
     };
-    if let Some(sessions) = attached_sessions(host.host) {
-        let session = sessions.run_chat(&start).await?;
-        report_detach(sessions, name, &session).await?;
+    if let Some(attaches) = host.host.attaches() {
+        let session = attaches.run_chat(&start).await?;
+        report_detach(attaches, name, &session).await?;
         return Ok(true);
     }
     let place = places.open(&start).await?;
@@ -1132,15 +1122,11 @@ fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
 }
 
 /// The IDs of the owners with an agent session: those of `places`, recorded
-/// for owners by ID, whose hosts attach them.
+/// for owners by ID, whose hosts keep sessions.
 pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
     places
         .iter()
-        .filter(|(_, place)| {
-            kept_by(place)
-                .sessions()
-                .is_some_and(Sessions::attaches_places)
-        })
+        .filter(|(_, place)| kept_by(place).sessions().is_some())
         .map(|(owner, _)| (*owner).to_owned())
         .collect()
 }
@@ -1420,10 +1406,7 @@ pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
 /// Whether an agent launched here runs in a session this terminal attaches
 /// to, leaving the caller's shell where it was once the terminal detaches.
 pub(in crate::cli) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
-    current(settings)
-        .host
-        .sessions()
-        .is_some_and(Sessions::keeps_agents_in_sessions)
+    current(settings).host.attaches().is_some()
 }
 
 /// Give a workspace added without an agent a shell at `cwd` in the place
@@ -1461,8 +1444,8 @@ pub(in crate::cli) async fn label_current(
 /// The program an agent launch here needs besides the agent's own.
 pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
     hosts()
-        .filter_map(Host::sessions)
-        .find_map(Sessions::launcher_program)
+        .find_map(Host::attaches)
+        .map(Attaches::launcher_program)
 }
 
 /// The session this process runs in, where an agent's wrapper can type a

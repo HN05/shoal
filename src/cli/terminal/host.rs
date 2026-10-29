@@ -47,6 +47,12 @@ pub(in crate::cli) trait Host: Sync {
         None
     }
 
+    /// How this host runs agents and chats in new sessions this terminal
+    /// attaches to, unless it runs none so from here.
+    fn attaches(&self) -> Option<&dyn Attaches> {
+        None
+    }
+
     /// The demos this host keeps, unless it keeps none.
     fn demos(&self) -> Option<&dyn Demos> {
         None
@@ -178,22 +184,23 @@ pub(in crate::cli) trait Closes: Sync {
 /// A host that keeps agents in sessions of its own, which `shoal attach`
 /// finds where the daemon recorded them and shows as [`Places::show`] does.
 pub(in crate::cli) trait Sessions: Sync {
-    /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
-    /// attach this terminal to it, returning the session once the terminal
-    /// left it, where [`Sessions::keeps_agents_in_sessions`].
-    fn run_agent<'a>(
-        &'a self,
-        _start: &'a Start<'a>,
-        _owner: Owner<'a>,
-        _agent: &'a str,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async { anyhow::bail!("this host runs no agents in sessions of its own") })
-    }
+    /// The session at `place`, where an agent or chat was recorded running,
+    /// while it is open.
+    fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>>;
 
-    /// Run `start`, a chat, in a new session and attach this terminal to
-    /// it, as [`Sessions::run_agent`] runs an agent.
-    fn run_chat<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async { anyhow::bail!("this host runs no chats in sessions of its own") })
+    /// The session open at each of `places`, in order, for a host that reads
+    /// them all at once more cheaply than one at a time.
+    fn sessions_at<'a>(
+        &'a self,
+        places: &'a [&'a Origin],
+    ) -> BoxFuture<'a, Result<Vec<Option<Session>>>> {
+        Box::pin(async move {
+            let mut found = Vec::with_capacity(places.len());
+            for place in places {
+                found.push(self.session_at(place).await?);
+            }
+            Ok(found)
+        })
     }
 
     /// Whether `session`, which this host attached this terminal to, still
@@ -213,45 +220,28 @@ pub(in crate::cli) trait Sessions: Sync {
     ) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { Ok(()) })
     }
+}
 
-    /// Whether agents and chats launched here run in sessions this terminal
-    /// attaches to, which their wrapper can type prompts into, and a focused
-    /// addition stays here to start its agent so.
-    fn keeps_agents_in_sessions(&self) -> bool {
-        false
-    }
+/// A host that runs agents and chats launched here in new sessions of its
+/// own this terminal attaches to, which their wrapper can type prompts into;
+/// a focused addition stays here to start its agent so.
+pub(in crate::cli) trait Attaches: Sessions {
+    /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
+    /// attach this terminal to it, returning the session once the terminal
+    /// left it.
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        owner: Owner<'a>,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<String>>;
+
+    /// Run `start`, a chat, in a new session and attach this terminal to
+    /// it, as [`Attaches::run_agent`] runs an agent.
+    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>>;
 
     /// The program an agent launch here needs besides the agent's own.
-    fn launcher_program(&self) -> Option<&'static str> {
-        None
-    }
-
-    /// The session at `place`, where an agent or chat was recorded running,
-    /// while it is open.
-    fn session_at<'a>(&'a self, _place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    /// The session open at each of `places`, in order, for a host that reads
-    /// them all at once more cheaply than one at a time.
-    fn sessions_at<'a>(
-        &'a self,
-        places: &'a [&'a Origin],
-    ) -> BoxFuture<'a, Result<Vec<Option<Session>>>> {
-        Box::pin(async move {
-            let mut found = Vec::with_capacity(places.len());
-            for place in places {
-                found.push(self.session_at(place).await?);
-            }
-            Ok(found)
-        })
-    }
-
-    /// Whether the places recorded for agents of this host are sessions
-    /// [`Sessions::session_at`] finds.
-    fn attaches_places(&self) -> bool {
-        false
-    }
+    fn launcher_program(&self) -> &'static str;
 }
 
 /// A host that types into the places it records, such as a demo's or the

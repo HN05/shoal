@@ -18,7 +18,7 @@ use tokio::process::Command;
 
 use super::{
     Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Closes, Demos, Places, Sessions, Types, Watches},
+    host::{Attaches, Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -67,6 +67,10 @@ impl Host for Zmx {
 
     fn sessions(&self) -> Option<&dyn Sessions> {
         Some(self)
+    }
+
+    fn attaches(&self) -> Option<&dyn Attaches> {
+        on_terminal().then_some(self)
     }
 
     fn demos(&self) -> Option<&dyn Demos> {
@@ -163,31 +167,6 @@ impl Closes for Zmx {
 }
 
 impl Sessions for Zmx {
-    fn run_agent<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-        owner: Owner<'a>,
-        agent: &'a str,
-    ) -> BoxFuture<'a, Result<String>> {
-        Box::pin(run(start, owner, agent))
-    }
-
-    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
-        Box::pin(run_chat(start))
-    }
-
-    fn label_current<'a>(&'a self, state: &'a Path, owner: Owner<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(label_current(state, owner))
-    }
-
-    fn keeps_agents_in_sessions(&self) -> bool {
-        on_terminal()
-    }
-
-    fn launcher_program(&self) -> Option<&'static str> {
-        on_terminal().then(|| Tool::Zmx.program())
-    }
-
     /// The session under the recorded name, while zmx keeps it.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(async move { Ok(sessions_at(&[place]).await?.pop().flatten()) })
@@ -201,12 +180,31 @@ impl Sessions for Zmx {
         Box::pin(sessions_at(places))
     }
 
-    fn attaches_places(&self) -> bool {
-        true
-    }
-
     fn left_running<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move { Ok(list().await?.iter().any(|(name, _)| name == session)) })
+    }
+
+    fn label_current<'a>(&'a self, state: &'a Path, owner: Owner<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(label_current(state, owner))
+    }
+}
+
+impl Attaches for Zmx {
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        owner: Owner<'a>,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<String>> {
+        Box::pin(run(start, owner, agent))
+    }
+
+    fn run_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<String>> {
+        Box::pin(run_chat(start))
+    }
+
+    fn launcher_program(&self) -> &'static str {
+        Tool::Zmx.program()
     }
 }
 
