@@ -210,7 +210,7 @@ fn install_picks_an_omitted_packaged_config() {
         .args(["config", "install"])
         .output()
         .unwrap();
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("; pass it explicitly"));
     let fzf = home.path().join("bin/fzf");
     support::install_test_script(
         &fzf,

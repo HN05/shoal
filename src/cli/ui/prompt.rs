@@ -12,12 +12,28 @@ use crate::cli::{
     output::{Palette, Style},
 };
 
-pub(super) fn require_interactive(ctx: &Context) -> Result<()> {
+/// Refuse to ask for `argument` without a terminal, naming the `option` that
+/// supplies it instead.
+pub fn require_argument(ctx: &Context, argument: &str, option: &str) -> Result<()> {
     ensure!(
         ctx.interactive(),
-        "missing argument; pass an explicit target/name in non-interactive mode"
+        "missing {argument}; pass {option} in non-interactive mode"
     );
     Ok(())
+}
+
+/// [`require_argument`] for what `prompt` asks, when its caller names no option.
+pub(super) fn require_interactive(ctx: &Context, prompt: &str) -> Result<()> {
+    require_argument(ctx, &prompted_argument(prompt), "it explicitly")
+}
+
+/// What a prompt such as `Repository> ` asks for, as in `repository`.
+fn prompted_argument(prompt: &str) -> String {
+    let asked = prompt.trim_end_matches([' ', '>', ':']);
+    let mut chars = asked.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_lowercase().chain(chars).collect()
+    })
 }
 
 /// Ctrl-C must cancel a prompt even after the execution wrapper registered its
@@ -204,7 +220,7 @@ fn or_default(value: String, default: &str) -> String {
 
 /// Read a line, preserving blank input; EOF means cancellation.
 pub fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
-    require_interactive(ctx)?;
+    require_interactive(ctx, prompt)?;
     eprint!(
         "{} ",
         Palette::stderr(ctx.json).paint(Style::Heading, format_args!("{prompt}:"))

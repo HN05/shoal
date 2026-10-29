@@ -340,7 +340,7 @@ pub fn pick_chat(ctx: &Context, chats: &[Chat]) -> Result<String> {
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
-    require_interactive(ctx)?;
+    require_interactive(ctx, "Workspaces")?;
     let entries = workspace_entries(ctx, workspaces, false).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick_many(ctx, "Workspaces> ", entries)

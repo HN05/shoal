@@ -45,3 +45,15 @@ fn blank_input_takes_the_default() {
     assert_eq!(or_default("  ".into(), "repo-chat"), "repo-chat");
     assert_eq!(or_default(" talk ".into(), "repo-chat"), "talk");
 }
+
+#[test]
+fn refusals_name_the_argument_a_prompt_asks_for() {
+    for (prompt, argument) in [
+        ("Repository> ", "repository"),
+        ("Removed workspace> ", "removed workspace"),
+        ("Repository path or URL", "repository path or URL"),
+        ("", ""),
+    ] {
+        assert_eq!(prompted_argument(prompt), argument, "{prompt:?}");
+    }
+}

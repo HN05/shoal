@@ -2186,7 +2186,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("missing argument"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("; pass it explicitly"));
 }
 
 #[test]
@@ -2351,8 +2351,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     let missing = fixture.run(&["status"]);
     assert!(!missing.status.success());
     assert!(
-        String::from_utf8_lossy(&missing.stderr)
-            .contains("missing argument; pass an explicit target/name")
+        String::from_utf8_lossy(&missing.stderr).contains("missing workspace; pass it explicitly")
     );
 
     for target in [
@@ -6430,14 +6429,15 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
 fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::new();
     fixture.add("available");
-    for args in [
-        &["add"][..],
-        &["run", "--", "true"],
-        &["rm"],
-        &["status"],
-        &["stop"],
-        &["diff"],
-        &["done"],
+    let workspace = "missing workspace; pass it explicitly";
+    for (args, refusal) in [
+        (&["add"][..], "missing repository; pass it explicitly"),
+        (&["run", "--", "true"], workspace),
+        (&["rm"], "missing workspaces; pass it explicitly"),
+        (&["status"], workspace),
+        (&["stop"], "missing workspaces; pass it explicitly"),
+        (&["diff"], workspace),
+        (&["done"], workspace),
     ] {
         for json in [false, true] {
             let mut command = fixture.command();
@@ -6446,7 +6446,10 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
             }
             let output = command.args(args).output().unwrap();
             assert!(!output.status.success(), "{args:?}: {output:?}");
-            assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains(refusal),
+                "{args:?}: {output:?}"
+            );
         }
     }
 }
@@ -10243,7 +10246,7 @@ fn repository_commands_pick_an_omitted_repository() {
         .to_owned();
     let missing = fixture.run(&["repo", "rm", "--yes"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("; pass it explicitly"));
 
     let (output, rows) = fixture.pick(&["repo", "config"], &id, "");
     assert!(output.status.success(), "{output:?}");
@@ -14319,7 +14322,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             vec!["add", "--issue", "https://github.com/team/other/issues/4"],
             "shoal repo add",
         ),
-        (vec!["add", "--issue", "4"], "missing argument"),
+        (vec!["add", "--issue", "4"], "missing repository"),
         (
             vec!["add", "https://github.com/team/project/issues/4"],
             "no agent selected",
