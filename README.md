@@ -172,7 +172,7 @@ shoal messages send "Stop the dev server" --workspace fix-login  # Message the w
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice
-shoal stop fix-login          # Stop agents and commands; they stay down until shoal resume
+shoal stop fix-login          # Stop agents and commands here and below; they stay down until shoal resume
 shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace; a reboot saves agents too
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update

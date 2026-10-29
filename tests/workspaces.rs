@@ -5280,6 +5280,56 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
     assert!(records[..2].iter().all(|record| record.exists()));
 }
 
+/// Stopping a workspace stops the workspaces split from it, whose agents work
+/// for it, unless `--skip-children`.
+#[test]
+fn stopping_a_workspace_stops_the_workspaces_below_it() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    fixture.add("parent");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let paths = ["parent", "child"].map(|name| {
+        let workspace = fixture.ok(&["status", name])["workspace"].clone();
+        let state = fixture
+            .root
+            .path()
+            .join("state/workspaces")
+            .join(workspace["id"].as_str().unwrap());
+        fs::create_dir_all(&state).unwrap();
+        fs::write(
+            state.join(format!("{name}-agent.last-session.json")),
+            r#"{"agent":"waiter"}"#,
+        )
+        .unwrap();
+        PathBuf::from(workspace["path"].as_str().unwrap())
+    });
+    fixture.ok(&["resume", "parent", "child"]);
+    wait_until("the restores", || {
+        paths.iter().all(|path| path.join("restored").exists())
+    });
+    let running = |name| {
+        fixture.ok(&["status", name])["executions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|execution| execution["state"] == "running")
+    };
+
+    let stopped = fixture.ok(&["stop", "parent", "--skip-children"]);
+    assert_eq!(stopped["stopped"], true, "{stopped}");
+    assert!(!running("parent") && running("child"));
+    let stopped = fixture.ok(&["stop", "parent"]);
+    assert_eq!(
+        stopped["stopped"],
+        serde_json::json!(["parent", "child"]),
+        "{stopped}"
+    );
+    assert!(!running("child"));
+}
+
 #[test]
 fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
     let fixture = Fixture::new();

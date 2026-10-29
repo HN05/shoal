@@ -18,14 +18,20 @@ use crate::{
     state::WorkspaceState,
 };
 
-pub(super) async fn run(ctx: &Context, targets: WorkspaceTargets, yes: bool) -> Result<i32> {
+pub(super) async fn run(
+    ctx: &Context,
+    targets: WorkspaceTargets,
+    yes: bool,
+    skip_children: bool,
+) -> Result<i32> {
     if targets.all {
         return stop_all(ctx).await;
     }
-    match ui::select_workspaces(ctx, targets.workspace)
-        .await?
-        .as_slice()
-    {
+    let mut selected = ui::select_workspaces(ctx, targets.workspace).await?;
+    if !skip_children {
+        selected = with_children(ctx, selected).await?;
+    }
+    match selected.as_slice() {
         [workspace] => stop_one(ctx, workspace.clone(), yes).await,
         workspaces => {
             let workspaces = inspect_each(ctx, workspaces).await?;
@@ -88,6 +94,34 @@ async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
     );
     ensure!(ui::confirm(ctx, &action, "--yes")?, "stop canceled");
     request_stop(true).await
+}
+
+/// The IDs of the workspaces `selectors` name, each followed by the
+/// workspaces below it, which a stop of it stops too: their agents work for
+/// it.
+async fn with_children(ctx: &Context, selectors: Vec<String>) -> Result<Vec<String>> {
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let mut ids = Vec::new();
+    for selector in selectors {
+        let id = client::inspect(&ctx.paths, selector).await?.workspace.id;
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    let mut next = 0;
+    while let Some(parent) = ids.get(next).cloned() {
+        for workspace in &workspaces {
+            let child = workspace
+                .parent_workspace
+                .as_ref()
+                .is_some_and(|reference| reference.id == parent);
+            if child && !ids.contains(&workspace.id) {
+                ids.push(workspace.id.clone());
+            }
+        }
+        next += 1;
+    }
+    Ok(ids)
 }
 
 /// The workspaces `selectors` name, refusing them all before any stops when

@@ -8,7 +8,11 @@ use crate::cli::{
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleCommand) -> Result<i32> {
     match command {
-        LifecycleCommand::Stop { targets, yes } => stop::run(&ctx, targets, yes).await,
+        LifecycleCommand::Stop {
+            targets,
+            yes,
+            skip_children,
+        } => stop::run(&ctx, targets, yes, skip_children).await,
         LifecycleCommand::Rm {
             workspace,
             confirmation,

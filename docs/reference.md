@@ -287,7 +287,8 @@ waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace...]` stops tracked agents and commands through their wrappers,
-which print what stopped them and how to restore them, retaining work and resource leases. Its agents, and those
+which print what stopped them and how to restore them, retaining work and resource leases. It stops
+the workspaces split from each selected one too, unless `--skip-children`. Its agents, and those
 stopped there before, stay down until `shoal resume` continues them: each
 becomes a last session, as an agent that exits on its own leaves, which holds
 no agent slot, keeps nothing from cleanup and nothing restores on its own. To

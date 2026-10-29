@@ -15,6 +15,9 @@ pub enum LifecycleCommand {
         /// Treat executions Shoal cannot prove ended as stopped without asking.
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Keep running the workspaces below the selected ones.
+        #[arg(long, conflicts_with = "all")]
+        skip_children: bool,
     },
     /// Remove workspaces and release their resources.
     ///
