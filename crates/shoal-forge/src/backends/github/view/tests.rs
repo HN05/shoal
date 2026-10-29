@@ -5,14 +5,16 @@ use serde_json::json;
 fn github_issue_and_pr_details_read_content_and_comments() {
     let issue = json!({"number": 4, "title": "Crash", "body": "Steps", "state": "OPEN",
             "author": {"login": "ann"}, "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z",
-            "comments": [{"author": {"login": "bob"}, "createdAt": "2026-01-02T00:00:00Z", "body": "Same here"}]});
+            "comments": [{"author": {"login": "bob"}, "createdAt": "2026-01-02T00:00:00Z", "body": "Same here",
+                "url": "https://github.com/o/r/issues/4#issuecomment-41"}]});
     let details = parse_details(&issue.to_string(), ItemKind::Issue, 4).unwrap();
     assert_eq!(details.title, "Crash");
     assert_eq!(details.state, "open");
     assert_eq!(details.author, "ann");
     assert_eq!(details.labels, ["bug"]);
     assert!(details.pr.is_none());
-    assert_eq!(details.comments.unwrap()[0].body, "Same here");
+    let comment = &details.comments.unwrap()[0];
+    assert_eq!((comment.id, comment.body.as_str()), (41, "Same here"));
     assert!(parse_details(&issue.to_string(), ItemKind::Issue, 5).is_err());
 
     let pull = json!({"number": 7, "title": "Fix", "body": "", "state": "MERGED",

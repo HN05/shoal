@@ -198,8 +198,11 @@ fn inline_threads_become_reviews_with_their_resolution() {
     ]);
     let (comments, reviews) = threads(listed.as_array().unwrap());
     assert_eq!(
-        comments.iter().map(|c| c.body.as_str()).collect::<Vec<_>>(),
-        ["Looks fine", "Agreed"]
+        comments
+            .iter()
+            .map(|c| (c.id, c.body.as_str()))
+            .collect::<Vec<_>>(),
+        [(1, "Looks fine"), (4, "Agreed")]
     );
     assert_eq!(reviews.len(), 1);
     assert_eq!(reviews[0].author, "bob");

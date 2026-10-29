@@ -895,6 +895,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
         let start = comments.iter().find(|candidate| candidate["id"] == thread);
         if !start.is_some_and(|start| start["inline"].is_object()) {
             general.push(Comment {
+                id,
                 author: nickname(&comment["user"]),
                 created_at: text(&comment["created_on"]).unwrap_or_default(),
                 body: text(&comment["content"]["raw"]).unwrap_or_default(),

@@ -65,12 +65,10 @@ fn forgejo_reviews_carry_inline_comments_and_resolution() {
         thread(&reviews[1].comments[0]),
         (23, 23, Some(9), Some(false))
     );
-    assert_eq!(
-        parse_comments(&json!([{"user": {"login": "a"}, "body": "b", "created_at": "c"}])).unwrap()
-            [0]
-        .author,
-        "a"
-    );
+    let comments =
+        parse_comments(&json!([{"id": 5, "user": {"login": "a"}, "body": "b", "created_at": "c"}]))
+            .unwrap();
+    assert_eq!((comments[0].id, comments[0].author.as_str()), (5, "a"));
 }
 
 #[test]

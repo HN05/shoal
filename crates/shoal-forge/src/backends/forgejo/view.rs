@@ -89,6 +89,7 @@ fn parse_comments(comments: &Value) -> Result<Vec<Comment>> {
         .context("Forgejo comments are not a list")?
         .iter()
         .map(|comment| Comment {
+            id: comment["id"].as_u64().unwrap_or_default(),
             author: login(&comment["user"]),
             created_at: text_field(&comment["created_at"]),
             body: text_field(&comment["body"]),

@@ -140,7 +140,7 @@ fn approvals_and_reviewer_states_become_verdicts() {
 fn diff_threads_become_reviews_and_other_notes_comments() {
     let listed = json!([
         {"notes": [{"system": true, "body": "added 1 commit"}]},
-        {"notes": [{"author": {"username": "ann"}, "body": "Looks fine", "created_at": "t1"}]},
+        {"notes": [{"id": 20, "author": {"username": "ann"}, "body": "Looks fine", "created_at": "t1"}]},
         {"notes": [
             {"id": 30, "type": "DiffNote", "author": {"username": "bob"}, "body": "Bug", "created_at": "t2",
                 "resolved": false, "position": {"new_path": "a.rs", "new_line": 3}},
@@ -151,8 +151,12 @@ fn diff_threads_become_reviews_and_other_notes_comments() {
     let (comments, reviews) = discussions(listed.as_array().unwrap());
     assert_eq!(comments.len(), 1);
     assert_eq!(
-        (comments[0].author.as_str(), comments[0].body.as_str()),
-        ("ann", "Looks fine")
+        (
+            comments[0].id,
+            comments[0].author.as_str(),
+            comments[0].body.as_str()
+        ),
+        (20, "ann", "Looks fine")
     );
     assert_eq!(reviews.len(), 1);
     assert_eq!(

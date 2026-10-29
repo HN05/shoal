@@ -99,6 +99,7 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
                 .context("gh comments are not a list")?
                 .iter()
                 .map(|comment| Comment {
+                    id: comment_id(&comment["url"]),
                     author: login(&comment["author"]),
                     created_at: text_field(&comment["createdAt"]),
                     body: text_field(&comment["body"]),
@@ -119,6 +120,14 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
         comments,
         reviews: None,
     })
+}
+
+/// The REST ID of the comment at `url`, which `gh` reports only there.
+fn comment_id(url: &Value) -> u64 {
+    url.as_str()
+        .and_then(|url| url.rsplit_once("#issuecomment-"))
+        .and_then(|(_, id)| id.parse().ok())
+        .unwrap_or_default()
 }
 
 /// REST reviews and inline comments; each comment belongs to the review that

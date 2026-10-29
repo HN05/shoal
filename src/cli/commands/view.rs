@@ -202,7 +202,12 @@ fn render_details(details: &Details, palette: Palette) {
         outln!();
         outln!("Comments: {}", comments.len());
         for comment in comments {
-            outln!("  {} · {}", comment.author, comment.created_at);
+            outln!(
+                "  {} · {} · comment {}",
+                comment.author,
+                comment.created_at,
+                comment.id
+            );
             print_indented(&comment.body, 4);
         }
     }

@@ -1036,6 +1036,7 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
             });
         } else {
             comments.extend(notes.iter().map(|note| Comment {
+                id: note["id"].as_u64().unwrap_or_default(),
                 author: username(&note["author"]),
                 created_at: text(&note["created_at"]).unwrap_or_default(),
                 body: text(&note["body"]).unwrap_or_default(),

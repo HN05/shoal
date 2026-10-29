@@ -2926,9 +2926,9 @@ account; successful and pending checks omit log output.
 report an error, as does a check that links no CI job in the repository, such as
 an outside service's; log downloads are limited to 8 MiB.
 Kinds and explicit items select as they do for `watch`, and
-`--no-comments` leaves out comments and reviews. Each inline comment shows its ID,
-the ID of the comment that starts its thread when it is a reply, and whether
-the thread is resolved. A failed lookup reports its error on that item, and a
+`--no-comments` leaves out comments and reviews. Each comment shows its ID; an
+inline comment also shows the ID of the comment that starts its thread when it is
+a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a
 review whose inline comments could not be read keeps its body; the command exits 1 when an item could not be read. `--json` returns an array
 of items with failed logs in `check_logs`, or a check log object with `--check`.
 
