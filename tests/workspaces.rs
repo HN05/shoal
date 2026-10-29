@@ -6947,6 +6947,41 @@ fn simulator_exclusivity_wait_reuse_scope_and_removal() {
 
 #[test]
 #[cfg(target_os = "macos")]
+fn simulator_leases_journal_acquisition_and_release() {
+    let fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
+    fixture.add("first");
+    let sim = fixture.ok(&["acquire", "sim", "--workspace", "first"]);
+    fixture.ok(&["acquire", "sim", "--workspace", "first"]);
+    fixture.ok(&["release", "sim", "--workspace", "first"]);
+    fixture.ok(&["acquire", "sim", "--workspace", "first"]);
+    // Removal deletes the leased device, which releases the lease.
+    fixture.ok(&["rm", "first"]);
+    let events: Vec<_> = journal(&fixture)
+        .into_iter()
+        .filter(|event| event["simulator"].is_object())
+        .collect();
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event["kind"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        [
+            "simulator_acquired",
+            "simulator_released",
+            "simulator_acquired",
+            "simulator_released"
+        ]
+    );
+    for event in &events {
+        assert_eq!(event["name"], "first");
+        assert_eq!(event["simulator"]["name"], "default");
+        assert_eq!(event["simulator"]["udid"], sim["udid"]);
+        assert_eq!(event["simulator"]["device"], sim["device"]);
+    }
+}
+
+#[test]
+#[cfg(target_os = "macos")]
 fn simulator_failures_retain_claims_and_restart_never_reassigns_them() {
     let mut fixture = Fixture::with_tools(Some(SIM_CONFIG), true);
     fixture.add("first");

@@ -1537,7 +1537,8 @@ preserve device state on handoff, require `--clean --reason` for erasure with
 an audit record written before the destructive step, and delete devices on
 removal or idle expiry. Workspace lookups index the JSON record's current owner,
 falling back to its last owner only when unclaimed; SQLite maintains the index
-on every write and rejects malformed ownership fields. Allocation planning is pure
+on every write and rejects malformed ownership fields, and journals a lease when
+its record enters or leaves the leased state, or goes while leased. Allocation planning is pure
 over recorded devices and inventory; its executor revalidates ownership and live capacity under the simulator
 gate before ordered audit, claim and simctl operations. An omitted runtime selects
 the latest installed, available iOS version compatible with the requested device;

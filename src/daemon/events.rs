@@ -44,6 +44,10 @@ states!(EventKind {
     DemoStarted => "demo_started",
     /// A demo that had run ended with its execution.
     DemoStopped => "demo_stopped",
+    /// A simulator lease's device booted for the workspace.
+    SimulatorAcquired => "simulator_acquired",
+    /// A booted simulator lease was released or its device deleted.
+    SimulatorReleased => "simulator_released",
 });
 
 states!(
@@ -120,6 +124,9 @@ pub struct EventDetails {
     /// The demo that started or stopped.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demo: Option<DemoEvent>,
+    /// The simulator lease acquired or released.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub simulator: Option<SimulatorEvent>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -157,6 +164,15 @@ pub struct DemoEvent {
     pub preset: Option<crate::demos::Preset>,
     /// The leased simulator a simulator demo runs on.
     pub udid: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimulatorEvent {
+    /// The lease's name, such as `default`.
+    pub name: String,
+    pub udid: Option<String>,
+    pub device: String,
+    pub runtime: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

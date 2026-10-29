@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 83;
+const SCHEMA_VERSION: i64 = 84;
 
 #[cfg(test)]
 mod benchmark;
@@ -426,6 +426,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (81, PROMPT_CACHE_EXPIRY, None),
     (82, CHAT_RENAMES, None),
     (83, include_str!("store/demo_events.sql"), None),
+    (84, include_str!("store/simulator_events.sql"), None),
 ];
 
 /// Journal a running chat's new name, which a chat still starting keeps.
