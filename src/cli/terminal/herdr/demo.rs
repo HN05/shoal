@@ -35,25 +35,6 @@ pub(super) async fn start(demo: &Demo<'_>) -> Result<Origin> {
     Ok(place)
 }
 
-/// Focus the tab holding the demo's pane.
-pub(super) async fn open(pane: &str) -> Result<()> {
-    let mut get = Command::new("herdr");
-    get.args(["pane", "get", pane]);
-    let output = Run::new(get)
-        .checked()
-        .await
-        .context("find the demo's Herdr tab")?;
-    let info: Response<PaneResult> =
-        serde_json::from_slice(&output.stdout).context("invalid Herdr pane response")?;
-    let mut focus = Command::new("herdr");
-    focus.args(["tab", "focus", &info.result.pane.tab_id]);
-    Run::new(focus)
-        .checked()
-        .await
-        .context("focus the demo's Herdr tab")?;
-    Ok(())
-}
-
 pub(super) async fn screen(pane: &str) -> Result<String> {
     let mut read = Command::new("herdr");
     read.args([
@@ -95,14 +76,6 @@ fn read_text(stdout: &[u8]) -> String {
 #[derive(Deserialize)]
 struct Response<T> {
     result: T,
-}
-#[derive(Deserialize)]
-struct PaneResult {
-    pane: Pane,
-}
-#[derive(Deserialize)]
-struct Pane {
-    tab_id: String,
 }
 #[derive(Deserialize)]
 struct ReadResult {

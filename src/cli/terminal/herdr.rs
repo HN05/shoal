@@ -172,7 +172,7 @@ impl Demos for Herdr {
     }
 
     fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(demo::open(place.id()))
+        Box::pin(attach::reveal(place))
     }
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {

@@ -1098,7 +1098,8 @@ printing how to open it, and a workspace process also notifies you.
 `shoal demo [NAME] [--workspace W]` opens a demo: a picker of the running demos
 of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
-variables, otherwise shows it where it runs: Herdr focuses its tab, Rex its
+variables, otherwise shows it where it runs: Herdr focuses its tab, attaching its Herdr session
+outside Herdr, Rex its
 window (or selects it in the Mac app), zmx attaches (Ctrl-\ detaches), and the
 background follows its log. `shoal demo ls` lists the configured and
 running demos, `shoal demo screen NAME [--lines N]` prints the end of what it
