@@ -1,5 +1,5 @@
 //! Show issues and PRs as the forge reports them, without gh or fj.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
     cli::{
@@ -21,8 +21,8 @@ use crate::{
         },
         review::view::{Details, ItemView, PrDetails, Review},
     },
-    model::Selected,
-    protocol::{CiMethod, ItemMethod},
+    model::{Selected, SelectedItem},
+    protocol::{CiMethod, ItemContext, ItemMethod},
     repository,
 };
 
@@ -33,37 +33,21 @@ pub(super) async fn view(
     no_comments: bool,
     check: Option<String>,
 ) -> Result<i32> {
-    let (workspace, selection) = super::links::select(ctx, items).await?;
+    let (context, selection) = super::links::select_in_context(ctx, items).await?;
     if let Some(check) = check {
-        let log: CheckLog = ctx
-            .progress(
-                "Reading check log",
-                client::request(
-                    &ctx.paths,
-                    CiMethod::CheckLog {
-                        workspace,
-                        selection,
-                        check,
-                    },
-                ),
-            )
-            .await?;
-        ctx.show(&log, render_log)?;
-        return Ok(0);
+        let ItemContext::Workspace(workspace) = context else {
+            bail!("--check reads a log through a workspace; run this in one or pass --workspace");
+        };
+        return show_log(ctx, workspace, selection, check).await;
     }
-    let selected: Selected = client::request(
-        &ctx.paths,
-        ItemMethod::SelectItems {
-            workspace: workspace.clone(),
-            selection,
-        },
-    )
-    .await?;
+    let selected = select_items(ctx, &context, selection).await?;
     let views = ctx
         .progress("Reading items", async {
             let hosts = ctx.forge_hosts()?;
             let mut views = read(&selected, &hosts, &ctx.forge_account()?, !no_comments).await?;
-            read_failed_logs(ctx, &hosts, &workspace, &mut views).await;
+            if let ItemContext::Workspace(workspace) = &context {
+                read_failed_logs(ctx, &hosts, workspace, &mut views).await;
+            }
             Ok::<_, anyhow::Error>(views)
         })
         .await?;
@@ -87,15 +71,8 @@ pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
         !env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot open a browser; ask the user"
     );
-    let (workspace, selection) = super::links::select(ctx, items).await?;
-    let selected: Selected = client::request(
-        &ctx.paths,
-        ItemMethod::SelectItems {
-            workspace,
-            selection,
-        },
-    )
-    .await?;
+    let (context, selection) = super::links::select_in_context(ctx, items).await?;
+    let selected = select_items(ctx, &context, selection).await?;
     let urls: Vec<_> = selected.items.into_iter().map(|item| item.url).collect();
     let failed = urls.iter().find_map(|url| browser::open(url).err());
     ctx.show(&urls, |urls| {
@@ -104,6 +81,84 @@ pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
         }
     })?;
     failed.map_or(Ok(0), Err)
+}
+
+/// The log of the selected PR's `check`.
+async fn show_log(
+    ctx: &Context,
+    workspace: String,
+    selection: Selection,
+    check: String,
+) -> Result<i32> {
+    let log: CheckLog = ctx
+        .progress(
+            "Reading check log",
+            client::request(
+                &ctx.paths,
+                CiMethod::CheckLog {
+                    workspace,
+                    selection,
+                    check,
+                },
+            ),
+        )
+        .await?;
+    ctx.show(&log, render_log)?;
+    Ok(0)
+}
+
+/// The items `selection` names: in the workspace, where it may name linked
+/// ones, or in the repository of the registered checkout.
+async fn select_items(
+    ctx: &Context,
+    context: &ItemContext,
+    selection: Selection,
+) -> Result<Selected> {
+    match context {
+        ItemContext::Workspace(workspace) => {
+            let workspace = workspace.clone();
+            let method = ItemMethod::SelectItems {
+                workspace,
+                selection,
+            };
+            client::request(&ctx.paths, method).await
+        }
+        ItemContext::Checkout(repository) => checkout_selected(ctx, repository, selection).await,
+    }
+}
+
+/// The item `selection` names in the repository of its registered checkout,
+/// where nothing is linked.
+async fn checkout_selected(
+    ctx: &Context,
+    repository: &str,
+    selection: Selection,
+) -> Result<Selected> {
+    let input = selection
+        .input
+        .context("outside a workspace, nothing is linked; pass a number or URL")?;
+    let repo = client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|repo| repo.id == repository)
+        .context("the checkout's repository is no longer registered")?;
+    let forge = super::issues::origin_forge(ctx, &repo).await?;
+    let kind = match selection.kind {
+        Some(kind) => kind,
+        None => {
+            forge
+                .item_kind(&ctx.forge_account()?, input.parse()?)
+                .await?
+        }
+    };
+    let (_, url) = match kind {
+        ItemKind::Issue => forge.issue(&input)?,
+        ItemKind::Pr => forge.pull(&input)?,
+    };
+    Ok(Selected {
+        path: repo.path,
+        items: vec![SelectedItem { url, kind }],
+    })
 }
 
 /// Each item as the forge reports it now, in selection order.

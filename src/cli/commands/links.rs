@@ -18,7 +18,7 @@ use crate::{
     },
     git,
     model::{Relation, Repository, ReviewMark, Selected, SelectedItem, Workspace},
-    protocol::{AssignmentMethod, ItemMethod},
+    protocol::{AssignmentMethod, ItemContext, ItemMethod},
 };
 
 /// The workspace and the items selected in it, with the kind of a bare number
@@ -29,6 +29,23 @@ pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Se
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
     let selection = resolve_kind(ctx, &workspace, selection).await?;
     Ok((workspace, selection))
+}
+
+/// The items selected in the named or current workspace, with the kind of a
+/// bare number resolved, or in the registered checkout the current directory
+/// is in, where only a number or URL selects one.
+pub(super) async fn select_in_context(
+    ctx: &Context,
+    items: ItemArgs,
+) -> Result<(ItemContext, Selection)> {
+    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    match super::items::select_context(ctx, items.workspace).await? {
+        ItemContext::Workspace(workspace) => {
+            let selection = resolve_kind(ctx, &workspace, selection).await?;
+            Ok((ItemContext::Workspace(workspace), selection))
+        }
+        checkout => Ok((checkout, selection)),
+    }
 }
 
 /// Give a number selected without a kind the kind of the linked item with

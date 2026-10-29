@@ -13,7 +13,7 @@ const NO_CONTEXT: &str =
 
 /// The named or current workspace, else the registered checkout the current
 /// directory is in, else a workspace the user picks.
-pub(super) async fn select_context(
+pub(in crate::cli::commands) async fn select_context(
     ctx: &Context,
     workspace: Option<String>,
 ) -> Result<ItemContext> {

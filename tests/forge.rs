@@ -3965,12 +3965,17 @@ fn item_commands_act_from_a_registered_checkout() {
     let listed = in_checkout(&["--json", "issue", "list", "flaky"]);
     let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
     assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
+    let viewed = in_checkout(&["--json", "view", "issue", "40", "--no-comments"]);
+    let viewed: Value = serde_json::from_slice(&viewed.stdout).unwrap();
+    assert_eq!(viewed[0]["url"], format!("{}/issues/40", fixture.web));
     // A checkout links nothing, so the item must be named.
-    let closed = in_checkout(&["issue", "close"]);
-    assert!(
-        String::from_utf8_lossy(&closed.stderr).contains("nothing is linked"),
-        "{closed:?}"
-    );
+    for args in [&["issue", "close"][..], &["view"]] {
+        let refused = in_checkout(args);
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("nothing is linked"),
+            "{args:?}: {refused:?}"
+        );
+    }
 }
 
 #[test]
