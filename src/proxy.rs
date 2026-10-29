@@ -7,8 +7,7 @@ mod launch;
 
 pub use config::{Proxies, Proxy, routes, validate, validate_references};
 pub use launch::{
-    KEY_HEADER, KEY_VARIABLE, Running, forget_reports, remember_executable, send_relayed,
-    send_report, start,
+    KEY_HEADER, KEY_VARIABLE, Running, forget_reports, send_relayed, send_report, start,
 };
 
 #[cfg(test)]

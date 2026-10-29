@@ -253,10 +253,10 @@ async fn prepare_tracked_launch(
     mode: &Mode,
     agent: Option<String>,
 ) -> Result<TrackedLaunch> {
-    // An agent may get a proxy later, on a restore after an upgrade, so the
-    // binary is read now, before the upgrade can replace it.
+    // An agent's proxy reports through the installed binary after an
+    // upgrade, so the binary is read now, before the upgrade can replace it.
     if agent.is_some() {
-        crate::proxy::remember_executable();
+        crate::cli::installed::remember_started();
     }
     // A detached command or a demo never runs in the caller's terminal.
     let place = match mode {

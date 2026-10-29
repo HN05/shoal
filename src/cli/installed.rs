@@ -7,6 +7,7 @@ use crate::fsutil::FileIdentity;
 
 /// The binary this command runs, so an upgrade that changes the daemon
 /// protocol can hand the command to the installed release.
+#[derive(Clone)]
 pub(crate) struct Executable {
     path: Option<PathBuf>,
     identity: Option<FileIdentity>,
@@ -76,6 +77,19 @@ impl Executable {
         }
         self.take_over(arguments).unwrap_or(error)
     }
+}
+
+/// The binary this process started from, as [`remember_started`] read it.
+pub(crate) fn started() -> &'static Executable {
+    static STARTED: std::sync::OnceLock<Executable> = std::sync::OnceLock::new();
+    STARTED.get_or_init(Executable::current)
+}
+
+/// Read the binary this process started from while it is still the one at
+/// its path, so an upgrade later shows as its replacement. Once the binary
+/// is replaced, the path no longer names the running one.
+pub(crate) fn remember_started() {
+    started();
 }
 
 /// This command's arguments.

@@ -128,19 +128,10 @@ pub(super) async fn send_from(
     relay(paths, &origin.executable, &json).await
 }
 
-/// The wrapper's own [`Origin`], whose binary [`remember_executable`] reads
-/// as it starts, before an upgrade can replace it.
+/// The wrapper's own [`Origin`], the binary it started from.
 fn origin() -> &'static Origin {
     static ORIGIN: std::sync::OnceLock<Origin> = std::sync::OnceLock::new();
-    ORIGIN.get_or_init(|| Origin::at(crate::cli::installed::Executable::current()))
-}
-
-/// Read the binary an agent's wrapper started from, while it is still the
-/// one at its path, so an upgrade later shows as its replacement and the
-/// proxy's reports can go through the installed release. Once the binary
-/// is replaced, the path no longer names the running one.
-pub fn remember_executable() {
-    origin();
+    ORIGIN.get_or_init(|| Origin::at(crate::cli::installed::started().clone()))
 }
 
 /// Hand `report`, a proxy report's JSON, to the binary installed over
