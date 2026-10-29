@@ -32,13 +32,17 @@ pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<
     let path = std::path::absolute(path).unwrap();
     let parent = path.parent().unwrap();
     fs::create_dir_all(parent).unwrap();
-    // Copy in a child so parallel spawns cannot inherit the destination's
-    // writable file descriptor and cause ETXTBSY when executing the fixture.
+    // Copy to a fresh file so an earlier fixture can still be executing.
+    // Close its writable descriptor before copying in a child, so parallel
+    // spawns cannot inherit it and cause ETXTBSY when executing the fixture.
+    let destination = tempfile::NamedTempFile::new_in(parent)
+        .unwrap()
+        .into_temp_path();
     let mut source = tempfile::NamedTempFile::new_in(parent).unwrap();
     source.write_all(script.as_ref()).unwrap();
     let output = isolated(parent, "cp")
         .arg(source.path())
-        .arg(&path)
+        .arg(&destination)
         .output()
         .unwrap();
     assert!(
@@ -47,7 +51,8 @@ pub fn install_test_script_with_mode(path: impl AsRef<Path>, script: impl AsRef<
         path.display(),
         String::from_utf8_lossy(&output.stderr)
     );
-    fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    fs::set_permissions(&destination, fs::Permissions::from_mode(mode)).unwrap();
+    fs::rename(&destination, path).unwrap();
 }
 
 /// Keep commands and their descendants in a temporary home, state and cwd.

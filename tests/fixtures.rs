@@ -1,6 +1,6 @@
 mod support;
 
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{fs, io::Read, os::unix::fs::PermissionsExt, process::Command};
 
 #[test]
 fn installed_scripts_preserve_literal_paths_contents_and_modes() {
@@ -21,7 +21,16 @@ fn installed_scripts_preserve_literal_paths_contents_and_modes() {
     assert_eq!(output.stdout, b"quote ' ; $(touch injected)");
     assert!(!root.path().join("injected").exists());
 
+    // An executing fixture keeps the previous file even after replacement.
+    let mut previous = fs::File::open(&script).unwrap();
     support::install_test_script_with_mode(&script, "#!/bin/sh\nexit 7\n", 0o700);
+    let mut previous_contents = String::new();
+    previous.read_to_string(&mut previous_contents).unwrap();
+    assert_eq!(previous_contents, contents);
+    assert_eq!(
+        previous.metadata().unwrap().permissions().mode() & 0o777,
+        0o755
+    );
     assert_eq!(
         fs::metadata(&script).unwrap().permissions().mode() & 0o777,
         0o700
