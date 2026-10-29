@@ -37,7 +37,7 @@ use crate::{
     },
     daemon::notifications::Notification,
     env,
-    forge::items::link::ItemKind,
+    forge::items::link::{self, ItemKind},
     model::LinkedItem,
     protocol::{ConfigTarget, NotificationMethod},
 };
@@ -763,7 +763,8 @@ async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>>
         .collect())
 }
 
-/// The URL of one of `items`, listed by kind and title.
+/// The URL of one of `items`, listed by kind, number and title, which
+/// Shoal does not record for every item.
 fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<String> {
     let cells = items
         .iter()
@@ -772,14 +773,18 @@ fn pick_linked(ctx: &Context, items: &[LinkedItem]) -> Result<String> {
                 ItemKind::Issue => "Issue",
                 ItemKind::Pr => "PR",
             };
+            let number = link::item(item.kind, &item.url)
+                .map(|(_, number)| format!("#{number}"))
+                .unwrap_or_default();
             [
                 (kind.to_owned(), Some(Style::Heading)),
+                (number, None),
                 (item.title.clone().unwrap_or_default(), None),
                 (item.url.clone(), Some(Style::Muted)),
             ]
         })
         .collect();
-    let limit = ui::picker_width().map(|width| WidthLimit { column: 1, width });
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 2, width });
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
     let choices: Vec<_> = items
         .iter()

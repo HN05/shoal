@@ -15854,7 +15854,7 @@ esac
     let rows = fs::read_to_string(root.join("view-rows")).unwrap();
     assert_eq!(rows.lines().count(), 2, "{rows}");
     assert!(
-        rows.contains("Issue") && rows.contains("Crash") && rows.contains("PR"),
+        rows.contains("Issue") && rows.contains("#3  Crash") && rows.contains("#7"),
         "{rows}"
     );
     assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
