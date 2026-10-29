@@ -287,7 +287,9 @@ a reboot without a command; run `shoal stop --all` first to keep agents down. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits
-for `shoal resume` instead. Other commands just end.
+for `shoal resume` instead. Other commands just end. After a reboot, Shoal
+forgets the executions of the earlier boot; an agent among them that saved
+nothing becomes a last session.
 For an execution whose wrapper is gone, `shoal stop <workspace>` stops the
 processes it verifies as the execution's and forgets the record once nothing of
 it is visible. Processes it cannot verify or read fail the stop with their PIDs,

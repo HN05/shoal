@@ -232,6 +232,7 @@ impl Manager {
         recover: bool,
         running: Duration,
     ) {
+        self.record_execution_agent(id, name).await;
         let connections = self.executions.connections().await;
         let Some(stop) = connections.stop_channel(id) else {
             return;
@@ -253,6 +254,25 @@ impl Manager {
         connections
             .with_agents(|agents| agents.insert(id.into(), agent))
             .await;
+    }
+
+    /// Keep the name of the agent execution `id` runs with its record, which
+    /// outlives this daemon, unlike the tracked agent.
+    async fn record_execution_agent(&self, id: &str, name: &str) {
+        let (execution, name) = (id.to_owned(), name.to_owned());
+        let recorded = self
+            .store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE executions SET agent=?2 WHERE id=?1",
+                    rusqlite::params![execution, name],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(error) = recorded {
+            log!("agent of execution {id} not recorded: {error:#}");
+        }
     }
 
     /// Prove that a protection-stopped agent ended, then forget its stopped

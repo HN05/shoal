@@ -888,6 +888,14 @@ async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
         .unwrap()
         .executions
         .remove(0);
+    // The daemon keeps the agent's name, which its session needs without a record.
+    let id = execution.id.clone();
+    let agent_name = manager
+        .store
+        .run(move |db| store::execution_agent(db, &id))
+        .await
+        .unwrap();
+    assert_eq!(agent_name.as_deref(), Some("fixture"));
     let wrapper = execution.wrapper.clone().unwrap();
     crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
     // The agent traps the stop the wrapper sends it, which follows the save.

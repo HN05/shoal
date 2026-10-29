@@ -156,7 +156,9 @@ are the only outcome that notifies; `shoal stop` names them, and
 `shoal resume` still reconciles the execution it selects. An unknown execution
 whose wrapper, and child when recorded, ran in an earlier boot needs no
 evidence: restarting the machine ended its processes, while its recorded process
-group may name another's, so the daemon forgets it and keeps what it saved.
+group may name another's, so the daemon forgets it, keeping its record, or
+else the session its agent reported as a last session. The daemon records each
+execution's agent name for that.
 Agent metadata is transient, so restart cannot select disconnected survivors.
 `shoal restart` restarts agents in place through the same wrapper path, so the
 agent stays in its terminal: the daemon sends the stop protection sends, with

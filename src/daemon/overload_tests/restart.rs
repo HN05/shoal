@@ -153,9 +153,11 @@ async fn restart_forgets_a_stopped_agent_whose_wrapper_exited_and_keeps_its_reco
 }
 
 /// Restarting the machine ended every process of an earlier boot, though
-/// their recorded process group IDs may name processes of this one.
+/// their recorded process group IDs may name processes of this one. An
+/// agent that saved no record leaves its session for `shoal resume`.
 #[tokio::test]
-async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_their_records() {
+async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_saved() {
+    use crate::execution::recovery::{LastSession, save_session};
     let (_root, manager, workspace, serving) = fixture().await;
     let (_alive, live) = sleeper();
     let earlier = live.recorded_in("an-earlier-boot");
@@ -174,6 +176,24 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_their_reco
     for id in ["unrecorded", "this-boot"] {
         fs::remove_file(record_path(&manager.paths, &workspace.id, id)).unwrap();
     }
+    manager
+        .store
+        .run(|db| {
+            db.execute(
+                "UPDATE executions SET agent='fixture' WHERE id='unrecorded'",
+                [],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    save_session(
+        &manager.paths,
+        &workspace.id,
+        "unrecorded",
+        "rebooted-session",
+    )
+    .unwrap();
     let reopened = restart(&manager).await;
     reopened.reconcile_interrupted_agents().await.unwrap();
     let kept: Vec<_> = executions(&reopened, &workspace)
@@ -188,6 +208,17 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_their_reco
             .stop_reason
             .as_deref(),
         Some("test memory pressure")
+    );
+    let last = LastSession::all(&reopened.paths, &workspace.id).unwrap();
+    assert_eq!(
+        last,
+        [LastSession {
+            execution: "unrecorded".into(),
+            agent: "fixture".into(),
+            session: Some("rebooted-session".into()),
+            moved: false,
+            origin: None,
+        }]
     );
     assert!(blocked(&reopened).await.is_empty());
     reopened.store.shutdown().await;

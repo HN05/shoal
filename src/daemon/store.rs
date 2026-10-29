@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 77;
+const SCHEMA_VERSION: i64 = 78;
 
 #[cfg(test)]
 mod benchmark;
@@ -419,7 +419,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (75, AUTOMATIC_RESTORES, None),
     (76, include_str!("store/places.sql"), None),
     (77, include_str!("store/owned_places.sql"), None),
+    (78, EXECUTION_AGENTS, None),
 ];
+
+/// The agent each execution runs, which keeps its reported session once the
+/// execution ends without a stop of its own, as at a reboot.
+const EXECUTION_AGENTS: &str = "ALTER TABLE executions ADD COLUMN agent TEXT;";
 
 /// Restores Shoal queued on its own, as after a signal stop, rather than
 /// `shoal resume`: one of an agent stopped between turns waits for an update.
@@ -997,6 +1002,16 @@ pub fn executions(db: &Connection, workspace_id: &str) -> Result<Vec<Execution>>
         .prepare(&executions_query())?
         .query_map([workspace_id], execution)?
         .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// The agent execution `id` runs, when it runs one.
+pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT agent FROM executions WHERE id=?1", [id], |row| {
+            row.get(0)
+        })
+        .optional()?
+        .flatten())
 }
 
 pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {

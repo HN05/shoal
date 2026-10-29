@@ -265,6 +265,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 77 {
         db.execute_batch(include_str!("owned_places.sql"))?;
     }
+    if version >= 78 {
+        db.execute_batch(EXECUTION_AGENTS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
