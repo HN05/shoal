@@ -40,7 +40,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
-use host::{Demo, DemoWorker, Host, Places, Prompts, Sessions, Start};
+use host::{Demo, DemoWorker, Host, Places, Sessions, Start};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 pub(in crate::cli) use typed::run as run_launch;
 
@@ -1466,23 +1466,23 @@ pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
 }
 
 /// The session this process runs in, where an agent's wrapper can type a
-/// prompt for it.
+/// prompt for it: the place the daemon records for its execution, in a host
+/// that types into its places.
 #[derive(Clone)]
 pub(crate) struct PromptSession {
-    host: &'static dyn Prompts,
-    name: OsString,
+    place: Origin,
 }
 
 impl PromptSession {
     pub(crate) fn current() -> Option<Self> {
-        hosts()
-            .filter_map(Host::prompts)
-            .find_map(|host| host.prompt_session().map(|name| Self { host, name }))
+        let place = current_origin().filter(|place| place.place.is_some())?;
+        kept_by(&place).types()?;
+        Some(Self { place })
     }
 
     /// Submit `text` as a prompt in the session.
     pub(crate) async fn submit(&self, text: &str) -> Result<()> {
-        self.host.submit_prompt(&self.name, text).await
+        submit_prompt(&self.place, text).await
     }
 }
 

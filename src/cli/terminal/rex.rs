@@ -3,14 +3,14 @@
 //! the shell, since Rex sets no environment for a new terminal. Rex keeps
 //! sessions running without a connected app, so agents run in place in
 //! their block and outlive the Mac app or the phone.
-use std::{ffi::OsStr, ffi::OsString, path::Path};
+use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
 use super::{
     Demo, Host, PlaceState, Session, Start, Watched,
-    host::{Demos, Places, Prompts, Sessions, Types, Watches},
+    host::{Demos, Places, Sessions, Types, Watches},
     typed::Typed,
 };
 use crate::{
@@ -48,10 +48,6 @@ impl Host for Rex {
     }
 
     fn sessions(&self) -> Option<&dyn Sessions> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
         Some(self)
     }
 
@@ -157,25 +153,6 @@ impl Sessions for Rex {
 
     fn attaches_places(&self) -> bool {
         true
-    }
-}
-
-impl Prompts for Rex {
-    fn prompt_session(&self) -> Option<OsString> {
-        in_rex()
-            .then(|| var("REX_BLOCK").map(OsString::from))
-            .flatten()
-    }
-
-    /// Paste `text` as one prompt and submit it with Enter.
-    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            let block = session.to_str().context("the Rex block ID is not UTF-8")?;
-            Server::here()?
-                .send(block, &format!("\x1b[200~{text}\x1b[201~\r"))
-                .await
-                .context("type into the Rex block")
-        })
     }
 }
 

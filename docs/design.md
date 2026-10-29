@@ -1246,7 +1246,7 @@ tries a failed wait again instead of exiting, because a hook that ends leaves th
 idle agent with no wait until its next turn; waits outlast a daemon restart,
 including the time before the next daemon listens and knows the agent's scope. Codex
 has no hook that can start a turn, so its tracked wrapper types a fixed prompt
-into the zmx session it runs in once Codex is idle with updates, at most once
+into the zmx session, Rex block or Herdr pane it runs in once Codex is idle with updates, at most once
 per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook
 does not run after an interrupted turn, so its wrapper prompts it the same way
 while it idles after one. Besides that prompt, Shoal writes to an agent's

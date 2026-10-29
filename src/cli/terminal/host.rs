@@ -1,8 +1,5 @@
 //! What a terminal host does, and the work generic code hands it.
-use std::{
-    ffi::{OsStr, OsString},
-    path::Path,
-};
+use std::{ffi::OsString, path::Path};
 
 use anyhow::Result;
 use futures_util::future::BoxFuture;
@@ -47,11 +44,6 @@ pub(in crate::cli) trait Host: Sync {
 
     /// The agent sessions this host keeps, unless it keeps none.
     fn sessions(&self) -> Option<&dyn Sessions> {
-        None
-    }
-
-    /// How this host types prompts, unless it types none.
-    fn prompts(&self) -> Option<&dyn Prompts> {
         None
     }
 
@@ -260,17 +252,6 @@ pub(in crate::cli) trait Sessions: Sync {
     fn attaches_places(&self) -> bool {
         false
     }
-}
-
-/// A host that types prompts into the session an agent runs in, for the
-/// agent's wrapper.
-pub(in crate::cli) trait Prompts: Sync {
-    /// The session this process runs in, where a prompt can be typed.
-    fn prompt_session(&self) -> Option<OsString>;
-
-    /// Submit `text` as a prompt in `session`, from
-    /// [`Prompts::prompt_session`].
-    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
 /// A host that types into the places it records, such as a demo's or the

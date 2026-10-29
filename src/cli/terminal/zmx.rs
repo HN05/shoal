@@ -6,7 +6,7 @@
 //! cleanup closes it.
 use std::{
     collections::{BTreeMap, HashSet},
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     io::IsTerminal,
     path::Path,
     process::ExitStatus,
@@ -18,7 +18,7 @@ use tokio::process::Command;
 
 use super::{
     Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Closes, Demos, Places, Prompts, Sessions, Types, Watches},
+    host::{Closes, Demos, Places, Sessions, Types, Watches},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -66,10 +66,6 @@ impl Host for Zmx {
     }
 
     fn sessions(&self) -> Option<&dyn Sessions> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
         Some(self)
     }
 
@@ -211,16 +207,6 @@ impl Sessions for Zmx {
 
     fn left_running<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move { Ok(list().await?.iter().any(|(name, _)| name == session)) })
-    }
-}
-
-impl Prompts for Zmx {
-    fn prompt_session(&self) -> Option<OsString> {
-        std::env::var_os(SESSION_VAR)
-    }
-
-    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(submit_prompt(session, text))
     }
 }
 
@@ -497,22 +483,6 @@ async fn send_keys(session: &str, keys: &str) -> Result<()> {
         .checked()
         .await
         .context("type into the demo's session")?;
-    Ok(())
-}
-
-/// Submit `text` as a prompt in `session`, as if pasted and sent: bracketed
-/// paste keeps it one prompt, and Enter in the same write submits it rather
-/// than ending the paste.
-async fn submit_prompt(session: &OsStr, text: &str) -> Result<()> {
-    let mut send = Command::new(Tool::Zmx.program());
-    send.arg("send")
-        .arg(session)
-        .arg(format!("\x1b[200~{text}\x1b[201~\r"))
-        .stdin(std::process::Stdio::null());
-    Run::new(send)
-        .checked()
-        .await
-        .context("type into the zmx session")?;
     Ok(())
 }
 

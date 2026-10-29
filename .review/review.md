@@ -125,7 +125,7 @@ instead of the PR delivery guidance below.
   hook wakes the idle agent; a chat's hooks deliver its own queue of its workers'
   events, which the user receives as notifications if the chat ends first; a workspace's own Shoal comments, thread replies,
   closing and reopening are not reported back to it. The only terminal input Shoal writes is
-  the tracked wrapper's fixed prompt into an idle Codex's zmx session, or an
+  the tracked wrapper's fixed prompt into an idle Codex's terminal session, or an
   idle Claude Code's after an interrupted turn, once per idle stretch, the
   agent's interrupt key the CLI types for `shoal stop --interrupt`, and the
   fixed prompt with which `shoal resume` continues that turn; the daemon never

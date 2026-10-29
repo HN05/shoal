@@ -1580,7 +1580,7 @@ followed by the worker template, which holds only your additions and cannot
 replace or suppress the guidance. Both may use `{workspace}`, `{branch}` and
 `{path}` from the target worktree, and `{updates}` saying how the launch
 receives issue and PR activity: delivered by its hooks for Claude Code and for
-Codex in a zmx session, otherwise by running `shoal watch pr`. Claude receives `--append-system-prompt`,
+Codex in a zmx session, Rex block or Herdr pane, otherwise by running `shoal watch pr`. Claude receives `--append-system-prompt`,
 Codex CLI receives a `developer_instructions` config override, and Happy Codex
 receives the instructions before its first prompt through Happy's delivery path
 (or as the first message when no prompt was supplied). Desktop handoffs do not
@@ -3348,13 +3348,13 @@ agent is never left idle without one. Its command
 passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the
 agent would otherwise leave the hook behind. Codex cannot
-be woken by a hook: when a Codex launched in a zmx session reports its turn
+be woken by a hook: when a Codex in a zmx session, Rex block or Herdr pane reports its turn
 finished and has undelivered messages or activity, Shoal types `Shoal: new
 messages or activity on this workspace's issues and PRs.` into the session and
 submits it, once until Codex starts another turn, and its prompt hook delivers
 them. Claude Code's wake hook does not follow a turn
-`shoal stop --interrupt` ended, so Shoal wakes a Claude Code launched in a zmx
-session the same way while it idles after one. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
+`shoal stop --interrupt` ended, so Shoal wakes a Claude Code in one the same
+way while it idles after one. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
 hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can
