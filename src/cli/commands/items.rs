@@ -422,24 +422,7 @@ fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>) -> Action 
 /// no reason. Without exactly one selected PR the action itself fails, so
 /// there is nothing to ask.
 async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64) -> Result<()> {
-    let workspace = ui::select_workspace(
-        ctx,
-        selector.workspace.clone(),
-        ui::Fallback::CurrentDirectory,
-    )
-    .await?;
-    let selection = Selection {
-        kind: Some(ItemKind::Pr),
-        input: selector.item.clone(),
-    };
-    let selected: Selected = client::request(
-        &ctx.paths,
-        ItemMethod::SelectItems {
-            workspace,
-            selection,
-        },
-    )
-    .await?;
+    let selected = select_prs(ctx, selector).await?;
     let [item] = selected.items.as_slice() else {
         return Ok(());
     };
@@ -463,6 +446,28 @@ async fn confirm_unanswered(ctx: &Context, selector: &ItemSelector, comment: u64
         );
     }
     Ok(())
+}
+
+/// The PR `selector` names, or the workspace's linked ones.
+async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
+    let workspace = ui::select_workspace(
+        ctx,
+        selector.workspace.clone(),
+        ui::Fallback::CurrentDirectory,
+    )
+    .await?;
+    let selection = Selection {
+        kind: Some(ItemKind::Pr),
+        input: selector.item.clone(),
+    };
+    client::request(
+        &ctx.paths,
+        ItemMethod::SelectItems {
+            workspace,
+            selection,
+        },
+    )
+    .await
 }
 
 /// The body and the files to attach, checked before anything is sent, with
