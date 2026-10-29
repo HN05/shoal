@@ -104,7 +104,10 @@ pub(in crate::cli::commands) async fn run(
                     cleanup,
                     integrated,
                     keep_demos,
-                    results: messages::attachment_paths(&attach)?,
+                    results: {
+                        crate::daemon::workspace_files::check_results(&attach)?;
+                        messages::attachment_paths(&attach)?
+                    },
                 };
                 workspaces::done(&ctx, workspace, options).await
             }

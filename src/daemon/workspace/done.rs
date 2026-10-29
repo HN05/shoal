@@ -70,6 +70,7 @@ impl Manager {
         integrated: bool,
         results: Vec<PathBuf>,
     ) -> Result<Completion> {
+        crate::daemon::workspace_files::check_results(&results)?;
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;

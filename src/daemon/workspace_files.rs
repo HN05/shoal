@@ -35,6 +35,19 @@ states!(FileSource {
     Result => "result",
 });
 
+/// The most files one completion hands back, which keeps the completion that
+/// lists their copies to one protocol frame.
+pub const MAX_RESULTS: usize = 64;
+
+/// Refuse more results than one completion hands back.
+pub fn check_results(results: &[PathBuf]) -> Result<()> {
+    ensure!(
+        results.len() <= MAX_RESULTS,
+        "hand back at most {MAX_RESULTS} files with one completion"
+    );
+    Ok(())
+}
+
 /// A file attached to a workspace: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {

@@ -421,6 +421,21 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
 }
 
 #[tokio::test]
+async fn a_completion_hands_back_a_bounded_number_of_files() {
+    let (temp, manager) = manager().await;
+    let audit = workspace(&temp, &manager).await;
+    let results = (0..=super::MAX_RESULTS)
+        .map(|n| temp.path().join(format!("{n}.md")))
+        .collect();
+    let error = manager
+        .mark_done(&audit.id, false, false, results)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("at most"), "{error:#}");
+    assert!(manager.completion(&audit.id).await.unwrap().is_none());
+}
+
+#[tokio::test]
 async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;

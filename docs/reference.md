@@ -2454,8 +2454,8 @@ work under new commits, as after a cherry-pick or a rebase that edited them: unt
 HEAD moves, commits no remote or default branch has no longer keep the workspace
 from completion cleanup, and the [watch](#linked-items-and-cleanup) stops reporting its
 branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
-`status` shows it as integrated elsewhere. `--attach FILE`, repeated for more,
-hands back files such as a report: Shoal copies each, of at most 100 MiB, into
+`status` shows it as integrated elsewhere. `--attach FILE`, repeated for up to
+64 files, hands back files such as a report: Shoal copies each, of at most 100 MiB, into
 the workspace's [attached files](#attached-files) as a result, the completion
 lists the copies in `results`, `status` names them, and the completion notice
 ends with `results in shoal files <workspace>:` and their names. A missing file
