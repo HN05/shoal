@@ -715,6 +715,12 @@ impl Protection {
     pub(crate) fn is_queue_move(&self) -> bool {
         self.reason == MOVE_REASON
     }
+
+    /// Whether `[overload.recovery]` decides its restore, as for a stop that
+    /// load or disk space caused; `shoal queue move` restores whatever it says.
+    pub(crate) fn follows_overload_recovery(&self) -> bool {
+        !self.is_queue_move()
+    }
 }
 
 /// The stop reason a restarted agent's wrapper shows and saves.

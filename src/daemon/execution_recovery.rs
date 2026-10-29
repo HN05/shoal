@@ -73,9 +73,8 @@ pub(super) async fn pause(
     let Some(protection) = manager.agent_overload(execution_id).await else {
         return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
     };
-    // The user sent the agent to the queue, so the overload policy does not
-    // apply to its restore.
     let moved = protection.is_queue_move();
+    let follows_policy = protection.follows_overload_recovery();
     // Stop survivors before anything can cancel the restore, so every outcome
     // leaves only processes Shoal cannot stop. The wrapper finishes on each,
     // and the daemon's completion scan decides whether they leave it unknown.
@@ -99,7 +98,7 @@ pub(super) async fn pause(
     let ready = tokio::select! {
         biased;
         action = interrupted(manager, execution_id, incoming, stop) => return action,
-        () = recovery_disabled(manager), if !moved => {
+        () = recovery_disabled(manager), if follows_policy => {
             return Ok(Action::Stop(Cancel::because("automatic recovery was disabled")));
         }
         ready = async {
@@ -112,7 +111,7 @@ pub(super) async fn pause(
     let resume = async {
         let grant = ready?;
         ensure!(
-            moved || manager.config().overload.recovery.enabled,
+            !follows_policy || manager.config().overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
         prepare_resume(manager, execution_id, workspace_id, grant).await
