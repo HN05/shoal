@@ -29,6 +29,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
+        diff::Diff,
         status::{PrStatus, Verdict},
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
@@ -42,6 +43,7 @@ use crate::{
 };
 
 pub(crate) mod glab;
+mod review;
 
 use super::{Backend, LoginHint, rest};
 
@@ -464,6 +466,15 @@ impl Backend for GitLab {
             .await
             .hint_login(self)?;
         open_blocking(&links)
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        review::diff(repo, account, current).await
     }
 
     async fn issue_activity(

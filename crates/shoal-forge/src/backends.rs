@@ -35,6 +35,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
+        diff::Diff,
         status::PrStatus,
         thread::Thread,
         view::{Details, Review},
@@ -324,6 +325,11 @@ pub(crate) trait Backend {
         thread: &Thread,
         resolved: bool,
     ) -> Result<Request>;
+
+    /// The diff of the PR `current`, at its head commit where the forge
+    /// reads a diff there.
+    async fn pr_diff(&self, repo: &ForgeRepo, account: &Account, current: &Current)
+    -> Result<Diff>;
 
     /// An issue's state and discussion.
     async fn issue_activity(
@@ -854,6 +860,15 @@ impl Backend for ForgeKind {
         resolved: bool,
     ) -> Result<Request> {
         dispatch!(self, backend => backend.resolution(repo, number, thread, resolved))
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        dispatch!(self, backend => backend.pr_diff(repo, account, current).await)
     }
 
     async fn issue_activity(

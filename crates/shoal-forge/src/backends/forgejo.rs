@@ -6,6 +6,7 @@ use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Value, json};
 
 mod actions;
+mod review;
 mod sniff;
 pub(crate) mod tea;
 pub(crate) mod threads;
@@ -40,6 +41,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
+        diff::Diff,
         status::{PrStatus, Verdict, forgejo_reviews},
         thread::{Target, Thread},
         view::{Details, Review, login},
@@ -372,6 +374,15 @@ impl Backend for Forgejo {
     ) -> Result<Vec<String>> {
         github_rest::open_dependencies(repo, account, &format!("issues/{number}/dependencies"))
             .await
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        review::diff(repo, account, current).await
     }
 
     async fn issue_activity(

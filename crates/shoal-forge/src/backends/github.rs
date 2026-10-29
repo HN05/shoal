@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 mod actions;
 mod activity;
+mod review;
 pub(crate) mod threads;
 mod view;
 
@@ -37,6 +38,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
+        diff::Diff,
         status::PrStatus,
         thread::{Target, Thread},
         view::{Details, Review},
@@ -476,6 +478,15 @@ impl Backend for GitHub {
                 "variables": { "id": node },
             })),
         ))
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        review::diff(repo, account, current).await
     }
 
     async fn issue_activity(

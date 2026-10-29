@@ -30,6 +30,7 @@ use crate::{
     },
     repo::locator::ItemRoute,
     review::{
+        diff::Diff,
         status::{PrStatus, Verdict},
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
@@ -40,6 +41,8 @@ use crate::{
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
+
+mod review;
 
 use super::{Backend, LoginHint, rest};
 
@@ -190,7 +193,7 @@ impl Backend for Bitbucket {
             head_repository: text(&value["source"]["repository"]["full_name"]),
             body: text(body).unwrap_or_default(),
             head_sha: text(&value["source"]["commit"]["hash"]),
-            base_sha: None,
+            base_sha: text(&value["destination"]["commit"]["hash"]),
             // Bitbucket does not report whether a pull request conflicts.
             conflict: None,
             reviewers: value["reviewers"]
@@ -421,6 +424,15 @@ impl Backend for Bitbucket {
             format!("{pr}/comments/{}/resolve", thread.first),
             None,
         ))
+    }
+
+    async fn pr_diff(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+    ) -> Result<Diff> {
+        review::diff(repo, account, current).await
     }
 
     async fn issue_activity(
