@@ -317,6 +317,25 @@ pub async fn repositories(paths: &Paths) -> Result<Vec<Repository>> {
     request(paths, RepositoryMethod::ListRepositories).await
 }
 
+/// Close `place` of `host`, a place Shoal created for `workspace`, while
+/// the daemon still records it as that workspace's.
+pub async fn close_owned_place(
+    paths: &Paths,
+    workspace: &str,
+    host: crate::sessions::HostName,
+    place: &str,
+) -> Result<crate::sessions::PlaceClose> {
+    request(
+        paths,
+        WorkspaceMethod::CloseOwnedPlace {
+            workspace: workspace.to_owned(),
+            host,
+            place: place.to_owned(),
+        },
+    )
+    .await
+}
+
 /// Record `origin`, a place Shoal created for `workspace`, so the daemon
 /// closes it once the workspace is removed.
 pub async fn record_owned_place(

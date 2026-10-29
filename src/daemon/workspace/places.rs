@@ -1,26 +1,36 @@
 //! Where executions run in terminal hosts, as their wrappers report it, and
 //! the places Shoal created for workspaces, which it closes with them.
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::sessions::Origin;
+use crate::sessions::{HostName, Origin};
 
 impl Manager {
-    /// Record that `execution` runs at `origin`.
+    /// Record that `execution` runs at `origin`. A place Shoal created for
+    /// another workspace now belongs to the execution's, as a relabelled zmx
+    /// session does, so the earlier workspace's removal leaves it open.
     pub(crate) async fn record_execution_origin(
         &self,
         execution: &str,
         origin: Origin,
     ) -> Result<()> {
         let execution = execution.to_owned();
-        let origin = serde_json::to_string(&origin)?;
+        let _ownership = self.place_ownership.lock().await;
         self.store
             .run(move |db| {
-                db.execute(
+                let tx = db.transaction()?;
+                tx.execute(
                     "UPDATE executions SET origin=?2 WHERE id=?1",
-                    params![execution, origin],
+                    params![execution, serde_json::to_string(&origin)?],
                 )?;
+                tx.execute(
+                    "UPDATE owned_places SET workspace_id=
+                        (SELECT workspace_id FROM executions WHERE id=?1)
+                     WHERE host=?2 AND place=?3",
+                    params![execution, origin.host, origin.id()],
+                )?;
+                tx.commit()?;
                 Ok(())
             })
             .await
@@ -65,6 +75,27 @@ impl Manager {
     ) -> Result<Vec<(String, Origin)>> {
         self.store
             .run(move |db| owned(db, workspace.as_deref()))
+            .await
+    }
+
+    /// The workspace the record of `place` of `host` names its owner.
+    pub(super) async fn place_owner(
+        &self,
+        host: HostName,
+        place: &str,
+    ) -> Result<Option<(String, Origin)>> {
+        let place = place.to_owned();
+        self.store
+            .run(move |db| {
+                db.query_row(
+                    "SELECT workspace_id,origin FROM owned_places WHERE host=?1 AND place=?2",
+                    params![host, place],
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                )
+                .optional()?
+                .map(|(workspace, origin)| Ok((workspace, serde_json::from_str(&origin)?)))
+                .transpose()
+            })
             .await
     }
 

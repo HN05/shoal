@@ -14,6 +14,7 @@ use crate::{
     env,
     model::Inspection,
     paths::Paths,
+    sessions::PlaceClose,
     state::AgentState,
 };
 
@@ -124,7 +125,8 @@ pub async fn watch(
         }
     };
     let earlier = EarlierCompletion(kept_at);
-    close_when_due(host, &place, earlier, lifecycle, || {
+    let close = async || close_place(ctx, host, &place).await;
+    close_when_due(host, &place, earlier, lifecycle, close, || {
         ctx.paths.state.exists()
     })
     .await?;
@@ -132,7 +134,17 @@ pub async fn watch(
     Ok(0)
 }
 
-/// Close `place` once `lifecycle` and the host say so,
+/// Close `place` through the daemon while it records the place as its
+/// workspace's, otherwise through its host. A place another workspace's
+/// agent took over since stays open.
+async fn close_place(ctx: &Context, host: &dyn Host, place: &Watched) -> Result<()> {
+    match client::close_owned_place(&ctx.paths, &place.workspace, host.name(), &place.id).await? {
+        PlaceClose::NotRecorded => host.close_place(&place.id).await,
+        PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
+    }
+}
+
+/// Close `place` with `close` once `lifecycle` and the host say so,
 /// looking again while `watching` holds. A missing daemon or a failed query
 /// does not prove completion or removal, so `lifecycle` gives `None` then,
 /// or the failure that ends the watch. A closed place leaves nothing to
@@ -143,6 +155,7 @@ async fn close_when_due<F>(
     place: &Watched,
     mut earlier: EarlierCompletion,
     mut lifecycle: impl FnMut() -> F,
+    close: impl AsyncFn() -> Result<()>,
     watching: impl Fn() -> bool,
 ) -> Result<()>
 where
@@ -160,7 +173,7 @@ where
         if let (Some(lifecycle), Some(reported)) = (lifecycle, reported)
             && lifecycle.closes(reported)
         {
-            if let Err(error) = host.close_place(&place.id).await {
+            if let Err(error) = close().await {
                 eprintln!("warning: {error:#}");
             }
             break;

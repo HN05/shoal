@@ -101,6 +101,9 @@ enum WorkspaceSource {
 pub struct Manager {
     pub store: Store,
     pub(crate) session_hosts: Vec<Arc<dyn crate::sessions::Host>>,
+    /// Held while the owner of a recorded place is read and its place
+    /// closed, or its ownership moves to another workspace.
+    pub(crate) place_ownership: tokio::sync::Mutex<()>,
     pub(crate) gates: gates::Gates,
     pub(crate) item_waits: crate::daemon::links::wait::ActiveWaits,
     pub(crate) chat_waits: crate::daemon::links::wait::ActiveWaits,
@@ -134,6 +137,7 @@ impl Manager {
             cleanup_health: Default::default(),
             store: Store::open(paths.database()).await?,
             session_hosts: crate::sessions::hosts(),
+            place_ownership: Default::default(),
             gates: Default::default(),
             paths,
             queues: Default::default(),

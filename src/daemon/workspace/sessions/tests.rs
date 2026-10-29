@@ -510,3 +510,47 @@ async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() ->
     assert!(manager.owned_places(None).await?.is_empty());
     Ok(())
 }
+
+#[tokio::test]
+async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Result<()> {
+    use crate::{daemon::workspace::ExecutionKind, sessions::PlaceClose};
+
+    let (_root, manager, workspace, host) = rex_fixture(&["shared"]).await?;
+    let taker = manager
+        .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
+        .await?;
+    host.add("shared", &workspace.id)?;
+    let started = manager
+        .begin_execution(&taker.id, None, ExecutionKind::Command, None)
+        .await?;
+    manager
+        .record_execution_origin(
+            &started.plan.id,
+            Origin::created(HostName::Rex, "shared".into()),
+        )
+        .await?;
+    // The first workspace's removal and its watcher leave the block open.
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert_eq!(
+        manager
+            .close_recorded_place(&workspace.id, HostName::Rex, "shared")
+            .await?,
+        PlaceClose::OwnedElsewhere
+    );
+    assert!(host.closed()?.is_empty());
+    // It closes with the workspace whose agent took it over.
+    assert_eq!(
+        manager
+            .close_recorded_place(&taker.id, HostName::Rex, "shared")
+            .await?,
+        PlaceClose::Closed
+    );
+    assert_eq!(host.closed()?, ["shared"]);
+    assert_eq!(
+        manager
+            .close_recorded_place(&taker.id, HostName::Rex, "shared")
+            .await?,
+        PlaceClose::NotRecorded
+    );
+    Ok(())
+}

@@ -11,7 +11,7 @@ use super::Manager;
 use crate::{
     daemon::notifications::NotificationKind,
     model::Workspace,
-    sessions::{Origin, Owner},
+    sessions::{HostName, Origin, Owner, PlaceClose},
 };
 
 impl Manager {
@@ -76,24 +76,39 @@ impl Manager {
         };
         for (owner, place) in places {
             let removed = !sweep || matches!(self.find_workspace(&owner).await, Ok(None));
-            if removed && let Err(error) = self.close_owned_place(owner, place).await {
+            if removed
+                && let Err(error) = self
+                    .close_recorded_place(&owner, place.host, place.id())
+                    .await
+            {
                 self.session_cleanup_failed(None, &error).await;
             }
         }
     }
 
-    /// Close `place` and forget it; a host that cannot close places leaves
-    /// that to the place itself.
-    async fn close_owned_place(&self, workspace: String, place: Origin) -> Result<()> {
-        if let Some(host) = self
-            .session_hosts
-            .iter()
-            .find(|host| host.name() == place.host)
-        {
-            host.close(&self.paths.state, &place, &Owner::Workspace(workspace))
+    /// Close `place` of `host`, recorded as one Shoal created, and forget
+    /// it while its record still names `workspace` its owner: an agent of
+    /// another workspace may have taken it over since. A host that cannot
+    /// close places leaves that to the place itself.
+    pub(crate) async fn close_recorded_place(
+        &self,
+        workspace: &str,
+        host: HostName,
+        place: &str,
+    ) -> Result<PlaceClose> {
+        let _ownership = self.place_ownership.lock().await;
+        let Some((owner, origin)) = self.place_owner(host, place).await? else {
+            return Ok(PlaceClose::NotRecorded);
+        };
+        if owner != workspace {
+            return Ok(PlaceClose::OwnedElsewhere);
+        }
+        if let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) {
+            host.close(&self.paths.state, &origin, &Owner::Workspace(owner))
                 .await?;
         }
-        self.forget_owned_place(place).await
+        self.forget_owned_place(origin).await?;
+        Ok(PlaceClose::Closed)
     }
 
     /// The close was queued atomically with deleting the verified execution.

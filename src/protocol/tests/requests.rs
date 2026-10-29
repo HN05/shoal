@@ -54,6 +54,7 @@ const REQUESTS: &[&str] = &[
     r#"{"workspace_hook":{"workspace":"fix","kind":"post_setup"}}"#,
     r#"{"layered_config":{"target":{"workspace":"fix"}}}"#,
     r#"{"keep_agent_environment":{"workspace":"fix","environment":{}}}"#,
+    r#"{"close_owned_place":{"workspace":"fix","host":"rex","place":"block:1"}}"#,
     r#"{"record_owned_place":{"workspace":"fix","origin":{"host":"rex","place":"block:1","owned":true}}}"#,
     r#"{"hold_acquire":{"workspace":"fix","name":"review","reason":null}}"#,
     r#"{"hold_release":{"workspace":"fix","name":"review"}}"#,

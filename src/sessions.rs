@@ -27,6 +27,18 @@ pub(crate) enum Owner {
     Demo(String),
 }
 
+/// What happened to a recorded place a watcher asked the daemon to close.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceClose {
+    /// It was the workspace's, and is closed.
+    Closed,
+    /// Another workspace's agent took it over, so it stays open.
+    OwnedElsewhere,
+    /// The daemon keeps no record of it; its host closes it.
+    NotRecorded,
+}
+
 /// A host exposes its session operations; lifecycle policy belongs to the daemon.
 /// Verified closes must exclude ownership replacement in the native namespace.
 pub(crate) trait Host: Send + Sync {

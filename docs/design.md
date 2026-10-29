@@ -704,7 +704,10 @@ of shell history, and the shell stays as in a Herdr tab. Rex blocks carry no
 labels, so the daemon's records of the places Shoal created are the proof of
 ownership, closed through the same removal hook, orphan sweep and pending-close
 retries as zmx sessions; Rex never reuses IDs, so a recorded block that still
-exists is Shoal's, and each state directory knows only its own. A close ends
+exists is Shoal's, and each state directory knows only its own. An agent of
+another workspace that starts in a recorded block takes it over, as
+relabelling does for a zmx session, and place watchers close recorded places
+through the daemon, which reads the owner and closes under one lock. A close ends
 only that block, leaving the user's other blocks in its window. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.
 

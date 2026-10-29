@@ -830,7 +830,9 @@ Rex and selects it in the Mac app from another terminal; a block that is gone
 leaves nothing to attach. Shoal closes only the blocks it created, and never
 their window's other blocks: completion and removal close them as they close a
 Herdr tab, and daemon startup and `shoal cleanup` close those whose workspace is
-gone. A block you opened stays open, even after an agent ran there. Rex reports
+gone. A block you opened stays open, even after an agent ran there, and one
+Shoal opened belongs to another workspace once that workspace's agent starts
+in it. Rex reports
 no agent turn state, so an agent without turn hooks closes its block once its
 execution ends. Rex sends no push notifications to the phone, and a demo's
 screen of a full-screen program shows only its current screen.

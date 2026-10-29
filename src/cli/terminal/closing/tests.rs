@@ -177,7 +177,8 @@ async fn watch_from(
         instance: None,
     };
     let earlier = EarlierCompletion(kept_at.map(str::to_owned));
-    close_when_due(host, &place, earlier, next, watching)
+    let close = async || host.close_place(&place.id).await;
+    close_when_due(host, &place, earlier, next, close, watching)
         .await
         .unwrap();
     looked.load(std::sync::atomic::Ordering::SeqCst)
