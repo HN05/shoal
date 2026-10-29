@@ -21608,13 +21608,19 @@ elif args[:2] == ['tab', 'get']:
     if (root / 'herdr-unreachable').exists():
         print(json.dumps({'error': {'code': 'server_not_running'}}))
         sys.exit(1)
-    print(json.dumps({'result': {'tab_id': args[2]}}))
+    print(json.dumps({'result': {'tab': {'tab_id': args[2], 'label': 'tab ' + args[2]}}}))
+elif args[:2] == ['pane', 'get']:
+    closed = root / 'closed-panes'
+    if closed.exists() and args[2] in closed.read_text().split():
+        print(json.dumps({'error': {'code': 'pane_not_found'}}))
+        sys.exit(1)
+    print(json.dumps({'result': {'pane': {'pane_id': args[2], 'tab_id': args[2].replace(':p', ':t')}}}))
 elif args[:2] == ['pane', 'process-info']:
     idle = root / 'idle-panes'
     at_prompt = idle.exists() and args[3] in idle.read_text().split()
     processes = {'shell_pid': 1, 'foreground_process_group_id': 1 if at_prompt else 2}
     print(json.dumps({'result': {'process_info': processes}}))
-print('{}') if args[:2] not in (['tab', 'create'], ['pane', 'process-info']) else None
+print('{}') if args[:2] not in (['tab', 'create'], ['tab', 'get'], ['pane', 'get'], ['pane', 'process-info']) else None
 "#,
     );
 }
@@ -24374,11 +24380,85 @@ fn attach_returns_to_chats_by_name() {
         assert!(!output.status.success());
         assert!(
             transcript.contains(
-                "quiet has no session to attach; it runs in the Herdr tab or terminal that started it"
+                "quiet has no session to attach; it runs in the terminal that started it"
             ),
             "{transcript}"
         );
     }
+}
+
+#[test]
+fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    let home = fixture.root.path();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let socket = "/herdr/work/herdr.sock";
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "talk", "agent": "claude",
+        "pid": std::process::id(),
+        "origin": {"host": "herdr", "group": "w1", "place": "w1:p4",
+                   "data": {"HERDR_SESSION": "work", "HERDR_SOCKET_PATH": socket}}
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let calls_since = |count: usize| herdr_calls(&fixture)[count..].to_vec();
+
+    // Outside Herdr, the tab is focused and a client attaches its session.
+    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(
+        calls_since(0),
+        [
+            vec!["pane", "get", "w1:p4"],
+            vec!["pane", "get", "w1:p4"],
+            vec!["tab", "focus", "w1:t4"],
+            vec!["session", "attach", "work"],
+        ]
+    );
+
+    // In a pane of the same server, focusing the tab shows it.
+    let before = herdr_calls(&fixture).len();
+    let mut same = fixture.command();
+    same.args(["attach", "talk"])
+        .env("HERDR_ENV", "1")
+        .env("HERDR_SOCKET_PATH", socket)
+        .env("HERDR_PANE_ID", "w1:p1");
+    let (output, transcript) = fixture.interactive_command(&mut same, "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(
+        calls_since(before).last().unwrap(),
+        &["tab", "focus", "w1:t4"]
+    );
+
+    // A pane of another Herdr server cannot show it.
+    let before = herdr_calls(&fixture).len();
+    let mut other = fixture.command();
+    other
+        .args(["attach", "talk"])
+        .env("HERDR_ENV", "1")
+        .env("HERDR_SOCKET_PATH", "/herdr/other/herdr.sock")
+        .env("HERDR_PANE_ID", "w1:p1");
+    let (output, transcript) = fixture.interactive_command(&mut other, "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("the Herdr tab runs in Herdr session work"),
+        "{transcript}"
+    );
+    assert!(
+        !calls_since(before)
+            .iter()
+            .any(|call| call[0] == "tab" && call[1] == "focus"),
+        "{transcript}"
+    );
+
+    // A closed pane leaves nothing to attach.
+    fs::write(home.join("closed-panes"), "w1:p4\n").unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
+    assert!(!output.status.success());
+    assert!(
+        transcript.contains("talk has no session to attach"),
+        "{transcript}"
+    );
 }
 
 #[test]

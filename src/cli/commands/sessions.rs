@@ -137,7 +137,7 @@ impl Target {
                     format!("{} runs in {place}; it has no session to attach", chat.name)
                 }
                 None => format!(
-                    "{} has no session to attach; it runs in the Herdr tab or terminal that started it",
+                    "{} has no session to attach; it runs in the terminal that started it",
                     chat.name
                 ),
             },

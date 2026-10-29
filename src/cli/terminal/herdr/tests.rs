@@ -50,13 +50,14 @@ fn a_finished_or_unseen_turn_reads_as_idle() {
 
 #[test]
 fn only_herdr_reporting_the_tab_missing_proves_it_gone() {
-    assert!(tab_not_found(
+    let gone = |stdout: &[u8]| failed_with(stdout, "tab_not_found");
+    assert!(gone(
         br#"{"error":{"code":"tab_not_found","message":"tab w2:t9 not found"},"id":"cli:tab:get"}"#
     ));
-    assert!(!tab_not_found(
-            br#"{"id":"cli:tab:get","error":{"code":"server_not_running","message":"no herdr server is running"}}"#
-        ));
-    assert!(!tab_not_found(b"connection reset"));
+    assert!(!gone(
+        br#"{"id":"cli:tab:get","error":{"code":"server_not_running","message":"no herdr server is running"}}"#
+    ));
+    assert!(!gone(b"connection reset"));
 }
 
 #[test]

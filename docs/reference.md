@@ -733,9 +733,12 @@ unless the top-level `close_when_done = false` keeps it open.
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
 workspace has several; `shoal status` lists them. Without a target it takes the
 current workspace, else the only running chat of the current checkout, else a
-picker of the workspaces and chats with sessions. A chat running in a Herdr
-tab, the Happy app or a terminal outside zmx has no session, and attaching
-says where it runs instead. Sessions are named after the workspace or chat,
+picker of the workspaces and chats with sessions. An agent or chat running in
+a Herdr pane counts as a session named after its tab: attaching focuses the
+tab and, from a terminal outside Herdr, attaches a Herdr client to the tab's
+Herdr session, and inside another Herdr session it is refused. A chat running
+in the Happy app or a terminal outside zmx has no session, and attaching says
+where it runs instead. Sessions are named after the workspace or chat,
 suffixed `-2`, `-3`, ... when the name is in use, and labelled
 `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`, so
 `zmx ls` and `zmx attach` work as well. Sessions Shoal creates are also labelled

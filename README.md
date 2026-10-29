@@ -237,7 +237,7 @@ review and exporting feedback to an agent.
 
 CLI agents and chats run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
 running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns
-to one by its workspace's or chat's name. Happy sessions run detached, log
+to one, or to an agent's Herdr tab, by its workspace's or chat's name. Happy sessions run detached, log
 to a file Shoal names, and stop with `shoal stop`. The Codex shortcut disables
 Codex's sandbox and approval prompts; use `shoal run --workspace fix-login -- codex` for a
 custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.

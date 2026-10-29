@@ -8,10 +8,11 @@ use tokio::process::Command;
 use futures_util::future::BoxFuture;
 
 use super::{
-    ChatStart, Demo, Host, Options, PlaceState, Start, Watched,
-    host::{Closes, Demos, Places, Watches},
+    ChatStart, Demo, Host, Options, Owner, PlaceState, Session, Start, Watched,
+    host::{Closes, Demos, Places, Sessions, Watches},
 };
 
+mod attach;
 mod demo;
 use crate::{
     config,
@@ -43,6 +44,10 @@ impl Host for Herdr {
     }
 
     fn closes(&self) -> Option<&dyn Closes> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
         Some(self)
     }
 
@@ -125,6 +130,39 @@ impl Watches for Herdr {
 impl Closes for Herdr {
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(close_tab(place))
+    }
+}
+
+/// Herdr keeps no sessions of its own: an agent or chat in one of its panes
+/// is reached through its tab.
+impl Sessions for Herdr {
+    /// Agents in a Herdr pane run in place.
+    fn run_agent<'a>(
+        &'a self,
+        _start: &'a Start<'a>,
+        _owner: Owner<'a>,
+        _agent: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    /// The pane, under its tab's label, while it is open.
+    fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
+        Box::pin(attach::session_at(place))
+    }
+
+    fn attaches_places(&self) -> bool {
+        true
+    }
+
+    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let place = session
+                .place
+                .as_ref()
+                .context("the session has no Herdr pane")?;
+            attach::reveal(place).await
+        })
     }
 }
 
@@ -368,7 +406,7 @@ async fn tab_state(tab: &str) -> Result<PlaceState> {
             .map_or(AgentStatus::Unknown, |info| info.result.tab.agent_status);
         return Ok(PlaceState::Open(status.turn()));
     }
-    if tab_not_found(&output.stdout) {
+    if failed_with(&output.stdout, "tab_not_found") {
         return Ok(PlaceState::Gone);
     }
     bail!(
@@ -396,10 +434,11 @@ struct TabInfoResult {
 struct TabState {
     #[serde(default)]
     agent_status: AgentStatus,
+    label: Option<String>,
 }
 
-/// Herdr's answer to a failed query; a missing server is not a missing tab,
-/// since a replacement server can keep its tabs.
+/// Herdr's answer to a failed query; a missing server is not a missing tab
+/// or pane, since a replacement server can keep them.
 #[derive(Deserialize)]
 struct QueryFailure {
     error: QueryError,
@@ -409,9 +448,9 @@ struct QueryError {
     code: String,
 }
 
-fn tab_not_found(stdout: &[u8]) -> bool {
-    serde_json::from_slice::<QueryFailure>(stdout)
-        .is_ok_and(|failure| failure.error.code == "tab_not_found")
+/// Whether Herdr answered a failed query with error `code`.
+fn failed_with(stdout: &[u8], code: &str) -> bool {
+    serde_json::from_slice::<QueryFailure>(stdout).is_ok_and(|failure| failure.error.code == code)
 }
 
 /// Herdr's view of the agent in a tab; `Done` is a finished turn not yet seen.
