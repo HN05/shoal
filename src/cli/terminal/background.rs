@@ -65,6 +65,11 @@ pub(super) fn demo_screen(place: &str) -> Result<String> {
     tail(Path::new(place), SCREEN_BYTES).with_context(|| format!("read {place}"))
 }
 
+/// Refuse keys for a background demo, whose process reads no terminal.
+pub(super) fn send_demo_keys() -> Result<()> {
+    anyhow::bail!("a demo running in the background takes no keys; start it from zmx or Herdr")
+}
+
 /// How much of a log's end stands in for a screen.
 const SCREEN_BYTES: u64 = 256 * 1024;
 

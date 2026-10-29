@@ -32,6 +32,11 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
+    /// The demos this host keeps, unless it keeps none.
+    fn demos(&self) -> Option<&dyn Demos> {
+        None
+    }
+
     /// The group labelled `label` on the server of `near`, or this
     /// machine's, created at `cwd` when there is none; `None` for a host
     /// without groups.
@@ -223,31 +228,23 @@ pub(in crate::cli) trait Host: Sync {
     fn attach<'a>(&'a self, _session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
+}
 
-    /// Start `demo` in a new background place of this host. Returns the
-    /// place, or `None` when this host keeps no demos.
-    fn start_demo<'a>(&'a self, _demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async { Ok(None) })
-    }
+/// A host that keeps demos in places of its own, which the user opens, reads
+/// and types into.
+pub(in crate::cli) trait Demos: Sync {
+    /// Start `demo` in a new background place of this host, returning the
+    /// place.
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>>;
 
     /// Show the demo at `place` in this terminal until the user leaves it.
-    fn open_demo<'a>(&'a self, _place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} cannot show demos", self.name()) })
-    }
+    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>>;
 
     /// What the demo at `place` shows, oldest line first.
-    fn demo_screen<'a>(&'a self, _place: &'a Origin) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async { anyhow::bail!("{} cannot read a demo's screen", self.name()) })
-    }
+    fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>>;
 
     /// Type `keys` into the demo at `place`.
-    fn send_demo_keys<'a>(
-        &'a self,
-        _place: &'a Origin,
-        _keys: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} cannot type into a demo", self.name()) })
-    }
+    fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
 /// The demo worker's argv for the place it runs in.

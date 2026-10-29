@@ -20,7 +20,6 @@ use std::{
 };
 
 use anyhow::{Context as _, Result, ensure};
-use futures_util::future::BoxFuture;
 use serde::Serialize;
 
 use super::{
@@ -197,26 +196,6 @@ impl Host for Plain {
 
     fn background_note(&self, name: &str) -> String {
         format!("Started {name} in the background")
-    }
-
-    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(background::open_demo(place.id()))
-    }
-
-    fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
-        Box::pin(async move { background::demo_screen(place.id()) })
-    }
-
-    fn send_demo_keys<'a>(
-        &'a self,
-        _place: &'a Origin,
-        _keys: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async {
-            anyhow::bail!(
-                "a demo running in the background takes no keys; start it from zmx or Herdr"
-            )
-        })
     }
 }
 
@@ -878,6 +857,9 @@ pub(in crate::cli) async fn start_demo(
         &repo,
         &workspace.path,
         async |host, group| {
+            let Some(demos) = host.host.demos() else {
+                return Ok(None);
+            };
             if host.host.ensure_installed().is_err() {
                 return Ok(None);
             }
@@ -891,7 +873,7 @@ pub(in crate::cli) async fn start_demo(
                 env: &env,
                 worker,
             };
-            host.host.start_demo(&demo).await
+            demos.start_demo(&demo).await.map(Some)
         },
     )
     .await?;
@@ -914,19 +896,28 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
 /// Show the demo `launch` describes in this terminal.
 pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
     let place = &launch.origin;
-    kept_by(place).open_demo(place).await
+    match kept_by(place).demos() {
+        Some(demos) => demos.open_demo(place).await,
+        None => background::open_demo(place.id()).await,
+    }
 }
 
 /// What the demo `launch` describes shows.
 pub(in crate::cli) async fn demo_screen(launch: &Launch) -> Result<String> {
     let place = &launch.origin;
-    kept_by(place).demo_screen(place).await
+    match kept_by(place).demos() {
+        Some(demos) => demos.demo_screen(place).await,
+        None => background::demo_screen(place.id()),
+    }
 }
 
 /// Type `keys` into the demo `launch` describes.
 pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Result<()> {
     let place = &launch.origin;
-    kept_by(place).send_demo_keys(place, keys).await
+    match kept_by(place).demos() {
+        Some(demos) => demos.send_demo_keys(place, keys).await,
+        None => background::send_demo_keys(),
+    }
 }
 
 /// The host, or the plain terminal, that keeps `place`.

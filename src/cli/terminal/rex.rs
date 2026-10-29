@@ -7,7 +7,9 @@ use std::{ffi::OsStr, ffi::OsString, path::Path};
 use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, PlaceState, Session, Start, Watched, typed::Typed};
+use super::{
+    ChatStart, Demo, Host, PlaceState, Session, Start, Watched, host::Demos, typed::Typed,
+};
 use crate::sessions::{
     HostName, Origin,
     rex::{Block, Rex as Server, Window},
@@ -184,8 +186,14 @@ impl Host for Rex {
         })
     }
 
-    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { start_demo(demo).await.map(Some) })
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Demos for Rex {
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(start_demo(demo))
     }
 
     fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {

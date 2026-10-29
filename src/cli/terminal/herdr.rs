@@ -7,7 +7,7 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched};
+use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched, host::Demos};
 
 mod demo;
 use crate::{
@@ -106,8 +106,14 @@ impl Host for Herdr {
         Box::pin(rename_tab(place, label))
     }
 
-    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { demo::start(demo).await.map(Some) })
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Demos for Herdr {
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(demo::start(demo))
     }
 
     fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {

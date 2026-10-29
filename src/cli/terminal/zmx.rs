@@ -15,7 +15,9 @@ use anyhow::{Context as _, Result, bail};
 use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
-use super::{ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched};
+use super::{
+    ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched, host::Demos,
+};
 use crate::{
     cli::agents::ensure_program,
     env,
@@ -173,8 +175,14 @@ impl Host for Zmx {
         Box::pin(attach(&session.name))
     }
 
-    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { start_demo(demo).await.map(Some) })
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+}
+
+impl Demos for Zmx {
+    fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
+        Box::pin(start_demo(demo))
     }
 
     fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
