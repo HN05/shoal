@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::{
+    io::{AsyncReadExt, BufReader},
+    sync::oneshot,
+};
 
 use super::*;
 use crate::protocol::{AgentMethod, WorkspaceMethod};

@@ -79,6 +79,9 @@ pub mod timing {
     pub const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(5);
     /// Status and shutdown should fail promptly when the daemon is unresponsive.
     pub const ADMIN_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+    /// A status request during daemon startup waits this long for it to end
+    /// before learning the running step, within the admin request timeout.
+    pub const STARTUP_STATUS_WAIT: Duration = Duration::from_secs(2);
     /// Ordinary requests may include slow Git, simulator, or hook work.
     pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(3600);
     /// Allow daemon startup or shutdown to settle across repeated status requests.

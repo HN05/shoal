@@ -391,10 +391,8 @@ fn failed_startup_recovery_never_serves() {
             .spawn()
             .unwrap();
         let socket = root.path().join("state/daemon.sock");
-        let status = wait_for("daemon exit", || {
-            assert!(!socket.exists(), "{state}: daemon bound its socket");
-            guard.child.try_wait().unwrap()
-        });
+        // The socket is bound before startup work, but requests wait for it.
+        let status = wait_for("daemon exit", || guard.child.try_wait().unwrap());
         assert!(!status.success(), "{state}");
         let output = fs::read_to_string(stderr.path()).unwrap();
         assert!(output.contains("recovery blocked"), "{state}: {output}");
