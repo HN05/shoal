@@ -350,6 +350,18 @@ impl Backend for GitHub {
         Ok(github_rest::set_state(repo, item, state))
     }
 
+    /// GitHub counts both sides of a comparison; one commit to a page keeps
+    /// its list of the head's commits short.
+    async fn behind(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Option<u64>> {
+        let compare = |base: &str, head: &str| format!("compare/{base}...{head}?per_page=1");
+        github_rest::behind(repo, account, number, compare, "behind_by").await
+    }
+
     fn merge(
         &self,
         repo: &ForgeRepo,

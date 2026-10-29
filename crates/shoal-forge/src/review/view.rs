@@ -56,6 +56,10 @@ pub struct PrDetails {
     pub draft: bool,
     /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
     pub merge_conflicts: Option<bool>,
+    /// How many commits the base has that the head lacks; unknown for closed
+    /// PRs and where the forge cannot tell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u64>,
     pub checks: Vec<CheckResult>,
     pub review: Option<ReviewState>,
     /// Set while the forge is to merge the open PR once it can.
@@ -156,14 +160,21 @@ impl ForgeRepo {
             .view_details(self, account, kind, number, comments);
         let status = async {
             match kind {
-                ItemKind::Pr => Some(self.pr_status(account, url).await),
+                ItemKind::Pr => Some(tokio::join!(
+                    self.pr_status(account, url),
+                    self.kind.behind(self, account, number)
+                )),
                 ItemKind::Issue => None,
             }
         };
         let (content, status) = tokio::join!(content, status);
         let mut details = content?;
-        if let (Some(pr), Some(status)) = (&mut details.pr, status) {
+        if let (Some(pr), Some((status, behind))) = (&mut details.pr, status) {
             pr.record(status, errors);
+            match behind {
+                Ok(behind) => pr.behind = behind,
+                Err(error) => errors.push(format!("behind lookup failed: {error:#}")),
+            }
         }
         if comments {
             let discussion = self
@@ -199,6 +210,7 @@ impl PrDetails {
             base,
             draft,
             merge_conflicts: None,
+            behind: None,
             checks: Vec::new(),
             review: None,
             auto_merge: None,

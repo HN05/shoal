@@ -19,7 +19,7 @@ use crate::{
         reaction::{Listed, Subject},
     },
     review::{reviewers::team_name, view::login},
-    transport::api::{HttpMethod, Request},
+    transport::api::{HttpMethod, Request, encode},
 };
 
 /// Which forge serves GitHub's REST shapes.
@@ -102,6 +102,29 @@ pub(crate) fn current(
         user_ids: Default::default(),
         replaced_labels: Vec::new(),
     })
+}
+
+/// How many commits the base branch of open PR `number` has that its head
+/// lacks: the count `field` of the comparison at the path `compare` gives
+/// for the base branch and the head commit.
+pub(crate) async fn behind(
+    repo: &ForgeRepo,
+    account: &Account,
+    number: u64,
+    compare: impl FnOnce(&str, &str) -> String,
+    field: &str,
+) -> Result<Option<u64>> {
+    let pull = repo.read(account, ItemKind::Pr, number).await?;
+    let (ItemState::Open, Some(pr), Some(head)) = (pull.item.state, &pull.item.pr, &pull.head_sha)
+    else {
+        return Ok(None);
+    };
+    let endpoint = repo.repo_endpoint(&compare(&encode(&pr.base, true), head));
+    let comparison = repo.send(account, &Request::get(endpoint)).await?;
+    comparison[field]
+        .as_u64()
+        .context("the forge did not report how far the head is behind")
+        .map(Some)
 }
 
 /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its

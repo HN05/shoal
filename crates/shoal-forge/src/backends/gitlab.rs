@@ -328,6 +328,26 @@ impl Backend for GitLab {
         ))
     }
 
+    /// GitLab counts the target branch's commits the source branch lacks
+    /// when asked.
+    async fn behind(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Option<u64>> {
+        let endpoint = repo.item_endpoint(ItemKind::Pr, number);
+        let endpoint = format!("{endpoint}?include_diverged_commits_count=true");
+        let merge_request = repo.send(account, &Request::get(endpoint)).await?;
+        if merge_request["state"] != "opened" {
+            return Ok(None);
+        }
+        let behind = merge_request["diverged_commits_count"].as_u64();
+        behind
+            .context("GitLab did not report how far the source branch is behind")
+            .map(Some)
+    }
+
     fn merge(
         &self,
         repo: &ForgeRepo,

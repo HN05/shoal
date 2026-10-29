@@ -252,6 +252,21 @@ impl Backend for Forgejo {
         Ok(github_rest::set_state(repo, item, state))
     }
 
+    /// Forgejo counts only the commits a comparison's head has beyond its
+    /// base, so comparing from the PR's head to its base counts those the
+    /// head lacks.
+    async fn behind(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Option<u64>> {
+        let compare = |base: &str, head: &str| {
+            format!("compare/{head}...{base}?files=false&stat=false&verification=false")
+        };
+        github_rest::behind(repo, account, number, compare, "total_commits").await
+    }
+
     fn merge(
         &self,
         repo: &ForgeRepo,

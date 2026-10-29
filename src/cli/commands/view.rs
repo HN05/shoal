@@ -283,7 +283,13 @@ fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
         None => String::new(),
     };
     outln!("State:    {state}{draft}{conflicts}{auto_merge}");
-    outln!("Branch:   {} → {}", pr.head, pr.base);
+    let behind = match pr.behind {
+        Some(0) => ", up to date".into(),
+        Some(1) => ", 1 commit behind".into(),
+        Some(behind) => format!(", {behind} commits behind"),
+        None => String::new(),
+    };
+    outln!("Branch:   {} → {}{behind}", pr.head, pr.base);
     if let Some(review) = pr.review {
         outln!("Review:   {}", palette.review_state(review));
     }

@@ -239,6 +239,18 @@ pub(crate) trait Backend {
             .await
             .context(MERGED_HINT.trim_start_matches("; ").to_owned())
     }
+
+    /// How many commits the base branch of PR `number` has that its head
+    /// lacks; none once it is closed, or where the forge cannot tell.
+    async fn behind(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _number: u64,
+    ) -> Result<Option<u64>> {
+        Ok(None)
+    }
+
     /// Read what `edit` needs beyond `current` before it is planned.
     async fn prepare_edit(
         &self,
@@ -859,6 +871,16 @@ impl Backend for ForgeKind {
     ) -> Result<Option<Vec<String>>> {
         dispatch!(self, backend => backend.merged_commits(repo, account, number, branch).await)
     }
+
+    async fn behind(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+    ) -> Result<Option<u64>> {
+        dispatch!(self, backend => backend.behind(repo, account, number).await)
+    }
+
     async fn prepare_edit(
         &self,
         repo: &ForgeRepo,

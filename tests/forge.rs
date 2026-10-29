@@ -934,6 +934,82 @@ fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
 }
 
 #[test]
+fn pr_views_count_the_base_commits_the_head_lacks() {
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let fixture = Fixture::new(forge, "");
+        let mut open = pull(8, "open", "Fix", &[]);
+        open["head"]["sha"] = json!("c0ffee");
+        let (compare, count) = match forge {
+            Forge::GitHub => (
+                "GET repos/team/project/compare/release/2...c0ffee?per_page=1",
+                json!({"behind_by": 3, "ahead_by": 1}),
+            ),
+            Forge::Forgejo => (
+                "GET repos/team/project/compare/c0ffee...release/2?files=false&stat=false&verification=false",
+                json!({"total_commits": 3}),
+            ),
+        };
+        open["base"]["ref"] = json!("release/2");
+        fixture.respond(json!({
+            "GET repos/team/project/pulls/8": {"body": open},
+            "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
+                "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
+                "headRefName": "topic", "baseRefName": "release/2", "isDraft": false}},
+            compare: {"body": count},
+            "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
+        }));
+        let args = ["view", "pr", "8", "--workspace", "topic", "--no-comments"];
+        let view = &fixture.ok(&args)[0];
+        assert_eq!(view["pr"]["behind"], 3, "{view}");
+        let text = fixture.run(&args);
+        let text = String::from_utf8_lossy(&text.stdout);
+        assert!(
+            text.contains("Branch:   topic → release/2, 3 commits behind"),
+            "{text}"
+        );
+
+        // A closed PR is not compared.
+        fixture.respond(json!({
+            "GET repos/team/project/pulls/8": {"body": pull(8, "closed", "Fix", &[])},
+            "pr view 8": {"body": {"number": 8, "state": "CLOSED", "title": "Fix", "body": "",
+                "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
+                "headRefName": "topic", "baseRefName": "main", "isDraft": false}},
+            "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
+        }));
+        fixture.requests();
+        let view = &fixture.ok(&args)[0];
+        assert!(view["pr"].get("behind").is_none(), "{view}");
+        assert!(
+            !fixture
+                .requests()
+                .iter()
+                .any(|request| request[0].as_str().unwrap().contains("compare")),
+        );
+    }
+
+    // GitLab counts them on the merge request when asked.
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let root = fixture.root.path();
+    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
+    let remote = "git@gitlab.com:team/project.git";
+    git(&fixture.repo, &["remote", "set-url", "origin", remote]);
+    let request = json!({"iid": 8, "title": "Fix", "state": "opened", "description": "",
+        "labels": [], "source_branch": "topic", "target_branch": "main", "draft": false,
+        "sha": "abc", "author": {"username": "ann"}, "created_at": "t0",
+        "source_project_id": 1, "target_project_id": 1});
+    let mut counted = request.clone();
+    counted["diverged_commits_count"] = json!(2);
+    let endpoint = "projects/team%2Fproject/merge_requests/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": request},
+        format!("GET {endpoint}?include_diverged_commits_count=true"): {"body": counted},
+    }));
+    let args = ["view", "pr", "8", "--workspace", "topic", "--no-comments"];
+    let view = &fixture.ok(&args)[0];
+    assert_eq!(view["pr"]["behind"], 2, "{view}");
+}
+
+#[test]
 fn views_count_reactions_and_mark_the_logins_own() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let issue = "repos/team/project/issues/3";
