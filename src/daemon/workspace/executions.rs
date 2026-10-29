@@ -1079,8 +1079,6 @@ impl Manager {
         self.forget_execution(&execution.id).await
     }
 
-    /// Fail while processes use the workspace's directory: an acknowledgement
-    /// that an unprovable execution ended cannot cover a visible process.
     /// Combine the process evidence of `execution` from `scan`.
     pub(crate) async fn inspect_execution(
         &self,
@@ -1091,6 +1089,8 @@ impl Manager {
         Processes::inspect(execution, &workspace.path, scan).await
     }
 
+    /// Fail while processes use the workspace's directory: an acknowledgement
+    /// that an unprovable execution ended cannot cover a visible process.
     async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
         let path = self.workspace(workspace_id).await?.path;
         let users = if path.is_dir() {
