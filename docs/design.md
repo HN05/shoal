@@ -1386,7 +1386,7 @@ resume serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
 process, leaving no wrapper to report its exit, so the record lasts while a
 process with the registered identity lives, checked periodically and before
-chats are listed. Starts and ends are journal events. A workspace belongs to the
+chats are listed. Starts, renames and ends are journal events. A workspace belongs to the
 chat that last opened it until that chat ends, and opening it outside a chat
 returns it to the user, so Shoal knows which chat coordinates which workers.
 Having no workspace, a chat keeps its messages in its own queue, which the same
@@ -1397,7 +1397,8 @@ grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
-ends. The process the user runs chooses the name, so the tab or session that
+ends or is renamed. Renaming changes the record and the files kept under the
+name, not the zmx session, which zmx names only at creation. The process the user runs chooses the name, so the tab or session that
 hosts the chat carries it before the chat is recorded; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
 zmx may have suffixed, and the chat labels the session with its ID so no

@@ -25,6 +25,10 @@ use crate::{
     repository,
 };
 
+mod rename;
+
+pub(super) use rename::rename;
+
 pub(super) async fn start(
     ctx: &Context,
     repository: Option<String>,
@@ -88,7 +92,7 @@ impl Topic {
 pub(super) fn ensure_unscoped(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot start chats"
+        "workspace processes cannot start or rename chats"
     );
     Ok(())
 }

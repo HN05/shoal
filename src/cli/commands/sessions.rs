@@ -156,7 +156,10 @@ pub(in crate::cli) fn chat_places(chats: &[Chat]) -> Vec<(&str, &Origin)> {
 
 /// The only running chat of the registered checkout the current directory
 /// is in.
-async fn checkout_chat(ctx: &Context, chats: &[Chat]) -> Result<Option<Chat>> {
+pub(in crate::cli::commands) async fn checkout_chat(
+    ctx: &Context,
+    chats: &[Chat],
+) -> Result<Option<Chat>> {
     let repos = client::repositories(&ctx.paths).await?;
     let Some(repo) = super::issues::current_checkout(&repos).await? else {
         return Ok(None);

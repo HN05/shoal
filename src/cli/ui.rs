@@ -18,7 +18,8 @@
 //!   last ([`pick_place`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
 //!   picked ([`select_workspace`]), listed by what the command needs of it,
-//!   or picked among running chats as well ([`pick_workspace_or_chat`]).
+//!   or picked among running chats as well ([`pick_workspace_or_chat`]) or
+//!   alone ([`pick_chat`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!

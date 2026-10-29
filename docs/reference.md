@@ -1209,8 +1209,18 @@ pressure or resumed. The daemon records each chat under its name while its
 agent process runs. Workspaces and running chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a running
-chat's name. The name frees once the chat's process ends. `shoal work` lists the chat by name with the workspaces it
-opened, and [workspace events](#workspace-events) report its start and end. A workspace
+chat's name. The name frees once the chat's process ends.
+
+`shoal chat rename [chat] NAME` gives a running chat, `shoal plan` chats
+included, a new name that is free as a new chat's would be, and frees the old
+one. Without a chat it renames the chat it runs in, else the current checkout's
+only running chat, else offers a picker. A Happy chat's log and saved first
+message move to the new name. The zmx session keeps the name it started with,
+since `shoal attach` finds the chat's session where the chat runs, and the Herdr
+tab keeps its label. Workspace processes cannot rename chats.
+
+`shoal work` lists the chat by name with the workspaces it
+opened, and [workspace events](#workspace-events) report its start, renames and end. A workspace
 belongs to the chat whose agent last opened it with `shoal add`: its `chat`
 field and `shoal status` name that chat until the chat ends or the workspace is opened outside a
 chat, which returns it to you. While it runs, the chat

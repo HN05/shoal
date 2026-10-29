@@ -24072,7 +24072,8 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     ]);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("workspace processes cannot start chats"),
+        String::from_utf8_lossy(&output.stderr)
+            .contains("workspace processes cannot start or rename chats"),
         "{output:?}"
     );
 }
@@ -24663,6 +24664,83 @@ fn attach_returns_to_chats_by_name() {
             "{transcript}"
         );
     }
+}
+
+#[test]
+fn chat_rename_renames_the_named_current_or_picked_chat() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let other = init_repo(home, "other", &[("tracked", "committed\n")]);
+    let other_repository = fixture.ok(&["repo", "add", other.to_str().unwrap()]);
+    // The chats last while this test's process runs.
+    let start = |repository: &Value, name: &str, session: Option<&str>| {
+        let origin = session.map(|session| serde_json::json!({"host": "zmx", "place": session}));
+        let response = fixture.request(serde_json::json!({"start_chat":{
+            "repository": repository["id"], "name": name, "agent": "claude",
+            "pid": std::process::id(), "origin": origin
+        }}));
+        assert_eq!(response["type"], "chat", "{response}");
+        response["data"]["id"].as_str().unwrap().to_owned()
+    };
+    let talk = start(&repository, "talk", Some("talk"));
+    let plan = start(&repository, "repo-plan-7", None);
+    start(&other_repository, "quiet", None);
+    fs::write(home.join("zmx-sessions"), "  name=talk\tpid=1\tclients=0\n").unwrap();
+    let names = || -> Vec<String> {
+        let chats = fixture.ok(&["work", "--chats"]);
+        chats
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|chat| chat["name"].as_str().unwrap().to_owned())
+            .collect()
+    };
+
+    // By name; the zmx session keeps its name, and attach finds it by the
+    // chat's new one.
+    let renamed = fixture.ok(&["chat", "rename", "talk", "topic"]);
+    assert_eq!(renamed["id"], talk.as_str());
+    assert_eq!(renamed["name"], "topic");
+    let (output, transcript) = fixture.interactive(&["attach", "topic"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(
+        transcript.contains("detached from talk; run `shoal attach topic` to return"),
+        "{transcript}"
+    );
+    let output = fixture.run(&["chat", "rename", "repo-plan-7", "topic"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("a running chat already has the name topic"),
+        "{output:?}"
+    );
+
+    // The chat this runs in, as its agent would.
+    let output = fixture
+        .command()
+        .env("SHOAL_CHAT", &plan)
+        .args(["chat", "rename", "repo-plan-8"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("Renamed chat to repo-plan-8"),
+        "{output:?}"
+    );
+
+    // The checkout's only chat, else one from a picker.
+    let output = fixture
+        .command()
+        .current_dir(&other)
+        .args(["chat", "rename", "calm"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let (output, rows) = fixture.pick_in(&fixture.repo, &["chat", "rename", "picked"], &talk, "");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(rows.lines().count(), 3, "{rows}");
+    assert_eq!(names(), ["picked", "repo-plan-8", "calm"]);
 }
 
 /// A Claude that waits to be stopped, running for a workspace inside a fake

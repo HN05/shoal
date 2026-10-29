@@ -322,6 +322,13 @@ pub async fn pick_workspace_or_chat(
     pick(ctx, "Workspace or chat> ", entries)
 }
 
+/// Pick one of `chats`, listed by name. Returns the chosen chat's ID.
+pub fn pick_chat(ctx: &Context, chats: &[Chat]) -> Result<String> {
+    let entries = chat_entries(chats, Palette::stderr(ctx.json), picker_width());
+    ensure!(!entries.is_empty(), "no chat is running");
+    pick(ctx, "Chat> ", entries)
+}
+
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
     require_interactive(ctx)?;
     let entries = workspace_entries(ctx, workspaces, false).await;

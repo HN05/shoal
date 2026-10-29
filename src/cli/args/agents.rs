@@ -46,7 +46,10 @@ pub enum AgentsCommand {
     /// Inside Herdr the chat opens in a focused tab; on a terminal it runs in
     /// a zmx session. A Happy chat starts detached, to continue in the Happy
     /// app. Chats are not tracked executions.
+    #[command(args_conflicts_with_subcommands = true)]
     Chat {
+        #[command(subcommand)]
+        command: Option<ChatCommand>,
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]
         here: bool,
@@ -103,5 +106,22 @@ pub enum AgentsCommand {
         prompt: Option<String>,
         #[arg(last = true)]
         args: Vec<OsString>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ChatCommand {
+    /// Rename a running chat, `shoal plan` chats included.
+    ///
+    /// Without a chat, renames the chat this runs in, else the current
+    /// checkout's only running chat, else offers a picker. A chat's zmx
+    /// session keeps its name; `shoal attach` finds it by the new one.
+    #[command(allow_missing_positional = true)]
+    Rename {
+        /// Running chat, by name.
+        chat: Option<String>,
+        /// New name, free among workspaces and running chats.
+        name: String,
     },
 }

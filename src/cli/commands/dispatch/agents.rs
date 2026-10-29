@@ -5,7 +5,7 @@ use crate::{
     ai::IntegrationKind,
     cli::{
         agents,
-        args::agents::AgentsCommand,
+        args::agents::{AgentsCommand, ChatCommand},
         commands::{chat, plan},
         context::Context,
     },
@@ -42,6 +42,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             args,
         } => agents::happy(&ctx, agent, workspace, prompt, args).await,
         AgentsCommand::Chat {
+            command: Some(ChatCommand::Rename { chat, name }),
+            ..
+        } => chat::rename(&ctx, chat, name).await,
+        AgentsCommand::Chat {
+            command: None,
             here,
             repository,
             agent,
