@@ -17,7 +17,7 @@ use tokio::process::Command;
 
 use super::{
     ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Demos, Prompts},
+    host::{Demos, Prompts, Sessions},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -78,15 +78,6 @@ impl Host for Zmx {
         Box::pin(start_detached(start))
     }
 
-    fn run_agent<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-        owner: Owner<'a>,
-        agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move { run(start, owner, agent).await.map(Some) })
-    }
-
     fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move { run_chat(start).await.map(ChatStart::Session) })
     }
@@ -139,6 +130,29 @@ impl Host for Zmx {
         })
     }
 
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        Some(self)
+    }
+}
+
+impl Sessions for Zmx {
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        owner: Owner<'a>,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move { run(start, owner, agent).await.map(Some) })
+    }
+
     fn label_current<'a>(
         &'a self,
         state: &'a Path,
@@ -156,7 +170,7 @@ impl Host for Zmx {
         on_terminal().then(|| Tool::Zmx.program())
     }
 
-    fn sessions<'a>(&'a self, owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
+    fn running<'a>(&'a self, owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(sessions(owner))
     }
 
@@ -166,14 +180,6 @@ impl Host for Zmx {
 
     fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(attach(&session.name))
-    }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
-        Some(self)
     }
 }
 

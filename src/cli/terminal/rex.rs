@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     ChatStart, Demo, Host, PlaceState, Session, Start, Watched,
-    host::{Demos, Prompts},
+    host::{Demos, Prompts, Sessions},
     typed::Typed,
 };
 use crate::sessions::{
@@ -76,23 +76,6 @@ impl Host for Rex {
         Box::pin(run_at_prompt(state, place, argv, env))
     }
 
-    /// Outside Rex, a focused window in the default session; inside it the
-    /// agent runs in place in its block.
-    fn run_agent<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-        _owner: super::Owner<'a>,
-        _agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async move {
-            if in_rex() {
-                return Ok(None);
-            }
-            let opened = open_window(start).await?;
-            Ok(Some(opened.id().to_owned()))
-        })
-    }
-
     fn start_chat<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<ChatStart>> {
         Box::pin(async move {
             open_window(start).await?;
@@ -139,6 +122,45 @@ impl Host for Rex {
         true
     }
 
+    fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if let Err(error) = rename_window(place, label).await {
+                eprintln!("warning: cannot rename the Rex window of {place}: {error:#}");
+            }
+        })
+    }
+
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        Some(self)
+    }
+}
+
+impl Sessions for Rex {
+    /// Outside Rex, a focused window in the default session; inside it the
+    /// agent runs in place in its block.
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        _owner: super::Owner<'a>,
+        _agent: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async move {
+            if in_rex() {
+                return Ok(None);
+            }
+            let opened = open_window(start).await?;
+            Ok(Some(opened.id().to_owned()))
+        })
+    }
+
     /// The block, under its window's name, while it is open.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
         Box::pin(session_at(place))
@@ -161,22 +183,6 @@ impl Host for Rex {
                 .context("the Rex block is gone")?;
             reveal(&server, &block, place.id(), &session.name).await
         })
-    }
-
-    fn rename_place<'a>(&'a self, place: &'a str, label: &'a str) -> BoxFuture<'a, ()> {
-        Box::pin(async move {
-            if let Err(error) = rename_window(place, label).await {
-                eprintln!("warning: cannot rename the Rex window of {place}: {error:#}");
-            }
-        })
-    }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
-        Some(self)
     }
 }
 

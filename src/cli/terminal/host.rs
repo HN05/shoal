@@ -32,6 +32,11 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
+    /// The agent sessions this host keeps, unless it keeps none.
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        None
+    }
+
     /// How this host types prompts, unless it types none.
     fn prompts(&self) -> Option<&dyn Prompts> {
         None
@@ -82,18 +87,6 @@ pub(in crate::cli) trait Host: Sync {
         _env: &'a [(&'a str, String)],
     ) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
-    }
-
-    /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
-    /// attach this terminal to it, returning the session once the terminal
-    /// left it. `None` means the agent runs in place.
-    fn run_agent<'a>(
-        &'a self,
-        _start: &'a Start<'a>,
-        _owner: Owner<'a>,
-        _agent: &'a str,
-    ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async { Ok(None) })
     }
 
     /// Run `start`, a chat, beside this terminal, where config lets the host
@@ -169,6 +162,24 @@ pub(in crate::cli) trait Host: Sync {
     fn places_keep_shells(&self) -> bool {
         true
     }
+}
+
+/// A host that keeps agents in sessions of its own, which `shoal attach`
+/// finds and attaches this terminal to.
+pub(in crate::cli) trait Sessions: Sync {
+    /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
+    /// attach this terminal to it, returning the session once the terminal
+    /// left it. `None` means the agent runs in place.
+    fn run_agent<'a>(
+        &'a self,
+        start: &'a Start<'a>,
+        owner: Owner<'a>,
+        agent: &'a str,
+    ) -> BoxFuture<'a, Result<Option<String>>>;
+
+    /// Attach this terminal to `session`, one of [`Sessions::running`] or
+    /// [`Sessions::session_at`], until the user detaches or the session ends.
+    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>>;
 
     /// Label the session this process runs in, when it runs in one, so
     /// `shoal attach` finds `owner`'s agent there.
@@ -192,8 +203,9 @@ pub(in crate::cli) trait Host: Sync {
         None
     }
 
-    /// `owner`'s running agent sessions.
-    fn sessions<'a>(&'a self, _owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
+    /// `owner`'s running agent sessions, for a host that finds them by
+    /// their owner.
+    fn running<'a>(&'a self, _owner: Owner<'a>) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async { Ok(Vec::new()) })
     }
 
@@ -209,15 +221,9 @@ pub(in crate::cli) trait Host: Sync {
     }
 
     /// Whether the places recorded for agents of this host are sessions
-    /// [`Host::session_at`] finds.
+    /// [`Sessions::session_at`] finds.
     fn attaches_places(&self) -> bool {
         false
-    }
-
-    /// Attach this terminal to `session`, one of [`Host::sessions`] or
-    /// [`Host::session_at`], until the user detaches or the session ends.
-    fn attach<'a>(&'a self, _session: &'a Session) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
 }
 

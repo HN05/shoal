@@ -38,7 +38,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
-use host::{ChatStart, Demo, DemoWorker, Host, Prompts, Start};
+use host::{ChatStart, Demo, DemoWorker, Host, Prompts, Sessions, Start};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 pub(in crate::cli) use typed::run as run_launch;
 
@@ -661,6 +661,9 @@ pub(in crate::cli) async fn run_agent(
     command: &[OsString],
 ) -> Result<Option<i32>> {
     let current = current(settings);
+    let Some(sessions) = current.host.sessions() else {
+        return Ok(None);
+    };
     let repo = groups::Repo::Id(&workspace.repository_id);
     let origin = groups::beside(ctx, &current, &repo, &workspace.path).await?;
     let Configured {
@@ -694,7 +697,7 @@ pub(in crate::cli) async fn run_agent(
         env: &env,
     };
     let owner = Owner::Workspace(&workspace.id);
-    let Some(session) = host.run_agent(&start, owner, agent).await? else {
+    let Some(session) = sessions.run_agent(&start, owner, agent).await? else {
         return Ok(None);
     };
     report_detach(owner, &workspace.name, &session).await?;
@@ -732,8 +735,9 @@ async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> 
     let place = host
         .this_place()
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
-    if label {
-        host.label_current(&ctx.paths.state, Owner::Workspace(workspace), "")
+    if label && let Some(sessions) = host.sessions() {
+        sessions
+            .label_current(&ctx.paths.state, Owner::Workspace(workspace), "")
             .await?;
     }
     closing::start_watcher(ctx, host, &place, workspace).await
@@ -783,13 +787,15 @@ pub(in crate::cli) async fn start_chat(
 /// at the `places` the daemon recorded for it.
 pub(in crate::cli) async fn sessions(owner: Owner<'_>, places: &[&Origin]) -> Result<Vec<Session>> {
     let mut sessions = Vec::new();
-    for host in hosts() {
-        sessions.extend(host.sessions(owner).await?);
+    for host in hosts().filter_map(Host::sessions) {
+        sessions.extend(host.running(owner).await?);
     }
     let mut seen = HashSet::new();
     for place in places {
-        if seen.insert((place.host, place.id())) {
-            sessions.extend(kept_by(place).session_at(place).await?);
+        if seen.insert((place.host, place.id()))
+            && let Some(host) = kept_by(place).sessions()
+        {
+            sessions.extend(host.session_at(place).await?);
         }
     }
     Ok(sessions)
@@ -802,13 +808,17 @@ pub(in crate::cli) async fn session_owners(
     places: &[(&str, &Origin)],
 ) -> Result<HashSet<String>> {
     let mut owners = HashSet::new();
-    for host in hosts() {
+    for host in hosts().filter_map(Host::sessions) {
         owners.extend(host.session_owners(kind).await?);
     }
     owners.extend(
         places
             .iter()
-            .filter(|(_, place)| kept_by(place).attaches_places())
+            .filter(|(_, place)| {
+                kept_by(place)
+                    .sessions()
+                    .is_some_and(Sessions::attaches_places)
+            })
             .map(|(owner, _)| (*owner).to_owned()),
     );
     Ok(owners)
@@ -818,7 +828,10 @@ pub(in crate::cli) async fn session_owners(
 /// it, then say how to return to it by `name` when it outlives the attach.
 pub(in crate::cli) async fn attach(owner: Owner<'_>, name: &str, session: &Session) -> Result<i32> {
     let host = named(session.host).context("the session's host is unknown")?;
-    host.attach(session).await?;
+    let sessions = host
+        .sessions()
+        .with_context(|| format!("{} keeps no sessions", host.name()))?;
+    sessions.attach(session).await?;
     report_detach(owner, name, &session.name).await?;
     Ok(0)
 }
@@ -993,14 +1006,15 @@ pub(in crate::cli) async fn host_workspace(
         // A place is labelled before it is watched, since the watcher only
         // closes a place it finds hosting the workspace.
         (Some(place), _) => {
-            place
-                .host
-                .label_current(
-                    &ctx.paths.state,
-                    Owner::Workspace(&workspace.id),
-                    agent.unwrap_or_default(),
-                )
-                .await?;
+            if let Some(sessions) = place.host.sessions() {
+                sessions
+                    .label_current(
+                        &ctx.paths.state,
+                        Owner::Workspace(&workspace.id),
+                        agent.unwrap_or_default(),
+                    )
+                    .await?;
+            }
             place.host.rename_place(&place.id, label).await;
             record_owned_here(ctx, place.host.name().as_str(), &workspace.id).await;
             if place.closes_when_done {
@@ -1026,7 +1040,10 @@ pub(in crate::cli) fn follows_caller(ctx: &Context) -> bool {
 /// Whether an agent launched here runs in a session this terminal attaches
 /// to, leaving the caller's shell where it was once the terminal detaches.
 pub(in crate::cli) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
-    current(settings).host.keeps_agents_in_sessions()
+    current(settings)
+        .host
+        .sessions()
+        .is_some_and(Sessions::keeps_agents_in_sessions)
 }
 
 /// Give a workspace added without an agent a shell at `cwd` in the place
@@ -1056,7 +1073,7 @@ pub(in crate::cli) async fn label_current(
     owner: Owner<'_>,
     agent: &str,
 ) -> Result<()> {
-    for host in hosts() {
+    for host in hosts().filter_map(Host::sessions) {
         host.label_current(&paths.state, owner, agent).await?;
     }
     Ok(())
@@ -1064,7 +1081,9 @@ pub(in crate::cli) async fn label_current(
 
 /// The program an agent launch here needs besides the agent's own.
 pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
-    hosts().find_map(|host| host.launcher_program())
+    hosts()
+        .filter_map(Host::sessions)
+        .find_map(Sessions::launcher_program)
 }
 
 /// The session this process runs in, where an agent's wrapper can type a
