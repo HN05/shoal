@@ -24,6 +24,7 @@ pub(crate) struct Gates {
     proposal_files: Mutex<()>,
     announcements: Mutex<()>,
     git: Keyed<Mutex<()>>,
+    message_files: Keyed<Mutex<()>>,
     forge_hosts: Keyed<Mutex<()>>,
     resources: Keyed<RwLock<()>>,
     prs: Keyed<Mutex<()>>,
@@ -128,6 +129,22 @@ impl Gates {
     #[cfg(test)]
     pub(crate) fn git_gate(&self, repository_id: &str) -> Arc<Mutex<()>> {
         self.git.gate(repository_id)
+    }
+
+    /// Order keeping the files attached to a repository's agent messages,
+    /// from copying them through queueing or discarding the message, against
+    /// other sends, workspace removal and moving the repository's directory,
+    /// so a queued message names copies that exist where it says. Callers
+    /// holding the repository's Git gate take it after that one.
+    pub(crate) async fn lock_message_files(&self, repository_id: &str) -> OwnedMutexGuard<()> {
+        self.message_files.gate(repository_id).lock_owned().await
+    }
+
+    /// The attached-files gate of `repository_id`, for tests that count who
+    /// waits on it.
+    #[cfg(test)]
+    pub(crate) fn message_files_gate(&self, repository_id: &str) -> Arc<Mutex<()>> {
+        self.message_files.gate(repository_id)
     }
 
     /// Hold `host`'s gate, so concurrent first lookups ask a forge host once.

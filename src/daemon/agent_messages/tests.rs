@@ -218,6 +218,50 @@ async fn a_refused_message_leaves_no_copies() {
 }
 
 #[tokio::test]
+async fn an_attached_send_waits_for_the_files_gate() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager, "receiver").await;
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    // Another send, a removal or a move holds the gate.
+    let held = manager
+        .gates
+        .lock_message_files(&workspace.repository_id)
+        .await;
+    let gate = manager.gates.message_files_gate(&workspace.repository_id);
+    let send = tokio::spawn({
+        let (manager, name) = (manager.clone(), workspace.name.clone());
+        async move {
+            manager
+                .send_agent_message(&name, "See the log".into(), vec![file])
+                .await
+        }
+    });
+    // The holder, this test and the waiting send.
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        while std::sync::Arc::strong_count(&gate) < 3 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the send reaches the gate");
+    assert!(
+        manager
+            .agent_messages(&workspace.name)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let attachments = repo.workspaces_dir.unwrap().join(".attachments");
+    assert!(!attachments.join(&workspace.id).exists());
+    drop(held);
+    send.await.unwrap().unwrap();
+    let messages = manager.agent_messages(&workspace.name).await.unwrap();
+    assert!(messages[0].attachments[0].exists());
+}
+
+#[tokio::test]
 async fn attachments_must_be_files() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;

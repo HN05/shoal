@@ -512,3 +512,38 @@ async fn unread_messages_follow_their_attached_files_to_the_new_root() -> Result
     assert_eq!(fs::read_to_string(copy)?, "panic");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
+    let (temp, manager, repo, workspace, root) = cloned().await?;
+    let file = temp.path().join("crash.log");
+    fs::write(&file, "panic")?;
+    // A send is copying files at the old place.
+    let sending = manager.gates.lock_message_files(&repo.id).await;
+    let gate = manager.gates.message_files_gate(&repo.id);
+    let moving = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.move_repositories(Layout::Regular).await }
+    });
+    // The send, this test and the waiting move.
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        while Arc::strong_count(&gate) < 3 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .context("the move reaches the gate")?;
+    let old = repo.workspaces_dir.clone().context("no directory")?;
+    assert!(old.exists(), "the move waits before moving the directory");
+    drop(sending);
+    moving.await??;
+    // A send after the move copies to the new place.
+    manager
+        .send_agent_message(&workspace.id, "See the log".into(), vec![file])
+        .await?;
+    let messages = manager.agent_messages(&workspace.id).await?;
+    let copy = &messages[0].attachments[0];
+    assert!(copy.starts_with(root.join("origin")), "{copy:?}");
+    assert!(copy.exists());
+    Ok(())
+}
