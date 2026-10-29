@@ -71,3 +71,18 @@ fn shell_command_quotes_only_words_that_need_it() {
         r#"/opt/bin/shoal internal herdr 'a b' 'it'\''s' ''"#
     );
 }
+
+#[test]
+fn a_herdr_the_variables_name_needs_none_on_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let program = dir.path().join("herdr");
+    std::fs::write(&program, "").unwrap();
+    let data = BTreeMap::from([("HERDR_BIN_PATH".to_owned(), program.display().to_string())]);
+    assert!(ensure_reachable(&data).is_ok());
+    assert_eq!(herdr::named_program(&data), program.to_str());
+    let gone = BTreeMap::from([(
+        "HERDR_BIN_PATH".to_owned(),
+        dir.path().join("gone").display().to_string(),
+    )]);
+    assert_eq!(herdr::named_program(&gone), None);
+}

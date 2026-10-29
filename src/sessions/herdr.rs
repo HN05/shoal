@@ -33,16 +33,19 @@ pub(crate) fn server(data: &BTreeMap<String, String>) -> String {
 /// process inherited that name another server give way, so a record without
 /// them reaches Herdr's default server rather than this process's.
 pub(crate) fn command(data: &BTreeMap<String, String>) -> Command {
-    let program = data
-        .get(BIN_PATH)
-        .filter(|path| Path::new(path).is_file())
-        .map_or("herdr", String::as_str);
-    let mut command = Command::new(program);
+    let mut command = Command::new(named_program(data).unwrap_or("herdr"));
     for name in SERVER_VARS {
         command.env_remove(name);
     }
     command.envs(data);
     command
+}
+
+/// The `herdr` the variables `data` records name, while it exists.
+pub(crate) fn named_program(data: &BTreeMap<String, String>) -> Option<&str> {
+    data.get(BIN_PATH)
+        .filter(|path| Path::new(path).is_file())
+        .map(String::as_str)
 }
 
 /// Close `pane` of the server `data` records, and nothing else: Herdr

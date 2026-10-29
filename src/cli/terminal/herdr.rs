@@ -1,5 +1,5 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{ffi::OsString, path::Path};
+use std::{collections::BTreeMap, ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -38,8 +38,9 @@ impl Host for Herdr {
         in_herdr()
     }
 
+    /// The `herdr` this process's variables name, otherwise one on PATH.
     fn ensure_installed(&self) -> Result<()> {
-        crate::cli::agents::ensure_program("background launch", "herdr")
+        ensure_reachable(&workspaces::server_here())
     }
 
     fn places(&self) -> Option<&dyn Places> {
@@ -168,6 +169,15 @@ impl Demos for Herdr {
     fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(demo::send(place, keys))
     }
+}
+
+/// Refuse when neither the `herdr` the variables `data` record nor one on
+/// PATH exists, as [`herdr::command`] runs one of them.
+fn ensure_reachable(data: &BTreeMap<String, String>) -> Result<()> {
+    if herdr::named_program(data).is_some() {
+        return Ok(());
+    }
+    crate::cli::agents::ensure_program("background launch", "herdr")
 }
 
 /// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
