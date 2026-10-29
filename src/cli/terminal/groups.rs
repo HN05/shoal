@@ -115,6 +115,14 @@ pub(super) async fn first_queued<T>(
     failure.map_or(Ok(None), Err)
 }
 
+/// The first host a queued start from `origin` tries.
+pub(super) fn first_queued_host(settings: &Effective, origin: Option<&Origin>) -> Configured {
+    fallbacks(settings, origin).into_iter().next().map_or_else(
+        || Configured::named(settings, HostName::Zmx),
+        |fallback| fallback.host,
+    )
+}
+
 /// A host a queued start may run in, and the group it joins there.
 struct Fallback<'a> {
     host: Configured,

@@ -80,4 +80,11 @@ fn a_default_host_config_turns_off_leaves_queued_starts_to_zmx() {
     }
     let disabled = repository_settings("default_host = 'rex'", "[rex]\nenabled = false");
     assert_eq!(Configured::default_host(&disabled).host.name(), Zmx);
+    // A background start's preflight checks the host queued starts use.
+    for repository in ["[rex]\nenabled = false", "[rex]\nnew_window = false"] {
+        let settings = repository_settings("default_host = 'rex'", repository);
+        assert_eq!(first_queued_host(&settings, None).host.name(), Zmx);
+    }
+    let rex = repository_settings("default_host = 'rex'", "");
+    assert_eq!(first_queued_host(&rex, None).host.name(), Rex);
 }
