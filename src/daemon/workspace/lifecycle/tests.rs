@@ -1038,3 +1038,33 @@ async fn automatic_removal_keeps_branch_when_default_branch_is_unknown() {
     assert!(!worktree.exists());
     assert!(!git(&path, &["rev-parse", "--verify", "refs/heads/main"]).is_empty());
 }
+
+#[tokio::test]
+async fn removal_stops_detached_processes_running_from_the_worktree() {
+    let (root, manager, workspace) = fixture().await;
+    let detached =
+        crate::test_support::Detached::start(&workspace.path, &root.path().join("pids")).await;
+    let mut attached = tokio::process::Command::new("sleep")
+        .arg("300")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let attached_identity = identity::capture(attached.id().unwrap()).unwrap().unwrap();
+
+    manager
+        .remove_workspace(
+            &workspace.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(identity::capture(detached.shell).unwrap(), None);
+    assert_eq!(identity::capture(detached.child).unwrap(), None);
+    // A process a live parent outside the worktree keeps, such as a shell
+    // the user opened there, is not the workspace's to stop.
+    assert!(identity::alive(&attached_identity).unwrap());
+    attached.kill().await.unwrap();
+}

@@ -136,6 +136,12 @@ impl<'a> Removal<'a> {
         }
     }
 
+    /// Automatic removal takes only unused workspaces, so a detached process
+    /// running from one is activity that retains it; the others stop it.
+    fn stops_detached_processes(self) -> bool {
+        !matches!(self, Removal::Automatic { .. })
+    }
+
     /// Merged cleanup removes unsaved files once a checkpoint keeps them.
     fn discards_archived_files(self) -> bool {
         matches!(
@@ -1020,6 +1026,10 @@ impl Manager {
         // Processes can write files as they stop, which the final inspection
         // and the checkpoint must include.
         self.stop_workspace_processes(&workspace.id).await?;
+        if removal.stops_detached_processes() {
+            self.stop_detached_directory_processes(&workspace.path)
+                .await?;
+        }
         let check = self
             .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
             .await?;

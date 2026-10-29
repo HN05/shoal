@@ -2283,8 +2283,11 @@ first, or with `--yes`. Large previews show an omitted-entry count; use
 them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
 Removal stops tracked commands and every verified process that carries the
-workspace's identity, including those hooks and `shoal work env` exports started,
-leaving unrelated processes alone. Ownership and removal policy are checked again after removal hooks,
+workspace's identity, including those hooks and `shoal work env` exports started.
+Removal other than automatic cleanup also stops detached processes running from
+the worktree, which launchd or init adopted when their parent exited, with the
+children they started there, even when their environment hides the identity;
+it leaves unrelated processes alone, including shells the user opened there. Ownership and removal policy are checked again after removal hooks,
 and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal

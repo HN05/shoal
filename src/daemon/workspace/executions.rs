@@ -1123,6 +1123,28 @@ impl Manager {
         Ok(())
     }
 
+    /// Stop the detached processes running from the workspace's directory,
+    /// such as scripts a recording left behind, whose environment may not
+    /// show the workspace's identity. Each round also stops those its
+    /// predecessor started meanwhile, which stopping their parent detaches.
+    pub(super) async fn stop_detached_directory_processes(&self, path: &Path) -> Result<()> {
+        const ROUNDS: usize = 3;
+        for _ in 0..ROUNDS {
+            let detached = crate::process::detached_in_directory(path).await?;
+            if detached.is_empty() {
+                return Ok(());
+            }
+            process::stop_verified(&detached).await?;
+        }
+        let remaining = crate::process::detached_in_directory(path).await?;
+        ensure!(
+            remaining.is_empty(),
+            "detached processes running from the workspace directory survived stopping: {}; stop them yourself, then retry",
+            pids(&remaining)
+        );
+        Ok(())
+    }
+
     /// Ask connected wrappers to stop and signal disconnected survivors.
     pub(super) async fn stop_executions(
         &self,
