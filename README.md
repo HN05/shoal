@@ -229,7 +229,8 @@ For workspace actions, omit the name to use your scoped or current workspace;
 outside one, choose from the interactive picker or pass a target for `--json`
 and noninteractive calls. Bare `shoal cd` always opens a picker. `shoal cd -`,
 `shoal attach -` and other commands that open, show or run something in a
-workspace take `-` for the workspace they last acted on.
+workspace take `-` for the workspace they last acted on; for `attach`, the one
+whose session you last detached from.
 Use `shoal <command> --help` for options.
 
 To move changes between your workspace and the default branch:

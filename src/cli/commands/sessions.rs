@@ -45,7 +45,10 @@ pub(super) async fn attach(
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
     };
-    terminal::attach(target.name(), session).await
+    if terminal::attach(target.name(), session).await? {
+        target.record_detach(ctx).await;
+    }
+    Ok(0)
 }
 
 /// What `shoal attach` returns to.
@@ -79,7 +82,7 @@ impl Target {
     }
 
     async fn workspace(ctx: &Context, name: Option<String>, fallback: Fallback) -> Result<Self> {
-        let id = ui::select_workspace(ctx, name, fallback).await?;
+        let id = ui::choose_workspace(ctx, name, fallback).await?;
         Self::inspected(ctx, id).await
     }
 
@@ -100,8 +103,16 @@ impl Target {
         if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
             return Ok(Self::Chat(Box::new(chat)));
         }
-        recent::record(ctx, &id).await;
         Self::inspected(ctx, id).await
+    }
+
+    /// Remember a workspace once this terminal left its session running, so
+    /// `attach -` returns to the session last detached from rather than the
+    /// one last attached, which another terminal may still show.
+    async fn record_detach(&self, ctx: &Context) {
+        if let Self::Workspace(inspection) = self {
+            recent::record(ctx, &inspection.workspace.id).await;
+        }
     }
 
     /// Whose settings choose the hosts to look in.

@@ -1172,24 +1172,25 @@ pub(in crate::cli) async fn open_session_owners(
 }
 
 /// Show `session` in this terminal through the host that keeps it, then
-/// say how to return to it by `name` when it outlives the attach.
-pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<i32> {
+/// say how to return to it by `name` when it outlives the attach, which
+/// this returns.
+pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<bool> {
     let host = kept_by(&session.place);
     let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
         anyhow::bail!("{} keeps no sessions", host.name());
     };
     places.show(&session.place, &session.name).await?;
-    report_detach(sessions, name, &session.name).await?;
-    Ok(0)
+    report_detach(sessions, name, &session.name).await
 }
 
 /// Say how to return to `session`, one `host` attached this terminal to, by
-/// `name` when it still runs after this terminal left it.
-async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<()> {
-    if host.left_running(session).await? {
+/// `name` when it still runs after this terminal left it, and whether it does.
+async fn report_detach(host: &dyn Sessions, name: &str, session: &str) -> Result<bool> {
+    let running = host.left_running(session).await?;
+    if running {
         eprintln!("shoal: detached from {session}; run `shoal attach {name}` to return");
     }
-    Ok(())
+    Ok(running)
 }
 
 /// Start a demo of `workspace` in the first host that runs queued starts and

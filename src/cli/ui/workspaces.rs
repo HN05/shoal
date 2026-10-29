@@ -61,12 +61,22 @@ pub async fn select_workspace(
     explicit: Option<String>,
     fallback: Fallback,
 ) -> Result<String> {
-    let workspace = match resolve_workspace(ctx, explicit, fallback).await? {
-        Resolution::Workspace(id) => id,
-        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await?,
-    };
+    let workspace = choose_workspace(ctx, explicit, fallback).await?;
     recent::record(ctx, &workspace).await;
     Ok(workspace)
+}
+
+/// The workspace `select_workspace` selects, left out of the command's
+/// history for a command that records it once it has acted.
+pub async fn choose_workspace(
+    ctx: &Context,
+    explicit: Option<String>,
+    fallback: Fallback,
+) -> Result<String> {
+    Ok(match resolve_workspace(ctx, explicit, fallback).await? {
+        Resolution::Workspace(id) => id,
+        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await?,
+    })
 }
 
 /// The workspaces a command that acts on several takes: those named, each

@@ -21948,6 +21948,7 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 /// session keeps the environment it was created with and runs sent text as
 /// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
 /// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
+/// An attached session ends once `$HOME/zmx-attach-ends-session` exists.
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
 /// recorded actions.
 const PASSTHROUGH_ZMX: &str = r#"#!/usr/bin/env python3
@@ -22031,6 +22032,10 @@ elif args[:1] == ['attach']:
     args = args[1:]
     if args[:1] == ['--labels']:
         args = args[2:]
+    if (root / 'zmx-attach-ends-session').exists():
+        sessions = root / 'zmx-sessions'
+        sessions.write_text(''.join(line + '\n' for line in sessions.read_text().splitlines()
+            if not any(field == f'name={args[0]}' for field in line.strip().split('\t'))))
     if len(args) > 1:
         os.environ['ZMX_SESSION'] = args[0]
         if os.environ.get('ZMX_TEST_LEAK_INPUT_MODE'):
@@ -25344,6 +25349,45 @@ fn attach_selects_a_session_of_the_workspace() {
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
     drop((persist, second, other));
+}
+
+#[test]
+fn attach_previous_returns_to_the_session_last_detached_from() {
+    let fixture = Fixture::new();
+    fixture.add("persist");
+    fixture.add("other");
+    let home = fixture.root.path();
+    let session = |name: &str| format!("  name={name}\tpid=1\tclients=0\tshoal.workspace=w0\n");
+    fs::write(
+        home.join("zmx-sessions"),
+        session("persist") + &session("other"),
+    )
+    .unwrap();
+    let persist = agent_in_session(&fixture, "persist", "persist");
+    let other = agent_in_session(&fixture, "other", "other");
+    let attached = || {
+        zmx_calls(&fixture)
+            .into_iter()
+            .rfind(|call| call[0] == "attach")
+            .unwrap()
+    };
+    let (output, transcript) = fixture.interactive(&["attach", "other"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    // A session that ends while attached is not one to return to.
+    fs::write(home.join("zmx-attach-ends-session"), "").unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "persist"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert!(!transcript.contains("detached from"), "{transcript}");
+    fs::remove_file(home.join("zmx-attach-ends-session")).unwrap();
+    fs::write(
+        home.join("zmx-sessions"),
+        session("persist") + &session("other"),
+    )
+    .unwrap();
+    let (output, transcript) = fixture.interactive(&["attach", "-"], "");
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    assert_eq!(attached(), ["attach", "other"]);
+    drop((persist, other));
 }
 
 #[test]
