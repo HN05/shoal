@@ -136,9 +136,22 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         entry.expect("the requested restore was not queued").state
     };
     assert_eq!(restore().await, crate::state::QueueState::Queued);
-    manager.system_shutdown_cancelled();
+    manager.system_shutdown_cancelled().await;
     assert!(!manager.agent_queue.suspended());
     assert_eq!(restore().await, crate::state::QueueState::Starting);
+}
+
+#[tokio::test]
+async fn suspending_waits_for_an_admission_pass_in_progress() {
+    use futures_util::FutureExt;
+    let queue = super::super::agent_queue::AgentQueue::default();
+    let admitting = queue.lock_admission().await;
+    let mut suspending = Box::pin(queue.suspend(true));
+    assert!(suspending.as_mut().now_or_never().is_none());
+    assert!(!queue.suspended());
+    drop(admitting);
+    suspending.await;
+    assert!(queue.suspended());
 }
 
 #[test]

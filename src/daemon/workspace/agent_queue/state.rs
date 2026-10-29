@@ -96,7 +96,10 @@ impl AgentQueue {
 
     /// Hold back admission while the system shuts down, so nothing the
     /// shutdown stopped starts again before it; resuming wakes the dispatcher.
-    pub(crate) fn suspend(&self, suspended: bool) {
+    /// Takes the admission gate, so an admission pass already past its
+    /// check finishes first.
+    pub(crate) async fn suspend(&self, suspended: bool) {
+        let _gate = self.lock_admission().await;
         self.suspended.store(suspended, Ordering::SeqCst);
         if !suspended {
             self.wake();

@@ -23,7 +23,7 @@ impl Manager {
     /// it. The user learns what to continue. An update waits for the stop.
     pub(crate) async fn stop_for_system_shutdown(&self) {
         let _operation = self.gates.operation().await;
-        self.agent_queue.suspend(true);
+        self.agent_queue.suspend(true).await;
         let targets = match self.stop_targets().await {
             Ok(targets) => targets,
             Err(error) => {
@@ -46,8 +46,8 @@ impl Manager {
     }
 
     /// Admit queued agents again once the shutdown was cancelled.
-    pub(crate) fn system_shutdown_cancelled(&self) {
-        self.agent_queue.suspend(false);
+    pub(crate) async fn system_shutdown_cancelled(&self) {
+        self.agent_queue.suspend(false).await;
     }
 
     async fn notify_shutdown_stop_failed(&self, workspace: &Workspace, error: &anyhow::Error) {
