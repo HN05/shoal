@@ -35,12 +35,11 @@ pub(super) async fn run(
     let root = root
         .map(|root| super::repositories::absolute(ctx, root))
         .transpose()?;
-    let repositories = client::repositories(&ctx.paths).await?;
+    let before = Registrations::load(ctx).await?;
     let moves = plan_moves(ctx, root.clone(), regular_dir).await?;
     if !confirmed && !moves.repositories.is_empty() {
-        let workspaces = client::workspaces(&ctx.paths).await?;
         ensure!(
-            ui::confirm(ctx, &plan(&moves, &workspaces), "--yes")?,
+            ui::confirm(ctx, &plan(&moves, &before.workspaces), "--yes")?,
             "repository move canceled"
         );
     }
@@ -52,9 +51,8 @@ pub(super) async fn run(
         move_repositories(ctx, regular_dir).await
     }
     .await;
-    if let Ok(moved) = &moved {
-        retrust(ctx, &repositories, moved).await;
-    }
+    // A failed request may follow moves that completed.
+    retrust(ctx, &before).await;
     let queued = resume_stopped(ctx, &moves.executions).await;
     show(ctx, &moved?, queued.as_ref())
 }
@@ -100,31 +98,54 @@ async fn move_repositories(ctx: &Context, regular_dir: bool) -> Result<Vec<Moved
     .await
 }
 
-/// Remove agent trust for the old paths of the `moved` repositories, as
-/// `repositories` recorded them, and trust each moved workspace for the
-/// agents whose sessions `shoal resume` continues there.
-async fn retrust(ctx: &Context, repositories: &[Repository], moved: &[MovedRepository]) {
-    for moved in moved {
-        if let Some(old) = repositories
-            .iter()
-            .find(|repo| repo.id == moved.repository.id)
-        {
-            agents::cleanup_moved_trust(ctx, old, &moved.workspace_paths).await;
-        }
+/// The repositories and workspaces as recorded before the move.
+struct Registrations {
+    repositories: Vec<Repository>,
+    workspaces: Vec<Workspace>,
+}
+
+impl Registrations {
+    async fn load(ctx: &Context) -> Result<Self> {
+        Ok(Self {
+            repositories: client::repositories(&ctx.paths).await?,
+            workspaces: client::workspaces(&ctx.paths).await?,
+        })
     }
-    let workspaces = match client::workspaces(&ctx.paths).await {
-        Ok(workspaces) => workspaces,
+}
+
+/// For each repository whose directory moved since `before`, remove agent
+/// trust for its old paths and trust its workspaces for the agents whose
+/// sessions `shoal resume` continues there. Failures only warn.
+async fn retrust(ctx: &Context, before: &Registrations) {
+    let after = match Registrations::load(ctx).await {
+        Ok(after) => after,
         Err(error) => {
             eprintln!("warning: cannot trust the moved workspaces for their agents: {error:#}");
             return;
         }
     };
-    for workspace in workspaces.iter().filter(|workspace| {
-        moved
+    for old in &before.repositories {
+        let moved = after
+            .repositories
             .iter()
-            .any(|moved| moved.repository.id == workspace.repository_id)
-    }) {
-        agents::trust_saved(ctx, workspace).await;
+            .any(|repo| repo.id == old.id && repo.workspaces_dir != old.workspaces_dir);
+        if !moved {
+            continue;
+        }
+        let paths: Vec<_> = before
+            .workspaces
+            .iter()
+            .filter(|workspace| workspace.repository_id == old.id)
+            .map(|workspace| workspace.path.clone())
+            .collect();
+        agents::cleanup_moved_trust(ctx, old, &paths).await;
+        for workspace in after
+            .workspaces
+            .iter()
+            .filter(|workspace| workspace.repository_id == old.id)
+        {
+            agents::trust_saved(ctx, workspace).await;
+        }
     }
 }
 
