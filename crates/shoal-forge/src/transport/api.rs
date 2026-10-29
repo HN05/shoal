@@ -375,6 +375,14 @@ impl ForgeRepo {
         Ok(items)
     }
 
+    /// The list an endpoint that ignores pages answers, read as `account`.
+    pub(crate) async fn whole_list(&self, account: &Account, endpoint: &str) -> Result<Vec<Value>> {
+        let response = self.send(account, &Request::get(endpoint.into())).await?;
+        let (list, _) = (self.kind.page(&response, usize::MAX))
+            .with_context(|| format!("{endpoint} is not a list"))?;
+        Ok(list.to_vec())
+    }
+
     /// Hand each page of a paginated list endpoint, read as `account`, to
     /// `visit` until it returns false or no page follows.
     pub(crate) async fn pages_while(

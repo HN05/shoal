@@ -494,6 +494,11 @@ impl Backend for Forgejo {
         ))
     }
 
+    /// Forgejo lists a comment's reactions all at once, ignoring pages.
+    fn pages_reactions(&self, subject: Subject) -> bool {
+        subject == Subject::Item
+    }
+
     fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
         github_rest::listed_reaction(reaction)
     }

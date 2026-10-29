@@ -939,8 +939,9 @@ fn views_count_reactions_and_mark_the_logins_own() {
         "GET user": {"body": {"login": "me"}},
         format!("GET {issue}/reactions?limit=50&page=1"):
             {"body": [reaction("+1", "ann"), reaction("heart", "ann"), reaction("+1", "me")]},
-        // Forgejo lists no reactions as null.
-        "GET repos/team/project/issues/comments/9/reactions?limit=50&page=1": {"body": null},
+        // Forgejo lists a comment's reactions at once, however many.
+        "GET repos/team/project/issues/comments/9/reactions":
+            {"body": vec![reaction("eyes", "ann"); 50]},
     }));
     let view = &fixture.ok(&["view", "issue", "3", "--workspace", "topic"])[0];
     assert_eq!(
@@ -950,7 +951,11 @@ fn views_count_reactions_and_mark_the_logins_own() {
         "{view}"
     );
     assert_eq!(view["comments"][0]["id"], 9, "{view}");
-    assert!(view["comments"][0].get("reactions").is_none(), "{view}");
+    assert_eq!(
+        view["comments"][0]["reactions"],
+        json!([{"content": "eyes", "count": 50, "reacted": false}]),
+        "{view}"
+    );
     assert!(view.get("errors").is_none(), "{view}");
     let text = fixture.run(&["view", "issue", "3", "--workspace", "topic"]);
     let text = String::from_utf8_lossy(&text.stdout);
@@ -1057,7 +1062,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
         "GET user": {"body": {"login": "me"}},
         format!("GET {issue}/reactions?limit=50&page=1"): {"body": null},
         format!("POST {issue}/reactions"): {"status": 201, "body": {"content": "eyes"}},
-        "GET repos/team/project/issues/comments/9/reactions?limit=50&page=1":
+        "GET repos/team/project/issues/comments/9/reactions":
             {"body": [{"content": "heart", "user": {"login": "Me"}}]},
         "DELETE repos/team/project/issues/comments/9/reactions": {"body": null},
     }));

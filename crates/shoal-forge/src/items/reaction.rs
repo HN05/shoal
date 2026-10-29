@@ -215,8 +215,12 @@ impl ForgeRepo {
         subject: Subject,
     ) -> Result<Vec<Listed>> {
         let endpoint = self.kind.reactions_endpoint(self, kind, number, subject)?;
-        self.pages(account, &endpoint)
-            .await?
+        let reactions = if self.kind.pages_reactions(subject) {
+            self.pages(account, &endpoint).await?
+        } else {
+            self.whole_list(account, &endpoint).await?
+        };
+        reactions
             .iter()
             .map(|reaction| self.kind.listed_reaction(reaction))
             .collect()

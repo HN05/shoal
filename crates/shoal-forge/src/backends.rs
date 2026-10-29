@@ -434,6 +434,12 @@ pub(crate) trait Backend {
         subject: Subject,
     ) -> Result<String>;
 
+    /// Whether the forge lists the reactions on `subject` in pages; by
+    /// default it does.
+    fn pages_reactions(&self, _subject: Subject) -> bool {
+        true
+    }
+
     /// A reaction as the forge lists it, with GitHub's name for its content.
     fn listed_reaction(&self, reaction: &Value) -> Result<Listed>;
 
@@ -1037,6 +1043,10 @@ impl Backend for ForgeKind {
         subject: Subject,
     ) -> Result<String> {
         dispatch!(self, backend => backend.reactions_endpoint(repo, kind, number, subject))
+    }
+
+    fn pages_reactions(&self, subject: Subject) -> bool {
+        dispatch!(self, backend => backend.pages_reactions(subject))
     }
 
     fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
