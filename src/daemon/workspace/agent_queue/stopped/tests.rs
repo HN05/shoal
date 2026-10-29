@@ -385,9 +385,8 @@ async fn a_stop_claims_only_the_agents_nothing_stopped_before() {
     // A protection stop's agent keeps its execution while its wrapper waits.
     let (paused, _paused) = connected_agent(&manager, &workspace).await;
     stop(&manager, &workspace, &paused, STOPPED);
-    let stopper = manager.stopper("work", "parent").await.unwrap();
-    assert_eq!(stopper.workspace, "parent");
-    assert_eq!(stopper.executions, [running]);
+    let unstopped = manager.unstopped_executions(&workspace.id).await.unwrap();
+    assert_eq!(unstopped, [running]);
 }
 
 #[tokio::test]

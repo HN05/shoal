@@ -17,37 +17,28 @@ pub struct Discarded {
     pub executions: Vec<String>,
 }
 
-/// A workspace process stopping another workspace's executions, which may
-/// resume the agents among them.
+/// A workspace process that stopped another workspace's executions, which
+/// may resume the agents among them.
 pub(super) struct Stopper<'a> {
     /// The ID of the process's workspace.
     pub(super) workspace: &'a str,
-    /// The executions running before the stop that nothing stopped yet.
+    /// The executions the stop ended.
     pub(super) executions: Vec<String>,
 }
 
 impl Manager {
-    /// The process of workspace `stopped_by` about to stop the executions of
-    /// the workspace `selector` names. An agent that already saved its
-    /// recovery record was stopped before, such as one whose wrapper waits
-    /// to restore it after a protection stop, so that stop is not this one.
-    pub(super) async fn stopper<'a>(
-        &self,
-        selector: &str,
-        stopped_by: &'a str,
-    ) -> Result<Stopper<'a>> {
-        let workspace = self.workspace(selector).await?;
-        let executions = self.workspace_executions(&workspace.id).await?;
+    /// The executions of workspace `id` that nothing stopped yet. An agent
+    /// that already saved its recovery record was stopped before, such as
+    /// one whose wrapper waits to restore it after a protection stop.
+    pub(super) async fn unstopped_executions(&self, id: &str) -> Result<Vec<String>> {
+        let executions = self.workspace_executions(id).await?;
         let stopped_before =
-            |id: &str| recovery::record_path(&self.paths, &workspace.id, id).exists();
-        Ok(Stopper {
-            workspace: stopped_by,
-            executions: executions
-                .into_iter()
-                .map(|execution| execution.id)
-                .filter(|id| !stopped_before(id))
-                .collect(),
-        })
+            |execution: &str| recovery::record_path(&self.paths, id, execution).exists();
+        Ok(executions
+            .into_iter()
+            .map(|execution| execution.id)
+            .filter(|execution| !stopped_before(execution))
+            .collect())
     }
 
     /// Keep the workspace's stopped agents whose execution ended as last

@@ -2,7 +2,7 @@
 //! crate::execution, in the invoking CLI process.
 mod completion;
 
-use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace};
+use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_work::Stopper};
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
@@ -889,6 +889,7 @@ impl Manager {
             StopPolicy::RequireCompleteProof,
         )
         .await
+        .map(drop)
     }
 
     /// Stop as [`Manager::stop_workspace`] does at the user's request, then
@@ -908,12 +909,13 @@ impl Manager {
         } else {
             StopPolicy::RequireCompleteProof
         };
-        let stopper = match stopped_by {
-            Some(workspace) => Some(self.stopper(selector, workspace).await?),
-            None => None,
-        };
-        self.stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
+        let stopped = self
+            .stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
             .await?;
+        let stopper = stopped_by.map(|workspace| Stopper {
+            workspace,
+            executions: stopped,
+        });
         self.keep_stopped_as_last_sessions(selector, stopper.as_ref())
             .await
     }
@@ -943,20 +945,25 @@ impl Manager {
             StopPolicy::RequireCompleteProof,
         )
         .await
+        .map(drop)
     }
 
+    /// Stop the executions of the workspace `selector` names, returning those
+    /// that nothing stopped before, read once the reservation keeps new ones
+    /// from registering.
     async fn stop_workspace_executions(
         &self,
         selector: &str,
         request: StopRequest,
         protected: Protected,
         policy: StopPolicy,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
         let workspace = self.workspace(selector).await?;
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
+            let stopping = self.unstopped_executions(&workspace.id).await?;
             // Before stopping, so a restore admitted meanwhile cannot start
             // after, and again once stopped, for the request of an agent a
             // signal was ending meanwhile.
@@ -968,7 +975,7 @@ impl Manager {
             if protected == Protected::Stop {
                 self.cancel_stopped_restores(&workspace.id).await?;
             }
-            anyhow::Ok(())
+            anyhow::Ok(stopping)
         }
         .await;
         // A stop waiting for the user's confirmation has not failed.
