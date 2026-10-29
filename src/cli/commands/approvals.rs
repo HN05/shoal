@@ -227,18 +227,15 @@ pub(super) async fn decide(
 /// grants in view.
 pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let request = request::<Vec<ApprovalRequest>>(
-        &ctx.paths,
-        ApprovalMethod::ListApprovals { workspace: None },
-    )
-    .await?
-    .into_iter()
-    .find(|request| {
-        request.id == id
-            && request.created_at == created_at
-            && request.status == DecisionStatus::Pending
-    })
-    .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    let request = list_requests(ctx, None)
+        .await?
+        .into_iter()
+        .find(|request| {
+            request.id == id
+                && request.created_at == created_at
+                && request.status == DecisionStatus::Pending
+        })
+        .with_context(|| format!("approval request {id} changed since it was listed"))?;
     prompt_decision(ctx, Box::new(request)).await
 }
 
@@ -323,25 +320,9 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 }
 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let requests =
-        request::<Vec<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ListApprovals { workspace })
-            .await?;
+    let requests = list_requests(ctx, workspace.clone()).await?;
     if ctx.interactive_output() && !requests.is_empty() {
-        let (selected, decision) = pick_request(ctx, requests)?;
-        return match decision {
-            Some(approve) => {
-                ensure_scope_token(ctx)?;
-                submit(
-                    ctx,
-                    selected.id,
-                    approve,
-                    Some(selected),
-                    ProposalDecision::default(),
-                )
-                .await
-            }
-            None => show_request(ctx, selected).await,
-        };
+        return pick_and_decide(ctx, workspace, requests).await;
     }
     ctx.show(&requests, |requests| {
         for request in requests {
@@ -352,6 +333,46 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
         }
     })?;
     Ok(0)
+}
+
+async fn list_requests(ctx: &Context, workspace: Option<String>) -> Result<Vec<ApprovalRequest>> {
+    request(&ctx.paths, ApprovalMethod::ListApprovals { workspace }).await
+}
+
+/// Open the chosen request, or decide it with a key and choose again while
+/// pending requests remain; leaving the picker after a decision succeeds.
+async fn pick_and_decide(
+    ctx: &Context,
+    workspace: Option<String>,
+    mut requests: Vec<ApprovalRequest>,
+) -> Result<i32> {
+    let mut decided = false;
+    loop {
+        let (selected, decision) = match pick_request(ctx, requests) {
+            Err(error) if decided && error.is::<ui::SelectionCanceled>() => return Ok(0),
+            picked => picked?,
+        };
+        let Some(approve) = decision else {
+            return show_request(ctx, selected).await;
+        };
+        ensure_scope_token(ctx)?;
+        submit(
+            ctx,
+            selected.id,
+            approve,
+            Some(selected),
+            ProposalDecision::default(),
+        )
+        .await?;
+        decided = true;
+        requests = list_requests(ctx, workspace.clone()).await?;
+        if !requests
+            .iter()
+            .any(|request| request.status == DecisionStatus::Pending)
+        {
+            return Ok(0);
+        }
+    }
 }
 
 /// Choose a request, pending ones first, and how to act on it.
@@ -375,12 +396,8 @@ fn pick_request(
 }
 
 async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
-    let requests = request::<Vec<ApprovalRequest>>(
-        &ctx.paths,
-        ApprovalMethod::ListApprovals { workspace: None },
-    )
-    .await?;
-    let pending: Vec<_> = requests
+    let pending: Vec<_> = list_requests(ctx, None)
+        .await?
         .into_iter()
         .filter(|request| request.status == DecisionStatus::Pending)
         .collect();

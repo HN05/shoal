@@ -19955,6 +19955,43 @@ head -1 "$HOME/picker-input"
 }
 
 #[test]
+fn approval_list_shortcuts_reopen_the_list_while_requests_are_pending() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    let mut pending = Vec::new();
+    for agent in ["first", "second"] {
+        fixture.add(agent);
+        pending.push(pending_approval(scoped_command(
+            &fixture,
+            agent,
+            &["acquire", "port", "web", "--reason", "serve preview"],
+        )));
+    }
+    // Decides the first row, then leaves the reopened list.
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        r#"#!/bin/sh
+cat > "$HOME/picker-input"
+echo run >> "$HOME/picker-runs"
+[ "$(wc -l < "$HOME/picker-runs")" -gt 1 ] && exit 130
+printf 'ctrl-a\n'
+head -1 "$HOME/picker-input"
+"#,
+    );
+    let (output, transcript) =
+        fixture.terminal_command(fixture.command().arg("approvals"), "", true);
+    assert!(output.status.success(), "{transcript}");
+    let runs = fs::read_to_string(fixture.root.path().join("picker-runs")).unwrap();
+    assert_eq!(runs.lines().count(), 2, "{transcript}");
+    let statuses: Vec<_> = pending
+        .iter()
+        .map(|request| fixture.ok(&["approvals", &request["id"].to_string()])["status"].clone())
+        .collect();
+    assert!(statuses.contains(&Value::from("approved")), "{statuses:?}");
+    assert!(statuses.contains(&Value::from("pending")), "{statuses:?}");
+}
+
+#[test]
 fn question_picker_answers_the_selected_question_with_a_suggestion() {
     let fixture = Fixture::new();
     fixture.add("asker");
