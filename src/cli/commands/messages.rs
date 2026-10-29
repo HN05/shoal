@@ -362,12 +362,13 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
     lines.join("\n")
 }
 
-/// Where the agent asks the user, by whether a terminal shows its session.
+/// Whether a terminal shows the agent's session; the agent's guidance says
+/// how to reach the user either way.
 fn attachment_notice(attached: bool) -> &'static str {
     if attached {
-        "The user is attached to this session: ask questions here in the chat instead of with shoal questions ask."
+        "The user is attached to this session."
     } else {
-        "The user is not attached to this session: ask questions with shoal questions ask."
+        "The user is not attached to this session."
     }
 }
 

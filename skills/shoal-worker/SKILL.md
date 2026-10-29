@@ -180,11 +180,15 @@ them with PR activity, as described above; a new message also ends `shoal watch 
 with a `messages` array, and `shoal messages` shows new ones. Each
 message is shown once. Follow it.
 
+Claude Code and Codex also hear whether the user is attached to your session,
+when that changes. While the user is attached, ask questions and report status
+in the chat instead of with `shoal questions ask` and `shoal alerts send`, and
+end your turn to wait for a reply.
+
 ## Questions
 
 When you need the user to decide something, ask a question rather than
-notifying. When Shoal tells you the user is attached to your session, ask in the
-chat instead and end your turn to wait for the reply. Otherwise ask with:
+notifying:
 
 ```sh
 shoal questions ask "Which database should the cache use?" --recommend SQLite \

@@ -3211,8 +3211,9 @@ tool call, which the hook input names as a subagent's, delivers nothing, since
 its context reaches the agent only through the subagent's report. Delivering through the hook replaces a running watch in
 the workspace, which ends with `superseded: true`. The hook also tells the
 agent whether you are attached to its session, once its wrapper first reports
-it and again whenever that changes, so it asks you in its chat while you are
-there and with `shoal questions ask` otherwise. Claude Code launches also run
+it and again whenever that changes; Shoal's agent guidance then has it ask
+questions and report status in its chat while you are there, instead of with
+`shoal questions ask` and `shoal alerts send`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` and `StopFailure` hook with
 `asyncRewake`: after each turn, including one an API error ended, it waits up to a week for the next message or item activity, prints it and
 exits 2, so Claude Code starts the idle agent's next turn with it. The wait

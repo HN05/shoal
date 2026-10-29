@@ -47,7 +47,7 @@ fn hook_output_names_the_event_it_answers() {
 }
 
 #[test]
-fn hook_context_tells_the_agent_where_to_ask_the_user() {
+fn hook_context_tells_the_agent_whether_the_user_is_attached() {
     let attached = |attached| Updates {
         updates: Vec::new(),
         messages: Vec::new(),
@@ -58,11 +58,11 @@ fn hook_context_tells_the_agent_where_to_ask_the_user() {
     let inbox = Inbox::Workspace("worker".into());
     assert_eq!(
         inbox.hook_context(&attached(true)),
-        "The user is attached to this session: ask questions here in the chat instead of with shoal questions ask."
+        "The user is attached to this session."
     );
     assert_eq!(
         inbox.hook_context(&attached(false)),
-        "The user is not attached to this session: ask questions with shoal questions ask."
+        "The user is not attached to this session."
     );
 }
 
