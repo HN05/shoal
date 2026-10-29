@@ -373,8 +373,9 @@ restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal resume`. An agent that does not start again
 stays stopped for `shoal resume`, and the exit status is 1. One whose stopped
-processes do not exit is reported as failed with their PIDs and the command that
-ends them, and restarts once they exit unless `shoal stop` cancels it.
+processes do not exit is reported as pending with their PIDs and the command that
+ends them, which also sets the exit status to 1, and restarts once they exit
+unless `shoal stop` cancels it.
 
 `shoal resume [workspace...]` queues the restore of each agent a saved recovery
 record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and

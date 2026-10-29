@@ -5,18 +5,12 @@ use std::time::Duration;
 use futures_util::{StreamExt, stream::FuturesUnordered};
 
 use anyhow::{Result, ensure};
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::time::{Instant, sleep, sleep_until};
 
 use crate::{
     agent::Agent,
-    cli::{
-        args::WorkspaceTargets,
-        client::request,
-        context::Context,
-        output::{Palette, Style},
-        ui,
-    },
+    cli::{args::WorkspaceTargets, client::request, context::Context},
     daemon::workspace::capacity::STAGGER,
     execution::recovery,
     model::RunningAgent,
@@ -24,9 +18,11 @@ use crate::{
 };
 
 mod plan;
+mod progress;
 
 pub(super) use plan::skip_reason;
 use plan::{Restart, Selection, Skipped};
+use progress::Progress;
 
 /// How many agents restart at once, each holding one of the daemon's
 /// long-lived connections until its agent runs again.
@@ -60,35 +56,16 @@ pub(super) async fn run(
         )?;
         return Ok(0);
     }
-    let mut report = ui::Report::new("restarted", "restart");
-    let mut skipped = report_skipped(ctx, &plan.skipped);
-    let gone = if sequential {
-        restart_in_turn(ctx, &mut report, plan.restarts, wait).await?
+    let mut progress = Progress::new(plan.restarts.len() + plan.skipped.len());
+    for skipped in plan.skipped {
+        progress.skip(ctx, skipped);
+    }
+    if sequential {
+        restart_in_turn(ctx, &mut progress, plan.restarts, wait).await?;
     } else {
-        restart_together(ctx, &mut report, plan.restarts, wait).await?
-    };
-    skipped.extend(gone);
-    report.field("skipped", skipped.into());
-    report.finish(ctx, "")
-}
-
-/// Print each skipped agent, returning their JSON entries.
-fn report_skipped(ctx: &Context, skipped: &[Skipped]) -> Vec<Value> {
-    let palette = Palette::stdout(ctx.json);
-    skipped
-        .iter()
-        .map(|skipped| {
-            if !ctx.json {
-                let message = format!("Skipped {}: {}", skipped.workspace, skipped.reason);
-                outln!("{}", palette.paint(Style::Warning, &message));
-            }
-            json!({
-                "workspace": skipped.workspace,
-                "agent": skipped.agent,
-                "reason": skipped.reason,
-            })
-        })
-        .collect()
+        restart_together(ctx, &mut progress, plan.restarts, wait).await?;
+    }
+    progress.finish(ctx)
 }
 
 impl Restart {
@@ -102,11 +79,8 @@ impl Restart {
         .await;
         restarted.map_err(|error| {
             // A restart that waits still restores the agent itself.
-            let waits = error
-                .downcast_ref::<RemoteError>()
-                .is_some_and(|remote| remote.code == ErrorCode::RestartWaits);
             match recovery::pending(&ctx.paths, &self.workspace.id) {
-                Ok(true) if !waits => anyhow::anyhow!(
+                Ok(true) if waits(&error).is_none() => anyhow::anyhow!(
                     "{error:#}; restore it with shoal resume {}",
                     self.workspace.name
                 ),
@@ -116,59 +90,61 @@ impl Restart {
     }
 }
 
+/// What the restart waits for, when `error` answers a restart that goes on
+/// once the stopped agent's remaining processes exit.
+fn waits(error: &anyhow::Error) -> Option<&str> {
+    error
+        .downcast_ref::<RemoteError>()
+        .filter(|remote| remote.code == ErrorCode::RestartWaits)
+        .map(|remote| remote.message.as_str())
+}
+
 /// Restart `restarts` one at a time, idle ones first, each at least the
 /// admission stagger after the previous start, and with `wait` only once its
-/// turn ended,
-/// returning the JSON entries of agents that stopped running meanwhile.
+/// turn ended.
 async fn restart_in_turn(
     ctx: &Context,
-    report: &mut ui::Report,
+    progress: &mut Progress,
     mut restarts: Vec<Restart>,
     wait: bool,
-) -> Result<Vec<Value>> {
-    let total = restarts.len();
-    let mut position = 0;
+) -> Result<()> {
     let mut previous: Option<Instant> = None;
-    let mut gone = Vec::new();
     while !restarts.is_empty() {
         if let Some(previous) = previous {
             sleep_until(previous + STAGGER).await;
         }
         let restart = if wait {
-            let Some(restart) = next_idle(ctx, &mut restarts, &mut gone).await? else {
+            let Some(restart) = next_idle(ctx, progress, &mut restarts).await? else {
                 break;
             };
             restart
         } else {
             restarts.remove(0)
         };
-        position += 1;
         let result = restart.run(ctx).await;
         if result.is_ok() {
             previous = Some(Instant::now());
         }
-        report_outcome(ctx, report, &restart, result, (position, total));
+        progress.ended(ctx, &restart, result);
     }
-    Ok(gone)
+    Ok(())
 }
 
 /// Restart `restarts` together, up to [`PARALLEL_RESTARTS`] at a time, and
-/// with `wait` each as soon as its turn ends, returning the JSON entries of
-/// agents that stopped running meanwhile.
+/// with `wait` each as soon as its turn ends.
 async fn restart_together(
     ctx: &Context,
-    report: &mut ui::Report,
+    progress: &mut Progress,
     mut waiting: Vec<Restart>,
     wait: bool,
-) -> Result<Vec<Value>> {
-    let total = waiting.len();
-    let mut finished = 0;
-    let mut gone = Vec::new();
+) -> Result<()> {
     let mut running = FuturesUnordered::new();
     let mut told = false;
     loop {
         if wait {
-            gone.extend(report_skipped(ctx, &refresh(ctx, &mut waiting).await?));
+            for gone in refresh(ctx, &mut waiting).await? {
+                progress.skip(ctx, gone);
+            }
         }
         while running.len() < PARALLEL_RESTARTS
             && let Some(index) = waiting.iter().position(|restart| !wait || restart.idle())
@@ -180,37 +156,15 @@ async fn restart_together(
             });
         }
         if waiting.is_empty() && running.is_empty() {
-            return Ok(gone);
+            return Ok(());
         }
         if wait && !told {
             told = tell_waiting(ctx, &waiting);
         }
         tokio::select! {
-            Some((restart, result)) = running.next() => {
-                finished += 1;
-                report_outcome(ctx, report, &restart, result, (finished, total));
-            }
+            Some((restart, result)) = running.next() => progress.ended(ctx, &restart, result),
             () = sleep(TURN_POLL_INTERVAL), if wait && !waiting.is_empty() => {}
         }
-    }
-}
-
-/// Report how `restart` ended, as the `position`th of `total`.
-fn report_outcome(
-    ctx: &Context,
-    report: &mut ui::Report,
-    restart: &Restart,
-    result: Result<()>,
-    (position, total): (usize, usize),
-) {
-    let name = &restart.workspace.name;
-    match result {
-        Ok(()) => report.done(
-            ctx,
-            &format!("Restarted {name} ({position}/{total})"),
-            json!({"workspace": name, "agent": restart.agent.agent}),
-        ),
-        Err(error) => report.failed(ctx, name, &error),
     }
 }
 
@@ -229,15 +183,17 @@ fn tell_waiting(ctx: &Context, restarts: &[Restart]) -> bool {
 
 /// Take the first of `restarts` whose turn ended, from states read now,
 /// waiting until one has; an agent waiting for the user or without turn
-/// reports works. Agents that stopped running are reported into `gone`.
+/// reports works. Agents that stopped running are reported as skipped.
 async fn next_idle(
     ctx: &Context,
+    progress: &mut Progress,
     restarts: &mut Vec<Restart>,
-    gone: &mut Vec<Value>,
 ) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
-        gone.extend(report_skipped(ctx, &refresh(ctx, restarts).await?));
+        for gone in refresh(ctx, restarts).await? {
+            progress.skip(ctx, gone);
+        }
         if restarts.is_empty() {
             return Ok(None);
         }

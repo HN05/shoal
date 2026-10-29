@@ -83,6 +83,10 @@ pub fn failure(ctx: &Context, verb: &str, workspace: &str, error: &anyhow::Error
         "{} cannot {verb} {workspace}: {error:#}",
         Palette::stderr(ctx.json).paint(Style::Error, "error:")
     );
+    failure_value(workspace, error)
+}
+
+fn failure_value(workspace: &str, error: &anyhow::Error) -> Value {
     json!({"workspace": workspace, "error": format!("{error:#}")})
 }
 
@@ -121,6 +125,21 @@ impl Report {
     /// others.
     pub fn failed(&mut self, ctx: &Context, workspace: &str, error: &anyhow::Error) {
         self.failed.push(failure(ctx, self.verb, workspace, error));
+    }
+
+    /// Record a workspace the command failed on, printing `message`, which
+    /// names the failure in the command's own words, instead of an error line.
+    pub fn failed_saying(
+        &mut self,
+        ctx: &Context,
+        message: &str,
+        workspace: &str,
+        error: &anyhow::Error,
+    ) {
+        if !ctx.json {
+            eprintln!("{}", Palette::stderr(false).paint(Style::Error, message));
+        }
+        self.failed.push(failure_value(workspace, error));
     }
 
     /// How many items the command acted on, and how many it failed on.
