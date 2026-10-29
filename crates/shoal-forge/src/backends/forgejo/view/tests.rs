@@ -24,6 +24,23 @@ fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
 }
 
 #[test]
+fn the_latest_scheduling_in_the_timeline_sets_an_automatic_merge() {
+    let event = |kind: &str| json!({"type": kind});
+    assert_eq!(scheduled_merge(&[event("pull_push")]), None);
+    let scheduled = [
+        event("pull_scheduled_merge"),
+        event("pull_cancel_scheduled_merge"),
+        event("pull_scheduled_merge"),
+        event("comment"),
+    ];
+    assert_eq!(
+        scheduled_merge(&scheduled),
+        Some(AutoMerge { method: None })
+    );
+    assert_eq!(scheduled_merge(&scheduled[..2]), None);
+}
+
+#[test]
 fn forgejo_reviews_carry_inline_comments_and_resolution() {
     let reviews = [
         (

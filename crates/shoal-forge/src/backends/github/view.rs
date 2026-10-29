@@ -9,10 +9,10 @@ use super::{
 use crate::{
     ForgeRepo,
     account::Account,
-    items::link::ItemKind,
+    items::{action::MergeMethod, link::ItemKind},
     review::view::{
-        Comment, Details, PrDetails, Review, labels, login, required, review_comment, review_state,
-        text_field,
+        AutoMerge, Comment, Details, PrDetails, Review, labels, login, required, review_comment,
+        review_state, text_field,
     },
 };
 
@@ -27,7 +27,7 @@ pub(crate) async fn details(
     let repository = format!("{}/{}", repo.host, repo.path);
     let (command, extra) = match kind {
         ItemKind::Issue => ("issue", ""),
-        ItemKind::Pr => ("pr", ",headRefName,baseRefName,isDraft"),
+        ItemKind::Pr => ("pr", ",headRefName,baseRefName,isDraft,autoMergeRequest"),
     };
     let fields = format!(
         "number,title,body,state,author,labels,createdAt{extra}{}",
@@ -86,11 +86,14 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
     ensure!(item["number"] == number, "gh returned a different item");
     let pr = match kind {
         ItemKind::Issue => None,
-        ItemKind::Pr => Some(PrDetails::read(
-            &item["headRefName"],
-            &item["baseRefName"],
-            item["isDraft"].as_bool().unwrap_or_default(),
-        )?),
+        ItemKind::Pr => Some(PrDetails {
+            auto_merge: auto_merge(&item["autoMergeRequest"])?,
+            ..PrDetails::read(
+                &item["headRefName"],
+                &item["baseRefName"],
+                item["isDraft"].as_bool().unwrap_or_default(),
+            )?
+        }),
     };
     let comments = match item.get("comments") {
         Some(comments) => Some(
@@ -122,6 +125,21 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
         reviews: None,
         reactions: Vec::new(),
     })
+}
+
+fn auto_merge(request: &Value) -> Result<Option<AutoMerge>> {
+    if request.is_null() {
+        return Ok(None);
+    }
+    let method = match request["mergeMethod"].as_str() {
+        Some("MERGE") => MergeMethod::Merge,
+        Some("REBASE") => MergeMethod::Rebase,
+        Some("SQUASH") => MergeMethod::Squash,
+        method => anyhow::bail!("unknown auto-merge method {method:?}"),
+    };
+    Ok(Some(AutoMerge {
+        method: Some(method),
+    }))
 }
 
 /// The REST ID of the comment at `url`, which `gh` reports only there.

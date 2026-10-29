@@ -907,6 +907,8 @@ fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
     fixture.respond(json!({
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
         "GET repos/team/project/issues/8/comments": {"body": []},
+        "GET repos/team/project/issues/8/timeline?limit=50&page=1":
+            {"body": [{"type": "pull_scheduled_merge"}]},
         format!("GET {endpoint}/reviews?limit=50&page=1"):
             {"body": [review(3, "Retried"), review(4, "Unreadable")]},
         format!("GET {endpoint}/reviews/3/comments"):
@@ -914,6 +916,7 @@ fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
         format!("GET {endpoint}/reviews/4/comments"): {"status": 403, "body": {"message": "no"}},
     }));
     let view = &fixture.ok(&["view", "pr", "8", "--workspace", "topic"])[0];
+    assert_eq!(view["pr"]["auto_merge"], json!({"method": null}), "{view}");
     let reviews = view["reviews"].as_array().unwrap();
     assert_eq!(reviews[0]["comments"][0]["body"], "Nit", "{view}");
     assert_eq!(reviews[1]["body"], "Unreadable", "{view}");
@@ -2530,6 +2533,7 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
         responses["GET repos/team/project/issues/8/comments"] =
             json!({"body": [{"body": "Please fix CI", "user": {"login": "reviewer"}}]});
         responses["GET repos/team/project/pulls/8/reviews?limit=50&page=1"] = json!({"body": []});
+        responses["GET repos/team/project/issues/8/timeline?limit=50&page=1"] = json!({"body": []});
         if outcome == "unavailable" {
             responses["GET repos/team/project/actions/jobs/18345/logs"] =
                 json!({"status": 404, "body": {"message": "logs unavailable"}});

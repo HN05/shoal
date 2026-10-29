@@ -35,7 +35,7 @@ use crate::{
         status::{PrStatus, Verdict},
         submit::{PlacedReview, Submission},
         thread::{Target, Thread},
-        view::{Comment, Details, PrDetails, Review, ReviewComment},
+        view::{AutoMerge, Comment, Details, PrDetails, Review, ReviewComment},
     },
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
@@ -852,10 +852,11 @@ async fn view_details(
         .send(account, &Request::get(repo.item_endpoint(kind, number)))
         .await?;
     let current = repo.current(kind, number, &value)?;
-    let pr = match current.item.pr {
-        Some(pr) => Some(PrDetails::new(pr.head, pr.base, pr.draft)),
-        None => None,
-    };
+    let open = current.item.state == ItemState::Open;
+    let pr = current.item.pr.map(|pr| PrDetails {
+        auto_merge: auto_merge(&value).filter(|_| open),
+        ..PrDetails::new(pr.head, pr.base, pr.draft)
+    });
     Ok(Details {
         number,
         title: current.item.title,
@@ -868,6 +869,19 @@ async fn view_details(
         comments: None,
         reviews: None,
         reactions: Vec::new(),
+    })
+}
+
+/// The merge GitLab makes once the pipeline succeeds, squashed as the merge
+/// request says.
+fn auto_merge(merge_request: &Value) -> Option<AutoMerge> {
+    let method = if merge_request["squash"] == true {
+        MergeMethod::Squash
+    } else {
+        MergeMethod::Merge
+    };
+    (merge_request["merge_when_pipeline_succeeds"] == true).then_some(AutoMerge {
+        method: Some(method),
     })
 }
 

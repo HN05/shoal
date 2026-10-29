@@ -15756,6 +15756,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
         serde_json::json!({"number":7,"title":"Fix crash","body":"Closes #3","state":"OPEN",
             "author":{"login":"agent"},"labels":[],"createdAt":"t2","headRefName":"view",
             "baseRefName":"main","isDraft":false,"headRefOid":"head","commits":[],
+            "autoMergeRequest":{"mergeMethod":"REBASE"},
             "comments":[],"reviews":[{"id":"r1","author":{"login":"bot"},"state":"CHANGES_REQUESTED"}],
             "mergeable":"CONFLICTING","statusCheckRollup":[{"__typename":"CheckRun","name":"rust",
             "status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"rust/1"}]})
@@ -15800,6 +15801,10 @@ fn view_shows_linked_items_with_status_and_discussion() {
     assert_eq!(pr["pr"]["merge_conflicts"], true);
     assert_eq!(pr["pr"]["checks"][0]["result"], "failure");
     assert_eq!(pr["pr"]["review"], "changes_requested");
+    assert_eq!(
+        pr["pr"]["auto_merge"],
+        serde_json::json!({"method": "rebase"})
+    );
     let finding = &pr["reviews"][0]["comments"][0];
     assert_eq!(finding["path"], "src/a.rs");
     assert_eq!(
@@ -15832,6 +15837,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let text = String::from_utf8_lossy(&text.stdout);
     assert!(text.contains("PR #7: Fix crash"), "{text}");
     assert!(text.contains("Branch:   view → main"), "{text}");
+    assert!(text.contains(", auto-merge (rebase)"), "{text}");
     assert!(
         text.contains("src/a.rs:3 · bot · t3 · comment 21 · unresolved"),
         "{text}"

@@ -29,6 +29,18 @@ fn github_issue_and_pr_details_read_content_and_comments() {
         (pr.head.as_str(), pr.base.as_str(), pr.draft),
         ("topic", "main", true)
     );
+    assert_eq!(pr.auto_merge, None);
+
+    let mut pull = pull;
+    pull["state"] = json!("OPEN");
+    pull["autoMergeRequest"] = json!({"mergeMethod": "SQUASH", "enabledBy": {"login": "kim"}});
+    let details = parse_details(&pull.to_string(), ItemKind::Pr, 7).unwrap();
+    assert_eq!(
+        details.pr.unwrap().auto_merge,
+        Some(AutoMerge {
+            method: Some(MergeMethod::Squash)
+        })
+    );
 }
 
 #[test]

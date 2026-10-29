@@ -9,7 +9,7 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
-    items::{link::ItemKind, reaction::Reaction},
+    items::{action::MergeMethod, link::ItemKind, reaction::Reaction},
     review::status::{CheckResult, PrStatus, ReviewState},
 };
 
@@ -58,6 +58,16 @@ pub struct PrDetails {
     pub merge_conflicts: Option<bool>,
     pub checks: Vec<CheckResult>,
     pub review: Option<ReviewState>,
+    /// Set while the forge is to merge the open PR once it can.
+    #[serde(default)]
+    pub auto_merge: Option<AutoMerge>,
+}
+
+/// A merge the forge makes once the PR's required checks and approvals pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AutoMerge {
+    /// Unknown where the forge does not report it.
+    pub method: Option<MergeMethod>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,6 +201,7 @@ impl PrDetails {
             merge_conflicts: None,
             checks: Vec::new(),
             review: None,
+            auto_merge: None,
         }
     }
 

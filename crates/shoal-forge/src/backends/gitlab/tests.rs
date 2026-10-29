@@ -92,6 +92,24 @@ fn merge_requests_read_branches_drafts_and_conflicts() {
 }
 
 #[test]
+fn merges_when_the_pipeline_succeeds_keep_their_squash_setting() {
+    let mut merge_request = json!({"merge_when_pipeline_succeeds": false, "squash": true});
+    assert_eq!(auto_merge(&merge_request), None);
+    merge_request["merge_when_pipeline_succeeds"] = json!(true);
+    assert_eq!(
+        auto_merge(&merge_request),
+        Some(AutoMerge {
+            method: Some(MergeMethod::Squash)
+        })
+    );
+    merge_request["squash"] = json!(false);
+    assert_eq!(
+        auto_merge(&merge_request).and_then(|merge| merge.method),
+        Some(MergeMethod::Merge)
+    );
+}
+
+#[test]
 fn statuses_keep_the_newest_of_each_name_in_shared_states() {
     let listed = json!([
         {"id": 1, "name": "rust", "status": "failed"},

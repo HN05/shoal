@@ -20,7 +20,7 @@ use crate::{
             link::{ItemKind, Selection},
             reaction::Reaction,
         },
-        review::view::{Details, ItemView, PrDetails, Review},
+        review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
     },
     model::Selected,
     protocol::{CiMethod, ItemContext},
@@ -275,7 +275,14 @@ fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
         None => String::new(),
     };
     let draft = if pr.draft { ", draft" } else { "" };
-    outln!("State:    {state}{draft}{conflicts}");
+    let auto_merge = match pr.auto_merge {
+        Some(AutoMerge {
+            method: Some(method),
+        }) => format!(", auto-merge ({method})"),
+        Some(AutoMerge { method: None }) => ", auto-merge".into(),
+        None => String::new(),
+    };
+    outln!("State:    {state}{draft}{conflicts}{auto_merge}");
     outln!("Branch:   {} → {}", pr.head, pr.base);
     if let Some(review) = pr.review {
         outln!("Review:   {}", palette.review_state(review));
