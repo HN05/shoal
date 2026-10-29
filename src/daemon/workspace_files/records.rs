@@ -89,19 +89,13 @@ pub(super) fn record_all(
     Ok(records)
 }
 
-/// The workspace `workspace_id`'s files, only those called `name` when
-/// given, oldest first.
-pub(super) fn list(
-    db: &Connection,
-    workspace_id: &str,
-    name: Option<&str>,
-) -> Result<Vec<AttachedFile>> {
+/// The workspace `workspace_id`'s files, oldest first.
+pub(super) fn list(db: &Connection, workspace_id: &str) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files
-                WHERE workspace_id=?1 AND (?2 IS NULL OR name=?2) ORDER BY id"
+            "SELECT {COLUMNS} FROM workspace_files WHERE workspace_id=?1 ORDER BY id"
         ))?
-        .query_map(params![workspace_id, name], row)?
+        .query_map([workspace_id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }
 

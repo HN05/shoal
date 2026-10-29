@@ -111,9 +111,7 @@ impl Manager {
     /// removed workspace of that name handed back, oldest first.
     pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
-        self.store
-            .run(move |db| records::list(db, &owner.id, None))
-            .await
+        self.store.run(move |db| records::list(db, &owner.id)).await
     }
 
     /// The workspace `selector` names, or else the latest removed one of
@@ -152,26 +150,31 @@ impl Manager {
     }
 
     /// Delete the files attached to the workspace `selector` names, only the
-    /// copies of files called `name` when given, and return their records.
+    /// copies of files with one of `names` when there are any, and return
+    /// their records. A name no file has deletes nothing.
     pub async fn remove_workspace_files(
         &self,
         selector: &str,
-        name: Option<String>,
+        names: Vec<String>,
     ) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
         let repo = self.repository(&owner.repository_id).await?;
         let _files = self.gates.lock_message_files(&repo.id).await;
-        let (id, wanted) = (owner.id.clone(), name.clone());
-        let files = self
-            .store
-            .run(move |db| records::list(db, &id, wanted.as_deref()))
-            .await?;
-        if let Some(name) = &name {
+        let id = owner.id.clone();
+        let mut files = self.store.run(move |db| records::list(db, &id)).await?;
+        if !names.is_empty() {
+            let missing: Vec<_> = names
+                .iter()
+                .filter(|name| !files.iter().any(|file| file.name == **name))
+                .map(String::as_str)
+                .collect();
             ensure!(
-                !files.is_empty(),
-                "workspace {} has no attached file named {name}",
-                owner.name
+                missing.is_empty(),
+                "workspace {} has no attached file named {}",
+                owner.name,
+                missing.join(", ")
             );
+            files.retain(|file| names.contains(&file.name));
         }
         self.delete_files(&repo, files).await
     }

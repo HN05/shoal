@@ -16,11 +16,12 @@ pub enum FileMethod {
         /// Absolute paths of the files, which the daemon copies.
         files: Vec<std::path::PathBuf>,
     },
-    /// Delete a workspace's attached files, only those with file name `name`
-    /// when given; without a workspace, those of every workspace without a
-    /// running agent or command.
+    /// Delete a workspace's attached files, only those with one of `names`
+    /// when there are any; without a workspace, those of every workspace
+    /// without a running agent or command.
     RemoveFiles {
         workspace: Option<String>,
-        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        names: Vec<String>,
     },
 }

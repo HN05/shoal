@@ -62,14 +62,14 @@ pub(super) async fn add(
     Ok(0)
 }
 
-/// Delete the files of the workspace `scope` selects, only those called
-/// `name` when given, or of every workspace without a running agent or
-/// command. Asks first for every workspace, or one where an agent or command
+/// Delete the files of the workspace `scope` selects, only those with one of
+/// `names` when there are any, or of every workspace without a running agent
+/// or command. Asks first for every workspace, or one where an agent or command
 /// runs, unless `yes`.
 pub(super) async fn remove(
     ctx: &Context,
     scope: WorkspaceScope,
-    name: Option<String>,
+    names: Vec<String>,
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
@@ -77,7 +77,7 @@ pub(super) async fn remove(
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
     let deleted =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { workspace, name })
+        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { workspace, names })
             .await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),

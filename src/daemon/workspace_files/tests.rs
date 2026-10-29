@@ -119,7 +119,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         .await
         .unwrap();
     let error = manager
-        .remove_workspace_files(&workspace.name, Some("missing.txt".into()))
+        .remove_workspace_files(&workspace.name, vec!["missing.txt".into()])
         .await
         .unwrap_err();
     assert!(
@@ -127,7 +127,7 @@ async fn deleting_by_name_keeps_the_other_files() {
         "{error:#}"
     );
     let deleted = manager
-        .remove_workspace_files(&workspace.name, Some("crash.log".into()))
+        .remove_workspace_files(&workspace.name, vec!["crash.log".into()])
         .await
         .unwrap();
     assert!(!deleted[0].path.exists());
@@ -356,7 +356,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     std::fs::remove_dir_all(directory).unwrap();
     std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
     let error = manager
-        .remove_workspace_files(&workspace.name, None)
+        .remove_workspace_files(&workspace.name, vec![])
         .await
         .unwrap_err();
     assert!(

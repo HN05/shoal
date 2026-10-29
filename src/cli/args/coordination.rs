@@ -76,12 +76,14 @@ pub enum FilesCommand {
     /// Delete a workspace's attached files; asks first when an agent or
     /// command runs there.
     Rm {
-        /// Workspace whose files to delete; defaults to the current workspace or picker.
+        /// Delete only the files with these names; omit to delete them all.
+        #[arg(value_name = "FILE")]
+        files: Vec<String>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
         workspace: Option<String>,
-        /// Delete only the copies of files with this name.
-        file: Option<String>,
         /// Delete the files of every workspace without a running agent or command.
-        #[arg(long, conflicts_with_all = ["workspace", "file"])]
+        #[arg(long, conflicts_with_all = ["workspace", "files"])]
         all: bool,
         #[command(flatten)]
         confirmation: crate::cli::args::ConfirmationArgs,

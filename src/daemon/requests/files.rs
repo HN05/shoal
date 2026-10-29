@@ -20,8 +20,8 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: FileMethod) -> Result
         }
         FileMethod::RemoveFiles {
             workspace: Some(workspace),
-            name,
-        } => manager.remove_workspace_files(&workspace, name).await,
+            names,
+        } => manager.remove_workspace_files(&workspace, names).await,
         FileMethod::RemoveFiles {
             workspace: None, ..
         } => manager.remove_idle_files().await,

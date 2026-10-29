@@ -19584,7 +19584,7 @@ fn files_add_attaches_copies_without_a_message() {
 
     // An idle workspace's files go without asking; every workspace's only
     // once confirmed.
-    let deleted = fixture.ok(&["files", "rm", "receiver", "notes.md"]);
+    let deleted = fixture.ok(&["files", "rm", "notes.md", "--workspace", "receiver"]);
     assert_eq!(deleted, added);
     assert!(!copy.exists());
     let unconfirmed = fixture.run(&["files", "rm", "--all"]);
