@@ -146,15 +146,16 @@ pub async fn watch(
 async fn close_place(ctx: &Context, host: &dyn Host, place: &Watched) -> Result<()> {
     let closed =
         client::close_owned_place(&ctx.paths, &place.workspace, host.name(), &place.id).await?;
-    close_unrecorded(host, place, closed).await
+    close_left_to_host(host, place, closed).await
 }
 
 /// Close `place` through its host when the daemon, which `closed` says
-/// what it did, keeps no record of it, where the host's places prove their
-/// own ownership.
-async fn close_unrecorded(host: &dyn Host, place: &Watched, closed: PlaceClose) -> Result<()> {
+/// what it did, leaves that to the host: it cannot close the host's places,
+/// or it keeps no record of the place. Only a host whose places prove their
+/// own ownership closes them.
+async fn close_left_to_host(host: &dyn Host, place: &Watched, closed: PlaceClose) -> Result<()> {
     match closed {
-        PlaceClose::NotRecorded => match host.closes() {
+        PlaceClose::HostCloses | PlaceClose::NotRecorded => match host.closes() {
             Some(closes) => closes.close_place(&place.id).await,
             None => Ok(()),
         },

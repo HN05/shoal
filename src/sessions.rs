@@ -35,6 +35,9 @@ pub enum PlaceClose {
     Closed,
     /// Another workspace's agent or a chat took it over, so it stays open.
     OwnedElsewhere,
+    /// It was the workspace's, and its host, whose places the daemon cannot
+    /// close, closes it.
+    HostCloses,
     /// The daemon keeps no record of it; its host closes it.
     NotRecorded,
 }

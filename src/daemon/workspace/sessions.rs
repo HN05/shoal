@@ -88,8 +88,8 @@ impl Manager {
 
     /// Close `place` of `host`, recorded as one Shoal created, and forget
     /// it while its record still names `workspace` its owner: an agent of
-    /// another workspace may have taken it over since. A host that cannot
-    /// close places leaves that to the place itself.
+    /// another workspace may have taken it over since. A host the daemon
+    /// cannot close places of leaves that to the place's watcher.
     pub(crate) async fn close_recorded_place(
         &self,
         workspace: &str,
@@ -103,14 +103,16 @@ impl Manager {
         if owner.as_deref() != Some(workspace) {
             return Ok(PlaceClose::OwnedElsewhere);
         }
-        if let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) {
-            host.close(
-                &self.paths.state,
-                &origin,
-                &Owner::Workspace(workspace.to_owned()),
-            )
-            .await?;
-        }
+        let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) else {
+            self.forget_owned_place(origin).await?;
+            return Ok(PlaceClose::HostCloses);
+        };
+        host.close(
+            &self.paths.state,
+            &origin,
+            &Owner::Workspace(workspace.to_owned()),
+        )
+        .await?;
         self.forget_owned_place(origin).await?;
         Ok(PlaceClose::Closed)
     }

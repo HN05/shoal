@@ -567,6 +567,28 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
 }
 
 #[tokio::test]
+async fn a_recorded_place_the_daemon_cannot_close_is_left_to_its_host() -> Result<()> {
+    use crate::sessions::PlaceClose;
+
+    let (_root, manager, workspace, host) = rex_fixture(&[]).await?;
+    manager
+        .record_owned_place(
+            &workspace.id,
+            Origin::created(HostName::Herdr, "w1:p9".into()),
+        )
+        .await?;
+    assert_eq!(
+        manager
+            .close_recorded_place(&workspace.id, HostName::Herdr, "w1:p9")
+            .await?,
+        PlaceClose::HostCloses
+    );
+    assert!(host.closed()?.is_empty());
+    assert!(manager.owned_places(None).await?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> {
     use crate::{daemon::workspace::ExecutionKind, sessions::PlaceClose};
 

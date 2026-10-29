@@ -359,7 +359,7 @@ fn a_closing_place_is_recorded_until_its_watcher_ends() {
 }
 
 #[tokio::test]
-async fn a_place_without_a_record_closes_only_where_it_proves_its_owner() {
+async fn the_host_closes_what_the_daemon_leaves_to_it() {
     let place = Watched {
         id: "place-1".into(),
         workspace: "workspace".into(),
@@ -371,14 +371,17 @@ async fn a_place_without_a_record_closes_only_where_it_proves_its_owner() {
         ..FakeHost::new(Ok(PlaceState::Open(None)))
     };
     for closed in [
+        PlaceClose::HostCloses,
         PlaceClose::NotRecorded,
         PlaceClose::Closed,
         PlaceClose::OwnedElsewhere,
     ] {
-        close_unrecorded(&labelled, &place, closed).await.unwrap();
+        close_left_to_host(&labelled, &place, closed).await.unwrap();
         // A Rex block whose creation record failed may hold another agent now.
-        close_unrecorded(&unlabelled, &place, closed).await.unwrap();
+        close_left_to_host(&unlabelled, &place, closed)
+            .await
+            .unwrap();
     }
-    assert_eq!(labelled.closed(), ["place-1"]);
+    assert_eq!(labelled.closed(), ["place-1", "place-1"]);
     assert!(unlabelled.closed().is_empty());
 }

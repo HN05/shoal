@@ -161,11 +161,11 @@ pub(in crate::cli) trait Watches: Sync {
 }
 
 /// A host whose places carry their own ownership, so Shoal closes one the
-/// daemon keeps no record of. A host without it has only the record, and its
-/// places without one stay open.
+/// daemon keeps no record of or cannot close. A host without it has only the
+/// record, and its places without one stay open.
 pub(in crate::cli) trait Closes: Sync {
-    /// Close `place`, one this host opened for a workspace, which the
-    /// daemon keeps no record of.
+    /// Close `place`, one this host opened for a workspace, where the daemon
+    /// leaves that to the host.
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
