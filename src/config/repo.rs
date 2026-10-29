@@ -1,4 +1,5 @@
 use crate::agent::{Agent, AgentMode};
+use crate::sessions::HostName;
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -571,14 +572,33 @@ states!(
     }
 );
 
-states!(
-    #[derive(Default)]
-    /// The terminal host for launches from a terminal no host serves, by
-    /// the host's name.
-    DefaultHost: Variants {
-        #[default]
-        Zmx => "zmx",
-        Herdr => "herdr",
-        Rex => "rex",
+/// The terminal host for launches from a terminal no host serves, by the
+/// host's name: any host but the plain terminal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "HostName", into = "HostName")]
+pub struct DefaultHost(HostName);
+
+impl Default for DefaultHost {
+    fn default() -> Self {
+        Self(HostName::Zmx)
     }
-);
+}
+
+impl TryFrom<HostName> for DefaultHost {
+    type Error = String;
+
+    fn try_from(host: HostName) -> Result<Self, String> {
+        if host == HostName::Terminal {
+            return Err(format!(
+                "default_host must name a terminal host other than {host}"
+            ));
+        }
+        Ok(Self(host))
+    }
+}
+
+impl From<DefaultHost> for HostName {
+    fn from(default: DefaultHost) -> Self {
+        default.0
+    }
+}

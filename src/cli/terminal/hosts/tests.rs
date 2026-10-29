@@ -28,16 +28,18 @@ fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
 }
 
 #[test]
-fn every_default_host_setting_names_a_host() {
-    for default in crate::config::repo::DefaultHost::ALL {
-        let config: crate::config::Config =
-            toml::from_str(&format!("default_host = '{}'", default.as_str())).unwrap();
-        let settings = config
+fn every_host_but_the_plain_terminal_can_be_the_default() {
+    for &name in HostName::ALL {
+        let parsed = toml::from_str::<crate::config::Config>(&format!("default_host = '{name}'"));
+        let Some(registered) = registration(name) else {
+            assert!(parsed.is_err(), "{name}");
+            continue;
+        };
+        let settings = parsed
+            .unwrap()
             .resolve(&crate::config::repo::ConfigLayers::default())
             .unwrap();
-        assert_eq!(
-            Configured::default_host(&settings).host.name().as_str(),
-            default.as_str()
-        );
+        assert_eq!(Configured::default_host(&settings).host.name(), name);
+        assert_eq!(registered.host.name(), name);
     }
 }

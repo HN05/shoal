@@ -35,7 +35,7 @@ pub struct Effective {
     pub max_agents: Option<config::AgentLimit>,
     pub focus: Option<bool>,
     pub close_when_done: bool,
-    pub default_host: config::repo::DefaultHost,
+    pub default_host: crate::sessions::HostName,
     pub claude: Shortcut,
     pub codex: Shortcut,
     pub herdr: config::Herdr,
@@ -242,7 +242,7 @@ impl Effective {
                 workspace_name: built_in(merged.herdr.workspace_name, "herdr.workspace_name")?,
                 close_when_done: merged.herdr.close_when_done,
             },
-            default_host: built_in(merged.default_host, "default_host")?,
+            default_host: built_in(merged.default_host, "default_host")?.into(),
             rex: config::Rex {
                 enabled: built_in(merged.rex.enabled, "rex.enabled")?,
                 new_window: built_in(merged.rex.new_window, "rex.new_window")?,

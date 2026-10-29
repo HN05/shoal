@@ -208,7 +208,7 @@ fn herdr_defaults_and_options_resolve_independently() {
 #[test]
 fn rex_defaults_and_options_resolve_independently() {
     let defaults = stack("", "", "").resolve().unwrap();
-    assert_eq!(defaults.default_host, config::repo::DefaultHost::Zmx);
+    assert_eq!(defaults.default_host, crate::sessions::HostName::Zmx);
     let rex = defaults.rex;
     assert!(rex.enabled && rex.new_window);
     assert_eq!(rex.placement, config::repo::RexPlacement::Window);
@@ -221,14 +221,15 @@ fn rex_defaults_and_options_resolve_independently() {
     )
     .resolve()
     .unwrap();
-    assert_eq!(settings.default_host, config::repo::DefaultHost::Rex);
+    assert_eq!(settings.default_host, crate::sessions::HostName::Rex);
     assert!(settings.rex.enabled);
     assert_eq!(settings.rex.session_name, "work");
     assert_eq!(settings.rex.placement, config::repo::RexPlacement::Split);
     assert_eq!(settings.rex.close_when_done, Some(false));
     let herdr = stack("default_host = 'herdr'\n", "", "").resolve().unwrap();
-    assert_eq!(herdr.default_host, config::repo::DefaultHost::Herdr);
+    assert_eq!(herdr.default_host, crate::sessions::HostName::Herdr);
     assert!(toml::from_str::<Config>("default_host = 'tmux'\n").is_err());
+    assert!(toml::from_str::<Config>("default_host = 'terminal'\n").is_err());
     assert!(toml::from_str::<Config>("[rex]\nplacement = 'tab'\n").is_err());
 }
 

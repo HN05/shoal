@@ -113,11 +113,10 @@ impl Configured {
     }
 
     /// The host `default_host` names for a terminal no host serves, or zmx
-    /// where config turns that host off. The setting's values are host names.
+    /// where config turns that host off.
     pub(super) fn default_host(settings: &Effective) -> Self {
-        let name = settings.default_host.as_str();
         Self::all(settings)
-            .find(|host| host.host.name().as_str() == name && host.options.enabled)
+            .find(|host| host.host.name() == settings.default_host && host.options.enabled)
             .unwrap_or_else(|| Self::named(settings, HostName::Zmx))
     }
 
