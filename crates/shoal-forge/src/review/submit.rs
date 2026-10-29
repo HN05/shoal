@@ -1,5 +1,10 @@
 //! Reviews Shoal submits on a PR: a verdict, a body and comments on lines
 //! of its diff, checked against the diff before anything is sent.
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock, Mutex, PoisonError},
+};
+
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -228,6 +233,7 @@ impl ForgeRepo {
         number: u64,
         review: &NewReview,
     ) -> Result<Acted> {
+        let _submitting = Submitting::start(self.item_url(ItemKind::Pr, number)?).await;
         let current = self.read(account, ItemKind::Pr, number).await?;
         self.kind.check_review(self, account, number).await?;
         let diff = if review.comments.is_empty() {
@@ -288,6 +294,47 @@ impl Submitted {
             responses: Vec::new(),
             failure: Some(failure),
             published: false,
+        }
+    }
+}
+
+/// The lock each PR's review submissions in this process take in turn,
+/// by the PR's URL. GitLab publishes every draft an account has pending,
+/// so one review's drafts must not be pending while another is checked or
+/// published.
+static SUBMITTING: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> =
+    LazyLock::new(Default::default);
+
+/// A review submission's turn on its PR, which ends when it drops.
+struct Submitting {
+    url: String,
+    _turn: tokio::sync::OwnedMutexGuard<()>,
+}
+
+impl Submitting {
+    /// Wait for the turn of a review of the PR at `url`.
+    async fn start(url: String) -> Self {
+        let lock = {
+            let mut submitting = SUBMITTING.lock().unwrap_or_else(PoisonError::into_inner);
+            submitting.entry(url.clone()).or_default().clone()
+        };
+        Self {
+            url,
+            _turn: lock.lock_owned().await,
+        }
+    }
+}
+
+impl Drop for Submitting {
+    /// Forget the PR's lock once no other submission holds or awaits it:
+    /// then only the map and this turn refer to it.
+    fn drop(&mut self) {
+        let mut submitting = SUBMITTING.lock().unwrap_or_else(PoisonError::into_inner);
+        if submitting
+            .get(&self.url)
+            .is_some_and(|lock| Arc::strong_count(lock) == 2)
+        {
+            submitting.remove(&self.url);
         }
     }
 }

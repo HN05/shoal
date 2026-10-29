@@ -144,3 +144,22 @@ async fn a_failure_after_publishing_keeps_what_was_posted() {
     assert_eq!(sent, ["POST a", "POST b"]);
     assert!(submitted.published && submitted.failure.is_none());
 }
+
+#[tokio::test]
+async fn submissions_to_one_pr_take_turns_and_leave_no_lock_behind() {
+    use futures_util::FutureExt;
+    let url = "https://gitlab.example/g/r/-/merge_requests/1";
+    let first = Submitting::start(url.into()).await;
+    let mut second = Box::pin(Submitting::start(url.into()));
+    assert!((&mut second).now_or_never().is_none());
+    // Another PR's submission does not wait.
+    let other = Submitting::start(format!("{url}0")).now_or_never();
+    assert!(other.is_some());
+    drop(other);
+    drop(first);
+    let second = second.await;
+    drop(second);
+    let submitting = SUBMITTING.lock().unwrap();
+    assert!(!submitting.contains_key(url));
+    assert!(!submitting.contains_key(&format!("{url}0")));
+}
