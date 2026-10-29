@@ -37,7 +37,9 @@ impl Manager {
             }
         }
         if !chosen.is_empty() {
-            self.stop_idle(self.agent_turns().await?, chosen).await;
+            let turns = self.agent_turns().await?;
+            let now = i64::try_from(crate::time::unix_seconds())?;
+            self.stop_idle(turns, chosen, now).await;
         }
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())
@@ -77,12 +79,15 @@ impl Manager {
         Ok(settings.idle_stop.enabled.then(Protection::idle_expired))
     }
 
-    /// Stop the `chosen` agents that are still running and idle, as `turns`
-    /// read before taking the agents lock and their own reports since show.
+    /// Stop the `chosen` agents that are still running and idle with no
+    /// prompt cache left at `now`, as `turns` read before taking the agents
+    /// lock and their own reports since show: a turn that ended since they
+    /// were chosen renewed the cache.
     async fn stop_idle(
         &self,
         mut turns: HashMap<String, Turn>,
         chosen: HashMap<String, Protection>,
+        now: i64,
     ) {
         let stopped: Vec<StoppedAgent> = self
             .executions
@@ -90,7 +95,11 @@ impl Manager {
                 still_idle(&mut turns, agents);
                 chosen
                     .into_iter()
-                    .filter(|(id, _)| turns.get(id).is_some_and(Turn::idle))
+                    .filter(|(id, _)| {
+                        turns
+                            .get(id)
+                            .is_some_and(|turn| turn.idle_without_cache(now))
+                    })
                     .filter_map(|(id, protection)| {
                         let agent = agents.get_mut(&id).filter(|agent| agent.running())?;
                         self.protect(&id, agent, &protection, Some(AgentState::Idle))

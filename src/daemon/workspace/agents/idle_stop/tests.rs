@@ -208,3 +208,21 @@ async fn idle_stop_stops_any_agent_once_its_cache_expires() {
         "{notifications:?}"
     );
 }
+
+#[tokio::test]
+async fn a_cache_renewed_after_the_agent_was_chosen_keeps_it() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let chosen = HashMap::from([(execution.plan.id.clone(), Protection::idle_held())]);
+    // A turn ended after the sweep chose the agent.
+    cache_expires_in(&manager, &workspace, 600).await;
+    let turns = manager.agent_turns().await.unwrap();
+    let now = i64::try_from(crate::time::unix_seconds()).unwrap();
+    manager.stop_idle(turns, chosen, now).await;
+    assert!(!*execution.stop.borrow());
+}
