@@ -221,23 +221,31 @@ async fn stop_each(
         )
     }))
     .await;
-    let mut stopped = Vec::new();
+    let mut resumable = Vec::new();
     for (workspace, result) in workspaces.iter().zip(results) {
         let name = workspace.name.as_str();
         match result {
             Ok(()) => {
                 report.done(ctx, &format!("Stopped {name}"), json!(name));
-                stopped.push(name);
+                if has_saved_work(ctx, workspace) {
+                    resumable.push(name);
+                }
             }
             Err(error) => report.failed(ctx, name, &error),
         }
     }
-    let summary = match (stopped.is_empty(), resume.is_empty()) {
+    let summary = match (resumable.is_empty(), resume.is_empty()) {
         (true, _) => String::new(),
-        (false, true) => continue_hint(&stopped.join(" ")),
+        (false, true) => continue_hint(&resumable.join(" ")),
         (false, false) => continue_hint(resume),
     };
     report.finish(ctx, &summary)
+}
+
+/// Whether `workspace` saved work for `shoal resume`, which refuses to
+/// resume a workspace without any.
+fn has_saved_work(ctx: &Context, workspace: &Workspace) -> bool {
+    recovery::Saved::load(&ctx.paths, &workspace.id).is_ok_and(|saved| !saved.is_empty())
 }
 
 /// How to continue what `shoal stop` stopped in `targets`, the arguments of

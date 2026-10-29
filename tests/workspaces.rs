@@ -5363,27 +5363,24 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
     fixture.add("parent");
     let split = scoped_command(&fixture, "parent", &["split", "child"]);
     assert!(split.status.success(), "{split:?}");
-    let paths = ["parent", "child"].map(|name| {
-        let workspace = fixture.ok(&["status", name])["workspace"].clone();
-        let state = fixture
-            .root
-            .path()
-            .join("state/workspaces")
-            .join(workspace["id"].as_str().unwrap());
-        fs::create_dir_all(&state).unwrap();
-        fs::write(
-            state.join(format!("{name}-agent.last-session.json")),
-            r#"{"agent":"waiter"}"#,
-        )
-        .unwrap();
-        PathBuf::from(workspace["path"].as_str().unwrap())
-    });
-    fixture.ok(&["resume", "parent", "child"]);
-    wait_until("the restores", || {
-        paths.iter().all(|path| path.join("restored").exists())
-    });
-    let running = |name| {
-        fixture.ok(&["status", name])["executions"]
+    // Only the child has an agent, stopped so its restore queues.
+    let child = fixture.ok(&["status", "child"])["workspace"].clone();
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(child["id"].as_str().unwrap());
+    fs::create_dir_all(&state).unwrap();
+    fs::write(
+        state.join("child-agent.recovery.json"),
+        r#"{"agent":"waiter"}"#,
+    )
+    .unwrap();
+    let path = PathBuf::from(child["path"].as_str().unwrap());
+    fixture.ok(&["resume", "child"]);
+    wait_until("the restore", || path.join("restored").exists());
+    let running = || {
+        fixture.ok(&["status", "child"])["executions"]
             .as_array()
             .unwrap()
             .iter()
@@ -5392,14 +5389,15 @@ fn stopping_a_workspace_stops_the_workspaces_below_it() {
 
     let stopped = fixture.ok(&["stop", "parent", "--skip-children"]);
     assert_eq!(stopped["stopped"], true, "{stopped}");
-    assert!(!running("parent") && running("child"));
-    let stopped = fixture.ok(&["stop", "parent"]);
-    assert_eq!(
-        stopped["stopped"],
-        serde_json::json!(["parent", "child"]),
-        "{stopped}"
-    );
-    assert!(!running("child"));
+    assert!(running());
+    let output = fixture.run(&["stop", "parent"]);
+    assert!(output.status.success(), "{output:?}");
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(text.contains("Stopped parent"), "{text}");
+    assert!(text.contains("Stopped child"), "{text}");
+    // The idle parent saved nothing, which resume would refuse.
+    assert!(text.contains("Continue with shoal resume child."), "{text}");
+    assert!(!running());
 }
 
 #[test]
