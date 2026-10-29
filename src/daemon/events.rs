@@ -40,6 +40,10 @@ states!(EventKind {
     ItemActivity => "item_activity",
     /// A chat opened the workspace, or it returned to the user.
     ChatChanged => "chat_changed",
+    /// A demo's command ran for the first time.
+    DemoStarted => "demo_started",
+    /// A demo that had run ended with its execution.
+    DemoStopped => "demo_stopped",
 });
 
 states!(
@@ -113,6 +117,9 @@ pub struct EventDetails {
         with = "present_or_null"
     )]
     pub chat: Option<Option<String>>,
+    /// The demo that started or stopped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub demo: Option<DemoEvent>,
 }
 
 /// Distinguish an absent field from an explicit null.
@@ -142,6 +149,14 @@ pub struct ReviewEvent {
     pub kind: Option<crate::forge::items::link::ItemKind>,
     pub url: Option<String>,
     pub head: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DemoEvent {
+    pub name: String,
+    pub preset: Option<crate::demos::Preset>,
+    /// The leased simulator a simulator demo runs on.
+    pub udid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -832,6 +832,11 @@ how to open it; the repository's `open` command replaces that, so tools such
 as browsers and screen sharing stay outside Shoal. Starting, reading and stopping
 a demo are own-workspace actions without approval: the agent can already run
 the command, and a demo only keeps it running and tells the user.
+The journal records a demo's start at its command's first run, when a start
+reports it, and its stop when its record goes with the execution, so clients
+showing demos follow them without polling; restarts between runs are not
+changes. The listing carries a web demo's URL, which the daemon derives as
+opening does, so clients do not rebuild it.
 
 `max_agents` admission belongs to the daemon, so concurrent additions and its
 dispatcher share one count. Slots derive from state the daemon already tracks:

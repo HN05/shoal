@@ -3166,7 +3166,7 @@ Each JSON line has `type: "event"`, an increasing `id`, Unix-seconds `created_at
 workspace and repository UUIDs (`workspace_id`, `repository_id`), `name`, `path`,
 `branch`, `kind`, `cause`, and `error`. Kinds are `created`, `ready`, `setup_failed`,
 `completed`, `undone`, `removed`, `retained`, `branch_changed`, `review_ready`,
-`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity` and `chat_changed`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
+`review_cleared`, `linked`, `unlinked`, `base_changed`, `agent_state`, `item_changed`, `item_activity`, `chat_changed`, `demo_started` and `demo_stopped`; history from earlier versions may also contain `continued`. Review events add a `review` object with the mark's `kind`,
 `url` (both null for a workspace mark) and `head`. Link events add a `link`
 object with the linked issue or PR's `kind` and canonical `url`. Agent state
 events add `agent_state` with the reported `state`, null when its execution ended.
@@ -3177,6 +3177,9 @@ with the observed update's `kind` and `message`. `created` and `base_changed`
 events add `base_workspace` with the base's `id`, `name` and `branch`, or null.
 `chat_changed` events add `chat`, the ID of the [chat](#chats) that opened the
 workspace, or null once it returned to you.
+`demo_started` events, when a [demo](#demos)'s command first runs, and
+`demo_stopped` events, when a demo that ran ends, add `demo` with its `name`,
+`preset` and, for a simulator demo, the device's `udid`.
 Causes are `manual`, `idle`, `issue`, `pr` (including a base workspace's merged
 PRs), `completion`, `missing_directory`, `disk_space`, or `removed` for a base workspace's removal, and null
 when inapplicable; `error` describes setup or cleanup failures. Branch changes

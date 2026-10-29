@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use super::*;
 use crate::{
     daemon::{
+        events::{EventItem, EventKind},
         scope::{self, Caller, ScopedExecution},
         workspace::ExecutionKind,
     },
@@ -372,4 +373,64 @@ async fn running_web_demos_list_their_url() {
             )
         ]
     );
+}
+
+/// The kinds and demos of the workspace's demo events, oldest first.
+async fn demo_events(
+    manager: &Manager,
+    workspace: &str,
+) -> Vec<(EventKind, String, Option<String>)> {
+    manager
+        .workspace_events(None, 1000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter_map(|item| match item {
+            EventItem::Event(event) if event.details.workspace_id == workspace => {
+                let demo = event.details.demo?;
+                Some((event.details.kind, demo.name, demo.udid))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn demos_journal_their_first_run_and_their_end() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let mut app = launch("app");
+    app.preset = Some(crate::demos::Preset::Simulator);
+    app.environment = BTreeMap::from([(crate::demos::SIM_UDID.into(), "UDID-1".into())]);
+    let started = manager
+        .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(app))
+        .await
+        .unwrap();
+    let mut unrun = launch("unrun");
+    unrun.id = "unrun".into();
+    let never = manager
+        .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(unrun))
+        .await
+        .unwrap();
+    assert!(demo_events(&manager, &first.id).await.is_empty());
+
+    let id = started.plan.id.clone();
+    manager
+        .record_execution_child(id.clone(), None, 4_000_000)
+        .await
+        .unwrap();
+    for execution in [id, never.plan.id] {
+        manager.forget_execution(&execution).await.unwrap();
+    }
+    let started = (
+        EventKind::DemoStarted,
+        "app".to_owned(),
+        Some("UDID-1".to_owned()),
+    );
+    let stopped = (
+        EventKind::DemoStopped,
+        "app".to_owned(),
+        Some("UDID-1".to_owned()),
+    );
+    assert_eq!(demo_events(&manager, &first.id).await, [started, stopped]);
 }
