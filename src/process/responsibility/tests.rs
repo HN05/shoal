@@ -31,9 +31,10 @@ fn image_restarts_this_binary_marked_as_claimed() {
 
 #[test]
 fn disclaimed_process_is_responsible_for_what_it_starts() {
+    // The inner shell stops itself, so both stay until `end` kills them.
     let shell = Image {
         program: CString::new("/bin/sh").unwrap(),
-        args: ["sh", "-c", "sleep 30; :"]
+        args: ["sh", "-c", "/bin/sh -c 'kill -STOP $$'; :"]
             .map(|arg| CString::new(arg).unwrap())
             .into(),
         vars: vec![],
@@ -68,7 +69,7 @@ fn child_of(parent: libc::pid_t) -> Option<libc::pid_t> {
 }
 
 /// Kill the test's processes, children first so none outlives its parent,
-/// and reap the shell.
+/// and reap the outer shell. SIGKILL ends a stopped process too.
 fn end(pids: impl IntoIterator<Item = libc::pid_t>) {
     let mut status: c_int = 0;
     for pid in pids {
