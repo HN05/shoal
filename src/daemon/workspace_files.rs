@@ -163,31 +163,38 @@ impl Manager {
     }
 
     /// Delete the files attached to the workspace `selector` names, only the
-    /// copies of files with one of `names` when there are any, and return
-    /// their records. A name no file has deletes nothing.
+    /// copies of files with one of `names` and the records `ids` when there
+    /// are any, and return their records. A name or record the workspace does
+    /// not have deletes nothing.
     pub async fn remove_workspace_files(
         &self,
         selector: &str,
         names: Vec<String>,
+        ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
         let repo = self.repository(&owner.repository_id).await?;
         let _files = self.gates.lock_message_files(&repo.id).await;
         let id = owner.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
-        if !names.is_empty() {
+        if !names.is_empty() || !ids.is_empty() {
             let missing: Vec<_> = names
                 .iter()
                 .filter(|name| !files.iter().any(|file| file.name == **name))
-                .map(String::as_str)
+                .cloned()
+                .chain(
+                    ids.iter()
+                        .filter(|id| !files.iter().any(|file| file.id == **id))
+                        .map(|id| format!("number {id}")),
+                )
                 .collect();
             ensure!(
                 missing.is_empty(),
-                "workspace {} has no attached file named {}",
+                "workspace {} has no attached file {}",
                 owner.name,
                 missing.join(", ")
             );
-            files.retain(|file| names.contains(&file.name));
+            files.retain(|file| names.contains(&file.name) || ids.contains(&file.id));
         }
         self.delete_files(&repo, files).await
     }

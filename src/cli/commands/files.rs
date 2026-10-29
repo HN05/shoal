@@ -63,22 +63,29 @@ pub(super) async fn add(
 }
 
 /// Delete the files of the workspace `scope` selects, only those with one of
-/// `names` when there are any, or of every workspace without a running agent
-/// or command. Asks first for every workspace, or one where an agent or command
-/// runs, unless `yes`.
+/// `names` and the records `ids` when there are any, or of every workspace
+/// without a running agent or command. Asks first for every workspace, or
+/// one where an agent or command runs, unless `yes`.
 pub(super) async fn remove(
     ctx: &Context,
     scope: WorkspaceScope,
     names: Vec<String>,
+    ids: Vec<i64>,
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
     if !yes && let Some(action) = confirmation(ctx, workspace.as_deref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { workspace, names })
-            .await?;
+    let deleted = client::pages::<AttachedFile>(
+        &ctx.paths,
+        FileMethod::RemoveFiles {
+            workspace,
+            names,
+            ids,
+        },
+    )
+    .await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),

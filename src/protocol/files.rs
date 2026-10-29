@@ -17,11 +17,13 @@ pub enum FileMethod {
         files: Vec<std::path::PathBuf>,
     },
     /// Delete a workspace's attached files, only those with one of `names`
-    /// when there are any; without a workspace, those of every workspace
-    /// without a running agent or command.
+    /// and the records `ids` when there are any; without a workspace, those
+    /// of every workspace without a running agent or command.
     RemoveFiles {
         workspace: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         names: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        ids: Vec<i64>,
     },
 }

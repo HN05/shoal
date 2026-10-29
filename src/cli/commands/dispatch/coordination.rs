@@ -82,7 +82,7 @@ pub(in crate::cli::commands) async fn run(
             ..
         } => {
             let scope = crate::cli::args::WorkspaceScope { workspace, all };
-            files::remove(&ctx, scope, names, confirmation.yes).await
+            files::remove(&ctx, scope, names, vec![], confirmation.yes).await
         }
         CoordinationCommand::Files {
             command: None,

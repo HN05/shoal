@@ -119,15 +119,15 @@ async fn deleting_by_name_keeps_the_other_files() {
         .await
         .unwrap();
     let error = manager
-        .remove_workspace_files(&workspace.name, vec!["missing.txt".into()])
+        .remove_workspace_files(&workspace.name, vec!["missing.txt".into()], vec![])
         .await
         .unwrap_err();
     assert!(
-        error.to_string().contains("no attached file named"),
+        error.to_string().contains("no attached file missing.txt"),
         "{error:#}"
     );
     let deleted = manager
-        .remove_workspace_files(&workspace.name, vec!["crash.log".into()])
+        .remove_workspace_files(&workspace.name, vec!["crash.log".into()], vec![])
         .await
         .unwrap();
     assert!(!deleted[0].path.exists());
@@ -356,7 +356,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     std::fs::remove_dir_all(directory).unwrap();
     std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
     let error = manager
-        .remove_workspace_files(&workspace.name, vec![])
+        .remove_workspace_files(&workspace.name, vec![], vec![])
         .await
         .unwrap_err();
     assert!(
@@ -491,4 +491,31 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
         "{error:#}"
     );
     assert!(elsewhere.join(inside).exists());
+}
+
+#[tokio::test]
+async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let added = manager
+        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .await
+        .unwrap();
+    manager
+        .send_agent_message(&workspace.name, String::new(), vec![file])
+        .await
+        .unwrap();
+    let deleted = manager
+        .remove_workspace_files(&workspace.name, vec![], vec![added[0].id])
+        .await
+        .unwrap();
+    assert_eq!(deleted, added);
+    let left = manager.workspace_files(&workspace.name).await.unwrap();
+    let [sent] = left.as_slice() else {
+        panic!("{left:?}");
+    };
+    assert_eq!(sent.source, FileSource::Message);
+    assert!(sent.path.exists());
 }
