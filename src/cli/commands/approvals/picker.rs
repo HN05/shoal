@@ -138,13 +138,9 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     let cells = requests
         .iter()
         .map(|request| {
-            let status = match request.status {
-                DecisionStatus::Pending => String::new(),
-                status => status.to_string(),
-            };
             [
                 (request.id.to_string(), Some(Style::Muted)),
-                (status, Some(Style::Muted)),
+                status_cell(request.status),
                 (request.workspace.clone(), None),
                 (about(request), None),
             ]
@@ -154,6 +150,17 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
     let ids = requests.iter().map(row_id).collect::<Result<Vec<_>>>()?;
     Ok(ids.into_iter().zip(labels).collect())
+}
+
+/// A decided request's status: a mark for an approval or a denial, and the
+/// status's name otherwise.
+fn status_cell(status: DecisionStatus) -> ui::Cell {
+    match status {
+        DecisionStatus::Pending => (String::new(), None),
+        DecisionStatus::Approved => ("✓".into(), Some(Style::Success)),
+        DecisionStatus::Denied => ("✗".into(), Some(Style::Error)),
+        status => (status.to_string(), Some(Style::Muted)),
+    }
 }
 
 /// A row's id: the request's number and a digest of its record as shown,

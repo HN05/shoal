@@ -20422,7 +20422,7 @@ fn approval_prompt_accepts_only_case_insensitive_y_or_n() {
 
 #[test]
 fn approval_list_shortcuts_decide_in_place_and_reload_the_list() {
-    for (key, status) in [("ctrl-a", "approved"), ("ctrl-d", "denied")] {
+    for (key, status, mark) in [("ctrl-a", "approved", "✓"), ("ctrl-d", "denied", "✗")] {
         let fixture = Fixture::new();
         set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
         let mut pending = Vec::new();
@@ -20481,7 +20481,7 @@ exit 130
         let reload = read("picker-reload");
         let first = reload.lines().next().unwrap_or_default();
         let last = reload.lines().last().unwrap_or_default();
-        assert!(!first.contains(status) && last.contains(status), "{reload}");
+        assert!(!first.contains(mark) && last.contains(mark), "{reload}");
     }
 }
 
