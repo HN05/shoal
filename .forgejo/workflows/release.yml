@@ -43,11 +43,13 @@ jobs:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           # Not GITHUB_*: Forgejo reserves that prefix for secret names.
           RELEASE_TOKEN_GITHUB: ${{ secrets.RELEASE_TOKEN_GITHUB }}
+          MACOS_SIGNING_PEM: ${{ secrets.MACOS_SIGNING_PEM }}
         run: |
           test "$REF" = refs/heads/main || { echo 'Select main to release'; exit 1; }
           test -n "$TOKEN" || { echo 'Configure RELEASE_AUTOMATION_TOKEN'; exit 1; }
           test -n "$TAP_TOKEN" || { echo 'Configure HOMEBREW_TAP_TOKEN'; exit 1; }
           test -n "$RELEASE_TOKEN_GITHUB" || { echo 'Configure RELEASE_TOKEN_GITHUB'; exit 1; }
+          test -n "$MACOS_SIGNING_PEM" || { echo 'Configure MACOS_SIGNING_PEM'; exit 1; }
       - name: Check out main
         env:
           SERVER: ${{ github.server_url }}
@@ -186,21 +188,33 @@ jobs:
           curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/scripts/release_metadata.py" -o release_metadata.py
           sh checkout-release.sh
           # Build helpers follow the workflow commit when resuming an older tag.
-          for helper in cross-build.sh release-targets.txt zig-wrapper.py; do
+          for helper in cross-build.sh release-targets.txt sign-macos.sh zig-wrapper.py; do
             curl -fsS "${FORGEJO_SERVER%/}/$REPOSITORY/raw/commit/$WORKFLOW_SHA/.forgejo/scripts/$helper" -o "$helper"
             chmod +x "$helper"
           done
-      - name: Cross-build release binaries (holding a /ci-target slot)
+      - name: Cross-build and sign release binaries (holding a /ci-target slot)
+        env:
+          MACOS_SIGNING_PEM: ${{ secrets.MACOS_SIGNING_PEM }}
         run: |
           set -euo pipefail
+          # The signing key stays outside the published files, readable only by
+          # this job, and leaves with the step.
+          pem=$(mktemp)
+          trap 'rm -f "$pem"' EXIT
+          printf '%s\n' "$MACOS_SIGNING_PEM" > "$pem"
+          unset MACOS_SIGNING_PEM
           cd source
           . .forgejo/scripts/lock-target-dir.sh
           mkdir -p dist
           # Archives are reproducible for a tag (fixed mtime, owner and order, no
-          # gzip timestamp), so a rerun attaches the same bytes it would have.
+          # gzip timestamp). The macOS signature records its signing time, so
+          # only a rerun's Linux archives carry the same bytes as before.
           epoch=$(git log -1 --format=%ct)
           while read -r target platform _selectors <&3; do
             ../cross-build.sh "$target" 3<&-
+            case "$target" in
+              *-apple-darwin) ../sign-macos.sh "$pem" "$CARGO_TARGET_DIR/$target/release/shoal" 3<&- ;;
+            esac
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
               -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
               -C "$PWD" skills \

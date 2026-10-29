@@ -283,9 +283,10 @@ open no issues; audit results are advisory and do not gate merges.
 
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64. The formula
-has no head channel, so every Homebrew installation runs a CI-built release.
-`shoal update` replaces a downloaded binary with the latest GitHub release and leaves Homebrew installations to Homebrew, so one
-package manager owns each installation. A shared release-target table drives cross-builds,
+has no head channel, so every Homebrew installation runs a CI-signed release.
+`shoal update` replaces a downloaded binary with the latest GitHub release and
+leaves Homebrew installations to Homebrew, so one package manager owns each
+installation. A shared release-target table drives cross-builds,
 archive names and Homebrew platform selectors.
 Named configuration templates in `configs/` are embedded at build time, so
 installation needs no source checkout or network access.
@@ -302,6 +303,18 @@ preserving complete asset sets. It never tags a later commit, downgrades, or for
 explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes. Deleted release
 branch labels are accepted only for matching repository and exact PR identity.
+
+Release signing: the release job signs each macOS binary with `rcodesign` as
+`com.shoal.cli` using a project-owned self-signed certificate, and fails unless
+the signature has the expected designated requirement. macOS privacy grants
+such as Full Disk Access follow that requirement; an ad-hoc signature's
+requirement is its hash, so each release would need a new grant. Only a stable
+requirement is needed, not Gatekeeper trust, so there is no Developer ID or
+notarization. The certificate came from `rcodesign
+generate-self-signed-certificate --person-name "Shoal" --validity-days 7300`;
+its unified PEM is the `MACOS_SIGNING_PEM` Actions secret, and the maintainer
+keeps a copy outside Forgejo. A new certificate changes the requirement, so
+every user grants access again.
 
 ## Workspaces and Git
 

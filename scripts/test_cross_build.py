@@ -29,6 +29,9 @@ class CrossBuildTests(unittest.TestCase):
                 helper = directory / "cross-build.sh"
                 helper.write_text('#!/bin/sh\nread -r ignored || true\nprintf "%s\\n" "$1"\n')
                 helper.chmod(0o755)
+            signer = root / "sign-macos.sh"
+            signer.write_text('#!/bin/sh\nprintf "signed %s with %s\\n" "$2" "$1"\n')
+            signer.chmod(0o755)
             for workflow in ("ci.yml", "release.yml"):
                 with self.subTest(workflow=workflow):
                     text = (SCRIPTS.parent / "workflows" / workflow).read_text()
@@ -37,9 +40,15 @@ class CrossBuildTests(unittest.TestCase):
                         ["bash", "-eu", "-c", 'tar() { :; }; gzip() { cat; };\n' + loop],
                         cwd=source, input="build input\n", capture_output=True, text=True, check=True,
                         env={**os.environ, "CARGO_TARGET_DIR": str(root / "target"),
-                             "RELEASE_TAG": "v0.2.0", "epoch": "0"},
+                             "RELEASE_TAG": "v0.2.0", "epoch": "0", "pem": "key.pem"},
                     )
-                    self.assertEqual(result.stdout.splitlines(), [row[0] for row in release_targets()])
+                    expected = []
+                    for target, *_ in release_targets():
+                        expected.append(target)
+                        # Only the release signs, and it goes by the target, not the platform.
+                        if workflow == "release.yml" and target.endswith("-apple-darwin"):
+                            expected.append(f"signed {root}/target/{target}/release/shoal with key.pem")
+                    self.assertEqual(result.stdout.splitlines(), expected)
 
     def test_target_validation_follows_the_table_beside_the_helper(self):
         with tempfile.TemporaryDirectory() as root:

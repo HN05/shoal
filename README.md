@@ -11,8 +11,9 @@ shoal daemon install
 shoal skill install
 ```
 
-Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
-the macOS binaries are unsigned, so clear the download quarantine first with
+Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
+The macOS binaries are signed with Shoal's own certificate but not notarized, so
+clear the quarantine of a downloaded binary with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the additional tools for workspace management and interactive
 menus. For a downloaded binary, install
@@ -23,6 +24,10 @@ daemon and writes missing config and chat template defaults in `~/.config/shoal/
 [AI tool's existing skill directory](docs/reference.md#agent-skill-outside-project-repositories);
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
 skills current after upgrades.
+
+On macOS, when workspaces or `root_dir` are on an external volume, grant the
+`shoal` binary Full Disk Access or Removable Volumes once under System Settings >
+Privacy & Security, then run `shoal daemon restart`. The grant survives upgrades.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:
