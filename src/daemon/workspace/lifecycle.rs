@@ -276,6 +276,14 @@ impl CleanupExecutions {
     }
 }
 
+/// A workspace reserved for removal: its record, whether its directory
+/// existed, and the state the reservation replaced.
+struct Reserved {
+    workspace: Workspace,
+    present: bool,
+    replaced: WorkspaceState,
+}
+
 /// A post-remove hook resolved while the workspace record still exists.
 struct PostRemoveHook {
     command: PathBuf,
@@ -781,9 +789,11 @@ impl Manager {
     }
 
     async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
-        let workspace = self.workspace(selector).await?;
-        let present = workspace.path.try_exists()?;
-        let reserved_state = self.reserve_removal(&workspace, removal, present).await?;
+        let Reserved {
+            workspace,
+            present,
+            replaced: reserved_state,
+        } = self.reserve_removal(selector, removal).await?;
         // Checked again after the reservation, so a worktree restored meanwhile
         // cannot be deleted by an unattended removal.
         let result = async {
@@ -834,19 +844,25 @@ impl Manager {
         }
     }
 
-    /// Reserve `workspace` for `removal`. A manual removal also takes one
-    /// whose setup never started, as when the command creating it was
-    /// interrupted; the repository's Git gate waits for its creation to end.
-    async fn reserve_removal(
-        &self,
-        workspace: &Workspace,
-        removal: Removal<'_>,
-        present: bool,
-    ) -> Result<WorkspaceState> {
+    /// Reserve the workspace `selector` names for `removal`. A manual removal
+    /// also takes one whose setup never started, as when the command creating
+    /// it was interrupted; it waits on the repository's Git gate for that
+    /// creation to end and reads the workspace again, which creation has
+    /// since finished recording.
+    async fn reserve_removal(&self, selector: &str, removal: Removal<'_>) -> Result<Reserved> {
+        let manual = matches!(removal, Removal::Manual { .. });
+        let mut workspace = self.workspace(selector).await?;
+        let _created = if manual && workspace.state == WorkspaceState::Preparing {
+            let created = self.gates.lock_git(&workspace.repository_id).await;
+            workspace = self.workspace(&workspace.id).await?;
+            Some(created)
+        } else {
+            None
+        };
+        let present = workspace.path.try_exists()?;
         let rules = RemovalRules {
             allow_pending_rename: !present,
-            awaiting_setup: matches!(removal, Removal::Manual { .. })
-                && workspace.state == WorkspaceState::Preparing,
+            awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
             refuse_holds: matches!(
                 removal,
                 Removal::Manual {
@@ -855,13 +871,14 @@ impl Manager {
                 }
             ),
         };
-        let _created = if rules.awaiting_setup {
-            Some(self.gates.lock_git(&workspace.repository_id).await)
-        } else {
-            None
-        };
-        self.reserve_lifecycle_for_removal(&workspace.id, rules)
-            .await
+        let replaced = self
+            .reserve_lifecycle_for_removal(&workspace.id, rules)
+            .await?;
+        Ok(Reserved {
+            workspace,
+            present,
+            replaced,
+        })
     }
 
     async fn prepare_post_remove_hook(

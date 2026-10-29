@@ -238,6 +238,69 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
 }
 
 #[tokio::test]
+async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
+    let (_root, manager, workspace) = fixture().await;
+    let base = (workspace.base_ref.clone(), workspace.base_commit.clone());
+    assert!(base.0.is_some() && base.1.is_some());
+    // Creation holds the Git gate and has yet to record the base.
+    let creating = manager.gates.lock_git(&workspace.repository_id).await;
+    let gate = manager.gates.git_gate(&workspace.repository_id);
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET state='preparing',base_ref=NULL,base_commit=NULL WHERE id=?1",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let removal = tokio::spawn({
+        let manager = manager.clone();
+        let id = workspace.id.clone();
+        async move {
+            manager
+                .remove_workspace(&id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+                .await
+        }
+    });
+    // Creation, this test and the waiting removal.
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        while Arc::strong_count(&gate) < 3 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the removal reaches the Git gate");
+    let (id, recorded) = (workspace.id.clone(), base.clone());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE workspaces SET base_ref=?2,base_commit=?3 WHERE id=?1",
+                rusqlite::params![id, recorded.0, recorded.1],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    drop(creating);
+
+    assert!(removal.await.unwrap().unwrap().removed);
+    let removed = manager.removed_workspaces().await.unwrap();
+    let removed = removed
+        .iter()
+        .find(|removed| removed.workspace_id == workspace.id)
+        .unwrap();
+    assert_eq!(
+        (removed.base_ref.clone(), removed.base_commit.clone()),
+        base
+    );
+}
+
+#[tokio::test]
 async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
     for script in [
         "git commit --allow-empty -m 'hook work'",

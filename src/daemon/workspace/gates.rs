@@ -124,6 +124,12 @@ impl Gates {
         self.git.gate(repository_id).try_lock_owned().ok()
     }
 
+    /// The Git gate of `repository_id`, for tests that count who waits on it.
+    #[cfg(test)]
+    pub(crate) fn git_gate(&self, repository_id: &str) -> Arc<Mutex<()>> {
+        self.git.gate(repository_id)
+    }
+
     /// Hold `host`'s gate, so concurrent first lookups ask a forge host once.
     pub(crate) async fn lock_forge_host(&self, host: &str) -> OwnedMutexGuard<()> {
         self.forge_hosts.gate(host).lock_owned().await
