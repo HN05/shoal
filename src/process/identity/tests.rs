@@ -212,6 +212,11 @@ fn describe(attribution: Attribution) -> String {
     match attribution {
         Attribution::Owned(marks) => format!("owned by {}", marks.execution.unwrap_or_default()),
         Attribution::Foreign => "foreign".into(),
+        Attribution::Remembered(owners::Evidence {
+            told: owners::Told::Owner(marks),
+            ..
+        }) => format!("owned by {}", marks.execution.unwrap_or_default()),
+        Attribution::Remembered(_) => "foreign".into(),
         Attribution::Unknown(head) => format!("unknown under {}", head.pid),
     }
 }
@@ -362,13 +367,17 @@ fn an_inventory_keeps_owners_recorded_after_it_began() {
     });
     let began = std::time::Instant::now();
     // An overlapping inventory records a process this one's listing missed.
+    let recorded = owners::Evidence {
+        told,
+        observed: std::time::Instant::now(),
+    };
     owners.update(
-        std::time::Instant::now(),
-        vec![(100, told.clone())],
+        recorded.observed,
+        vec![(100, recorded.clone())],
         &HashSet::new(),
     );
     owners.update(began, Vec::new(), &HashSet::new());
-    assert_eq!(owners.recall(100), Some(told));
+    assert_eq!(owners.recall(100), Some(recorded));
 }
 
 #[test]
@@ -376,21 +385,59 @@ fn an_older_inventory_never_replaces_what_a_later_one_told() {
     let owners = owners::Owners::default();
     let older = std::time::Instant::now();
     let later = older + Duration::from_secs(1);
-    owners.update(
-        later,
-        vec![(100, owners::Told::NoExecution)],
-        &HashSet::new(),
-    );
+    let told = |told, observed| (100, owners::Evidence { told, observed });
     let marks = Marks {
         execution: Some("execution".into()),
         workspace: None,
     };
     owners.update(
-        older,
-        vec![(100, owners::Told::Owner(marks))],
+        later,
+        vec![told(owners::Told::NoExecution, later)],
         &HashSet::new(),
     );
-    assert_eq!(owners.recall(100), Some(owners::Told::NoExecution));
+    owners.update(
+        older,
+        vec![told(owners::Told::Owner(marks), older)],
+        &HashSet::new(),
+    );
+    assert_eq!(
+        owners.recall(100).map(|evidence| evidence.told),
+        Some(owners::Told::NoExecution)
+    );
+}
+
+#[test]
+fn a_remembered_owner_keeps_when_it_was_told() -> Result<()> {
+    use Evidence::Hidden;
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    let first = std::time::Instant::now();
+    let reading = first + Duration::from_secs(1);
+    let later = first + Duration::from_secs(2);
+    let marks = Marks {
+        execution: Some("execution".into()),
+        workspace: None,
+    };
+    let owned = owners::Evidence {
+        told: owners::Told::Owner(marks),
+        observed: first,
+    };
+    owners.update(first, vec![(100, owned)], &HashSet::new());
+    // An inventory that began after another read the process without the
+    // marker answers from memory once it is hidden and adopted...
+    Inventory {
+        started: later,
+        ..inventory(&owners, [unique(observed(10, 1, true, Hidden), 100, 90)])
+    }
+    .attribute(Marker::Execution, &ids)?;
+    // ...which leaves the earlier reading's answer the newer one.
+    let unmarked = owners::Evidence {
+        told: owners::Told::NoExecution,
+        observed: reading,
+    };
+    owners.update(reading, vec![(100, unmarked.clone())], &HashSet::new());
+    assert_eq!(owners.recall(100), Some(unmarked));
+    Ok(())
 }
 
 /// An agent's job whose shell and agent were killed stays the agent's: the

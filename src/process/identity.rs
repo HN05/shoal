@@ -558,6 +558,8 @@ fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
 enum Attribution {
     Owned(Marks),
     Foreign,
+    /// What an earlier inventory told about it or its exited parent.
+    Remembered(owners::Evidence),
     /// Its owner cannot be told; the identity heads the processes it covers.
     Unknown(Identity),
 }
@@ -597,39 +599,45 @@ impl<'a> Inventory<'a> {
                 continue;
             }
             let identity = &process.lineage.identity;
-            match self.resolve(*pid, &mut attributions) {
-                Attribution::Owned(marks) => {
-                    if let Some(id) = marks.get(marker).filter(|id| ids.contains(*id))
-                        && alive(identity)?
-                    {
-                        scan.processes.push(OwnedProcess {
-                            execution_id: id.to_owned(),
-                            identity: identity.clone(),
-                        });
-                    }
-                    told.extend(
-                        process
-                            .lineage
-                            .unique
-                            .map(|unique| (unique, owners::Told::Owner(marks))),
-                    );
+            let evidence = match self.evidence(self.resolve(*pid, &mut attributions)) {
+                Ok(evidence) => evidence,
+                Err(head) => {
+                    scan.unreadable.push(Unattributed {
+                        identity: identity.clone(),
+                        head,
+                    });
+                    continue;
                 }
-                Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
+            };
+            if let owners::Told::Owner(marks) = &evidence.told
+                && let Some(id) = marks.get(marker).filter(|id| ids.contains(*id))
+                && alive(identity)?
+            {
+                scan.processes.push(OwnedProcess {
+                    execution_id: id.to_owned(),
                     identity: identity.clone(),
-                    head,
-                }),
-                Attribution::Foreign => {
-                    told.extend(
-                        process
-                            .lineage
-                            .unique
-                            .map(|unique| (unique, owners::Told::NoExecution)),
-                    );
-                }
+                });
             }
+            told.extend(process.lineage.unique.map(|unique| (unique, evidence)));
         }
         self.owners.update(self.started, told, &self.named());
         Ok(scan)
+    }
+
+    /// What `attribution` tells about a process's owner, observed by this
+    /// inventory unless it was remembered, or the head of the processes it
+    /// leaves unknown.
+    fn evidence(&self, attribution: Attribution) -> Result<owners::Evidence, Identity> {
+        let told = match attribution {
+            Attribution::Remembered(evidence) => return Ok(evidence),
+            Attribution::Unknown(head) => return Err(head),
+            Attribution::Owned(marks) => owners::Told::Owner(marks),
+            Attribution::Foreign => owners::Told::NoExecution,
+        };
+        Ok(owners::Evidence {
+            told,
+            observed: self.started,
+        })
     }
 
     /// The unique IDs observed processes name as their own or their parent's.
@@ -645,15 +653,14 @@ impl<'a> Inventory<'a> {
     /// its exited parent, otherwise unknown under it. A process told to be no
     /// execution's stays so whatever its parent was.
     fn remembered(&self, lineage: &Lineage) -> Attribution {
-        match [lineage.unique, lineage.parent]
+        [lineage.unique, lineage.parent]
             .into_iter()
             .flatten()
             .find_map(|unique| self.owners.recall(unique))
-        {
-            Some(owners::Told::Owner(marks)) => Attribution::Owned(marks),
-            Some(owners::Told::NoExecution) => Attribution::Foreign,
-            None => Attribution::Unknown(lineage.identity.clone()),
-        }
+            .map_or_else(
+                || Attribution::Unknown(lineage.identity.clone()),
+                Attribution::Remembered,
+            )
     }
 
     /// `pid`'s owner by its own environment, or for a hidden one by the
