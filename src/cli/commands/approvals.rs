@@ -2,6 +2,8 @@
 use anyhow::{Context as _, Result, ensure};
 use serde_json::{Value, json};
 
+mod picker;
+
 use super::EXIT_BUSY;
 use crate::{
     cli::{
@@ -9,7 +11,7 @@ use crate::{
         client::{self, request},
         context::Context,
         output::{Palette, Style},
-        ui::{self, Cell, Entries, WidthLimit},
+        ui::{self, Cell},
     },
     daemon::approvals::{
         ApprovalRequest, DecisionStatus, Specification,
@@ -57,7 +59,7 @@ async fn show(ctx: &Context, id: i64) -> Result<i32> {
     show_request(ctx, request).await
 }
 
-async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
+pub(super) async fn show_request(ctx: &Context, request: Box<ApprovalRequest>) -> Result<i32> {
     if ctx.interactive_output() && request.status == DecisionStatus::Pending {
         return prompt_decision(ctx, request).await;
     }
@@ -215,7 +217,7 @@ pub(super) async fn decide(
             )
         }
         None => {
-            let picked = pick_pending(ctx).await?;
+            let picked = picker::pick_pending(ctx).await?;
             (picked.id, Some(Box::new(picked)))
         }
     };
@@ -242,7 +244,7 @@ pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Re
 /// Send the decision on request `id`, which `shown` names when the user
 /// chose it from a list, so a request reusing its number is refused. Only
 /// proposals take `details`.
-async fn submit(
+pub(super) async fn submit(
     ctx: &Context,
     id: i64,
     approve: bool,
@@ -293,7 +295,7 @@ async fn escalate(ctx: &Context, id: i64, shown: Option<Box<ApprovalRequest>>) -
 }
 
 /// A process that cleared the scope token it inherits would act as the user.
-fn ensure_scope_token(ctx: &Context) -> Result<()> {
+pub(super) fn ensure_scope_token(ctx: &Context) -> Result<()> {
     ensure!(
         crate::env::is_scoped() || !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot decide approval requests without their scope token"
@@ -322,7 +324,7 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests = list_requests(ctx, workspace.clone()).await?;
     if ctx.interactive_output() && !requests.is_empty() {
-        return pick_and_decide(ctx, workspace, requests).await;
+        return picker::pick_and_decide(ctx, workspace, requests).await;
     }
     ctx.show(&requests, |requests| {
         for request in requests {
@@ -335,105 +337,11 @@ pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32
     Ok(0)
 }
 
-async fn list_requests(ctx: &Context, workspace: Option<String>) -> Result<Vec<ApprovalRequest>> {
-    request(&ctx.paths, ApprovalMethod::ListApprovals { workspace }).await
-}
-
-/// Open the chosen request, or decide it with a key and choose again while
-/// pending requests remain; leaving the picker after a decision succeeds.
-async fn pick_and_decide(
+pub(super) async fn list_requests(
     ctx: &Context,
     workspace: Option<String>,
-    mut requests: Vec<ApprovalRequest>,
-) -> Result<i32> {
-    let mut decided = false;
-    loop {
-        let (selected, decision) = match pick_request(ctx, requests) {
-            Err(error) if decided && error.is::<ui::SelectionCanceled>() => return Ok(0),
-            picked => picked?,
-        };
-        let Some(approve) = decision else {
-            return show_request(ctx, selected).await;
-        };
-        ensure_scope_token(ctx)?;
-        submit(
-            ctx,
-            selected.id,
-            approve,
-            Some(selected),
-            ProposalDecision::default(),
-        )
-        .await?;
-        decided = true;
-        requests = list_requests(ctx, workspace.clone()).await?;
-        if !requests
-            .iter()
-            .any(|request| request.status == DecisionStatus::Pending)
-        {
-            return Ok(0);
-        }
-    }
-}
-
-/// Choose a request, pending ones first, and how to act on it.
-fn pick_request(
-    ctx: &Context,
-    mut requests: Vec<ApprovalRequest>,
-) -> Result<(Box<ApprovalRequest>, Option<bool>)> {
-    requests.sort_by_key(|request| request.status != DecisionStatus::Pending);
-    let bindings = ui::KeyBindings(&[
-        ("enter", "open", None),
-        ("ctrl-a", "approve", Some(true)),
-        ("ctrl-d", "deny", Some(false)),
-    ]);
-    let picked = ui::pick_with_keys(ctx, "Approval> ", picker_rows(&requests), bindings)?;
-    let id: i64 = picked.id.parse()?;
-    let selected = requests
-        .into_iter()
-        .find(|request| request.id == id)
-        .context("unknown approval request")?;
-    Ok((Box::new(selected), picked.action))
-}
-
-async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
-    let pending: Vec<_> = list_requests(ctx, None)
-        .await?
-        .into_iter()
-        .filter(|request| request.status == DecisionStatus::Pending)
-        .collect();
-    ensure!(!pending.is_empty(), "no pending approval requests");
-    let id: i64 = ui::pick(ctx, "Approval> ", picker_rows(&pending))?.parse()?;
-    pending
-        .into_iter()
-        .find(|request| request.id == id)
-        .context("picker returned an unknown approval request")
-}
-
-/// One aligned row per request: its number, its status once decided, the
-/// workspace, and what it asks for and why, cut to fit the picker.
-fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
-    let cells = requests
-        .iter()
-        .map(|request| {
-            let status = match request.status {
-                DecisionStatus::Pending => String::new(),
-                status => status.to_string(),
-            };
-            [
-                (request.id.to_string(), Some(Style::Muted)),
-                (status, Some(Style::Muted)),
-                (request.workspace.clone(), None),
-                (about(request), None),
-            ]
-        })
-        .collect();
-    let limit = ui::picker_width().map(|width| WidthLimit { column: 3, width });
-    let labels = ui::aligned_to(cells, Palette::picker(), limit);
-    requests
-        .iter()
-        .map(|request| request.id.to_string())
-        .zip(labels)
-        .collect()
+) -> Result<Vec<ApprovalRequest>> {
+    request(&ctx.paths, ApprovalMethod::ListApprovals { workspace }).await
 }
 
 /// What a request asks for, and why when its agent said.
