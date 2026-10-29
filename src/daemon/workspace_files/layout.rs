@@ -155,7 +155,8 @@ impl Layout {
 
     /// The copies kept for the workspace `workspace_id` outside its results:
     /// the files two directories below its own, one directory per message and
-    /// one per file within it. Hidden entries are copies still being made.
+    /// one per file within it. A hidden message directory holds copies still
+    /// being made; the files themselves may have any name.
     pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Vec<PathBuf> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Vec::new();
@@ -165,13 +166,16 @@ impl Layout {
                 .into_iter()
                 .flatten()
                 .flatten()
-                .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
                 .map(|entry| entry.path())
                 .collect()
         };
+        let staging = |path: &PathBuf| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with('.'))
+        };
         let mut copies: Vec<PathBuf> = entries(&self.root.join(workspace_id))
             .iter()
-            .filter(|message| message.is_dir())
+            .filter(|message| message.is_dir() && !staging(message))
             .flat_map(|message| entries(message))
             .filter(|file| file.is_dir())
             .flat_map(|file| entries(&file))

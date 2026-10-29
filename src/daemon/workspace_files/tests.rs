@@ -556,15 +556,20 @@ async fn handing_back_a_changed_file_completes_again() {
 async fn upgrading_records_the_copies_messages_attached_before() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let file = temp.path().join("crash.log");
-    std::fs::write(&file, "panic").unwrap();
+    let (log, env) = (temp.path().join("crash.log"), temp.path().join(".env"));
+    std::fs::write(&log, "panic").unwrap();
+    std::fs::write(&env, "PORT=1").unwrap();
     manager
-        .send_agent_message(&workspace.name, "See the log".into(), vec![file])
+        .send_agent_message(&workspace.name, "See".into(), vec![log, env])
         .await
         .unwrap();
-    let copy = manager.workspace_files(&workspace.name).await.unwrap()[0]
-        .path
-        .clone();
+    let copies: Vec<_> = manager
+        .workspace_files(&workspace.name)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|file| file.path)
+        .collect();
     // A state database from before Shoal recorded attached files.
     manager
         .store
@@ -576,11 +581,11 @@ async fn upgrading_records_the_copies_messages_attached_before() {
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
     let files = reopened.workspace_files(&workspace.name).await.unwrap();
-    let [recorded] = files.as_slice() else {
-        panic!("{files:?}");
-    };
-    assert_eq!(recorded.path, copy);
-    assert_eq!(recorded.source, FileSource::Message);
-    assert_eq!(recorded.bytes, 5);
+    let mut recorded: Vec<_> = files.iter().map(|file| file.path.clone()).collect();
+    recorded.sort();
+    let mut expected = copies;
+    expected.sort();
+    assert_eq!(recorded, expected, "a hidden file name is a copy too");
+    assert!(files.iter().all(|file| file.source == FileSource::Message));
     reopened.store.shutdown().await;
 }
