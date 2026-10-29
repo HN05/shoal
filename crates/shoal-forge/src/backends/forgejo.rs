@@ -43,6 +43,7 @@ use crate::{
     review::{
         diff::Diff,
         status::{PrStatus, Verdict, forgejo_reviews},
+        submit::{PlacedReview, Submission},
         thread::{Target, Thread},
         view::{Details, Review, login},
     },
@@ -96,7 +97,10 @@ impl Backend for Forgejo {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::ForkPrs
-            | Capability::Forks => Support::Supported,
+            | Capability::Forks
+            | Capability::LineComments
+            | Capability::ApprovePrs
+            | Capability::RequestChanges => Support::Supported,
         }
     }
 
@@ -383,6 +387,21 @@ impl Backend for Forgejo {
         current: &Current,
     ) -> Result<Diff> {
         review::diff(repo, account, current).await
+    }
+
+    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+        Ok(review::review(repo, number, review))
+    }
+
+    async fn review_keys(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _number: u64,
+        _review: &PlacedReview<'_>,
+        responses: &[Value],
+    ) -> Result<Vec<String>> {
+        review::keys(responses.first().context("the review was not posted")?)
     }
 
     async fn issue_activity(

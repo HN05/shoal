@@ -37,6 +37,7 @@ use crate::{
     review::{
         diff::Diff,
         status::PrStatus,
+        submit::{PlacedReview, Submission},
         thread::Thread,
         view::{Details, Review},
     },
@@ -330,6 +331,33 @@ pub(crate) trait Backend {
     /// reads a diff there.
     async fn pr_diff(&self, repo: &ForgeRepo, account: &Account, current: &Current)
     -> Result<Diff>;
+
+    /// The requests that submit `review` of PR `number`.
+    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission>;
+
+    /// The request that deletes the review draft a draft request's
+    /// response describes, where the forge keeps drafts.
+    fn discard_draft(&self, _repo: &ForgeRepo, _number: u64, _draft: &Value) -> Result<Request> {
+        anyhow::bail!("{} keeps no review drafts", self.name())
+    }
+
+    /// The activity keys of what `review` of PR `number` posted, from the
+    /// `responses` to its submission's requests: by default each response
+    /// describes a posted comment.
+    async fn review_keys(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _number: u64,
+        _review: &PlacedReview<'_>,
+        responses: &[Value],
+    ) -> Result<Vec<String>> {
+        let key = self.comment_key();
+        Ok(responses
+            .iter()
+            .filter_map(|response| crate::updates::posted_key(key, response))
+            .collect())
+    }
 
     /// An issue's state and discussion.
     async fn issue_activity(
@@ -869,6 +897,25 @@ impl Backend for ForgeKind {
         current: &Current,
     ) -> Result<Diff> {
         dispatch!(self, backend => backend.pr_diff(repo, account, current).await)
+    }
+
+    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+        dispatch!(self, backend => backend.review(repo, number, review))
+    }
+
+    fn discard_draft(&self, repo: &ForgeRepo, number: u64, draft: &Value) -> Result<Request> {
+        dispatch!(self, backend => backend.discard_draft(repo, number, draft))
+    }
+
+    async fn review_keys(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        review: &PlacedReview<'_>,
+        responses: &[Value],
+    ) -> Result<Vec<String>> {
+        dispatch!(self, backend => backend.review_keys(repo, account, number, review, responses).await)
     }
 
     async fn issue_activity(

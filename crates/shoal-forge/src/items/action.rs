@@ -16,6 +16,7 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
     },
+    review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
 };
 
@@ -46,7 +47,7 @@ pub fn after_send(error: anyhow::Error, sent: bool) -> anyhow::Error {
 
 /// `error`, marked as [`Sent`] with what the action posted once its first
 /// request was sent.
-fn after_post(error: anyhow::Error, sent: bool, authored: &[String]) -> anyhow::Error {
+pub(crate) fn after_post(error: anyhow::Error, sent: bool, authored: &[String]) -> anyhow::Error {
     if !sent {
         return error;
     }
@@ -71,6 +72,7 @@ pub enum Action {
         delete_branch: bool,
     },
     Thread(ThreadChange),
+    Review(NewReview),
 }
 
 /// Fields left empty stay as they are; base, reviewers and draft state are
@@ -119,6 +121,7 @@ impl Action {
                 Some(false) => "unresolve",
                 None => "reply",
             },
+            Self::Review(_) => "review",
         }
     }
 
@@ -144,6 +147,15 @@ impl Action {
             Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
             Self::Merge { method, .. } => vec![Capability::merge(*method)],
             Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],
+            Self::Review(review) => {
+                let lines = (!review.comments.is_empty()).then_some(Capability::LineComments);
+                let verdict = match review.verdict {
+                    ReviewVerdict::Comment => None,
+                    ReviewVerdict::Approve => Some(Capability::ApprovePrs),
+                    ReviewVerdict::RequestChanges => Some(Capability::RequestChanges),
+                };
+                lines.into_iter().chain(verdict).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -184,6 +196,10 @@ impl Action {
                 if let Some(reply) = &change.reply {
                     ensure!(!reply.trim().is_empty(), "the reply is empty");
                 }
+            }
+            Self::Review(review) => {
+                pr_only("reviews")?;
+                review.validate()?;
             }
             Self::Close | Self::Reopen => {}
         }
@@ -268,6 +284,9 @@ impl ForgeRepo {
         action.validate(kind)?;
         // Refused before anything is read or posted.
         self.require_all(action.needs(kind))?;
+        if let Action::Review(review) = action {
+            return self.submit_review(account, number, review).await;
+        }
         let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
         let (action, pending) = self
@@ -366,15 +385,12 @@ impl ForgeRepo {
     /// succeeded.
     fn posted(&self, action: &Action, response: &serde_json::Value) -> Option<String> {
         let reply = matches!(action, Action::Thread(change) if change.reply.is_some());
-        let (source, field) = match action {
+        let key = match action {
             Action::Comment { .. } => self.kind.comment_key(),
             _ if reply => self.kind.reply_key(),
             _ => return None,
         };
-        response
-            .get(field)
-            .filter(|id| id.is_string() || id.is_number())
-            .map(|id| crate::updates::activity_key(source, id))
+        crate::updates::posted_key(key, response)
     }
 
     /// The requests that carry out `action`, after reading what it needs
@@ -458,6 +474,7 @@ impl ForgeRepo {
                 self.kind.merge(self, current, *method, *delete_branch)?
             }
             Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
+            Action::Review(_) => anyhow::bail!("a review is planned from the PR's diff"),
         })
     }
 }

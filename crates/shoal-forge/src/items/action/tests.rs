@@ -445,3 +445,37 @@ fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
         "the forge did not add ready on #7, which has no labels"
     );
 }
+
+#[test]
+fn reviews_need_line_comments_and_their_verdict_and_only_prs_take_them() {
+    use crate::review::submit::{LineComment, NewReview, ReviewVerdict, Side};
+    let review = |verdict, comments: usize| {
+        Action::Review(NewReview {
+            verdict,
+            body: "Body".into(),
+            comments: (0..comments)
+                .map(|_| LineComment {
+                    path: "a.rs".into(),
+                    line: 1,
+                    side: Side::New,
+                    body: "Why?".into(),
+                })
+                .collect(),
+        })
+    };
+    assert!(
+        review(ReviewVerdict::Comment, 0)
+            .needs(ItemKind::Pr)
+            .is_empty()
+    );
+    assert_eq!(
+        review(ReviewVerdict::Approve, 1).needs(ItemKind::Pr),
+        [Capability::LineComments, Capability::ApprovePrs]
+    );
+    assert_eq!(
+        review(ReviewVerdict::RequestChanges, 0).needs(ItemKind::Pr),
+        [Capability::RequestChanges]
+    );
+    let issue = review(ReviewVerdict::Comment, 0).validate(ItemKind::Issue);
+    assert_eq!(issue.unwrap_err().to_string(), "issues have no reviews");
+}

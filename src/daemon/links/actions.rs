@@ -50,10 +50,10 @@ impl Manager {
             ItemKind::Issue => forge.issue(&input)?,
             ItemKind::Pr => forge.pull(&input)?,
         };
-        // Merging is the user's decision; every other change is the agent's.
-        let account = match action {
-            Action::Merge { .. } => self.user_account(),
-            _ => self.agent_account(&workspace).await?,
+        let account = if users_decision(&action) {
+            self.user_account()
+        } else {
+            self.agent_account(&workspace).await?
         };
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
@@ -162,7 +162,8 @@ impl Manager {
             }
         };
         let own = own_state(action).then(|| acted.item.state.as_str());
-        self.record_own_action(id, target, action.name(), own, acted.authored)
+        let authored = own_posts(action, acted.authored);
+        self.record_own_action(id, target, action.name(), own, authored)
             .await
             .map_err(|error| crate::forge::items::action::after_send(error, true))?;
         Ok(acted.item)
@@ -179,7 +180,7 @@ impl Manager {
     ) -> anyhow::Error {
         let Some(authored) = error
             .downcast_ref::<Sent>()
-            .map(|sent| sent.authored.clone())
+            .map(|sent| own_posts(action, sent.authored.clone()))
             .filter(|authored| !authored.is_empty())
         else {
             return error;
@@ -239,6 +240,27 @@ pub(super) struct Target {
 /// the user's decision, which the agent still hears about.
 fn own_state(action: &Action) -> bool {
     matches!(action, Action::Close | Action::Reopen)
+}
+
+/// Whether `action` is the user's decision, made as their account: merging
+/// and a review's verdict. Every other change is the agent's.
+fn users_decision(action: &Action) -> bool {
+    match action {
+        Action::Merge { .. } => true,
+        Action::Review(review) => review.has_verdict(),
+        _ => false,
+    }
+}
+
+/// The activity keys of what `action` posted that are the agent's own, so
+/// its watches do not report them back: none of the user's decisions,
+/// which the agent still hears about.
+fn own_posts(action: &Action, authored: Vec<String>) -> Vec<String> {
+    if users_decision(action) {
+        Vec::new()
+    } else {
+        authored
+    }
 }
 
 impl Manager {

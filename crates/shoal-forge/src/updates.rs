@@ -379,6 +379,18 @@ pub(crate) fn activity_key(source: &str, id: &serde_json::Value) -> String {
     format!("{source}:{}", id_text(id))
 }
 
+/// The activity key of what a post's `response` describes, which holds
+/// its ID in `field` and is recorded under `source`; none without an ID.
+pub(crate) fn posted_key(
+    (source, field): (&str, &str),
+    response: &serde_json::Value,
+) -> Option<String> {
+    response
+        .get(field)
+        .filter(|id| id.is_string() || id.is_number())
+        .map(|id| activity_key(source, id))
+}
+
 /// The activity key of the discussion comment `id`.
 pub(crate) fn discussion_key(id: &serde_json::Value) -> String {
     activity_key(DISCUSSION, id)

@@ -539,6 +539,74 @@ fn changes_use_the_agent_account_and_merges_the_users() {
 }
 
 #[test]
+fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let mut pull = pull(8, "open", "Fix", &[]);
+    pull["head"]["sha"] = json!("c0ffee");
+    let diff = "diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n\
+                @@ -1,2 +1,3 @@\n a\n+b\n c\n";
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull},
+        "GET repos/team/project/pulls/8.diff": {"body": diff},
+        "POST repos/team/project/pulls/8/reviews": {"body": {"id": 5}},
+    }));
+    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let review = |verdict: &str, comments: Value| {
+        json!({"item_action": {"workspace": "topic", "kind": "pr", "item": "8",
+            "action": {"action": "review", "verdict": verdict, "body": "Close",
+                "comments": comments}}})
+    };
+    let posts = || -> Vec<Value> {
+        fixture
+            .requests()
+            .into_iter()
+            .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+            .collect()
+    };
+
+    let line = json!([{"path": "src/a.rs", "line": 2, "body": "Why b?"}]);
+    let commented = fixture.request_as(review("comment", line), Some(&scope));
+    assert_eq!(commented["type"], "item", "{commented}");
+    assert_eq!(
+        posts(),
+        [json!(["POST repos/team/project/pulls/8/reviews",
+            {"event": "COMMENT", "body": "Close", "commit_id": "c0ffee",
+                "comments": [{"path": "src/a.rs", "new_position": 2, "old_position": 0,
+                    "body": "Why b?"}]},
+            "token agenttoken"])]
+    );
+
+    // A comment off the diff refuses the whole review before anything is posted.
+    let off = json!([{"path": "src/a.rs", "line": 2, "body": "Fine"},
+        {"path": "src/a.rs", "line": 9, "body": "Why?"}]);
+    let refused = fixture.request_as(review("comment", off), Some(&scope));
+    let message = refused["data"]["message"].as_str().unwrap();
+    assert!(message.contains("src/a.rs:9: no hunk"), "{refused}");
+    assert!(posts().is_empty());
+
+    // Verdicts are the user's: refused for the agent, posted as the user otherwise.
+    let scoped = fixture.request_as(review("approve", json!([])), Some(&scope));
+    let message = scoped["data"]["message"].as_str().unwrap();
+    assert!(message.contains("the user's decision"), "{scoped}");
+    assert!(fixture.requests().is_empty());
+    let approved = fixture.request(review("approve", json!([])));
+    assert_eq!(approved["type"], "item", "{approved}");
+    let posted = posts();
+    assert_eq!(posted[0][1]["event"], "APPROVED");
+    assert_eq!(posted[0][2], "token usertoken");
+}
+
+#[test]
 fn review_threads_take_replies_and_ask_before_resolving_without_one() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

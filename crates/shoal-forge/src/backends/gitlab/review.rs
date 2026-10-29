@@ -10,8 +10,11 @@ use crate::{
         item::{Current, text},
         link::ItemKind,
     },
-    review::diff::{Bases, Diff, FileDiff},
-    transport::api::Request,
+    review::{
+        diff::{Bases, Diff, FileDiff},
+        submit::{PlacedReview, Submission},
+    },
+    transport::api::{HttpMethod, Request},
 };
 
 /// The diff of the merge request's version at its head, with the commits
@@ -68,6 +71,14 @@ fn changed_file(file: &Value) -> Result<FileDiff> {
     let path = text(&file["new_path"]).context("a changed file has no path")?;
     let old_path = text(&file["old_path"]).unwrap_or_else(|| path.clone());
     FileDiff::new(path, old_path, file["diff"].as_str().unwrap_or_default())
+}
+
+/// The request that posts `review` of merge request `number`, its body as
+/// a note.
+pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Submission {
+    let endpoint = format!("{}/notes", repo.item_endpoint(ItemKind::Pr, number));
+    let body = serde_json::json!({ "body": review.body });
+    Submission::posting(vec![Request::new(HttpMethod::Post, endpoint, Some(body))])
 }
 
 #[cfg(test)]

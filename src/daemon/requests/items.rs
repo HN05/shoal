@@ -136,6 +136,12 @@ impl Scoped for ItemMethod {
                 action: Action::Merge { .. },
                 ..
             } => bail!("merging is the user's decision; ask them with shoal alerts send"),
+            ItemMethod::ItemAction {
+                action: Action::Review(review),
+                ..
+            } if review.has_verdict() => bail!(
+                "approving and requesting changes are the user's decision; ask them with shoal alerts send"
+            ),
             ItemMethod::SetIssue { workspace, .. }
             | ItemMethod::LinkItem { workspace, .. }
             | ItemMethod::UnlinkItems { workspace, .. }
@@ -150,6 +156,7 @@ impl Scoped for ItemMethod {
                     Action::Edit(_)
                     | Action::Comment { .. }
                     | Action::Thread(_)
+                    | Action::Review(_)
                     | Action::Close
                     | Action::Reopen,
                 ..

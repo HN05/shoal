@@ -23,6 +23,9 @@ states!(Capability: Variants {
     SquashMerge => "squash_merge",
     ForkPrs => "fork_prs",
     Forks => "forks",
+    LineComments => "line_comments",
+    ApprovePrs => "approve_prs",
+    RequestChanges => "request_changes",
 });
 
 impl Capability {
@@ -44,6 +47,9 @@ impl Capability {
             Self::SquashMerge => "squash and merge PRs",
             Self::ForkPrs => "open PRs from a fork",
             Self::Forks => "fork repositories",
+            Self::LineComments => "comment on lines of a PR's diff",
+            Self::ApprovePrs => "approve PRs",
+            Self::RequestChanges => "request changes on PRs",
         }
     }
 

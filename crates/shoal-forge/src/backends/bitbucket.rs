@@ -32,6 +32,7 @@ use crate::{
     review::{
         diff::Diff,
         status::{PrStatus, Verdict},
+        submit::{PlacedReview, Submission},
         thread::{Target, Thread},
         view::{Comment, Details, PrDetails, Review, ReviewComment},
     },
@@ -81,7 +82,10 @@ impl Backend for Bitbucket {
             Capability::RerunJobs
             | Capability::CancelJobs
             | Capability::ReadJobLogs
-            | Capability::ReadRuns => Support::Unsupported(None),
+            | Capability::ReadRuns
+            | Capability::LineComments
+            | Capability::ApprovePrs
+            | Capability::RequestChanges => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
@@ -433,6 +437,10 @@ impl Backend for Bitbucket {
         current: &Current,
     ) -> Result<Diff> {
         review::diff(repo, account, current).await
+    }
+
+    fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
+        Ok(review::review(repo, number, review))
     }
 
     async fn issue_activity(
