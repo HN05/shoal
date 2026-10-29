@@ -16,6 +16,14 @@ use std::{
 /// Deeper chains are not plausible process trees; stop rather than loop.
 const MAX_ANCESTRY: usize = 64;
 
+/// The limit on an inventory's `ps`. Unit tests run inventories on loaded
+/// machines, where it is only a hang guard, so they allow far longer.
+const INVENTORY_TIMEOUT: Duration = if cfg!(test) {
+    Duration::from_secs(120)
+} else {
+    timing::PROCESS_INVENTORY_TIMEOUT
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Identity {
     pub pid: u32,
@@ -301,7 +309,7 @@ async fn list_processes() -> Result<Listing> {
         .args(["-ax", "-o", "pid=,uid=,ruid="])
         .env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
-        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
+        .timeout(INVENTORY_TIMEOUT)
         .output()
         .await
         .context("process inventory failed")?;
@@ -1169,7 +1177,7 @@ async fn same_user_processes() -> Result<Vec<(u32, u32, u32)>> {
         .args(["-ax", "-o", "pid=,uid=,pgid=,ppid="])
         .env("LC_ALL", "C");
     let output = crate::subprocess::Run::new(command)
-        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
+        .timeout(INVENTORY_TIMEOUT)
         .output()
         .await?;
     let mut rows = Vec::new();
