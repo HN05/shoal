@@ -231,14 +231,7 @@ pub(super) async fn decide(
 /// grants in view.
 pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let request = listed_pending(ctx, id, created_at).await?;
-    prompt_decision(ctx, Box::new(request)).await
-}
-
-/// The pending request `id` created at `created_at`, refusing one that
-/// replaced it or was decided since a list showed it.
-async fn listed_pending(ctx: &Context, id: i64, created_at: u64) -> Result<ApprovalRequest> {
-    list_requests(ctx, None)
+    let request = list_requests(ctx, None)
         .await?
         .into_iter()
         .find(|request| {
@@ -246,7 +239,8 @@ async fn listed_pending(ctx: &Context, id: i64, created_at: u64) -> Result<Appro
                 && request.created_at == created_at
                 && request.status == DecisionStatus::Pending
         })
-        .with_context(|| format!("approval request {id} changed since it was listed"))
+        .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    prompt_decision(ctx, Box::new(request)).await
 }
 
 /// Send the decision on request `id`, which `shown` names when the user

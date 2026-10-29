@@ -20390,7 +20390,7 @@ fn approval_picker_inspects_before_deciding_the_selected_request() {
     ));
     let id = pending["id"].to_string();
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
-    let (output, rows) = fixture.pick(&["approvals"], &approval_row(&pending), "Y\n");
+    let (output, rows) = fixture.pick(&["approvals"], &approval_row(&fixture, &pending), "Y\n");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("serve preview"), "{rows}");
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
@@ -20486,6 +20486,41 @@ exit 130
 }
 
 #[test]
+fn approval_list_shortcuts_refuse_a_request_that_changed_since_it_was_listed() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("agent");
+    let pending = pending_approval(scoped_command(
+        &fixture,
+        "agent",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let id = pending["id"].to_string();
+    let row = approval_row(&fixture, &pending);
+    let (shown, _) = row.split_once(':').unwrap();
+    // The same number with another record, as a replacement would list.
+    let stale = format!("{shown}:{}", "0".repeat(64));
+    let output = fixture
+        .command()
+        .args(["internal", "approval-decide", "approve", &stale])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("changed since it was listed"),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
+    let output = fixture
+        .command()
+        .args(["internal", "approval-decide", "approve", &row])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
+}
+
+#[test]
 fn question_picker_answers_the_selected_question_with_a_suggestion() {
     let fixture = Fixture::new();
     fixture.add("asker");
@@ -20565,7 +20600,10 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
-    let (signing_row, web_row) = (approval_row(&signing), approval_row(&web));
+    let (signing_row, web_row) = (
+        approval_row(&fixture, &signing),
+        approval_row(&fixture, &web),
+    );
     let (signing, web) = (signing["id"].to_string(), web["id"].to_string());
     let (output, rows) = fixture.pick(&["approvals", "--approve"], &web_row, "");
     assert!(output.status.success(), "{output:?}");
@@ -20605,9 +20643,17 @@ fn agents_withdraw_requests_they_no_longer_need() {
     );
 }
 
-/// The picker row id of an approval request.
-fn approval_row(request: &Value) -> String {
-    format!("{}:{}", request["id"], request["created_at"])
+/// The picker row id of an approval request as `fixture` lists it now: its
+/// number and a digest of the record, serialized with sorted keys.
+fn approval_row(fixture: &Fixture, request: &Value) -> String {
+    use sha2::Digest;
+    let id = request["id"].to_string();
+    let record = serde_json::to_vec(&fixture.ok(&["approvals", &id])).unwrap();
+    let digest: String = sha2::Sha256::digest(record)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!("{id}:{digest}")
 }
 
 fn pending_approval(output: Output) -> Value {

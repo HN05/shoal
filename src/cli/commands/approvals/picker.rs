@@ -1,7 +1,8 @@
 //! The `shoal approvals` picker: requests chosen to open or decide.
 use anyhow::{Context as _, Result, ensure};
+use sha2::{Digest as _, Sha256};
 
-use super::{about, ensure_scope_token, list_requests, listed_pending, show_request, submit};
+use super::{about, ensure_scope_token, list_requests, show_request, submit};
 use crate::{
     cli::{
         args::approvals::Decision,
@@ -20,35 +21,8 @@ pub(super) async fn pick_and_open(
     workspace: Option<String>,
     requests: Vec<ApprovalRequest>,
 ) -> Result<i32> {
-    let worker = |worker| internal::shell_command(&ctx.paths, worker);
-    let decide = |key, label, decision| -> Result<_> {
-        Ok(ui::InPlaceKey {
-            key,
-            label,
-            command: worker(Worker::ApprovalDecide { decision })?,
-        })
-    };
-    let keys = [
-        decide("ctrl-a", "approve", Decision::Approve)?,
-        decide("ctrl-d", "deny", Decision::Deny)?,
-    ];
-    let reload = worker(Worker::ApprovalRows {
-        workspace: workspace.as_deref(),
-    })?;
-    let row = ui::pick_in_place(
-        ctx,
-        "Approval> ",
-        listed_rows(requests),
-        "open",
-        &keys,
-        &reload,
-    )?;
-    let (id, created_at) = parse_row(&row)?;
-    let request = list_requests(ctx, workspace)
-        .await?
-        .into_iter()
-        .find(|request| request.id == id && request.created_at == created_at)
-        .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    let row = choose(ctx, workspace.as_deref(), requests)?;
+    let request = displayed(ctx, workspace, &row).await?;
     show_request(ctx, Box::new(request)).await
 }
 
@@ -57,26 +31,25 @@ pub(in crate::cli::commands) async fn print_rows(
     ctx: &Context,
     workspace: Option<String>,
 ) -> Result<i32> {
-    for (id, label) in listed_rows(list_requests(ctx, workspace).await?) {
+    for (id, label) in listed_rows(list_requests(ctx, workspace).await?)? {
         outln!("{}", ui::picker_line(&id, &label));
     }
     Ok(0)
 }
 
-/// Approve or deny the pending request the picker's `row` names, and print
-/// the outcome for the picker to show.
+/// Approve or deny the request the picker's `row` shows, and print the
+/// outcome for the picker to show.
 pub(in crate::cli::commands) async fn decide_row(
     ctx: &Context,
     row: &str,
     decision: Decision,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let (id, created_at) = parse_row(row)?;
-    let request = listed_pending(ctx, id, created_at).await?;
+    let request = displayed(ctx, None, row).await?;
     let approve = decision == Decision::Approve;
     submit(
         ctx,
-        id,
+        request.id,
         approve,
         Some(Box::new(request)),
         ProposalDecision::default(),
@@ -84,8 +57,52 @@ pub(in crate::cli::commands) async fn decide_row(
     .await
 }
 
+/// Choose a request's row, with keys that decide the highlighted one
+/// without leaving the list.
+fn choose(
+    ctx: &Context,
+    workspace: Option<&str>,
+    requests: Vec<ApprovalRequest>,
+) -> Result<String> {
+    let keys = [
+        decision_key(ctx, "ctrl-a", "approve", Decision::Approve)?,
+        decision_key(ctx, "ctrl-d", "deny", Decision::Deny)?,
+    ];
+    let reload = internal::shell_command(&ctx.paths, Worker::ApprovalRows { workspace })?;
+    ui::pick_in_place(
+        ctx,
+        "Approval> ",
+        listed_rows(requests)?,
+        "open",
+        &keys,
+        &reload,
+    )
+}
+
+/// `key`, which makes `decision` through the decision worker.
+fn decision_key<'a>(
+    ctx: &Context,
+    key: &'a str,
+    label: &'a str,
+    decision: Decision,
+) -> Result<ui::InPlaceKey<'a>> {
+    Ok(ui::InPlaceKey {
+        key,
+        label,
+        command: internal::shell_command(&ctx.paths, Worker::ApprovalDecide { decision })?,
+    })
+}
+
+/// The request `row` shows, refusing one that changed or replaced it since.
+async fn displayed(ctx: &Context, workspace: Option<String>, row: &str) -> Result<ApprovalRequest> {
+    let mut requests = list_requests(ctx, workspace).await?.into_iter();
+    requests
+        .find(|request| row_id(request).is_ok_and(|id| id == row))
+        .context("the approval request changed since it was listed")
+}
+
 /// Every request's row, pending ones first.
-fn listed_rows(mut requests: Vec<ApprovalRequest>) -> Entries {
+fn listed_rows(mut requests: Vec<ApprovalRequest>) -> Result<Entries> {
     requests.sort_by_key(|request| request.status != DecisionStatus::Pending);
     picker_rows(&requests)
 }
@@ -97,18 +114,17 @@ pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
         .filter(|request| request.status == DecisionStatus::Pending)
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
-    let (id, created_at) = parse_row(&ui::pick(ctx, "Approval> ", picker_rows(&pending))?)?;
+    let row = ui::pick(ctx, "Approval> ", picker_rows(&pending)?)?;
     pending
         .into_iter()
-        .find(|request| request.id == id && request.created_at == created_at)
+        .find(|request| row_id(request).is_ok_and(|id| id == row))
         .context("picker returned an unknown approval request")
 }
 
-/// One aligned row per request, by its number and when it was made since a
-/// later request may reuse the number: the number, its status once
+/// One aligned row per request, by [`row_id`]: its number, its status once
 /// decided, the workspace, and what it asks for and why, cut to fit the
 /// picker.
-fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
+fn picker_rows(requests: &[ApprovalRequest]) -> Result<Entries> {
     let cells = requests
         .iter()
         .map(|request| {
@@ -126,19 +142,18 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
         .collect();
     let limit = ui::picker_width().map(|width| WidthLimit { column: 3, width });
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
-    requests
-        .iter()
-        .map(|request| format!("{}:{}", request.id, request.created_at))
-        .zip(labels)
-        .collect()
+    let ids = requests.iter().map(row_id).collect::<Result<Vec<_>>>()?;
+    Ok(ids.into_iter().zip(labels).collect())
 }
 
-/// The number and creation time a row's id holds.
-fn parse_row(row: &str) -> Result<(i64, u64)> {
-    let invalid = || anyhow::anyhow!("picker returned an invalid approval request");
-    let (id, created_at) = row.split_once(':').ok_or_else(invalid)?;
-    Ok((
-        id.parse().map_err(|_| invalid())?,
-        created_at.parse().map_err(|_| invalid())?,
-    ))
+/// A row's id: the request's number and a digest of its record as shown,
+/// since a later request may reuse the number and a proposal may change.
+/// Objects serialize with sorted keys, so the same record has one digest.
+fn row_id(request: &ApprovalRequest) -> Result<String> {
+    let record = serde_json::to_vec(&serde_json::to_value(request)?)?;
+    let digest = Sha256::digest(record)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Ok(format!("{}:{digest}", request.id))
 }
