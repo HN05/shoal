@@ -1,7 +1,7 @@
 //! Stop idle agents to free memory, saving each as protection does so that an
 //! update restores it. Only an agent whose prompt cache has expired stops,
 //! since restoring one rewrites its cache.
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use anyhow::{Result, ensure};
 
@@ -13,15 +13,13 @@ struct Candidate {
     execution: String,
     workspace_id: String,
     workspace: String,
-    /// How long it has been idle.
-    idle: Duration,
 }
 
 impl Manager {
     /// Stop each idle agent whose prompt cache has expired in a done
     /// workspace whose cleanup is held, which could otherwise run until the
-    /// workspace goes, or idle longer than its workspace's `[idle_stop]`
-    /// allows. A failure in one workspace does not skip the others.
+    /// workspace goes, or in any workspace whose `[idle_stop]` is enabled. A
+    /// failure in one workspace does not skip the others.
     pub(crate) async fn stop_idle_agents(&self) -> Result<()> {
         // The process scan that tells agents with work in flight waits until
         // some agent would stop.
@@ -52,17 +50,17 @@ impl Manager {
             .with_agents(|agents| {
                 agents
                     .iter()
-                    .filter(|(_, agent)| agent.running() && agent.recover)
-                    .filter_map(|(id, agent)| {
-                        let turn = turns.get(id)?;
-                        turn.idle_without_cache(now).then(|| Candidate {
-                            execution: id.clone(),
-                            workspace_id: agent.workspace_id.clone(),
-                            workspace: agent.workspace.clone(),
-                            idle: Duration::from_secs(
-                                u64::try_from(now - turn.since).unwrap_or_default(),
-                            ),
-                        })
+                    .filter(|(id, agent)| {
+                        agent.running()
+                            && agent.recover
+                            && turns
+                                .get(*id)
+                                .is_some_and(|turn| turn.idle_without_cache(now))
+                    })
+                    .map(|(id, agent)| Candidate {
+                        execution: id.clone(),
+                        workspace_id: agent.workspace_id.clone(),
+                        workspace: agent.workspace.clone(),
                     })
                     .collect()
             })
@@ -76,11 +74,7 @@ impl Manager {
             return Ok(Some(Protection::idle_held()));
         }
         let settings = self.workspace_settings(&self.workspace(id).await?).await?;
-        let timed_out = settings
-            .idle_stop
-            .after()
-            .is_some_and(|after| candidate.idle >= after);
-        Ok(timed_out.then(Protection::idle_timeout))
+        Ok(settings.idle_stop.enabled.then(Protection::idle_expired))
     }
 
     /// Stop the `chosen` agents that are still running and idle, as `turns`

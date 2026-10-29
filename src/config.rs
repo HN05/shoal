@@ -360,28 +360,10 @@ impl Default for PrCleanup {
     }
 }
 
-/// Stopping agents idle longer than `idle_minutes`, which is opt-in.
-#[derive(Debug, Serialize)]
+/// Stopping any agent idle once its prompt cache expires, which is opt-in.
+#[derive(Debug, Default, Serialize)]
 pub struct IdleStop {
     pub enabled: bool,
-    pub idle_minutes: u64,
-}
-
-impl Default for IdleStop {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            idle_minutes: 60,
-        }
-    }
-}
-
-impl IdleStop {
-    /// How long an agent stays idle before it stops; `None` when disabled.
-    pub fn after(&self) -> Option<Duration> {
-        self.enabled
-            .then(|| Duration::from_secs(self.idle_minutes * 60))
-    }
 }
 
 #[derive(Debug, Serialize)]
@@ -733,7 +715,6 @@ impl Config {
         config.root_dir(paths)?;
         templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
-        config.idle_stop.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;

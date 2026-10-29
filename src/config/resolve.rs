@@ -327,7 +327,6 @@ impl Effective {
             },
             idle_stop: IdleStop {
                 enabled: built_in(merged.idle_stop.enabled, "idle_stop.enabled")?,
-                idle_minutes: built_in(merged.idle_stop.idle_minutes, "idle_stop.idle_minutes")?,
             },
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
@@ -445,7 +444,6 @@ fn built_in() -> RepoConfig {
         },
         idle_stop: config::repo::IdleStop {
             enabled: Some(IdleStop::default().enabled),
-            idle_minutes: Some(IdleStop::default().idle_minutes),
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
@@ -779,7 +777,6 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(cleanup.restore.archive_max_mb),
         scalar!(done.cleanup),
         scalar!(idle_stop.enabled),
-        scalar!(idle_stop.idle_minutes),
         scalar!(review.post),
         scalar!(ready.undraft),
         scalar!(unready.draft),

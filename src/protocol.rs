@@ -722,10 +722,10 @@ impl Protection {
         Self::idle(IDLE_HELD_REASON)
     }
 
-    /// An agent idle longer than `[idle_stop]` allows, which Shoal stops to
-    /// free memory.
-    pub(crate) fn idle_timeout() -> Self {
-        Self::idle(IDLE_TIMEOUT_REASON)
+    /// An idle agent whose prompt cache expired, which Shoal stops to free
+    /// memory under `[idle_stop]`.
+    pub(crate) fn idle_expired() -> Self {
+        Self::idle(IDLE_EXPIRED_REASON)
     }
 
     /// An idle stop for `reason`, whose restore waits for an update. Wrappers
@@ -739,7 +739,7 @@ impl Protection {
 
     /// Whether Shoal stopped the agent for being idle, not for load.
     pub(crate) fn is_idle(&self) -> bool {
-        [IDLE_HELD_REASON, IDLE_TIMEOUT_REASON].contains(&self.reason.as_str())
+        [IDLE_HELD_REASON, IDLE_EXPIRED_REASON].contains(&self.reason.as_str())
     }
 
     /// Whether `[overload.recovery]` decides its restore, as for a stop that
@@ -766,8 +766,8 @@ const MOVE_REASON: &str = "moved in the agent queue by shoal queue move";
 /// The stop reason of an idle agent of a done workspace whose cleanup is held.
 const IDLE_HELD_REASON: &str = "idle in a done workspace whose cleanup is held";
 
-/// The stop reason of an agent idle longer than `[idle_stop]` allows.
-const IDLE_TIMEOUT_REASON: &str = "idle longer than idle_stop.idle_minutes";
+/// The stop reason of an idle agent `[idle_stop]` stops.
+const IDLE_EXPIRED_REASON: &str = "idle with its prompt cache expired";
 
 /// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
 #[derive(Debug, Serialize, Deserialize)]

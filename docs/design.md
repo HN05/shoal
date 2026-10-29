@@ -159,11 +159,11 @@ An idle agent of a done workspace whose cleanup is held could run until the
 workspace goes, so the cleanup sweep stops it as protection stops an agent
 between turns, and an update restores it although the assignment is done,
 since Shoal rather than the agent ended it. Load plays no part, so the recovery
-policy does not apply. Stopping any agent idle longer than a configured time
-works the same way and is opt-in, since timers the agent keeps itself end with
-it, which only a done assignment leaves nothing to do. Either stops an agent
-only once its prompt cache has expired, since a resumed session's first
-request writes most of the cache again. A
+policy does not apply. Stopping any idle agent works the same way and is
+opt-in, since timers the agent keeps itself end with it, which only a done
+assignment leaves nothing to do. Either stops an agent once its prompt cache
+has expired and not before, since a resumed session's first request writes
+most of the cache again. A
 record names the
 stop's stage: the daemon saves `stopping` before delivering a stop, and the
 wrapper saves `stopped` after ending the agent. At startup, and whenever an

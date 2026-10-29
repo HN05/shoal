@@ -171,24 +171,8 @@ async fn other_agents_keep_running() {
     }
 }
 
-/// Make the workspace's agent idle since `seconds` ago.
-async fn idle_for(manager: &Manager, workspace: &Workspace, seconds: i64) {
-    let id = workspace.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE workspace_agent_state SET since=unixepoch()-?2 WHERE workspace_id=?1",
-                rusqlite::params![id, seconds],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-}
-
 #[tokio::test]
-async fn an_agent_idle_past_the_repositorys_idle_stop_timeout_stops() {
+async fn idle_stop_stops_any_agent_once_its_cache_expires() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -201,22 +185,13 @@ async fn an_agent_idle_past_the_repositorys_idle_stop_timeout_stops() {
         ..HELD_DONE_IDLE
     };
     let (workspace, execution) = agent(&manager, &repo.id, "idle", unfinished).await;
-    idle_for(&manager, &workspace, 24 * 3600).await;
     manager.stop_idle_agents().await.unwrap();
-    assert!(!*execution.stop.borrow(), "the timeout is opt-in");
+    assert!(!*execution.stop.borrow(), "idle_stop is opt-in");
 
     manager
-        .set_repository_config(
-            &repo.id,
-            Some("[idle_stop]\nenabled = true\nidle_minutes = 30\n".into()),
-        )
+        .set_repository_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
         .await
         .unwrap();
-    idle_for(&manager, &workspace, 29 * 60).await;
-    manager.stop_idle_agents().await.unwrap();
-    assert!(!*execution.stop.borrow(), "idle for less than the timeout");
-
-    idle_for(&manager, &workspace, 30 * 60).await;
     cache_expires_in(&manager, &workspace, 60).await;
     manager.stop_idle_agents().await.unwrap();
     assert!(!*execution.stop.borrow(), "a warm cache keeps the agent");
@@ -229,9 +204,7 @@ async fn an_agent_idle_past_the_repositorys_idle_stop_timeout_stops() {
         notifications
             .iter()
             .any(|event| event.kind == NotificationKind::AgentStopped
-                && event
-                    .message
-                    .contains("idle longer than idle_stop.idle_minutes")),
+                && event.message.contains("idle with its prompt cache expired")),
         "{notifications:?}"
     );
 }

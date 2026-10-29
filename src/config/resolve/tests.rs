@@ -14,7 +14,7 @@ pre_resource_release_cmd = 'release'\npost_setup_cmd = 'attach'\npre_remove_cmd 
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
-[cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[idle_stop]\nenabled = true\nidle_minutes = 45\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\nother_repositories = 'direct'\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[land]\npush = true\nrequires_approval = false\n\
+[cleanup]\ngrace_minutes = 5\n[cleanup.auto]\nenabled = false\nidle_minutes = 30\n[cleanup.pr]\nenabled = false\n[cleanup.merged]\nenabled = false\nidle_minutes = 60\n[cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[done]\ncleanup = false\n[idle_stop]\nenabled = true\n[review]\npost = false\n[ready]\nundraft = false\n[unready]\ndraft = true\n[pr]\ndraft = true\nrequired_labels = ['area/']\n[issue]\nrequired_labels = ['type/']\nother_repositories = 'direct'\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[land]\npush = true\nrequires_approval = false\n\
 [approvals]\nissue_open = 'propose'\npr_open = 'propose'\n[api]\nagent_writes = true\n[seed]\ncmd = 'scripts/seed'\npaths = ['target']\n";
 
 fn json<T: Serialize>(value: &T) -> Value {
@@ -466,7 +466,6 @@ fn every_option_survives_layering_in_both_directions() {
         cleanup.restore.archive_max_mb.is_some(),
         done.cleanup.is_some(),
         idle_stop.enabled.is_some(),
-        idle_stop.idle_minutes.is_some(),
         review.post.is_some(),
         ready.undraft.is_some(),
         unready.draft.is_some(),
