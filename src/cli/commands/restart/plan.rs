@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::{
     cli::{args::WorkspaceTargets, client, context::Context, ui},
-    model::{RunningAgent, Workspace},
+    model::{PendingRestart, RunningAgent, Workspace},
     protocol::ExecutionMethod,
     state::AgentState,
 };
@@ -30,9 +30,9 @@ pub(super) struct Plan {
 pub(super) struct Restart {
     pub(super) workspace: Workspace,
     pub(super) agent: RunningAgent,
-    /// Its restart was in progress when the run selected it, so the run
-    /// waits for that restart instead of starting another, even once it ends.
-    pub(super) joins: bool,
+    /// The restart in progress when the run selected it, which the run
+    /// waits for instead of starting another, even once it ends.
+    pub(super) joins: Option<PendingRestart>,
 }
 
 /// A workspace whose agent cannot restart in place.
@@ -47,7 +47,7 @@ impl Restart {
     /// reported itself that its turn ended, since another agent's report in
     /// the same workspace does not count, or the run joins its restart.
     pub(super) fn ready(&self) -> bool {
-        self.agent.state == Some(AgentState::Idle) || self.joins
+        self.agent.state == Some(AgentState::Idle) || self.joins.is_some()
     }
 
     /// The agent, skipped for `reason`.
@@ -116,7 +116,7 @@ impl Selection {
                     }),
                     None => plan.restarts.push(Restart {
                         workspace: workspace.clone(),
-                        joins: running.restart.is_some(),
+                        joins: running.restart.clone(),
                         agent: running,
                     }),
                 }

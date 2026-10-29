@@ -185,8 +185,14 @@ fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
     // The restart in progress comes first, ready although its turn was
     // working, since its agent is already stopped.
     assert_eq!(restarted(&plan), ["pending", "earlier", "other"]);
-    assert!(plan.restarts[0].joins && plan.restarts[0].ready());
-    assert!(!plan.restarts[1].joins && !plan.restarts[1].ready());
+    assert_eq!(
+        plan.restarts[0].joins,
+        Some(PendingRestart {
+            run: Some("interrupted".into())
+        })
+    );
+    assert!(plan.restarts[0].ready());
+    assert!(plan.restarts[1].joins.is_none() && !plan.restarts[1].ready());
     assert_eq!(
         skipped(&plan),
         [("again", "the interrupted run restarted it already")]

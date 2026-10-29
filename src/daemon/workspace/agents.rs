@@ -37,8 +37,9 @@ pub(crate) struct Agent {
     update_hold: Option<OwnedRwLockReadGuard<()>>,
     /// Set while `shoal restart` restarts the agent.
     restart: Option<restart::Restart>,
-    /// How its last restart ended, which answers a request that joins it late.
-    restarted: Option<Result<(), String>>,
+    /// How each of its restarts that ended did, by the run that asked for
+    /// it, which answers a request that joins it late.
+    ended_restarts: HashMap<Option<String>, Result<(), String>>,
     /// The `shoal restart` run whose restart last started it again.
     restarted_by: Option<String>,
     /// The turn state the agent reported last, which the workspace's state
@@ -59,9 +60,7 @@ impl Agent {
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
         self.update_hold = None;
-        if self.restart.take().is_some() {
-            self.restarted = Some(Err("the restart was cancelled".into()));
-        }
+        self.cancel_restart();
     }
 
     /// Whether protection stopped the agent and it awaits automatic recovery.
@@ -280,7 +279,7 @@ impl Manager {
             overload: None,
             update_hold: None,
             restart: None,
-            restarted: None,
+            ended_restarts: HashMap::new(),
             restarted_by: None,
             turn: None,
             interrupted: false,

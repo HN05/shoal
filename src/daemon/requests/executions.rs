@@ -56,7 +56,7 @@ pub(super) async fn handle(
             run,
         } => {
             if join {
-                manager.join_restart(&execution).await?;
+                manager.join_restart(&execution, run).await?;
             } else {
                 manager.restart_agent(&execution, run).await?;
             }

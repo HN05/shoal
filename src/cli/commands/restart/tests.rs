@@ -29,7 +29,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
     let mut restarts = vec![Restart {
         workspace,
         agent: agent.clone(),
-        joins: true,
+        joins: agent.restart.clone(),
     }];
     // The restart ended before the run asked for it, and the agent works.
     let ended = RunningAgent {
@@ -38,5 +38,5 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         ..agent
     };
     assert!(refresh(&mut restarts, &[ended]).is_empty());
-    assert!(restarts[0].joins && restarts[0].ready());
+    assert!(restarts[0].joins.is_some() && restarts[0].ready());
 }

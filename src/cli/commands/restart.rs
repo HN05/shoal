@@ -100,8 +100,11 @@ impl Restart {
             &ctx.paths,
             ExecutionMethod::RestartAgent {
                 execution: self.agent.execution.clone(),
-                join: self.joins,
-                run: Some(run.to_owned()),
+                join: self.joins.is_some(),
+                run: match &self.joins {
+                    Some(joined) => joined.run.clone(),
+                    None => Some(run.to_owned()),
+                },
             },
         )
         .await;

@@ -106,9 +106,11 @@ impl Manager {
         restarted(self.request_restart(execution, run).await?).await
     }
 
-    /// Wait for the restart of `execution` in progress as [`Self::restart_agent`]
-    /// does, or answer as the restart that already ended did.
-    pub(crate) async fn join_restart(&self, execution: &str) -> Result<()> {
+    /// Wait for the restart of `execution` that `run` asked for as
+    /// [`Self::restart_agent`] does, or answer as it did if it ended, even
+    /// when another run restarts the agent now. A restart whose run a
+    /// daemon before this one forgot matches whichever is in progress.
+    pub(crate) async fn join_restart(&self, execution: &str, run: Option<String>) -> Result<()> {
         let joined = self
             .executions
             .with_agents(|agents| {
@@ -116,8 +118,8 @@ impl Manager {
                     .get_mut(execution)
                     .with_context(|| format!("no connected agent runs execution {execution}"))?;
                 anyhow::Ok(match &mut agent.restart {
-                    Some(restart) => Ok(restart.answer()),
-                    None => Err(agent.restarted.clone().unwrap_or_else(|| {
+                    Some(restart) if run.is_none() || restart.run == run => Ok(restart.answer()),
+                    _ => Err(agent.ended_restarts.get(&run).cloned().unwrap_or_else(|| {
                         Err(format!("no restart of {} is in progress", agent.name))
                     })),
                 })
@@ -267,7 +269,9 @@ impl Manager {
                 let restart = agent
                     .restart
                     .take_if(|restart| restart.resumed || !once_resumed)?;
-                agent.restarted = Some(outcome.clone());
+                agent
+                    .ended_restarts
+                    .insert(restart.run.clone(), outcome.clone());
                 if outcome.is_ok() {
                     agent.restarted_by.clone_from(&restart.run);
                 }
@@ -278,6 +282,16 @@ impl Manager {
         for done in restart.into_iter().flat_map(|restart| restart.answers) {
             // The request may have gone with its client.
             let _ = done.send(outcome.clone().map_err(|reason| anyhow!(reason)));
+        }
+    }
+}
+
+impl Agent {
+    /// Drop the restart in progress, recording that it was cancelled.
+    pub(super) fn cancel_restart(&mut self) {
+        if let Some(restart) = self.restart.take() {
+            self.ended_restarts
+                .insert(restart.run, Err("the restart was cancelled".into()));
         }
     }
 }
