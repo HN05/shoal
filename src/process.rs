@@ -10,7 +10,7 @@ pub mod usage;
 
 use crate::tools::Tool;
 use anyhow::{Context, Result};
-use std::{path::Path, time::Duration};
+use std::{collections::HashSet, path::Path, time::Duration};
 use tokio::process::Command;
 
 /// Automatic cleanup treats every process using the directory as activity.
@@ -33,12 +33,30 @@ pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<St
 /// No terminal or other process outside the directory keeps them, so they
 /// belong to whatever owns the directory.
 pub async fn detached_in_directory(root: &Path) -> Result<Vec<identity::Identity>> {
-    let pids = directory_users(root)
+    let listed = directory_pids(root).await?;
+    let mut lineages = blocking(move || identity::Lineages::capture(&listed)).await?;
+    // The listing names bare PIDs; a second one after the capture binds its
+    // directory to the captured processes.
+    let listed = directory_pids(root).await?;
+    blocking(move || {
+        lineages.confirm(&listed)?;
+        Ok(lineages.detached())
+    })
+    .await
+}
+
+async fn directory_pids(root: &Path) -> Result<HashSet<u32>> {
+    Ok(directory_users(root)
         .await?
         .into_iter()
         .map(|(pid, _)| pid)
-        .collect();
-    tokio::task::spawn_blocking(move || identity::detached_among(&pids))
+        .collect())
+}
+
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    tokio::task::spawn_blocking(work)
         .await
         .context("process lineage worker failed")?
 }

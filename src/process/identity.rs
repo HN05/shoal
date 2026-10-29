@@ -247,20 +247,43 @@ impl Unattributed {
     }
 }
 
-/// The live same-user processes among `pids` that are detached, or descend
-/// from a detached one through parents all among `pids`.
-pub fn detached_among(pids: &HashSet<u32>) -> Result<Vec<Identity>> {
-    let mut lineages = HashMap::new();
-    for pid in pids {
-        if let Some(lineage) = lineage(*pid)? {
-            lineages.insert(*pid, lineage);
+/// The lineages of live same-user processes, captured from bare PIDs.
+pub struct Lineages(HashMap<u32, Lineage>);
+
+impl Lineages {
+    pub fn capture(pids: &HashSet<u32>) -> Result<Self> {
+        let mut lineages = HashMap::new();
+        for pid in pids {
+            if let Some(lineage) = lineage(*pid)? {
+                lineages.insert(*pid, lineage);
+            }
         }
+        Ok(Self(lineages))
     }
-    Ok(lineages
-        .values()
-        .filter(|lineage| descends_from_detached(lineage, &lineages))
-        .map(|lineage| lineage.identity.clone())
-        .collect())
+
+    /// Keep the processes `pids`, listed after the capture, still names and
+    /// that are still alive: neither PID was reused meanwhile, so what the
+    /// listing says about each PID holds for the captured process.
+    pub fn confirm(&mut self, pids: &HashSet<u32>) -> Result<()> {
+        let mut confirmed = HashMap::new();
+        for (pid, lineage) in self.0.drain() {
+            if pids.contains(&pid) && alive(&lineage.identity)? {
+                confirmed.insert(pid, lineage);
+            }
+        }
+        self.0 = confirmed;
+        Ok(())
+    }
+
+    /// The processes that are detached, or descend from a detached one
+    /// through parents all among these.
+    pub fn detached(&self) -> Vec<Identity> {
+        self.0
+            .values()
+            .filter(|lineage| descends_from_detached(lineage, &self.0))
+            .map(|lineage| lineage.identity.clone())
+            .collect()
+    }
 }
 
 /// Whether `lineage` is detached, or its parent among `lineages` is the
