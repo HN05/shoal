@@ -103,6 +103,7 @@ fn listings_show_running_demos_then_the_configured_ones_not_running() {
             execution_id: "execution".into(),
             started_at: 0,
             has_run: true,
+            url: None,
             launch,
         }],
     };

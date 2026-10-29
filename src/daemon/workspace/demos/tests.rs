@@ -336,3 +336,40 @@ async fn stopping_an_away_demo_between_runs_ends_its_record() {
     assert!(manager.demos(Some(&first.id)).await.unwrap().is_empty());
     assert!(away.wait().is_ok_and(|status| !status.success()));
 }
+
+#[tokio::test]
+async fn running_web_demos_list_their_url() {
+    let (temp, manager) = manager().await;
+    let (first, _) = workspaces(&manager, temp.path()).await;
+    let mut site = launch("site");
+    site.preset = Some(crate::demos::Preset::Web);
+    site.scheme = Some(crate::demos::Scheme::Https);
+    site.environment = BTreeMap::from([(crate::demos::PORT.into(), "49200".into())]);
+    let mut dns = launch("dns");
+    dns.preset = Some(crate::demos::Preset::Server);
+    dns.environment = site.environment.clone();
+    dns.id = "dns".into();
+    for demo in [site, dns] {
+        manager
+            .begin_execution_running(&first.id, None, ExecutionKind::Command, None, Some(demo))
+            .await
+            .unwrap();
+    }
+    let urls: Vec<_> = manager
+        .demos(Some(&first.id))
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|demo| (demo.launch.name, demo.url))
+        .collect();
+    assert_eq!(
+        urls,
+        [
+            ("dns".to_owned(), None),
+            (
+                "site".to_owned(),
+                Some("https://localhost:49200".to_owned())
+            )
+        ]
+    );
+}

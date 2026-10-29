@@ -208,13 +208,15 @@ fn list(db: &Connection, workspace: Option<&str>) -> Result<Vec<Running>> {
     })?;
     rows.map(|row| {
         let (workspace_id, workspace, execution_id, started_at, record, has_run) = row?;
+        let launch: Launch = serde_json::from_str(&record).context("invalid demo record")?;
         Ok(Running {
             workspace_id,
             workspace,
             execution_id,
             started_at: started_at as u64,
             has_run,
-            launch: serde_json::from_str(&record).context("invalid demo record")?,
+            url: launch.url(),
+            launch,
         })
     })
     .collect()

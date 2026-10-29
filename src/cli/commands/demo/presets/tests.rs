@@ -1,4 +1,5 @@
 use super::*;
+use crate::demos::Scheme;
 
 fn launch(preset: Preset, variable: &str, value: &str) -> Launch {
     Launch {

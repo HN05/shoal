@@ -17,16 +17,12 @@ use crate::{
     },
     config::repo::ConflictPolicy,
     daemon::ports::PortRequest,
-    demos::{Launch, Preset, Scheme},
+    demos::{Launch, PORT, Preset, SIM_UDID},
     model::{PortReservation, Workspace},
     protocol::{Body, PortMethod, SimulatorMethod},
     sim::{SimRequest, Simulator},
 };
 
-/// The variable a web demo's port reaches its command as.
-const PORT: &str = "PORT";
-/// The variable a simulator demo's device reaches its command as.
-const SIM_UDID: &str = "SHOAL_SIM_UDID";
 /// The workspace's lease `shoal acquire sim` takes by default, so the demo
 /// shows the device the agent installed on.
 const SIM_LEASE: &str = "default";
@@ -201,17 +197,11 @@ fn instructions(preset: Preset, launch: &Launch, ssh: Option<&str>) -> Result<Ve
     let host = ssh.and_then(|connection| connection.split_whitespace().nth(2));
     Ok(match preset {
         Preset::Server | Preset::Web => {
-            let port = launch
-                .environment
-                .get(PORT)
-                .with_context(|| format!("demo {} has no port", launch.name))?;
-            let address = format!("localhost:{port}");
-            let mut lines = vec![if preset == Preset::Web {
-                let scheme = launch.scheme.unwrap_or(Scheme::Http);
-                format!("{scheme}://{address}")
-            } else {
-                address
-            }];
+            let (Some(port), Some(address)) = (launch.environment.get(PORT), launch.address())
+            else {
+                anyhow::bail!("demo {} has no port", launch.name);
+            };
+            let mut lines = vec![launch.url().unwrap_or(address)];
             if let Some(host) = host {
                 let user = std::env::var("USER").unwrap_or_default();
                 lines.push(format!(

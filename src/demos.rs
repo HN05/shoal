@@ -9,6 +9,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::states;
 
+/// The variable a serving demo's port reaches its command as.
+pub const PORT: &str = "PORT";
+/// The variable a simulator demo's device reaches its command as.
+pub const SIM_UDID: &str = "SHOAL_SIM_UDID";
+
 states!(
     /// How a demo reaches the user, beyond attaching to its session.
     Preset: ValueEnum {
@@ -88,8 +93,28 @@ pub struct Running {
     pub started_at: u64,
     /// The demo's command has started; a start reports the demo only then.
     pub has_run: bool,
+    /// Where a browser opens a web demo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     #[serde(flatten)]
     pub launch: Launch,
+}
+
+impl Launch {
+    /// Where a serving demo listens, on this machine.
+    pub fn address(&self) -> Option<String> {
+        let port = self.environment.get(PORT)?;
+        Some(format!("localhost:{port}"))
+    }
+
+    /// Where a browser opens a web demo.
+    pub fn url(&self) -> Option<String> {
+        if self.preset != Some(Preset::Web) {
+            return None;
+        }
+        let scheme = self.scheme.unwrap_or(Scheme::Http);
+        Some(format!("{scheme}://{}", self.address()?))
+    }
 }
 
 /// How far a launch the starting CLI waits on got.

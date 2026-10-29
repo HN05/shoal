@@ -1171,7 +1171,7 @@ variables, otherwise shows it where it runs: Herdr focuses its tab, attaching it
 outside Herdr, Rex its
 window (or selects it in the Mac app), zmx attaches (Ctrl-\ detaches), and the
 background follows its log. `shoal demo ls` lists the configured and
-running demos, `shoal demo screen NAME [--lines N]` prints the end of what it
+running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
 the screen you are looking at. `shoal demo stop [NAME]` stops one demo, or every
 demo of the workspace.
