@@ -90,6 +90,10 @@ enum Removal<'a> {
     /// The directory was deleted outside Shoal; forget the workspace and
     /// release what it owned, retaining its branch.
     Deleted,
+    /// An ancestor finished its assignment with cleanup, which takes the
+    /// workspace whatever its own work: it goes with its unsaved files once
+    /// a checkpoint keeps them, while the ancestor's completion stands.
+    UnderCompleted { ancestor: &'a Workspace },
     /// The workspace's parent is being removed, which nothing about the
     /// workspace keeps: it goes with its unsaved files once a checkpoint
     /// keeps them. `cause` and `refuse_holds` are the parent removal's.
@@ -108,6 +112,7 @@ impl<'a> Removal<'a> {
             Self::Completed { cause, .. } => cause,
             Self::Deleted => EventCause::MissingDirectory,
             Self::Parent { .. } => EventCause::Parent,
+            Self::UnderCompleted { .. } => EventCause::ParentCompletion,
         }
     }
 
@@ -117,6 +122,7 @@ impl<'a> Removal<'a> {
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Parent { .. }
+            | Removal::UnderCompleted { .. }
             | Removal::Merged { .. }
             | Removal::Completed { .. } => &NOTHING,
         }
@@ -125,7 +131,7 @@ impl<'a> Removal<'a> {
     fn inspection(self) -> InspectionPolicy {
         match self {
             Removal::Manual { inspection, .. } => inspection,
-            Removal::Parent { .. } => InspectionPolicy::GitOnly,
+            Removal::Parent { .. } | Removal::UnderCompleted { .. } => InspectionPolicy::GitOnly,
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Merged { .. }
@@ -138,6 +144,7 @@ impl<'a> Removal<'a> {
             Removal::Manual { .. }
             | Removal::Merged { .. }
             | Removal::Completed { .. }
+            | Removal::UnderCompleted { .. }
             | Removal::Parent { .. } => StopPolicy::ForRemoval,
             Removal::Automatic { .. } | Removal::Deleted => StopPolicy::RequireCompleteProof,
         }
@@ -149,8 +156,8 @@ impl<'a> Removal<'a> {
         !matches!(self, Removal::Automatic { .. })
     }
 
-    /// Merged cleanup and a parent's removal remove unsaved files once a
-    /// checkpoint keeps them.
+    /// Merged cleanup, an ancestor's completion and a parent's removal
+    /// remove unsaved files once a checkpoint keeps them.
     fn discards_archived_files(self) -> bool {
         matches!(
             self,
@@ -161,6 +168,7 @@ impl<'a> Removal<'a> {
                 },
                 ..
             } | Removal::Parent { .. }
+                | Removal::UnderCompleted { .. }
         )
     }
 
@@ -168,7 +176,9 @@ impl<'a> Removal<'a> {
     /// space; a user's request does not.
     fn waits_for_grace(self) -> bool {
         match self {
-            Removal::Merged { .. } | Removal::Completed { .. } => true,
+            Removal::Merged { .. } | Removal::Completed { .. } | Removal::UnderCompleted { .. } => {
+                true
+            }
             Removal::Automatic { cause, .. } => {
                 !matches!(cause, EventCause::DiskSpace | EventCause::Manual)
             }
@@ -182,7 +192,10 @@ impl<'a> Removal<'a> {
     fn unattended(self) -> bool {
         matches!(
             self,
-            Removal::Automatic { .. } | Removal::Merged { .. } | Removal::Completed { .. }
+            Removal::Automatic { .. }
+                | Removal::Merged { .. }
+                | Removal::Completed { .. }
+                | Removal::UnderCompleted { .. }
         )
     }
 
@@ -256,7 +269,7 @@ impl<'a> Removal<'a> {
                 stage.change(),
                 unsaved.uncovered(check).join(" and ")
             ),
-            (Removal::Deleted | Removal::Parent { .. }, _) => {}
+            (Removal::Deleted | Removal::Parent { .. } | Removal::UnderCompleted { .. }, _) => {}
         }
         Ok(())
     }
@@ -707,6 +720,12 @@ impl Manager {
 
     /// Assignment state whose own cleanup path decides removal.
     async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+        let workspace = self.workspace(id).await?;
+        if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
+            return Ok(Some(CleanupReason::AncestorCompleted {
+                workspace: ancestor.name,
+            }));
+        }
         if self.pr_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::PrWatch));
         }
@@ -799,6 +818,17 @@ impl Manager {
             cause,
         };
         self.remove_after_grace(selector, removal).await
+    }
+
+    /// Remove the workspace below `ancestor`, whose completion with cleanup
+    /// stands, after the grace period.
+    pub(super) async fn remove_under_completed(
+        &self,
+        selector: &str,
+        ancestor: &Workspace,
+    ) -> Result<bool> {
+        self.remove_after_grace(selector, Removal::UnderCompleted { ancestor })
+            .await
     }
 
     /// Remove the workspace unless its grace period is still running.
@@ -1163,6 +1193,19 @@ impl Manager {
                 "workspace changed {}",
                 stage.change()
             ),
+            // The workspaces below go first, under the same completion, so
+            // none that something keeps goes with this one.
+            (Removal::UnderCompleted { ancestor }, _) => {
+                ensure!(
+                    check.workspace.child_workspaces.is_empty(),
+                    "workspaces split from it remain; retaining it until they go"
+                );
+                ensure!(
+                    self.completion_stands(ancestor).await?,
+                    "{} withdrew its completion or changed since; retaining workspace",
+                    ancestor.name
+                );
+            }
             (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
         }
         Ok(check)

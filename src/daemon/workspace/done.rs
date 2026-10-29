@@ -216,6 +216,7 @@ impl Manager {
     }
 
     /// Each workspace's PR gate is held only while that workspace is handled.
+    /// A workspace below a completed one goes by that completion.
     pub async fn sweep_completed(&self) -> Result<()> {
         for listed in self.list_workspaces().await? {
             let _guard = self.gates.lock_prs([&listed.id]).await;
@@ -223,6 +224,10 @@ impl Manager {
                 continue;
             };
             if workspace.state != WorkspaceState::Ready {
+                continue;
+            }
+            if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
+                self.sweep_under_completed(&workspace, &ancestor).await?;
                 continue;
             }
             let result = self.cleanup_completed(&workspace).await;
@@ -378,6 +383,8 @@ fn results_preview(results: &[HandedBack]) -> String {
         more => format!("{} and {more} more", names.join(", ")),
     }
 }
+
+mod children;
 
 #[cfg(test)]
 mod tests;

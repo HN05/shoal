@@ -77,6 +77,8 @@ states!(EventCause {
     Removed => "removed",
     /// The workspace's parent was removed, which takes its children first.
     Parent => "parent",
+    /// An ancestor of the workspace finished its assignment with cleanup.
+    ParentCompletion => "parent_completion",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

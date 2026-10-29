@@ -527,6 +527,11 @@ pub enum CleanupReason {
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
     PrWatch,
+    /// An ancestor finished its assignment with cleanup, which takes this
+    /// workspace too.
+    AncestorCompleted {
+        workspace: String,
+    },
     Completed {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
@@ -563,6 +568,9 @@ impl std::fmt::Display for CleanupReason {
             Self::PrProposal => f.write_str("PR proposal waiting for approval"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
+            Self::AncestorCompleted { workspace } => {
+                write!(f, "{workspace} done; completion cleanup pending")
+            }
             Self::Completed { integrated: false } => {
                 f.write_str("Done; completion cleanup pending")
             }

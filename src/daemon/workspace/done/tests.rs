@@ -778,3 +778,99 @@ fn a_notice_names_the_first_results_and_counts_the_rest() {
     );
     assert_eq!(results_preview(&results[..2]), "report.md, repro.sh");
 }
+
+#[tokio::test]
+async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
+    let (_root, manager, parent) = fixture().await;
+    // The parent's own unpushed commit keeps it, but not its children.
+    commit_file(&parent.path, "parent-work");
+    let split = |name: &'static str, parent: String| {
+        let manager = manager.clone();
+        async move {
+            manager
+                .split_workspace(&parent, name.into(), None)
+                .await
+                .unwrap()
+        }
+    };
+    let dirty = split("dirty", parent.id.clone()).await;
+    commit_file(&dirty.path, "child-work");
+    fs::write(dirty.path.join("draft"), "draft").unwrap();
+    let held = split("held", parent.id.clone()).await;
+    manager
+        .acquire_hold(&held.id, "review".into(), None)
+        .await
+        .unwrap();
+    let nested = split("nested", parent.id.clone()).await;
+    let leaf = split("leaf", nested.id.clone()).await;
+
+    manager.mark_done(&parent.id, false, false, Vec::new()).await.unwrap();
+    assert_eq!(
+        manager.cleanup_reason(&dirty).await,
+        CleanupReason::AncestorCompleted {
+            workspace: "finished".into()
+        }
+    );
+    assert_eq!(manager.cleanup_reason(&held).await, CleanupReason::Held);
+    // The leaf goes first, then the workspace it was split from.
+    manager.sweep_completed().await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    for gone in [&dirty, &nested, &leaf] {
+        assert!(manager.find_workspace(&gone.id).await.unwrap().is_none());
+        assert!(!gone.path.exists(), "{}", gone.name);
+    }
+    // Its commit stays on the kept branch, its unsaved file in a checkpoint.
+    let repo = manager.repository(&parent.repository_id).await.unwrap();
+    assert_eq!(
+        git(&repo.path, &["branch", "--list", "dirty"]).trim(),
+        "dirty"
+    );
+    let removed = manager.removed_workspaces().await.unwrap();
+    assert!(removed.iter().any(|removed| removed.name == "dirty"));
+    assert!(held.path.exists());
+    assert!(parent.path.exists());
+    assert_error(&manager, &parent, "neither pushed").await;
+}
+
+#[tokio::test]
+async fn children_stay_while_their_parents_completion_does_not_stand() {
+    let (_root, manager, parent) = fixture().await;
+    commit_file(&parent.path, "parent-work");
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    // Without cleanup the completion leaves them.
+    manager
+        .set_repository_config(
+            &parent.repository_id,
+            Some("[done]\ncleanup = false\n".into()),
+        )
+        .await
+        .unwrap();
+    manager.mark_done(&parent.id, false, false, Vec::new()).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    // Nor once it is withdrawn.
+    manager.mark_done(&parent.id, true, false, Vec::new()).await.unwrap();
+    manager.undo_done(&parent.id).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    // Nor once the parent committed after it.
+    manager.mark_done(&parent.id, true, false, Vec::new()).await.unwrap();
+    commit_file(&parent.path, "parent-work");
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    assert_eq!(
+        manager.cleanup_reason(&child).await,
+        CleanupReason::Idle { minutes: 10 }
+    );
+}
+
+/// Commit a new revision of the file `name` in `path`.
+fn commit_file(path: &std::path::Path, name: &str) {
+    let file = path.join(name);
+    let revision = fs::read_to_string(&file).unwrap_or_default();
+    fs::write(&file, format!("{revision}x")).unwrap();
+    commit(path, name);
+}
