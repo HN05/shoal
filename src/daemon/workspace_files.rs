@@ -290,10 +290,14 @@ impl Manager {
     }
 
     /// Delete the attached files of every workspace without a running agent
-    /// or command, and return their records.
+    /// or command, and return their records. No execution starts while a
+    /// repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
         for repo in self.repositories().await? {
+            // Execution admission comes first, as nothing holding the files
+            // gate waits for it.
+            let _admission = self.executions.connections().await;
             let _files = self.gates.lock_message_files(&repo.id).await;
             let id = repo.id.clone();
             let files = self
