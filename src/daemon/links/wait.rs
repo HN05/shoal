@@ -899,11 +899,11 @@ fn receiving<'a>(id: &'a str, children: &'a [WorkspaceRef]) -> impl Iterator<Ite
 }
 
 /// A change the workspace's agent made to `url` through Shoal, which its
-/// watches do not report back: the comment or reply it posted and the state
-/// it set.
+/// watches do not report back: the comments, replies or reviews it posted
+/// and the state it set.
 pub(crate) struct OwnChange<'a> {
     pub url: &'a str,
-    pub authored: Option<String>,
+    pub authored: Vec<String>,
     pub state: Option<&'a str>,
 }
 

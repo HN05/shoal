@@ -1001,7 +1001,7 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .run(move |db| {
             let change = OwnChange {
                 url: "pr",
-                authored: Some("discussion:2".into()),
+                authored: vec!["discussion:2".into()],
                 state: Some("closed"),
             };
             record_own_change(db, &id, change)

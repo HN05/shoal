@@ -24,8 +24,9 @@ use crate::{
 /// not send it again.
 #[derive(Debug, Default)]
 pub struct Sent {
-    /// The activity key of the comment or reply the action posted.
-    pub authored: Option<String>,
+    /// The activity keys of the comments, replies or reviews the action
+    /// posted.
+    pub authored: Vec<String>,
 }
 
 impl std::fmt::Display for Sent {
@@ -45,12 +46,12 @@ pub fn after_send(error: anyhow::Error, sent: bool) -> anyhow::Error {
 
 /// `error`, marked as [`Sent`] with what the action posted once its first
 /// request was sent.
-fn after_post(error: anyhow::Error, sent: bool, authored: &Option<String>) -> anyhow::Error {
+fn after_post(error: anyhow::Error, sent: bool, authored: &[String]) -> anyhow::Error {
     if !sent {
         return error;
     }
     error.context(Sent {
-        authored: authored.clone(),
+        authored: authored.to_vec(),
     })
 }
 
@@ -238,8 +239,9 @@ impl Action {
 pub struct Acted {
     /// The item as the forge reports it afterwards.
     pub item: Item,
-    /// The activity key of the comment or review reply the action posted.
-    pub authored: Option<String>,
+    /// The activity keys of the comments, replies or reviews the action
+    /// posted.
+    pub authored: Vec<String>,
 }
 
 impl ForgeRepo {
@@ -271,7 +273,7 @@ impl ForgeRepo {
         let (action, pending) = self
             .upload_attachments(account, &current, action, per_item)
             .await?;
-        let mut authored = None;
+        let mut authored = Vec::new();
         let mut first = None;
         for request in self.requests(account, current, &action).await? {
             let response = self
@@ -280,7 +282,7 @@ impl ForgeRepo {
                 .map_err(|error| after_post(error, first.is_some(), &authored))?;
             // A comment, or a thread's reply, is the action's first request.
             if first.is_none() {
-                authored = self.posted(&action, &response);
+                authored.extend(self.posted(&action, &response));
                 first = Some(response);
             }
         }

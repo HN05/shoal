@@ -179,12 +179,13 @@ impl Manager {
     ) -> anyhow::Error {
         let Some(authored) = error
             .downcast_ref::<Sent>()
-            .and_then(|sent| sent.authored.clone())
+            .map(|sent| sent.authored.clone())
+            .filter(|authored| !authored.is_empty())
         else {
             return error;
         };
         match self
-            .record_own_action(id, target, action.name(), None, Some(authored))
+            .record_own_action(id, target, action.name(), None, authored)
             .await
         {
             Ok(()) => error,
@@ -202,7 +203,7 @@ impl Manager {
         target: Target,
         name: &'static str,
         state: Option<&'static str>,
-        authored: Option<String>,
+        authored: Vec<String>,
     ) -> Result<()> {
         let id = id.to_owned();
         let Target { kind, url, .. } = target;
