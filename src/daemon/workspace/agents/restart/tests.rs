@@ -75,7 +75,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 state: Some(AgentState::Idle),
                 interrupted: false,
                 origin: None,
-                restarted_by: None,
+                restarted_by: Vec::new(),
                 restart: None,
             },
             RunningAgent {
@@ -86,7 +86,7 @@ async fn agents_list_connected_agents_and_executions_whose_wrapper_is_gone() {
                 state: None,
                 interrupted: false,
                 origin: None,
-                restarted_by: None,
+                restarted_by: Vec::new(),
                 restart: None,
             },
         ]
@@ -321,7 +321,8 @@ async fn a_second_request_joins_the_restart_in_progress() {
     second.await.unwrap().unwrap();
     let listed = manager.running_agents().await.unwrap();
     assert_eq!(listed[0].restart, None);
-    assert_eq!(listed[0].restarted_by.as_deref(), Some("first"));
+    // The run that joined got its restart too.
+    assert_eq!(listed[0].restarted_by, ["first", "second"]);
     // Joining once the restart ended finds the agent running again, and
     // starts no other restart.
     manager

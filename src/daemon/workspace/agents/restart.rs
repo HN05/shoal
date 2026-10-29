@@ -20,6 +20,9 @@ pub(super) struct Restart {
     answers: Vec<oneshot::Sender<Result<()>>>,
     /// The `shoal restart` run that asked for it.
     run: Option<String>,
+    /// The other runs whose requests joined it, for which it restarts the
+    /// agent as well.
+    joined: Vec<String>,
     /// The stopped agent was resumed, so its wrapper's next start is the
     /// restarted agent rather than the first one.
     resumed: bool,
@@ -35,14 +38,21 @@ impl Restart {
         Self {
             answers: Vec::new(),
             run,
+            joined: Vec::new(),
             resumed: false,
             waits: None,
         }
     }
 
-    /// Answer one more request: at once while the restart waits for the
-    /// agent's processes, otherwise once it ends.
-    fn answer(&mut self) -> oneshot::Receiver<Result<()>> {
+    /// Answer one more request, of `run`: at once while the restart waits
+    /// for the agent's processes, otherwise once it ends.
+    fn answer(&mut self, run: Option<String>) -> oneshot::Receiver<Result<()>> {
+        if let Some(run) = run
+            && self.run.as_ref() != Some(&run)
+            && !self.joined.contains(&run)
+        {
+            self.joined.push(run);
+        }
         let (done, answer) = oneshot::channel();
         match &self.waits {
             Some(waits) => {
@@ -62,6 +72,11 @@ impl Restart {
         PendingRestart {
             run: self.run.clone(),
         }
+    }
+
+    /// Every run it restarts the agent for.
+    fn runs(&self) -> impl Iterator<Item = Option<String>> + '_ {
+        std::iter::once(self.run.clone()).chain(self.joined.iter().cloned().map(Some))
     }
 }
 
@@ -86,7 +101,7 @@ impl Manager {
                             restorable: agent.is_some_and(|agent| agent.recover),
                             state: agent.and_then(|agent| agent.turn),
                             interrupted: agent.is_some_and(|agent| agent.interrupted),
-                            restarted_by: agent.and_then(|agent| agent.restarted_by.clone()),
+                            restarted_by: agent.map(Agent::restarted_by).unwrap_or_default(),
                             restart: agent
                                 .and_then(|agent| agent.restart.as_ref())
                                 .map(Restart::pending),
@@ -118,7 +133,9 @@ impl Manager {
                     .get_mut(execution)
                     .with_context(|| format!("no connected agent runs execution {execution}"))?;
                 anyhow::Ok(match &mut agent.restart {
-                    Some(restart) if run.is_none() || restart.run == run => Ok(restart.answer()),
+                    Some(restart) if run.is_none() || restart.run == run => {
+                        Ok(restart.answer(None))
+                    }
                     _ => Err(agent.ended_restarts.get(&run).cloned().unwrap_or_else(|| {
                         Err(format!("no restart of {} is in progress", agent.name))
                     })),
@@ -159,7 +176,7 @@ impl Manager {
             return Ok(answer);
         }
         if let Some(restart) = &mut agent.restart {
-            return Ok(restart.answer());
+            return Ok(restart.answer(run));
         }
         ensure!(
             agent.recover,
@@ -179,7 +196,7 @@ impl Manager {
         )
         .context("save the agent's recovery record")?;
         let mut restart = Restart::unanswered(run);
-        let answer = restart.answer();
+        let answer = restart.answer(None);
         agent.restart = Some(restart);
         if agent.stop.send(true).is_err() {
             agent.restart = None;
@@ -270,12 +287,7 @@ impl Manager {
                 let restart = agent
                     .restart
                     .take_if(|restart| restart.resumed || !once_resumed)?;
-                agent
-                    .ended_restarts
-                    .insert(restart.run.clone(), outcome.clone());
-                if outcome.is_ok() {
-                    agent.restarted_by.clone_from(&restart.run);
-                }
+                agent.end_restart(&restart, &outcome);
                 Some(restart)
             })
             .await
@@ -291,9 +303,27 @@ impl Agent {
     /// Drop the restart in progress, recording that it was cancelled.
     pub(super) fn cancel_restart(&mut self) {
         if let Some(restart) = self.restart.take() {
-            self.ended_restarts
-                .insert(restart.run, Err("the restart was cancelled".into()));
+            self.end_restart(&restart, &Err("the restart was cancelled".into()));
         }
+    }
+
+    /// Record `outcome` for every run `restart` restarted the agent for.
+    fn end_restart(&mut self, restart: &Restart, outcome: &Result<(), String>) {
+        for run in restart.runs() {
+            self.ended_restarts.insert(run, outcome.clone());
+        }
+    }
+
+    /// The runs a restart started the agent again for.
+    fn restarted_by(&self) -> Vec<String> {
+        let mut runs: Vec<String> = self
+            .ended_restarts
+            .iter()
+            .filter(|(_, outcome)| outcome.is_ok())
+            .filter_map(|(run, _)| run.clone())
+            .collect();
+        runs.sort();
+        runs
     }
 }
 

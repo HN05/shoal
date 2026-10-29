@@ -790,10 +790,10 @@ pub struct RunningAgent {
     /// Where it runs in a terminal host, when its wrapper runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
-    /// The `shoal restart` run whose restart last started it again, while
-    /// this daemon runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub restarted_by: Option<String>,
+    /// The `shoal restart` runs a restart started it again for, including
+    /// runs that joined another's restart, while this daemon runs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub restarted_by: Vec<String>,
     /// The `shoal restart` of it in progress.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restart: Option<PendingRestart>,

@@ -40,8 +40,6 @@ pub(crate) struct Agent {
     /// How each of its restarts that ended did, by the run that asked for
     /// it, which answers a request that joins it late.
     ended_restarts: HashMap<Option<String>, Result<(), String>>,
-    /// The `shoal restart` run whose restart last started it again.
-    restarted_by: Option<String>,
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
@@ -280,7 +278,6 @@ impl Manager {
             update_hold: None,
             restart: None,
             ended_restarts: HashMap::new(),
-            restarted_by: None,
             turn: None,
             interrupted: false,
             attached: None,
