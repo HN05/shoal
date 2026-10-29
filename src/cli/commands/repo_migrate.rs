@@ -46,14 +46,15 @@ pub(super) async fn run(
     if let Some(root) = root {
         save_root(ctx, &root).await?;
     }
+    let mut stopped = Vec::new();
     let moved = async {
-        stop_running(ctx, &moves.executions, confirmed).await?;
+        stop_running(ctx, &moves.executions, confirmed, &mut stopped).await?;
         move_repositories(ctx, regular_dir).await
     }
     .await;
     // A failed request may follow moves that completed.
     retrust(ctx, &before).await;
-    let queued = resume_stopped(ctx, &moves.executions).await;
+    let queued = resume_stopped(ctx, &stopped).await;
     show(ctx, &moved?, queued.as_ref())
 }
 
@@ -72,17 +73,30 @@ async fn plan_moves(
     .await
 }
 
-/// Stop the workspaces `executions` run in, keeping their agents' sessions.
-/// An execution Shoal cannot prove ended stops once the user confirms it
-/// did, or when `confirmed`.
-async fn stop_running(ctx: &Context, executions: &[Execution], confirmed: bool) -> Result<()> {
+/// Stop the workspaces `executions` run in, keeping their agents' sessions,
+/// and add to `stopped` the executions each ran as it stopped, including
+/// any started since the plan. An execution Shoal cannot prove ended stops
+/// once the user confirms it did, or when `confirmed`.
+async fn stop_running(
+    ctx: &Context,
+    executions: &[Execution],
+    confirmed: bool,
+    stopped: &mut Vec<Execution>,
+) -> Result<()> {
     let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.workspace_id).collect();
     for workspace in workspaces {
-        ctx.progress(
-            "Stopping commands and agents",
-            super::stop::stop(ctx, workspace, confirmed),
-        )
-        .await?;
+        let running = client::inspect(&ctx.paths, workspace.clone())
+            .await?
+            .executions;
+        let result = ctx
+            .progress(
+                "Stopping commands and agents",
+                super::stop::stop(ctx, workspace, confirmed),
+            )
+            .await;
+        // A failed stop may have ended some of them.
+        stopped.extend(running);
+        result?;
     }
     Ok(())
 }
