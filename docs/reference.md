@@ -2914,7 +2914,8 @@ Assigned PRs accumulate without duplicates and must name the recorded workspace
 branch. Assigned items suppress idle cleanup.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
-author, labels, description, comments, and reviews with their inline comments; a
+author, labels, description, comments, and reviews with their inline comments,
+with the reactions on the item and each comment where the forge has them; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
 reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
@@ -2930,7 +2931,11 @@ Kinds and explicit items select as they do for `watch`, and
 inline comment also shows the ID of the comment that starts its thread when it is
 a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a
 review whose inline comments could not be read keeps its body; the command exits 1 when an item could not be read. `--json` returns an array
-of items with failed logs in `check_logs`, or a check log object with `--check`.
+of items with failed logs in `check_logs`, or a check log object with `--check`;
+`reactions` on an item or comment lists each reaction's `content`, `count`, and
+whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
+`laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
+without one keeps its GitLab name.
 
 `shoal watch` polls all linked items every ~30 seconds, and the daemon queues
 what its own polling of a ready workspace's linked items observes for the next

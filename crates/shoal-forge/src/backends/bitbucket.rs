@@ -27,6 +27,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
+        reaction::{Listed, Subject},
     },
     repo::locator::ItemRoute,
     review::{
@@ -84,6 +85,7 @@ impl Backend for Bitbucket {
             | Capability::CancelJobs
             | Capability::ReadJobLogs
             | Capability::ReadRuns => Support::Unsupported(None),
+            Capability::Reactions => Support::Unsupported(Some("Bitbucket has no reactions")),
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
@@ -517,6 +519,24 @@ impl Backend for Bitbucket {
             .hint_login(self)
     }
 
+    fn reactions_endpoint(
+        &self,
+        _repo: &ForgeRepo,
+        _kind: ItemKind,
+        _number: u64,
+        _subject: Subject,
+    ) -> Result<String> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
+    fn listed_reaction(&self, _reaction: &Value) -> Result<Listed> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
+    async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<String> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
     /// No CI job Shoal can act on, since it reads no Pipelines jobs.
     async fn ci_checks(
         &self,
@@ -663,6 +683,7 @@ async fn view_details(
             .map(|pr| PrDetails::new(pr.head, pr.base, pr.draft)),
         comments: None,
         reviews: None,
+        reactions: Vec::new(),
     })
 }
 
@@ -899,6 +920,7 @@ fn threads(comments: &[Value]) -> (Vec<Comment>, Vec<Review>) {
                 author: nickname(&comment["user"]),
                 created_at: text(&comment["created_on"]).unwrap_or_default(),
                 body: text(&comment["content"]["raw"]).unwrap_or_default(),
+                reactions: Vec::new(),
             });
             continue;
         }
@@ -978,6 +1000,7 @@ fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment
         line: inline["to"].as_u64().or(inline["from"].as_u64()),
         body: text(&comment["content"]["raw"]).unwrap_or_default(),
         resolved: Some(resolved),
+        reactions: Vec::new(),
     }
 }
 

@@ -926,6 +926,38 @@ fn forgejo_views_keep_reviews_whose_comments_fail_and_retry_busy_lookups() {
     );
 }
 
+#[test]
+fn views_count_reactions_and_mark_the_logins_own() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let issue = "repos/team/project/issues/3";
+    let reaction =
+        |content: &str, login: &str| json!({"content": content, "user": {"login": login}});
+    fixture.respond(json!({
+        format!("GET {issue}"): {"body": {"number": 3, "title": "Crash", "state": "open",
+            "labels": [], "user": {"login": "ann"}}},
+        format!("GET {issue}/comments"): {"body": [{"id": 9, "body": "Same", "user": {"login": "bob"}}]},
+        "GET user": {"body": {"login": "me"}},
+        format!("GET {issue}/reactions?limit=50&page=1"):
+            {"body": [reaction("+1", "ann"), reaction("heart", "ann"), reaction("+1", "me")]},
+        // Forgejo lists no reactions as null.
+        "GET repos/team/project/issues/comments/9/reactions?limit=50&page=1": {"body": null},
+    }));
+    let view = &fixture.ok(&["view", "issue", "3", "--workspace", "topic"])[0];
+    assert_eq!(
+        view["reactions"],
+        json!([{"content": "+1", "count": 2, "reacted": true},
+            {"content": "heart", "count": 1, "reacted": false}]),
+        "{view}"
+    );
+    assert_eq!(view["comments"][0]["id"], 9, "{view}");
+    assert!(view["comments"][0].get("reactions").is_none(), "{view}");
+    assert!(view.get("errors").is_none(), "{view}");
+    let text = fixture.run(&["view", "issue", "3", "--workspace", "topic"]);
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("Reactions: +1 2 (you), heart 1"), "{text}");
+    assert!(text.contains("comment 9"), "{text}");
+}
+
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
 /// beside them that references the image.
 fn attachment_files(fixture: &Fixture) -> [String; 3] {

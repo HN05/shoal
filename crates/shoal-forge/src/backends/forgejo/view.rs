@@ -80,6 +80,7 @@ fn parse_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
         pr,
         comments: None,
         reviews: None,
+        reactions: Vec::new(),
     })
 }
 
@@ -93,6 +94,7 @@ fn parse_comments(comments: &Value) -> Result<Vec<Comment>> {
             author: login(&comment["user"]),
             created_at: text_field(&comment["created_at"]),
             body: text_field(&comment["body"]),
+            reactions: Vec::new(),
         })
         .collect())
 }

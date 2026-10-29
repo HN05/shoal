@@ -103,6 +103,7 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
                     author: login(&comment["author"]),
                     created_at: text_field(&comment["createdAt"]),
                     body: text_field(&comment["body"]),
+                    reactions: Vec::new(),
                 })
                 .collect(),
         ),
@@ -119,6 +120,7 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
         pr,
         comments,
         reviews: None,
+        reactions: Vec::new(),
     })
 }
 

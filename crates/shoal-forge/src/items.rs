@@ -6,4 +6,5 @@ pub mod issue;
 pub mod item;
 pub mod link;
 pub mod list;
+pub mod reaction;
 mod retarget;

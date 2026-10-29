@@ -14,7 +14,10 @@ use crate::{
         account::Account,
         capability::Capability,
         ci::checks::CheckLog,
-        items::link::{ItemKind, Selection},
+        items::{
+            link::{ItemKind, Selection},
+            reaction::Reaction,
+        },
         review::view::{Details, ItemView, PrDetails, Review},
     },
     model::Selected,
@@ -194,6 +197,7 @@ fn render_details(details: &Details, palette: Palette) {
     if !details.labels.is_empty() {
         outln!("Labels:   {}", details.labels.join(", "));
     }
+    render_reactions(&details.reactions, 0);
     if !details.body.trim().is_empty() {
         outln!();
         print_indented(&details.body, 2);
@@ -209,6 +213,7 @@ fn render_details(details: &Details, palette: Palette) {
                 comment.id
             );
             print_indented(&comment.body, 4);
+            render_reactions(&comment.reactions, 4);
         }
     }
     if let Some(reviews) = &details.reviews {
@@ -268,7 +273,23 @@ fn render_review(review: &Review) {
             comment.id
         );
         print_indented(&comment.body, 6);
+        render_reactions(&comment.reactions, 6);
     }
+}
+
+/// One line with each reaction's count, marking those the viewer made.
+fn render_reactions(reactions: &[Reaction], indent: usize) {
+    if reactions.is_empty() {
+        return;
+    }
+    let reactions: Vec<String> = reactions
+        .iter()
+        .map(|reaction| {
+            let own = if reaction.reacted { " (you)" } else { "" };
+            format!("{} {}{own}", reaction.content, reaction.count)
+        })
+        .collect();
+    outln!("{:indent$}Reactions: {}", "", reactions.join(", "));
 }
 
 fn print_indented(text: &str, indent: usize) {

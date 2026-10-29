@@ -36,6 +36,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
+        reaction::{Listed, Subject},
     },
     repo::locator::ItemRoute,
     review::{
@@ -100,7 +101,8 @@ impl Backend for GitHub {
             | Capability::Forks
             | Capability::LineComments
             | Capability::ApprovePrs
-            | Capability::RequestChanges => Support::Supported,
+            | Capability::RequestChanges
+            | Capability::Reactions => Support::Supported,
         }
     }
 
@@ -574,6 +576,29 @@ impl Backend for GitHub {
         _errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
         view::reviews(repo, account, kind, number).await
+    }
+
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        _kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String> {
+        Ok(github_rest::reactions_endpoint(
+            repo,
+            number,
+            subject,
+            Dialect::GitHub,
+        ))
+    }
+
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
+        github_rest::listed_reaction(reaction)
+    }
+
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        github_rest::own_login(repo, account).await
     }
 
     /// Only each check's latest attempt, not those reruns replaced, and

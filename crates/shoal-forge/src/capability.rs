@@ -26,6 +26,7 @@ states!(Capability: Variants {
     LineComments => "line_comments",
     ApprovePrs => "approve_prs",
     RequestChanges => "request_changes",
+    Reactions => "reactions",
 });
 
 impl Capability {
@@ -50,6 +51,7 @@ impl Capability {
             Self::LineComments => "comment on lines of a PR's diff",
             Self::ApprovePrs => "approve PRs",
             Self::RequestChanges => "request changes on PRs",
+            Self::Reactions => "react to issues, PRs and comments",
         }
     }
 

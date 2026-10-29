@@ -9,14 +9,16 @@ use super::{
 };
 use crate::{
     ForgeRepo,
+    account::Account,
     ci::{CiCheck, JobState, check},
     items::{
         action::Edit,
         create::{Head, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
+        reaction::{Listed, Subject},
     },
-    review::reviewers::team_name,
+    review::{reviewers::team_name, view::login},
     transport::api::{HttpMethod, Request},
 };
 
@@ -338,3 +340,33 @@ pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<
 
 #[cfg(test)]
 mod tests;
+
+/// The endpoint of the reactions on `subject` of item `number`; Forgejo
+/// keeps a PR's inline comments among its issue comments.
+pub(crate) fn reactions_endpoint(
+    repo: &ForgeRepo,
+    number: u64,
+    subject: Subject,
+    dialect: Dialect,
+) -> String {
+    repo.repo_endpoint(&match (subject, dialect) {
+        (Subject::Item, _) => format!("issues/{number}/reactions"),
+        (Subject::Comment(id), _) | (Subject::ReviewComment(id), Dialect::Forgejo) => {
+            format!("issues/comments/{id}/reactions")
+        }
+        (Subject::ReviewComment(id), Dialect::GitHub) => format!("pulls/comments/{id}/reactions"),
+    })
+}
+
+pub(crate) fn listed_reaction(reaction: &Value) -> Result<Listed> {
+    Ok(Listed {
+        id: reaction["id"].clone(),
+        content: text(&reaction["content"]).context("a reaction has no content")?,
+        login: login(&reaction["user"]),
+    })
+}
+
+pub(crate) async fn own_login(repo: &ForgeRepo, account: &Account) -> Result<String> {
+    let user = repo.send(account, &Request::get("user".into())).await?;
+    text(&user["login"]).context("the forge did not report your login")
+}

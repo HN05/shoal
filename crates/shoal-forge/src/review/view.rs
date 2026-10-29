@@ -8,7 +8,8 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
-    items::link::ItemKind,
+    capability::Capability,
+    items::{link::ItemKind, reaction::Reaction},
     review::status::{CheckResult, PrStatus, ReviewState},
 };
 
@@ -43,6 +44,9 @@ pub struct Details {
     pub comments: Option<Vec<Comment>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reviews: Option<Vec<Review>>,
+    /// Read with the comments, where the forge has reactions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +67,8 @@ pub struct Comment {
     pub author: String,
     pub created_at: String,
     pub body: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +95,8 @@ pub struct ReviewComment {
     pub body: String,
     /// Whether the thread is resolved; unknown where the forge does not say.
     pub resolved: Option<bool>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 impl ForgeRepo {
@@ -157,6 +165,11 @@ impl ForgeRepo {
                 Ok(None) => {}
                 Err(error) => errors.push(format!("comments lookup failed: {error:#}")),
             }
+            if self.supports(Capability::Reactions)
+                && let Err(error) = self.view_reactions(account, kind, &mut details).await
+            {
+                errors.push(format!("reactions lookup failed: {error:#}"));
+            }
         }
         Ok(details)
     }
@@ -223,6 +236,7 @@ pub(crate) fn review_comment(
         line: positive(line).or_else(|| positive(original)),
         body: text_field(&comment["body"]),
         resolved,
+        reactions: Vec::new(),
     }
 }
 

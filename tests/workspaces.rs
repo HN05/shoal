@@ -15726,7 +15726,7 @@ fn view_shows_linked_items_with_status_and_discussion() {
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("gh"),
-        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') printf 'HTTP/2.0 200 OK\\n\\n'; cat \"$HOME/threads.json\";; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
+        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') printf 'HTTP/2.0 200 OK\\n\\n'; cat \"$HOME/threads.json\";; '-X user') printf 'HTTP/2.0 200 OK\\n\\n{\"login\":\"me\"}';; '-X '*/issues/3/reactions*) printf 'HTTP/2.0 200 OK\\n\\n[{\"id\":1,\"content\":\"heart\",\"user\":{\"login\":\"me\"}}]';; '-X '*/reactions*) printf 'HTTP/2.0 200 OK\\n\\n[]';; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
     );
     let root = fixture.root.path();
     // Longer than a protocol frame: lookups run in the CLI.
@@ -15780,6 +15780,10 @@ fn view_shows_linked_items_with_status_and_discussion() {
     assert_eq!(issue["state"], "open");
     assert_eq!(issue["body"], body);
     assert_eq!(issue["comments"][0]["body"], "Same here");
+    assert_eq!(
+        issue["reactions"],
+        serde_json::json!([{"content": "heart", "count": 1, "reacted": true}])
+    );
     let pr = views.iter().find(|view| view["kind"] == "pr").unwrap();
     assert_eq!(pr["pr"]["merge_conflicts"], true);
     assert_eq!(pr["pr"]["checks"][0]["result"], "failure");

@@ -40,6 +40,7 @@ use crate::{
         item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
+        reaction::{Listed, Subject},
     },
     repo::locator::ItemRoute,
     review::{
@@ -103,7 +104,8 @@ impl Backend for Forgejo {
             | Capability::Forks
             | Capability::LineComments
             | Capability::ApprovePrs
-            | Capability::RequestChanges => Support::Supported,
+            | Capability::RequestChanges
+            | Capability::Reactions => Support::Supported,
         }
     }
 
@@ -171,7 +173,11 @@ impl Backend for Forgejo {
         ("limit", PAGE_SIZE)
     }
 
+    /// Forgejo reports some empty lists, such as reactions, as `null`.
     fn page<'a>(&self, response: &'a Value, size: usize) -> Option<(&'a [Value], bool)> {
+        if response.is_null() {
+            return Some((&[], false));
+        }
         full_page(response, size)
     }
 
@@ -471,6 +477,29 @@ impl Backend for Forgejo {
         view::discussion(repo, account, kind, number, details, errors)
             .await
             .hint_login(self)
+    }
+
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        _kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String> {
+        Ok(github_rest::reactions_endpoint(
+            repo,
+            number,
+            subject,
+            Dialect::Forgejo,
+        ))
+    }
+
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
+        github_rest::listed_reaction(reaction)
+    }
+
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        github_rest::own_login(repo, account).await.hint_login(self)
     }
 
     async fn ci_checks(
@@ -903,17 +932,14 @@ fn search_endpoint(kind: ItemKind, search: &list::Search) -> String {
 
 /// `owner/repository` of the account's existing fork of the repository.
 async fn owned_fork(repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
-    let user = repo.send(account, &Request::get("user".into())).await?;
-    let login = user["login"]
-        .as_str()
-        .context("the forge did not report your login")?;
+    let login = github_rest::own_login(repo, account).await?;
     let forks = repo.pages(account, &repo.repo_endpoint("forks")).await?;
     forks
         .iter()
         .find(|fork| {
             fork["owner"]["login"]
                 .as_str()
-                .is_some_and(|owner| owner.eq_ignore_ascii_case(login))
+                .is_some_and(|owner| owner.eq_ignore_ascii_case(&login))
         })
         .map(github_rest::full_name)
         .transpose()

@@ -32,6 +32,7 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
+        reaction::{Listed, Subject},
     },
     repo::locator::ItemRoute,
     review::{
@@ -423,6 +424,21 @@ pub(crate) trait Backend {
         details: &mut Details,
         errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>>;
+
+    /// The endpoint that lists the reactions on `subject` of item `number`.
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String>;
+
+    /// A reaction as the forge lists it, with GitHub's name for its content.
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed>;
+
+    /// The login `account` signs in to the forge as.
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
 
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
@@ -996,6 +1012,24 @@ impl Backend for ForgeKind {
         errors: &mut Vec<String>,
     ) -> Result<Option<Vec<Review>>> {
         dispatch!(self, backend => backend.view_discussion(repo, account, kind, number, details, errors).await)
+    }
+
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String> {
+        dispatch!(self, backend => backend.reactions_endpoint(repo, kind, number, subject))
+    }
+
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
+        dispatch!(self, backend => backend.listed_reaction(reaction))
+    }
+
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        dispatch!(self, backend => backend.own_login(repo, account).await)
     }
 
     async fn ci_checks(

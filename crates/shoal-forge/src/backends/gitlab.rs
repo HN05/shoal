@@ -26,6 +26,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
+        reaction::{Listed, Subject},
     },
     repo::locator::ItemRoute,
     review::{
@@ -45,6 +46,7 @@ use crate::{
 };
 
 pub(crate) mod glab;
+mod reactions;
 mod review;
 
 use super::{Backend, LoginHint, rest};
@@ -99,7 +101,8 @@ impl Backend for GitLab {
             | Capability::SquashMerge
             | Capability::LineComments
             | Capability::ApprovePrs
-            | Capability::RequestChanges => Support::Supported,
+            | Capability::RequestChanges
+            | Capability::Reactions => Support::Supported,
         }
     }
 
@@ -578,6 +581,24 @@ impl Backend for GitLab {
             .hint_login(self)
     }
 
+    fn reactions_endpoint(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+    ) -> Result<String> {
+        Ok(reactions::endpoint(repo, kind, number, subject))
+    }
+
+    fn listed_reaction(&self, reaction: &Value) -> Result<Listed> {
+        reactions::listed(reaction)
+    }
+
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
+        reactions::own_login(repo, account).await.hint_login(self)
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -802,6 +823,7 @@ async fn view_details(
         pr,
         comments: None,
         reviews: None,
+        reactions: Vec::new(),
     })
 }
 
@@ -1040,6 +1062,7 @@ fn discussions(discussions: &[Value]) -> (Vec<Comment>, Vec<Review>) {
                 author: username(&note["author"]),
                 created_at: text(&note["created_at"]).unwrap_or_default(),
                 body: text(&note["body"]).unwrap_or_default(),
+                reactions: Vec::new(),
             }));
         }
     }
@@ -1089,6 +1112,7 @@ fn review_comment(note: &Value, thread: u64) -> ReviewComment {
             .or(position["old_line"].as_u64()),
         body: text(&note["body"]).unwrap_or_default(),
         resolved: note["resolved"].as_bool(),
+        reactions: Vec::new(),
     }
 }
 

@@ -33,3 +33,33 @@ fn dependencies_keep_open_issues() {
         ["https://forge.example/o/r/issues/1"]
     );
 }
+
+#[test]
+fn forgejo_keeps_inline_comment_reactions_with_issue_comments() {
+    let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+    let endpoint = |repo, subject, dialect| reactions_endpoint(repo, 4, subject, dialect);
+    assert_eq!(
+        endpoint(&github, Subject::Item, Dialect::GitHub),
+        "repos/team/repo/issues/4/reactions"
+    );
+    assert_eq!(
+        endpoint(&github, Subject::Comment(9), Dialect::GitHub),
+        "repos/team/repo/issues/comments/9/reactions"
+    );
+    assert_eq!(
+        endpoint(&github, Subject::ReviewComment(9), Dialect::GitHub),
+        "repos/team/repo/pulls/comments/9/reactions"
+    );
+    let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    assert!(
+        endpoint(&forgejo, Subject::ReviewComment(9), Dialect::Forgejo)
+            .ends_with("issues/comments/9/reactions")
+    );
+    let reaction = json!({"id": 2, "content": "eyes", "user": {"login": "ann"}});
+    let listed = listed_reaction(&reaction).unwrap();
+    assert_eq!(
+        (listed.content.as_str(), listed.login.as_str()),
+        ("eyes", "ann")
+    );
+    assert!(listed_reaction(&json!({"user": null})).is_err());
+}
