@@ -101,7 +101,8 @@ pub(super) struct Continuation(Vec<Target>);
 
 impl Continuation {
     /// The turns an interrupt ended of the agents in the workspaces
-    /// `selectors` name, with the selectors of the workspaces without one.
+    /// `selectors` name, each once, with the selectors of the workspaces
+    /// without one.
     pub(super) async fn plan(ctx: &Context, selectors: Vec<String>) -> Result<(Self, Vec<String>)> {
         let mut targets = Vec::new();
         let mut rest = Vec::new();

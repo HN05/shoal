@@ -43,14 +43,17 @@ pub async fn select(
     // leaves every agent as it was.
     let mut continuation = Continuation::default();
     if !discard && execution.is_none() && !targets.workspace.is_empty() {
-        (continuation, targets.workspace) = Continuation::plan(ctx, targets.workspace).await?;
+        let named = ui::select_workspaces(ctx, targets.workspace).await?;
+        (continuation, targets.workspace) = Continuation::plan(ctx, named).await?;
     }
     let code = if continuation.is_empty() || !targets.workspace.is_empty() {
         resume_stopped(ctx, targets, execution, discard, now, focus).await?
     } else {
         0
     };
-    continuation.submit(ctx).await?;
+    if code == 0 {
+        continuation.submit(ctx).await?;
+    }
     Ok(code)
 }
 
