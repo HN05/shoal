@@ -71,11 +71,8 @@ impl Host for Zmx {
         true
     }
 
-    fn run_in_background<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-    ) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { start_detached(start).await.map(|()| None) })
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(start_detached(start))
     }
 
     fn run_agent<'a>(

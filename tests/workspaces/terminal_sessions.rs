@@ -378,7 +378,10 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
         .into_iter()
         .find(|call| call.starts_with(&["send".into(), "resumed".into()]))
         .ok_or_else(|| anyhow::anyhow!("no restore was sent to the session"))?;
-    assert!(sent[2].contains(" --close-in zmx "), "{sent:?}");
+    assert!(
+        sent[2].contains(" --opened-in zmx --close-in zmx "),
+        "{sent:?}"
+    );
     assert!(
         fixture.ok(&["status", "resumed"])["workspace"]["done"]
             .as_bool()

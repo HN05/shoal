@@ -219,12 +219,8 @@ pub(in crate::cli) trait Host: Sync {
         false
     }
 
-    /// Run `start` in a new background place, returning it where this host
-    /// names its places to the daemon.
-    fn run_in_background<'a>(
-        &'a self,
-        _start: &'a Start<'a>,
-    ) -> BoxFuture<'a, Result<Option<Origin>>> {
+    /// Run `start` in a new background place.
+    fn run_in_background<'a>(&'a self, _start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} cannot run in the background", self.name()) })
     }
 
@@ -919,9 +915,12 @@ async fn start_in_background(
 ) -> Result<()> {
     let template = host.options.name_template.clone();
     let label = naming::workspace_label(ctx, template, host.host, workspace).await;
+    let name = host.host.name().as_str();
+    // The restore records its place before anything can run there.
     let mut argv = shoal_command(ctx, args)?;
+    argv.extend(["--opened-in".into(), name.into()]);
     if host.closes_when_done {
-        argv.extend(["--close-in".into(), host.host.name().as_str().into()]);
+        argv.extend(["--close-in".into(), name.into()]);
     }
     let start = Start {
         state: &ctx.paths.state,
@@ -932,10 +931,7 @@ async fn start_in_background(
         argv: &argv,
         env: &place_env(ctx)?,
     };
-    if let Some(place) = host.host.run_in_background(&start).await? {
-        record_owned(ctx, &workspace.id, place).await;
-    }
-    Ok(())
+    host.host.run_in_background(&start).await
 }
 
 /// Record `place`, one Shoal created for `workspace`, so the daemon closes

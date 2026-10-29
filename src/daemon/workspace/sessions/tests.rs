@@ -533,6 +533,13 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
             }),
         )
         .await?;
+    // A creation record that arrives late does not take the block back.
+    manager
+        .record_owned_place(
+            &workspace.id,
+            Origin::created(HostName::Rex, "shared".into()),
+        )
+        .await?;
     // The first workspace's removal and its watcher leave the block open.
     manager.close_owned_places(Some(workspace.id.clone())).await;
     assert_eq!(

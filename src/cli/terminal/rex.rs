@@ -57,11 +57,8 @@ impl Host for Rex {
         true
     }
 
-    fn run_in_background<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-    ) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { open_window(start).await.map(Some) })
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move { open_window(start).await.map(drop) })
     }
 
     /// A block back at its shell prompt, as it is after the wrapper exits.

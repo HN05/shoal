@@ -48,11 +48,8 @@ impl Host for Herdr {
         true
     }
 
-    fn run_in_background<'a>(
-        &'a self,
-        start: &'a Start<'a>,
-    ) -> BoxFuture<'a, Result<Option<Origin>>> {
-        Box::pin(async move { open_tab(start).await.map(|()| None) })
+    fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
+        Box::pin(open_tab(start))
     }
 
     /// A pane back at its shell prompt, as it is after the wrapper exits.

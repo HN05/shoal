@@ -34,6 +34,10 @@ pub enum SessionsCommand {
         /// daemon's start of a queued restore.
         #[arg(long, hide = true, requires_all = ["execution", "now"])]
         queue_entry: Option<String>,
+        /// The host that opened this place in the background for this
+        /// restore, which records it as the workspace's before restoring.
+        #[arg(long, hide = true, requires_all = ["execution", "now"])]
+        opened_in: Option<String>,
         /// The host whose place, opened in the background for this restore,
         /// closes once the workspace is done.
         #[arg(long, hide = true, requires_all = ["execution", "now"])]

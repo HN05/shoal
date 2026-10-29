@@ -39,7 +39,8 @@ pub(super) fn record_execution_place(
 
 impl Manager {
     /// Record `origin`, a place Shoal created for the workspace `selector`
-    /// names, as owned by it.
+    /// names, as owned by it. A place already recorded keeps its owner: only
+    /// an agent's takeover or a chat moves it.
     pub(crate) async fn record_owned_place(
         &self,
         selector: &str,
@@ -55,8 +56,8 @@ impl Manager {
         self.store
             .run(move |db| {
                 db.execute(
-                    "INSERT OR REPLACE INTO owned_places(host,place,workspace_id,origin)
-                     VALUES (?1,?2,?3,?4)",
+                    "INSERT INTO owned_places(host,place,workspace_id,origin)
+                     VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO NOTHING",
                     params![
                         origin.host,
                         origin.id(),

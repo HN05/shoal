@@ -22,8 +22,12 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: SessionsCommand
             discard,
             now,
             queue_entry,
+            opened_in,
             close_in,
         } => {
+            if let Some(host) = opened_in {
+                resume::record_place(&ctx, &host, &targets).await;
+            }
             if let Some(host) = close_in {
                 resume::close_place_when_done(&ctx, &host, &targets).await;
             }

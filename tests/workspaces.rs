@@ -21831,7 +21831,11 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     assert_eq!(create[label + 1], "resumed second");
     assert!(create.iter().any(|arg| arg == "--no-focus"));
     assert_eq!(calls[4][..3], ["pane", "run", "w1:p9"]);
-    resumed(&calls[4], &expected[1], &["--close-in", "herdr"]);
+    resumed(
+        &calls[4],
+        &expected[1],
+        &["--opened-in", "herdr", "--close-in", "herdr"],
+    );
 }
 
 #[test]
@@ -24074,7 +24078,7 @@ fn terminal_resume_all_starts_each_agent_in_a_detached_session() {
             .unwrap();
         assert!(
             send[2].ends_with(&format!(
-                " resume {id} --execution {execution} --now --close-in zmx && exit; exec \"$SHELL\" -l\r"
+                " resume {id} --execution {execution} --now --opened-in zmx --close-in zmx && exit; exec \"$SHELL\" -l\r"
             )),
             "{send:?}"
         );
