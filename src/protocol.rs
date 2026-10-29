@@ -68,7 +68,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 158;
+pub const VERSION: u32 = 159;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
