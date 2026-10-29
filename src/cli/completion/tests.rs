@@ -1,7 +1,10 @@
 use super::*;
 use crate::{
+    config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
-    protocol::{self, Body, ChatMethod, ExecutionMethod, Method, Operation, Request, Response},
+    protocol::{
+        self, Body, ChatMethod, ConfigTarget, ExecutionMethod, Method, Operation, Request, Response,
+    },
     sessions::{HostName, Origin},
     state::WorkspaceState,
 };
@@ -42,8 +45,13 @@ async fn attach_candidates_follow_recorded_places() -> Result<()> {
     .await
     .context("attach candidate discovery stalled")??;
     assert!(output.status.success(), "{output:?}");
-    // One listing answers for every recorded place.
+    // One listing answers for every recorded place, and Herdr is asked only
+    // where it is on.
     assert_eq!(fs::read_to_string(root.path().join("zmx-lists"))?, "list\n");
+    assert_eq!(
+        fs::read_to_string(root.path().join("herdr-calls"))?,
+        "pane get w9:p2\n"
+    );
     Ok(())
 }
 
@@ -61,6 +69,15 @@ fn install_session_fixture(root: &std::path::Path) -> Result<()> {
         ),
     )?;
     fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
+    let herdr = bin.join("herdr");
+    fs::write(
+        &herdr,
+        format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\necho unavailable\nexit 1\n",
+            root.join("herdr-calls").display()
+        ),
+    )?;
+    fs::set_permissions(herdr, fs::Permissions::from_mode(0o755))?;
     Ok(())
 }
 
@@ -101,7 +118,9 @@ async fn attach_candidates_child() -> Result<()> {
 }
 
 async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) -> Result<()> {
-    for _ in 0..4 {
+    // Four listings, then the settings of each of the five workspaces whose
+    // recorded places are asked about.
+    for _ in 0..9 {
         let (mut stream, _) = listener.accept().await?;
         let request: Request = protocol::read(&mut stream).await?;
         let body = if matches!(
@@ -130,14 +149,28 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
             request.method,
             Method::Operation(Operation::Workspace(WorkspaceMethod::OwnedPlaces))
         ) {
+            // `fifth` turned Herdr off, so its pane is never asked about;
+            // `sixth`'s Herdr cannot answer, which leaves zmx's answers.
             Body::OwnedPlaces(
-                [("w2", "retained"), ("w3", "gone")]
-                    .map(|(workspace, session)| OwnedPlace {
-                        workspace_id: workspace.into(),
-                        origin: Origin::created(HostName::Zmx, session.into()),
-                    })
-                    .into(),
+                [
+                    ("w2", HostName::Zmx, "retained"),
+                    ("w3", HostName::Zmx, "gone"),
+                    ("w5", HostName::Herdr, "w9:p1"),
+                    ("w6", HostName::Herdr, "w9:p2"),
+                ]
+                .map(|(workspace, host, place)| OwnedPlace {
+                    workspace_id: workspace.into(),
+                    origin: Origin::created(host, place.into()),
+                })
+                .into(),
             )
+        } else if let Method::Operation(Operation::Workspace(WorkspaceMethod::LayeredConfig {
+            target: ConfigTarget::Workspace(workspace),
+        })) = &request.method
+        {
+            let mut layers = ConfigLayers::default();
+            layers.saved_repository_config.herdr.enabled = Some(workspace != "w5");
+            Body::LayeredConfig(Box::new(layers))
         } else if matches!(
             request.method,
             Method::Operation(Operation::Chat(ChatMethod::ListChats))
@@ -169,6 +202,8 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
         ("w2", "second"),
         ("w3", "third"),
         ("w4", "fourth"),
+        ("w5", "fifth"),
+        ("w6", "sixth"),
     ]
     .into_iter()
     .map(|(id, name)| {

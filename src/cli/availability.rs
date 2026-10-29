@@ -1,7 +1,7 @@
 //! What a command needs of the workspace it acts on, so completion and
 //! pickers can say why a workspace would be refused instead of offering it
 //! as if it would work.
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     cli::{client, internal, list_status::ListStatus, terminal},
@@ -251,8 +251,37 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         )
         .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
-    owners.extend(terminal::open_session_owners(&recorded).await);
+    let settings = workspace_settings(paths, recorded.iter().map(|(owner, _)| *owner)).await;
+    owners.extend(terminal::open_session_owners(&recorded, &settings).await);
     owners
+}
+
+/// The settings of each of `workspaces`, which say which hosts to ask about
+/// its places; one whose settings cannot be read is left out.
+async fn workspace_settings<'a>(
+    paths: &Paths,
+    workspaces: impl Iterator<Item = &'a str>,
+) -> HashMap<String, crate::config::Effective> {
+    let mut settings = HashMap::new();
+    let Ok(config) = crate::config::Config::load_with_templates(paths) else {
+        return settings;
+    };
+    for workspace in workspaces {
+        if settings.contains_key(workspace) {
+            continue;
+        }
+        let layers = client::request::<Box<crate::config::repo::ConfigLayers>>(
+            paths,
+            crate::protocol::WorkspaceMethod::LayeredConfig {
+                target: crate::protocol::ConfigTarget::Workspace(workspace.to_owned()),
+            },
+        )
+        .await;
+        if let Ok(resolved) = layers.and_then(|layers| config.resolve(&layers)) {
+            settings.insert(workspace.to_owned(), resolved);
+        }
+    }
+    settings
 }
 
 /// Workspaces whose running executions would block setup. Setup exempts

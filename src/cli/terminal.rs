@@ -15,7 +15,7 @@ mod typed;
 mod zmx;
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     ffi::OsString,
     path::{Path, PathBuf},
 };
@@ -879,21 +879,26 @@ pub(in crate::cli) async fn sessions(
     places: &[&Origin],
 ) -> Result<Vec<Session>> {
     let places = distinct_places(places);
-    let found = open_at(&places, |host| {
+    let (found, failure) = open_at(&places, |host| {
         enabled_host(settings, host).and_then(Host::sessions)
     })
-    .await?;
-    Ok(found.into_iter().flatten().collect())
+    .await;
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(found.into_iter().flatten().collect()),
+    }
 }
 
 /// The session open at each of `places`, in order, asking each host that
 /// `sessions_of` names about all of its places at once; a place without one
-/// has none.
+/// has none. A host that cannot answer leaves its places without one and
+/// gives the last such failure, while the others' answers stand.
 async fn open_at(
     places: &[&Origin],
     sessions_of: impl Fn(HostName) -> Option<&'static dyn Sessions>,
-) -> Result<Vec<Option<Session>>> {
+) -> (Vec<Option<Session>>, Option<anyhow::Error>) {
     let mut found = vec![None; places.len()];
+    let mut failure = None;
     let mut hosts = Vec::new();
     for place in places {
         if !hosts.contains(&place.host) {
@@ -910,11 +915,16 @@ async fn open_at(
             .filter(|(_, place)| place.host == host)
             .map(|(index, place)| (index, *place))
             .unzip();
-        for (index, session) in indices.into_iter().zip(sessions.sessions_at(&group).await?) {
-            found[index] = session;
+        match sessions.sessions_at(&group).await {
+            Ok(sessions) => {
+                for (index, session) in indices.into_iter().zip(sessions) {
+                    found[index] = session;
+                }
+            }
+            Err(error) => failure = Some(error),
         }
     }
-    Ok(found)
+    (found, failure)
 }
 
 /// `places` without repeats of a place: the same ID in the same host, its
@@ -944,12 +954,23 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
 }
 
 /// The IDs of the owners of `places`, recorded for owners by ID, with a
-/// session still open there. A place whose host cannot say counts as closed.
-pub(in crate::cli) async fn open_session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
+/// session still open there, asking only hosts the owner's `settings`
+/// enable. A place whose owner has no settings, or whose host cannot say,
+/// counts as closed.
+pub(in crate::cli) async fn open_session_owners(
+    places: &[(&str, &Origin)],
+    settings: &HashMap<String, Effective>,
+) -> HashSet<String> {
+    let places: Vec<_> = places
+        .iter()
+        .filter(|(owner, place)| {
+            settings
+                .get(*owner)
+                .is_some_and(|settings| enabled_host(settings, place.host).is_some())
+        })
+        .collect();
     let origins: Vec<&Origin> = places.iter().map(|(_, place)| *place).collect();
-    let found = open_at(&origins, |host| kept_by_host(host).sessions())
-        .await
-        .unwrap_or_default();
+    let (found, _) = open_at(&origins, |host| kept_by_host(host).sessions()).await;
     places
         .iter()
         .zip(found)
