@@ -125,19 +125,8 @@ impl Layout {
             self.root.display()
         );
         let shown = path.display();
-        let inside = path.starts_with(&self.root)
-            && path
-                .parent()
-                .is_some_and(|parent| match parent.canonicalize() {
-                    Ok(parent) => self
-                        .root
-                        .canonicalize()
-                        .is_ok_and(|root| parent.starts_with(root)),
-                    // Nothing is left to delete there.
-                    Err(error) => error.kind() == ErrorKind::NotFound,
-                });
         ensure!(
-            inside,
+            self.contains(path),
             "{shown} is not among the repository's attached files"
         );
         match std::fs::remove_file(path) {
@@ -173,7 +162,29 @@ impl Layout {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        remove_dir(&self.results(workspace_id))
+        let results = self.results(workspace_id);
+        ensure!(
+            self.contains(&results),
+            "{} is not among the repository's attached files",
+            results.display()
+        );
+        remove_dir(&results)
+    }
+
+    /// Whether `path` is below this repository's attached files and its
+    /// directory stays there through any symbolic link; a directory that is
+    /// gone holds nothing to delete.
+    fn contains(&self, path: &Path) -> bool {
+        path.starts_with(&self.root)
+            && path
+                .parent()
+                .is_some_and(|parent| match parent.canonicalize() {
+                    Ok(parent) => self
+                        .root
+                        .canonicalize()
+                        .is_ok_and(|root| parent.starts_with(root)),
+                    Err(error) => error.kind() == ErrorKind::NotFound,
+                })
     }
 
     /// Delete the directory with every attached file, when the repository

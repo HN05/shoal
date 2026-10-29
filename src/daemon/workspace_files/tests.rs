@@ -370,3 +370,52 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
         "keep me"
     );
 }
+
+#[tokio::test]
+async fn expiry_refuses_results_whose_directory_was_replaced() {
+    let (temp, manager) = manager().await;
+    let audit = workspace(&temp, &manager).await;
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    let completion = manager
+        .mark_done(&audit.id, false, false, vec![report])
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &audit.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    // The results directory now leads elsewhere, to a directory of the
+    // workspace's ID.
+    let results = completion.results[0]
+        .ancestors()
+        .find(|path| path.ends_with("results"))
+        .unwrap()
+        .to_owned();
+    let elsewhere = temp.path().join("elsewhere");
+    std::fs::create_dir_all(elsewhere.join(&audit.id)).unwrap();
+    std::fs::write(elsewhere.join(&audit.id).join("keep.md"), "keep me").unwrap();
+    std::fs::remove_dir_all(&results).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, &results).unwrap();
+    let id = audit.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute("DELETE FROM removed_workspaces WHERE workspace_id=?1", [id])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = manager.expire_results().await.unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("is not among the repository's attached files"),
+        "{error:#}"
+    );
+    assert!(elsewhere.join(&audit.id).join("keep.md").exists());
+}
