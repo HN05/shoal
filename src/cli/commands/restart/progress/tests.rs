@@ -45,9 +45,15 @@ fn every_agent_takes_a_place_among_all_the_run_selected() {
 
 #[test]
 fn an_interruption_names_the_restarts_that_go_on() {
-    assert_eq!(interruption(&[]), "Interrupted");
+    assert_eq!(interruption(&[], None), "Interrupted");
+    let pending = ["api".into(), "web".into()];
     assert_eq!(
-        interruption(&["api".into(), "web".into()]),
+        interruption(&pending, None),
         "Interrupted; the restarts of api, web go on, and shoal restart api web reports on them"
+    );
+    // The command keeps to the agents the run selected.
+    assert_eq!(
+        interruption(&pending, Some("codex")),
+        "Interrupted; the restarts of api, web go on, and shoal restart api web --agent codex reports on them"
     );
 }

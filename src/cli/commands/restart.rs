@@ -72,7 +72,8 @@ pub(super) async fn run(
     };
     if interrupted {
         // The daemon goes on with the restarts it was asked for.
-        return progress.interrupted(ctx, &list_agents(ctx).await?);
+        let agents = list_agents(ctx).await?;
+        return progress.interrupted(ctx, &agents, agent.as_ref().map(Agent::name));
     }
     progress.finish(ctx)
 }

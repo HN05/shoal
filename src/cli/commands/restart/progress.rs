@@ -85,15 +85,21 @@ impl Progress {
     }
 
     /// Report that the run was interrupted, naming the agents of the run in
-    /// `agents` whose restart goes on without it, and exit 130.
-    pub(super) fn interrupted(mut self, ctx: &Context, agents: &[RunningAgent]) -> Result<i32> {
+    /// `agents` whose restart goes on without it and the command, selecting
+    /// only `agent` agents as the run did, that reports on them; exit 130.
+    pub(super) fn interrupted(
+        mut self,
+        ctx: &Context,
+        agents: &[RunningAgent],
+        agent: Option<&str>,
+    ) -> Result<i32> {
         let pending: Vec<String> = agents
             .iter()
             .filter(|agent| agent.restart.is_some())
             .filter_map(|agent| self.workspaces.get(&agent.execution).cloned())
             .collect();
         if !ctx.json {
-            eprintln!("{}", interruption(&pending));
+            eprintln!("{}", interruption(&pending, agent));
         }
         self.report.field("interrupted", true.into());
         self.report.field("pending", pending.into());
@@ -108,12 +114,15 @@ impl Progress {
     }
 }
 
-fn interruption(pending: &[String]) -> String {
+fn interruption(pending: &[String], agent: Option<&str>) -> String {
     if pending.is_empty() {
         return "Interrupted".into();
     }
+    let filter = agent
+        .map(|agent| format!(" --agent {agent}"))
+        .unwrap_or_default();
     format!(
-        "Interrupted; the restarts of {} go on, and shoal restart {} reports on them",
+        "Interrupted; the restarts of {} go on, and shoal restart {}{filter} reports on them",
         pending.join(", "),
         pending.join(" ")
     )
