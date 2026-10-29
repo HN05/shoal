@@ -570,13 +570,25 @@ pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
 }
 
 /// What a start the daemon runs later for this process needs, without a
-/// terminal: the place it comes from and the output setting.
+/// terminal: the place it comes from, the hosts' servers this process
+/// chooses, and the output setting.
 pub(crate) fn start_environment() -> BTreeMap<String, String> {
     let mut env = BTreeMap::from([env::output_setting()]);
     if let Some(origin) = current_origin().and_then(|origin| serde_json::to_string(&origin).ok()) {
         env.insert(env::ORIGIN.to_owned(), origin);
     }
+    env.extend(server_selection());
     env
+}
+
+/// The variables of this process that choose a host's server, so a start
+/// queued outside the host's places opens its place on that server.
+fn server_selection() -> impl Iterator<Item = (String, String)> {
+    hosts()
+        .filter_map(Host::places)
+        .flat_map(Places::server_variables)
+        .filter_map(|name| Some(((*name).to_owned(), std::env::var(name).ok()?)))
+        .filter(|(_, value)| !value.is_empty())
 }
 
 /// The place a start the daemon runs for this worker comes from: the one

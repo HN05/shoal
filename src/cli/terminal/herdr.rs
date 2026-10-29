@@ -111,6 +111,10 @@ impl Places for Herdr {
         &["HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID"]
     }
 
+    fn server_variables(&self) -> &'static [&'static str] {
+        herdr::SERVER_SELECTION
+    }
+
     fn names_places(&self) -> bool {
         true
     }

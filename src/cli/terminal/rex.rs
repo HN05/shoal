@@ -113,6 +113,10 @@ impl Places for Rex {
         &["REX_SESSION", "REX_BLOCK"]
     }
 
+    fn server_variables(&self) -> &'static [&'static str] {
+        &["REX_SERVER", "REX_BIN_DIR"]
+    }
+
     fn names_places(&self) -> bool {
         true
     }

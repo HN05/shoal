@@ -33,9 +33,8 @@ pub(super) async fn labelled(near: Option<&Origin>, label: &str, cwd: &Path) -> 
 /// The variables of this process that choose a Herdr server and its
 /// `herdr`; without them, `herdr` reaches its default server.
 fn server_here() -> BTreeMap<String, String> {
-    herdr::SERVER_VARS
+    herdr::SERVER_SELECTION
         .iter()
-        .chain([&herdr::BIN_PATH])
         .filter_map(|name| Some(((*name).to_owned(), std::env::var(name).ok()?)))
         .filter(|(_, value)| !value.is_empty())
         .collect()

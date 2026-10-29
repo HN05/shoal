@@ -21855,6 +21855,8 @@ elif args[1:2] == ['get']:
     else:
         print(json.dumps({'result': {'tab': {'tab_id': id, 'label': 'tab ' + id}}}))
 elif args[:2] == ['workspace', 'list']:
+    with (root / 'herdr-list-sessions').open('a') as sessions:
+        sessions.write(os.environ.get('HERDR_SESSION', '') + '\n')
     path = root / 'herdr-workspaces'
     workspaces = json.loads(path.read_text()) if path.exists() else []
     print(json.dumps({'result': {'workspaces': workspaces}}))

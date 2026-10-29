@@ -131,6 +131,54 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
 }
 
 #[test]
+fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 1\ndefault_host = 'herdr'\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let repo = fixture.repo.to_str().unwrap();
+    // Without a terminal, the first agent runs in place and takes the slot.
+    let mut first = fixture
+        .command()
+        .args(["add", repo, "first", "--agent", "waiter"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the first agent start", || {
+        fixture
+            .ok(&["work"])
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|workspace| workspace["name"] == "first" && workspace["running"] == true)
+            && fixture.ok(&["queue"]) == serde_json::json!([])
+    });
+    let output = fixture
+        .command()
+        .env("HERDR_SESSION", "work")
+        .args(["--json", "add", repo, "second", "--agent", "waiter"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let queued: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(queued["state"], "queued", "{queued}");
+    fixture.ok(&["stop", "first"]);
+    first.wait().unwrap();
+    fixture.ok(&["rm", "first", "--yes"]);
+    // The daemon's worker opens the tab on the session the caller chose.
+    let sessions = fixture.root.path().join("herdr-list-sessions");
+    wait_until("the queued start to look up its workspace", || {
+        sessions.exists()
+    });
+    assert_eq!(fs::read_to_string(&sessions).unwrap(), "work\n");
+    wait_until("the queued start to open its tab", || {
+        !calls_of(&fixture, &["tab", "create"]).is_empty()
+    });
+}
+
+#[test]
 fn demos_without_a_herdr_pane_open_in_the_repository_workspace() {
     let fixture = Fixture::with_config(Some("default_host = 'herdr'\n"));
     install_fake_herdr(&fixture);

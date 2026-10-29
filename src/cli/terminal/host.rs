@@ -92,6 +92,13 @@ pub(in crate::cli) trait Places: Sync {
         &[]
     }
 
+    /// The variables that choose which server of this host, and which of its
+    /// programs, a process reaches, which a start the daemon runs later for
+    /// this process keeps.
+    fn server_variables(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// The group labelled `label` on the server of `near`, or this
     /// machine's, created at `cwd` when there is none; `None` for a host
     /// without groups.

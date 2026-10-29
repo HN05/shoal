@@ -11,10 +11,13 @@ use tokio::process::Command;
 use crate::subprocess::Run;
 
 /// The variable naming the `herdr` that reaches the server of a pane.
-pub(crate) const BIN_PATH: &str = "HERDR_BIN_PATH";
+const BIN_PATH: &str = "HERDR_BIN_PATH";
 
 /// The variables naming the Herdr server a pane runs in, most specific first.
 pub(crate) const SERVER_VARS: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION"];
+
+/// The variables that choose the server a process reaches and its `herdr`.
+pub(crate) const SERVER_SELECTION: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION", BIN_PATH];
 
 /// The server whose variables `data` records, by the variable that routes
 /// to it: the most specific one present, as `herdr` reads them.
