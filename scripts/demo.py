@@ -10,74 +10,20 @@ shell stops the daemon; the next run starts over.
   python3 scripts/demo.py
   shoal demo start shoal -- python3 scripts/demo.py   # Offer it as a demo
 """
-import json
 import os
-import shutil
 import subprocess
 import sys
-import time
-from pathlib import Path
 
-import isolated_git
+from sandbox import ROOT, Sandbox, build
 
-ROOT = Path(__file__).resolve().parent.parent
 SANDBOX = ROOT / "target" / "demo"
-IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
-            for field, value in (("NAME", "Shoal Demo"), ("EMAIL", "demo@example.invalid"))}
-# Variables that would reach the user's agents, terminal hosts or daemon.
-LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_")
-DAEMON_START_SECONDS = 60
 REPOSITORY = "acme-app"
 WORKSPACES = ("fix-login", "new-onboarding", "refactor-api")
 
 
-def build():
-    """The executable Cargo reports building, wherever its config puts it."""
-    output = subprocess.run(["cargo", "build", "--bin", "shoal",
-                             "--message-format=json-render-diagnostics"],
-                            cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True).stdout
-    for line in output.splitlines():
-        message = json.loads(line)
-        if message.get("reason") == "compiler-artifact" and message.get("executable"):
-            return Path(message["executable"])
-    sys.exit("cargo built no shoal executable")
-
-
-def environment(sandbox, bin_dir):
-    """The caller's environment without its Git, Shoal, host or agent settings,
-    with the sandbox's home, state and zmx directory and `bin_dir` first on PATH."""
-    env = isolated_git.environment(sandbox / "home", **IDENTITY)
-    env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
-    env.update(SHOAL_STATE_DIR=str(sandbox / "state"), ZMX_DIR=str(sandbox / "zmx"),
-               PATH=os.pathsep.join([str(bin_dir), env.get("PATH", "")]))
-    return env
-
-
-def run(args, env, check=True):
-    result = subprocess.run(["shoal", *args], env=env, cwd=env["HOME"],
-                            stdin=subprocess.DEVNULL, capture_output=True, text=True)
-    if check and result.returncode != 0:
-        sys.exit(f"shoal {' '.join(args)} failed:\n{result.stderr}")
-    return result
-
-
-def in_workspace(workspace, args, env, check=True):
+def in_workspace(sandbox, workspace, args, check=True):
     """Run `shoal args` as a process of `workspace`, as its agent would."""
-    return run(["run", "--workspace", workspace, "--", "shoal", *args], env, check)
-
-
-def start_daemon(env):
-    log = open(SANDBOX / "daemon.log", "w")
-    daemon = subprocess.Popen(["shoal", "daemon", "run"], env=env, stdin=subprocess.DEVNULL,
-                              stdout=log, stderr=log)
-    deadline = time.monotonic() + DAEMON_START_SECONDS
-    while time.monotonic() < deadline and daemon.poll() is None:
-        status = run(["--json", "daemon", "status"], env, check=False)
-        if status.returncode == 0 and json.loads(status.stdout).get("running"):
-            return daemon
-        time.sleep(0.1)
-    daemon.kill()
-    sys.exit(f"the daemon did not start; see {SANDBOX / 'daemon.log'}")
+    return sandbox.run(["run", "--workspace", workspace, "--", "shoal", *args], check)
 
 
 def repository(env):
@@ -91,20 +37,22 @@ def repository(env):
     return repo
 
 
-def fill(env):
+def fill(sandbox):
     """A repository with workspaces, and something in the inbox of each kind."""
-    repo = repository(env)
-    run(["repo", "add", str(repo)], env)
+    repo = repository(sandbox.env)
+    sandbox.run(["repo", "add", str(repo)])
     for workspace in WORKSPACES:
-        run(["add", str(repo), workspace], env)
-    in_workspace("fix-login", ["questions", "ask", "Which database should the session cache use?",
-                               "--recommend", "SQLite", "--reason", "No server to run",
-                               "--choice", "SQLite", "--choice", "Postgres"], env)
-    in_workspace("fix-login", ["alerts", "send", "Login fix pushed; checks are running"], env)
+        sandbox.run(["add", str(repo), workspace])
+    in_workspace(sandbox, "fix-login",
+                 ["questions", "ask", "Which database should the session cache use?",
+                  "--recommend", "SQLite", "--reason", "No server to run",
+                  "--choice", "SQLite", "--choice", "Postgres"])
+    in_workspace(sandbox, "fix-login", ["alerts", "send", "Login fix pushed; checks are running"])
     # Pending approval exits 2 by design.
-    in_workspace("new-onboarding", ["acquire", "port", "web", "--reason",
-                                    "Preview the onboarding flow"], env, check=False)
-    in_workspace("refactor-api", ["ready"], env)
+    in_workspace(sandbox, "new-onboarding",
+                 ["acquire", "port", "web", "--reason", "Preview the onboarding flow"],
+                 check=False)
+    in_workspace(sandbox, "refactor-api", ["ready"])
 
 
 def shell(env):
@@ -114,46 +62,15 @@ def shell(env):
     return subprocess.call([program, "-i"], env=env, cwd=env["HOME"])
 
 
-def clear_sandbox():
-    """Remove the last run's sandbox, stopping a daemon an interrupted run left."""
-    if not SANDBOX.exists():
-        return
-    bin_dir = SANDBOX / "bin"
-    if (bin_dir / "shoal").exists():
-        run(["daemon", "stop"], environment(SANDBOX, bin_dir), check=False)
-    shutil.rmtree(SANDBOX)
-
-
-def prepare_sandbox(shoal):
-    """A fresh sandbox where `shoal` is the build, returning its environment."""
-    clear_sandbox()
-    bin_dir = SANDBOX / "bin"
-    bin_dir.mkdir(parents=True)
-    home = SANDBOX / "home"
-    home.mkdir()
-    # An empty home would start zsh's first-run wizard instead of a prompt.
-    (home / ".zshrc").write_text("PROMPT='shoal-demo %1~ %# '\n")
-    (home / ".bashrc").write_text("PS1='shoal-demo \\W \\$ '\n")
-    (bin_dir / "shoal").symlink_to(shoal)
-    prepare_zmx_lock(SANDBOX)
-    return environment(SANDBOX, bin_dir)
-
-
-def prepare_zmx_lock(sandbox):
-    """Create the ownership lock beside the sandbox's zmx directory. Debug builds
-    only open an existing lock there, leaving the user's own to the installed Shoal."""
-    (sandbox / "zmx.shoal-ownership.lock").touch()
-
-
 def main():
-    env = prepare_sandbox(build())
-    daemon = start_daemon(env)
+    sandbox = Sandbox(SANDBOX)
+    sandbox.prepare(build(), "shoal-demo")
+    sandbox.start_daemon()
     try:
-        fill(env)
-        return shell(env)
+        fill(sandbox)
+        return shell(sandbox.env)
     finally:
-        run(["daemon", "stop"], env, check=False)
-        daemon.wait()
+        sandbox.stop_daemon()
 
 
 if __name__ == "__main__":
