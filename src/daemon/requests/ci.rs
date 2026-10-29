@@ -20,8 +20,12 @@ pub(super) async fn handle(
             let listed = manager.ci_run_jobs(&workspace, run).await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
-        CiMethod::ListCiRuns { workspace, filter } => {
-            let listed = manager.list_ci_runs(&workspace, filter).await;
+        CiMethod::ListCiRuns {
+            workspace,
+            pr,
+            filter,
+        } => {
+            let listed = manager.list_ci_runs(&workspace, pr, filter).await;
             return Ok(Answer::pages(listed, Body::CiRuns));
         }
         CiMethod::CheckLog {

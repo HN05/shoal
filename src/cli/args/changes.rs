@@ -104,6 +104,11 @@ pub enum ChangesCommand {
         #[command(subcommand)]
         command: IssueCommand,
     },
+    /// List, start, rerun or cancel CI runs.
+    Ci {
+        #[command(subcommand)]
+        command: crate::cli::args::ci::CiCommand,
+    },
     /// Merge this workspace into the default branch, then optionally push it.
     Land {
         workspace: Option<String>,
@@ -119,11 +124,6 @@ pub enum ChangesCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum PrCommand {
-    /// Rerun failed or cancel running CI jobs of a PR.
-    Ci {
-        #[command(subcommand)]
-        command: CiCommand,
-    },
     /// List or search the workspace repository's PRs, newest first.
     List(ListArgs),
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
@@ -236,31 +236,6 @@ pub enum PrCommand {
         #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
         cancel_auto: bool,
     },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum CiCommand {
-    /// Rerun failed jobs on the PR's current head.
-    Rerun {
-        #[command(flatten)]
-        checks: CiChecks,
-    },
-    /// Cancel running jobs on the PR's current head.
-    Cancel {
-        #[command(flatten)]
-        checks: CiChecks,
-    },
-}
-
-// A PR and the checks on its head to act on.
-#[derive(Debug, Args)]
-pub struct CiChecks {
-    #[command(flatten)]
-    pub item: ItemSelector,
-    /// Act only on this check, as `shoal view` names it; repeat for more. Defaults to every failed or running check.
-    #[arg(long = "check", value_name = "NAME")]
-    pub checks: Vec<String>,
 }
 
 #[derive(Debug, Subcommand)]

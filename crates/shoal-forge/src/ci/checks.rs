@@ -91,7 +91,7 @@ impl ForgeRepo {
     }
 
     /// The head commit of PR `url`, open or not.
-    async fn pull_head(&self, account: &Account, url: &str) -> Result<String> {
+    pub async fn pull_head(&self, account: &Account, url: &str) -> Result<String> {
         let (number, _) = self.pull(url)?;
         let pull = self.read(account, ItemKind::Pr, number).await?;
         pull.head_sha.context("PR has no head commit")

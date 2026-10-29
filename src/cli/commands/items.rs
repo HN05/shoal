@@ -1,4 +1,4 @@
-//! `shoal pr`, `shoal pr ci` and `shoal issue`: ask the daemon to list, open or
+//! `shoal pr` and `shoal issue`: ask the daemon to list, open or
 //! change items of the repository of the workspace or registered checkout and
 //! report them as the forge now does.
 use anyhow::Result;
@@ -19,7 +19,6 @@ use crate::{
     protocol::ItemMethod,
 };
 
-mod ci;
 mod content;
 mod context;
 mod list;
@@ -30,7 +29,6 @@ mod reviewers;
 mod thread;
 
 use self::{
-    ci::ci,
     content::{comment, edit_fields, pr_edit, read_content},
     list::list,
     open::{open_issue, open_pr, pull_options},
@@ -42,7 +40,6 @@ pub(super) use context::select_context;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
-        PrCommand::Ci { command } => return ci(ctx, command).await,
         PrCommand::List(args) => return list(ctx, ItemKind::Pr, args).await,
         PrCommand::Open { workspace, pull } => {
             return open_pr(ctx, workspace, pull_options(pull)?).await;

@@ -777,6 +777,9 @@ impl Backend for GitLab {
         if let Some(branch) = &filter.branch {
             path.push_str(&format!("&ref={}", encode(branch, false)));
         }
+        if let Some(commit) = &filter.commit {
+            path.push_str(&format!("&sha={}", encode(commit, false)));
+        }
         Ok(path)
     }
 

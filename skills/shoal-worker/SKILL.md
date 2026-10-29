@@ -130,15 +130,15 @@ reviews with inline comments; use it instead of `gh` or `fj` to read them, with
 the forge reads job logs; checks from outside services have none.
 `--check '<check name>'` selects only that check's log. Failed-check watch updates
 include the failing step when the runner records it and a command to read the log.
-`shoal pr ci rerun --check '<check name>'` reruns a failed check on the PR's
-current head, after you have read its log and fixed or reported the cause, and
-`shoal pr ci cancel` cancels running ones; omit `--check` for all of them.
-`shoal forge ci run <workflow> --input NAME=VALUE` starts a workflow run on
-your branch. It is a new run, not a rerun: on Forgejo a failed check on the PR
-stays failed. `shoal forge ci rerun <run-url>` (`--failed` for failed jobs only)
-and `shoal forge ci cancel <run-url>` act on one run of your branch.
-`shoal forge ci view <run-url>` shows a run's jobs and the log tails of failed
-ones, and `shoal forge ci list` its newest runs on your branch.
+`shoal ci rerun --check '<check name>'` reruns a failed check on the linked PR's
+current head (`--pr N` for another), after you have read its log and fixed or
+reported the cause, and `shoal ci cancel` cancels running ones; omit `--check`
+for all of them. `shoal ci run <workflow> --input NAME=VALUE` starts a workflow
+run on your branch. It is a new run, not a rerun: on Forgejo a failed check on
+the PR stays failed. `shoal ci rerun <run-url>` (`--failed` for failed jobs
+only) and `shoal ci cancel <run-url>` act on one run of your branch.
+`shoal view ci <run-url>` shows a run's jobs and the log tails of failed ones,
+and `shoal ci list` the newest runs on your branch, or on a PR's head with `--pr N`.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

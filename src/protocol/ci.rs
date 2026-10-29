@@ -34,10 +34,12 @@ pub enum CiMethod {
         run: String,
         job: crate::forge::ci::run_view::JobRef,
     },
-    /// The newest CI workflow runs, on the workspace's branch by default,
-    /// sent in pages.
+    /// The newest CI workflow runs, on the head commit of the PR `pr`
+    /// names, otherwise on the workspace's branch by default, sent in pages.
     ListCiRuns {
         workspace: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pr: Option<String>,
         filter: crate::forge::ci::run_view::RunFilter,
     },
     /// Start a CI workflow run on a branch, by default the workspace's.

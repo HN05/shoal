@@ -757,6 +757,9 @@ impl Backend for GitHub {
         if let Some(branch) = &filter.branch {
             path.push_str(&format!("&branch={}", encode(branch, false)));
         }
+        if let Some(commit) = &filter.commit {
+            path.push_str(&format!("&head_sha={}", encode(commit, false)));
+        }
         Ok(path)
     }
 

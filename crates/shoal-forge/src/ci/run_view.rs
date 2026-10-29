@@ -54,6 +54,9 @@ pub enum JobRef {
 pub struct RunFilter {
     pub branch: Option<String>,
     pub workflow: Option<String>,
+    /// The commit the runs ran on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
     pub limit: usize,
 }
 
@@ -63,7 +66,11 @@ pub fn validate_filter(filter: &RunFilter) -> Result<()> {
         (1..=MAX_RUNS).contains(&filter.limit),
         "limit must be between 1 and {MAX_RUNS}"
     );
-    for (field, value) in [("branch", &filter.branch), ("workflow", &filter.workflow)] {
+    for (field, value) in [
+        ("branch", &filter.branch),
+        ("workflow", &filter.workflow),
+        ("commit", &filter.commit),
+    ] {
         ensure!(
             value.as_ref().is_none_or(|value| !value.trim().is_empty()),
             "{field} must be nonempty"

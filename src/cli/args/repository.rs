@@ -48,31 +48,6 @@ pub struct ApiArgs {
     pub workspace: Option<String>,
 }
 
-// Arguments of `shoal forge ci run`.
-#[derive(Debug, Args)]
-pub struct RunArgs {
-    /// Workflow file or ID, such as ci.yml, or a Bitbucket custom pipeline;
-    /// GitLab runs the branch's pipeline and takes none.
-    pub workflow: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
-    /// Branch to run on; defaults to the workspace's branch, the only one
-    /// workspace processes may run on.
-    #[arg(long)]
-    pub branch: Option<String>,
-    /// Pass a workflow input; repeat for more.
-    #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
-    pub inputs: Vec<(String, String)>,
-}
-
-fn workflow_input(input: &str) -> Result<(String, String), String> {
-    match input.split_once('=') {
-        Some((name, value)) if !name.trim().is_empty() => Ok((name.into(), value.into())),
-        _ => Err("expected NAME=VALUE".into()),
-    }
-}
-
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ForgeCommand {
@@ -84,70 +59,6 @@ pub enum ForgeCommand {
     /// `[api] agent_writes` lets agents send others; anyone else sends any
     /// request with your own logins.
     Api(ApiArgs),
-    /// Start CI workflow runs on a branch.
-    Ci {
-        #[command(subcommand)]
-        command: ForgeCiCommand,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
-pub enum ForgeCiCommand {
-    /// Start a workflow run on a branch.
-    ///
-    /// It is a new run, not a rerun of a PR's checks; on Forgejo a failed
-    /// check stays failed.
-    Run(RunArgs),
-    /// Rerun a workflow run; GitLab retries only its failed jobs.
-    Rerun {
-        #[command(flatten)]
-        target: RunTarget,
-        /// Rerun only the run's failed jobs.
-        #[arg(long)]
-        failed: bool,
-    },
-    /// Cancel a running workflow run.
-    Cancel {
-        #[command(flatten)]
-        target: RunTarget,
-    },
-    /// Show a workflow run's state, its jobs and the log tails of failed jobs.
-    View {
-        #[command(flatten)]
-        target: RunTarget,
-        /// Show only this job's log.
-        #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
-        job: Option<String>,
-        /// Show only the log of the job with this ID, for jobs that share a name.
-        #[arg(long, value_name = "ID")]
-        job_id: Option<u64>,
-    },
-    /// List the newest workflow runs, on the workspace's branch by default.
-    List {
-        /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
-        workspace: Option<String>,
-        /// Branch whose runs to list; defaults to the workspace's branch.
-        #[arg(long)]
-        branch: Option<String>,
-        /// List only this workflow file's runs; GitLab has none.
-        #[arg(long)]
-        workflow: Option<String>,
-        /// The most runs to list (1–100).
-        #[arg(long, default_value_t = 10)]
-        limit: usize,
-    },
-}
-
-// A workflow run to act on.
-#[derive(Debug, Args)]
-pub struct RunTarget {
-    /// The run's web URL, as `shoal forge ci run` or a check links it, or the number in it.
-    pub run: String,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

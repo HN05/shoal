@@ -32,7 +32,9 @@ pub enum ItemsCommand {
         #[arg(long, hide = true, requires = "workspace")]
         resume: bool,
     },
-    /// Show linked items, one kind, or a selected issue or PR with status and discussion.
+    /// Show linked items, one kind, or a selected issue, PR or CI run: `view ci 2765`.
+    ///
+    /// Issues and PRs show their status and discussion, and CI runs their jobs.
     View {
         #[command(flatten)]
         items: ItemArgs,
@@ -40,10 +42,16 @@ pub enum ItemsCommand {
         #[arg(long)]
         no_comments: bool,
         /// Show only this failed check's log, where the forge reads job logs.
-        #[arg(long, value_name = "NAME")]
+        #[arg(long, value_name = "NAME", conflicts_with_all = ["job", "job_id"])]
         check: Option<String>,
+        /// Show only the log of this job of a CI run.
+        #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
+        job: Option<String>,
+        /// Show only the log of the CI run's job with this ID, for jobs that share a name.
+        #[arg(long, value_name = "ID")]
+        job_id: Option<u64>,
         /// Open the items in the browser instead.
-        #[arg(long, conflicts_with_all = ["no_comments", "check"])]
+        #[arg(long, conflicts_with_all = ["no_comments", "check", "job", "job_id"])]
         web: bool,
     },
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
@@ -104,4 +112,11 @@ pub struct ItemArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+impl ItemArgs {
+    /// Whether the selection names CI runs, which no number alone does.
+    pub fn selects_ci(&self) -> bool {
+        self.kind_or_url.as_deref() == Some("ci")
+    }
 }

@@ -87,7 +87,7 @@ impl Backend for Forgejo {
         match capability {
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
             Capability::RerunJobs => Support::Unsupported(Some(
-                "rerun them from the web UI, push a fix, or start a new run with shoal forge ci run",
+                "rerun them from the web UI, push a fix, or start a new run with shoal ci run",
             )),
             Capability::CancelJobs
             | Capability::StartRuns
@@ -699,6 +699,9 @@ impl Backend for Forgejo {
         }
         if let Some(workflow) = &filter.workflow {
             path.push_str(&format!("&workflow_id={}", encode(workflow, false)));
+        }
+        if let Some(commit) = &filter.commit {
+            path.push_str(&format!("&head_sha={}", encode(commit, false)));
         }
         Ok(path)
     }

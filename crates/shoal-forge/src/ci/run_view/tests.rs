@@ -6,6 +6,7 @@ fn filter(branch: Option<&str>, workflow: Option<&str>) -> RunFilter {
     RunFilter {
         branch: branch.map(Into::into),
         workflow: workflow.map(Into::into),
+        commit: None,
         limit: 10,
     }
 }
@@ -40,6 +41,31 @@ fn each_forge_lists_a_branch_or_workflow_its_own_way() -> Result<()> {
         path(forgejo, &filter(Some("topic"), Some("deps.yml")))?,
         "actions/runs?limit=10&page=1&ref=refs%2Fheads%2Ftopic&workflow_id=deps.yml"
     );
+    Ok(())
+}
+
+#[test]
+fn each_forge_lists_the_runs_on_a_commit_its_own_way() -> Result<()> {
+    let on_commit = RunFilter {
+        commit: Some("abc".into()),
+        ..filter(None, None)
+    };
+    for (remote, expected) in [
+        (
+            "https://github.com/team/repo",
+            "actions/runs?per_page=10&head_sha=abc",
+        ),
+        (
+            "https://gitlab.com/team/repo",
+            "pipelines?per_page=10&sha=abc",
+        ),
+        (
+            "https://codeberg.org/team/repo",
+            "actions/runs?limit=10&page=1&head_sha=abc",
+        ),
+    ] {
+        assert_eq!(path(remote, &on_commit)?, expected);
+    }
     Ok(())
 }
 

@@ -101,12 +101,33 @@ impl Manager {
             .with_context(|| format!("could not read a job log of CI run {input}"))
     }
 
-    /// The newest runs `filter` selects, on the workspace's branch unless it
-    /// names another.
-    pub async fn list_ci_runs(&self, selector: &str, mut filter: RunFilter) -> Result<Vec<Run>> {
+    /// The newest runs `filter` selects on the head commit of the PR `pr`
+    /// names, otherwise on the workspace's branch unless it names another.
+    pub async fn list_ci_runs(
+        &self,
+        selector: &str,
+        pr: Option<String>,
+        mut filter: RunFilter,
+    ) -> Result<Vec<Run>> {
         validate_filter(&filter)?;
+        ensure!(
+            pr.is_none() || filter.branch.is_none(),
+            "list the runs of a branch or of a PR, not both"
+        );
         let (workspace, forge, account) = self.run_forge(selector).await?;
-        filter.branch.get_or_insert(workspace.branch);
+        match pr {
+            Some(input) => {
+                let (_, url) = forge.pull(&input)?;
+                let head = forge
+                    .pull_head(&account, &url)
+                    .await
+                    .with_context(|| format!("could not read the head of {url}"))?;
+                filter.commit = Some(head);
+            }
+            None => {
+                filter.branch.get_or_insert(workspace.branch);
+            }
+        }
         forge
             .list_runs(&account, &filter)
             .await
@@ -128,7 +149,7 @@ fn on_own_branch(workspace: &Workspace, run: &Run) -> Result<()> {
     ensure!(
         run.branch.as_deref() == Some(workspace.branch.as_str()),
         "workspace processes act only on CI runs of their workspace's branch; \
-         use shoal pr ci for a PR's checks"
+         use --pr for a PR's checks"
     );
     Ok(())
 }

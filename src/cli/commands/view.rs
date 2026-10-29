@@ -81,13 +81,17 @@ fn render_views(views: &[ItemView], json: bool) {
 /// Open the selected items in the browser and print each URL, also when
 /// the opener fails, for a terminal elsewhere; workspace processes cannot.
 pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    ensure!(
-        !env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot open a browser; ask the user"
-    );
+    may_open_browser(ctx)?;
     let (context, selection) = links::select_in_context(ctx, items).await?;
     let selected = links::select_items(ctx, &context, selection).await?;
-    let urls: Vec<_> = selected.items.into_iter().map(|item| item.url).collect();
+    open_urls(
+        ctx,
+        selected.items.into_iter().map(|item| item.url).collect(),
+    )
+}
+
+/// Open `urls` in the browser and print each, also when the opener fails.
+pub(super) fn open_urls(ctx: &Context, urls: Vec<String>) -> Result<i32> {
     let failed = urls.iter().find_map(|url| browser::open(url).err());
     ctx.show(&urls, |urls| {
         for url in urls {
@@ -95,6 +99,15 @@ pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
         }
     })?;
     failed.map_or(Ok(0), Err)
+}
+
+/// Refuse workspace processes, whose user may be elsewhere.
+pub(super) fn may_open_browser(ctx: &Context) -> Result<()> {
+    ensure!(
+        !env::inherits_scope(&ctx.paths.state),
+        "workspace processes cannot open a browser; ask the user"
+    );
+    Ok(())
 }
 
 /// The log of the selected PR's `check`.

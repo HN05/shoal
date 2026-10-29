@@ -2866,35 +2866,21 @@ as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 `closed` or `merged`), `labels`, and for a PR, `pr` with `head`, `base` and
 `draft`.
 
-```sh
-shoal pr ci rerun                      # rerun every failed job on the linked PR's head
-shoal pr ci cancel 12 --check rust     # cancel one running check of PR 12
-```
-
-`shoal pr ci rerun` reruns failed jobs on the current head of the linked PR or the
-one named, and `shoal pr ci cancel` cancels running ones: every such CI job, leaving
-other providers' checks alone, or each repeated `--check` by the name `shoal view`
-shows, which must be a CI job in that state. The daemon uses the forge's job API
-as the agent account and records an `item_changed` event once a request succeeds;
-a failed request stops the rest. GitHub reruns a failed Actions job, or every
-failed job of a run when several of its jobs are selected, because a rerun starts
-a new attempt of the run, refuses a rerun while another job of the run is still
-running, and cancels the job's run; GitLab retries or cancels each job; Forgejo
-cancels each check's run. `--json` returns `url`, `action` and the
-`checks` acted on.
-
-#### CI workflow runs
+#### CI runs
 
 ```sh
-shoal forge ci run deps.yml               # start a workflow run on the workspace's branch
-shoal forge ci run deps.yml --branch main --input level=full
-shoal forge ci rerun 2765 --failed        # rerun a run's failed jobs
-shoal forge ci cancel https://forge.example/team/repo/actions/runs/2765
-shoal forge ci view 2765                  # a run's state, its jobs and failed jobs' logs
-shoal forge ci list --workflow deps.yml   # the newest runs on the workspace's branch
+shoal ci run deps.yml                    # start a workflow run on the workspace's branch
+shoal ci run deps.yml --branch main --input level=full
+shoal ci rerun                           # rerun every failed job on the linked PR's head
+shoal ci cancel --pr 12 --check rust     # cancel one running check of PR 12
+shoal ci rerun 2765 --failed             # rerun a run's failed jobs
+shoal ci cancel https://forge.example/team/repo/actions/runs/2765
+shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
+shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
+shoal ci list --pr 12                    # the runs on PR 12's head commit
 ```
 
-`shoal forge ci run` starts a workflow run on the workspace's branch, or the one
+`shoal ci run` starts a workflow run on the workspace's branch, or the one
 `--branch` names, with each repeated `--input NAME=VALUE`. It is a new run, not
 a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
 reports checks there like any other run. Forgejo attaches a dispatched run to no
@@ -2908,27 +2894,39 @@ processes inside a workspace may start runs only on that workspace's branch.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not.
 
-`shoal forge ci rerun` and `shoal forge ci cancel` act on one run, named by its
-web URL, as `forge ci run` or a check links it, or by the number in that URL.
-`rerun` reruns every job of a finished run, or with `--failed` only its failed
-jobs; GitLab retries only failed and cancelled jobs either way, and Forgejo,
-Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every
-forge but Bitbucket. Processes inside a workspace act only on runs of that
-workspace's branch, so a PR's checks, whose runs may name the PR instead, are
-acted on with `shoal pr ci`. `--json` returns the run's `url` and the
-`action`.
+`shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
+`ci run` or a check links it, or the number in that URL. `rerun` reruns every
+job of a finished run, or with `--failed` only its failed jobs; GitLab retries
+only failed and cancelled jobs either way, and Forgejo, Gitea and Bitbucket
+cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
+Processes inside a workspace act only on runs of that workspace's branch, so a
+PR's checks, whose runs may name the PR instead, are acted on through the PR.
+`--json` returns the run's `url` and the `action`.
 
-`shoal forge ci view` shows a run's state (`running`, `failed` or `finished`),
+Without a run, `shoal ci rerun` reruns failed jobs on the current head of the
+linked PR or the one `--pr` names, and `shoal ci cancel` cancels running ones:
+every such CI job, leaving other providers' checks alone, or each repeated
+`--check` by the name `shoal view` shows, which must be a CI job in that state.
+The daemon uses the forge's job API as the agent account and records an
+`item_changed` event once a request succeeds; a failed request stops the rest.
+GitHub reruns a failed Actions job, or every failed job of a run when several of
+its jobs are selected, because a rerun starts a new attempt of the run, refuses
+a rerun while another job of the run is still running, and cancels the job's
+run; GitLab retries or cancels each job; Forgejo cancels each check's run.
+`--json` returns `url`, `action` and the `checks` acted on.
+
+`shoal view ci` shows a run's state (`running`, `failed` or `finished`),
 branch, workflow and jobs, and the log tails of its failed jobs as `shoal view`
 shows a PR's; `--job` shows only that job's log, in any state, and `--job-id`
-the log of the job with that ID when several share a name. `shoal forge ci
-list` lists the newest runs, ten unless `--limit` says up to 100, on the
-workspace's branch or the one `--branch` names, and of one workflow file with
-`--workflow`, which GitLab does not take. Both read any run of the repository as
-the agent account, on every forge but Bitbucket. `--json` returns each run's
-`url`, `state`, `branch` and `workflow`, and for `view` its `jobs` with their
-`id`, `name`, `state` and `url`, the `logs` it read and the `errors` of those it could
-not.
+the log of the job with that ID when several share a name. A number after `ci`
+names a run; a number alone never does. `shoal ci list` lists the newest runs,
+ten unless `--limit` says up to 100, on the workspace's branch, the one
+`--branch` names or the head commit of the PR `--pr` names, and of one workflow
+file with `--workflow`, which GitLab does not take. Both read any run of the
+repository as the agent account, on every forge but Bitbucket. `--json` returns
+each run's `url`, `state`, `branch` and `workflow`, and for `view` its `jobs`
+with their `id`, `name`, `state` and `url`, the `logs` it read and the `errors`
+of those it could not.
 
 #### Forge API requests
 

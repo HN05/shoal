@@ -3,7 +3,7 @@ use anyhow::Result;
 use crate::{
     cli::{
         args::changes::{BranchCommand, ChangesCommand},
-        commands::{base, items, review, workspaces},
+        commands::{base, ci, items, review, workspaces},
         context::Context,
     },
     forge::items::link::ItemKind,
@@ -13,6 +13,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
     match command {
         ChangesCommand::Pr { command } => items::pr(&ctx, command).await,
         ChangesCommand::Issue { command } => items::issue(&ctx, command).await,
+        ChangesCommand::Ci { command } => ci::run(&ctx, command).await,
         ChangesCommand::Branch { command } => branch(&ctx, command).await,
         ChangesCommand::Diff { workspace } => workspaces::diff(&ctx, workspace).await,
         ChangesCommand::Conflicts { target, workspace } => {

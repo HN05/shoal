@@ -620,6 +620,8 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             },
             no_comments: false,
             check: None,
+            job: None,
+            job_id: None,
             web: false,
         }),
         Row::Ready {
@@ -724,6 +726,8 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
         },
         no_comments: false,
         check: None,
+        job: None,
+        job_id: None,
         web,
     }))
 }

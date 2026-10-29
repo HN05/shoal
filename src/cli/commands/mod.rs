@@ -10,6 +10,7 @@ mod branches;
 mod capabilities;
 mod catalog;
 mod chat;
+mod ci;
 mod cleanup;
 mod configuration;
 pub(crate) mod configured;
@@ -54,7 +55,6 @@ mod turns;
 mod update;
 mod view;
 mod work;
-mod workflows;
 pub(in crate::cli) mod workspaces;
 mod worktree_hooks;
 

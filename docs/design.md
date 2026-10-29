@@ -698,7 +698,7 @@ is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; workspace maintenance lives under
 `work`, repository administration under `repo`, forge inspection and API access under
-`forge`, branch workflow runs under `forge ci`, PR checks under `pr ci`, and
+`forge`, CI runs and the checks on a PR's head under `ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
@@ -1797,8 +1797,10 @@ Agents may also start a workflow run on their own workspace's branch, on every
 forge including Bitbucket. A started run is not a rerun of a PR's checks: on
 Forgejo it has no head commit or event, so it cannot replace the rerun Forgejo
 lacks, while elsewhere only a run on the PR's head commit reports checks there.
-`forge ci` also reruns and cancels one run by its URL; `pr ci` stays the way to act
-on a PR's checks. Workspace processes act only on runs of their own branch, which
+`ci` gathers both: it reruns and cancels one run by its URL, or the checks on a
+PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
+Run numbers overlap issue and PR numbers, so only a number after `ci` names a
+run. Workspace processes act only on runs of their own branch, which
 the daemon reads from the run before acting, and read any run of their repository.
 Viewing a run reads every page of its jobs; the daemon sends them, and listed
 runs, in frame-sized pages, and each failed job's log, named by job ID, as one

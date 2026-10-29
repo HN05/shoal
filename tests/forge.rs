@@ -2982,9 +2982,9 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     assert!(posts().is_empty());
 
     let rerun = fixture.ok(&[
-        "pr",
         "ci",
         "rerun",
+        "--pr",
         "8",
         "--check",
         "rust",
@@ -3058,7 +3058,6 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
     let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
     fixture.respond(json!({dispatch: {"status": 204}}));
     let started = fixture.ok(&[
-        "forge",
         "ci",
         "run",
         "deps.yml",
@@ -3113,7 +3112,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         (&["--branch", " "], "branch must be nonempty"),
         (&["--input", " =x"], "expected NAME=VALUE"),
     ] {
-        let output = fixture.run(&[&["forge", "ci", "run", "deps.yml"][..], args].concat());
+        let output = fixture.run(&[&["ci", "run", "deps.yml"][..], args].concat());
         assert!(!output.status.success());
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(error),
@@ -3129,7 +3128,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
     fixture.respond(json!({
         dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765, "jobs": ["audit"]}},
     }));
-    let started = fixture.ok(&["forge", "ci", "run", "deps.yml", "--workspace", "topic"]);
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--workspace", "topic"]);
     assert_eq!(
         started["url"],
         format!("{}/actions/runs/2765", fixture.web),
@@ -3139,7 +3138,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         writes(&fixture),
         [json!([dispatch, {"ref": "topic", "inputs": {}, "return_run_info": true}])]
     );
-    let output = fixture.run(&["forge", "ci", "run", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "run", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("starts a named workflow"),
@@ -3164,7 +3163,6 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     }));
     let url = "https://github.com/team/project/actions/runs/12";
     let rerun = fixture.ok(&[
-        "forge",
         "ci",
         "rerun",
         &format!("{url}/job/34"),
@@ -3232,7 +3230,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
             .contains("is not a CI run of"),
         "{other}"
     );
-    let output = fixture.run(&["forge", "ci", "cancel", "ci.yml"]);
+    let output = fixture.run(&["ci", "cancel", "ci.yml"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("by its web URL"),
@@ -3250,7 +3248,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
-    let cancel = fixture.ok(&["forge", "ci", "cancel", &url, "--workspace", "topic"]);
+    let cancel = fixture.ok(&["ci", "cancel", &url, "--workspace", "topic"]);
     assert_eq!(cancel["url"], url, "{cancel}");
     assert_eq!(
         writes(&fixture),
@@ -3259,7 +3257,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
             null
         ])]
     );
-    let output = fixture.run(&["forge", "ci", "rerun", "2765", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "rerun", "2765", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr)
@@ -3270,8 +3268,10 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
 }
 
 #[test]
-fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
+fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut head_pull = pull(8, "open", "Fix", &[]);
+    head_pull["head"]["sha"] = json!("head");
     let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "topic",
         "workflow_id": "deps.yml", "status": "failure"});
     fixture.respond(json!({
@@ -3285,9 +3285,12 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
         "GET repos/team/project/actions/jobs/18344/logs": {"body": "built\n"},
         "GET repos/team/project/actions/runs?limit=5&page=1&ref=refs%2Fheads%2Ftopic&workflow_id=deps.yml":
             {"body": {"workflow_runs": [run], "total_count": 1}},
+        "GET repos/team/project/pulls/8": {"body": head_pull},
+        "GET repos/team/project/actions/runs?limit=10&page=1&head_sha=head":
+            {"body": {"workflow_runs": [run], "total_count": 1}},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
-    let view = fixture.ok(&["forge", "ci", "view", "2765", "--workspace", "topic"]);
+    let view = fixture.ok(&["view", "ci", "2765", "--workspace", "topic"]);
     assert_eq!(view["url"], url, "{view}");
     assert_eq!(
         (&view["state"], &view["branch"], &view["workflow"]),
@@ -3307,21 +3310,11 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
     assert_eq!(logs[0]["failed_step"], "Audit");
     assert_eq!(logs[0]["job_url"], format!("{url}/jobs/1"));
 
-    let log = fixture.ok(&[
-        "forge",
-        "ci",
-        "view",
-        &url,
-        "--job",
-        "build",
-        "--workspace",
-        "topic",
-    ]);
+    let log = fixture.ok(&["view", "ci", &url, "--job", "build", "--workspace", "topic"]);
     assert_eq!(log["text"], "built\n", "{log}");
 
     // The workspace's branch is listed unless another is named.
     let runs = fixture.ok(&[
-        "forge",
         "ci",
         "list",
         "--workflow",
@@ -3335,7 +3328,12 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch() {
         runs,
         json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
     );
-    let output = fixture.run(&["forge", "ci", "list", "--limit", "0"]);
+    // A PR's runs are those on its head commit.
+    let runs = fixture.ok(&["ci", "list", "--pr", "#8", "--workspace", "topic"]);
+    assert_eq!(runs[0]["url"], url, "{runs}");
+    let output = fixture.run(&["ci", "list", "--pr", "8", "--branch", "topic"]);
+    assert!(!output.status.success());
+    let output = fixture.run(&["ci", "list", "--limit", "0"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("limit must be between 1 and 100"),
@@ -3367,7 +3365,7 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
             json!({"body": {"total_count": 1001, "jobs": jobs}});
     }
     fixture.respond(responses);
-    let view = fixture.ok(&["forge", "ci", "view", "12", "--workspace", "topic"]);
+    let view = fixture.ok(&["view", "ci", "12", "--workspace", "topic"]);
     assert_eq!(view["jobs"].as_array().unwrap().len(), 1001);
     // The failed job on the last page is the one whose log is read, though a
     // successful job shares its name.
@@ -3378,25 +3376,15 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         (&json!("test"), &json!("boom\n"))
     );
 
-    let output = fixture.run(&[
-        "forge",
-        "ci",
-        "view",
-        "12",
-        "--job",
-        "test",
-        "--workspace",
-        "topic",
-    ]);
+    let output = fixture.run(&["view", "ci", "12", "--job", "test", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("select one by its ID"),
         "{output:?}"
     );
     let log = fixture.ok(&[
-        "forge",
-        "ci",
         "view",
+        "ci",
         "12",
         "--job-id",
         "1001",
@@ -3404,6 +3392,27 @@ fn ci_run_views_read_every_page_of_jobs_and_tell_apart_jobs_of_one_name() {
         "topic",
     ]);
     assert_eq!(log["text"], "boom\n", "{log}");
+
+    // A run's job log and a PR's check log are selected apart.
+    for (args, error) in [
+        (
+            &["view", "ci", "12", "--check", "test"][..],
+            "use --job for a run's",
+        ),
+        (&["view", "8", "--job", "test"], "view ci RUN --job NAME"),
+        (
+            &["ci", "rerun", "12", "--check", "test"],
+            "cannot be used with",
+        ),
+        (&["ci", "rerun", "--failed"], "<RUN>"),
+    ] {
+        let output = fixture.run(args);
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(error),
+            "{output:?}"
+        );
+    }
 }
 
 /// Run a Shoal command inside the workspace, as its agent would.
