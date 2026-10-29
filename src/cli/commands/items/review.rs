@@ -4,7 +4,7 @@ use std::{io::Read as _, path::Path};
 
 use anyhow::{Context as _, Result, bail};
 
-use super::read_body;
+use super::content::read_body;
 use crate::{
     cli::args::changes::{ReviewArgs, VerdictArgs},
     forge::{
