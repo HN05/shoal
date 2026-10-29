@@ -197,11 +197,11 @@ impl Demos for Herdr {
     }
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
-        Box::pin(demo::screen(place.id()))
+        Box::pin(demo::screen(place))
     }
 
     fn send_demo_keys<'a>(&'a self, place: &'a Origin, keys: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(demo::send(place.id(), keys))
+        Box::pin(demo::send(place, keys))
     }
 }
 

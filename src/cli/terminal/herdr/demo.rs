@@ -2,7 +2,6 @@
 //! demo's place, and the tab closes once the demo stops.
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
-use tokio::process::Command;
 
 use super::{created, herdr, shell_command, tab_command};
 use crate::{cli::terminal::Demo, sessions::Origin, subprocess::Run};
@@ -13,7 +12,9 @@ const SCREEN_LINES: &str = "500";
 /// Open a background tab for the demo and run its worker in the tab's pane,
 /// returning the pane.
 pub(super) async fn start(demo: &Demo<'_>) -> Result<Origin> {
-    let origin = demo.origin.context("Shoal does not run in a Herdr pane")?;
+    let origin = demo
+        .origin
+        .context("Shoal has no Herdr workspace to open a tab in")?;
     let pane = created(tab_command(origin, demo.cwd, demo.label, false, demo.env)?)
         .await?
         .root_pane
@@ -35,12 +36,13 @@ pub(super) async fn start(demo: &Demo<'_>) -> Result<Origin> {
     Ok(place)
 }
 
-pub(super) async fn screen(pane: &str) -> Result<String> {
-    let mut read = Command::new("herdr");
+/// What the demo in the pane at `place` shows, read from its server.
+pub(super) async fn screen(place: &Origin) -> Result<String> {
+    let mut read = herdr(place);
     read.args([
         "pane",
         "read",
-        pane,
+        place.id(),
         "--source",
         "recent",
         "--lines",
@@ -55,9 +57,10 @@ pub(super) async fn screen(pane: &str) -> Result<String> {
     Ok(read_text(&output.stdout))
 }
 
-pub(super) async fn send(pane: &str, keys: &str) -> Result<()> {
-    let mut send = Command::new("herdr");
-    send.args(["pane", "send-text", pane, keys]);
+/// Type `keys` into the demo in the pane at `place`, through its server.
+pub(super) async fn send(place: &Origin, keys: &str) -> Result<()> {
+    let mut send = herdr(place);
+    send.args(["pane", "send-text", place.id(), keys]);
     Run::new(send)
         .checked()
         .await
