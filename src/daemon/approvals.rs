@@ -43,7 +43,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `land`, `issue_open` or `pr_open`.
+/// `secret/<name>`, `hold/<name>`, `land`, `issue_open` or `pr_open`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -61,6 +61,9 @@ pub enum Target {
     IssueOpen,
     /// Opening a PR for the workspace branch at one commit.
     PrOpen,
+    /// A hold an agent asks to place on its own workspace, which approval
+    /// places.
+    Hold(String),
 }
 
 /// The name of a workspace's single land request.
@@ -76,6 +79,7 @@ impl fmt::Display for Target {
             Self::Land => f.write_str("land"),
             Self::IssueOpen => f.write_str("issue_open"),
             Self::PrOpen => f.write_str("pr_open"),
+            Self::Hold(name) => write!(f, "hold/{name}"),
         }
     }
 }
@@ -101,6 +105,11 @@ impl FromStr for Target {
         {
             return Ok(Self::Secret(name.into()));
         }
+        if let Some(name) = text.strip_prefix("hold/")
+            && !name.is_empty()
+        {
+            return Ok(Self::Hold(name.into()));
+        }
         // The scope may itself contain a slash; pool names cannot.
         if let Some((scope, pool)) = text
             .strip_prefix("resource/")
@@ -123,6 +132,13 @@ impl Target {
     pub fn is_proposal(&self) -> bool {
         matches!(self, Self::IssueOpen | Self::PrOpen)
     }
+
+    /// Whether a coordinator decides the request only while it holds a grant
+    /// for the same thing. A hold grants nothing a coordinator could hold, so
+    /// the nearest one decides it.
+    fn needs_grant(&self) -> bool {
+        !matches!(self, Self::Hold(_))
+    }
 }
 
 /// The effective allocation settings a decision binds; a later request with
@@ -138,6 +154,7 @@ pub enum Specification {
     Land(LandSpecification),
     Issue(IssueSpecification),
     Pull(PullSpecification),
+    Hold(HoldSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,6 +200,13 @@ pub struct LandSpecification {
 pub struct SecretSpecification {
     pub command: Vec<String>,
     pub tools: Vec<String>,
+}
+
+/// A hold covers its name on the requesting workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HoldSpecification {
+    pub hold: String,
 }
 
 impl fmt::Display for Specification {
@@ -406,7 +430,8 @@ impl ApprovalRequest {
     }
 
     /// What the user is asked to decide: the access and how long it lasts,
-    /// the branch and commit to land, or the issue or PR to open.
+    /// the branch and commit to land, the issue or PR to open, or the hold
+    /// to place.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Land, Specification::Land(land)) => {
@@ -419,6 +444,7 @@ impl ApprovalRequest {
                     None => format!("open issue \"{title}\""),
                 }
             }
+            (Target::Hold(name), _) => format!("hold the workspace as {name}"),
             (Target::PrOpen, Specification::Pull(pull)) => format!(
                 "open PR \"{}\" from {} at {}",
                 pull.pull.title, pull.pull.head, pull.commit
@@ -501,6 +527,12 @@ fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> R
     }))
 }
 
+/// Whether the coordinating agent of `workspace` may decide `request`: one
+/// that needs no grant, or one it holds a grant for.
+fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
+    Ok(!request.target.needs_grant() || holds_grant(db, workspace, request)?)
+}
+
 /// A pending request and the coordinators routing passed over, which hold no
 /// grant for it.
 pub struct Routed {
@@ -548,7 +580,7 @@ fn route(
     let mut passed = Vec::new();
     request.decider = None;
     for candidate in candidates {
-        if holds_grant(tx, candidate, &request)? {
+        if may_decide(tx, candidate, &request)? {
             request.decider = Some(candidate.clone());
             break;
         }
@@ -938,7 +970,7 @@ impl Manager {
         );
         let decision = self.record_decision(request, approve).await?;
         if decision.new {
-            self.tell_requester(&decision.request).await;
+            self.carry_out(&decision.request).await;
         }
         Ok(decision.request)
     }
@@ -967,7 +999,7 @@ impl Manager {
             .await?;
         if let Some(decision) = decided {
             if decision.new {
-                self.tell_requester(&decision.request).await;
+                self.carry_out(&decision.request).await;
             }
             return Ok(decision.request);
         }
@@ -1004,7 +1036,7 @@ impl Manager {
                     stored.is_same(&request),
                     "approval request {id} changed since it was shown; choose again"
                 );
-                if !holds_grant(&tx, &coordinator, &stored)? {
+                if !may_decide(&tx, &coordinator, &stored)? {
                     return Ok(None);
                 }
                 let decision = decide(&tx, &key, approve)?;
@@ -1032,6 +1064,18 @@ impl Manager {
                 Ok(decision)
             })
             .await
+    }
+
+    /// Do what a new decision decided, then tell the requester. Failure only
+    /// logs; the decision stands, and retrying the request does it.
+    async fn carry_out(&self, request: &ApprovalRequest) {
+        if let Target::Hold(name) = &request.target
+            && request.status == DecisionStatus::Approved
+            && let Err(error) = self.place_approved_hold(request, name).await
+        {
+            log!("approved hold {name} not placed: {error:#}");
+        }
+        self.tell_requester(request).await;
     }
 
     /// Failure only logs; the decision stands.

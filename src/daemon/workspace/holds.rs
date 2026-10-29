@@ -1,10 +1,17 @@
 //! Caller-named claims of workspace use, independent of assignment completion.
-use anyhow::{Result, ensure};
+use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{GuardMode, Manager};
 use crate::{
-    daemon::store,
+    daemon::{
+        allocation::Allocation,
+        approvals::{
+            self, ApprovalRequest, HoldSpecification, Lifetime, ReasonRequired, Specification,
+            Target,
+        },
+        store,
+    },
     model::{HoldPlacer, WorkspaceHold},
     validate,
 };
@@ -46,6 +53,65 @@ impl Manager {
         Ok(hold)
     }
 
+    /// Hold the workspace for its own agent once its coordinator, or the
+    /// user when it has none, approves; approval places the hold, and asking
+    /// again returns it.
+    pub async fn request_hold(
+        &self,
+        selector: &str,
+        name: String,
+        reason: Option<String>,
+    ) -> Result<Allocation<WorkspaceHold>> {
+        validate::name("hold", &name)?;
+        let workspace = self.workspace(selector).await?;
+        if let Some(hold) = workspace.holds.iter().find(|hold| hold.name == name) {
+            return Ok(Allocation::Granted(hold.clone()));
+        }
+        let request = ApprovalRequest::new(
+            &workspace.id,
+            Target::Hold(name.clone()),
+            &name,
+            Specification::Hold(HoldSpecification { hold: name.clone() }),
+            Lifetime::Lease,
+            reason.as_deref(),
+        );
+        let pending = self.request_approval(request).await.map_err(|error| {
+            if error.is::<ReasonRequired>() {
+                anyhow!(
+                    "holding your own workspace needs approval; request it with shoal acquire hold --name {name} --reason <why>"
+                )
+            } else {
+                error
+            }
+        })?;
+        let outcome = match pending {
+            Some(pending) => Allocation::Approval(Box::new(pending)),
+            None => Allocation::Granted(
+                self.acquire_hold(&workspace.id, name, reason, HoldPlacer::Agent)
+                    .await?,
+            ),
+        };
+        self.notify_allocation(&workspace.name, &outcome, "").await;
+        Ok(outcome)
+    }
+
+    /// Place the hold `name` that `request`, an approved request of the
+    /// workspace's agent, asked for.
+    pub(crate) async fn place_approved_hold(
+        &self,
+        request: &ApprovalRequest,
+        name: &str,
+    ) -> Result<WorkspaceHold> {
+        let reason = Some(request.reason.clone()).filter(|reason| !reason.is_empty());
+        self.acquire_hold(
+            &request.workspace_id,
+            name.to_owned(),
+            reason,
+            HoldPlacer::Agent,
+        )
+        .await
+    }
+
     /// Release the hold `name` for `released_by`: an agent releases only
     /// the holds agents placed.
     pub async fn release_hold(
@@ -75,6 +141,8 @@ impl Manager {
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
                     params![id, name],
                 )?;
+                // Holding it again needs another approval.
+                approvals::release(&tx, &id, &Target::Hold(name.clone()), &name)?;
                 tx.commit()?;
                 Ok(())
             })

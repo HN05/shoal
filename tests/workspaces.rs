@@ -23982,8 +23982,8 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
             .contains("app-thread (Open thread)")
     );
-    // Workspace processes list their holds and release only the holds
-    // agents placed.
+    // Workspace processes list their holds, ask to hold their own workspace
+    // and release only the holds agents placed.
     let scoped = |args: &[&str]| {
         let mut command = vec![
             "run",
@@ -24002,11 +24002,24 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
         expected
     );
-    let refused = scoped(&["acquire", "hold", "--name", "scoped"]);
-    assert!(!refused.status.success());
+    let unexplained = scoped(&["acquire", "hold", "--name", "scoped"]);
+    assert!(!unexplained.status.success());
     assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("shoal questions ask"),
-        "{refused:?}"
+        String::from_utf8_lossy(&unexplained.stderr).contains("--reason <why>"),
+        "{unexplained:?}"
+    );
+    let requested = scoped(&[
+        "acquire",
+        "hold",
+        "--name",
+        "scoped",
+        "--reason",
+        "Keep my notes",
+    ]);
+    assert_eq!(requested.status.code(), Some(2), "{requested:?}");
+    assert!(
+        format!("{requested:?}").contains("approval_pending"),
+        "{requested:?}"
     );
     let release = scoped(&["release", "hold", "--name", "app-thread"]);
     assert!(!release.status.success());

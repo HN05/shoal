@@ -24,6 +24,15 @@ pub(super) async fn handle(
         None => HoldPlacer::User,
     };
     Ok(Answer::Body(match method {
+        // An agent asks to hold its own workspace.
+        HoldMethod::HoldAcquire {
+            workspace,
+            name,
+            reason,
+        } if caller.is_some_and(|caller| caller.workspace_id == workspace) => manager
+            .request_hold(&workspace, name, reason)
+            .await?
+            .into_body(Body::Hold),
         HoldMethod::HoldAcquire {
             workspace,
             name,
@@ -42,20 +51,13 @@ pub(super) async fn handle(
 }
 
 impl Scoped for HoldMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    /// Holding the caller's own workspace needs approval, which
+    /// [`handle`] requests.
+    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(Some(match self {
-            HoldMethod::HoldList { workspace } | HoldMethod::HoldRelease { workspace, .. } => {
-                workspace
-            }
-            HoldMethod::HoldAcquire { workspace, .. } => {
-                manager
-                    .workspace_below(
-                        caller,
-                        workspace,
-                        "workspace processes hold only the workspaces below theirs; ask with shoal questions ask",
-                    )
-                    .await?
-            }
+            HoldMethod::HoldList { workspace }
+            | HoldMethod::HoldRelease { workspace, .. }
+            | HoldMethod::HoldAcquire { workspace, .. } => workspace,
         }))
     }
 }

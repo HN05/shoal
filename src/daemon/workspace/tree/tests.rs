@@ -1585,3 +1585,120 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
         }
     }
 }
+
+#[tokio::test]
+async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_grant() {
+    use crate::{
+        daemon::{allocation::Allocation, approvals::DecisionStatus},
+        model::HoldPlacer,
+        protocol::HoldMethod,
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+        manager
+            .executions
+            .issue_scope(
+                workspace.name.clone(),
+                Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                },
+            )
+            .await;
+    }
+    let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
+        workspace: child.name.clone(),
+        name: "review".into(),
+        reason: None,
+    });
+    crate::daemon::scope::authorize(&manager, Some("child"), &mut acquire)
+        .await
+        .unwrap();
+    let Err(error) = manager.request_hold(&child.id, "review".into(), None).await else {
+        panic!("a request needs a reason");
+    };
+    assert!(error.to_string().contains("--reason"), "{error:#}");
+    let Allocation::Approval(requested) = manager
+        .request_hold(&child.id, "review".into(), Some("Keep my notes".into()))
+        .await
+        .unwrap()
+    else {
+        panic!("holding its own workspace needs approval");
+    };
+    // The parent's agent decides it without a grant of its own.
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+    assert!(manager.workspace(&child.id).await.unwrap().holds.is_empty());
+    let decided = manager
+        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .await
+        .unwrap();
+    assert_eq!(decided.status, DecisionStatus::Approved);
+    // Approval placed the hold, which asking again returns.
+    let holds = manager.workspace(&child.id).await.unwrap().holds;
+    assert_eq!(holds.len(), 1);
+    assert_eq!(holds[0].placed_by, HoldPlacer::Agent);
+    assert_eq!(holds[0].reason.as_deref(), Some("Keep my notes"));
+    let Allocation::Granted(hold) = manager
+        .request_hold(&child.id, "review".into(), None)
+        .await
+        .unwrap()
+    else {
+        panic!("the approved hold is placed");
+    };
+    assert_eq!(hold, holds[0]);
+    // Releasing it ends the approval, so holding it again asks again.
+    manager
+        .release_hold(&child.id, "review".into(), HoldPlacer::Agent)
+        .await
+        .unwrap();
+    assert!(matches!(
+        manager
+            .request_hold(&child.id, "review".into(), Some("Again".into()))
+            .await
+            .unwrap(),
+        Allocation::Approval(_)
+    ));
+
+    // Without a coordinator the user decides.
+    let Allocation::Approval(requested) = manager
+        .request_hold(&parent.id, "review".into(), Some("Keep it".into()))
+        .await
+        .unwrap()
+    else {
+        panic!("holding its own workspace needs approval");
+    };
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider, None);
+    manager
+        .decide_approval(requested.id, true, None, Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);
+}

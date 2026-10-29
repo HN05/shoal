@@ -57,8 +57,8 @@ async fn holds_are_idempotent_persistent_and_scoped() {
             },
         )
         .await;
-    // Workspace processes list and release their own holds, but never
-    // hold their own workspace or reach outside their tree.
+    // Workspace processes list, ask for and release their own holds, but
+    // never reach outside their tree.
     for target in [&workspace.name, &other.id] {
         let own = target == &workspace.name;
         let mut list = HoldMethod::HoldList {
@@ -68,7 +68,12 @@ async fn holds_are_idempotent_persistent_and_scoped() {
             workspace: target.clone(),
             name: "app".into(),
         };
-        for method in [&mut list, &mut release] {
+        let mut acquire = HoldMethod::HoldAcquire {
+            workspace: target.clone(),
+            name: "app".into(),
+            reason: None,
+        };
+        for method in [&mut list, &mut release, &mut acquire] {
             assert_eq!(
                 scope::authorize(&manager, Some("scope"), method)
                     .await
@@ -76,16 +81,6 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                 own
             );
         }
-        let mut acquire = HoldMethod::HoldAcquire {
-            workspace: target.clone(),
-            name: "app".into(),
-            reason: None,
-        };
-        assert!(
-            scope::authorize(&manager, Some("scope"), &mut acquire)
-                .await
-                .is_err()
-        );
     }
     // Releasing one the user placed is the user's.
     let error = manager
