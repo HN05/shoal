@@ -1097,14 +1097,14 @@ pub(in crate::cli) async fn open_session_owners(
         .collect()
 }
 
-/// Attach this terminal to `session` through the host that keeps it, then
+/// Show `session` in this terminal through the host that keeps it, then
 /// say how to return to it by `name` when it outlives the attach.
 pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<i32> {
     let host = kept_by(&session.place);
-    let sessions = host
-        .sessions()
-        .with_context(|| format!("{} keeps no sessions", host.name()))?;
-    sessions.attach(session).await?;
+    let (Some(places), Some(sessions)) = (host.places(), host.sessions()) else {
+        anyhow::bail!("{} keeps no sessions", host.name());
+    };
+    places.show(&session.place, &session.name).await?;
     report_detach(sessions, name, &session.name).await?;
     Ok(0)
 }
@@ -1178,8 +1178,8 @@ fn demo_label(host: &dyn Host, workspace: &Workspace, name: &str) -> String {
 /// Show the demo `launch` describes in this terminal.
 pub(in crate::cli) async fn open_demo(launch: &Launch) -> Result<()> {
     let place = &launch.origin;
-    match kept_by(place).demos() {
-        Some(demos) => demos.open_demo(place).await,
+    match kept_by(place).places() {
+        Some(places) => places.show(place, "the demo").await,
         None => background::open_demo(place.id()).await,
     }
 }

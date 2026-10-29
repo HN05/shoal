@@ -125,6 +125,12 @@ pub(in crate::cli) trait Places: Sync {
         Box::pin(async { Ok(false) })
     }
 
+    /// Bring `place`, one this host opened, called `name`, before the user
+    /// of this terminal: where the terminal shows this host, by focusing it;
+    /// otherwise by attaching the terminal to it until the user leaves it,
+    /// or by showing it where the host shows its places.
+    fn show<'a>(&'a self, place: &'a Origin, name: &'a str) -> BoxFuture<'a, Result<()>>;
+
     /// Whether the places this host opens show a name.
     fn names_places(&self) -> bool {
         false
@@ -173,7 +179,7 @@ pub(in crate::cli) trait Closes: Sync {
 }
 
 /// A host that keeps agents in sessions of its own, which `shoal attach`
-/// finds where the daemon recorded them and attaches this terminal to.
+/// finds where the daemon recorded them and shows as [`Places::show`] does.
 pub(in crate::cli) trait Sessions: Sync {
     /// Run `start`, a tracked agent `agent` of `owner`, in a new session and
     /// attach this terminal to it, returning the session once the terminal
@@ -184,10 +190,6 @@ pub(in crate::cli) trait Sessions: Sync {
         owner: Owner<'a>,
         agent: &'a str,
     ) -> BoxFuture<'a, Result<Option<String>>>;
-
-    /// Attach this terminal to `session`, one [`Sessions::session_at`]
-    /// found, until the user detaches or the session ends.
-    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>>;
 
     /// Whether `session`, which this host attached this terminal to, still
     /// runs after the terminal left it. A host that shows its sessions
@@ -257,15 +259,12 @@ pub(in crate::cli) trait Prompts: Sync {
     fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
-/// A host that keeps demos in places of its own, which the user opens, reads
-/// and types into.
+/// A host that keeps demos in places of its own, which the user opens as
+/// [`Places::show`] shows a place, reads and types into.
 pub(in crate::cli) trait Demos: Sync {
     /// Start `demo` in a new background place of this host, returning the
     /// place.
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>>;
-
-    /// Show the demo at `place` in this terminal until the user leaves it.
-    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>>;
 
     /// What the demo at `place` shows, oldest line first.
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>>;

@@ -105,6 +105,17 @@ impl Places for Rex {
         })
     }
 
+    fn show<'a>(&'a self, place: &'a Origin, name: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async move {
+            let server = Server::recorded(&place.data)?;
+            let block = server
+                .block(place.id())
+                .await?
+                .context("the Rex block is gone")?;
+            reveal(&server, &block, place.id(), name).await
+        })
+    }
+
     fn background_places(&self) -> &'static str {
         "Rex blocks"
     }
@@ -174,18 +185,6 @@ impl Sessions for Rex {
     fn attaches_places(&self) -> bool {
         true
     }
-
-    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            let place = &session.place;
-            let server = Server::recorded(&place.data)?;
-            let block = server
-                .block(place.id())
-                .await?
-                .context("the Rex block is gone")?;
-            reveal(&server, &block, place.id(), &session.name).await
-        })
-    }
 }
 
 impl Prompts for Rex {
@@ -210,17 +209,6 @@ impl Prompts for Rex {
 impl Demos for Rex {
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
         Box::pin(start_demo(demo))
-    }
-
-    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move {
-            let server = Server::recorded(&place.data)?;
-            let block = server
-                .block(place.id())
-                .await?
-                .context("the demo's Rex block is gone")?;
-            reveal(&server, &block, place.id(), "the demo").await
-        })
     }
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {

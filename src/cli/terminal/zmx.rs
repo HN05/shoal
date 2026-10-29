@@ -106,6 +106,12 @@ impl Places for Zmx {
         Box::pin(async move { run_chat(start).await.map(ChatStart::Session) })
     }
 
+    /// The session, attached to this terminal until the user detaches or it
+    /// ends.
+    fn show<'a>(&'a self, place: &'a Origin, _name: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(attach(place.id()))
+    }
+
     fn background_places(&self) -> &'static str {
         "detached zmx sessions"
     }
@@ -213,10 +219,6 @@ impl Sessions for Zmx {
         true
     }
 
-    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
-        Box::pin(attach(&session.name))
-    }
-
     fn left_running<'a>(&'a self, session: &'a str) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async move { Ok(list().await?.iter().any(|(name, _)| name == session)) })
     }
@@ -235,10 +237,6 @@ impl Prompts for Zmx {
 impl Demos for Zmx {
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
         Box::pin(start_demo(demo))
-    }
-
-    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(open_demo(place.id()))
     }
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
@@ -484,21 +482,6 @@ fn session_command(words: &[&str], launch: &NewSession<'_>) -> String {
         env::ENDS_SESSION,
         crate::shell::quote(words)
     )
-}
-
-/// Attach this terminal to the demo's session until the user detaches.
-async fn open_demo(session: &str) -> Result<()> {
-    ensure_program("demo", Tool::Zmx.program())?;
-    let status = Command::new(Tool::Zmx.program())
-        .args(["attach", session])
-        .status()
-        .await
-        .context("run zmx")?;
-    crate::execution::reset_input_modes();
-    if !status.success() {
-        bail!("zmx exited with {status}");
-    }
-    Ok(())
 }
 
 /// The session's scrollback as plain text.

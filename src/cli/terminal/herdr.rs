@@ -109,6 +109,12 @@ impl Places for Herdr {
         })
     }
 
+    /// Its tab, focused; from a terminal outside Herdr, shown in a Herdr
+    /// client attached to the tab's session.
+    fn show<'a>(&'a self, place: &'a Origin, _name: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(attach::reveal(place))
+    }
+
     fn background_places(&self) -> &'static str {
         "Herdr tabs"
     }
@@ -181,19 +187,11 @@ impl Sessions for Herdr {
     fn attaches_places(&self) -> bool {
         true
     }
-
-    fn attach<'a>(&'a self, session: &'a Session) -> BoxFuture<'a, Result<()>> {
-        Box::pin(attach::reveal(&session.place))
-    }
 }
 
 impl Demos for Herdr {
     fn start_demo<'a>(&'a self, demo: &'a Demo<'a>) -> BoxFuture<'a, Result<Origin>> {
         Box::pin(demo::start(demo))
-    }
-
-    fn open_demo<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<()>> {
-        Box::pin(attach::reveal(place))
     }
 
     fn demo_screen<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<String>> {
