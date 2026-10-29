@@ -187,8 +187,10 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     });
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
     // Every rex call above was a client that has since disconnected; the
-    // agent keeps running in its block.
-    assert_eq!(executions(&fixture, "placed"), 1);
+    // agent keeps running in its block once setup's execution has ended.
+    wait_until("only the agent to run", || {
+        executions(&fixture, "placed") == 1
+    });
 
     // An agent in the user's own block is recorded where it runs, but the
     // block stays the user's.
