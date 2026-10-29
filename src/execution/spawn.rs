@@ -176,15 +176,31 @@ impl AgentLaunch {
     }
 
     /// Give `command` the agent's environment, over the workspace's
-    /// `environment`, and the key its proxy wants, when one runs.
+    /// `environment`, and, when its proxy runs, the defaults that go with it
+    /// and the key the proxy wants. Its own `env_remove` still removes those
+    /// defaults.
     fn apply(&self, command: &mut Command, environment: &BTreeMap<String, OsString>) {
         self.account.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
+        if self.proxy.is_some() {
+            command.envs(self.proxy_defaults(environment));
+        }
         self.environment.apply(command.as_std_mut(), &self.home);
         if let Some(proxy) = &self.proxy {
             command.envs(self.proxy_environment(&proxy.key, environment));
         }
+    }
+
+    /// The variables the agent gets through its proxy that its environment
+    /// leaves unset.
+    fn proxy_defaults(
+        &self,
+        environment: &BTreeMap<String, OsString>,
+    ) -> Vec<(&'static str, &'static str)> {
+        let configured = self.configured_environment(environment);
+        let variable = |name: &str| crate::env::configured_var(&configured, name);
+        crate::cli::agents::proxy_defaults(self.kind(), &variable)
     }
 
     /// What the agent's environment gets so its requests name its proxy's

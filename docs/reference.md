@@ -1017,7 +1017,11 @@ wrapper reports that turn for `retry`, which waits out rate and usage limits. `s
 shows a request the proxy waits to retry, which the wrapper reports, through the installed release once an upgrade changed the daemon's protocol under it; `--json` gives `proxy_retry` with
 `failure`, `attempt` and the Unix-seconds `next_at`. Through the proxy, Claude Code on a claude.ai login treats
 its base URL as a gateway and leaves out Remote Control and remote managed
-settings. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
+settings. Claude Code keeps its prompt cache for an hour only on a claude.ai
+login within its usage limits, and for 5 minutes with an API key or auth token,
+so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
+environment it runs with sets that variable; a lifetime in
+`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
 
 `instructions` passes the rendered agent guidance apart from the first message,

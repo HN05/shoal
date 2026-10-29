@@ -119,3 +119,34 @@ async fn a_restore_that_runs_a_key_command_stops_it_at_the_limit() {
     );
     assert!(launch.proxy.is_none());
 }
+
+#[tokio::test]
+async fn a_claude_agent_through_its_proxy_gets_the_hour_long_prompt_cache_unless_it_sets_one() {
+    let home = tempfile::tempdir().unwrap();
+    let mut launch = launch(home.path());
+    let unset = BTreeMap::new();
+    assert_eq!(prompt_cache_1h(&launch, &unset), None);
+    launch
+        .restart_proxy(Some(proxy("http://127.0.0.1:9", None)), &unset)
+        .await
+        .unwrap();
+    assert_eq!(prompt_cache_1h(&launch, &unset), Some(Some("1".into())));
+    // The workspace's own value reaches the agent unchanged.
+    let chosen = BTreeMap::from([("ENABLE_PROMPT_CACHING_1H".to_owned(), "0".into())]);
+    assert_eq!(prompt_cache_1h(&launch, &chosen), None);
+}
+
+/// What `launch` sets `ENABLE_PROMPT_CACHING_1H` to over the workspace's
+/// `environment`, if it touches it.
+fn prompt_cache_1h(
+    launch: &AgentLaunch,
+    environment: &BTreeMap<String, OsString>,
+) -> Option<Option<OsString>> {
+    let mut command = Command::new("true");
+    launch.apply(&mut command, environment);
+    command
+        .as_std()
+        .get_envs()
+        .find(|(name, _)| *name == "ENABLE_PROMPT_CACHING_1H")
+        .map(|(_, value)| value.map(ToOwned::to_owned))
+}

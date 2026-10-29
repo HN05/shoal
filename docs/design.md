@@ -1053,7 +1053,10 @@ but no Shoal code, like `shoal-forge`. Each tracked agent that names one gets it
 own, run by its wrapper, so a daemon restart never cuts a stream and the proxy
 ends with the agent; Shoal points the agent at it through the integration, which
 knows how that agent takes a base URL. All its requests share one outage budget,
-so the agent's own retries never multiply the proxy's.
+so the agent's own retries never multiply the proxy's. Claude Code keeps its prompt cache for 5 minutes outside
+a claude.ai login within its usage limits, while an agent waiting for CI or a
+review idles longer, so a proxied Claude agent gets the 1-hour cache unless its
+environment or settings choose a lifetime.
 
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings, plus permission for a workspace's

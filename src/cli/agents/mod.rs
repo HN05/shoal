@@ -78,6 +78,12 @@ pub(in crate::cli) trait Integration: Sync {
         vec![(crate::proxy::KEY_VARIABLE, key.into())]
     }
 
+    /// Variables a launch through its proxy gets when the environment it
+    /// runs with leaves them unset.
+    fn proxy_defaults(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
     /// Arguments that only send its API requests to Shoal's proxy, for a
     /// launch Shoal gives no hooks, such as a configured resume command,
     /// with the placeholders of [`Self::hook_args`].
@@ -586,6 +592,20 @@ pub(crate) fn proxy_environment(
     variable: &dyn Fn(&str) -> Option<OsString>,
 ) -> Vec<(&'static str, OsString)> {
     integration(kind).proxy_environment(key, variable)
+}
+
+/// The variables an agent with integration `kind` gets through its proxy
+/// that `variable`, the environment it runs with otherwise, leaves unset.
+pub(crate) fn proxy_defaults(
+    kind: IntegrationKind,
+    variable: &dyn Fn(&str) -> Option<OsString>,
+) -> Vec<(&'static str, &'static str)> {
+    integration(kind)
+        .proxy_defaults()
+        .iter()
+        .copied()
+        .filter(|(name, _)| variable(name).is_none())
+        .collect()
 }
 
 /// Whether an agent with integration `kind` can go through Shoal's proxy.

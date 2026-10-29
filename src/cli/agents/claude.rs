@@ -57,6 +57,14 @@ impl Integration for Claude {
         vec![(CUSTOM_HEADERS, headers)]
     }
 
+    /// The 1-hour prompt cache, which Claude Code chooses itself only on a
+    /// claude.ai login within its usage limits; an agent waiting for CI or a
+    /// review often idles past the 5-minute one. Claude Code ranks this
+    /// below a lifetime its settings or environment name.
+    fn proxy_defaults(&self) -> &'static [(&'static str, &'static str)] {
+        &[(PROMPT_CACHE_1H, "1")]
+    }
+
     /// Empty settings, which the wrapper's merge gives the proxy's URL.
     fn proxy_args(&self) -> Vec<OsString> {
         vec!["--settings".into(), "{}".into()]
@@ -276,6 +284,10 @@ fn wake_hooks(shoal: &str) -> [(&'static str, Value); 2] {
 
 /// The variable whose lines Claude Code adds to each request as headers.
 const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";
+
+/// The variable that gives Claude Code the 1-hour prompt cache unless a
+/// lifetime is set elsewhere.
+const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 
 mod settings;
 
