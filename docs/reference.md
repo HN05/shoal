@@ -458,11 +458,18 @@ notification and tries again only once agents have no work or the config reloads
 
 ### Idle agents
 
+```toml
+[idle_stop]
+enabled = false                # Opt in with true
+idle_minutes = 60              # Minutes idle before an agent stops
+```
+
 An idle agent keeps its memory while it waits for its next update. Each
 [cleanup sweep](#automatic-cleanup) stops the [idle](#agent-state) agents of
 done workspaces that something keeps from cleanup, such as a
 [hold](#workspace-holds), an open [question](#questions) or a
-[child workspace](#child-workspaces). Only an agent idle with no processes running
+[child workspace](#child-workspaces), and with `[idle_stop]` enabled, which a
+repository may set, any agent idle for `idle_minutes` (1–525600). Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
@@ -470,7 +477,8 @@ whose cache lifetime is unknown counts as expired. The stop saves the agent as
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
 assignment is done and whatever `[overload.recovery]` says. Timers the agent
-keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it.
+keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
+which is why `[idle_stop]` is opt-in.
 
 ## Workspaces
 

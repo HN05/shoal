@@ -119,6 +119,7 @@ pub struct RepoConfig {
     #[serde(skip_serializing)]
     pub pr_cleanup: PrCleanup,
     pub done: Done,
+    pub idle_stop: IdleStop,
     pub review: Review,
     pub ready: Ready,
     pub unready: Unready,
@@ -310,6 +311,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
         kind.validate(kind.repository_command(&config))?;
     }
     config.cleanup.validate()?;
+    config.idle_stop.validate()?;
     crate::config::validate_port_range(config.ports.start, config.ports.end)?;
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
@@ -420,6 +422,23 @@ pub struct MergedCleanup {
 pub struct Restore {
     pub retention_days: Option<u64>,
     pub archive_max_mb: Option<u64>,
+}
+
+/// Repository values for the global `[idle_stop]`.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IdleStop {
+    pub enabled: Option<bool>,
+    pub idle_minutes: Option<u64>,
+}
+
+impl IdleStop {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if let Some(minutes) = self.idle_minutes {
+            crate::config::validate_idle_minutes("idle_stop.idle_minutes", minutes)?;
+        }
+        Ok(())
+    }
 }
 
 /// Default cleanup choice when an agent marks its workspace done.

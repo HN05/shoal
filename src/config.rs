@@ -140,6 +140,7 @@ pub struct Config {
     pub auto_cleanup: repo::AutoCleanup,
     pub pr_cleanup: repo::PrCleanup,
     pub done: repo::Done,
+    pub idle_stop: repo::IdleStop,
     pub review: repo::Review,
     pub ready: repo::Ready,
     pub unready: repo::Unready,
@@ -356,6 +357,30 @@ pub struct PrCleanup {
 impl Default for PrCleanup {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+/// Stopping agents idle longer than `idle_minutes`, which is opt-in.
+#[derive(Debug, Serialize)]
+pub struct IdleStop {
+    pub enabled: bool,
+    pub idle_minutes: u64,
+}
+
+impl Default for IdleStop {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            idle_minutes: 60,
+        }
+    }
+}
+
+impl IdleStop {
+    /// How long an agent stays idle before it stops; `None` when disabled.
+    pub fn after(&self) -> Option<Duration> {
+        self.enabled
+            .then(|| Duration::from_secs(self.idle_minutes * 60))
     }
 }
 
@@ -677,6 +702,7 @@ impl Config {
             },
             cleanup: self.cleanup,
             done: self.done,
+            idle_stop: self.idle_stop,
             review: self.review,
             ready: self.ready,
             unready: self.unready,
@@ -707,6 +733,7 @@ impl Config {
         config.root_dir(paths)?;
         templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
+        config.idle_stop.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;
