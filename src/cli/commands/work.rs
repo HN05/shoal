@@ -7,7 +7,6 @@ use super::{restore, workspaces};
 
 pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
     match command {
-        WorkCommand::Base { command, workspace } => super::base::run(ctx, command, workspace).await,
         WorkCommand::Env { workspace, revoke } => {
             workspaces::environment(ctx, workspace, revoke).await
         }

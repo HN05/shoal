@@ -79,7 +79,7 @@ Use `shoal add my-project` to pick a new or existing branch, an open issue or an
 ```sh
 shoal add my-project fix-api --base feature/api  # Branch from feature/api
 shoal add my-project fix-api --base origin/feature/api  # Fetch the pushed branch first
-shoal work base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
+shoal branch base set feature-api --workspace fix-api  # Record the workspace fix-api builds on
 shoal split fix-typo --workspace fix-api     # Create a child workspace for work in its own PR
 shoal add my-project --existing origin/feature/api --agent codex
 shoal add my-project quick-fix --path ../quick-fix

@@ -1,4 +1,4 @@
-//! Arguments of commands for a workspace's changes, its PRs and issues, and landing it.
+//! Arguments of commands for a workspace's branch and changes, its PRs and issues, and landing it.
 use std::{ffi::OsString, path::PathBuf};
 
 use clap::{Args, Subcommand};
@@ -10,7 +10,41 @@ use crate::{
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
+pub enum BranchCommand {
+    /// Show, set or clear the workspace a stacked workspace builds on.
+    #[command(args_conflicts_with_subcommands = true)]
+    Base {
+        #[command(subcommand)]
+        command: Option<BaseCommand>,
+        workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum BaseCommand {
+    /// Record the workspace whose branch this workspace builds on.
+    Set {
+        /// Workspace name or branch in the same repository; omit to choose one.
+        base: Option<String>,
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Remove the recorded base workspace.
+    Clear {
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
 pub enum ChangesCommand {
+    /// Show or change a workspace's branch and the branch it builds on.
+    Branch {
+        #[command(subcommand)]
+        command: BranchCommand,
+    },
     /// Show changes since the branch's fork point.
     Diff { workspace: Option<String> },
     /// Check whether the branch merges cleanly into another branch.

@@ -1677,10 +1677,10 @@ below. A `--base` naming another workspace's branch, locally or on a remote,
 records that workspace as the new workspace's base workspace.
 
 ```sh
-shoal work base                          # Show the current workspace's base workspace
-shoal work base set feature-a            # Record it by workspace name or branch
-shoal work base clear                    # Remove it
-shoal work base set feature-a --workspace feature-b
+shoal branch base                        # Show the current workspace's base workspace
+shoal branch base set feature-a          # Record it by workspace name or branch
+shoal branch base clear                  # Remove it
+shoal branch base set feature-a --workspace feature-b
 ```
 
 The base must be another workspace of the same repository and must not create

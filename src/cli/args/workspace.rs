@@ -65,31 +65,7 @@ pub enum WorkspaceCommand {
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
-pub enum BaseCommand {
-    /// Record the workspace whose branch this workspace builds on.
-    Set {
-        /// Workspace name or branch in the same repository; omit to choose one.
-        base: Option<String>,
-        #[arg(long)]
-        workspace: Option<String>,
-    },
-    /// Remove the recorded base workspace.
-    Clear {
-        #[arg(long)]
-        workspace: Option<String>,
-    },
-}
-
-#[derive(Debug, Subcommand)]
-#[command(defer = true)]
 pub enum WorkCommand {
-    /// Show, set or clear the workspace a stacked workspace builds on.
-    #[command(args_conflicts_with_subcommands = true)]
-    Base {
-        #[command(subcommand)]
-        command: Option<BaseCommand>,
-        workspace: Option<String>,
-    },
     /// Export the environment for processes started in a workspace.
     Env {
         workspace: Option<String>,

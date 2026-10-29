@@ -35,6 +35,7 @@ const GROUPS: &[(&str, &[&str])] = &[
     (
         "Changes and review",
         &[
+            "branch",
             "diff",
             "conflicts",
             "review",

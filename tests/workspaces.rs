@@ -1855,7 +1855,7 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
         vec!["done", "--undo", ""],
         vec!["ready", "--undo", "--workspace", ""],
         vec!["release", "hold", "--workspace", ""],
-        vec!["work", "base", "clear", "--workspace", ""],
+        vec!["branch", "base", "clear", "--workspace", ""],
     ] {
         let choices = described(&args);
         assert!(
@@ -10113,7 +10113,11 @@ fn base_set_picks_a_workspace_of_the_same_repository() {
     fixture.ok(&["repo", "add", other.to_str().unwrap()]);
     let foreign = fixture.ok(&["add", other.to_str().unwrap(), "foreign"]);
     let lower = lower["id"].as_str().unwrap();
-    let (output, rows) = fixture.pick(&["work", "base", "set", "--workspace", "upper"], lower, "");
+    let (output, rows) = fixture.pick(
+        &["branch", "base", "set", "--workspace", "upper"],
+        lower,
+        "",
+    );
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains(&format!("{lower}\t")), "{rows:?}");
     assert_eq!(rows.lines().count(), 1, "{rows:?}");
