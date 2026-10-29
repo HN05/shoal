@@ -154,6 +154,7 @@ const REQUESTS: &[&str] = &[
     r#"{"agent_messages":{"workspace":"fix"}}"#,
     r#"{"mark_agent_messages_delivered":{"workspace":"fix","ids":[5]}}"#,
     r#"{"agent_updates":{"workspace":"fix"}}"#,
+    r#"{"agent_session":{"workspace":"fix"}}"#,
     // Questions.
     r#"{"ask_question":{"workspace":"fix","ask":{"question":"Which?","recommendation":"A","choices":["A","B"]}}}"#,
     r#"{"list_questions":{"workspace":"fix"}}"#,
