@@ -265,6 +265,15 @@ async fn a_shutdown_keeps_a_protection_stopped_agent_from_resuming() {
             .stop_agent_for_overload("critical memory pressure")
             .await
     );
+    manager.queue_agent_restore(&id).await.unwrap();
+    // Its waiting wrapper restores it, not the queue, and ends with the system.
+    assert!(
+        !manager
+            .queued_stopped_restores()
+            .await
+            .unwrap()
+            .contains(&id)
+    );
 
     let mut stop = execution.stop.clone();
     assert!(*stop.borrow_and_update());

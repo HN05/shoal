@@ -142,6 +142,13 @@ fn restoring_workspaces(db: &Connection) -> Result<HashSet<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+fn stopped_restores(db: &Connection) -> Result<HashSet<String>> {
+    Ok(db
+        .prepare("SELECT execution_id FROM agent_queue WHERE kind=?1 AND env IS NOT NULL")?
+        .query_map([QueueKind::Restore], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Each waiting restore the daemon starts: its ID, workspace and execution.
 fn waiting_restores(db: &Connection) -> Result<Vec<(String, String, String)>> {
     Ok(db
@@ -321,6 +328,14 @@ impl Manager {
             }
         }
         Ok(pending)
+    }
+
+    /// The executions of stopped agents whose restore the daemon starts from
+    /// the queue, unlike one a waiting wrapper restores.
+    pub(in crate::daemon::workspace) async fn queued_stopped_restores(
+        &self,
+    ) -> Result<HashSet<String>> {
+        self.store.run(|db| stopped_restores(db)).await
     }
 
     /// Whether the entry `id` restores a stopped agent the daemon starts.

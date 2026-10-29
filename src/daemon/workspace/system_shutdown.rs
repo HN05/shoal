@@ -65,10 +65,13 @@ impl Manager {
         if stopped.is_empty() {
             return;
         }
-        let queued = self.queued_restores().await.unwrap_or_else(|error| {
-            log!("system shutdown: agent queue unavailable: {error:#}");
-            HashSet::new()
-        });
+        let queued = self
+            .queued_stopped_restores()
+            .await
+            .unwrap_or_else(|error| {
+                log!("system shutdown: agent queue unavailable: {error:#}");
+                HashSet::new()
+            });
         let waiting: Vec<&Workspace> = stopped
             .iter()
             .copied()
@@ -97,16 +100,6 @@ impl Manager {
             ),
         )
         .await;
-    }
-
-    /// The executions of stopped agents whose restore is in the agent queue.
-    async fn queued_restores(&self) -> Result<HashSet<String>> {
-        Ok(self
-            .queue_entries()
-            .await?
-            .into_iter()
-            .filter_map(|entry| entry.execution)
-            .collect())
     }
 }
 
