@@ -17,9 +17,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::ProxyReport { report } => {
             crate::proxy::send_relayed(&ctx.paths, &report).await
         }
-        InternalCommand::AgentState { state, workspace } => {
-            agent_state::run(&ctx, workspace, state).await
-        }
+        InternalCommand::AgentState {
+            state,
+            ends_turn,
+            workspace,
+        } => agent_state::run(&ctx, workspace, state, ends_turn).await,
         InternalCommand::TurnFailed {
             integration,
             workspace,

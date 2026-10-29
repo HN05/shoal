@@ -9,6 +9,7 @@ use std::{
 use anyhow::Result;
 
 use crate::{
+    ai::IntegrationKind,
     cli::{
         client::request,
         context::Context,
@@ -16,14 +17,17 @@ use crate::{
     },
     execution::recovery,
     model::AgentStatus,
-    protocol::AgentMethod,
+    protocol::{AgentMethod, TurnEnd},
     state::{AgentState, TurnFailure},
 };
 
+/// Report `state`, which ends a turn of an agent with integration
+/// `ends_turn` when one is named.
 pub(super) async fn run(
     ctx: &Context,
     workspace: Option<String>,
     state: AgentState,
+    ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let session = hook_event().as_ref().and_then(session_of);
@@ -33,7 +37,7 @@ pub(super) async fn run(
             workspace,
             state,
             session,
-            turn_end: None,
+            turn_end: ends_turn.map(|integration| turn_end(ctx, integration)),
         },
     )
     .await?;
@@ -46,7 +50,7 @@ pub(super) async fn run(
 pub(super) async fn turn_failed(
     ctx: &Context,
     workspace: Option<String>,
-    integration: crate::ai::IntegrationKind,
+    integration: IntegrationKind,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let event = hook_event().unwrap_or_default();
@@ -59,11 +63,22 @@ pub(super) async fn turn_failed(
             failure,
             session: session_of(&event),
             execution: None,
-            turn_end: Default::default(),
+            turn_end: turn_end(ctx, integration),
         },
     )
     .await?;
     emit(ctx, status)
+}
+
+/// What the hook of an agent with `integration` reports when its turn
+/// ends: how long its prompt cache lives, as the environment the hook runs
+/// in gives it.
+fn turn_end(ctx: &Context, integration: IntegrationKind) -> TurnEnd {
+    let variable = |name: &str| std::env::var_os(name);
+    let lifetime = crate::cli::agents::prompt_cache(integration, &variable, &ctx.paths.home);
+    TurnEnd {
+        prompt_cache_secs: lifetime.map(|lifetime| lifetime.as_secs()),
+    }
 }
 
 fn emit(ctx: &Context, status: AgentStatus) -> Result<i32> {

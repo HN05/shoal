@@ -70,6 +70,20 @@ fn report(shoal: &str, state: AgentState) -> String {
     format!("{shoal} internal agent-state {state} >/dev/null 2>&1 || true")
 }
 
+/// The group that reports the end of a turn of an agent with `integration`,
+/// which reads how long the agent's prompt cache lives from the environment
+/// the hook runs in. It never fails, as [`state`] does not.
+pub fn turn_ended(shoal: &str, integration: crate::ai::IntegrationKind) -> Value {
+    json!({ "hooks": [{
+        "type": "command",
+        "command": format!(
+            "{shoal} internal agent-state idle --ends-turn {} >/dev/null 2>&1 || true",
+            crate::shell::quote(&[integration.as_str()])
+        ),
+        "timeout": 10,
+    }] })
+}
+
 /// The group that reports a turn an API error ended for an agent with
 /// `integration`, which reads the failure from the hook's event; the turn
 /// leaves the agent idle. It never fails, as [`state`] does not.

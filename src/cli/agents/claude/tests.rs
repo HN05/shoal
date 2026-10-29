@@ -39,6 +39,14 @@ fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
             expected("Stop", None, "idle"),
         ]
     );
+    // A turn's end reports how long the agent's prompt cache lives.
+    let ended = settings["hooks"]["Stop"][0]["hooks"][0]["command"]
+        .as_str()
+        .unwrap();
+    assert!(
+        ended.contains(" internal agent-state idle --ends-turn claude "),
+        "{ended}"
+    );
     // A turn an API error ended reports its failure, read from the event.
     let failed = settings["hooks"]["StopFailure"][0]["hooks"][0]["command"]
         .as_str()

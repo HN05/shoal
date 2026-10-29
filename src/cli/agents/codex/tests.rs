@@ -41,7 +41,10 @@ fn config_overrides_deliver_messages_and_report_state() {
     let stop = hooks["hooks.Stop"][0]["hooks"][0]["command"]
         .as_str()
         .unwrap();
-    assert!(stop.contains(" agent-state idle "), "{stop}");
+    assert!(
+        stop.contains(" agent-state idle --ends-turn codex "),
+        "{stop}"
+    );
     let start = &hooks["hooks.SessionStart"][0];
     assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
     let start = start["hooks"][0]["command"].as_str().unwrap();

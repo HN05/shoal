@@ -954,8 +954,9 @@ turns ends normally. A pending retry outlasts a daemon restart;
 `prompt_cache_minutes` sets how long a tool's prompt cache lives after its last
 request, which `status` uses to show when an idle agent's
 [cache expires](#agent-state); a tool's launch profiles inherit it unless they
-set their own. Without it, Codex's is 30 minutes, the least OpenAI keeps a
-GPT-5.6 or later cache, and other tools have none.
+set their own. Without it, Claude Code's is what its environment and settings
+give, Codex's is 30 minutes, the least OpenAI keeps a GPT-5.6 or later cache,
+and other tools have none.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
@@ -2950,7 +2951,14 @@ read it instead of each inferring it from the terminal. Shoal's terminal
 Claude Code and Codex launches, including `add --agent` and resumed sessions, register
 the hooks with the [message hooks](#agent-messages); Happy sessions do not.
 A session that starts, resumes or clears reports `idle`, so a new agent shows
-`waiting` until its first turn. A turn an API error ends reports `idle` through
+`waiting` until its first turn. A turn that ends reports `idle` with
+`--ends-turn <integration>`, which reads how long the agent's prompt cache lives
+from the environment the hook runs in, the agent's own. For Claude Code that is
+5 minutes with `FORCE_PROMPT_CACHING_5M`, else `CLAUDE_CODE_PROMPT_CACHE_TTL`,
+else `promptCacheTtl` in its user settings, else an hour with
+`ENABLE_PROMPT_CACHING_1H`, else 5 minutes with an API key, auth token,
+`apiKeyHelper` or another provider such as Bedrock, and an hour on a claude.ai
+login, which Shoal assumes is within its usage limits. A turn an API error ends reports `idle` through
 `shoal internal turn-failed --integration <name>`, which also reads the failure
 the integration's hook event names.
 Neither agent has a hook for an interrupted turn: Claude Code shows `working` until

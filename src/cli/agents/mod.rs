@@ -123,6 +123,16 @@ pub(in crate::cli) trait Integration: Sync {
         None
     }
 
+    /// How long the agent's prompt cache lives after a turn, as its own
+    /// settings give it; `variable` reads the environment it runs with.
+    fn prompt_cache(
+        &self,
+        _variable: &dyn Fn(&str) -> Option<OsString>,
+        _home: &Path,
+    ) -> Option<std::time::Duration> {
+        None
+    }
+
     /// The failure that `event`, from its hook for a turn an API error ended,
     /// reports; `None` for an agent without one.
     fn turn_failure(&self, _event: &serde_json::Value) -> Option<crate::state::TurnFailure> {
@@ -606,6 +616,16 @@ pub(crate) fn proxy_defaults(
         .copied()
         .filter(|(name, _)| variable(name).is_none())
         .collect()
+}
+
+/// How long the prompt cache of an agent with integration `kind` lives after
+/// a turn, as its own settings in the environment `variable` reads give it.
+pub(crate) fn prompt_cache(
+    kind: IntegrationKind,
+    variable: &dyn Fn(&str) -> Option<OsString>,
+    home: &Path,
+) -> Option<std::time::Duration> {
+    integration(kind).prompt_cache(variable, home)
 }
 
 /// Whether an agent with integration `kind` can go through Shoal's proxy.

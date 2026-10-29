@@ -12,7 +12,7 @@ use super::{
     desktop::{self, App},
     trust::{CODEX, TrustFile},
 };
-use crate::{agent::hooks, state::AgentState};
+use crate::{agent::hooks, ai::IntegrationKind, state::AgentState};
 
 /// The Codex app, which `codex app` offers to install when it is missing.
 pub(in crate::cli) const APP: App = App {
@@ -117,7 +117,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
             "PostToolUse",
             hooks::state(shoal, None, AgentState::Working),
         ),
-        ("Stop", hooks::state(shoal, None, AgentState::Idle)),
+        ("Stop", hooks::turn_ended(shoal, IntegrationKind::Codex)),
     ]
 }
 

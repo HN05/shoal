@@ -18986,6 +18986,38 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
 }
 
 #[test]
+fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
+    let fixture = Fixture::new();
+    fixture.add("cached");
+    // The hook reads the lifetime from the environment the agent runs with.
+    let output = fixture
+        .command()
+        .args(["run", "--workspace", "cached", "--", "sh", "-c"])
+        .arg(concat!(
+            r#""$0" internal agent-state idle --ends-turn claude >/dev/null && "#,
+            r#""$0" status --json && "$0" status --text"#
+        ))
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .env("CLAUDE_CODE_PROMPT_CACHE_TTL", "5m")
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let shown = String::from_utf8(output.stdout).unwrap();
+    let status: Value = serde_json::Deserializer::from_str(&shown)
+        .into_iter()
+        .next()
+        .unwrap()
+        .unwrap();
+    let state = &status["workspace"]["agent_state"];
+    assert_eq!(
+        state["prompt_cache_expires_at"].as_i64(),
+        state["since"].as_i64().map(|since| since + 300),
+        "{status}"
+    );
+    assert!(shown.contains("Prompt cache:  expires at "), "{shown}");
+}
+
+#[test]
 fn agents_report_their_turn_state_until_their_execution_ends() {
     let fixture = Fixture::new();
     fixture.add("reporter");

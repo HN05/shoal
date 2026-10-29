@@ -28,6 +28,10 @@ pub enum InternalCommand {
     /// Report the agent's turn state; Shoal's agent hooks call it.
     AgentState {
         state: crate::state::AgentState,
+        /// The integration of an agent whose turn this idle report ends,
+        /// which reads how long the agent's prompt cache lives.
+        #[arg(long, value_name = "INTEGRATION")]
+        ends_turn: Option<crate::ai::IntegrationKind>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

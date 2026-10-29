@@ -65,6 +65,14 @@ impl Integration for Claude {
         &[(PROMPT_CACHE_1H, "1")]
     }
 
+    fn prompt_cache(
+        &self,
+        variable: &dyn Fn(&str) -> Option<OsString>,
+        home: &Path,
+    ) -> Option<std::time::Duration> {
+        Some(prompt_cache::lifetime(variable, home))
+    }
+
     /// Empty settings, which the wrapper's merge gives the proxy's URL.
     fn proxy_args(&self) -> Vec<OsString> {
         vec!["--settings".into(), "{}".into()]
@@ -231,7 +239,7 @@ fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
             "Notification",
             hooks::state(shoal, Some("idle_prompt"), AgentState::Idle),
         ),
-        ("Stop", hooks::state(shoal, None, AgentState::Idle)),
+        ("Stop", hooks::turn_ended(shoal, IntegrationKind::Claude)),
         (
             "StopFailure",
             hooks::turn_failed(shoal, IntegrationKind::Claude),
@@ -289,6 +297,7 @@ const CUSTOM_HEADERS: &str = "ANTHROPIC_CUSTOM_HEADERS";
 /// lifetime is set elsewhere.
 const PROMPT_CACHE_1H: &str = "ENABLE_PROMPT_CACHING_1H";
 
+mod prompt_cache;
 mod settings;
 
 #[cfg(test)]
