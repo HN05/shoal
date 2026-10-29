@@ -292,7 +292,11 @@ impl ForgeRepo {
         self.require_all(action.needs(kind))?;
         match action {
             Action::Review(review) => return self.submit_review(account, number, review).await,
-            Action::React(change) => return self.react(account, kind, number, change).await,
+            // Boxed so finding a comment among the item's discussion does not
+            // grow the future of every action.
+            Action::React(change) => {
+                return Box::pin(self.react(account, kind, number, change)).await;
+            }
             _ => {}
         }
         let per_item = self.check_uploads(account, action.attachments()).await?;
