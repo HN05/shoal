@@ -77,7 +77,10 @@ repository may refuse it. Before opening one, search for an
 existing issue with `shoal issue list <words>` (`--state all`, `--label`,
 `--author`, `--limit`; `pr list` takes the same), and comment there instead of
 opening a duplicate. Merging is
-the user's: `shoal pr merge` refuses workspace processes.
+the user's: `shoal pr merge` refuses workspace processes. `shoal pr revert
+[<number>]` opens a PR that undoes a merged one; where the forge cannot, it
+opens it from a child workspace already marked done, which goes once the
+revert merges.
 
 A repository can require the user's approval for issues and PRs you open
 (`[approvals]`). Then `issue open` and `pr open` exit 0 with `proposed`, an

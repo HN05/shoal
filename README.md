@@ -209,6 +209,7 @@ shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comment
 shoal pr update --method rebase # Update the linked PR's branch from its base on the forge
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-auto withdraws it
+shoal pr revert 42            # Open a PR that reverts merged PR 42
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it

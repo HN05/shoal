@@ -24,6 +24,7 @@ mod context;
 mod list;
 mod open;
 mod react;
+mod revert;
 mod review;
 mod reviewers;
 mod thread;
@@ -44,6 +45,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         PrCommand::Open { workspace, pull } => {
             return open_pr(ctx, workspace, pull_options(pull)?).await;
         }
+        PrCommand::Revert { item, revert } => return revert::revert(ctx, item, revert).await,
         PrCommand::Edit { item, edit } => (item, Action::Edit(pr_edit(edit)?), "PR updated"),
         PrCommand::Reviewers { item } => return reviewers::reviewers(ctx, &item).await,
         PrCommand::Comment { item, body, files } => {

@@ -2646,6 +2646,7 @@ shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr update --method rebase    # take in the base's commits on the forge
 shoal pr merge --method rebase --delete-branch
 shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
+shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
@@ -2744,6 +2745,25 @@ GitLab's merge when the pipeline succeeds, or Forgejo's merge when checks
 succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
+`revert` opens a PR that undoes a merged PR into its base branch and refuses
+one that has not merged. It takes `pr open`'s options except `--base`; its
+title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,
+and its labels to the reverted PR's. Where the forge reverts PRs (the
+`revert_prs` capability, GitHub only), the forge opens it from a branch it
+creates, and the workspace records it as opened without linking it; a
+workspace process cannot have it opened where `[approvals] pr_open` asks for
+the user's approval, since the forge's revert cannot wait for it. Elsewhere
+Shoal creates a workspace on branch `revert-<number>` from the base branch as
+`origin` has it, set up as any new workspace and a child of the workspace a
+workspace process runs in. It reverts the merge in one commit: a merge commit
+against its first parent; the PR's commits when the base's latest first-parent
+commits carry their messages, as after a rebase or fast-forward; otherwise the
+one squashed commit. It then pushes and opens the PR as `pr open` does, linked
+to the new workspace, and marks that workspace done with cleanup, so it goes
+once the revert merges. A revert that conflicts, or that changes nothing,
+removes the new workspace and fails, listing the conflicting files; when only
+opening the PR fails, the workspace stays for `shoal pr open --workspace`.
+Its JSON is `pr open`'s, with the new `workspace` when Shoal made one.
 `review` submits one review with exactly one of `--comment`, `--approve` or
 `--request-changes`, a body from `--body` or `--body-file`, and comments on
 single lines of the PR's diff: repeated `--line PATH:LINE BODY` on a line of the

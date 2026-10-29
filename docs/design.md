@@ -1379,7 +1379,11 @@ state in the title, so callers see the same item either way. Each backend
 declares the capabilities it has, and a request needing one it lacks is refused
 before anything is sent with one typed error naming the forge and the
 capability, so a backend gains a capability without changes elsewhere;
-`shoal forge capabilities` reports them so agents can check first. Actions run in the
+`shoal forge capabilities` reports them so agents can check first. A revert uses
+the forge's own where it has one, and elsewhere reverts the merge with Git in a
+new workspace that opens the PR and goes once it merges, so backing out a merge
+needs no agent; a conflicting revert does, so it is abandoned rather than left
+half done. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, while
 merging and a review's verdict stay the user's decisions, so scoped callers can
 comment in a review but not merge, approve or request changes, and those act as
