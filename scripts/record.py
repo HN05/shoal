@@ -84,19 +84,31 @@ def prepare_sandbox(directory):
     return sandbox
 
 
-def record(sandbox, tape, setup):
-    sandbox.start_daemon()
-    if setup is not None:
-        subprocess.run(["sh", str(setup)], env=sandbox.env, cwd=sandbox.env["HOME"],
-                       stdin=subprocess.DEVNULL, check=True)
+def run_setup(sandbox, setup):
+    subprocess.run(["sh", str(setup)], env=sandbox.env, cwd=sandbox.env["HOME"],
+                   stdin=subprocess.DEVNULL, check=True)
+
+
+def run_vhs(sandbox, tape):
     return subprocess.call(["vhs", str(tape)], env=sandbox.env, cwd=tape.parent)
 
 
-def clean_up(sandbox, directory, since):
-    """Stop the daemon and what the run started, returning what survives.
-    Another termination signal no longer cuts this short."""
+def record(sandbox, tape, setup):
+    sandbox.start_daemon()
+    if setup is not None:
+        run_setup(sandbox, setup)
+    return run_vhs(sandbox, tape)
+
+
+def ignore_termination():
+    """Let cleanup run to the end however many termination signals arrive."""
     for number in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(number, signal.SIG_IGN)
+
+
+def clean_up(sandbox, directory, since):
+    """Stop the daemon and what the run started, returning what survives."""
+    ignore_termination()
     sandbox.stop_daemon()
     return stop_leftovers(processes.started_by_run(directory, since),
                           "processes the recording left running")
