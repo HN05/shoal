@@ -581,7 +581,7 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     manager
         .store
         .run(|db| {
-            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
         .await
@@ -681,7 +681,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     manager
         .store
         .run(|db| {
-            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
         .await
@@ -717,7 +717,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     manager
         .store
         .run(|db| {
-            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            db.execute_batch(BEFORE_ATTACHED_FILES)?;
             Ok(())
         })
         .await
@@ -744,3 +744,9 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     );
     reopened.store.shutdown().await;
 }
+
+/// Return a current state database to version 87, before Shoal recorded
+/// attached files, undoing the later migrations that cannot run twice.
+const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
+    ALTER TABLE workspace_holds DROP COLUMN placed_by;
+    PRAGMA user_version=87;";

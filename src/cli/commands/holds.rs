@@ -10,7 +10,7 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::WorkspaceHold,
+    model::{HoldPlacer, WorkspaceHold},
     protocol::HoldMethod,
 };
 
@@ -101,9 +101,13 @@ fn render(holds: &[WorkspaceHold]) {
     }
     for hold in holds {
         outln!(
-            "  {}{}",
+            "  {}{}{}",
             hold.name,
-            optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+            optional(hold.reason.as_deref(), |r| format!(" ({r})")),
+            match hold.placed_by {
+                HoldPlacer::Agent => " [placed by an agent]",
+                HoldPlacer::User => "",
+            }
         );
     }
 }

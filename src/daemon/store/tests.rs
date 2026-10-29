@@ -307,6 +307,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 91 {
         db.execute_batch(PARENT_REMOVAL)?;
     }
+    if version >= 92 {
+        db.execute_batch(HOLD_PLACERS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

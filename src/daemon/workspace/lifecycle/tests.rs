@@ -336,7 +336,12 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         .unwrap()
         .unwrap();
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let removal = Removal::Automatic {

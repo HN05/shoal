@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 91;
+const SCHEMA_VERSION: i64 = 92;
 
 #[cfg(test)]
 mod benchmark;
@@ -434,6 +434,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (89, EARLIER_ATTACHED_FILES, None),
     (90, include_str!("store/workspace_item_runs.sql"), None),
     (91, PARENT_REMOVAL, None),
+    (92, HOLD_PLACERS, None),
 ];
 
 /// The repositories whose copies of files attached to messages before Shoal
@@ -453,6 +454,9 @@ const QUIET_AGENT_MESSAGES: &str = "ALTER TABLE agent_messages
 /// Removal takes a workspace's children before it, so none moves up. Tests
 /// emulating an earlier database may have dropped the trigger already.
 const PARENT_REMOVAL: &str = "DROP TRIGGER IF EXISTS workspace_parent_removed;";
+/// Who placed each hold; earlier holds were the user's and host apps'.
+const HOLD_PLACERS: &str = "ALTER TABLE workspace_holds
+    ADD COLUMN placed_by TEXT NOT NULL DEFAULT 'user' CHECK(placed_by IN ('user','agent'));";
 /// What a workspace's agent calls its work.
 const WORKSPACE_TITLES: &str = "ALTER TABLE workspaces ADD COLUMN title TEXT;";
 

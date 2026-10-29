@@ -56,7 +56,7 @@ pub(super) async fn handle(
         Operation::Agent(method) => agents::handle(&server.manager, method, caller).await,
         Operation::Chat(method) => chats::handle(&server.manager, method, caller).await,
         Operation::Queue(method) => queue::handle(&server.manager, method, caller).await,
-        Operation::Hold(method) => holds::handle(&server.manager, method).await,
+        Operation::Hold(method) => holds::handle(&server.manager, method, caller).await,
         Operation::Demo(method) => demos::handle(&server.manager, method).await,
         Operation::File(method) => files::handle(&server.manager, method).await,
         Operation::Item(method) => items::handle(&server.manager, method, caller).await,

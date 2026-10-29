@@ -58,7 +58,12 @@ async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     // Neither the leaf's hold nor its unsaved file keeps it; a checkpoint
     // keeps the file.
     manager
-        .acquire_hold(&leaf.id, "editor".into(), None)
+        .acquire_hold(
+            &leaf.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     std::fs::write(leaf.path.join("draft.txt"), "draft").unwrap();
@@ -259,7 +264,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
 
     // Removal would release the user's holds.
     manager
-        .acquire_hold(&child.id, "editor".into(), None)
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     // The check refuses too, so a batch refuses before removing any.
@@ -271,7 +281,7 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     }
     // Removing it would release the holds of the workspaces below it too.
     manager
-        .release_hold(&child.id, "editor".into())
+        .release_hold(&child.id, "editor".into(), crate::model::HoldPlacer::User)
         .await
         .unwrap();
     let grandchild = manager
@@ -279,7 +289,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .await
         .unwrap();
     manager
-        .acquire_hold(&grandchild.id, "editor".into(), None)
+        .acquire_hold(
+            &grandchild.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let mut method = remove(&child.name);
@@ -291,7 +306,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         "{error:#}"
     );
     manager
-        .acquire_hold(&child.id, "editor".into(), None)
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     // So does the removal itself, for a hold acquired after authorization.
@@ -456,7 +476,12 @@ async fn children_never_keep_their_parent_and_go_with_it() {
         .await
         .unwrap();
     manager
-        .acquire_hold(&child.id, "editor".into(), None)
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     std::fs::write(child.path.join("draft.txt"), "draft").unwrap();

@@ -1,16 +1,23 @@
 //! Caller-named claims of workspace use, independent of assignment completion.
-use anyhow::Result;
-use rusqlite::{Connection, params};
+use anyhow::{Result, ensure};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{GuardMode, Manager};
-use crate::{daemon::store, model::WorkspaceHold, validate};
+use crate::{
+    daemon::store,
+    model::{HoldPlacer, WorkspaceHold},
+    validate,
+};
 
 impl Manager {
+    /// Hold the workspace as `placed_by`; repeating a held name keeps the
+    /// hold as it was placed.
     pub async fn acquire_hold(
         &self,
         selector: &str,
         name: String,
         reason: Option<String>,
+        placed_by: HoldPlacer,
     ) -> Result<WorkspaceHold> {
         validate::name("hold", &name)?;
         validate::reason("hold", reason.as_deref())?;
@@ -24,12 +31,12 @@ impl Manager {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
             tx.execute(
-                "INSERT INTO workspace_holds(workspace_id,name,reason,created_at) VALUES (?1,?2,?3,?4)
+                "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
                  ON CONFLICT(workspace_id,name) DO NOTHING",
-                params![id, name, reason, crate::time::unix_seconds() as i64],
+                params![id, name, reason, crate::time::unix_seconds() as i64, placed_by],
             )?;
             let hold = tx.query_row(
-                "SELECT workspace_id,name,reason,created_at FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+                &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
                 params![id, name], row,
             )?;
             tx.commit()?;
@@ -39,16 +46,36 @@ impl Manager {
         Ok(hold)
     }
 
-    pub async fn release_hold(&self, selector: &str, name: String) -> Result<()> {
+    /// Release the hold `name` for `released_by`: an agent releases only
+    /// the holds agents placed.
+    pub async fn release_hold(
+        &self,
+        selector: &str,
+        name: String,
+        released_by: HoldPlacer,
+    ) -> Result<()> {
         validate::name("hold", &name)?;
         let workspace = self.workspace(selector).await?;
         let id = workspace.id.clone();
         self.store
             .run(move |db| {
-                db.execute(
+                let tx = db.transaction()?;
+                let placed_by: Option<HoldPlacer> = tx
+                    .query_row(
+                        "SELECT placed_by FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+                        params![id, name],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                ensure!(
+                    released_by == HoldPlacer::User || placed_by != Some(HoldPlacer::User),
+                    "hold {name} is the user's; workspace processes release only the holds agents placed"
+                );
+                tx.execute(
                     "DELETE FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
                     params![id, name],
                 )?;
+                tx.commit()?;
                 Ok(())
             })
             .await?;
@@ -75,8 +102,11 @@ impl Manager {
     }
 }
 
+const COLUMNS: &str = "SELECT workspace_id,name,reason,created_at,placed_by FROM workspace_holds";
+
 pub(super) fn list(db: &Connection, id: &str) -> Result<Vec<WorkspaceHold>> {
-    Ok(db.prepare("SELECT workspace_id,name,reason,created_at FROM workspace_holds WHERE workspace_id=?1 ORDER BY name")?
+    Ok(db
+        .prepare(&format!("{COLUMNS} WHERE workspace_id=?1 ORDER BY name"))?
         .query_map([id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }
@@ -87,6 +117,7 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceHold> {
         name: row.get(1)?,
         reason: row.get(2)?,
         created_at: row.get(3)?,
+        placed_by: row.get(4)?,
     })
 }
 

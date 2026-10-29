@@ -434,7 +434,12 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     );
     // A hold, not the withdrawn completion, keeps a merged workspace.
     manager
-        .acquire_hold(&workspace.id, "review".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
@@ -444,7 +449,11 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     manager.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     manager
-        .release_hold(&workspace.id, "review".into())
+        .release_hold(
+            &workspace.id,
+            "review".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -553,7 +562,12 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
 async fn holds_retain_completion_without_turning_it_into_an_error() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let completed = manager
@@ -567,7 +581,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     assert!(completion.error.is_none());
     assert!(workspace.path.exists());
     manager
-        .release_hold(&workspace.id, "app".into())
+        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -709,7 +723,12 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
     fs::write(workspace.path.join("new-work"), "keep").unwrap();
     commit(&workspace.path, "new-work");
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
@@ -722,7 +741,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .unwrap();
     assert!(!completion.integrated);
     manager
-        .release_hold(&workspace.id, "app".into())
+        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -798,13 +817,21 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     fs::write(dirty.path.join("draft"), "draft").unwrap();
     let held = split("held", parent.id.clone()).await;
     manager
-        .acquire_hold(&held.id, "review".into(), None)
+        .acquire_hold(
+            &held.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let nested = split("nested", parent.id.clone()).await;
     let leaf = split("leaf", nested.id.clone()).await;
 
-    manager.mark_done(&parent.id, false, false, Vec::new()).await.unwrap();
+    manager
+        .mark_done(&parent.id, false, false, Vec::new())
+        .await
+        .unwrap();
     assert_eq!(
         manager.cleanup_reason(&dirty).await,
         CleanupReason::AncestorCompleted {
@@ -848,16 +875,25 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         )
         .await
         .unwrap();
-    manager.mark_done(&parent.id, false, false, Vec::new()).await.unwrap();
+    manager
+        .mark_done(&parent.id, false, false, Vec::new())
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once it is withdrawn.
-    manager.mark_done(&parent.id, true, false, Vec::new()).await.unwrap();
+    manager
+        .mark_done(&parent.id, true, false, Vec::new())
+        .await
+        .unwrap();
     manager.undo_done(&parent.id).await.unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once the parent committed after it.
-    manager.mark_done(&parent.id, true, false, Vec::new()).await.unwrap();
+    manager
+        .mark_done(&parent.id, true, false, Vec::new())
+        .await
+        .unwrap();
     commit_file(&parent.path, "parent-work");
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());

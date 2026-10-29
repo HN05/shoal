@@ -75,7 +75,12 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     }
     let held = manager.workspace("first").await.unwrap();
     manager
-        .acquire_hold(&held.id, "keep".into(), None)
+        .acquire_hold(
+            &held.id,
+            "keep".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let readings = AtomicUsize::new(0);
@@ -107,7 +112,10 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     monitor.check(&manager, start, above_stop).await.unwrap();
     assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
     // A pass that could not free enough space waits for the interval.
-    manager.release_hold(&held.id, "keep".into()).await.unwrap();
+    manager
+        .release_hold(&held.id, "keep".into(), crate::model::HoldPlacer::User)
+        .await
+        .unwrap();
     monitor.check(&manager, start, above_stop).await.unwrap();
     assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
     monitor
@@ -191,7 +199,12 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
         .await
         .unwrap();
     manager
-        .acquire_hold(&held.id, "keep".into(), None)
+        .acquire_hold(
+            &held.id,
+            "keep".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let repo = manager.repository(&repo.id).await.unwrap();
@@ -289,7 +302,12 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
         .await
         .unwrap();
     manager
-        .acquire_hold(&held.id, "keep".into(), None)
+        .acquire_hold(
+            &held.id,
+            "keep".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let repo = manager.repository(&repo.id).await.unwrap();

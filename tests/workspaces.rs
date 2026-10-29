@@ -23982,7 +23982,8 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
             .contains("app-thread (Open thread)")
     );
-    // Workspace processes list their holds but cannot change them.
+    // Workspace processes list their holds and release only the holds
+    // agents placed.
     let scoped = |args: &[&str]| {
         let mut command = vec![
             "run",
@@ -24001,14 +24002,18 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
         expected
     );
-    for action in ["acquire", "release"] {
-        let output = scoped(&[action, "hold", "--name", "scoped"]);
-        assert!(!output.status.success());
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("shoal questions ask"),
-            "{output:?}"
-        );
-    }
+    let refused = scoped(&["acquire", "hold", "--name", "scoped"]);
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("shoal questions ask"),
+        "{refused:?}"
+    );
+    let release = scoped(&["release", "hold", "--name", "app-thread"]);
+    assert!(!release.status.success());
+    assert!(
+        String::from_utf8_lossy(&release.stderr).contains("is the user's"),
+        "{release:?}"
+    );
     fixture.restart();
     assert_eq!(
         fixture.ok(&["leases", "hold", "--workspace", "held"]),

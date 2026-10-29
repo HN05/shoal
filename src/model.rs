@@ -365,7 +365,21 @@ pub struct WorkspaceHold {
     pub name: String,
     pub reason: Option<String>,
     pub created_at: i64,
+    #[serde(default)]
+    pub placed_by: HoldPlacer,
 }
+
+crate::state::states!(
+    /// Who placed a hold, which decides who may release it.
+    #[derive(Default)]
+    HoldPlacer {
+        /// The user or a host app; only they release it.
+        #[default]
+        User => "user",
+        /// An agent, whose workspace or one above it may release it.
+        Agent => "agent",
+    }
+);
 
 impl Workspace {
     pub fn new_record(
