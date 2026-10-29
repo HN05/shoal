@@ -286,8 +286,9 @@ work with the signal as its stop reason, before its wrapper stops it, and its re
 a reboot without a command; run `shoal stop --all` first to keep agents down.
 On Linux the daemon also holds a systemd-logind shutdown delay lock while it
 runs. When a shutdown starts, it stops what `shoal stop --all` stops, each
-wrapper saving its agent as for that signal, and admits nothing from the agent
-queue until the shutdown is cancelled; then it releases the lock, which logind
+wrapper saving its agent as for that signal, but keeps waiting and requested
+restores, and admits nothing from the agent queue until the shutdown is
+cancelled; then it releases the lock, which logind
 honours for at most its `InhibitDelayMaxSec`. A `system_shutdown` notification
 says whether `shoal resume --all` is needed, a workspace that does not stop
 records `stop_failed`, and a refused lock `environment_problem`. An

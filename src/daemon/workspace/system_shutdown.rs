@@ -17,10 +17,10 @@ use crate::{
 
 impl Manager {
     /// Stop the workspaces `shoal stop --all` stops, each wrapper saving its
-    /// agent before the stop and queueing restores that need no user, and
-    /// hold the agent queue until the shutdown is cancelled, so nothing
-    /// starts again before it. The user learns what to continue. An update
-    /// waits for the stop.
+    /// agent before the stop and requesting restores that need no user,
+    /// which the stop keeps with those already waiting, and hold the agent
+    /// queue until the shutdown is cancelled, so nothing starts again before
+    /// it. The user learns what to continue. An update waits for the stop.
     pub(crate) async fn stop_for_system_shutdown(&self) {
         let _operation = self.gates.operation().await;
         self.agent_queue.suspend(true);
@@ -31,11 +31,10 @@ impl Manager {
                 return;
             }
         };
-        let results =
-            join_all(targets.iter().map(|workspace| {
-                self.stop_workspace(&workspace.id, StopRequest::system_shutdown())
-            }))
-            .await;
+        let results = join_all(targets.iter().map(|workspace| {
+            self.stop_keeping_restores(&workspace.id, StopRequest::system_shutdown())
+        }))
+        .await;
         let mut stopped = Vec::new();
         for (workspace, result) in targets.iter().zip(results) {
             match result {

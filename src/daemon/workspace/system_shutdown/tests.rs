@@ -20,7 +20,7 @@ async fn read<T: serde::de::DeserializeOwned>(stream: &mut BufReader<UnixStream>
 }
 
 #[tokio::test]
-async fn a_shutdown_stops_running_work_and_holds_the_queue_until_cancelled() {
+async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -82,7 +82,7 @@ async fn a_shutdown_stops_running_work_and_holds_the_queue_until_cancelled() {
         manager.gates.try_quiesce().is_none(),
         "an update must wait for the stop"
     );
-    // The wrapper saves an agent whose restore waits for the user.
+    // The wrapper saves its agent and requests the restore.
     recovery::save_record(
         &manager.paths,
         &workspace.id,
@@ -92,6 +92,11 @@ async fn a_shutdown_stops_running_work_and_holds_the_queue_until_cancelled() {
         None,
     )
     .unwrap();
+    let request = manager
+        .paths
+        .workspace_state(&workspace.id)
+        .join(format!("{}.restore-request.json", plan.id));
+    std::fs::write(&request, "{}").unwrap();
     let finished = ExecutionEvent::Finished { exit_code: 143 };
     protocol::write(connection.get_mut(), &finished)
         .await
@@ -112,16 +117,28 @@ async fn a_shutdown_stops_running_work_and_holds_the_queue_until_cancelled() {
     assert_eq!(
         stopped,
         [
-            "Stopped work in 1 workspace before the system shut down; continue it with shoal resume --all"
+            "Stopped work in 1 workspace before the system shut down; the agent queue restores its agents"
         ]
     );
-    // The stopped agent stays stopped work, not a last session.
+    // The stopped agent stays stopped work with its request, not a last session.
     let saved = Saved::load(&manager.paths, &workspace.id).unwrap();
     assert_eq!(saved.agents.len(), 1);
     assert!(saved.sessions.is_empty());
+    assert!(request.exists());
 
+    // The restore queues but starts only once the shutdown is cancelled.
+    let restore = async || {
+        manager.dispatch_queue().await.unwrap();
+        let entries = manager.queue_entries().await.unwrap();
+        let entry = entries
+            .into_iter()
+            .find(|entry| entry.execution.as_deref() == Some(plan.id.as_str()));
+        entry.expect("the requested restore was not queued").state
+    };
+    assert_eq!(restore().await, crate::state::QueueState::Queued);
     manager.system_shutdown_cancelled();
     assert!(!manager.agent_queue.suspended());
+    assert_eq!(restore().await, crate::state::QueueState::Starting);
 }
 
 #[test]

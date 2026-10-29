@@ -917,6 +917,17 @@ impl Manager {
             reason,
             save: Save::Everything,
         };
+        self.stop_keeping_restores(selector, request).await
+    }
+
+    /// Stop executions other than agents that protection already stopped
+    /// for `request`, keeping their restores and those the stopped agents
+    /// request.
+    pub(super) async fn stop_keeping_restores(
+        &self,
+        selector: &str,
+        request: StopRequest,
+    ) -> Result<()> {
         self.stop_workspace_executions(
             selector,
             request,
