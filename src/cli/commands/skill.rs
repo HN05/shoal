@@ -173,9 +173,7 @@ fn installed_directories() -> Result<BTreeSet<PathBuf>> {
 }
 
 fn packaged() -> Result<Contents> {
-    let configured = std::env::var_os(crate::env::SKILLS_DIR)
-        .map(PathBuf::from)
-        .or_else(|| crate::env::COMPILED_SKILLS_DIR.map(PathBuf::from));
+    let configured = std::env::var_os(crate::env::SKILLS_DIR).map(PathBuf::from);
     let source = packaged_source(configured, &std::env::current_exe()?)?;
     skill_contents(source.as_deref())
 }

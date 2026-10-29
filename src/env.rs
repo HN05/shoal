@@ -87,10 +87,6 @@ pub const PROFILE: &str = "SHOAL_PROFILE";
 pub const DEV_USER_FILES: &str = "SHOAL_DEV_USER_FILES";
 /// Runtime override for the packaged skills directory.
 pub const SKILLS_DIR: &str = "SHOAL_SKILLS_DIR";
-/// Build-time fallback for the packaged skills directory; the macro requires a
-/// literal. Named apart from the runtime override, which launched agents
-/// inherit, so their own builds never embed it.
-pub const COMPILED_SKILLS_DIR: Option<&str> = option_env!("SHOAL_BUILD_SKILLS_DIR");
 /// Claude Code's configuration directory override (its `.claude.json` and skills).
 pub const CLAUDE_CONFIG_DIR: &str = "CLAUDE_CONFIG_DIR";
 /// Codex's user configuration and state directory override.

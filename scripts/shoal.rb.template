@@ -7,11 +7,6 @@ class Shoal < Formula
 
 @RELEASE_SOURCES@
 
-  head do
-    url "@REPOSITORY@.git", branch: "main"
-    depends_on "rust" => :build
-  end
-
   depends_on "fzf"
   depends_on "git"
   depends_on "neurosnap/tap/zmx"
@@ -19,15 +14,10 @@ class Shoal < Formula
   uses_from_macos "lsof"
 
   def install
-    if build.head?
-      system "bash", "scripts/install-homebrew.sh", prefix, opt_prefix,
-                     "--jobs", ENV.make_jobs.to_s
-    else
-      libexec.install "shoal"
-      (share/"shoal").install "skills"
-      (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
-      bin.install_symlink libexec/"shoal"
-    end
+    libexec.install "shoal"
+    (share/"shoal").install "skills"
+    (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
+    bin.install_symlink libexec/"shoal"
   end
 
   def caveats

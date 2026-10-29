@@ -35,18 +35,19 @@ Progress uses terminal stderr only and is suppressed with JSON output or `TERM=d
 ## Homebrew
 
 The [HN05 tap](https://github.com/HN05/homebrew-tap) installs prebuilt releases
-on macOS and Linux (arm64 or x86_64); `--HEAD` builds from source and requires
-Rust. Both channels use the same [runtime dependencies](../README.md#runtime-dependencies).
+on macOS and Linux (arm64 or x86_64) with the same
+[runtime dependencies](../README.md#runtime-dependencies) as a downloaded binary.
 
 ```sh
 brew tap hn05/tap
-brew install hn05/tap/shoal            # Or: brew install --HEAD hn05/tap/shoal
+brew install hn05/tap/shoal
 shoal skill install
 shoal daemon install
 ```
 
-Upgrade with `brew update && brew upgrade hn05/tap/shoal` (`--fetch-HEAD` for
-`main`). `shoal update` refuses Homebrew installations; for a downloaded binary,
+Upgrade with `brew update && brew upgrade hn05/tap/shoal`. An installation from
+the former `--HEAD` channel moves to releases with `brew reinstall
+hn05/tap/shoal`. `shoal update` refuses Homebrew installations; for a downloaded binary,
 it installs the latest GitHub release's archive for this platform when that
 release is newer, after checking it against the release's `SHA256SUMS` and its
 reported version, by replacing the resolved executable file. Managed daemons notice the replacement and restart once daemon operations are
@@ -55,15 +56,12 @@ up to ten minutes for it. Followed event and notification streams and
 item waits reconnect across the handoff, continuing in the installed release
 when its protocol differs; use `shoal daemon restart` to apply an
 upgrade immediately. Tracked agents and commands keep running while the daemon
-is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). The channels share one installation,
-daemon, and skill path; to switch, run `shoal daemon stop`, uninstall, install
-the other channel, and `shoal daemon start`. State and installed skills live
+is away and reattach to the next one; see [Daemon restarts](#daemon-restarts). State and installed skills live
 outside the package and survive; the next `shoal` command
 [updates installed skills](#agent-skill-outside-project-repositories) from
 Homebrew's stable `opt` path.
 Packagers can set `SHOAL_SKILLS_DIR` to an absolute directory holding every
-bundled `<skill>/SKILL.md` at runtime, overriding `SHOAL_BUILD_SKILLS_DIR` at
-build time. Without either, an adjacent `shoal-skills` symlink can point through
+bundled `<skill>/SKILL.md` at runtime. Without it, an adjacent `shoal-skills` symlink can point through
 a stable installation prefix; relative targets resolve lexically against its
 directory. Without that link, installation uses the embedded skills.
 

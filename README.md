@@ -11,8 +11,7 @@ shoal daemon install
 shoal skill install
 ```
 
-Use `brew install --HEAD hn05/tap/shoal` to track `main` instead of releases, or
-download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
+Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases);
 the macOS binaries are unsigned, so clear the download quarantine first with
 `xattr -d com.apple.quarantine shoal`.
 Homebrew installs the additional tools for workspace management and interactive
@@ -423,8 +422,7 @@ brew update
 brew upgrade hn05/tap/shoal
 ```
 
-Update a downloaded binary with `shoal update`. Managed daemons apply the upgrade once their operations are idle. For
-a main-channel install, use `brew upgrade --fetch-HEAD hn05/tap/shoal`; run
+Update a downloaded binary with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment
 are stopped instead; restore them with `shoal resume --all`. The next `shoal`

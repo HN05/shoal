@@ -32,9 +32,7 @@ end
             self.assertIn(f'https://github.com/HN05/shoal/releases/download/v0.2.0/shoal-v0.2.0-{platform}.tar.gz', result)
         self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), len(updater.release_platforms()))
         self.assertIn('  version "0.2.0"', result)
-        self.assertIn('head do\n    url "https://github.com/HN05/shoal.git", branch: "main"\n    depends_on "rust" => :build\n  end', result)
-        self.assertEqual(result.count('depends_on "rust"'), 1)
-        self.assertIn('if build.head?', result)
+        self.assertNotRegex(result, r"\bhead\b")
         self.assertIn('libexec.install "shoal"', result)
         self.assertIn('(libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"', result)
         self.assertIn('bin.install_symlink libexec/"shoal"', result)
@@ -64,7 +62,7 @@ end
         source_url = "https://forgejo.example/HN05/shoal.git"
         result = self.update(formula, "0.2.0", "b" * 40, source_url)
         self.assertIn('url "https://forgejo.example/HN05/shoal/releases/download/v0.2.0/', result)
-        self.assertIn('url "https://forgejo.example/HN05/shoal.git", branch: "main"', result)
+        self.assertIn('homepage "https://forgejo.example/HN05/shoal"', result)
         self.assertNotIn("github.com", result)
         self.assertEqual(self.update(result, "0.2.0", "b" * 40, source_url), result)
         with self.assertRaises(ValueError):

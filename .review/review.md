@@ -278,7 +278,7 @@ instead of the PR delivery guidance below.
   Forgejo PR and issue references. Runtime dependency links target the tagged
   README on each host; reruns synchronize notes without replacing
   complete asset sets. Homebrew releases install checksummed binaries after
-  both release hosts publish assets; only `--HEAD` builds from source with Rust.
+  both release hosts publish assets; the formula has no head channel.
 - Prompt templates append the selected saved/worktree repository value to global
   guidance, falling back to the bundled chat template for an omitted global base.
   Empty repository values suppress only local additions; provenance reports the
