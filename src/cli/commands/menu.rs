@@ -740,15 +740,25 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
     }))
 }
 
-/// The issues and PRs `workspace` links.
+/// The issues and PRs `workspace` links in its own repository, the only
+/// ones `shoal view` reads for it.
 async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>> {
-    Ok(client::workspaces(&ctx.paths)
+    let record = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
         .find(|record| record.id == workspace)
-        .with_context(|| format!("unknown workspace: {workspace}"))?
-        .links
-        .items())
+        .with_context(|| format!("unknown workspace: {workspace}"))?;
+    let items = record.links.items();
+    if items.is_empty() {
+        return Ok(items);
+    }
+    let remote = crate::repository::remote_url_from_path(&record.path)
+        .await?
+        .context("item lookup needs an origin remote")?;
+    Ok(items
+        .into_iter()
+        .filter(|item| item.in_repository(&remote))
+        .collect())
 }
 
 /// The URL of one of `items`, listed by kind and title.

@@ -68,3 +68,18 @@ fn linked_items_list_each_url_once_with_its_title() {
         ]
     );
 }
+
+#[test]
+fn linked_items_know_their_repository() {
+    let item = |kind, url: &str| LinkedItem {
+        kind,
+        url: url.into(),
+        title: None,
+    };
+    let remote = "git@github.com:team/project.git";
+    assert!(item(ItemKind::Pr, "https://github.com/team/project/pull/7").in_repository(remote));
+    assert!(
+        item(ItemKind::Issue, "https://github.com/team/project/issues/3").in_repository(remote)
+    );
+    assert!(!item(ItemKind::Issue, "https://github.com/them/tool/issues/3").in_repository(remote));
+}

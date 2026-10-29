@@ -203,6 +203,15 @@ pub struct LinkedItem {
     pub title: Option<String>,
 }
 
+impl LinkedItem {
+    /// Whether the item belongs to the repository `remote` names, as an
+    /// issue opened elsewhere does not.
+    pub fn in_repository(&self, remote: &str) -> bool {
+        crate::forge::items::link::item(self.kind, &self.url)
+            .is_ok_and(|(repository, _)| repository.is_remote(remote))
+    }
+}
+
 crate::state::states!(
     /// Why a checkpoint was taken.
     CheckpointCause {
