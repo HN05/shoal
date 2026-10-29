@@ -133,7 +133,7 @@ impl Scoped for ItemMethod {
         Ok(match self {
             ItemMethod::ForgeType { .. } => None,
             ItemMethod::ItemAction {
-                action: Action::Merge { .. },
+                action: Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge,
                 ..
             } => bail!("merging is the user's decision; ask them with shoal alerts send"),
             ItemMethod::ItemAction {

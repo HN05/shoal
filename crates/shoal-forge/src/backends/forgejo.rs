@@ -100,6 +100,7 @@ impl Backend for Forgejo {
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
+            | Capability::AutoMerge
             | Capability::ForkPrs
             | Capability::Forks
             | Capability::LineComments
@@ -258,14 +259,37 @@ impl Backend for Forgejo {
         method: MergeMethod,
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
-        let number = current.item.number;
+        Ok(vec![merge_request(
+            repo,
+            current,
+            method,
+            delete_branch,
+            false,
+        )])
+    }
+
+    /// Forgejo merges now when the checks already succeed.
+    fn auto_merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        Ok(vec![merge_request(
+            repo,
+            current,
+            method,
+            delete_branch,
+            true,
+        )])
+    }
+
+    fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
         Ok(vec![Request::new(
-            HttpMethod::Post,
-            format!("{}/merge", repo.item_endpoint(ItemKind::Pr, number)),
-            Some(json!({
-                "Do": method.as_str(),
-                "delete_branch_after_merge": delete_branch,
-            })),
+            HttpMethod::Delete,
+            merge_endpoint(repo, current),
+            None,
         )])
     }
 
@@ -783,6 +807,31 @@ impl Backend for Forgejo {
     fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
         label["exclusive"].as_bool().unwrap_or(false)
     }
+}
+
+fn merge_endpoint(repo: &ForgeRepo, current: &Current) -> String {
+    format!(
+        "{}/merge",
+        repo.item_endpoint(ItemKind::Pr, current.item.number)
+    )
+}
+
+/// Merge the PR now, or once its checks succeed when `when_checks_succeed`.
+fn merge_request(
+    repo: &ForgeRepo,
+    current: &Current,
+    method: MergeMethod,
+    delete_branch: bool,
+    when_checks_succeed: bool,
+) -> Request {
+    let mut body = json!({
+        "Do": method.as_str(),
+        "delete_branch_after_merge": delete_branch,
+    });
+    if when_checks_succeed {
+        body["merge_when_checks_succeed"] = json!(true);
+    }
+    Request::new(HttpMethod::Post, merge_endpoint(repo, current), Some(body))
 }
 
 /// The `labels` that an exclusive label `edit` adds replaces: the other

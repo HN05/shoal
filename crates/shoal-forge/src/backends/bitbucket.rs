@@ -86,6 +86,9 @@ impl Backend for Bitbucket {
             | Capability::ReadJobLogs
             | Capability::ReadRuns => Support::Unsupported(None),
             Capability::Reactions => Support::Unsupported(Some("Bitbucket has no reactions")),
+            Capability::AutoMerge => {
+                Support::Unsupported(Some("Bitbucket's API cannot merge a pull request later"))
+            }
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
@@ -204,6 +207,7 @@ impl Backend for Bitbucket {
             base_sha: text(&value["destination"]["commit"]["hash"]),
             // Bitbucket does not report whether a pull request conflicts.
             conflict: None,
+            merges_now: false,
             reviewers: value["reviewers"]
                 .as_array()
                 .into_iter()
@@ -318,6 +322,20 @@ impl Backend for Bitbucket {
             method,
             delete_branch,
         )])
+    }
+
+    fn auto_merge(
+        &self,
+        _repo: &ForgeRepo,
+        _current: &Current,
+        _method: MergeMethod,
+        _delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        Err(capability::unsupported(self, Capability::AutoMerge))
+    }
+
+    fn cancel_auto_merge(&self, _repo: &ForgeRepo, _current: &Current) -> Result<Vec<Request>> {
+        Err(capability::unsupported(self, Capability::AutoMerge))
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {

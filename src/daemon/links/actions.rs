@@ -272,7 +272,7 @@ fn own_state(action: &Action) -> bool {
 /// and a review's verdict. Every other change is the agent's.
 fn users_decision(action: &Action) -> bool {
     match action {
-        Action::Merge { .. } => true,
+        Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge => true,
         Action::Review(review) => review.has_verdict(),
         _ => false,
     }

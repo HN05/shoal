@@ -24,6 +24,7 @@ fn pull(head_repository: Option<&str>) -> Current {
         head_sha: None,
         base_sha: None,
         conflict: None,
+        merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
         replaced_labels: Vec::new(),

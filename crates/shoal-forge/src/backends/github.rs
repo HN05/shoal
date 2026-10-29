@@ -97,6 +97,7 @@ impl Backend for GitHub {
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
+            | Capability::AutoMerge
             | Capability::ForkPrs
             | Capability::Forks
             | Capability::LineComments
@@ -377,6 +378,29 @@ impl Backend for GitHub {
             ));
         }
         Ok(requests)
+    }
+
+    /// GitHub refuses to merge later a PR it would merge now, so that one
+    /// merges now.
+    fn auto_merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        ensure!(
+            !delete_branch,
+            "GitHub deletes the branch of an automatic merge only when the repository's settings say so"
+        );
+        if current.merges_now {
+            return self.merge(repo, current, method, false);
+        }
+        Ok(vec![auto_merge_request(current, Some(method))?])
+    }
+
+    fn cancel_auto_merge(&self, _repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
+        Ok(vec![auto_merge_request(current, None)?])
     }
 
     /// GitHub reads discussion comments by GraphQL node ID, which REST
@@ -982,6 +1006,30 @@ fn draft_request(current: &Current, draft: bool) -> Result<Request> {
             ),
             "variables": { "id": id },
         })),
+    ))
+}
+
+/// The GraphQL request that has GitHub merge the PR `current` with `method`
+/// once it can, or withdraws that without one.
+fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<Request> {
+    let id = current
+        .node_id
+        .as_deref()
+        .context("GitHub did not report the PR's node ID")?;
+    let (query, variables) = match method {
+        Some(method) => (
+            "mutation($id: ID!, $method: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) { clientMutationId } }",
+            json!({ "id": id, "method": method.as_str().to_ascii_uppercase() }),
+        ),
+        None => (
+            "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) { clientMutationId } }",
+            json!({ "id": id }),
+        ),
+    };
+    Ok(Request::new(
+        HttpMethod::Post,
+        "graphql".into(),
+        Some(json!({ "query": query, "variables": variables })),
     ))
 }
 

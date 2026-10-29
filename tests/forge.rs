@@ -590,6 +590,8 @@ fn changes_use_the_agent_account_and_merges_the_users() {
             "POST repos/team/project/issues/8/comments": {"body": {}},
             format!("PUT {endpoint}/merge"): {"body": {"merged": true}},
             format!("POST {endpoint}/merge"): {"body": {}},
+            format!("DELETE {endpoint}/merge"): {"body": {}},
+            "POST graphql": {"body": {"data": {}}},
         }));
         let act = |action: Value| {
             fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
@@ -601,13 +603,15 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         );
         let merged = act(json!({"action": "merge", "method": "rebase", "delete_branch": false}));
         assert_eq!(merged["type"], "item", "{merged}");
+        let cancelled = act(json!({"action": "cancel_auto_merge"}));
+        assert_eq!(cancelled["type"], "item", "{cancelled}");
         let auth: Vec<_> = fixture
             .requests()
             .into_iter()
             .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
             .map(|request| request[2].clone())
             .collect();
-        assert_eq!(auth, [agent, user]);
+        assert_eq!(auth, [agent, user.clone(), user]);
     }
 
     // An fj wrapper whose home Shoal does not know cannot stand in for the agent.

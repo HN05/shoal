@@ -28,6 +28,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         head_sha: None,
         base_sha: None,
         conflict: None,
+        merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
         replaced_labels: Vec::new(),
@@ -331,6 +332,87 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
 }
 
 #[test]
+fn automatic_merges_use_each_forges_requests() {
+    let [github, forgejo] = forges();
+    let gitlab = ForgeRepo::parse("git@gitlab.com:group/repo.git").unwrap();
+    let auto = |delete_branch| Action::AutoMerge {
+        method: MergeMethod::Squash,
+        delete_branch,
+    };
+    let open = pr(&forgejo, false, &[]);
+    assert_eq!(
+        requests(&forgejo, &open, auto(true)),
+        [(
+            "POST".into(),
+            "repos/team/repo/pulls/7/merge".into(),
+            json!({"Do": "squash", "delete_branch_after_merge": true,
+                    "merge_when_checks_succeed": true})
+        )]
+    );
+    assert_eq!(
+        requests(&forgejo, &open, Action::CancelAutoMerge),
+        [(
+            "DELETE".into(),
+            "repos/team/repo/pulls/7/merge".into(),
+            Value::Null
+        )]
+    );
+
+    let open = pr(&gitlab, false, &[]);
+    assert_eq!(
+        requests(&gitlab, &open, auto(true)),
+        [(
+            "PUT".into(),
+            "projects/group%2Frepo/merge_requests/7/merge".into(),
+            json!({"squash": true, "should_remove_source_branch": true,
+                    "merge_when_pipeline_succeeds": true})
+        )]
+    );
+    assert_eq!(
+        requests(&gitlab, &open, Action::CancelAutoMerge),
+        [(
+            "POST".into(),
+            "projects/group%2Frepo/merge_requests/7/cancel_merge_when_pipeline_succeeds".into(),
+            Value::Null
+        )]
+    );
+
+    let mut open = pr(&github, false, &[]);
+    let enable = requests(&github, &open, auto(false));
+    assert_eq!((enable.len(), enable[0].1.as_str()), (1, "graphql"));
+    assert_eq!(
+        enable[0].2["variables"],
+        json!({"id": "PR_1", "method": "SQUASH"})
+    );
+    assert!(
+        enable[0].2["query"]
+            .to_string()
+            .contains("enablePullRequestAutoMerge")
+    );
+    let disable = requests(&github, &open, Action::CancelAutoMerge);
+    assert_eq!(disable[0].2["variables"], json!({"id": "PR_1"}));
+    assert!(
+        disable[0].2["query"]
+            .to_string()
+            .contains("disablePullRequestAutoMerge")
+    );
+    // GitHub keeps its own setting for deleting the branch.
+    assert!(github.plan(&open, &auto(true)).is_err());
+    // GitHub refuses to merge later what it would merge now.
+    open.merges_now = true;
+    assert_eq!(
+        requests(&github, &open, auto(false)),
+        [(
+            "PUT".into(),
+            "repos/team/repo/pulls/7/merge".into(),
+            json!({"merge_method": "squash"})
+        )]
+    );
+    open.item.state = ItemState::Closed;
+    assert!(github.plan(&open, &Action::CancelAutoMerge).is_err());
+}
+
+#[test]
 fn actions_refuse_what_the_item_cannot_take() {
     assert!(
         Action::Edit(Edit::default())
@@ -382,6 +464,15 @@ fn actions_need_the_capabilities_they_use() -> Result<()> {
         delete_branch: false,
     };
     assert_eq!(rebase.needs(ItemKind::Pr), [Capability::RebaseMerge]);
+    let auto = Action::AutoMerge {
+        method: MergeMethod::Rebase,
+        delete_branch: false,
+    };
+    assert_eq!(
+        auto.needs(ItemKind::Pr),
+        [Capability::AutoMerge, Capability::RebaseMerge]
+    );
+    assert!(Action::CancelAutoMerge.validate(ItemKind::Issue).is_err());
     assert_eq!(Action::Reopen.needs(ItemKind::Pr), [Capability::ReopenPrs]);
     assert!(Action::Reopen.needs(ItemKind::Issue).is_empty());
     let labels = Action::Edit(Edit {
@@ -402,6 +493,7 @@ fn actions_need_the_capabilities_they_use() -> Result<()> {
     let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
     assert!(bitbucket.require_all(labels.needs(ItemKind::Pr)).is_err());
     assert!(bitbucket.require_all(rebase.needs(ItemKind::Pr)).is_ok());
+    assert!(bitbucket.require_all(auto.needs(ItemKind::Pr)).is_err());
     Ok(())
 }
 

@@ -268,6 +268,19 @@ pub(crate) trait Backend {
         delete_branch: bool,
     ) -> Result<Vec<Request>>;
 
+    /// The requests that have the forge merge the open PR `current` once its
+    /// required checks and approvals pass.
+    fn auto_merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>>;
+
+    /// The requests that withdraw the automatic merge of the open PR `current`.
+    fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>>;
+
     /// Where activity records a posted comment: its source, and the
     /// response field that holds its ID.
     fn comment_key(&self) -> (&'static str, &'static str);
@@ -876,6 +889,20 @@ impl Backend for ForgeKind {
         delete_branch: bool,
     ) -> Result<Vec<Request>> {
         dispatch!(self, backend => backend.merge(repo, current, method, delete_branch))
+    }
+
+    fn auto_merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        dispatch!(self, backend => backend.auto_merge(repo, current, method, delete_branch))
+    }
+
+    fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
+        dispatch!(self, backend => backend.cancel_auto_merge(repo, current))
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {

@@ -99,6 +99,7 @@ impl Backend for GitLab {
             | Capability::Attachments
             | Capability::MergeCommit
             | Capability::SquashMerge
+            | Capability::AutoMerge
             | Capability::LineComments
             | Capability::ApprovePrs
             | Capability::RequestChanges
@@ -214,6 +215,7 @@ impl Backend for GitLab {
             head_sha: text(&value["sha"]),
             base_sha: None,
             conflict,
+            merges_now: false,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
             user_ids: reviewers.into_iter().collect(),
             replaced_labels: Vec::new(),
@@ -338,7 +340,34 @@ impl Backend for GitLab {
             format!("{endpoint}/merge"),
             method,
             delete_branch,
+            false,
         )?])
+    }
+
+    /// GitLab merges now when the pipeline already succeeded.
+    fn auto_merge(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: MergeMethod,
+        delete_branch: bool,
+    ) -> Result<Vec<Request>> {
+        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![merge_request(
+            format!("{endpoint}/merge"),
+            method,
+            delete_branch,
+            true,
+        )?])
+    }
+
+    fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
+        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![Request::new(
+            HttpMethod::Post,
+            format!("{endpoint}/cancel_merge_when_pipeline_succeeds"),
+            None,
+        )])
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {
@@ -937,19 +966,25 @@ const UNDECIDED: [&str; 4] = ["unchecked", "checking", "preparing", "approvals_s
 /// Title prefixes that make a merge request a draft, including the former `WIP:`.
 const DRAFT_PREFIXES: [&str; 5] = ["Draft:", "[Draft]", "(Draft)", "Draft -", "WIP:"];
 
-/// GitLab merges with the project's merge method, optionally squashing.
-fn merge_request(endpoint: String, method: MergeMethod, delete_branch: bool) -> Result<Request> {
+/// GitLab merges with the project's merge method, optionally squashing, now
+/// or once the pipeline succeeds when `when_pipeline_succeeds`.
+fn merge_request(
+    endpoint: String,
+    method: MergeMethod,
+    delete_branch: bool,
+    when_pipeline_succeeds: bool,
+) -> Result<Request> {
     if method == MergeMethod::Rebase {
         return Err(capability::unsupported(&GitLab, Capability::merge(method)));
     }
-    Ok(Request::new(
-        HttpMethod::Put,
-        endpoint,
-        Some(json!({
-            "squash": method == MergeMethod::Squash,
-            "should_remove_source_branch": delete_branch,
-        })),
-    ))
+    let mut body = json!({
+        "squash": method == MergeMethod::Squash,
+        "should_remove_source_branch": delete_branch,
+    });
+    if when_pipeline_succeeds {
+        body["merge_when_pipeline_succeeds"] = json!(true);
+    }
+    Ok(Request::new(HttpMethod::Put, endpoint, Some(body)))
 }
 
 /// The title with GitLab's draft prefix added or removed.

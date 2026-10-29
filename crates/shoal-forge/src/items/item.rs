@@ -65,6 +65,9 @@ pub struct Current {
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,
+    /// Whether GitHub would merge the open PR now, which it then refuses
+    /// to merge later.
+    pub merges_now: bool,
     /// The usernames of a GitLab merge request's reviewers.
     pub reviewers: Vec<String>,
     /// GitLab user IDs by username, which its reviewer changes take: the

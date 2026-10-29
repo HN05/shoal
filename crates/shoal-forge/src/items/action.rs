@@ -72,6 +72,13 @@ pub enum Action {
         method: MergeMethod,
         delete_branch: bool,
     },
+    /// Have the forge merge the PR once its required checks and approvals
+    /// pass, or now when they already do.
+    AutoMerge {
+        method: MergeMethod,
+        delete_branch: bool,
+    },
+    CancelAutoMerge,
     Thread(ThreadChange),
     Review(NewReview),
     React(ReactionChange),
@@ -118,6 +125,8 @@ impl Action {
             Self::Close => "close",
             Self::Reopen => "reopen",
             Self::Merge { .. } => "merge",
+            Self::AutoMerge { .. } => "auto_merge",
+            Self::CancelAutoMerge => "cancel_auto_merge",
             Self::Thread(change) => match change.resolve {
                 Some(true) => "resolve",
                 Some(false) => "unresolve",
@@ -150,6 +159,10 @@ impl Action {
             }
             Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
             Self::Merge { method, .. } => vec![Capability::merge(*method)],
+            Self::AutoMerge { method, .. } => {
+                vec![Capability::AutoMerge, Capability::merge(*method)]
+            }
+            Self::CancelAutoMerge => vec![Capability::AutoMerge],
             Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],
             Self::Review(review) => {
                 let lines = (!review.comments.is_empty()).then_some(Capability::LineComments);
@@ -191,7 +204,9 @@ impl Action {
                 !body.trim().is_empty() || !attachments.is_empty(),
                 "the comment is empty"
             ),
-            Self::Merge { .. } => pr_only("merge")?,
+            Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
+                pr_only("merge")?;
+            }
             Self::Thread(change) => {
                 pr_only("review threads")?;
                 ensure!(
@@ -459,11 +474,7 @@ impl ForgeRepo {
             Action::Edit(edit) => self.kind.edit(self, current, edit)?,
             Action::Comment { body, .. } => vec![self.kind.comment(self, item, body)],
             Action::Close => {
-                ensure!(
-                    item.state == ItemState::Open,
-                    "#{} is not open",
-                    item.number
-                );
+                ensure_open(item)?;
                 vec![self.kind.set_state(self, item, ItemState::Closed)?]
             }
             Action::Reopen => {
@@ -478,12 +489,20 @@ impl ForgeRepo {
                 method,
                 delete_branch,
             } => {
-                ensure!(
-                    item.state == ItemState::Open,
-                    "#{} is not open",
-                    item.number
-                );
+                ensure_open(item)?;
                 self.kind.merge(self, current, *method, *delete_branch)?
+            }
+            Action::AutoMerge {
+                method,
+                delete_branch,
+            } => {
+                ensure_open(item)?;
+                self.kind
+                    .auto_merge(self, current, *method, *delete_branch)?
+            }
+            Action::CancelAutoMerge => {
+                ensure_open(item)?;
+                self.kind.cancel_auto_merge(self, current)?
             }
             Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
             Action::Review(_) => anyhow::bail!("a review is planned from the PR's diff"),
@@ -492,6 +511,15 @@ impl ForgeRepo {
             }
         })
     }
+}
+
+fn ensure_open(item: &Item) -> Result<()> {
+    ensure!(
+        item.state == ItemState::Open,
+        "#{} is not open",
+        item.number
+    );
+    Ok(())
 }
 
 /// The ID of the comment a post's response describes.

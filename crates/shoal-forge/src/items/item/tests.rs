@@ -27,6 +27,10 @@ fn pulls_read_the_same_from_both_forges() {
     );
     assert_eq!(current.node_id.as_deref(), Some("PR_1"));
     assert_eq!(current.head_repository.as_deref(), Some("team/repo"));
+    assert!(!current.merges_now);
+    let mut clean = pull.clone();
+    clean["mergeable_state"] = json!("clean");
+    assert!(github.current(ItemKind::Pr, 7, &clean).unwrap().merges_now);
 
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     let pull = json!({"number": 7, "title": "wip: Fix", "state": "open", "merged": false,

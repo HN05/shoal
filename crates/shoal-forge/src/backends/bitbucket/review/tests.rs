@@ -24,6 +24,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         head_sha: Some("abc".into()),
         base_sha: Some("def".into()),
         conflict: None,
+        merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
         replaced_labels: Vec::new(),

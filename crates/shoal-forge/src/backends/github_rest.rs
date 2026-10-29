@@ -94,6 +94,10 @@ pub(crate) fn current(
         head_sha: text(&value["head"]["sha"]),
         base_sha: text(&value["base"]["sha"]),
         conflict,
+        merges_now: matches!(
+            value["mergeable_state"].as_str(),
+            Some("clean" | "has_hooks" | "unstable")
+        ),
         reviewers: Vec::new(),
         user_ids: Default::default(),
         replaced_labels: Vec::new(),
