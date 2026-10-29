@@ -13,38 +13,43 @@ use std::{
 /// The daemon's memory, which every inventory consults and updates.
 pub(super) static OWNERS: LazyLock<Owners> = LazyLock::new(Owners::default);
 
-#[derive(Default)]
-pub(super) struct Owners(Mutex<HashMap<u64, Owner>>);
+/// What an inventory told about a process.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Told {
+    Owner(Marks),
+    /// Its readable environment, or its nearest ancestor's, carries no marker.
+    NoExecution,
+}
 
-struct Owner {
-    marks: Marks,
-    recorded: Instant,
+#[derive(Default)]
+pub(super) struct Owners(Mutex<HashMap<u64, Evidence>>);
+
+struct Evidence {
+    told: Told,
+    /// When the inventory that told it began, before it read anything.
+    observed: Instant,
 }
 
 impl Owners {
-    pub(super) fn recall(&self, unique: u64) -> Option<Marks> {
+    pub(super) fn recall(&self, unique: u64) -> Option<Told> {
         let owners = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        owners.get(&unique).map(|owner| owner.marks.clone())
+        owners.get(&unique).map(|evidence| evidence.told.clone())
     }
 
-    /// Remember the owners `told` names, forget the processes it tells are
-    /// no execution's, and forget those no process in `live` names as itself
-    /// or its parent any more, which no process can name again, unless an
-    /// inventory that started after `since` recorded them.
-    pub(super) fn update(
-        &self,
-        since: Instant,
-        told: Vec<(u64, Option<Marks>)>,
-        live: &HashSet<u64>,
-    ) {
-        let recorded = Instant::now();
+    /// Record what an inventory that began at `observed` told, unless an
+    /// inventory that began later told otherwise first, and forget what no
+    /// process in `live` names as itself or its parent any more, which no
+    /// process can name again, unless a later inventory told it.
+    pub(super) fn update(&self, observed: Instant, told: Vec<(u64, Told)>, live: &HashSet<u64>) {
         let mut owners = self.0.lock().unwrap_or_else(PoisonError::into_inner);
-        owners.retain(|unique, owner| owner.recorded >= since || live.contains(unique));
-        for (unique, marks) in told {
-            match marks {
-                Some(marks) => owners.insert(unique, Owner { marks, recorded }),
-                None => owners.remove(&unique),
-            };
+        owners.retain(|unique, evidence| evidence.observed >= observed || live.contains(unique));
+        for (unique, told) in told {
+            if owners
+                .get(&unique)
+                .is_none_or(|newest| newest.observed <= observed)
+            {
+                owners.insert(unique, Evidence { told, observed });
+            }
         }
     }
 

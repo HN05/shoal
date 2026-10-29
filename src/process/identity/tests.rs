@@ -336,44 +336,61 @@ fn owners_are_forgotten_once_no_live_process_names_them() -> Result<()> {
 }
 
 #[test]
-fn a_process_read_as_no_executions_loses_its_remembered_owner() -> Result<()> {
+fn a_process_read_as_no_executions_keeps_no_remembered_owner() -> Result<()> {
     use Evidence::{Hidden, Unmarked};
     let owners = owners::Owners::default();
     let ids = HashSet::from(["execution".to_owned()]);
-    let at = |evidence, parent, adopted| {
-        inventory(
-            &owners,
-            [unique(observed(10, parent, adopted, evidence), 100, 90)],
-        )
-    };
-    at(marked("execution"), 9, false).attribute(Marker::Execution, &ids)?;
+    let agent = || unique(observed(9, 8, false, marked("execution")), 90, 80);
+    let child =
+        |evidence, parent, adopted| unique(observed(10, parent, adopted, evidence), 100, 90);
+    inventory(&owners, [agent(), child(Hidden, 9, false)]).attribute(Marker::Execution, &ids)?;
     // It replaced its image with a program started without the marker...
-    at(Unmarked, 9, false).attribute(Marker::Execution, &ids)?;
-    // ...then with a hidden one, and launchd adopted it.
-    let later = at(Hidden, 1, true);
-    assert_eq!(
-        describe(later.resolve(10, &mut HashMap::new())),
-        "unknown under 10"
-    );
+    inventory(&owners, [agent(), child(Unmarked, 9, false)]).attribute(Marker::Execution, &ids)?;
+    // ...then with a hidden one, and launchd adopted it once the agent exited,
+    // whose owner is still remembered.
+    let later = inventory(&owners, [child(Hidden, 1, true)]);
+    assert_eq!(describe(later.resolve(10, &mut HashMap::new())), "foreign");
     Ok(())
 }
 
 #[test]
 fn an_inventory_keeps_owners_recorded_after_it_began() {
     let owners = owners::Owners::default();
-    let marks = Marks {
+    let told = owners::Told::Owner(Marks {
         execution: Some("execution".into()),
         workspace: None,
-    };
+    });
     let began = std::time::Instant::now();
     // An overlapping inventory records a process this one's listing missed.
     owners.update(
         std::time::Instant::now(),
-        vec![(100, Some(marks.clone()))],
+        vec![(100, told.clone())],
         &HashSet::new(),
     );
     owners.update(began, Vec::new(), &HashSet::new());
-    assert_eq!(owners.recall(100), Some(marks));
+    assert_eq!(owners.recall(100), Some(told));
+}
+
+#[test]
+fn an_older_inventory_never_replaces_what_a_later_one_told() {
+    let owners = owners::Owners::default();
+    let older = std::time::Instant::now();
+    let later = older + Duration::from_secs(1);
+    owners.update(
+        later,
+        vec![(100, owners::Told::NoExecution)],
+        &HashSet::new(),
+    );
+    let marks = Marks {
+        execution: Some("execution".into()),
+        workspace: None,
+    };
+    owners.update(
+        older,
+        vec![(100, owners::Told::Owner(marks))],
+        &HashSet::new(),
+    );
+    assert_eq!(owners.recall(100), Some(owners::Told::NoExecution));
 }
 
 /// An agent's job whose shell and agent were killed stays the agent's: the

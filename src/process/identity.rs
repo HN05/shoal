@@ -587,8 +587,7 @@ impl<'a> Inventory<'a> {
 
     /// Attribute every observed process and collect the scan of those whose
     /// `marker` is one of `ids`, checking that owned processes still live.
-    /// Every owner told is remembered for later inventories, and a process
-    /// told to be no execution's is forgotten.
+    /// Later inventories remember what this one told about each process.
     fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
@@ -608,14 +607,24 @@ impl<'a> Inventory<'a> {
                             identity: identity.clone(),
                         });
                     }
-                    told.extend(process.lineage.unique.map(|unique| (unique, Some(marks))));
+                    told.extend(
+                        process
+                            .lineage
+                            .unique
+                            .map(|unique| (unique, owners::Told::Owner(marks))),
+                    );
                 }
                 Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
                     identity: identity.clone(),
                     head,
                 }),
                 Attribution::Foreign => {
-                    told.extend(process.lineage.unique.map(|unique| (unique, None)));
+                    told.extend(
+                        process
+                            .lineage
+                            .unique
+                            .map(|unique| (unique, owners::Told::NoExecution)),
+                    );
                 }
             }
         }
@@ -632,17 +641,19 @@ impl<'a> Inventory<'a> {
             .collect()
     }
 
-    /// The owner an earlier inventory told for `lineage`, or for its exited
-    /// parent, otherwise unknown under it.
+    /// What an earlier inventory told about `lineage`, or failing that about
+    /// its exited parent, otherwise unknown under it. A process told to be no
+    /// execution's stays so whatever its parent was.
     fn remembered(&self, lineage: &Lineage) -> Attribution {
-        [lineage.unique, lineage.parent]
+        match [lineage.unique, lineage.parent]
             .into_iter()
             .flatten()
             .find_map(|unique| self.owners.recall(unique))
-            .map_or_else(
-                || Attribution::Unknown(lineage.identity.clone()),
-                Attribution::Owned,
-            )
+        {
+            Some(owners::Told::Owner(marks)) => Attribution::Owned(marks),
+            Some(owners::Told::NoExecution) => Attribution::Foreign,
+            None => Attribution::Unknown(lineage.identity.clone()),
+        }
     }
 
     /// `pid`'s owner by its own environment, or for a hidden one by the
