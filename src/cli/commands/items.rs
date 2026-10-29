@@ -10,9 +10,9 @@ use crate::{
         context::Context,
     },
     forge::items::{
-        action::Action,
+        action::{Action, MergeMethod},
         create::NewIssue,
-        item::Item,
+        item::{Item, ItemState},
         link::{ItemKind, Selection},
     },
     model::Selected,
@@ -85,14 +85,12 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             item,
             method,
             delete_branch,
-        } => (
-            item,
-            Action::Merge {
-                method,
-                delete_branch,
-            },
-            "PR merged",
-        ),
+            auto,
+            cancel_auto: _,
+        } => {
+            let (action, outcome) = merge(method, delete_branch, auto);
+            (item, action, outcome)
+        }
     };
     act(ctx, item, ItemKind::Pr, action, outcome).await
 }
@@ -134,6 +132,28 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
     act(ctx, item, ItemKind::Issue, action, outcome).await
 }
 
+/// The merge the options ask for: without a method, which only
+/// `--cancel-auto` leaves out, withdrawing an automatic merge.
+fn merge(method: Option<MergeMethod>, delete_branch: bool, auto: bool) -> (Action, &'static str) {
+    match method {
+        None => (Action::CancelAutoMerge, "Auto-merge canceled"),
+        Some(method) if auto => (
+            Action::AutoMerge {
+                method,
+                delete_branch,
+            },
+            "Auto-merge enabled",
+        ),
+        Some(method) => (
+            Action::Merge {
+                method,
+                delete_branch,
+            },
+            "PR merged",
+        ),
+    }
+}
+
 async fn act(
     ctx: &Context,
     selector: ItemSelector,
@@ -142,6 +162,8 @@ async fn act(
     outcome: &str,
 ) -> Result<i32> {
     action.validate(kind)?;
+    // The forge merges now a PR whose checks already pass.
+    let auto_merge = matches!(action, Action::AutoMerge { .. });
     let item: Item = client::request(
         &ctx.paths,
         ItemMethod::ItemAction {
@@ -152,6 +174,11 @@ async fn act(
         },
     )
     .await?;
+    let outcome = if auto_merge && item.state == ItemState::Merged {
+        "PR merged"
+    } else {
+        outcome
+    };
     ctx.emit(&format!("{outcome}: {}", item.url), &item)?;
     Ok(0)
 }

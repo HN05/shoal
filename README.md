@@ -205,6 +205,7 @@ shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve
 shoal pr react +1 --comment 812 # React to a comment; --remove takes it back, issue react too
 shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
+shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-auto withdraws it
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it

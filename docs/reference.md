@@ -2592,6 +2592,7 @@ shoal pr review 42 --request-changes --body-file why.md --comments-file lines.js
 shoal pr close 12                   # reopen works the same way
 shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr merge --method rebase --delete-branch
+shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
@@ -2678,6 +2679,12 @@ checked with the item's kind before anything is sent. A reaction already as
 asked is left unchanged. Bitbucket has no reactions.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
+`--auto` has the forge merge the PR that way once its required checks and
+approvals pass, merging now when they already do: GitHub's auto-merge,
+GitLab's merge when the pipeline succeeds, or Forgejo's merge when checks
+succeed. GitHub deletes the branch of an automatic merge only as the
+repository's settings say, so it refuses `--delete-branch` with `--auto`, and
+Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
 `review` submits one review with exactly one of `--comment`, `--approve` or
 `--request-changes`, a body from `--body` or `--body-file`, and comments on
 single lines of the PR's diff: repeated `--line PATH:LINE BODY` on a line of the

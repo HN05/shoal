@@ -209,16 +209,24 @@ pub enum PrCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
-    /// Merge a PR with your own login; workspace processes cannot merge.
+    /// Merge a PR with your own login, now or once its checks pass;
+    /// workspace processes cannot merge.
     Merge {
         #[command(flatten)]
         item: ItemSelector,
         /// How to merge.
-        #[arg(long, value_enum)]
-        method: crate::forge::items::action::MergeMethod,
+        #[arg(long, value_enum, required_unless_present = "cancel_auto")]
+        method: Option<crate::forge::items::action::MergeMethod>,
         /// Delete the PR's branch on the forge after merging.
         #[arg(long)]
         delete_branch: bool,
+        /// Have the forge merge the PR once its required checks and approvals
+        /// pass, or now when they already do.
+        #[arg(long)]
+        auto: bool,
+        /// Withdraw the PR's automatic merge.
+        #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
+        cancel_auto: bool,
     },
 }
 

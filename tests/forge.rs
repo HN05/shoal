@@ -2114,6 +2114,59 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
 }
 
 #[test]
+fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    let responses = |read: Value| {
+        json!({
+            format!("GET {endpoint}"): read,
+            format!("POST {endpoint}/merge"): {"body": {}},
+            format!("DELETE {endpoint}/merge"): {"status": 204},
+        })
+    };
+    let open = json!({"body": pull(8, "open", "Fix", &[])});
+    fixture.respond(responses(open.clone()));
+    let merge = |args: &[&str]| {
+        let output = fixture.run(&[&["pr", "merge", "8", "--workspace", "topic"], args].concat());
+        let text = String::from_utf8_lossy(&output.stdout).into_owned();
+        (output.status.success(), text)
+    };
+    let (ok, text) = merge(&["--auto", "--method", "squash"]);
+    assert!(ok && text.starts_with("Auto-merge enabled: "), "{text}");
+    let (ok, text) = merge(&["--cancel-auto"]);
+    assert!(ok && text.starts_with("Auto-merge canceled: "), "{text}");
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
+        .map(|request| json!([request[0], request[1]]))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!([format!("POST {endpoint}/merge"), {"Do": "squash",
+                "delete_branch_after_merge": false, "merge_when_checks_succeed": true}]),
+            json!([format!("DELETE {endpoint}/merge"), null]),
+        ]
+    );
+    // The checks already pass, so the forge merges the PR at once.
+    let merged = json!({"body": pull(8, "merged", "Fix", &[])});
+    fixture.respond(responses(json!([open, merged])));
+    let (ok, text) = merge(&["--auto", "--method", "merge"]);
+    assert!(ok && text.starts_with("PR merged: "), "{text}");
+
+    fixture.requests();
+    for refused in [
+        &["--auto"][..],
+        &["--cancel-auto", "--method", "squash"],
+        &["--cancel-auto", "--auto"],
+    ] {
+        assert!(!merge(refused).0, "{refused:?}");
+    }
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
 fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({
