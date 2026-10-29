@@ -187,10 +187,12 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     );
     // A tool that takes no other working directory gets none.
     assert!(agent_dir_args(&defaults, "pi", home.path()).is_empty());
-    // `~/` names a path under the home directory; a repeated one counts once.
-    let configured = settings("agent_dirs = ['/tmp', '~/cache', '/private/tmp']\n");
+    // `~/` names a path under the home directory; one reached again through
+    // a symlink counts once.
+    let configured = settings("agent_dirs = ['/tmp', '~/cache', '~/link']\n");
     let cache = home.path().join("cache");
     fs::create_dir(&cache).unwrap();
+    std::os::unix::fs::symlink(&cache, home.path().join("link")).unwrap();
     assert_eq!(
         agent_dirs(&configured, home.path()),
         BTreeSet::from([tmp, fs::canonicalize(&cache).unwrap()])
