@@ -50,13 +50,16 @@ pub(crate) fn insert(
 pub(crate) enum Delivery {
     /// It starts the agent's next turn.
     Wake,
-    /// It waits for the agent's next turn or update.
-    Quiet,
+    /// It starts the agent's next turn only while a tracked command, demo or
+    /// background process runs in the workspace, as one the agent could stop;
+    /// otherwise it waits for the agent's next turn or update.
+    WhileWorkRuns,
 }
 
 /// [`insert`] with `delivery`. An identical unread message that would not
-/// wake the agent wakes it once queued again with [`Delivery::Wake`],
-/// which returns its ID.
+/// always wake the agent wakes it once queued again with [`Delivery::Wake`];
+/// queued again with [`Delivery::WhileWorkRuns`], it returns its ID too, so
+/// waits check again whether work runs.
 pub(crate) fn insert_delivered(
     tx: &Transaction<'_>,
     workspace_id: &str,
@@ -83,10 +86,12 @@ pub(crate) fn insert_delivered(
         )
         .optional()?;
     if let Some((id, woke)) = pending {
-        if woke || !wakes {
+        if woke {
             return Ok(None);
         }
-        tx.execute("UPDATE agent_messages SET wakes=1 WHERE id=?1", [id])?;
+        if wakes {
+            tx.execute("UPDATE agent_messages SET wakes=1 WHERE id=?1", [id])?;
+        }
         return Ok(Some(id));
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
@@ -247,21 +252,40 @@ impl Manager {
 
     /// Unread messages, oldest first. They stay unread until delivered.
     pub async fn agent_messages(&self, selector: &str) -> Result<Vec<AgentMessage>> {
-        Ok(self.unread_agent_messages(selector).await?.messages)
+        let workspace = self.workspace(selector).await?;
+        Ok(self.read_unread(workspace.id).await?.0.messages)
     }
 
     /// Unread messages, oldest first, and whether one of them wakes an idle
-    /// agent.
+    /// agent now. One queued [`Delivery::WhileWorkRuns`] wakes it only while
+    /// work it could stop runs, or when that cannot be read.
     pub(crate) async fn unread_agent_messages(&self, selector: &str) -> Result<Unread> {
         let workspace = self.workspace(selector).await?;
+        let (mut unread, while_work_runs) = self.read_unread(workspace.id.clone()).await?;
+        if !unread.wakes && while_work_runs {
+            unread.wakes = self
+                .runs_agent_work(&workspace.id)
+                .await
+                .unwrap_or_else(|error| {
+                    crate::daemon::log!("running work unreadable, so messages wake: {error:#}");
+                    true
+                });
+        }
+        Ok(unread)
+    }
+
+    /// The workspace's unread messages, with whether one always wakes an
+    /// idle agent and whether one wakes it while work runs.
+    async fn read_unread(&self, workspace_id: String) -> Result<(Unread, bool)> {
         self.store
             .run(move |db| {
                 let mut unread = Unread::default();
+                let mut while_work_runs = false;
                 let mut rows = db.prepare(
                     "SELECT id,created_at,message,attachments,wakes FROM agent_messages
                         WHERE workspace_id=?1 ORDER BY id",
                 )?;
-                let mut rows = rows.query([workspace.id])?;
+                let mut rows = rows.query([workspace_id])?;
                 while let Some(row) = rows.next()? {
                     unread.messages.push(AgentMessage {
                         id: row.get("id")?,
@@ -270,9 +294,14 @@ impl Manager {
                         attachments: crate::daemon::store::json_column(row, "attachments")?
                             .unwrap_or_default(),
                     });
-                    unread.wakes |= row.get::<_, bool>("wakes")?;
+                    // A message that does not always wake waits for work.
+                    if row.get::<_, bool>("wakes")? {
+                        unread.wakes = true;
+                    } else {
+                        while_work_runs = true;
+                    }
                 }
-                Ok(unread)
+                Ok((unread, while_work_runs))
             })
             .await
     }

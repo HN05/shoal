@@ -82,7 +82,7 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
 }
 
 #[tokio::test]
-async fn idle_agents_with_nothing_running_are_warned_without_waking() {
+async fn agents_with_nothing_running_are_warned_without_waking() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -90,7 +90,11 @@ async fn idle_agents_with_nothing_running_are_warned_without_waking() {
         .await
         .unwrap();
     let mut executions = Vec::new();
-    for name in ["resting", "busy"] {
+    for (name, turn) in [
+        ("resting", AgentState::Idle),
+        ("working", AgentState::Working),
+        ("busy", AgentState::Idle),
+    ] {
         let workspace = manager
             .create_workspace(&repo.id, name.into(), None, None, None)
             .await
@@ -104,7 +108,7 @@ async fn idle_agents_with_nothing_running_are_warned_without_waking() {
             .track_agent(&id, "claude", &workspace.id, name, false, Duration::ZERO)
             .await;
         manager
-            .set_agent_state(name, AgentState::Idle, Some(id), None)
+            .set_agent_state(name, turn, Some(id), None)
             .await
             .unwrap();
         executions.push(execution);
@@ -129,6 +133,9 @@ async fn idle_agents_with_nothing_running_are_warned_without_waking() {
         .await;
     assert_eq!(manager.agent_messages("resting").await.unwrap().len(), 1);
     assert!(!wakes("resting").await);
+    // A working agent hears it after its next tool call, and a turn that
+    // ends without one leaves nothing to stop.
+    assert!(!wakes("working").await);
     assert!(wakes("busy").await);
     // An agent can free disk space without running anything.
     let resting = manager.agent_messages("resting").await.unwrap();

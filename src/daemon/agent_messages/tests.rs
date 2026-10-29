@@ -2,7 +2,7 @@ use super::Delivery;
 use crate::{
     daemon::{
         scope::{self, Caller},
-        workspace::Manager,
+        workspace::{ExecutionKind, Manager},
     },
     protocol::AgentMethod,
     test_support::{manager, repository},
@@ -83,33 +83,50 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
 }
 
 #[tokio::test]
-async fn a_quiet_message_wakes_once_queued_again_to_wake() {
+async fn a_message_for_running_work_wakes_only_while_work_runs() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager, "receiver").await;
     let queue = |delivery| {
         manager.queue_agent_message_delivered(&workspace.id, "Memory is low".into(), delivery)
     };
-    queue(Delivery::Quiet).await.unwrap();
-    let unread = manager.unread_agent_messages(&workspace.id).await.unwrap();
-    assert_eq!(unread.messages.len(), 1);
-    assert!(!unread.wakes);
-    let mut changed = manager.signals.watch_agent_messages();
-    changed.borrow_and_update();
-    queue(Delivery::Quiet).await.unwrap();
-    assert!(!changed.has_changed().unwrap());
-    queue(Delivery::Wake).await.unwrap();
-    assert!(changed.has_changed().unwrap());
-    let unread = manager.unread_agent_messages(&workspace.id).await.unwrap();
-    assert_eq!(unread.messages.len(), 1);
-    assert!(unread.wakes);
-    // Queued again quietly, it still wakes.
-    queue(Delivery::Quiet).await.unwrap();
-    assert!(
+    let wakes = || async {
         manager
             .unread_agent_messages(&workspace.id)
             .await
             .unwrap()
             .wakes
+    };
+    queue(Delivery::WhileWorkRuns).await.unwrap();
+    assert_eq!(
+        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        1
+    );
+    assert!(!wakes().await);
+    // Queued again, it has waits check again for work.
+    let mut changed = manager.signals.watch_agent_messages();
+    changed.borrow_and_update();
+    queue(Delivery::WhileWorkRuns).await.unwrap();
+    assert!(changed.has_changed().unwrap());
+    let command = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    assert!(wakes().await);
+    manager
+        .finish_execution(command.plan.id, ExecutionKind::Command, Some(0))
+        .await
+        .unwrap();
+    assert!(!wakes().await);
+    // Queued to wake, it wakes without work and stays so.
+    changed.borrow_and_update();
+    queue(Delivery::Wake).await.unwrap();
+    assert!(changed.has_changed().unwrap());
+    assert!(wakes().await);
+    queue(Delivery::WhileWorkRuns).await.unwrap();
+    assert!(wakes().await);
+    assert_eq!(
+        manager.agent_messages(&workspace.id).await.unwrap().len(),
+        1
     );
 }
 

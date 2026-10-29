@@ -12,6 +12,7 @@ pub(crate) use crate::protocol::Protection;
 use crate::daemon::log;
 use crate::{
     daemon::notifications::NotificationKind,
+    process::{execution::Processes, identity as process},
     protocol::timing,
     state::{AgentState, ExecutionState, WorkspaceState},
 };
@@ -644,19 +645,38 @@ impl Manager {
         workspaces
     }
 
-    /// Workspaces where only idle agents run: no tracked command, demo or
-    /// background process an agent started, so nothing there uses memory or
-    /// CPU that its agent could free.
-    pub(crate) async fn resting_agent_workspaces(&self) -> anyhow::Result<HashSet<String>> {
-        let mut turns = self.agent_turns().await?;
-        let running = self.store.run(|db| running_executions(db)).await?;
-        Ok(self
+    /// Whether something an agent could stop runs in the workspace: a tracked
+    /// command, a demo or a background process an agent started. The agents
+    /// themselves do not count, working or idle.
+    pub(crate) async fn runs_agent_work(&self, workspace_id: &str) -> anyhow::Result<bool> {
+        let id = workspace_id.to_owned();
+        let running = self
+            .store
+            .run(move |db| running_executions(db, &id))
+            .await?;
+        let connected: HashSet<String> = self
             .executions
             .with_agents(|agents| {
-                still_idle(&mut turns, agents);
-                resting(running, agents, &turns)
+                running
+                    .iter()
+                    .filter(|execution| agents.contains_key(&execution.id))
+                    .map(|execution| execution.id.clone())
+                    .collect()
             })
-            .await)
+            .await;
+        let (agents, work): (Vec<_>, Vec<_>) = running
+            .into_iter()
+            .partition(|execution| execution.agent.is_some() || connected.contains(&execution.id));
+        if !work.is_empty() {
+            return Ok(true);
+        }
+        if agents.is_empty() {
+            return Ok(false);
+        }
+        let scan = process::scan(agents.iter().map(|agent| agent.id.clone()).collect()).await?;
+        Ok(agents
+            .iter()
+            .any(|agent| Processes::runs_outside_group(agent, &scan)))
     }
 
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
@@ -817,34 +837,15 @@ fn still_idle(turns: &mut HashMap<String, Turn>, agents: &HashMap<String, Agent>
     }
 }
 
-/// Each running execution with its workspace.
-fn running_executions(db: &rusqlite::Connection) -> anyhow::Result<Vec<(String, String)>> {
-    Ok(db
-        .prepare("SELECT id,workspace_id FROM executions WHERE state=?1")?
-        .query_map([ExecutionState::Running], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?
-        .collect::<rusqlite::Result<_>>()?)
-}
-
-/// The workspaces of the `running` executions where each is an idle agent.
-fn resting(
-    running: Vec<(String, String)>,
-    agents: &HashMap<String, Agent>,
-    turns: &HashMap<String, Turn>,
-) -> HashSet<String> {
-    let mut busy = HashSet::new();
-    let mut workspaces = HashSet::new();
-    for (execution, workspace) in running {
-        let idle_agent =
-            agents.contains_key(&execution) && turns.get(&execution).is_some_and(Turn::idle);
-        if !idle_agent {
-            busy.insert(workspace.clone());
-        }
-        workspaces.insert(workspace);
-    }
-    workspaces.retain(|workspace| !busy.contains(workspace));
-    workspaces
+/// The workspace's running executions.
+fn running_executions(
+    db: &rusqlite::Connection,
+    workspace_id: &str,
+) -> anyhow::Result<Vec<crate::model::Execution>> {
+    Ok(crate::daemon::store::executions(db, workspace_id)?
+        .into_iter()
+        .filter(|execution| execution.state == ExecutionState::Running)
+        .collect())
 }
 
 /// A running agent protection may stop.
