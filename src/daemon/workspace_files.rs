@@ -251,21 +251,10 @@ impl Manager {
         let id = workspace.id.clone();
         let kept =
             tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
-        let (id, paths, bytes) = (workspace.id.clone(), kept.paths.clone(), kept.bytes.clone());
-        let recorded = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                record(&tx, &id, FileSource::Result, &paths, &bytes)?;
-                tx.commit()?;
-                Ok(())
-            })
-            .await;
-        if let Err(error) = recorded {
-            discard(kept).await;
-            return Err(error);
-        }
-        Ok(kept.paths)
+        let records = self
+            .record_or_discard(&workspace.id, FileSource::Result, kept)
+            .await?;
+        Ok(records.into_iter().map(|file| file.path).collect())
     }
 
     /// Delete the files attached to the workspace `selector` names, only the
@@ -360,21 +349,45 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let (layout, _files) = self.lock_files(&workspace).await?;
         let kept = keep(layout, &workspace.id, ADDED, files).await?;
-        let (id, paths, bytes) = (workspace.id.clone(), kept.paths.clone(), kept.bytes.clone());
-        let added = self
-            .store
-            .run(move |db| {
-                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                record(&tx, &id, FileSource::Added, &paths, &bytes)?;
-                let added = recorded(&tx, &paths)?;
-                tx.commit()?;
-                Ok(added)
-            })
-            .await;
-        if added.is_err() {
+        self.record_or_discard(&workspace.id, FileSource::Added, kept)
+            .await
+    }
+
+    /// Record the copies `kept` as attached to the workspace `workspace_id`
+    /// from `source` and return their records, or delete the copies made for
+    /// them when that fails.
+    async fn record_or_discard(
+        &self,
+        workspace_id: &str,
+        source: FileSource,
+        kept: Kept,
+    ) -> Result<Vec<AttachedFile>> {
+        let recorded = self.record_kept(workspace_id, source, &kept).await;
+        if recorded.is_err() {
             discard(kept).await;
         }
-        added
+        recorded
+    }
+
+    /// Record the copies `kept` as attached to the workspace `workspace_id`
+    /// from `source`, and return their records.
+    async fn record_kept(
+        &self,
+        workspace_id: &str,
+        source: FileSource,
+        kept: &Kept,
+    ) -> Result<Vec<AttachedFile>> {
+        let id = workspace_id.to_owned();
+        let (paths, bytes) = (kept.paths.clone(), kept.bytes.clone());
+        self.store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                record(&tx, &id, source, &paths, &bytes)?;
+                let records = recorded(&tx, &paths)?;
+                tx.commit()?;
+                Ok(records)
+            })
+            .await
     }
 
     /// Hold the gate of the files attached to `workspace`, with
