@@ -189,6 +189,11 @@ impl ForgeRepo {
         Self::resolve(ItemRoute::discover(url, ISSUE_ROUTES)?.0, hosts).await
     }
 
+    /// The user, organization or workspace the repository belongs to.
+    pub(crate) fn owner(&self) -> &str {
+        self.path.split('/').next().unwrap_or_default()
+    }
+
     pub fn repository_url(&self) -> String {
         format!("{}://{}/{}", self.web_scheme, self.host, self.path)
     }

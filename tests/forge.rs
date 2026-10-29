@@ -291,6 +291,7 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
             {"name": "complexity/medium", "exclusive": true},
         ]},
         put: {"body": []},
+        "GET repos/team/project/teams": user_owned(),
     }));
     let response = edit("complexity/medium");
     assert_eq!(response["type"], "item", "{response}");
@@ -299,10 +300,10 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
         .into_iter()
         .map(|request| (request[0].clone(), request[1].clone()))
         .collect();
-    assert_eq!(keys[1].0, labels);
-    assert_eq!(
-        keys[2],
-        (json!(put), json!({"labels": ["bug", "complexity/medium"]}))
+    assert!(keys.iter().any(|(key, _)| key == labels), "{keys:?}");
+    assert!(
+        keys.contains(&(json!(put), json!({"labels": ["bug", "complexity/medium"]}))),
+        "{keys:?}"
     );
 
     // A label the forge leaves out fails the edit, naming the item's labels.
@@ -324,6 +325,38 @@ fn an_added_exclusive_label_replaces_the_one_of_its_scope() {
             .iter()
             .all(|request| request[0] != labels)
     );
+}
+
+/// Forgejo's answer to a list of the teams of a repository a user owns.
+fn user_owned() -> Value {
+    json!({"status": 405, "body": {"message": "repo is not owned by an organization"}})
+}
+
+#[test]
+fn forgejo_lists_an_organizations_labels_with_the_repositorys() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let teams = "GET repos/team/project/teams";
+    let mut responses = json!({
+        "GET repos/team/project/labels?limit=50&page=1": {"body": [{"name": "bug"}]},
+        "GET orgs/team/labels?limit=50&page=1":
+            {"body": [{"name": "priority/high", "exclusive": true}]},
+        teams: {"body": [{"name": "core"}]},
+    });
+    fixture.respond(responses.clone());
+    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    assert_eq!(
+        labels,
+        json!([
+            {"name": "bug", "description": "", "exclusive": false},
+            {"name": "priority/high", "description": "", "exclusive": true},
+        ])
+    );
+
+    // A repository a user owns has no organization labels.
+    responses[teams] = user_owned();
+    fixture.respond(responses);
+    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
 }
 
 /// Add the label `ready` to PR 8 of the workspace's repository.

@@ -21,7 +21,7 @@ impl ForgeRepo {
         if !self.supports(Capability::Labels) {
             return Ok(Vec::new());
         }
-        let listed = self.pages(account, &self.repo_endpoint("labels")).await?;
+        let listed = self.kind.labels(self, account).await?;
         Ok(listed
             .iter()
             .filter_map(|label| self.label(label))

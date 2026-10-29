@@ -194,6 +194,26 @@ impl ForgeRepo {
         Ok(body)
     }
 
+    /// The body of the read `request`, or none when the forge answers it
+    /// with `status`, as one refuses an endpoint that does not apply to the
+    /// repository. It is not remembered for a conditional read.
+    pub(crate) async fn read_unless(
+        &self,
+        account: &Account,
+        request: &Request,
+        status: u16,
+    ) -> Result<Option<Value>> {
+        async {
+            let response = self.within_limit(account, request).await?;
+            if response.status == status {
+                return Ok(None);
+            }
+            json_body(response.success_body()?).map(Some)
+        }
+        .await
+        .with_context(|| format!("{} {}", request.method.as_str(), request.endpoint))
+    }
+
     /// The text of the response to `request`, which need not be JSON, such
     /// as a job log; it is not remembered for a conditional read.
     pub(crate) async fn read_text(&self, account: &Account, request: &Request) -> Result<String> {

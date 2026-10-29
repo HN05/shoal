@@ -2723,9 +2723,12 @@ the opened item.
 
 #### Repository conventions
 
-`shoal repo labels` lists the workspace repository's labels as the forge reports them,
-with each one's description, and `exclusive` for a label that allows no other
-of its scope: Forgejo's exclusive labels and GitLab's `key::value` labels.
+`shoal repo labels` lists the labels the workspace repository's items can take
+as the forge reports them, including a group's or organization's labels, with
+each one's description, and `exclusive` for a label that allows no other of its
+scope: Forgejo's exclusive labels and GitLab's `key::value` labels. Reading a
+Forgejo organization's labels needs a token with the `read:organization`
+scope; Bitbucket has no labels.
 
 `[pr] required_labels` and `[issue] required_labels` name entries that every new
 item's labels must each start with, so `area/` takes any area label. `pr open`

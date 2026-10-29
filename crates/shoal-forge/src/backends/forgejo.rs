@@ -701,8 +701,40 @@ impl Backend for Forgejo {
         shared_lookups(kind)
     }
 
+    /// Forgejo lists an organization's labels, which its repositories'
+    /// items take too, apart from the repository's own.
+    async fn labels(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
+        let endpoint = repo.repo_endpoint("labels");
+        let (mut labels, teams) = tokio::try_join!(
+            repo.pages(account, &endpoint),
+            organization_teams(repo, account),
+        )?;
+        if teams.is_some() {
+            let owner = repo.owner();
+            let endpoint = format!("orgs/{owner}/labels");
+            let organization = repo.pages(account, &endpoint).await.with_context(|| {
+                format!("the labels of organization {owner} need the read:organization scope")
+            })?;
+            labels.extend(organization);
+        }
+        Ok(labels)
+    }
+
     fn exclusive_label(&self, _name: &str, label: &Value) -> bool {
         label["exclusive"].as_bool().unwrap_or(false)
+    }
+}
+
+/// The teams with access to the repository when an organization owns it;
+/// none when a user does, for which Forgejo refuses the list.
+async fn organization_teams(repo: &ForgeRepo, account: &Account) -> Result<Option<Vec<Value>>> {
+    let request = Request::get(repo.repo_endpoint("teams"));
+    let Some(teams) = repo.read_unless(account, &request, 405).await? else {
+        return Ok(None);
+    };
+    match teams {
+        Value::Array(teams) => Ok(Some(teams)),
+        _ => bail!("teams are not a list"),
     }
 }
 

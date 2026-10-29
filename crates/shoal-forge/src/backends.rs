@@ -590,6 +590,11 @@ pub(crate) trait Backend {
     /// of `kind`, in its lookup order.
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)>;
 
+    /// Every label the repository's items can take, as the forge lists them.
+    async fn labels(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
+        repo.pages(account, &repo.repo_endpoint("labels")).await
+    }
+
     /// Whether the label `name`, as the forge lists it in `label`, allows an
     /// item at most one label of its scope.
     fn exclusive_label(&self, _name: &str, _label: &Value) -> bool {
@@ -1131,6 +1136,10 @@ impl Backend for ForgeKind {
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         dispatch!(self, backend => backend.template_lookups(kind))
+    }
+
+    async fn labels(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Value>> {
+        dispatch!(self, backend => backend.labels(repo, account).await)
     }
 
     fn exclusive_label(&self, name: &str, label: &Value) -> bool {
