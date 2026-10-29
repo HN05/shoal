@@ -321,16 +321,28 @@ impl Rex {
     /// Name `id`, a block that sits at `block`, `label`, and its window too
     /// while the block is alone there, as [`Self::name`] reads it.
     pub async fn rename(&self, id: &str, block: &Block, label: &str) -> Result<()> {
-        let input = json!({"session_id": block.session, "block_id": id, "label": label});
-        self.call("session.set_block_label", input).await?;
+        self.set_block_label(&block.session, id, label).await?;
         let Some(window) = self.window_of(block).await? else {
             return Ok(());
         };
         if window.holds_only(id) {
-            let input =
-                json!({"session_id": block.session, "window_id": window.window_id, "label": label});
-            self.call("session.set_window_label", input).await?;
+            self.set_window_label(&block.session, &window.window_id, label)
+                .await?;
         }
+        Ok(())
+    }
+
+    /// Label block `id` of `session` `label`.
+    async fn set_block_label(&self, session: &str, id: &str, label: &str) -> Result<()> {
+        let input = json!({"session_id": session, "block_id": id, "label": label});
+        self.call("session.set_block_label", input).await?;
+        Ok(())
+    }
+
+    /// Label `window` of `session` `label`.
+    async fn set_window_label(&self, session: &str, window: &str, label: &str) -> Result<()> {
+        let input = json!({"session_id": session, "window_id": window, "label": label});
+        self.call("session.set_window_label", input).await?;
         Ok(())
     }
 
