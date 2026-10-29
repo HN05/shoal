@@ -174,6 +174,13 @@ Questions).
 you more work during the grace period, run it before starting. It does not keep
 the workspace.
 
+## Workspace title
+
+Once you understand the assignment, name the work in two to five words with
+`shoal work title "<title>"`, such as `Agent tab titles`. The tabs and windows
+Shoal opens for your workspace show the title instead of its branch or issue
+number. Set it again when the work changes course.
+
 ## Checkpoints
 
 `shoal work checkpoint --name "<what comes next>"` keeps your workspace's HEAD
