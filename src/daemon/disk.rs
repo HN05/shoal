@@ -354,14 +354,12 @@ async fn delete_results(
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }
-        let repo = manager.repository(&owner.repository_id).await?;
-        let on_filesystem = crate::daemon::workspace_files::layout::Layout::of(&repo)
-            .is_some_and(|layout| filesystem.holds(&layout.results(&owner.id)));
-        if !on_filesystem {
-            continue;
-        }
-        let (kind, message) = match manager.delete_results(&owner).await {
-            Ok(()) => {
+        let deleted = manager
+            .delete_results_in(&owner, |path| filesystem.holds(path))
+            .await;
+        let (kind, message) = match deleted {
+            Ok(false) => continue,
+            Ok(true) => {
                 log!("disk space cleanup deleted the results of {}", owner.name);
                 (
                     NotificationKind::ResultsDeleted,

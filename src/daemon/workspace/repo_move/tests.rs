@@ -658,3 +658,57 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     assert!(manager.workspace_files(&workspace.id).await?.is_empty());
     Ok(())
 }
+
+#[tokio::test]
+async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
+    let (temp, manager, repo, workspace, root) = cloned().await?;
+    let report = temp.path().join("report.md");
+    fs::write(&report, "No leaks")?;
+    manager
+        .mark_done(&workspace.id, false, false, vec![report])
+        .await?;
+    manager
+        .remove_workspace(
+            &workspace.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::GitOnly,
+        )
+        .await?;
+    let [owner] =
+        manager.kept_results().await?.try_into().map_err(|kept| {
+            anyhow::anyhow!("expected one removed workspace with results: {kept:?}")
+        })?;
+    let old = repo.workspaces_dir.clone().context("no directory")?;
+    // A move, then disk cleanup for the old place, wait for the gate.
+    let held = manager.gates.lock_message_files(&repo.id).await;
+    let gate = manager.gates.message_files_gate(&repo.id);
+    let waiting = |count| {
+        let gate = gate.clone();
+        tokio::time::timeout(std::time::Duration::from_secs(60), async move {
+            while Arc::strong_count(&gate) < count {
+                tokio::task::yield_now().await;
+            }
+        })
+    };
+    let moving = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.move_repositories(Layout::Regular).await }
+    });
+    waiting(4).await.context("the move reaches the gate")?;
+    let cleaning = tokio::spawn({
+        let manager = manager.clone();
+        async move {
+            manager
+                .delete_results_in(&owner, |path| path.starts_with(&old))
+                .await
+        }
+    });
+    waiting(5).await.context("the cleanup reaches the gate")?;
+    drop(held);
+    moving.await??;
+    assert!(!cleaning.await??, "the results moved off the low place");
+    let kept = manager.workspace_files(&workspace.name).await?;
+    assert!(kept[0].path.starts_with(root.join("origin")), "{kept:?}");
+    assert!(kept[0].path.exists());
+    Ok(())
+}

@@ -1,6 +1,8 @@
 //! How long attached files stay: a workspace's files go with it, except its
 //! results, which stay as long as its removal record, and every file goes
 //! with its repository.
+use std::path::Path;
+
 use anyhow::{Result, ensure};
 
 use super::{Owner, layout::Layout, records};
@@ -79,10 +81,21 @@ impl Manager {
         self.store.run(|db| records::kept(db)).await
     }
 
-    /// Delete the results that the removed workspace `owner` handed back.
-    pub(crate) async fn delete_results(&self, owner: &Owner) -> Result<()> {
+    /// Delete the results that the removed workspace `owner` handed back
+    /// when they are where `holds` says, as on a filesystem low on space,
+    /// and return whether it did. The place is checked with the files gate
+    /// held, so a move of the repository's directory cannot come between.
+    pub(crate) async fn delete_results_in(
+        &self,
+        owner: &Owner,
+        holds: impl Fn(&Path) -> bool,
+    ) -> Result<bool> {
         let (repo, _files) = self.lock_repository_files(&owner.repository_id).await?;
-        self.delete_results_of(&repo, owner.id.clone()).await
+        let there = Layout::of(&repo).is_some_and(|layout| holds(&layout.results(&owner.id)));
+        if there {
+            self.delete_results_of(&repo, owner.id.clone()).await?;
+        }
+        Ok(there)
     }
 
     /// Delete the results of the workspace `workspace_id` of `repo`, and then
