@@ -274,7 +274,7 @@ pub enum IssueCommand {
 pub struct ReactArgs {
     /// Reaction: +1, -1, laugh, hooray, confused, heart, rocket or eyes, or a
     /// name the forge has.
-    #[arg(allow_hyphen_values = true)]
+    #[arg(allow_negative_numbers = true)]
     pub reaction: String,
     /// React to this comment or inline comment instead, by its ID as `shoal view` shows it.
     #[arg(long, value_name = "ID")]
