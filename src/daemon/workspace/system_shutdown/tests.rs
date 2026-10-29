@@ -232,3 +232,47 @@ fn done_workspaces_are_named_since_resume_all_skips_them() {
         "continue it with shoal resume --all and shoal resume finished"
     );
 }
+
+#[tokio::test]
+async fn a_shutdown_keeps_a_protection_stopped_agent_from_resuming() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    manager
+        .track_agent(
+            &id,
+            "claude",
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+
+    let mut stop = execution.stop.clone();
+    assert!(*stop.borrow_and_update());
+    manager.agent_queue.suspend(true).await;
+    let refused = manager.resume_agent_execution(&id, None).await.unwrap_err();
+    assert_eq!(format!("{refused:#}"), "the system is shutting down");
+    assert!(*stop.borrow());
+    manager.agent_queue.suspend(false).await;
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    assert!(!*stop.borrow_and_update());
+}

@@ -389,12 +389,15 @@ impl Manager {
     }
 
     /// Resume the stopped agent `id`, which `grant` admitted when its
-    /// automatic restore did.
+    /// automatic restore did, unless the system is shutting down: under the
+    /// queue gate, so a shutdown that begins meanwhile finds it running.
     pub(crate) async fn resume_agent_execution(
         &self,
         id: &str,
         grant: Option<Grant>,
     ) -> anyhow::Result<bool> {
+        let _gate = self.agent_queue.lock_admission().await;
+        anyhow::ensure!(!self.agent_queue.suspended(), "the system is shutting down");
         let connections = self.executions.connections().await;
         let stop = connections
             .stop_channel(id)
