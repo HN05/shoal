@@ -76,13 +76,12 @@ pub async fn probe(host: &str, scheme: &'static str, account: &Account) -> Resul
     let reasons: Vec<String> = answers
         .iter()
         .map(|(kind, answer)| match answer {
-            Ok(_) => format!("{kind}: not its API"),
-            Err(error) => format!("{kind}: {}", one_line(&format!("{error:#}"))),
+            Ok(_) => format!("{}: not its API", kind.name()),
+            Err(error) => format!("{}: {}", kind.name(), one_line(&format!("{error:#}"))),
         })
         .collect();
-    Err(anyhow!("{}", reasons.join("; ")).context(format!(
-        "{host} answers as none of GitHub, GitLab, Forgejo, Gitea or Bitbucket"
-    )))
+    Err(anyhow!("{}", reasons.join("; "))
+        .context(format!("{host} answers as none of the forges Shoal knows")))
 }
 
 /// `text` with its lines joined by spaces.
