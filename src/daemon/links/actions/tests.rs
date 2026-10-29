@@ -51,6 +51,7 @@ async fn a_branch_pushed_to_a_fork_on_the_same_forge_names_the_fork_as_its_head(
 async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked() {
     use crate::{
         forge::items::create::NewIssue,
+        protocol::ItemContext,
         state::WorkspaceState,
         test_support::{manager, repository},
     };
@@ -97,8 +98,9 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         labels: Vec::new(),
         attachments: Vec::new(),
     };
+    let context = ItemContext::Workspace(workspace.id.clone());
     let error = manager
-        .open_issue(&workspace.id, issue, None, false, None)
+        .open_issue(&context, issue, None, false, None)
         .await
         .unwrap_err();
     assert!(

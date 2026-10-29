@@ -767,15 +767,8 @@ impl Manager {
             .repository_id
             .as_deref()
             .context("the workspace that made the proposal is gone")?;
-        let path = self.repository(repository).await?.path;
-        let remote = crate::repository::remote_url_from_path(&path)
-            .await?
-            .context("forge actions need an origin remote")?;
-        // One snapshot, so a reload cannot pair a profile with another map.
-        let config = self.config();
-        let settings = self.repository_settings_from(&config, repository).await?;
-        let account = self.agent_account_from(&config, &settings)?;
-        Ok((self.forge(&remote).await?, account))
+        let repository = self.repository(repository).await?;
+        self.checkout_forge_account(&repository).await
     }
 }
 

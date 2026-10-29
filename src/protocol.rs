@@ -55,7 +55,7 @@ pub use daemon::{DaemonMethod, Exit, ExitRequest};
 pub use demos::DemoMethod;
 pub use executions::ExecutionMethod;
 pub use holds::HoldMethod;
-pub use items::ItemMethod;
+pub use items::{ItemContext, ItemMethod};
 pub use notifications::NotificationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;
@@ -68,7 +68,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 157;
+pub const VERSION: u32 = 158;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.

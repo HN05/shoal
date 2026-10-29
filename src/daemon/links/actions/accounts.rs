@@ -10,7 +10,7 @@ use crate::{
         account::{Account, AgentLogins},
     },
     fsutil::expand_home,
-    model::Workspace,
+    model::{Repository, Workspace},
 };
 
 /// The forge memory of the user's own logins.
@@ -76,5 +76,23 @@ impl Manager {
             self.workspace_forge(workspace).await?,
             self.agent_account(workspace).await?,
         ))
+    }
+
+    /// The forge of the registered checkout's `origin`, with the agent
+    /// account of the repository's settings.
+    pub(in crate::daemon::links) async fn checkout_forge_account(
+        &self,
+        repository: &Repository,
+    ) -> Result<(ForgeRepo, Account)> {
+        let remote = crate::repository::remote_url_from_path(&repository.path)
+            .await?
+            .context("forge actions need an origin remote")?;
+        // One snapshot, so a reload cannot pair a profile with another map.
+        let config = self.config();
+        let settings = self
+            .repository_settings_from(&config, &repository.id)
+            .await?;
+        let account = self.agent_account_from(&config, &settings)?;
+        Ok((self.forge(&remote).await?, account))
     }
 }

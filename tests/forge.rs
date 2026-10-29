@@ -3872,6 +3872,59 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
 }
 
 #[test]
+fn issues_open_from_a_registered_checkout_under_its_settings() {
+    let fixture = Fixture::new(
+        Forge::GitHub,
+        "[approvals]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
+    );
+    fixture.respond(json!({
+        "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": [{"name": "type/bug"}]}},
+    }));
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let open = |labels: &[&str], link: bool| {
+        json!({"open_issue": {"checkout": repository, "repository": null, "link": link,
+            "issue": {"title": "Flaky", "body": "", "labels": labels}}})
+    };
+
+    // The repository's required labels apply as in a workspace.
+    let refused = fixture.request(open(&["bug"], false));
+    assert!(refused.to_string().contains("type/"), "{refused}");
+    // Opening from a checkout assigns the issue to no workspace.
+    let linked = fixture.request(open(&["type/bug"], true));
+    assert!(
+        linked.to_string().contains("--link needs a workspace"),
+        "{linked}"
+    );
+    // A workspace process acts from its own workspace.
+    let scope = fixture.ok(&["work", "env", "topic"])["SHOAL_SCOPE_TOKEN"].clone();
+    let scoped = fixture.request_as(open(&["type/bug"], false), scope.as_str());
+    assert!(
+        scoped
+            .to_string()
+            .contains("not from a registered checkout"),
+        "{scoped}"
+    );
+    assert!(writes(&fixture).is_empty());
+
+    // The user's chat opens directly, whatever `issue_open` says.
+    let opened = fixture.request(open(&["type/bug"], false));
+    assert_eq!(opened["type"], "opened", "{opened}");
+    assert_eq!(opened["data"]["linked"], false);
+    assert_eq!(opened["data"]["url"], format!("{}/issues/40", fixture.web));
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues",
+            {"title": "Flaky", "body": "", "labels": ["type/bug"]}])]
+    );
+    assert_eq!(
+        fixture.ok(&["status", "topic"])["workspace"]["links"]["opened"],
+        json!([])
+    );
+}
+
+#[test]
 fn approving_a_proposal_warns_about_the_repository_conventions() {
     let fixture = Fixture::new(
         Forge::GitHub,

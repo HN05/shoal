@@ -10,7 +10,7 @@ use super::super::{
 };
 use crate::{
     forge::items::action::Action,
-    protocol::{self, Body, ItemMethod},
+    protocol::{self, Body, ItemContext, ItemMethod},
 };
 
 #[cfg(test)]
@@ -74,13 +74,13 @@ pub(super) async fn handle(
             Body::Opened(manager.open_pull(&workspace, options, caller).await?)
         }
         ItemMethod::OpenIssue {
-            workspace,
+            context,
             issue,
             repository,
             link,
         } => Body::Opened(
             manager
-                .open_issue(&workspace, issue, repository, link, caller)
+                .open_issue(&context, issue, repository, link, caller)
                 .await?,
         ),
         ItemMethod::SelectItems {
@@ -142,6 +142,7 @@ impl Scoped for ItemMethod {
             } if review.has_verdict() => bail!(
                 "approving and requesting changes are the user's decision; ask them with shoal alerts send"
             ),
+            ItemMethod::OpenIssue { context, .. } => Some(context_workspace(context)?),
             ItemMethod::SetIssue { workspace, .. }
             | ItemMethod::LinkItem { workspace, .. }
             | ItemMethod::UnlinkItems { workspace, .. }
@@ -149,7 +150,6 @@ impl Scoped for ItemMethod {
             | ItemMethod::PrWait { workspace, .. }
             | ItemMethod::WatchItems { workspace, .. }
             | ItemMethod::OpenPull { workspace, .. }
-            | ItemMethod::OpenIssue { workspace, .. }
             | ItemMethod::ItemAction {
                 workspace,
                 action:
@@ -166,6 +166,17 @@ impl Scoped for ItemMethod {
             | ItemMethod::ForgeApi { workspace, .. }
             | ItemMethod::SelectItems { workspace, .. } => Some(workspace),
         })
+    }
+}
+
+/// The workspace `context` names: a workspace process acts on items from its
+/// workspace, never from a registered checkout.
+fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
+    match context {
+        ItemContext::Workspace(workspace) => Ok(workspace),
+        ItemContext::Checkout(_) => bail!(
+            "workspace processes act on items from their workspace, not from a registered checkout"
+        ),
     }
 }
 

@@ -12,7 +12,7 @@ use crate::{
     },
     git,
     model::Workspace,
-    protocol::{ItemMethod, WorkspaceMethod},
+    protocol::{ItemContext, ItemMethod, WorkspaceMethod},
 };
 
 /// Verify the worktree before anything leaves it, push without forcing, then
@@ -91,7 +91,7 @@ pub(super) async fn open_issue(
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
         ItemMethod::OpenIssue {
-            workspace,
+            context: ItemContext::Workspace(workspace),
             issue,
             repository,
             link,

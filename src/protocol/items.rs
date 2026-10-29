@@ -47,10 +47,11 @@ pub enum ItemMethod {
         workspace: String,
         options: crate::forge::items::create::PullOptions,
     },
-    /// Open an issue in the workspace's repository, or the one `repository`
-    /// names, linking it when `link` is set.
+    /// Open an issue in the context's repository, or the one `repository`
+    /// names, linking it to the workspace when `link` is set.
     OpenIssue {
-        workspace: String,
+        #[serde(flatten)]
+        context: ItemContext,
         issue: crate::forge::items::create::NewIssue,
         repository: Option<String>,
         link: bool,
@@ -85,6 +86,16 @@ pub enum ItemMethod {
     /// The forge `host` serves, asking it over `scheme` once when neither
     /// the global config nor a recorded answer says.
     ForgeType { host: String, scheme: String },
+}
+
+/// Where an item request runs: in a workspace, or in the registered checkout
+/// of a repository, named by its ID, for a request that needs only the
+/// repository.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemContext {
+    Workspace(String),
+    Checkout(String),
 }
 
 impl ItemMethod {
