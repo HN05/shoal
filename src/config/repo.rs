@@ -550,10 +550,22 @@ pub struct Herdr {
 pub struct Rex {
     pub enabled: Option<bool>,
     pub new_window: Option<bool>,
+    pub placement: Option<RexPlacement>,
     pub window_name: Option<String>,
     pub session_name: Option<String>,
     pub close_when_done: Option<bool>,
 }
+
+states!(
+    #[derive(Default)]
+    /// Where Rex opens a place beside the caller's block: a new window, or a
+    /// split of that block.
+    RexPlacement {
+        #[default]
+        Window => "window",
+        Split => "split",
+    }
+);
 
 states!(
     #[derive(Default)]

@@ -760,6 +760,7 @@ pub struct Herdr {
 pub struct Rex {
     pub enabled: bool,
     pub new_window: bool,
+    pub placement: repo::RexPlacement,
     pub window_name: Option<String>,
     /// The session Shoal opens windows in when it has none of its own;
     /// `{repo}` is the repository's name.

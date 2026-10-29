@@ -125,6 +125,9 @@ new_tab = true
 enabled = true
 # Run issue/add in a new window inside Rex, after interactive choices.
 new_window = true
+# Open that place as a new window ("window") or a split beside the caller's
+# block ("split").
+placement = "window"
 # The session for windows Shoal opens outside a Rex session.
 session_name = "{repo}"
 # Override the top-level close_when_done for Rex windows.

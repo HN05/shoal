@@ -244,6 +244,7 @@ impl Effective {
             rex: config::Rex {
                 enabled: built_in(merged.rex.enabled, "rex.enabled")?,
                 new_window: built_in(merged.rex.new_window, "rex.new_window")?,
+                placement: built_in(merged.rex.placement, "rex.placement")?,
                 window_name: merged.rex.window_name,
                 session_name: built_in(merged.rex.session_name, "rex.session_name")?,
                 close_when_done: merged.rex.close_when_done,
@@ -384,6 +385,7 @@ fn built_in() -> RepoConfig {
         rex: config::repo::Rex {
             enabled: Some(true),
             new_window: Some(true),
+            placement: Some(config::repo::RexPlacement::default()),
             window_name: None,
             session_name: Some("{repo}".into()),
             close_when_done: None,
@@ -724,6 +726,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(default_host),
         scalar!(rex.enabled),
         scalar!(rex.new_window),
+        scalar!(rex.placement),
         scalar!(rex.window_name),
         scalar!(rex.session_name),
         scalar!(rex.close_when_done),
