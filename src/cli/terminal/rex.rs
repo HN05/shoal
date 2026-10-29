@@ -418,11 +418,8 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
         return Ok(None);
     };
     let name = server.name(place.id(), &block).await?;
-    Ok(Some(Session {
-        name: name.unwrap_or_else(|| place.id().to_owned()),
-        clients: 0,
-        place: place.clone(),
-    }))
+    let name = name.unwrap_or_else(|| place.id().to_owned());
+    Ok(Some(Session::open(name, 0, place)))
 }
 
 async fn rename_block(place: &str, label: &str) -> Result<()> {

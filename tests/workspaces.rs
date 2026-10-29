@@ -24634,7 +24634,7 @@ fn attach_selects_a_session_of_the_workspace() {
     .unwrap();
     let (output, rows) = fixture.pick(&["attach", "persist"], "1", "");
     assert!(output.status.success(), "{output:?}");
-    assert!(rows.contains("persist-2"), "{rows}");
+    assert!(rows.contains("persist-2  claude"), "{rows}");
     assert_eq!(attached(), ["attach", "persist-2"]);
     let (output, transcript) =
         fixture.interactive(&["attach", "persist", "--session", "persist"], "");
@@ -24693,7 +24693,7 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
     assert_eq!(attached(), ["attach", "failed"]);
     assert_eq!(
         fixture.ok(&["status", "failed"])["sessions"],
-        serde_json::json!([{"name": "failed", "clients": 0}])
+        serde_json::json!([{"name": "failed", "agent": null, "clients": 0}])
     );
 }
 
@@ -24707,7 +24707,7 @@ fn a_later_session_under_a_recorded_name_is_not_the_recorded_one() {
     let listed = || fixture.ok(&["status", "persist"])["sessions"].clone();
     assert_eq!(
         listed(),
-        serde_json::json!([{"name": "persist", "clients": 0}])
+        serde_json::json!([{"name": "persist", "agent": "claude", "clients": 0}])
     );
     // A record left by a wrapper that crashed outlives its session; another
     // session under the name is not the recorded one.
@@ -24730,12 +24730,12 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
     let status = fixture.ok(&["status", "persist"]);
     assert_eq!(
         status["sessions"],
-        serde_json::json!([{"name": "persist", "clients": 1}])
+        serde_json::json!([{"name": "persist", "agent": "claude", "clients": 1}])
     );
     let output = fixture.run(&["status", "persist"]);
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
-        text.contains("Sessions:      1\n  persist  attached\n"),
+        text.contains("Sessions:      1\n  persist  claude  attached\n"),
         "{text}"
     );
 

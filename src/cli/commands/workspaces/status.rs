@@ -8,7 +8,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        terminal,
+        terminal::{self, Recorded},
         ui::{self, Fallback},
     },
     forge::{IssueInput, items::link::Selection},
@@ -66,13 +66,7 @@ impl StatusView {
             request::<WorkspaceStatus>(&ctx.paths, WorkspaceMethod::WorkspaceStatus { workspace })
                 .await?;
         let chat = chat_name(&chats, &status.inspection.workspace);
-        let places: Vec<_> = status
-            .inspection
-            .executions
-            .iter()
-            .filter_map(|execution| execution.origin.as_ref())
-            .chain(&status.inspection.places)
-            .collect();
+        let places = Recorded::workspace(&status.inspection);
         let (sessions, sessions_error) =
             match sessions(ctx, &status.inspection.workspace, &places).await {
                 Ok(sessions) => (sessions, None),
@@ -92,7 +86,7 @@ impl StatusView {
 async fn sessions(
     ctx: &Context,
     workspace: &Workspace,
-    places: &[&crate::sessions::Origin],
+    places: &[Recorded<'_>],
 ) -> Result<Vec<terminal::Session>> {
     let target = ConfigTarget::Workspace(workspace.id.clone());
     let settings = client::settings(&ctx.paths, target).await?;

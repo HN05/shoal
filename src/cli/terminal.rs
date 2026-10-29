@@ -34,7 +34,7 @@ use crate::{
     config::{Effective, repo::DefaultHost},
     demos::Launch,
     env,
-    model::{Repository, Workspace},
+    model::{Chat, Inspection, Repository, Workspace},
     sessions::{HostName, Origin},
 };
 
@@ -287,6 +287,8 @@ impl<'a> Owner<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Session {
     pub name: String,
+    /// The agent the daemon recorded running there, when one runs there.
+    pub agent: Option<String>,
     /// Terminals attached to the session.
     pub clients: u32,
     /// Where it was recorded, which names the host keeping it.
@@ -295,13 +297,63 @@ pub struct Session {
 }
 
 impl Session {
-    /// The name, and whether a terminal is attached.
+    /// The session `name` a host found open at `place`, with `clients`
+    /// attached; the daemon's records supply its agent.
+    fn open(name: String, clients: u32, place: &Origin) -> Self {
+        Self {
+            name,
+            agent: None,
+            clients,
+            place: place.clone(),
+        }
+    }
+
+    /// The name, agent, and whether a terminal is attached.
     pub fn label(&self) -> String {
         let mut label = self.name.clone();
+        if let Some(agent) = &self.agent {
+            label.push_str(&format!("  {agent}"));
+        }
         if self.clients > 0 {
             label.push_str("  attached");
         }
         label
+    }
+}
+
+/// A place the daemon recorded, with the agent it recorded running there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::cli) struct Recorded<'a> {
+    pub place: &'a Origin,
+    pub agent: Option<&'a str>,
+}
+
+impl<'a> Recorded<'a> {
+    /// Where `inspection` recorded its workspace's executions running, with
+    /// their agents, and the places Shoal created for it.
+    pub fn workspace(inspection: &'a Inspection) -> Vec<Self> {
+        let executions = inspection.executions.iter().filter_map(|execution| {
+            Some(Self {
+                place: execution.origin.as_ref()?,
+                agent: execution.agent.as_deref(),
+            })
+        });
+        let created = inspection
+            .places
+            .iter()
+            .map(|place| Self { place, agent: None });
+        executions.chain(created).collect()
+    }
+
+    /// Where `chat` was recorded running, with its agent.
+    pub fn chat(chat: &'a Chat) -> Vec<Self> {
+        chat.origin
+            .iter()
+            .map(|place| Self {
+                place,
+                agent: Some(&chat.agent),
+            })
+            .collect()
     }
 }
 
@@ -876,17 +928,27 @@ pub(in crate::cli) async fn start_chat(
 /// running, or the places Shoal created for a workspace.
 pub(in crate::cli) async fn sessions(
     settings: &Effective,
-    places: &[&Origin],
+    places: &[Recorded<'_>],
 ) -> Result<Vec<Session>> {
     let places = distinct_places(places);
-    let (found, failure) = open_at(&places, |host| {
+    let origins: Vec<_> = places.iter().map(|recorded| recorded.place).collect();
+    let (found, failure) = open_at(&origins, |host| {
         enabled_host(settings, host).and_then(Host::sessions)
     })
     .await;
-    match failure {
-        Some(error) => Err(error),
-        None => Ok(found.into_iter().flatten().collect()),
+    if let Some(error) = failure {
+        return Err(error);
     }
+    Ok(places
+        .iter()
+        .zip(found)
+        .filter_map(|(recorded, session)| {
+            Some(Session {
+                agent: recorded.agent.map(str::to_owned),
+                ..session?
+            })
+        })
+        .collect())
 }
 
 /// The session open at each of `places`, in order, asking each host that
@@ -929,14 +991,21 @@ async fn open_at(
 
 /// `places` without repeats of a place: the same ID in the same host, its
 /// data, which tells servers of one host apart, and its instance, which tells
-/// a later place under a reused ID apart.
-fn distinct_places<'a>(places: &[&'a Origin]) -> Vec<&'a Origin> {
-    let mut seen = HashSet::new();
-    places
-        .iter()
-        .copied()
-        .filter(|place| seen.insert((place.host, place.id(), &place.data, &place.instance)))
-        .collect()
+/// a later place under a reused ID apart. A place keeps the agent any of its
+/// repeats records there.
+fn distinct_places<'a>(places: &[Recorded<'a>]) -> Vec<Recorded<'a>> {
+    let key = |place: &'a Origin| (place.host, place.id(), &place.data, &place.instance);
+    let mut distinct: Vec<Recorded<'a>> = Vec::new();
+    for recorded in places {
+        match distinct
+            .iter_mut()
+            .find(|kept| key(kept.place) == key(recorded.place))
+        {
+            Some(kept) => kept.agent = kept.agent.or(recorded.agent),
+            None => distinct.push(*recorded),
+        }
+    }
+    distinct
 }
 
 /// The IDs of the owners with an agent session: those of `places`, recorded

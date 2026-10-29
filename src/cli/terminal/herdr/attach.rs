@@ -18,11 +18,8 @@ pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {
         return Ok(None);
     };
     let label = tab_label(place, &pane.tab_id).await?;
-    Ok(Some(Session {
-        name: label.unwrap_or(pane.tab_id),
-        clients: 0,
-        place: place.clone(),
-    }))
+    let name = label.unwrap_or(pane.tab_id);
+    Ok(Some(Session::open(name, 0, place)))
 }
 
 /// Focus the tab of the pane at `place`, attaching this terminal to the

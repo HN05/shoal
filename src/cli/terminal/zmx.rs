@@ -591,12 +591,11 @@ async fn sessions_at(places: &[&Origin]) -> Result<Vec<Option<Session>>> {
             sessions
                 .iter()
                 .find(|(name, fields)| is_instance(name, fields, place))
-                .map(|(name, fields)| Session {
-                    clients: field(fields, "clients")
+                .map(|(name, fields)| {
+                    let clients = field(fields, "clients")
                         .and_then(|clients| clients.parse().ok())
-                        .unwrap_or(0),
-                    name: name.clone(),
-                    place: (*place).clone(),
+                        .unwrap_or(0);
+                    Session::open(name.clone(), clients, place)
                 })
         })
         .collect())

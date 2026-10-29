@@ -738,7 +738,8 @@ unless the top-level `close_when_done = false` keeps it open.
 
 `shoal attach [target]` reattaches to the session of the workspace or running
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
-workspace has several; `shoal status` lists them. Without a target it takes the
+workspace has several; the picker and `shoal status` list each with the agent
+the daemon recorded running there. Without a target it takes the
 current workspace, else the only running chat of the current checkout, else a
 picker of the workspaces and chats with sessions. An agent or chat running in
 a Herdr pane counts as a session named after its tab: attaching focuses the

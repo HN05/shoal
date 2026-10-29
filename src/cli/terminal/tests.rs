@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::Execution;
 
 #[test]
 fn placement_follows_the_setting_then_whether_the_launch_waits() {
@@ -16,7 +17,10 @@ fn a_place_repeats_only_in_the_same_host_and_server() {
     };
     let (work, again, other) = (pane("/work.sock"), pane("/work.sock"), pane("/other.sock"));
     let rex = Origin::created(HostName::Rex, "w1:p1".to_owned());
-    let distinct = distinct_places(&[&work, &again, &other, &rex]);
+    let distinct: Vec<_> = distinct_places(&[&work, &again, &other, &rex].map(unrecorded))
+        .into_iter()
+        .map(|recorded| recorded.place)
+        .collect();
     assert_eq!(distinct, [&work, &other, &rex]);
 }
 
@@ -45,4 +49,92 @@ fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
     assert_eq!(rex(&windows).beside(Some(&block)).split, None);
     let herdr = Configured::named(&splits, HostName::Herdr);
     assert_eq!(herdr.beside(Some(&block)).split, None);
+}
+
+#[test]
+fn a_repeated_place_keeps_the_agent_recorded_there() {
+    let session = Origin::created(HostName::Zmx, "work".to_owned());
+    let agent = Recorded {
+        place: &session,
+        agent: Some("claude"),
+    };
+    let other = Origin::created(HostName::Zmx, "other".to_owned());
+    assert_eq!(
+        distinct_places(&[unrecorded(&session), unrecorded(&other), agent]),
+        [agent, unrecorded(&other)]
+    );
+}
+
+#[test]
+fn a_workspace_records_its_execution_agents_and_created_places() {
+    let (agent, setup, shell) = (
+        Origin::created(HostName::Zmx, "agent".to_owned()),
+        Origin::created(HostName::Zmx, "setup".to_owned()),
+        Origin::created(HostName::Zmx, "shell".to_owned()),
+    );
+    let execution = |origin: &Origin, agent: Option<&str>| Execution {
+        id: origin.id().to_owned(),
+        workspace_id: "workspace".into(),
+        state: crate::state::ExecutionState::Running,
+        wrapper: None,
+        child: None,
+        group_id: None,
+        origin: Some(origin.clone()),
+        agent: agent.map(str::to_owned),
+    };
+    let detached = Execution {
+        origin: None,
+        ..execution(&agent, Some("codex"))
+    };
+    let inspection = Inspection {
+        issue: None,
+        completion: None,
+        pr_cleanup: None,
+        workspace: Workspace::new_record(
+            "repo".into(),
+            "workspace".into(),
+            "/workspace".into(),
+            "topic".into(),
+            crate::state::WorkspaceState::Ready,
+        ),
+        executions: vec![
+            execution(&agent, Some("claude")),
+            execution(&setup, None),
+            detached,
+        ],
+        places: vec![shell.clone()],
+        ports: Vec::new(),
+        resources: Vec::new(),
+        simulators: Vec::new(),
+    };
+    assert_eq!(
+        Recorded::workspace(&inspection),
+        [
+            Recorded {
+                place: &agent,
+                agent: Some("claude")
+            },
+            unrecorded(&setup),
+            unrecorded(&shell),
+        ]
+    );
+}
+
+#[test]
+fn a_session_label_names_its_agent() {
+    let place = Origin::created(HostName::Zmx, "work".to_owned());
+    let session = Session {
+        agent: Some("claude".into()),
+        ..Session::open("work".into(), 1, &place)
+    };
+    assert_eq!(session.label(), "work  claude  attached");
+    assert_eq!(Session::open("work".into(), 0, &place).label(), "work");
+    assert_eq!(
+        serde_json::to_value(&session).unwrap()["agent"],
+        serde_json::json!("claude")
+    );
+}
+
+fn unrecorded(place: &Origin) -> Recorded<'_> {
+    Recorded { place, agent: None }
 }

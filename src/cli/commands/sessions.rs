@@ -6,10 +6,11 @@ use crate::{
     cli::{
         agents, client,
         context::Context,
-        recent, terminal,
+        recent,
+        terminal::{self, Recorded},
         ui::{self, Fallback, NoCurrentWorkspace},
     },
-    model::{Chat, Workspace},
+    model::{Chat, Inspection},
     protocol::ConfigTarget,
     sessions::Origin,
 };
@@ -51,8 +52,8 @@ pub(super) async fn attach(
 enum Target {
     /// A workspace with the places its executions were recorded running in
     /// and those Shoal created for it.
-    Workspace(Box<Workspace>, Vec<Origin>),
-    Chat(Chat),
+    Workspace(Box<Inspection>),
+    Chat(Box<Chat>),
 }
 
 impl Target {
@@ -63,7 +64,7 @@ impl Target {
         let chats = client::chats(&ctx.paths).await?;
         if let Some(name) = name {
             return match chats.into_iter().find(|chat| chat.name == name) {
-                Some(chat) => Ok(Self::Chat(chat)),
+                Some(chat) => Ok(Self::Chat(Box::new(chat))),
                 None => Self::workspace(ctx, Some(name), Fallback::CurrentDirectory).await,
             };
         }
@@ -72,7 +73,7 @@ impl Target {
             current => return current,
         }
         if let Some(chat) = checkout_chat(ctx, &chats).await? {
-            return Ok(Self::Chat(chat));
+            return Ok(Self::Chat(Box::new(chat)));
         }
         Self::picked(ctx, chats).await
     }
@@ -84,13 +85,7 @@ impl Target {
 
     async fn inspected(ctx: &Context, id: String) -> Result<Self> {
         let inspection = client::inspect(&ctx.paths, id).await?;
-        let places = inspection
-            .executions
-            .into_iter()
-            .filter_map(|execution| execution.origin)
-            .chain(inspection.places)
-            .collect();
-        Ok(Self::Workspace(Box::new(inspection.workspace), places))
+        Ok(Self::Workspace(Box::new(inspection)))
     }
 
     /// A workspace or one of `chats`, each with an agent session, from a picker.
@@ -103,7 +98,7 @@ impl Target {
         let workspaces = client::workspaces(&ctx.paths).await?;
         let id = ui::pick_workspace_or_chat(ctx, workspaces, &chats).await?;
         if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
-            return Ok(Self::Chat(chat));
+            return Ok(Self::Chat(Box::new(chat)));
         }
         recent::record(ctx, &id).await;
         Self::inspected(ctx, id).await
@@ -112,30 +107,32 @@ impl Target {
     /// Whose settings choose the hosts to look in.
     fn config(&self) -> ConfigTarget {
         match self {
-            Self::Workspace(workspace, _) => ConfigTarget::Workspace(workspace.id.clone()),
+            Self::Workspace(inspection) => ConfigTarget::Workspace(inspection.workspace.id.clone()),
             Self::Chat(chat) => ConfigTarget::Repository(chat.repository_id.clone().into()),
         }
     }
 
     fn name(&self) -> &str {
         match self {
-            Self::Workspace(workspace, _) => &workspace.name,
+            Self::Workspace(inspection) => &inspection.workspace.name,
             Self::Chat(chat) => &chat.name,
         }
     }
 
-    /// Where the daemon recorded the target running.
-    fn places(&self) -> Vec<&Origin> {
+    /// Where the daemon recorded the target running, with its agents.
+    fn places(&self) -> Vec<Recorded<'_>> {
         match self {
-            Self::Workspace(_, places) => places.iter().collect(),
-            Self::Chat(chat) => chat.origin.iter().collect(),
+            Self::Workspace(inspection) => Recorded::workspace(inspection),
+            Self::Chat(chat) => Recorded::chat(chat),
         }
     }
 
     /// Why there is nothing to attach to, and for a chat where it runs instead.
     fn without_sessions(&self) -> String {
         match self {
-            Self::Workspace(workspace, _) => format!("{} has no agent sessions", workspace.name),
+            Self::Workspace(inspection) => {
+                format!("{} has no agent sessions", inspection.workspace.name)
+            }
             Self::Chat(chat) => match agents::chat_place(&chat.agent) {
                 Some(place) => {
                     format!("{} runs in {place}; it has no session to attach", chat.name)
