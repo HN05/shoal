@@ -24423,7 +24423,8 @@ impl Drop for SessionAgent<'_> {
 }
 
 /// Run a [`SessionAgent`] for `workspace` inside the fake zmx session
-/// `session`, returning once the daemon recorded it there.
+/// `session`, returning once the daemon lists it as a running agent there,
+/// as attach discovery reads it.
 fn agent_in_session<'a>(fixture: &'a Fixture, workspace: &str, session: &str) -> SessionAgent<'a> {
     let bin = fixture.root.path().join("bin");
     install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
@@ -24446,18 +24447,22 @@ fn agent_in_session<'a>(fixture: &'a Fixture, workspace: &str, session: &str) ->
         workspace: workspace.to_owned(),
         agent,
     };
-    wait_until("the agent's recorded session", || {
+    let id = fixture.ok(&["status", workspace])["workspace"]["id"].clone();
+    wait_until("the agent listed in its session", || {
         if let Some(status) = agent.agent.try_wait().unwrap() {
             panic!(
                 "the agent exited with {status}: {}",
                 fs::read_to_string(&errors).unwrap()
             );
         }
-        fixture.ok(&["status", workspace])["executions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|execution| execution["origin"]["place"] == session)
+        let agents = fixture.request(serde_json::json!("list_agents"));
+        agents["data"].as_array().is_some_and(|agents| {
+            agents.iter().any(|listed| {
+                listed["workspace_id"] == id
+                    && !listed["agent"].is_null()
+                    && listed["origin"]["place"] == session
+            })
+        })
     });
     agent
 }
