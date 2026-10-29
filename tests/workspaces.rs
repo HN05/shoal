@@ -1015,14 +1015,11 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         )
         .unwrap();
     };
-    set_state("preparing");
+    set_state("updating");
     let refused = export(&["--yes"]);
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("second: workspace is preparing"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("second: workspace is updating"), "{stderr}");
     assert!(paths.iter().all(|path| path.exists()));
     set_state("ready");
 
@@ -11751,14 +11748,11 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
         )
         .unwrap();
     };
-    set_state("preparing");
+    set_state("updating");
     let refused = fixture.run(&["rm", "first", "second", "--yes"]);
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
-    assert!(
-        stderr.contains("second: workspace is preparing"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("second: workspace is updating"), "{stderr}");
     assert!(path(0).exists());
     set_state("ready");
     // And one whose removal closes this tab, ending the removal of the others.
@@ -11814,6 +11808,12 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(!path(0).exists() && !path(1).exists() && path(2).exists());
 
     let second = fixture.add("fourth");
+    // One still preparing, whose setup never started, goes with the others.
+    db.execute(
+        "UPDATE workspaces SET state='preparing' WHERE name='fourth'",
+        [],
+    )
+    .unwrap();
     // A workspace named by its name and its ID is removed once.
     let third = workspaces[2]["id"].as_str().unwrap();
     let removed = fixture.ok(&["rm", "third", third, "fourth", "--yes"]);

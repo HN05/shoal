@@ -760,9 +760,7 @@ impl Manager {
     async fn remove(&self, selector: &str, removal: Removal<'_>) -> Result<RemovalResult> {
         let workspace = self.workspace(selector).await?;
         let present = workspace.path.try_exists()?;
-        let reserved_state = self
-            .reserve_lifecycle_for_removal(&workspace.id, !present)
-            .await?;
+        let reserved_state = self.reserve_removal(&workspace, removal, present).await?;
         // Checked again after the reservation, so a worktree restored meanwhile
         // cannot be deleted by an unattended removal.
         let result = async {
@@ -811,6 +809,26 @@ impl Manager {
                 Err(error)
             }
         }
+    }
+
+    /// Reserve `workspace` for `removal`. The user's removal also takes one
+    /// whose setup never started, as when the command creating it was
+    /// interrupted; the repository's Git gate waits for its creation to end.
+    async fn reserve_removal(
+        &self,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+        present: bool,
+    ) -> Result<WorkspaceState> {
+        let awaiting_setup = matches!(removal, Removal::Manual { .. })
+            && workspace.state == WorkspaceState::Preparing;
+        let _created = if awaiting_setup {
+            Some(self.gates.lock_git(&workspace.repository_id).await)
+        } else {
+            None
+        };
+        self.reserve_lifecycle_for_removal(&workspace.id, !present, awaiting_setup)
+            .await
     }
 
     async fn prepare_post_remove_hook(

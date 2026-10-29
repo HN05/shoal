@@ -2014,7 +2014,8 @@ the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it furt
 `setup_cmd` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. `shoal add` waits for it before entering the worktree or
 launching an agent; the workspace stays `preparing` until it exits 0 with no
-surviving processes. On failure, interactive mode asks whether to delete the
+surviving processes. When that command is interrupted before setup starts,
+`shoal work setup` prepares the workspace and `shoal rm` removes it. On failure, interactive mode asks whether to delete the
 new workspace and branch, ignore the failure and continue, or keep it for
 inspection (default). JSON/noninteractive mode returns nonzero, keeps the
 workspace, and sends setup output to stderr. Then choose explicitly; `--skip`

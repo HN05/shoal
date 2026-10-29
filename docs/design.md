@@ -505,7 +505,8 @@ Hooks that run with a worktree resolve paths against it and use it as their
 working directory. Setup runs through
 the tracked wrapper with workspace scope; the daemon owns readiness and execution
 records, and `add` keeps the workspace preparing until setup exits cleanly with no
-survivors. Failures preserve files, branches, and leases; process-verification
+survivors; manual removal also takes a preparing workspace with no execution, whose
+setup an interrupted command never started. Failures preserve files, branches, and leases; process-verification
 failures retain the workspace and report the command's exit status and the
 blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.

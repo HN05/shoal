@@ -756,16 +756,25 @@ impl Manager {
         id: &str,
         state: WorkspaceState,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(id, state, false).await
+        self.reserve_lifecycle_inner(id, state, false, false).await
     }
 
+    /// Reserve the workspace for removal; `awaiting_setup` also takes a
+    /// preparing one whose setup never started, which the caller excludes
+    /// from creation by holding the repository's Git gate.
     async fn reserve_lifecycle_for_removal(
         &self,
         id: &str,
         allow_pending_rename: bool,
+        awaiting_setup: bool,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(id, WorkspaceState::Removing, allow_pending_rename)
-            .await
+        self.reserve_lifecycle_inner(
+            id,
+            WorkspaceState::Removing,
+            allow_pending_rename,
+            awaiting_setup,
+        )
+        .await
     }
 
     async fn reserve_lifecycle_inner(
@@ -773,6 +782,7 @@ impl Manager {
         id: &str,
         state: WorkspaceState,
         allow_pending_rename: bool,
+        awaiting_setup: bool,
     ) -> Result<WorkspaceState> {
         let _resources = self.gates.resource_guard(id, GuardMode::Shared)?;
         let id = id.to_owned();
@@ -793,6 +803,18 @@ impl Manager {
                 let current = match current {
                     None => bail!("workspace no longer exists"),
                     Some(current @ (WorkspaceState::Ready | WorkspaceState::Failed)) => current,
+                    // Setup registers its execution as it reserves the
+                    // workspace, so none recorded means none started.
+                    Some(current @ WorkspaceState::Preparing)
+                        if awaiting_setup
+                            && !store::exists(
+                                &tx,
+                                "SELECT 1 FROM executions WHERE workspace_id=?1",
+                                [&id],
+                            )? =>
+                    {
+                        current
+                    }
                     Some(WorkspaceState::Removing) => {
                         bail!("workspace is already being removed; it will disappear shortly")
                     }

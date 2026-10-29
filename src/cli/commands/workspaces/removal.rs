@@ -15,7 +15,8 @@ use crate::{
 /// Refuse a workspace that a batch, named by its `(noun, verb)`, could not
 /// finish with: one in another lifecycle operation, which the removal check
 /// leaves to the removal itself, or one whose removal closes this terminal's
-/// tab, ending the batch before the others.
+/// tab, ending the batch before the others. A preparing workspace without
+/// commands is one whose setup never started, which removal takes.
 pub(in crate::cli::commands) async fn ensure_batch_removable(
     ctx: &Context,
     check: &RemovalCheck,
@@ -23,7 +24,11 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
 ) -> Result<()> {
     let state = check.workspace.state;
     ensure!(
-        matches!(state, WorkspaceState::Ready | WorkspaceState::Failed),
+        match state {
+            WorkspaceState::Ready | WorkspaceState::Failed => true,
+            WorkspaceState::Preparing => check.running_commands == 0,
+            _ => false,
+        },
         "workspace is {state}; wait for that operation to finish"
     );
     ensure!(

@@ -189,6 +189,55 @@ async fn lifecycle_reservation_returns_replaced_state() {
 }
 
 #[tokio::test]
+async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
+    let (_root, manager, workspace) = fixture().await;
+    manager
+        .set_state(&workspace.id, WorkspaceState::Preparing, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state) VALUES ('setup',?1,'running')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let remove = || {
+        manager.remove_workspace(
+            &workspace.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+    };
+    let error = remove().await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("workspace is preparing; wait"),
+        "{error:#}"
+    );
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().state,
+        WorkspaceState::Preparing
+    );
+
+    manager
+        .store
+        .run(|db| {
+            db.execute("DELETE FROM executions WHERE id='setup'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert!(remove().await.unwrap().removed);
+    assert!(!workspace.path.exists());
+    assert!(manager.workspace(&workspace.id).await.is_err());
+}
+
+#[tokio::test]
 async fn idle_removal_rechecks_head_and_ignored_activity_after_hooks() {
     for script in [
         "git commit --allow-empty -m 'hook work'",
