@@ -10,7 +10,11 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
-use crate::{daemon::workspace::Manager, model::Workspace, state::WorkspaceState};
+use crate::{
+    daemon::workspace::Manager,
+    model::{Repository, Workspace},
+    state::WorkspaceState,
+};
 
 pub(crate) mod files;
 
@@ -88,6 +92,19 @@ pub(crate) fn insert(
     Ok(Some(tx.last_insert_rowid()))
 }
 
+/// Copies of `files`, attached to `message` for the workspace
+/// `workspace_id`, made off the async runtime. Callers hold the gate of the
+/// repository's attached files.
+async fn keep_message_files(
+    layout: files::Layout,
+    workspace_id: &str,
+    message: &str,
+    files: Vec<PathBuf>,
+) -> Result<files::Kept> {
+    let (id, message) = (workspace_id.to_owned(), message.to_owned());
+    tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
+}
+
 /// Delete the copies of a message that was refused, such as one for a
 /// workspace removed while they were made. Failure only logs: the workspace's
 /// removal deletes whatever is left.
@@ -152,9 +169,7 @@ impl Manager {
             return self.queue_agent_message(&workspace.id, message).await;
         }
         let (layout, _files) = self.lock_message_files(&workspace).await?;
-        let (id, text) = (workspace.id.clone(), message.clone());
-        let kept =
-            tokio::task::spawn_blocking(move || layout.keep(&id, &text, &attachments)).await??;
+        let kept = keep_message_files(layout, &workspace.id, &message, attachments).await?;
         let queued = self
             .queue_attached_message(&workspace.id, message, kept.paths.clone())
             .await;
@@ -165,9 +180,10 @@ impl Manager {
     }
 
     /// Hold the gate of the files attached to `workspace`'s messages, with
-    /// where its repository keeps them. A registration older than the
-    /// repository's directory reserves it first, under the Git gate, which
-    /// is never taken while holding this one.
+    /// where its repository keeps them, once the workspace is still there and
+    /// not being removed. A registration older than the repository's
+    /// directory reserves it first, under the Git gate, which is never taken
+    /// while holding this one.
     async fn lock_message_files(
         &self,
         workspace: &Workspace,
@@ -178,7 +194,12 @@ impl Manager {
             self.workspaces_dir(&repo).await?;
         }
         let guard = self.gates.lock_message_files(&repo.id).await;
-        // A move may have finished while this waited.
+        // A move or removal may have finished while this waited.
+        let current = self.workspace(&workspace.id).await?;
+        ensure!(
+            current.state != WorkspaceState::Removing,
+            "the workspace is being removed"
+        );
         let repo = self.repository(&repo.id).await?;
         let layout = files::Layout::of(&repo).context("the repository has no directory")?;
         Ok((layout, guard))
@@ -197,6 +218,16 @@ impl Manager {
         };
         let id = workspace.id.clone();
         tokio::task::spawn_blocking(move || layout.remove_workspace(&id)).await?
+    }
+
+    /// Delete the directory of attached files with the repository, once its
+    /// workspaces are gone.
+    pub(crate) async fn delete_repository_message_files(&self, repo: &Repository) -> Result<()> {
+        let _files = self.gates.lock_message_files(&repo.id).await;
+        let Some(layout) = files::Layout::of(repo) else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || layout.remove()).await?
     }
 
     pub(crate) async fn queue_agent_message(
