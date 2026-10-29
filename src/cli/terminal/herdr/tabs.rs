@@ -36,6 +36,20 @@ pub(super) async fn state(place: &str) -> Result<PlaceState> {
     })
 }
 
+/// Whether `place` and `here` are in one tab, so closing the tab of `place`
+/// ends `here`. A place that is gone has no tab left to close; a failed query
+/// proves nothing, so it counts as one tab.
+pub(super) async fn shared(place: &str, here: &str) -> bool {
+    if place == here {
+        return true;
+    }
+    match (holding(place).await, holding(here).await) {
+        (Ok(Some(place)), Ok(Some(here))) => place.tab == here.tab,
+        (Ok(None), _) | (_, Ok(None)) => false,
+        _ => true,
+    }
+}
+
 /// Close the tab holding `place`; a place that is gone leaves nothing to
 /// close.
 pub(super) async fn close(place: &str) -> Result<()> {

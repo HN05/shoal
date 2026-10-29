@@ -51,7 +51,7 @@ async fn check_removals(
             continue;
         }
         match checked {
-            Ok(check) => match ensure_batch_removable(ctx, &check, ("removal", "remove")) {
+            Ok(check) => match ensure_batch_removable(ctx, &check, ("removal", "remove")).await {
                 Ok(()) => checks.push(check),
                 Err(error) => refusals.push(format!("{}: {error:#}", check.workspace.name)),
             },

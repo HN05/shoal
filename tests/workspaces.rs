@@ -1158,6 +1158,7 @@ fn streaming_export_to_a_closed_reader_removes_its_temporary_archive() {
 #[test]
 fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
     let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
     let workspace = fixture.add("tabbed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     // The pane's watcher records that its tab closes with the workspace.
@@ -1177,15 +1178,28 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
             .output()
             .unwrap()
     };
-    let refused = export("w1:p7");
-    assert!(!refused.status.success());
-    assert!(
-        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
-        "{refused:?}"
-    );
-    assert!(refused.stdout.is_empty());
-    assert!(path.exists());
-    // Another pane keeps its stream.
+    let refuses = |pane: &str| {
+        let refused = export(pane);
+        assert!(!refused.status.success());
+        assert!(
+            String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
+            "{refused:?}"
+        );
+        assert!(refused.stdout.is_empty());
+        assert!(path.exists());
+    };
+    // The watched pane, and another pane of its tab, which closes with it.
+    refuses("w1:p7");
+    refuses("w1:p7.2");
+    // Watchers of earlier releases mark the tab itself.
+    fs::remove_file(state.join("closing-herdr-w1:p7")).unwrap();
+    for marker in ["closing-herdr-w1:t7", "closing-tab-w1:t7"] {
+        fs::write(state.join(marker), "").unwrap();
+        refuses("w1:p7");
+        fs::remove_file(state.join(marker)).unwrap();
+    }
+    fs::write(state.join("closing-herdr-w1:p7"), "").unwrap();
+    // A pane of another tab keeps its stream.
     let exported = export("w1:p8");
     assert!(exported.status.success(), "{exported:?}");
     assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
@@ -21603,12 +21617,12 @@ elif args[:2] == ['pane', 'run']:
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
 elif args[1:2] == ['get']:
-    # Pane `w1:pN` is the root pane of tab `w1:tN`, and goes with it.
+    # Panes `w1:pN` and `w1:pN.M` are in tab `w1:tN`, and go with it.
     if (root / 'herdr-unreachable').exists():
         print(json.dumps({'error': {'code': 'server_not_running'}}))
         sys.exit(1)
     kind, id = args[0], args[2]
-    tab = id.replace(':p', ':t')
+    tab = id.replace(':p', ':t').split('.')[0]
     def listed(name, value):
         path = root / name
         return path.exists() and value in path.read_text().split()

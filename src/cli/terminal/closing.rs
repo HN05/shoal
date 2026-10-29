@@ -244,6 +244,24 @@ impl Marker {
         })
     }
 
+    /// The places of `host` whose watchers keep a marker for `workspace`,
+    /// with the tabs Herdr watchers of earlier releases mark by another name.
+    fn watched(paths: &Paths, host: &str, workspace: &str) -> Vec<String> {
+        let prefix = format!("closing-{host}-");
+        let Ok(entries) = std::fs::read_dir(paths.workspace_state(workspace)) else {
+            return Vec::new();
+        };
+        entries
+            .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+            .filter_map(|name| {
+                let place = name
+                    .strip_prefix(&prefix)
+                    .or_else(|| name.strip_prefix("closing-tab-"))?;
+                Some(place.to_owned())
+            })
+            .collect()
+    }
+
     /// Best effort: without the record, commands in the place cannot tell.
     fn record(paths: &Paths, host: &str, workspace: &str, place: &str) -> Self {
         let path = Self::path(paths, host, workspace, place).filter(|path| {
@@ -264,14 +282,19 @@ impl Drop for Marker {
 }
 
 /// Whether this process runs in a place that closes once `workspace` is
-/// removed.
-pub(super) fn closes_with(paths: &Paths, workspace: &str) -> bool {
-    hosts().any(|host| {
-        super::place_here(host).is_some_and(|place| {
-            Marker::path(paths, host.name().as_str(), workspace, &place)
-                .is_some_and(|path| path.exists())
-        })
-    })
+/// removed: one a watcher closes, or that closing a watched place ends.
+pub(super) async fn closes_with(paths: &Paths, workspace: &str) -> bool {
+    for host in hosts() {
+        let (Some(here), Some(watches)) = (super::place_here(host), host.watches()) else {
+            continue;
+        };
+        for place in Marker::watched(paths, host.name().as_str(), workspace) {
+            if watches.closing_ends(&place, &here).await {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[derive(Debug, Clone, PartialEq)]

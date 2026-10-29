@@ -685,8 +685,10 @@ closes it immediately, so completion cleanup leaves the agent its grace period.
 The turn comes from the agent's hooks, and from the host only for an agent
 without them, such as Herdr's `idle` or `done`; zmx reads none, so its sessions
 of such agents close with their execution. The rule, the watcher and its marker
-are generic: a host only closes a place and reports whether it is open and what
-its agent is doing, and generic code tells the Shoal it starts in a new place
+are generic: a host only closes a place and reports whether it is open, what
+its agent is doing and whether closing it ends another place, as closing a Herdr
+pane's tab ends its other panes, where a batch removal or a streaming export
+then refuses to start; generic code tells the Shoal it starts in a new place
 whether to watch it, while a resume in the pane its agent stopped in leaves that
 tab's watcher as it was. Top-level `close_when_done` applies to every host, and
 `herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.

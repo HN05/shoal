@@ -447,7 +447,7 @@ async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result
             destination.display()
         ),
         None => ensure!(
-            !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
+            !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id).await,
             "this terminal closes when the export removes the workspace, ending the stream; export to a file with -o, or from another terminal"
         ),
     }
@@ -586,7 +586,7 @@ async fn plan_export(
 ) -> Result<PlannedExport> {
     let output = Output::reserve(&directory.file(&workspace.name))?;
     let check = check_export(ctx, &workspace.id, &output).await?;
-    super::workspaces::ensure_batch_removable(ctx, &check, ("export", "export"))?;
+    super::workspaces::ensure_batch_removable(ctx, &check, ("export", "export")).await?;
     Ok(PlannedExport { check, output })
 }
 

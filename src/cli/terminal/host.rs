@@ -155,6 +155,12 @@ pub(in crate::cli) trait Watches: Sync {
     fn place_instance<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
         Box::pin(async { Ok(None) })
     }
+
+    /// Whether closing `place`, one this host's watcher closes, ends `here`,
+    /// the place this process runs in.
+    fn closing_ends<'a>(&'a self, place: &'a str, here: &'a str) -> BoxFuture<'a, bool> {
+        Box::pin(async move { place == here })
+    }
 }
 
 /// A host whose places carry their own ownership, so Shoal closes one the

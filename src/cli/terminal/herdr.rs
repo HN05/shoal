@@ -123,6 +123,11 @@ impl Watches for Herdr {
     fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
         Box::pin(tabs::state(&place.id))
     }
+
+    /// Closing a pane's tab ends every pane in it.
+    fn closing_ends<'a>(&'a self, place: &'a str, here: &'a str) -> BoxFuture<'a, bool> {
+        Box::pin(tabs::shared(place, here))
+    }
 }
 
 impl Closes for Herdr {

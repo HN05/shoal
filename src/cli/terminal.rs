@@ -564,8 +564,8 @@ async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
 
 /// Whether the place this process runs in closes once `workspace` is
 /// removed, ending anything it streams.
-pub(in crate::cli) fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
-    closing::closes_with(paths, workspace)
+pub(in crate::cli) async fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
+    closing::closes_with(paths, workspace).await
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that

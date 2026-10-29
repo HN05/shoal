@@ -16,7 +16,7 @@ use crate::{
 /// finish with: one in another lifecycle operation, which the removal check
 /// leaves to the removal itself, or one whose removal closes this terminal's
 /// tab, ending the batch before the others.
-pub(in crate::cli::commands) fn ensure_batch_removable(
+pub(in crate::cli::commands) async fn ensure_batch_removable(
     ctx: &Context,
     check: &RemovalCheck,
     (noun, verb): (&str, &str),
@@ -27,7 +27,7 @@ pub(in crate::cli::commands) fn ensure_batch_removable(
         "workspace is {state}; wait for that operation to finish"
     );
     ensure!(
-        !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id),
+        !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id).await,
         "this terminal closes with the workspace, ending the {noun} of the others; {verb} from another terminal"
     );
     Ok(())
