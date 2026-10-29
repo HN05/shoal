@@ -1100,3 +1100,57 @@ while [ ! -e '{pids}' ]; do sleep 1; done"#,
     assert!(identity::alive(&detached.shell).unwrap());
     assert!(identity::alive(&detached.child).unwrap());
 }
+
+#[tokio::test]
+async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let top = manager
+        .create_workspace(&repo.id, "top".into(), None, None, None)
+        .await
+        .unwrap();
+    let middle = manager
+        .split_workspace(&top.id, "middle".into(), None)
+        .await
+        .unwrap();
+    let bottom = manager
+        .split_workspace(&middle.id, "bottom".into(), None)
+        .await
+        .unwrap();
+    let report = temp.path().join("report.md");
+    fs::write(&report, "No leaks").unwrap();
+    manager
+        .mark_done(&bottom.id, false, false, vec![report])
+        .await
+        .unwrap();
+    manager
+        .remove_workspace(
+            &bottom.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    // The daemon stops right after the middle workspace's removal commits.
+    manager
+        .commit_workspace_removal(&middle.id, EventCause::Manual)
+        .await
+        .unwrap();
+    let id = bottom.id.clone();
+    let parent: Option<String> = manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT parent_id FROM workspace_files WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(parent.as_deref(), Some(top.id.as_str()));
+}

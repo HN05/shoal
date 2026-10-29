@@ -18,7 +18,7 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{rebase, record};
+pub(crate) use records::{forget_removed, rebase, record};
 
 use layout::{Kept, Layout};
 

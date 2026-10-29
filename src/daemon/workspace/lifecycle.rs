@@ -909,6 +909,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
+                crate::daemon::workspace_files::forget_removed(&tx, &id)?;
                 tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
                 tx.commit()?;
                 Ok(())

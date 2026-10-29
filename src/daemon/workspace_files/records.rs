@@ -171,29 +171,25 @@ pub(super) fn forget_workspace(db: &Connection, workspace_id: &str) -> Result<()
     Ok(())
 }
 
-/// Forget the records of the removed workspace `workspace_id` but its
-/// results, which keep its last `name`, and move the results it was the
-/// parent of to `parent`.
-pub(super) fn forget_removed(
-    db: &mut Connection,
-    workspace_id: &str,
-    name: &str,
-    parent: Option<&str>,
-) -> Result<()> {
-    let tx = db.transaction()?;
+/// Forget the records of the workspace `workspace_id` but its results,
+/// which keep its last name, and move the results it was the parent of to
+/// its own parent, in the transaction that deletes it, before its row goes.
+pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result<()> {
     tx.execute(
         "DELETE FROM workspace_files WHERE workspace_id=?1 AND source!=?2",
         params![workspace_id, FileSource::Result],
     )?;
     tx.execute(
-        "UPDATE workspace_files SET workspace=?2 WHERE workspace_id=?1",
-        params![workspace_id, name],
+        "UPDATE workspace_files SET workspace=(SELECT name FROM workspaces WHERE id=?1)
+            WHERE workspace_id=?1",
+        [workspace_id],
     )?;
     tx.execute(
-        "UPDATE workspace_files SET parent_id=?2 WHERE parent_id=?1",
-        params![workspace_id, parent],
+        "UPDATE workspace_files
+            SET parent_id=(SELECT parent_workspace_id FROM workspaces WHERE id=?1)
+            WHERE parent_id=?1",
+        [workspace_id],
     )?;
-    tx.commit()?;
     Ok(())
 }
 
