@@ -119,12 +119,25 @@ pub(crate) async fn behind(
     else {
         return Ok(None);
     };
-    let endpoint = repo.repo_endpoint(&compare(&encode(&pr.base, true), head));
-    let comparison = repo.send(account, &Request::get(endpoint)).await?;
+    let path = compare(&encode(&pr.base, true), head);
+    comparison_count(repo, account, &path, field)
+        .await
+        .map(Some)
+}
+
+/// The count `field` of the comparison at `path` under the repository.
+async fn comparison_count(
+    repo: &ForgeRepo,
+    account: &Account,
+    path: &str,
+    field: &str,
+) -> Result<u64> {
+    let comparison = repo
+        .send(account, &Request::get(repo.repo_endpoint(path)))
+        .await?;
     comparison[field]
         .as_u64()
         .context("the forge did not report how far the head is behind")
-        .map(Some)
 }
 
 /// Once a PR's branch is deleted, Forgejo reports the PR's own ref as its
