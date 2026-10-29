@@ -226,6 +226,16 @@ struct PreparedExecution {
     _resources: Option<ResourceGuard>,
 }
 
+/// What a stop keeps of the agents it stopped.
+#[derive(Clone, Copy)]
+enum Keep<'a> {
+    /// Their recovery records, as the stop saved them.
+    Records,
+    /// Last sessions, which stay down until `shoal resume`, recording the
+    /// workspace whose process stopped them when given.
+    LastSessions { stopped_by: Option<&'a str> },
+}
+
 /// The record a new execution persists at registration.
 struct ExecutionRecord {
     id: String,
@@ -887,9 +897,9 @@ impl Manager {
             request,
             Protected::Stop,
             StopPolicy::RequireCompleteProof,
+            Keep::Records,
         )
         .await
-        .map(drop)
     }
 
     /// Stop as [`Manager::stop_workspace`] does at the user's request, then
@@ -909,15 +919,15 @@ impl Manager {
         } else {
             StopPolicy::RequireCompleteProof
         };
-        let stopped = self
-            .stop_workspace_executions(selector, StopRequest::manual(), Protected::Stop, policy)
-            .await?;
-        let stopper = stopped_by.map(|workspace| Stopper {
-            workspace,
-            executions: stopped,
-        });
-        self.keep_stopped_as_last_sessions(selector, stopper.as_ref())
-            .await
+        let keep = Keep::LastSessions { stopped_by };
+        self.stop_workspace_executions(
+            selector,
+            StopRequest::manual(),
+            Protected::Stop,
+            policy,
+            keep,
+        )
+        .await
     }
 
     /// Stop executions other than agents that protection already stopped,
@@ -943,21 +953,22 @@ impl Manager {
             request,
             Protected::Keep,
             StopPolicy::RequireCompleteProof,
+            Keep::Records,
         )
         .await
-        .map(drop)
     }
 
-    /// Stop the executions of the workspace `selector` names, returning those
-    /// that nothing stopped before, read once the reservation keeps new ones
-    /// from registering.
+    /// Stop the executions of the workspace `selector` names and `keep` what
+    /// they saved, all under one reservation: no execution registers
+    /// meanwhile, and no other stop keeps the saved agents first.
     async fn stop_workspace_executions(
         &self,
         selector: &str,
         request: StopRequest,
         protected: Protected,
         policy: StopPolicy,
-    ) -> Result<Vec<String>> {
+        keep: Keep<'_>,
+    ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
@@ -975,7 +986,15 @@ impl Manager {
             if protected == Protected::Stop {
                 self.cancel_stopped_restores(&workspace.id).await?;
             }
-            anyhow::Ok(stopping)
+            if let Keep::LastSessions { stopped_by } = keep {
+                let stopper = stopped_by.map(|workspace| Stopper {
+                    workspace,
+                    executions: stopping,
+                });
+                self.keep_stopped_as_last_sessions(&workspace.id, stopper.as_ref())
+                    .await?;
+            }
+            anyhow::Ok(())
         }
         .await;
         // A stop waiting for the user's confirmation has not failed.
