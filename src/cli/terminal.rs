@@ -3,7 +3,8 @@
 //! background, and the [`Host`] that carries that out with its own
 //! primitives. Commands never name a host; adding one means implementing
 //! [`Host`] and the capability traits in [`host`] it supports, and listing
-//! it in [`HOSTS`].
+//! it in [`HOSTS`]; a `default_host` value of its name makes it the host for
+//! terminals no host serves.
 mod background;
 mod closing;
 mod groups;
@@ -31,7 +32,7 @@ use super::{
     context::Context,
 };
 use crate::{
-    config::{Effective, repo::DefaultHost},
+    config::Effective,
     demos::Launch,
     env,
     model::{Chat, Inspection, Repository, Workspace},
@@ -137,21 +138,12 @@ impl Configured {
     }
 
     /// The host `default_host` names for a terminal no host serves, or zmx
-    /// where config turns that host off.
+    /// where config turns that host off. The setting's values are host names.
     fn default_host(settings: &Effective) -> Self {
-        let named = Self::named(
-            settings,
-            match settings.default_host {
-                DefaultHost::Zmx => HostName::Zmx,
-                DefaultHost::Herdr => HostName::Herdr,
-                DefaultHost::Rex => HostName::Rex,
-            },
-        );
-        if named.options.enabled {
-            named
-        } else {
-            Self::named(settings, HostName::Zmx)
-        }
+        let name = settings.default_host.as_str();
+        Self::all(settings)
+            .find(|host| host.host.name().as_str() == name && host.options.enabled)
+            .unwrap_or_else(|| Self::named(settings, HostName::Zmx))
     }
 
     /// The plain terminal, which every terminal falls back to.

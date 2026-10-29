@@ -161,3 +161,18 @@ fn a_session_label_names_its_agent() {
 fn unrecorded(place: &Origin) -> Recorded<'_> {
     Recorded { place, agent: None }
 }
+
+#[test]
+fn every_default_host_setting_names_a_host() {
+    for default in crate::config::repo::DefaultHost::ALL {
+        let config: crate::config::Config =
+            toml::from_str(&format!("default_host = '{}'", default.as_str())).unwrap();
+        let settings = config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap();
+        assert_eq!(
+            Configured::default_host(&settings).host.name().as_str(),
+            default.as_str()
+        );
+    }
+}

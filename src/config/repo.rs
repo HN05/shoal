@@ -570,8 +570,9 @@ states!(
 
 states!(
     #[derive(Default)]
-    /// The terminal host for launches from a terminal no host serves.
-    DefaultHost {
+    /// The terminal host for launches from a terminal no host serves, by
+    /// the host's name.
+    DefaultHost: Variants {
         #[default]
         Zmx => "zmx",
         Herdr => "herdr",
