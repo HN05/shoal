@@ -38,7 +38,7 @@ use crate::{
 };
 
 pub(in crate::cli) use closing::{PlaceState, Watched, watch as watch_place};
-use host::{ChatStart, Demo, DemoWorker, Host, Start};
+use host::{ChatStart, Demo, DemoWorker, Host, Prompts, Start};
 pub(in crate::cli) use naming::{PlaceName, issue_label};
 pub(in crate::cli) use typed::run as run_launch;
 
@@ -1071,13 +1071,15 @@ pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
 /// prompt for it.
 #[derive(Clone)]
 pub(crate) struct PromptSession {
-    host: &'static dyn Host,
+    host: &'static dyn Prompts,
     name: OsString,
 }
 
 impl PromptSession {
     pub(crate) fn current() -> Option<Self> {
-        hosts().find_map(|host| host.prompt_session().map(|name| Self { host, name }))
+        hosts()
+            .filter_map(Host::prompts)
+            .find_map(|host| host.prompt_session().map(|name| Self { host, name }))
     }
 
     /// Submit `text` as a prompt in the session.

@@ -32,6 +32,11 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
+    /// How this host types prompts, unless it types none.
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        None
+    }
+
     /// The demos this host keeps, unless it keeps none.
     fn demos(&self) -> Option<&dyn Demos> {
         None
@@ -165,20 +170,6 @@ pub(in crate::cli) trait Host: Sync {
         true
     }
 
-    /// The session this process runs in, where a prompt can be typed.
-    fn prompt_session(&self) -> Option<OsString> {
-        None
-    }
-
-    /// Submit `text` as a prompt in `session`, from [`Host::prompt_session`].
-    fn submit_prompt<'a>(
-        &'a self,
-        _session: &'a OsStr,
-        _text: &'a str,
-    ) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} cannot type prompts", self.name()) })
-    }
-
     /// Label the session this process runs in, when it runs in one, so
     /// `shoal attach` finds `owner`'s agent there.
     fn label_current<'a>(
@@ -228,6 +219,17 @@ pub(in crate::cli) trait Host: Sync {
     fn attach<'a>(&'a self, _session: &'a Session) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} keeps no sessions", self.name()) })
     }
+}
+
+/// A host that types prompts into the session an agent runs in, for the
+/// agent's wrapper.
+pub(in crate::cli) trait Prompts: Sync {
+    /// The session this process runs in, where a prompt can be typed.
+    fn prompt_session(&self) -> Option<OsString>;
+
+    /// Submit `text` as a prompt in `session`, from
+    /// [`Prompts::prompt_session`].
+    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
 /// A host that keeps demos in places of its own, which the user opens, reads

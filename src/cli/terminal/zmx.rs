@@ -16,7 +16,8 @@ use futures_util::future::BoxFuture;
 use tokio::process::Command;
 
 use super::{
-    ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched, host::Demos,
+    ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
+    host::{Demos, Prompts},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -138,14 +139,6 @@ impl Host for Zmx {
         })
     }
 
-    fn prompt_session(&self) -> Option<OsString> {
-        std::env::var_os(SESSION_VAR)
-    }
-
-    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(submit_prompt(session, text))
-    }
-
     fn label_current<'a>(
         &'a self,
         state: &'a Path,
@@ -177,6 +170,20 @@ impl Host for Zmx {
 
     fn demos(&self) -> Option<&dyn Demos> {
         Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+}
+
+impl Prompts for Zmx {
+    fn prompt_session(&self) -> Option<OsString> {
+        std::env::var_os(SESSION_VAR)
+    }
+
+    fn submit_prompt<'a>(&'a self, session: &'a OsStr, text: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(submit_prompt(session, text))
     }
 }
 

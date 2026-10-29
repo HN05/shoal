@@ -8,7 +8,9 @@ use anyhow::{Context as _, Result};
 use futures_util::future::BoxFuture;
 
 use super::{
-    ChatStart, Demo, Host, PlaceState, Session, Start, Watched, host::Demos, typed::Typed,
+    ChatStart, Demo, Host, PlaceState, Session, Start, Watched,
+    host::{Demos, Prompts},
+    typed::Typed,
 };
 use crate::sessions::{
     HostName, Origin,
@@ -169,6 +171,16 @@ impl Host for Rex {
         })
     }
 
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+}
+
+impl Prompts for Rex {
     fn prompt_session(&self) -> Option<OsString> {
         in_rex()
             .then(|| var("REX_BLOCK").map(OsString::from))
@@ -184,10 +196,6 @@ impl Host for Rex {
                 .await
                 .context("type into the Rex block")
         })
-    }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
     }
 }
 
