@@ -376,6 +376,21 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
 }
 
 #[tokio::test]
+async fn a_stop_claims_only_the_agents_nothing_stopped_before() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    manager.publish_config(global_config("max_agents = 'none'"));
+    let workspace = create(&manager, &repo, "work").await;
+    let (running, _running) = connected_agent(&manager, &workspace).await;
+    // A protection stop's agent keeps its execution while its wrapper waits.
+    let (paused, _paused) = connected_agent(&manager, &workspace).await;
+    stop(&manager, &workspace, &paused, STOPPED);
+    let stopper = manager.stopper("work", "parent").await.unwrap();
+    assert_eq!(stopper.workspace, "parent");
+    assert_eq!(stopper.executions, [running]);
+}
+
+#[tokio::test]
 async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;

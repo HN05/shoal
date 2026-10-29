@@ -21,14 +21,16 @@ pub struct Discarded {
 /// resume the agents among them.
 pub(super) struct Stopper<'a> {
     /// The ID of the process's workspace.
-    workspace: &'a str,
-    /// The executions running before the stop.
-    executions: Vec<String>,
+    pub(super) workspace: &'a str,
+    /// The executions running before the stop that nothing stopped yet.
+    pub(super) executions: Vec<String>,
 }
 
 impl Manager {
     /// The process of workspace `stopped_by` about to stop the executions of
-    /// the workspace `selector` names.
+    /// the workspace `selector` names. An agent that already saved its
+    /// recovery record was stopped before, such as one whose wrapper waits
+    /// to restore it after a protection stop, so that stop is not this one.
     pub(super) async fn stopper<'a>(
         &self,
         selector: &str,
@@ -36,11 +38,14 @@ impl Manager {
     ) -> Result<Stopper<'a>> {
         let workspace = self.workspace(selector).await?;
         let executions = self.workspace_executions(&workspace.id).await?;
+        let stopped_before =
+            |id: &str| recovery::record_path(&self.paths, &workspace.id, id).exists();
         Ok(Stopper {
             workspace: stopped_by,
             executions: executions
                 .into_iter()
                 .map(|execution| execution.id)
+                .filter(|id| !stopped_before(id))
                 .collect(),
         })
     }
