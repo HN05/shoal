@@ -2,6 +2,7 @@
 //! the turn an interrupt ended: Shoal types the agent's own interrupt key, or
 //! a prompt to continue, into the place it runs in, through that place's
 //! terminal host, and the daemon records that the interrupt ended the turn.
+//! Every target is resolved before Shoal types into any.
 use anyhow::{Context as _, Result};
 use serde::Serialize;
 use serde_json::json;
@@ -24,13 +25,6 @@ use crate::{
 /// What `shoal resume` submits to an agent whose turn an interrupt ended.
 const CONTINUE_PROMPT: &str = "Continue where you left off.";
 
-/// An agent whose turn Shoal interrupted or continued.
-#[derive(Debug, Serialize)]
-struct Turn {
-    workspace: String,
-    agent: String,
-}
-
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
 /// `selected` workspaces, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i32> {
@@ -38,85 +32,114 @@ pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i3
     if crate::env::inherits_scope(&ctx.paths.state) {
         super::stop::ensure_below(ctx, &selected).await?;
     }
-    let mut interrupted = Vec::new();
-    for selector in selected {
-        let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
-        interrupted.extend(interrupt_workspace(ctx, &workspace).await?);
+    let interruptions = running_turns(ctx, selected).await?;
+    for interruption in &interruptions {
+        interrupt_turn(ctx, interruption).await?;
     }
-    let value = json!({"interrupted": interrupted});
-    if interrupted.is_empty() {
-        ctx.emit("No running agent turns", value)?;
-        return Ok(0);
-    }
-    let message = interrupted
-        .iter()
-        .map(|turn| {
-            format!(
-                "Interrupted the turn of {} in {}",
-                turn.agent, turn.workspace
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    ctx.emit_styled(Style::Success, &message, value)?;
+    let interrupted: Vec<_> = interruptions
+        .into_iter()
+        .map(|interruption| interruption.target)
+        .collect();
+    report_interrupted(ctx, &interrupted)?;
     Ok(0)
 }
 
-/// Interrupt each agent of `workspace` that runs a turn, recording that
-/// the interrupt ended it.
-async fn interrupt_workspace(ctx: &Context, workspace: &Workspace) -> Result<Vec<Turn>> {
-    let agents = workspace_agents(ctx, workspace).await?;
-    let running = agents.iter().filter(|agent| runs_turn(agent.state));
-    let settings = settings(ctx, workspace).await?;
-    let mut interrupted = Vec::new();
-    for agent in running {
-        let typed = Typed::of(workspace, agent)?;
-        let key = agents::interrupt_key(&settings, typed.name)
-            .with_context(|| format!("Shoal knows no key that interrupts {}", typed.name))?;
-        terminal::send_keys(typed.place, key).await?;
-        request::<AgentStatus>(
-            &ctx.paths,
-            AgentMethod::InterruptTurn {
-                workspace: workspace.id.clone(),
-                execution: agent.execution.clone(),
-            },
-        )
-        .await?;
-        interrupted.push(typed.turn(workspace));
-    }
-    Ok(interrupted)
+/// A running turn and the key that interrupts it.
+struct Interruption {
+    target: Target,
+    key: &'static str,
 }
 
-/// Continue the turns an interrupt ended of the agents in the workspaces
-/// `selectors` name, returning the selectors of the workspaces without one.
-pub(super) async fn continue_interrupted(
-    ctx: &Context,
-    selectors: Vec<String>,
-) -> Result<Vec<String>> {
-    let mut remaining = Vec::new();
-    for selector in selectors {
-        let workspace = client::inspect(&ctx.paths, selector.clone())
-            .await?
-            .workspace;
-        let agents = workspace_agents(ctx, &workspace).await?;
-        let interrupted: Vec<_> = agents
-            .iter()
-            .filter(|agent| idles_interrupted(agent))
-            .collect();
-        if interrupted.is_empty() {
-            remaining.push(selector);
-        }
-        for agent in interrupted {
-            let typed = Typed::of(&workspace, agent)?;
-            terminal::submit_prompt(typed.place, CONTINUE_PROMPT).await?;
-            ctx.emit_styled(
-                Style::Success,
-                &format!("Continued the turn of {} in {}", typed.name, workspace.name),
-                json!({"continued": typed.turn(&workspace)}),
-            )?;
+/// The running turns of the agents in the workspaces `selected` names,
+/// refusing them all when Shoal cannot interrupt one.
+async fn running_turns(ctx: &Context, selected: Vec<String>) -> Result<Vec<Interruption>> {
+    let mut interruptions = Vec::new();
+    for selector in selected {
+        let (workspace, agents) = agents_of(ctx, selector).await?;
+        let settings = settings(ctx, &workspace).await?;
+        for agent in agents.into_iter().filter(|agent| runs_turn(agent.state)) {
+            let target = Target::of(&workspace, agent)?;
+            let key = agents::interrupt_key(&settings, &target.agent)
+                .with_context(|| format!("Shoal knows no key that interrupts {}", target.agent))?;
+            interruptions.push(Interruption { target, key });
         }
     }
-    Ok(remaining)
+    Ok(interruptions)
+}
+
+/// Type the interrupt key, then record that it ended the turn.
+async fn interrupt_turn(ctx: &Context, interruption: &Interruption) -> Result<()> {
+    let target = &interruption.target;
+    terminal::send_keys(&target.place, interruption.key).await?;
+    request::<AgentStatus>(
+        &ctx.paths,
+        AgentMethod::InterruptTurn {
+            workspace: target.workspace_id.clone(),
+            execution: target.execution.clone(),
+        },
+    )
+    .await?;
+    Ok(())
+}
+
+fn report_interrupted(ctx: &Context, interrupted: &[Target]) -> Result<()> {
+    let value = json!({"interrupted": interrupted});
+    if interrupted.is_empty() {
+        return ctx.emit("No running agent turns", value);
+    }
+    let message = interrupted
+        .iter()
+        .map(|target| format!("Interrupted the turn of {}", target.described()))
+        .collect::<Vec<_>>()
+        .join("\n");
+    ctx.emit_styled(Style::Success, &message, value)
+}
+
+/// The turns an interrupt ended that `shoal resume` continues.
+#[derive(Default)]
+pub(super) struct Continuation(Vec<Target>);
+
+impl Continuation {
+    /// The turns an interrupt ended of the agents in the workspaces
+    /// `selectors` name, with the selectors of the workspaces without one.
+    pub(super) async fn plan(ctx: &Context, selectors: Vec<String>) -> Result<(Self, Vec<String>)> {
+        let mut targets = Vec::new();
+        let mut rest = Vec::new();
+        for selector in selectors {
+            let (workspace, agents) = agents_of(ctx, selector.clone()).await?;
+            let interrupted: Vec<_> = agents
+                .into_iter()
+                .filter(idles_interrupted)
+                .map(|agent| Target::of(&workspace, agent))
+                .collect::<Result<_>>()?;
+            if interrupted.is_empty() {
+                rest.push(selector);
+            }
+            targets.extend(interrupted);
+        }
+        Ok((Self(targets), rest))
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Submit the prompt that continues each turn.
+    pub(super) async fn submit(self, ctx: &Context) -> Result<()> {
+        for target in &self.0 {
+            continue_turn(ctx, target).await?;
+        }
+        Ok(())
+    }
+}
+
+async fn continue_turn(ctx: &Context, target: &Target) -> Result<()> {
+    terminal::submit_prompt(&target.place, CONTINUE_PROMPT).await?;
+    ctx.emit_styled(
+        Style::Success,
+        &format!("Continued the turn of {}", target.described()),
+        json!({"continued": target}),
+    )
 }
 
 /// Whether `agent` idles after an interrupt ended its turn.
@@ -130,14 +153,17 @@ fn runs_turn(state: Option<AgentState>) -> bool {
     matches!(state, Some(AgentState::Working | AgentState::Waiting))
 }
 
-async fn workspace_agents(ctx: &Context, workspace: &Workspace) -> Result<Vec<RunningAgent>> {
-    request(
+/// The workspace `selector` names and its connected agents.
+async fn agents_of(ctx: &Context, selector: String) -> Result<(Workspace, Vec<RunningAgent>)> {
+    let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
+    let agents = request(
         &ctx.paths,
         AgentMethod::WorkspaceAgents {
             workspace: workspace.id.clone(),
         },
     )
-    .await
+    .await?;
+    Ok((workspace, agents))
 }
 
 /// The settings that choose the integration of each agent of `workspace`.
@@ -145,31 +171,42 @@ async fn settings(ctx: &Context, workspace: &Workspace) -> Result<Effective> {
     client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await
 }
 
-/// An agent Shoal types into, by name, and the place it runs in.
-#[derive(Debug)]
-struct Typed<'a> {
-    name: &'a str,
-    place: &'a Origin,
+/// An agent Shoal types into, by workspace and name as output shows it, with
+/// its execution and the place it runs in.
+#[derive(Debug, Serialize)]
+struct Target {
+    workspace: String,
+    agent: String,
+    #[serde(skip)]
+    workspace_id: String,
+    #[serde(skip)]
+    execution: String,
+    #[serde(skip)]
+    place: Origin,
 }
 
-impl<'a> Typed<'a> {
+impl Target {
     /// `agent` of `workspace`, refusing one that runs in no terminal host.
-    fn of(workspace: &Workspace, agent: &'a RunningAgent) -> Result<Self> {
-        let name = agent.agent.as_deref().unwrap_or("the agent");
-        let place = agent.origin.as_ref().with_context(|| {
+    fn of(workspace: &Workspace, agent: RunningAgent) -> Result<Self> {
+        let name = agent.agent.unwrap_or_else(|| "the agent".into());
+        let place = agent.origin.with_context(|| {
             format!(
                 "{name} in {} runs in no terminal session Shoal can type into",
                 workspace.name
             )
         })?;
-        Ok(Self { name, place })
+        Ok(Self {
+            workspace: workspace.name.clone(),
+            agent: name,
+            workspace_id: workspace.id.clone(),
+            execution: agent.execution,
+            place,
+        })
     }
 
-    fn turn(&self, workspace: &Workspace) -> Turn {
-        Turn {
-            workspace: workspace.name.clone(),
-            agent: self.name.to_owned(),
-        }
+    /// The agent and its workspace, as messages name them.
+    fn described(&self) -> String {
+        format!("{} in {}", self.agent, self.workspace)
     }
 }
 

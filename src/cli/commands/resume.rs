@@ -1,7 +1,10 @@
 //! Manual recovery uses saved agent identity and today's restore configuration.
 //! It queues restores unless asked to start them now.
 use crate::{
-    cli::{args::WorkspaceTargets, client, context::Context, terminal, ui},
+    cli::{
+        args::WorkspaceTargets, client, commands::turns::Continuation, context::Context, terminal,
+        ui,
+    },
     daemon::{
         recovery::{ReconcileOptions, Report},
         workspace::Discarded,
@@ -36,14 +39,31 @@ pub async fn select(
         ensure_below(&targets, now || focus)?;
     }
     // A named workspace whose agent idles after an interrupt continues its
-    // turn; the rest resume their stopped work.
+    // turn once the rest resumed their stopped work, so a refusal of one
+    // leaves every agent as it was.
+    let mut continuation = Continuation::default();
     if !discard && execution.is_none() && !targets.workspace.is_empty() {
-        targets.workspace = super::turns::continue_interrupted(ctx, targets.workspace).await?;
-        if targets.workspace.is_empty() {
-            return Ok(0);
-        }
+        (continuation, targets.workspace) = Continuation::plan(ctx, targets.workspace).await?;
     }
-    if scoped && !discard {
+    let code = if continuation.is_empty() || !targets.workspace.is_empty() {
+        resume_stopped(ctx, targets, execution, discard, now, focus).await?
+    } else {
+        0
+    };
+    continuation.submit(ctx).await?;
+    Ok(code)
+}
+
+/// Resume the stopped work of the selected workspaces, as [`select`] does.
+async fn resume_stopped(
+    ctx: &Context,
+    targets: WorkspaceTargets,
+    execution: Option<String>,
+    discard: bool,
+    now: bool,
+    focus: bool,
+) -> Result<i32> {
+    if crate::env::inherits_scope(&ctx.paths.state) && !discard {
         return queue_below(ctx, targets.workspace, execution).await;
     }
     let selected = if targets.all {

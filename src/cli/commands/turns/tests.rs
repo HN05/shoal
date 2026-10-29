@@ -56,13 +56,19 @@ fn only_an_idle_agent_continues_the_turn_an_interrupt_ended() {
 #[test]
 fn an_agent_outside_any_terminal_host_takes_no_keys() {
     let workspace = workspace();
-    let detached = agent(None);
-    let error = Typed::of(&workspace, &detached).unwrap_err();
+    let error = Target::of(&workspace, agent(None)).unwrap_err();
     assert_eq!(
         error.to_string(),
         "claude in fix runs in no terminal session Shoal can type into"
     );
     let placed = agent(Some(Origin::created(HostName::Zmx, "fix".into())));
-    let typed = Typed::of(&workspace, &placed).unwrap();
-    assert_eq!((typed.name, typed.place.id()), ("claude", "fix"));
+    let target = Target::of(&workspace, placed).unwrap();
+    assert_eq!(
+        (target.described(), target.place.id()),
+        ("claude in fix".to_owned(), "fix")
+    );
+    assert_eq!(
+        serde_json::to_value(&target).unwrap(),
+        json!({"workspace": "fix", "agent": "claude"})
+    );
 }
