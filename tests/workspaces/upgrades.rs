@@ -18,10 +18,14 @@ fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
         "touch restored\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     )
     .unwrap();
-    // The wrapper starts from an installed path, as Homebrew's link is.
+    // The wrapper starts from an installed link to an earlier release, a copy
+    // of the daemon's binary in the target directory, where it may be cloned.
+    let releases = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let earlier = releases.path().join("shoal");
+    fs::copy(env!("CARGO_BIN_EXE_shoal"), &earlier).unwrap();
     let installed = fixture.root.path().join("installed/shoal");
     fs::create_dir_all(installed.parent().unwrap()).unwrap();
-    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &installed).unwrap();
+    std::os::unix::fs::symlink(&earlier, &installed).unwrap();
     let mut agent = Stopped {
         fixture: &fixture,
         agent: support::isolated(fixture.root.path(), &installed)
@@ -32,15 +36,9 @@ fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
             .unwrap(),
     };
     wait_until("agent to start", || path.join("agent-started").exists());
-    // The upgrade puts another file at the path, here one that runs the same
-    // release.
+    // The upgrade links the release the daemon runs in its place.
     let upgrade = installed.with_file_name("shoal.new");
-    fs::write(
-        &upgrade,
-        format!("#!/bin/sh\nexec '{}' \"$@\"\n", env!("CARGO_BIN_EXE_shoal")),
-    )
-    .unwrap();
-    fs::set_permissions(&upgrade, fs::Permissions::from_mode(0o755)).unwrap();
+    std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_shoal"), &upgrade).unwrap();
     fs::rename(&upgrade, &installed).unwrap();
     fixture.ok(&["restart", "upgraded"]);
     wait_until("agent to restore", || path.join("restored").exists());

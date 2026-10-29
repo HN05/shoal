@@ -785,11 +785,11 @@ pub enum Control {
     },
     Resume {
         ports: Vec<crate::model::PortReservation>,
-        /// The daemon runs the installed binary, which therefore speaks its
-        /// protocol, so a wrapper whose own binary an upgrade replaced may
-        /// continue from it. Older daemons leave it out.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        installed: bool,
+        /// The binary the daemon runs, which a wrapper whose own binary an
+        /// upgrade replaced may continue from, since it speaks the daemon's
+        /// protocol. Older daemons leave it out.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        executable: Option<crate::fsutil::FileIdentity>,
     },
     Finished {
         complete: bool,

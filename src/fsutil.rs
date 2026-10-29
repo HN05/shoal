@@ -181,7 +181,7 @@ fn same_file(left: &Path, right: &Path) -> bool {
 /// What tells a file at a path apart from its replacement. It follows
 /// symlinks, so retargeting a link, renaming another file over it or rewriting
 /// it in place all change the identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FileIdentity {
     device: u64,
     inode: u64,

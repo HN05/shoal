@@ -872,8 +872,8 @@ pub(super) fn save_command(
 pub(super) enum Waited {
     Resume {
         ports: Vec<crate::model::PortReservation>,
-        /// The daemon runs the installed binary.
-        installed: bool,
+        /// The binary the daemon runs, when it says.
+        executable: Option<crate::fsutil::FileIdentity>,
     },
     /// The restore was cancelled, with the daemon's reason if it gave one.
     Cancelled {
@@ -906,10 +906,10 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
         tokio::select! {
             received = link.recv() => match received {
                 Ok(Received::Detached | Received::Reattached) => {}
-                Ok(Received::Control(Control::Resume { ports, installed })) => {
+                Ok(Received::Control(Control::Resume { ports, executable })) => {
                     // The restored child reattaches once it is registered.
                     link.disarm();
-                    return Ok(Waited::Resume { ports, installed });
+                    return Ok(Waited::Resume { ports, executable });
                 }
                 Ok(Received::Control(Control::Stop { reason, removed })) => {
                     return Ok(Waited::Cancelled { reason, removed });

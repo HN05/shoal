@@ -182,9 +182,10 @@ its slot. The restore command resolves the agent again, so an updated agent
 binary runs. A wrapper whose binary an upgrade replaced execs the installed one
 when the daemon resumes its agent, keeping its process, terminal and daemon
 connection: the daemon sends nothing until the restored child starts, so no
-control is lost. The daemon allows it only while it runs the installed binary
-itself, since it holds back its own update until the agent starts, and the
-installed release bounds the commands it runs to prepare the agent. The installed release registers the execution again on that
+control is lost. The resume names the binary the daemon runs, and the wrapper
+continues only when the installed file is that binary, whatever path either
+started from, since the daemon holds back its own update until the agent
+starts; the installed release bounds the commands it runs to prepare the agent. The installed release registers the execution again on that
 connection, which records its place and returns a new plan, then restores the
 agent, so new wrapper code reaches running sessions without stopping them.
 The CLI restarts the selected agents together by default; `--sequential` spreads the load of

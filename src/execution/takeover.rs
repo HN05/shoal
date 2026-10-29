@@ -19,7 +19,7 @@ use super::{Mode, link::Link};
 use crate::{
     cli::internal::{Worker, internal_command},
     env,
-    fsutil::set_inherited,
+    fsutil::{FileIdentity, set_inherited},
     model::ExecutionPlan,
     paths::Paths,
     protocol::{Control, ExecutionEvent, timing},
@@ -28,15 +28,18 @@ use crate::{
 
 /// The binary the wrapper continues from: the installed one, once an
 /// upgrade put it in place of the wrapper's own, while `link` can hand its
-/// connection over to a `daemon` that runs the installed binary too.
-pub(super) fn installed(link: &Link, daemon: bool) -> Option<PathBuf> {
-    if !daemon {
-        return None;
-    }
+/// connection over and the daemon runs that binary.
+pub(super) fn installed(link: &Link, daemon: Option<FileIdentity>) -> Option<PathBuf> {
     link.descriptor()?;
-    crate::cli::installed::started()
-        .installed()
-        .map(Path::to_owned)
+    let installed = crate::cli::installed::started().installed()?;
+    runs_daemon_binary(installed, daemon).then(|| installed.to_owned())
+}
+
+/// Whether `candidate` is the binary the daemon runs, from whatever path, so
+/// it speaks the daemon's protocol: another release could wait for the
+/// daemon's update, which waits in turn for the restored agent to start.
+fn runs_daemon_binary(candidate: &Path, daemon: Option<FileIdentity>) -> bool {
+    daemon.is_some_and(|daemon| FileIdentity::of(candidate).is_ok_and(|file| file == daemon))
 }
 
 /// How long the installed binary may prepare the agent it restores: its
@@ -157,3 +160,6 @@ pub(super) async fn register_again(
         control => bail!("unexpected answer to the registration: {control:?}"),
     }
 }
+
+#[cfg(test)]
+mod tests;

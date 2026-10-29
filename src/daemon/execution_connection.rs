@@ -457,8 +457,8 @@ async fn relay(
                         *handoff_claimed = false;
                         awaiting_started = true;
                         sent_stop = false;
-                        let installed = runs_installed(crate::cli::installed::started());
-                        protocol::write(writer, &Control::Resume { ports, installed }).await?;
+                        let executable = crate::cli::installed::started().identity();
+                        protocol::write(writer, &Control::Resume { ports, executable }).await?;
                     }
                     // The next daemon continues the wait once the wrapper reattaches.
                     Action::Stop(_) if reattach && manager.executions.shutting_down() => {
@@ -474,14 +474,6 @@ async fn relay(
             }
         }
     }
-}
-
-/// Whether this daemon runs from `executable` as installed. A wrapper the
-/// upgrade left behind may then continue from the installed binary: another
-/// release could speak another protocol and wait for this daemon's update,
-/// which waits in turn for the restored agent to start.
-fn runs_installed(executable: &crate::cli::installed::Executable) -> bool {
-    executable.installed().is_none()
 }
 
 /// The plan of execution `id` of workspace `workspace_id`, whose wrapper

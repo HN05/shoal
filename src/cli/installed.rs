@@ -44,6 +44,11 @@ impl Executable {
         }
     }
 
+    /// The identity of the binary this command started from.
+    pub(crate) fn identity(&self) -> Option<FileIdentity> {
+        self.identity
+    }
+
     /// The installed binary, once an upgrade replaced this one.
     pub(crate) fn installed(&self) -> Option<&std::path::Path> {
         self.path.as_deref().filter(|_| self.replaced())
