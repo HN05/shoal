@@ -1392,7 +1392,7 @@ terminal like a package manager's modified configuration files, and with
 `--force` replaces them. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
 the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
-`SHOAL_SKILLS_DIR`, build-time directory, then an adjacent `shoal-skills` symlink
+`SHOAL_SKILLS_DIR`, then an adjacent `shoal-skills` symlink
 to a directory holding every bundled skill. Explicit paths must be absolute;
 relative link targets resolve lexically against the link's directory. Preserve
 stable installation prefixes so upgrades apply; unpackaged binaries install the

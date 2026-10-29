@@ -511,8 +511,8 @@ configured command for another agent, plus proven child
   file, and never stop agents.
   Packaged config installation replaces global TOML only on explicit request,
   keeps a backup, and uses templates embedded in the binary.
-  Packaged skills use the runtime `SHOAL_SKILLS_DIR`, then the build-time
-  directory, then an adjacent `shoal-skills` symlink. Explicit paths must be
+  Packaged skills use the runtime `SHOAL_SKILLS_DIR`, then an adjacent
+  `shoal-skills` symlink. Explicit paths must be
   absolute; relative link targets resolve lexically against the link's
   directory. The source must hold every bundled skill and stays uncanonicalized
   so stable prefixes follow upgrades. Shoal changes or removes only skills that
