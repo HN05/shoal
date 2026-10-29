@@ -30,21 +30,22 @@ pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<St
 
 /// The processes using the directory other than those `excluded` names,
 /// which is read after they are listed: a process started meanwhile that
-/// it covers is among them, and one that has exited since no longer uses
-/// the directory.
+/// it covers is among them, and one known to have exited since no longer
+/// uses the directory.
 pub async fn in_directory_besides(
     root: &Path,
     excluded: impl Future<Output = Result<Vec<u32>>>,
 ) -> Result<Vec<String>> {
     let users = directory_users(root).await?;
     let excluded = excluded.await?;
-    Ok(users
-        .into_iter()
-        .filter(|(pid, _)| {
-            !excluded.contains(pid) && identity::capture(*pid).is_ok_and(|p| p.is_some())
-        })
-        .map(|(pid, name)| format!("{name} (PID {pid})"))
-        .collect())
+    let mut found = Vec::new();
+    for (pid, name) in users {
+        if excluded.contains(&pid) || identity::capture(pid)?.is_none() {
+            continue;
+        }
+        found.push(format!("{name} (PID {pid})"));
+    }
+    Ok(found)
 }
 
 /// The detached processes running from the directory: those launchd or init
