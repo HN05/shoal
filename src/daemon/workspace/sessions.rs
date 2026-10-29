@@ -100,12 +100,16 @@ impl Manager {
         let Some((owner, origin)) = self.place_owner(host, place).await? else {
             return Ok(PlaceClose::NotRecorded);
         };
-        if owner != workspace {
+        if owner.as_deref() != Some(workspace) {
             return Ok(PlaceClose::OwnedElsewhere);
         }
         if let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) {
-            host.close(&self.paths.state, &origin, &Owner::Workspace(owner))
-                .await?;
+            host.close(
+                &self.paths.state,
+                &origin,
+                &Owner::Workspace(workspace.to_owned()),
+            )
+            .await?;
         }
         self.forget_owned_place(origin).await?;
         Ok(PlaceClose::Closed)

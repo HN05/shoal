@@ -125,7 +125,9 @@ pub(super) async fn execute(
         manager.executions.mark_unattachable(&plan.id);
     }
     if let Some(origin) = origin
-        && let Err(error) = manager.record_execution_origin(&plan.id, origin).await
+        && let Err(error) = manager
+            .record_execution_origin(&plan.id, origin, agent.is_some())
+            .await
     {
         log!("execution {}: cannot record its place: {error:#}", plan.id);
     }

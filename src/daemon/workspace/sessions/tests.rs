@@ -527,6 +527,7 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
         .record_execution_origin(
             &started.plan.id,
             Origin::created(HostName::Rex, "shared".into()),
+            true,
         )
         .await?;
     // The first workspace's removal and its watcher leave the block open.
@@ -552,5 +553,57 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
             .await?,
         PlaceClose::NotRecorded
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> {
+    use crate::{daemon::workspace::ExecutionKind, sessions::PlaceClose};
+
+    let (_root, manager, workspace, host) = rex_fixture(&["parent", "chatted"]).await?;
+    let child = manager
+        .create_workspace(&workspace.repository_id, "child".into(), None, None, None)
+        .await?;
+    host.add("parent", &workspace.id)?;
+    host.add("chatted", &workspace.id)?;
+    // A parent agent's `shoal run --workspace child` runs in the parent's block.
+    let nested = manager
+        .begin_execution(&child.id, None, ExecutionKind::Command, None)
+        .await?;
+    manager
+        .record_execution_origin(
+            &nested.plan.id,
+            Origin::created(HostName::Rex, "parent".into()),
+            false,
+        )
+        .await?;
+    assert_eq!(
+        manager
+            .close_recorded_place(&child.id, HostName::Rex, "parent")
+            .await?,
+        PlaceClose::OwnedElsewhere
+    );
+    // A chat that starts in a block takes it from the workspace.
+    let mut chat_place = Origin::created(HostName::Rex, "chatted".into());
+    chat_place.owned = false;
+    manager
+        .start_chat(
+            workspace.repository_id.clone().into(),
+            "chat".into(),
+            "claude".into(),
+            std::process::id(),
+            Some(chat_place),
+        )
+        .await?;
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert_eq!(host.closed()?, ["parent"]);
+    manager.cleanup_orphan_sessions().await;
+    assert_eq!(
+        manager
+            .close_recorded_place(&workspace.id, HostName::Rex, "chatted")
+            .await?,
+        PlaceClose::OwnedElsewhere
+    );
+    assert_eq!(host.closed()?, ["parent"]);
     Ok(())
 }

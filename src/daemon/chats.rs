@@ -45,6 +45,10 @@ impl Manager {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let started_at = i64::try_from(crate::time::unix_seconds())?;
         self.end_finished_chats().await?;
+        // A place Shoal created for a workspace is the chat's now.
+        if let Some(origin) = &origin {
+            self.release_place(origin).await?;
+        }
         let chat = Chat {
             id: Uuid::new_v4().to_string(),
             repository_id: repository,

@@ -705,8 +705,9 @@ labels, so the daemon's records of the places Shoal created are the proof of
 ownership, closed through the same removal hook, orphan sweep and pending-close
 retries as zmx sessions; Rex never reuses IDs, so a recorded block that still
 exists is Shoal's, and each state directory knows only its own. An agent of
-another workspace that starts in a recorded block takes it over, as
-relabelling does for a zmx session, and place watchers close recorded places
+another workspace that starts in a recorded block takes it over and a chat
+releases it from its workspace, as relabelling does for a zmx session, while a
+nested command takes nothing; place watchers close recorded places
 through the daemon, which reads the owner and closes under one lock. A close ends
 only that block, leaving the user's other blocks in its window. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.

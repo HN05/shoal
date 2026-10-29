@@ -33,7 +33,7 @@ pub(crate) enum Owner {
 pub enum PlaceClose {
     /// It was the workspace's, and is closed.
     Closed,
-    /// Another workspace's agent took it over, so it stays open.
+    /// Another workspace's agent or a chat took it over, so it stays open.
     OwnedElsewhere,
     /// The daemon keeps no record of it; its host closes it.
     NotRecorded,

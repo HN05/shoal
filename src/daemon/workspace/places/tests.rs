@@ -22,7 +22,7 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
     origin.owned = false;
     origin.group = Some("session:1".into());
     manager
-        .record_execution_origin(&started.plan.id, origin.clone())
+        .record_execution_origin(&started.plan.id, origin.clone(), true)
         .await?;
     let executions = manager.inspect_workspace(&workspace.id).await?.executions;
     assert_eq!(executions.len(), 1);
