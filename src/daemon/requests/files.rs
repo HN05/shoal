@@ -10,22 +10,23 @@ use super::super::{
 };
 use crate::protocol::{Body, FileMethod};
 
+/// Every answer lists files, which no limit keeps to one frame, so each is
+/// sent in pages.
 pub(super) async fn handle(manager: &Arc<Manager>, method: FileMethod) -> Result<Answer> {
-    Ok(Answer::Body(match method {
-        FileMethod::ListFiles { workspace } => {
-            Body::AttachedFiles(manager.workspace_files(&workspace).await?)
-        }
+    let files = match method {
+        FileMethod::ListFiles { workspace } => manager.workspace_files(&workspace).await,
         FileMethod::AddFiles { workspace, files } => {
-            Body::AttachedFiles(manager.add_workspace_files(&workspace, files).await?)
+            manager.add_workspace_files(&workspace, files).await
         }
         FileMethod::RemoveFiles {
             workspace: Some(workspace),
             name,
-        } => Body::AttachedFiles(manager.remove_workspace_files(&workspace, name).await?),
+        } => manager.remove_workspace_files(&workspace, name).await,
         FileMethod::RemoveFiles {
             workspace: None, ..
-        } => Body::AttachedFiles(manager.remove_idle_files().await?),
-    }))
+        } => manager.remove_idle_files().await,
+    };
+    Ok(Answer::pages(files, Body::AttachedFiles))
 }
 
 impl Scoped for FileMethod {
@@ -72,3 +73,6 @@ async fn narrow_to_removed(
     *workspace = owner.id;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

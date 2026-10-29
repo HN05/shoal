@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 use crate::{
     cli::{
         args::WorkspaceScope,
-        client::{self, request},
+        client,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
@@ -19,7 +19,8 @@ use crate::{
 /// Print the workspace's files, or with `paths` only where Shoal keeps them.
 pub(super) async fn list(ctx: &Context, workspace: Option<String>, paths: bool) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let files: Vec<AttachedFile> = request(&ctx.paths, FileMethod::ListFiles { workspace }).await?;
+    let files =
+        client::pages::<AttachedFile>(&ctx.paths, FileMethod::ListFiles { workspace }).await?;
     ctx.show(&files, |files| {
         if paths {
             for file in files {
@@ -48,8 +49,9 @@ pub(super) async fn add(
 ) -> Result<i32> {
     let files = super::messages::attachment_paths(&files)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let added: Vec<AttachedFile> =
-        request(&ctx.paths, FileMethod::AddFiles { workspace, files }).await?;
+    let added =
+        client::pages::<AttachedFile>(&ctx.paths, FileMethod::AddFiles { workspace, files })
+            .await?;
     ctx.show(&added, |added| {
         let now = crate::time::unix_seconds() as i64;
         let rows = added.iter().map(|file| cells(file, now)).collect();
@@ -74,8 +76,9 @@ pub(super) async fn remove(
     if !yes && let Some(action) = confirmation(ctx, workspace.as_deref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted: Vec<AttachedFile> =
-        request(&ctx.paths, FileMethod::RemoveFiles { workspace, name }).await?;
+    let deleted =
+        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { workspace, name })
+            .await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),
