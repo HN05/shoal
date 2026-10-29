@@ -669,7 +669,7 @@ pub(crate) fn save_session(
 }
 
 /// The session the hooks of execution `id` last reported.
-fn reported_session(paths: &Paths, workspace_id: &str, id: &str) -> Option<String> {
+pub(crate) fn reported_session(paths: &Paths, workspace_id: &str, id: &str) -> Option<String> {
     std::fs::read_to_string(session_path(paths, workspace_id, id))
         .ok()
         .filter(|session| valid_session(session))

@@ -62,6 +62,11 @@ pub enum AgentMethod {
         workspace: String,
         due: bool,
     },
+    /// The session of the workspace's agent that a fork starts from: the
+    /// caller's own agent there, else its only one.
+    AgentSession {
+        workspace: String,
+    },
     /// A message from the user to a workspace's agents.
     SendAgentMessage {
         workspace: String,

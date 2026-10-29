@@ -744,6 +744,15 @@ pub struct RunningAgent {
     pub origin: Option<crate::sessions::Origin>,
 }
 
+/// The session a workspace's agent reported last, which a new agent can
+/// start from a fork of.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentSession {
+    /// Named as `--agent` names it.
+    pub agent: String,
+    pub session: String,
+}
+
 /// An agent launch or restore waiting for, or starting in, a `max_agents` slot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueEntry {

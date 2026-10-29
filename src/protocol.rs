@@ -506,6 +506,7 @@ response_bodies! {
     Discarded(crate::daemon::workspace::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
+    AgentSession(crate::model::AgentSession),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::model::Selected),
     CheckLog(crate::forge::ci::checks::CheckLog),

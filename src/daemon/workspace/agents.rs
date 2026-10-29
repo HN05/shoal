@@ -17,6 +17,7 @@ use crate::{
 };
 
 mod attachment;
+mod forks;
 mod queue_move;
 mod restart;
 

@@ -105,6 +105,11 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        AgentMethod::AgentSession { workspace } => Body::AgentSession(
+            manager
+                .agent_session(&workspace, caller.and_then(Caller::execution_id))
+                .await?,
+        ),
         AgentMethod::SendAgentMessage {
             workspace,
             message,
@@ -140,6 +145,7 @@ impl Scoped for AgentMethod {
         Ok(match self {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentMessages { workspace }
+            | AgentMethod::AgentSession { workspace }
             | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
