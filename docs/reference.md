@@ -3088,8 +3088,9 @@ shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
 `shoal messages send` queues a message of at most 8 KiB, without control characters
-other than newlines and tabs, for the agents working in a workspace; output
-indents a message's later lines under its first. Agents read messages with
+other than newlines and tabs, for the agents working in a workspace, and is
+refused while the workspace is being removed; output indents a message's later
+lines under its first. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 

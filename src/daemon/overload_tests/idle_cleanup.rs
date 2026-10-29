@@ -45,7 +45,7 @@ async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
 }
 
 #[tokio::test]
-async fn an_update_during_removal_keeps_the_workspace_of_a_cancelled_restore() {
+async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     let (_root, manager, workspace, serving) = fixture().await;
     ignore_fixture_files(&workspace);
     let home = &manager.paths.home;
@@ -81,33 +81,26 @@ async fn an_update_during_removal_keeps_the_workspace_of_a_cancelled_restore() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move { manager.remove_on_request(&id, snapshot).await }
     });
-    // The hook runs once removal has cancelled the restore.
+    // The hook runs once removal has reserved the workspace and cancelled
+    // the restore, before its final check.
     bounded(async {
         while !started.exists() {
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await;
-    manager
+    let refused = manager
         .send_agent_message(&workspace.name, "Review requested".into())
         .await
-        .unwrap();
-    fs::write(&release, "").unwrap();
-    let error = bounded(removal).await.unwrap().unwrap_err();
+        .unwrap_err();
     assert!(
-        format!("{error:#}").contains("an update for its stopped agent arrived"),
-        "{error:#}"
+        format!("{refused:#}").contains("being removed"),
+        "{refused:#}"
     );
+    fs::write(&release, "").unwrap();
+    bounded(removal).await.unwrap().unwrap();
     bounded(launched).await.unwrap().unwrap();
-    assert!(workspace.path.is_dir());
-    assert_eq!(
-        manager.agent_messages(&workspace.name).await.unwrap().len(),
-        1
-    );
-    assert_eq!(
-        manager.cleanup_candidacy(&workspace.id).await.unwrap(),
-        Err(CleanupReason::Recovering)
-    );
+    assert!(!workspace.path.exists());
     serving.abort();
 }
 

@@ -1119,6 +1119,8 @@ per idle stretch, and the prompt's hook delivers them. That is the only input
 Shoal writes to an agent's terminal: the daemon never does, the prompt carries
 no forge text, and it is appended to anything typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse.
+A workspace being removed takes no message, since removal decides from the
+messages it has and deletes them with the workspace.
 `messages` reads new messages while `messages send` sends them. Scoped
 processes may read their own workspace's messages and send messages
 only to the agents of the workspaces below their own, which they coordinate.

@@ -991,17 +991,6 @@ impl Manager {
             bail!("{retention}; retaining workspace");
         }
         removal.verify(&check, stage)?;
-        // A cancelled restore's agent is exempt only while it has nothing to
-        // do; an update accepted since, as during the hooks, needs it back.
-        if removal.unattended()
-            && !cancelled.is_empty()
-            && self.agent_updates_recorded(&workspace.id).await?
-        {
-            bail!(
-                "an update for its stopped agent arrived {}; retaining the workspace for shoal resume",
-                stage.change()
-            );
-        }
         match (removal, stage) {
             (Removal::Merged { head } | Removal::Completed { head, .. }, _) => ensure!(
                 crate::daemon::links::pr::current_head(workspace).await? == head,

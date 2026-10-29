@@ -6,7 +6,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
-use crate::daemon::workspace::Manager;
+use crate::{daemon::workspace::Manager, state::WorkspaceState};
 
 /// Unread messages one workspace may hold, and their total size; together
 /// they fit one response.
@@ -23,12 +23,21 @@ pub struct AgentMessage {
 
 /// Queue `message` in the caller's transaction, returning its ID, or `None`
 /// when an identical message is still unread. Callers wake watches with
-/// `agent_messages_changed` after committing.
+/// `agent_messages_changed` after committing. A workspace being removed
+/// takes none, since removal decides from the messages it has.
 pub(crate) fn insert(
     tx: &Transaction<'_>,
     workspace_id: &str,
     message: &str,
 ) -> Result<Option<i64>> {
+    let removing: Option<bool> = tx
+        .query_row(
+            "SELECT state=?2 FROM workspaces WHERE id=?1",
+            params![workspace_id, WorkspaceState::Removing],
+            |row| row.get(0),
+        )
+        .optional()?;
+    ensure!(removing != Some(true), "the workspace is being removed");
     let pending: Option<i64> = tx
         .query_row(
             "SELECT id FROM agent_messages WHERE workspace_id=?1 AND message=?2",
