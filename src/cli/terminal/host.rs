@@ -87,12 +87,9 @@ pub(in crate::cli) trait Places: Sync {
     /// to reach it.
     fn background_note(&self, name: &str) -> String;
 
-    /// The place this process runs in, one this host opened, as [`Watches`]
-    /// and [`Closes`] name it.
-    fn this_place(&self) -> Option<String>;
-
-    /// The place this process runs in, with what a later start needs to
-    /// open a place beside it, for a host whose places new ones join.
+    /// The place this process runs in, under the one ID [`Watches`] and
+    /// [`Closes`] name it by, with what a later start needs to open a place
+    /// beside it.
     fn origin(&self) -> Option<Origin> {
         None
     }

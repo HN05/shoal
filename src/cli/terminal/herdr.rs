@@ -109,10 +109,6 @@ impl Places for Herdr {
         &["HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID"]
     }
 
-    fn this_place(&self) -> Option<String> {
-        current_pane()
-    }
-
     fn names_places(&self) -> bool {
         true
     }

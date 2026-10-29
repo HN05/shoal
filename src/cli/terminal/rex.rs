@@ -121,10 +121,6 @@ impl Places for Rex {
         &["REX_SESSION", "REX_BLOCK"]
     }
 
-    fn this_place(&self) -> Option<String> {
-        var("REX_BLOCK")
-    }
-
     fn names_places(&self) -> bool {
         true
     }

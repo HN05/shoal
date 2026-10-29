@@ -114,19 +114,17 @@ impl Places for Zmx {
         format!("Started {name} in a detached zmx session; attach with `shoal attach {name}`")
     }
 
-    fn this_place(&self) -> Option<String> {
-        std::env::var(SESSION_VAR)
-            .ok()
-            .filter(|session| !session.is_empty())
-    }
-
     /// The session this process runs in, which the daemon records for its
     /// executions and chats so `shoal attach` finds them there.
     fn origin(&self) -> Option<Origin> {
         Some(Origin {
             host: HostName::Zmx,
             group: None,
-            place: Some(self.this_place()?),
+            place: Some(
+                std::env::var(SESSION_VAR)
+                    .ok()
+                    .filter(|session| !session.is_empty())?,
+            ),
             data: BTreeMap::new(),
             owned: false,
             instance: None,

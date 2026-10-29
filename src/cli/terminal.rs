@@ -821,7 +821,7 @@ pub(in crate::cli) async fn close_background_place_when_done(
 /// labelling it with `workspace` first when `label`.
 async fn watch_here(ctx: &Context, host: &str, workspace: &str, label: bool) -> Result<()> {
     let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
-    let place = this_place(host)
+    let place = place_here(host)
         .with_context(|| format!("{} did not name the place this agent runs in", host.name()))?;
     if label && let Some(sessions) = host.sessions() {
         sessions
@@ -1084,9 +1084,11 @@ pub(in crate::cli) async fn send_demo_keys(launch: &Launch, keys: &str) -> Resul
     }
 }
 
-/// The place this process runs in, as `host` names the places it opens.
-fn this_place(host: &dyn Host) -> Option<String> {
-    host.places().and_then(Places::this_place)
+/// The ID of the place of `host` this process runs in, from its origin record.
+fn place_here(host: &dyn Host) -> Option<String> {
+    host.places()
+        .and_then(Places::origin)
+        .and_then(|origin| origin.place)
 }
 
 /// Whether the places `host` opens show a name.
@@ -1118,7 +1120,7 @@ fn named(name: &str) -> Option<&'static dyn Host> {
 /// it in place of the caller's shell.
 pub(in crate::cli) struct Place {
     host: &'static dyn Host,
-    /// The place as [`Places::this_place`] names it.
+    /// The place's ID in its origin record.
     id: String,
     closes_when_done: bool,
 }
@@ -1147,7 +1149,7 @@ pub(in crate::cli) async fn add_worker(
 ) -> Result<i32> {
     let plan = serde_json::from_str(payload).context("invalid workspace plan")?;
     let host = named(host).with_context(|| format!("unknown terminal host {host}"))?;
-    let id = this_place(host)
+    let id = place_here(host)
         .with_context(|| format!("{} did not name the place this worker runs in", host.name()))?;
     ctx.place = Some(Place {
         host,
