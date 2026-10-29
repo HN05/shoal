@@ -7,7 +7,7 @@ use crate::{
         client,
         context::Context,
         forge_hosts::ForgeHosts,
-        output::{Palette, Style},
+        output::{self, Palette, Style},
     },
     forge::{
         ForgeRepo,
@@ -67,12 +67,13 @@ pub(super) async fn view(
         })
         .await?;
     let palette = Palette::stdout(ctx.json);
+    let emoji = output::stdout_shows_emoji(ctx.json);
     ctx.show(&views, |views| {
         for (index, view) in views.iter().enumerate() {
             if index > 0 {
                 outln!();
             }
-            render(view, palette);
+            render(view, palette, emoji);
         }
     })?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
@@ -161,7 +162,7 @@ pub(super) fn render_log(log: &CheckLog) {
     }
 }
 
-fn render(view: &ItemView, palette: Palette) {
+fn render(view: &ItemView, palette: Palette, emoji: bool) {
     let kind = match view.kind {
         ItemKind::Issue => "Issue",
         ItemKind::Pr => "PR",
@@ -171,7 +172,7 @@ fn render(view: &ItemView, palette: Palette) {
             let heading = format!("{kind} #{}: {}", details.number, details.title);
             outln!("{}", palette.paint(Style::Heading, heading));
             outln!("URL:      {}", view.url);
-            render_details(details, palette);
+            render_details(details, palette, emoji);
         }
         None => {
             outln!("{}", palette.paint(Style::Heading, kind));
@@ -187,7 +188,7 @@ fn render(view: &ItemView, palette: Palette) {
     }
 }
 
-fn render_details(details: &Details, palette: Palette) {
+fn render_details(details: &Details, palette: Palette, emoji: bool) {
     match &details.pr {
         Some(pr) => render_pr(&details.state, pr, palette),
         None => outln!("State:    {}", details.state),
@@ -197,7 +198,7 @@ fn render_details(details: &Details, palette: Palette) {
     if !details.labels.is_empty() {
         outln!("Labels:   {}", details.labels.join(", "));
     }
-    render_reactions(&details.reactions, 0);
+    render_reactions(&details.reactions, 0, emoji);
     if !details.body.trim().is_empty() {
         outln!();
         print_indented(&details.body, 2);
@@ -213,14 +214,14 @@ fn render_details(details: &Details, palette: Palette) {
                 comment.id
             );
             print_indented(&comment.body, 4);
-            render_reactions(&comment.reactions, 4);
+            render_reactions(&comment.reactions, 4, emoji);
         }
     }
     if let Some(reviews) = &details.reviews {
         outln!();
         outln!("Reviews:  {}", reviews.len());
         for review in reviews {
-            render_review(review);
+            render_review(review, emoji);
         }
     }
 }
@@ -243,7 +244,7 @@ fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
     }
 }
 
-fn render_review(review: &Review) {
+fn render_review(review: &Review, emoji: bool) {
     outln!(
         "  {} · {} · {}",
         review.author,
@@ -273,23 +274,52 @@ fn render_review(review: &Review) {
             comment.id
         );
         print_indented(&comment.body, 6);
-        render_reactions(&comment.reactions, 6);
+        render_reactions(&comment.reactions, 6, emoji);
     }
 }
 
 /// One line with each reaction's count, marking those the viewer made.
-fn render_reactions(reactions: &[Reaction], indent: usize) {
+fn render_reactions(reactions: &[Reaction], indent: usize, emoji: bool) {
     if reactions.is_empty() {
         return;
     }
+    outln!(
+        "{:indent$}Reactions: {}",
+        "",
+        reactions_text(reactions, emoji)
+    );
+}
+
+/// Each reaction as its emoji where `emoji` allows and it has one, otherwise
+/// by name, with its count.
+fn reactions_text(reactions: &[Reaction], emoji: bool) -> String {
     let reactions: Vec<String> = reactions
         .iter()
         .map(|reaction| {
+            let shown = emoji
+                .then(|| reaction_emoji(&reaction.content))
+                .flatten()
+                .unwrap_or(&reaction.content);
             let own = if reaction.reacted { " (you)" } else { "" };
-            format!("{} {}{own}", reaction.content, reaction.count)
+            format!("{shown} {}{own}", reaction.count)
         })
         .collect();
-    outln!("{:indent$}Reactions: {}", "", reactions.join(", "));
+    reactions.join(", ")
+}
+
+/// The emoji of a reaction GitHub names `content`.
+fn reaction_emoji(content: &str) -> Option<&'static str> {
+    Some(match content {
+        "+1" => "👍",
+        "-1" => "👎",
+        "laugh" => "😄",
+        "hooray" => "🎉",
+        "confused" => "😕",
+        "heart" => "❤️",
+        "rocket" => "🚀",
+        "eyes" => "👀",
+        _ => return None,
+    })
 }
 
 fn print_indented(text: &str, indent: usize) {
@@ -301,3 +331,6 @@ fn print_indented(text: &str, indent: usize) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

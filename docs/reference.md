@@ -2921,7 +2921,9 @@ branch. Assigned items suppress idle cleanup.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, description, comments, and reviews with their inline comments,
-with the reactions on the item and each comment where the forge has them; a
+with the reactions on the item and each comment where the forge has them, as
+emoji on a terminal in a UTF-8 locale other than the Linux console and by name
+otherwise; a
 PR adds its branches and the merge conflicts, CI checks and review state `status`
 reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded

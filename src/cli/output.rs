@@ -41,6 +41,30 @@ pub fn stdout_width(json: bool) -> Option<usize> {
     terminal_width(io::stdout())
 }
 
+/// Whether text printed to stdout may use emoji: a terminal, not JSON, in a
+/// UTF-8 locale and not one known to lack emoji.
+pub fn stdout_shows_emoji(json: bool) -> bool {
+    let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .find(|value| !value.is_empty());
+    shows_emoji(
+        io::stdout().is_terminal() && !json,
+        std::env::var_os("TERM").as_deref(),
+        locale.as_deref(),
+    )
+}
+
+/// The first locale variable set decides the character set, as in libc; the
+/// Linux console and dumb terminals have no emoji glyphs.
+fn shows_emoji(terminal: bool, term: Option<&OsStr>, locale: Option<&OsStr>) -> bool {
+    let utf8 = locale.is_some_and(|locale| {
+        let locale = locale.to_string_lossy().to_ascii_lowercase();
+        locale.contains("utf-8") || locale.contains("utf8")
+    });
+    terminal && utf8 && !term.is_some_and(|term| term == "dumb" || term == "linux")
+}
+
 #[derive(Clone, Copy)]
 pub enum Style {
     Heading,

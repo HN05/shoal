@@ -52,3 +52,22 @@ fn styles_reset_and_state_labels_keep_their_wire_spelling() {
         "\"ready\""
     );
 }
+
+#[test]
+fn emoji_require_a_utf8_terminal_with_glyphs() {
+    for (terminal, term, locale, shown) in [
+        (true, Some("xterm-256color"), Some("en_US.UTF-8"), true),
+        (true, None, Some("C.utf8"), true),
+        (false, Some("xterm-256color"), Some("en_US.UTF-8"), false),
+        (true, Some("xterm-256color"), Some("C"), false),
+        (true, Some("xterm-256color"), None, false),
+        (true, Some("linux"), Some("en_US.UTF-8"), false),
+        (true, Some("dumb"), Some("en_US.UTF-8"), false),
+    ] {
+        assert_eq!(
+            shows_emoji(terminal, term.map(OsStr::new), locale.map(OsStr::new)),
+            shown,
+            "{terminal} {term:?} {locale:?}"
+        );
+    }
+}
