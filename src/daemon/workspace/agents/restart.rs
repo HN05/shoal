@@ -151,14 +151,15 @@ impl Manager {
         run: Option<String>,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
-        if let Some(restart) = &mut agent.restart {
-            return Ok(restart.answer());
-        }
-        // Another command continuing the same run restarted it already.
-        if run.is_some() && agent.restarted_by == run {
+        // Another command continuing the same run restarted it already,
+        // even if another run restarts it since.
+        if run.is_some() && agent.ended_restarts.get(&run) == Some(&Ok(())) {
             let (done, answer) = oneshot::channel();
             let _ = done.send(Ok(()));
             return Ok(answer);
+        }
+        if let Some(restart) = &mut agent.restart {
+            return Ok(restart.answer());
         }
         ensure!(
             agent.recover,

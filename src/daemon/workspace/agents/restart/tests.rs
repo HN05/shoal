@@ -434,14 +434,26 @@ async fn a_request_of_a_run_that_restarted_the_agent_already_leaves_it_running()
         .unwrap();
     assert!(!manager.restart_requested(&id).await);
     assert!(!*execution.stop.borrow());
-    // Another run restarts it again.
+    // Another run restarts it again, and a late request of the first run
+    // neither joins that restart nor, once it ended, starts another.
     let again = manager
         .request_restart(&id, Some("other".into()))
         .await
         .unwrap();
     assert!(manager.restart_requested(&id).await);
-    manager.fail_restart(&id, "cancelled".into()).await;
-    assert!(again.await.unwrap().is_err());
+    manager
+        .restart_agent(&id, Some("run".into()))
+        .await
+        .unwrap();
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    again.await.unwrap().unwrap();
+    manager
+        .restart_agent(&id, Some("run".into()))
+        .await
+        .unwrap();
+    assert!(!manager.restart_requested(&id).await);
+    assert!(!*execution.stop.borrow());
 }
 
 #[tokio::test]
