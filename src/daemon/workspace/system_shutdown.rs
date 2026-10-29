@@ -69,20 +69,20 @@ impl Manager {
             log!("system shutdown: agent queue unavailable: {error:#}");
             HashSet::new()
         });
-        let waits = stopped.iter().any(|workspace| {
-            waits_for_resume(&self.paths, &workspace.id, &queued).unwrap_or_else(|error| {
-                log!(
-                    "system shutdown: stopped work of {} unreadable: {error:#}",
-                    workspace.name
-                );
-                true
+        let waiting: Vec<&Workspace> = stopped
+            .iter()
+            .copied()
+            .filter(|workspace| {
+                waits_for_resume(&self.paths, workspace, &queued).unwrap_or_else(|error| {
+                    log!(
+                        "system shutdown: stopped work of {} unreadable: {error:#}",
+                        workspace.name
+                    );
+                    true
+                })
             })
-        });
-        let continues = if waits {
-            "continue it with shoal resume --all"
-        } else {
-            "the agent queue restores its agents"
-        };
+            .collect();
+        let continues = continuation(&waiting);
         let count = stopped.len();
         let workspaces = if count == 1 {
             "workspace"
@@ -111,22 +111,50 @@ impl Manager {
 }
 
 /// Whether the workspace saved work only `shoal resume` continues: a
-/// command, or an agent whose restore is neither `queued` nor requested.
+/// command, or an agent whose restore is neither `queued` nor requested. A
+/// done workspace's requests wait for `shoal resume` to name it.
 fn waits_for_resume(
     paths: &crate::paths::Paths,
-    workspace_id: &str,
+    workspace: &Workspace,
     queued: &HashSet<String>,
 ) -> Result<bool> {
-    let saved = Saved::load(paths, workspace_id)?;
-    let requested: HashSet<String> = recovery::restore_requests(paths, workspace_id)?
-        .into_iter()
-        .map(|(execution, _)| execution)
-        .collect();
+    let saved = Saved::load(paths, &workspace.id)?;
+    let requested: HashSet<String> = if workspace.done {
+        HashSet::new()
+    } else {
+        recovery::restore_requests(paths, &workspace.id)?
+            .into_iter()
+            .map(|(execution, _)| execution)
+            .collect()
+    };
     Ok(!saved.commands.is_empty()
         || saved
             .agents
             .iter()
             .any(|(execution, _)| !requested.contains(execution) && !queued.contains(execution)))
+}
+
+/// How the work of the `waiting` workspaces continues. `shoal resume --all`
+/// skips done workspaces, so they are named.
+fn continuation(waiting: &[&Workspace]) -> String {
+    let (done, open): (Vec<&Workspace>, Vec<&Workspace>) =
+        waiting.iter().partition(|workspace| workspace.done);
+    let mut commands = Vec::new();
+    if !open.is_empty() {
+        commands.push("shoal resume --all".to_owned());
+    }
+    if !done.is_empty() {
+        let names: Vec<&str> = done
+            .iter()
+            .map(|workspace| workspace.name.as_str())
+            .collect();
+        commands.push(format!("shoal resume {}", names.join(" ")));
+    }
+    if commands.is_empty() {
+        "the agent queue restores its agents".into()
+    } else {
+        format!("continue it with {}", commands.join(" and "))
+    }
 }
 
 #[cfg(test)]

@@ -174,20 +174,61 @@ async fn suspending_waits_for_an_admission_pass_in_progress() {
     assert!(queue.suspended());
 }
 
+fn workspace(root: &std::path::Path, name: &str, done: bool) -> Workspace {
+    let mut workspace = Workspace::new_record(
+        "repo".into(),
+        name.into(),
+        root.join(name),
+        name.into(),
+        crate::state::WorkspaceState::Ready,
+    );
+    workspace.done = done;
+    workspace
+}
+
 #[test]
 fn only_requested_or_queued_restores_continue_without_the_user() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
+    let open = workspace(root.path(), "open", false);
     let none = HashSet::new();
-    assert!(!waits_for_resume(&paths, "workspace", &none).unwrap());
-    recovery::save_record(&paths, "workspace", "requested", "claude", None, None).unwrap();
+    assert!(!waits_for_resume(&paths, &open, &none).unwrap());
+    recovery::save_record(&paths, &open.id, "requested", "claude", None, None).unwrap();
     let request = paths
-        .workspace_state("workspace")
+        .workspace_state(&open.id)
         .join("requested.restore-request.json");
     std::fs::write(&request, "{}").unwrap();
-    assert!(!waits_for_resume(&paths, "workspace", &none).unwrap());
-    recovery::save_record(&paths, "workspace", "unattended", "claude", None, None).unwrap();
-    assert!(waits_for_resume(&paths, "workspace", &none).unwrap());
+    assert!(!waits_for_resume(&paths, &open, &none).unwrap());
+    // A done workspace's request waits for `shoal resume` to name it.
+    let done = Workspace {
+        done: true,
+        ..open.clone()
+    };
+    assert!(waits_for_resume(&paths, &done, &none).unwrap());
+    recovery::save_record(&paths, &open.id, "unattended", "claude", None, None).unwrap();
+    assert!(waits_for_resume(&paths, &open, &none).unwrap());
     let queued = HashSet::from(["unattended".to_owned()]);
-    assert!(!waits_for_resume(&paths, "workspace", &queued).unwrap());
+    assert!(!waits_for_resume(&paths, &open, &queued).unwrap());
+}
+
+#[test]
+fn done_workspaces_are_named_since_resume_all_skips_them() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let (open, done) = (
+        workspace(root.path(), "open", false),
+        workspace(root.path(), "finished", true),
+    );
+    assert_eq!(continuation(&[]), "the agent queue restores its agents");
+    assert_eq!(
+        continuation(&[&open]),
+        "continue it with shoal resume --all"
+    );
+    assert_eq!(
+        continuation(&[&done]),
+        "continue it with shoal resume finished"
+    );
+    assert_eq!(
+        continuation(&[&open, &done]),
+        "continue it with shoal resume --all and shoal resume finished"
+    );
 }

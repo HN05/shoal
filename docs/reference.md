@@ -290,8 +290,9 @@ wrapper saving its agent as for that signal, but keeps waiting and requested
 restores, and admits nothing from the agent queue until the shutdown is
 cancelled; then it releases the lock, which logind
 honours for at most its `InhibitDelayMaxSec`. A `system_shutdown` notification
-says whether `shoal resume --all` is needed, a workspace that does not stop
-records `stop_failed`, and a refused lock `environment_problem`. An
+names the `shoal resume` command the work needs, naming done workspaces, which
+`--all` skips, or says the agent queue restores it; a workspace that does not
+stop records `stop_failed`, and a refused lock `environment_problem`. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits
