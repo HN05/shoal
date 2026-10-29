@@ -1671,6 +1671,10 @@ request whose branch moved since it was requested is refused as stale and marks 
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the
 agent account; every other item action stays within the workspace's repository.
+Item commands that need only a repository also run from a registered checkout,
+where a chat runs with the user's authority: they act as the repository's agent
+account under its settings, open without a proposal, and link or record nothing,
+since only a workspace holds links; workspace processes act from their workspace.
 People outside the project see such an issue, so `[issue] other_repositories`
 governs scoped callers separately from `issue_open`: `"propose"` by default,
 `"direct"`, or `"deny"`. The workspace's required labels and templates describe
