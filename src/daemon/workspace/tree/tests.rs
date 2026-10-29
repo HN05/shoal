@@ -156,6 +156,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
     let mut done = AssignmentMethod::WorkspaceDone {
         workspace: grandchild.name.clone(),
         cleanup: false,
+        integrated: false,
     };
     crate::daemon::scope::authorize(&manager, Some("scope"), &mut done)
         .await

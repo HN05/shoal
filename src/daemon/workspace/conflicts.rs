@@ -22,18 +22,30 @@ impl Manager {
 
     /// The conflicts a workspace watch reports: those of
     /// [`Self::check_conflicts`] with the default target, unless that target
-    /// already has HEAD's changes and a merge could only repeat them.
+    /// already has HEAD's changes and a merge could only repeat them, or the
+    /// assignment is done at HEAD with its work integrated elsewhere.
     pub(crate) async fn watched_conflicts(&self, selector: &str) -> Result<ConflictCheck> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let mut check = self.conflicts_with(&workspace, None).await?;
-        if check.conflicts
-            && git::status::merged_into(&workspace.path, &check.head, &check.target_commit).await?
-        {
+        if check.conflicts && self.conflicts_settled(&workspace, &check).await? {
             check.conflicts = false;
             check.files.clear();
         }
         Ok(check)
+    }
+
+    async fn conflicts_settled(
+        &self,
+        workspace: &Workspace,
+        check: &ConflictCheck,
+    ) -> Result<bool> {
+        let integrated = self
+            .completion(&workspace.id)
+            .await?
+            .is_some_and(|completion| completion.integrated && completion.head == check.head);
+        Ok(integrated
+            || git::status::merged_into(&workspace.path, &check.head, &check.target_commit).await?)
     }
 
     /// The conflicts of `workspace`'s committed HEAD with `target`.

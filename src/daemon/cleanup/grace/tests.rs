@@ -53,7 +53,10 @@ async fn completion_cleanup_starts_the_grace_period_only_once_eligible() {
     let (_root, manager, workspace) = fixture().await;
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     manager.sweep_completed().await.unwrap();
     // Unsaved work is reported at once and does not use up the grace period.
     let completion = manager.completion(&workspace.id).await.unwrap().unwrap();
@@ -84,7 +87,10 @@ async fn pr_cleanup_waits_for_the_grace_period() {
         .set_pr(&workspace.id, crate::daemon::links::pr::Action::Acknowledge)
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     manager.sweep_prs().await.unwrap();
     assert!(manager.cleanup_at(&workspace.id).await.unwrap().is_some());
     assert!(workspace.path.exists());
@@ -96,7 +102,10 @@ async fn pr_cleanup_waits_for_the_grace_period() {
 #[tokio::test]
 async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     let (_root, manager, workspace) = fixture().await;
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     sweep(&manager).await;
     assert!(manager.cleanup_at(&workspace.id).await.unwrap().is_some());
     manager.undo_done(&workspace.id).await.unwrap();
@@ -104,7 +113,10 @@ async fn a_pass_that_no_longer_removes_the_workspace_ends_its_grace_period() {
     assert_eq!(manager.cleanup_at(&workspace.id).await.unwrap(), None);
     assert!(workspace.path.exists());
     // A later completion starts a new grace period rather than inheriting one.
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     sweep(&manager).await;
     assert!(manager.cleanup_at(&workspace.id).await.unwrap().unwrap() > unix_seconds());
     assert!(workspace.path.exists());

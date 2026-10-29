@@ -28,9 +28,11 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: AssignmentMethod) -> 
             selection,
             draft,
         } => Body::ReviewMarks(manager.clear_ready(&workspace, selection, draft).await?),
-        AssignmentMethod::WorkspaceDone { workspace, cleanup } => {
-            Body::Completion(manager.mark_done(&workspace, cleanup).await?)
-        }
+        AssignmentMethod::WorkspaceDone {
+            workspace,
+            cleanup,
+            integrated,
+        } => Body::Completion(manager.mark_done(&workspace, cleanup, integrated).await?),
     }))
 }
 

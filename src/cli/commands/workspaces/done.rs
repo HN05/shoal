@@ -47,7 +47,11 @@ pub(in crate::cli::commands) async fn done(
     }
     let completion: Completion = request(
         &ctx.paths,
-        AssignmentMethod::WorkspaceDone { workspace, cleanup },
+        AssignmentMethod::WorkspaceDone {
+            workspace,
+            cleanup,
+            integrated: false,
+        },
     )
     .await?;
     let message = if completion.cleanup {

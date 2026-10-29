@@ -194,7 +194,10 @@ async fn a_new_turn_or_a_busy_agent_cancels_a_retry() {
 async fn a_finished_assignment_cancels_its_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
-    manager.mark_done(&workspace.name, false).await.unwrap();
+    manager
+        .mark_done(&workspace.name, false, false)
+        .await
+        .unwrap();
     assert_eq!(retry(&manager, &workspace).await, None);
     // Withdrawing completion does not bring the old retry back.
     manager.undo_done(&workspace.name).await.unwrap();

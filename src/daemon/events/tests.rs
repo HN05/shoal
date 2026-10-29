@@ -246,7 +246,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .await
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
-    manager.mark_done(&workspace.id, true).await.unwrap();
+    manager.mark_done(&workspace.id, true, false).await.unwrap();
     manager.sweep_completed().await.unwrap();
     let notifications = manager.notifications(true, 100).await.unwrap();
     manager

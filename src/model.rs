@@ -387,6 +387,10 @@ pub struct Execution {
 pub struct Completion {
     pub head: String,
     pub cleanup: bool,
+    /// Another branch has HEAD's work under other commits, so cleanup need
+    /// not wait for them to be pushed.
+    #[serde(default)]
+    pub integrated: bool,
     pub error: Option<String>,
 }
 
@@ -458,7 +462,10 @@ pub enum CleanupReason {
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
     PrWatch,
-    Completed,
+    Completed {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        integrated: bool,
+    },
     Issue,
     Recovering,
     RunningCommands,
@@ -492,7 +499,10 @@ impl std::fmt::Display for CleanupReason {
             Self::Children => f.write_str("Child workspaces"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
-            Self::Completed => f.write_str("Done; completion cleanup pending"),
+            Self::Completed { integrated: false } => {
+                f.write_str("Done; completion cleanup pending")
+            }
+            Self::Completed { integrated: true } => f.write_str("Done; integrated elsewhere"),
             Self::Issue => f.write_str("Linked issue"),
             Self::Recovering => f.write_str("Execution recovery pending"),
             Self::RunningCommands => f.write_str("Tracked commands running"),

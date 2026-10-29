@@ -72,8 +72,13 @@ impl std::fmt::Display for Retention {
 enum Removal<'a> {
     /// Explicit merge completion stops tracked agents without waiting for idle.
     Merged { head: &'a str },
-    /// An assignment finished; all commits must already be preserved.
-    Completed { head: &'a str, cause: EventCause },
+    /// An assignment finished; all commits must already be kept, unless
+    /// another branch has them under other commits.
+    Completed {
+        head: &'a str,
+        integrated: bool,
+        cause: EventCause,
+    },
     /// A user request; work no branch or remote keeps needs their consent.
     Manual {
         unsaved: &'a UnsavedWork,
@@ -169,13 +174,13 @@ impl<'a> Removal<'a> {
     /// to delete unsaved work.
     fn verify(self, check: &RemovalCheck, stage: Stage) -> Result<()> {
         match (self, stage) {
-            (Removal::Completed { .. }, _) => {
+            (Removal::Completed { integrated, .. }, _) => {
                 ensure!(
                     !check.dirty,
                     "workspace has uncommitted or untracked work; retaining it"
                 );
                 ensure!(
-                    check.commits_kept(),
+                    integrated || check.commits_kept(),
                     "workspace has commits neither pushed nor on the local default branch or the branch it builds on; retaining it"
                 );
             }
@@ -632,8 +637,10 @@ impl Manager {
         if self.pr_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::PrWatch));
         }
-        if self.completion(id).await?.is_some() {
-            return Ok(Some(CleanupReason::Completed));
+        if let Some(completion) = self.completion(id).await? {
+            return Ok(Some(CleanupReason::Completed {
+                integrated: completion.integrated,
+            }));
         }
         if self.issue_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::Issue));
@@ -710,11 +717,15 @@ impl Manager {
     pub(super) async fn remove_completed(
         &self,
         selector: &str,
-        head: &str,
+        completion: &crate::model::Completion,
         cause: EventCause,
     ) -> Result<bool> {
-        self.remove_after_grace(selector, Removal::Completed { head, cause })
-            .await
+        let removal = Removal::Completed {
+            head: &completion.head,
+            integrated: completion.integrated,
+            cause,
+        };
+        self.remove_after_grace(selector, removal).await
     }
 
     /// Remove the workspace unless its grace period is still running.

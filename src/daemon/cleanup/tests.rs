@@ -238,7 +238,7 @@ async fn failed_step_does_not_skip_later_steps_and_is_named() {
         .unwrap();
     // Completion cleanup retains the dirty workspace and cannot record why.
     fs::write(done.path.join("work"), "retain").unwrap();
-    manager.mark_done(&done.id, true).await.unwrap();
+    manager.mark_done(&done.id, true, false).await.unwrap();
     manager
         .store
         .run(|db| {
@@ -387,7 +387,10 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         reason: None,
         choices: vec![],
     };
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     let question = manager.ask_question(&workspace.name, ask).await.unwrap();
     assert_eq!(reason().await, CleanupReason::Held);
     manager
@@ -399,7 +402,10 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
         .answer_question(question.id, "No".into(), None)
         .await
         .unwrap();
-    assert_eq!(reason().await, CleanupReason::Completed);
+    assert_eq!(
+        reason().await,
+        CleanupReason::Completed { integrated: false }
+    );
     manager.undo_done(&workspace.id).await.unwrap();
 
     manager

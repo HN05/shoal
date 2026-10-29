@@ -835,7 +835,10 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     // The restored agent exited on its own too; finishing the assignment
     // forgets it.
     assert!(!last().is_empty());
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     assert_eq!(last(), []);
     assert_ne!(
         bounded(resume_isolated(&manager, &workspace, false))
@@ -1428,7 +1431,10 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     let (_root, manager, workspace, serving) = fixture().await;
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     assert!(
         manager
             .stop_agent_for_overload("test memory pressure")
@@ -1453,7 +1459,10 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     );
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
-    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, false, false)
+        .await
+        .unwrap();
     publish_recovery(&manager);
     bounded(launched).await.unwrap().unwrap();
     assert!(!workspace.path.join("restored").exists());

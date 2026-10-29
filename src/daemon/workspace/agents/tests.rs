@@ -77,7 +77,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, true).await.unwrap();
+    manager.mark_done(&workspace.id, true, false).await.unwrap();
     assert!(manager.signals.cleanup_woken().now_or_never().is_some());
     let complete = manager
         .finish_execution(execution.plan.id, ExecutionKind::Command, Some(0))

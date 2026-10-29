@@ -59,13 +59,21 @@ impl Manager {
         Ok(completion)
     }
 
-    /// `cleanup` requests cleanup even when `[done] cleanup` is false.
-    pub async fn mark_done(&self, selector: &str, cleanup: bool) -> Result<Completion> {
+    /// `cleanup` requests cleanup even when `[done] cleanup` is false;
+    /// `integrated` records that another branch has HEAD's work under other
+    /// commits.
+    pub async fn mark_done(
+        &self,
+        selector: &str,
+        cleanup: bool,
+        integrated: bool,
+    ) -> Result<Completion> {
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        self.record_done(&workspace, head, cleanup).await
+        self.record_done(&workspace, head, cleanup, integrated)
+            .await
     }
 
     /// Caller holds the workspace's PR gate and has verified ownership and
@@ -75,6 +83,7 @@ impl Manager {
         workspace: &Workspace,
         head: String,
         cleanup: bool,
+        integrated: bool,
     ) -> Result<Completion> {
         let settings = self.workspace_settings(workspace).await?;
         let hook = self.done_hook(workspace, &settings).await?;
@@ -82,6 +91,7 @@ impl Manager {
         let completion = Completion {
             head,
             cleanup: cleanup || settings.done.cleanup,
+            integrated,
             error: None,
         };
         let persisted = self.persist_completion(&workspace.id, &completion).await?;
@@ -251,7 +261,7 @@ impl Manager {
             return Ok(false);
         }
         let cause = self.completion_cause(&workspace.id).await?;
-        self.remove_completed(&workspace.id, &completion.head, cause)
+        self.remove_completed(&workspace.id, &completion, cause)
             .await
     }
 
@@ -298,7 +308,8 @@ struct Persisted {
 }
 
 /// Record `completion`, returning whether it differs from the recorded one:
-/// another HEAD, cleanup choice or cleanup error, or an unreadable record.
+/// another HEAD, cleanup choice, integration or cleanup error, or an
+/// unreadable record.
 fn record_completion(
     tx: &rusqlite::Transaction,
     id: &str,
@@ -322,10 +333,14 @@ fn record_completion(
 
 /// What the user is told about a completion and the questions it closed.
 fn done_notice(completion: &Completion, closed: &[i64]) -> String {
-    let mut notice = String::from(if completion.cleanup {
-        "assignment finished; cleanup requested"
+    let mut notice = String::from("assignment finished");
+    if completion.integrated {
+        notice.push_str("; integrated elsewhere");
+    }
+    notice.push_str(if completion.cleanup {
+        "; cleanup requested"
     } else {
-        "assignment finished; no cleanup requested"
+        "; no cleanup requested"
     });
     if let [number] = closed {
         notice.push_str(&format!("; closed question {number}"));

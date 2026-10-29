@@ -1436,6 +1436,37 @@ async fn branch_conflicts_with_a_target_that_has_heads_changes_are_not_reported(
     );
 }
 
+#[tokio::test]
+async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "branch".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .set_repository_config(&repo.id, Some("[done]\ncleanup = false\n".into()))
+        .await
+        .unwrap();
+    for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {
+        std::fs::write(repo.join("tracked"), content).unwrap();
+        crate::test_support::commit(repo, "tracked");
+    }
+    manager.mark_done(&workspace.id, false, true).await.unwrap();
+    let all = Selection::default();
+    let poll = || manager.poll_item_activity(&workspace.id, &all);
+    assert!(poll().await.unwrap().is_empty());
+    // Withdrawing the completion reports the conflict again.
+    manager.undo_done(&workspace.id).await.unwrap();
+    let updates = poll().await.unwrap();
+    assert_eq!(updates.len(), 1);
+    assert_eq!(updates[0].kind, UpdateKind::MergeConflict);
+}
+
 fn resolved_branch(workspace_id: &str) -> Snapshot {
     branch_conflicts(Ok(crate::model::ConflictCheck {
         workspace_id: workspace_id.into(),

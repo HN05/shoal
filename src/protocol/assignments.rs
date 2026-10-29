@@ -4,10 +4,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentMethod {
-    /// `cleanup` requests cleanup even when `[done] cleanup` is false.
+    /// `cleanup` requests cleanup even when `[done] cleanup` is false;
+    /// `integrated` records that another branch has HEAD's work under other
+    /// commits.
     WorkspaceDone {
         workspace: String,
         cleanup: bool,
+        #[serde(default)]
+        integrated: bool,
     },
     WorkspaceUndone {
         workspace: String,

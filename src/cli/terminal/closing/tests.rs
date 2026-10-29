@@ -320,6 +320,7 @@ async fn inspect(
             completion: completion.map(|cleanup| Completion {
                 head: "head".into(),
                 cleanup,
+                integrated: false,
                 error: None,
             }),
             executions,

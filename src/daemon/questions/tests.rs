@@ -522,7 +522,7 @@ async fn done_closes_open_questions_for_good() {
         .ask_question(&workspace.name, ask("Which cache?", &[]))
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, true).await.unwrap();
+    manager.mark_done(&workspace.id, true, false).await.unwrap();
 
     assert!(manager.questions(None).await.unwrap().questions.is_empty());
     assert_ne!(
