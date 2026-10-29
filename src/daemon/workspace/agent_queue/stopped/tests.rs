@@ -430,6 +430,34 @@ async fn a_stop_cancels_an_admitted_restore_before_its_agent_registers() {
 }
 
 #[tokio::test]
+async fn a_shutdown_returns_an_admitted_restore_to_the_queue_when_its_agent_registers() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let workspace = create(&manager, &repo, "work").await;
+    stop(&manager, &workspace, "agent", STOPPED);
+    let entry = manager
+        .queue_stopped_restore("work", "agent", herdr())
+        .await
+        .unwrap();
+    manager.dispatch_queue().await.unwrap();
+    assert!(manager.queue_entry_starting(&entry.id).await.unwrap());
+    // The shutdown begins after admission, before the agent registers.
+    manager.agent_queue.suspend(true).await;
+    let refused = manager.reserve_queue_entry(&entry.id).await.unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("the system is shutting down"),
+        "{refused:#}"
+    );
+    manager.dispatch_queue().await.unwrap();
+    assert_eq!(queue(&manager).await[0].2, Queued);
+    // Once the queue admits again, the restore starts again.
+    manager.agent_queue.suspend(false).await;
+    manager.dispatch_queue().await.unwrap();
+    drop(manager.reserve_queue_entry(&entry.id).await.unwrap());
+}
+
+#[tokio::test]
 async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
