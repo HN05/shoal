@@ -27,14 +27,21 @@ impl From<Exit> for Ending {
 }
 
 impl Manager {
-    /// End running work as the daemon exits with `ending`. What still runs
+    /// End running work as the daemon exits with `ending`, refusing new
+    /// executions before the stop lists what runs. What still runs
     /// afterwards, such as work that failed to stop, detaches or stops as
     /// [`Manager::stop_for_shutdown`] decides.
     pub(crate) async fn end_work(&self, ending: Ending) {
         match ending {
             Ending::Detach => {}
-            Ending::Stop => self.stop_all_for_exit().await,
-            Ending::Save => self.stop_for_shutdown_of(Shutdown::Daemon).await,
+            Ending::Stop => {
+                self.executions.close().await;
+                self.stop_all_for_exit().await;
+            }
+            Ending::Save => {
+                self.executions.close().await;
+                self.stop_for_shutdown_of(Shutdown::Daemon).await;
+            }
         }
     }
 

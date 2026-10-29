@@ -65,6 +65,8 @@ pub(crate) struct Executions {
     /// Recent demo launches whose execution ended before their command ran,
     /// for the start waiting on each.
     unrun_demo_launches: StdMutex<VecDeque<String>>,
+    /// Set once the daemon refuses new registrations.
+    closed: AtomicBool,
     shutting_down: AtomicBool,
     /// Scope token → the execution it was issued to.
     scopes: Mutex<HashMap<String, Caller>>,
@@ -102,10 +104,18 @@ impl Executions {
         self.connections().await.disconnect(id).await
     }
 
+    /// Refuse new registrations, as the daemon exits. Taking the connections
+    /// lock lets a registration under way finish first.
+    pub(crate) async fn close(&self) {
+        let _connections = self.connections().await;
+        self.closed.store(true, Ordering::Relaxed);
+    }
+
     /// Before the daemon exits, refuse new registrations and ask every
     /// connected execution to stop for `request`.
     pub(crate) async fn shut_down(&self, request: StopRequest) {
         let connections = self.connections().await;
+        self.closed.store(true, Ordering::Relaxed);
         self.shutting_down.store(true, Ordering::Relaxed);
         for id in connections.senders.keys() {
             let _ = connections.stop(id, &request, false).await;
@@ -233,10 +243,10 @@ pub(crate) struct Connections<'a> {
 }
 
 impl Connections<'_> {
-    /// Refuse a registration once shutdown has started stopping executions.
+    /// Refuse a registration once the daemon closed registrations.
     pub(crate) fn ensure_accepting(&self) -> Result<()> {
         ensure!(
-            !self.executions.shutting_down(),
+            !self.executions.closed.load(Ordering::Relaxed),
             "the daemon is shutting down; retry once it restarts"
         );
         Ok(())

@@ -114,6 +114,16 @@ impl Running {
             async move { manager.end_work(ending).await }
         });
         let control: Control = read(&mut self.connection).await;
+        // No execution starts while the stop runs, to outlive it.
+        let refused = self
+            .manager
+            .begin_execution(&self.workspace.id, None, ExecutionKind::Command, None)
+            .await
+            .expect_err("an execution registered while the daemon stops work");
+        assert!(
+            format!("{refused:#}").contains("shutting down"),
+            "{refused:#}"
+        );
         let finished = ExecutionEvent::Finished { exit_code: 143 };
         protocol::write(self.connection.get_mut(), &finished)
             .await
