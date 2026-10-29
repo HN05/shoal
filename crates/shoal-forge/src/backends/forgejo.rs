@@ -34,7 +34,7 @@ use crate::{
     },
     conventions::{Lookup, shared_lookups},
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, text},
@@ -101,6 +101,8 @@ impl Backend for Forgejo {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::UpdateByMerge
+            | Capability::UpdateByRebase
             | Capability::ForkPrs
             | Capability::Forks
             | Capability::LineComments
@@ -304,6 +306,20 @@ impl Backend for Forgejo {
         Ok(vec![Request::new(
             HttpMethod::Delete,
             merge_endpoint(repo, current),
+            None,
+        )])
+    }
+
+    fn update_branch(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>> {
+        let pull = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![Request::new(
+            HttpMethod::Post,
+            format!("{pull}/update?style={}", method.as_str()),
             None,
         )])
     }

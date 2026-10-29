@@ -21,7 +21,7 @@ use crate::{
     },
     conventions::Lookup,
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
@@ -89,6 +89,9 @@ impl Backend for Bitbucket {
             Capability::AutoMerge => {
                 Support::Unsupported(Some("Bitbucket's API cannot merge a pull request later"))
             }
+            Capability::UpdateByMerge | Capability::UpdateByRebase => Support::Unsupported(Some(
+                "Bitbucket has no API for updating a PR's branch, so update it with Git and push it",
+            )),
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
@@ -336,6 +339,15 @@ impl Backend for Bitbucket {
 
     fn cancel_auto_merge(&self, _repo: &ForgeRepo, _current: &Current) -> Result<Vec<Request>> {
         Err(capability::unsupported(self, Capability::AutoMerge))
+    }
+
+    fn update_branch(
+        &self,
+        _repo: &ForgeRepo,
+        _current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>> {
+        Err(capability::unsupported(self, Capability::update(method)))
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {

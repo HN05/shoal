@@ -79,6 +79,10 @@ pub enum Action {
         delete_branch: bool,
     },
     CancelAutoMerge,
+    /// Bring a PR's branch up to date with its base on the forge.
+    Update {
+        method: UpdateMethod,
+    },
     Thread(ThreadChange),
     Review(NewReview),
     React(ReactionChange),
@@ -117,6 +121,11 @@ states!(MergeMethod: ValueEnum {
     Squash => "squash",
 });
 
+states!(UpdateMethod: ValueEnum {
+    Merge => "merge",
+    Rebase => "rebase",
+});
+
 impl Action {
     pub fn name(&self) -> &'static str {
         match self {
@@ -127,6 +136,7 @@ impl Action {
             Self::Merge { .. } => "merge",
             Self::AutoMerge { .. } => "auto_merge",
             Self::CancelAutoMerge => "cancel_auto_merge",
+            Self::Update { .. } => "update",
             Self::Thread(change) => match change.resolve {
                 Some(true) => "resolve",
                 Some(false) => "unresolve",
@@ -163,6 +173,7 @@ impl Action {
                 vec![Capability::AutoMerge, Capability::merge(*method)]
             }
             Self::CancelAutoMerge => vec![Capability::AutoMerge],
+            Self::Update { method } => vec![Capability::update(*method)],
             Self::Thread(change) if change.resolve.is_some() => vec![Capability::ResolveThreads],
             Self::Review(review) => {
                 let lines = (!review.comments.is_empty()).then_some(Capability::LineComments);
@@ -207,6 +218,7 @@ impl Action {
             Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
                 pr_only("merge")?;
             }
+            Self::Update { .. } => pr_only("branch to update")?,
             Self::Thread(change) => {
                 pr_only("review threads")?;
                 ensure!(
@@ -503,6 +515,10 @@ impl ForgeRepo {
             Action::CancelAutoMerge => {
                 ensure_open(item)?;
                 self.kind.cancel_auto_merge(self, current)?
+            }
+            Action::Update { method } => {
+                ensure_open(item)?;
+                self.kind.update_branch(self, current, *method)?
             }
             Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
             Action::Review(_) => anyhow::bail!("a review is planned from the PR's diff"),

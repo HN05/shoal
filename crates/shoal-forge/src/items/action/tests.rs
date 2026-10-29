@@ -255,6 +255,69 @@ fn comments_state_changes_and_merges_use_each_forges_endpoints() {
 }
 
 #[test]
+fn branch_updates_use_each_forges_way_and_its_methods() -> Result<()> {
+    let update = |method| Action::Update { method };
+    let [github, forgejo] = forges();
+    let mut open = pr(&github, false, &[]);
+    open.head_sha = Some("c0ffee".into());
+    let planned = requests(&github, &open, update(UpdateMethod::Rebase));
+    let [(method, endpoint, body)] = planned.as_slice() else {
+        panic!("{planned:?}");
+    };
+    assert_eq!((method.as_str(), endpoint.as_str()), ("POST", "graphql"));
+    assert_eq!(
+        body["variables"],
+        json!({"id": "PR_1", "head": "c0ffee", "method": "REBASE"})
+    );
+    open.head_sha = None;
+    assert!(github.plan(&open, &update(UpdateMethod::Merge)).is_err());
+    for method in [UpdateMethod::Merge, UpdateMethod::Rebase] {
+        assert_eq!(
+            requests(&forgejo, &pr(&forgejo, false, &[]), update(method)),
+            [(
+                "POST".into(),
+                format!("repos/team/repo/pulls/7/update?style={}", method.as_str()),
+                Value::Null
+            )]
+        );
+    }
+    let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git")?;
+    let open = pr(&gitlab, false, &[]);
+    assert_eq!(
+        requests(&gitlab, &open, update(UpdateMethod::Rebase)),
+        [(
+            "PUT".into(),
+            "projects/group%2Fsub%2Frepo/merge_requests/7/rebase".into(),
+            Value::Null
+        )]
+    );
+    let refused = gitlab
+        .require_all(update(UpdateMethod::Merge).needs(ItemKind::Pr))
+        .unwrap_err();
+    assert_eq!(
+        refused.to_string(),
+        "Shoal cannot update PR branches by merging their base on GitLab; GitLab only rebases a merge request's branch, so use rebase"
+    );
+    assert!(gitlab.plan(&open, &update(UpdateMethod::Merge)).is_err());
+    let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
+    assert!(
+        bitbucket
+            .require_all(update(UpdateMethod::Rebase).needs(ItemKind::Pr))
+            .is_err()
+    );
+
+    let mut closed = pr(&forgejo, false, &[]);
+    closed.item.state = ItemState::Closed;
+    assert!(forgejo.plan(&closed, &update(UpdateMethod::Merge)).is_err());
+    assert!(
+        update(UpdateMethod::Merge)
+            .validate(ItemKind::Issue)
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
 fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
     let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
     let mut current = pr(&gitlab, false, &["bug"]);

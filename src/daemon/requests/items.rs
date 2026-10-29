@@ -153,7 +153,8 @@ impl Scoped for ItemMethod {
                     | Action::Review(_)
                     | Action::React(_)
                     | Action::Close
-                    | Action::Reopen,
+                    | Action::Reopen
+                    | Action::Update { .. },
                 ..
             } => Some(context_workspace(context)?),
             ItemMethod::SetIssue { workspace, .. }

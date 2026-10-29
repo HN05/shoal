@@ -29,7 +29,7 @@ use crate::{
     },
     conventions::{Lookup, shared_lookups},
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         issue::require_open,
@@ -98,6 +98,8 @@ impl Backend for GitHub {
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::UpdateByMerge
+            | Capability::UpdateByRebase
             | Capability::ForkPrs
             | Capability::Forks
             | Capability::LineComments
@@ -413,6 +415,37 @@ impl Backend for GitHub {
 
     fn cancel_auto_merge(&self, _repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
         Ok(vec![auto_merge_request(current, None)?])
+    }
+
+    /// Only GitHub's GraphQL API rebases a PR's branch, and it merges one
+    /// too. Naming the head the PR had when read leaves a branch that moved
+    /// since unchanged.
+    fn update_branch(
+        &self,
+        _repo: &ForgeRepo,
+        current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>> {
+        let id = current
+            .node_id
+            .as_deref()
+            .context("GitHub did not report the PR's node ID")?;
+        let head = current
+            .head_sha
+            .as_deref()
+            .context("GitHub did not report the PR's head commit")?;
+        let method = match method {
+            UpdateMethod::Merge => "MERGE",
+            UpdateMethod::Rebase => "REBASE",
+        };
+        Ok(vec![Request::new(
+            HttpMethod::Post,
+            "graphql".into(),
+            Some(json!({
+                "query": "mutation($id: ID!, $head: GitObjectID!, $method: PullRequestBranchUpdateMethod!) { updatePullRequestBranch(input: {pullRequestId: $id, expectedHeadOid: $head, updateMethod: $method}) { clientMutationId } }",
+                "variables": { "id": id, "head": head, "method": method },
+            })),
+        )])
     }
 
     /// GitHub reads discussion comments by GraphQL node ID, which REST

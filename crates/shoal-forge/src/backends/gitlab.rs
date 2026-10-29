@@ -20,7 +20,7 @@ use crate::{
     },
     conventions::Lookup,
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
@@ -87,6 +87,9 @@ impl Backend for GitLab {
             Capability::RebaseMerge => Support::Unsupported(Some(
                 "GitLab merges with the project's merge method, so use merge or squash",
             )),
+            Capability::UpdateByMerge => Support::Unsupported(Some(
+                "GitLab only rebases a merge request's branch, so use rebase",
+            )),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
@@ -100,6 +103,7 @@ impl Backend for GitLab {
             | Capability::MergeCommit
             | Capability::SquashMerge
             | Capability::AutoMerge
+            | Capability::UpdateByRebase
             | Capability::LineComments
             | Capability::ApprovePrs
             | Capability::RequestChanges
@@ -386,6 +390,24 @@ impl Backend for GitLab {
         Ok(vec![Request::new(
             HttpMethod::Post,
             format!("{endpoint}/cancel_merge_when_pipeline_succeeds"),
+            None,
+        )])
+    }
+
+    /// GitLab rebases in the background, after answering.
+    fn update_branch(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>> {
+        if method == UpdateMethod::Merge {
+            return Err(capability::unsupported(self, Capability::update(method)));
+        }
+        let endpoint = repo.item_endpoint(ItemKind::Pr, current.item.number);
+        Ok(vec![Request::new(
+            HttpMethod::Put,
+            format!("{endpoint}/rebase"),
             None,
         )])
     }

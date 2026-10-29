@@ -5,7 +5,12 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::state::states;
-use crate::{ForgeRepo, backends::Backend, ci::CiAction, items::action::MergeMethod};
+use crate::{
+    ForgeRepo,
+    backends::Backend,
+    ci::CiAction,
+    items::action::{MergeMethod, UpdateMethod},
+};
 
 states!(Capability: Variants {
     ResolveThreads => "resolve_threads",
@@ -22,6 +27,8 @@ states!(Capability: Variants {
     RebaseMerge => "rebase_merge",
     SquashMerge => "squash_merge",
     AutoMerge => "auto_merge",
+    UpdateByMerge => "update_by_merge",
+    UpdateByRebase => "update_by_rebase",
     ForkPrs => "fork_prs",
     Forks => "forks",
     LineComments => "line_comments",
@@ -48,6 +55,8 @@ impl Capability {
             Self::RebaseMerge => "rebase and merge PRs",
             Self::SquashMerge => "squash and merge PRs",
             Self::AutoMerge => "merge PRs once their checks pass",
+            Self::UpdateByMerge => "update PR branches by merging their base",
+            Self::UpdateByRebase => "update PR branches by rebasing onto their base",
             Self::ForkPrs => "open PRs from a fork",
             Self::Forks => "fork repositories",
             Self::LineComments => "comment on lines of a PR's diff",
@@ -62,6 +71,13 @@ impl Capability {
             MergeMethod::Merge => Self::MergeCommit,
             MergeMethod::Rebase => Self::RebaseMerge,
             MergeMethod::Squash => Self::SquashMerge,
+        }
+    }
+
+    pub fn update(method: UpdateMethod) -> Self {
+        match method {
+            UpdateMethod::Merge => Self::UpdateByMerge,
+            UpdateMethod::Rebase => Self::UpdateByRebase,
         }
     }
 

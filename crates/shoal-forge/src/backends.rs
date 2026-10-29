@@ -26,7 +26,7 @@ use crate::{
     },
     conventions::Lookup,
     items::{
-        action::{Edit, MergeMethod},
+        action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
@@ -292,6 +292,15 @@ pub(crate) trait Backend {
 
     /// The requests that withdraw the automatic merge of the open PR `current`.
     fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>>;
+
+    /// The requests that bring the branch of the open PR `current` up to
+    /// date with its base by `method`.
+    fn update_branch(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>>;
 
     /// Where activity records a posted comment: its source, and the
     /// response field that holds its ID.
@@ -925,6 +934,15 @@ impl Backend for ForgeKind {
 
     fn cancel_auto_merge(&self, repo: &ForgeRepo, current: &Current) -> Result<Vec<Request>> {
         dispatch!(self, backend => backend.cancel_auto_merge(repo, current))
+    }
+
+    fn update_branch(
+        &self,
+        repo: &ForgeRepo,
+        current: &Current,
+        method: UpdateMethod,
+    ) -> Result<Vec<Request>> {
+        dispatch!(self, backend => backend.update_branch(repo, current, method))
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {
