@@ -40,21 +40,36 @@ pub(crate) struct Block {
     pub window: Option<String>,
 }
 
-/// A window Shoal opened, with its only block.
+/// A block Shoal opened, with the window it opened for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Opened {
-    pub window: String,
+    pub window: Option<String>,
     pub block: String,
 }
 
-/// A shell window to open in a session.
-pub(crate) struct Window<'a> {
+/// A shell block to open in a session.
+pub(crate) struct Shell<'a> {
     pub session: &'a str,
     pub label: &'a str,
     pub cwd: &'a Path,
     pub focus: bool,
     /// Typed into the shell once it starts.
     pub input: Option<&'a str>,
+    /// The block to split for it; `None` opens a window of its own.
+    pub beside: Option<&'a str>,
+}
+
+impl Shell<'_> {
+    /// The layout node that starts the shell.
+    fn layout(&self) -> Result<serde_json::Value> {
+        let mut options = json!({
+            "cwd": self.cwd.to_str().context("the shell's directory is not UTF-8")?,
+        });
+        if let Some(input) = self.input {
+            options["initial_input"] = input.into();
+        }
+        Ok(json!({"block": {"flavor": SHELL_FLAVOR, "label": self.label, "options": options}}))
+    }
 }
 
 impl Rex {
@@ -168,35 +183,52 @@ impl Rex {
         Ok(created.session_id)
     }
 
-    /// Open a shell window, returning it and its block.
-    pub async fn open(&self, window: &Window<'_>) -> Result<Opened> {
-        let mut options = json!({
-            "cwd": window.cwd.to_str().context("the window's directory is not UTF-8")?,
-        });
-        if let Some(input) = window.input {
-            options["initial_input"] = input.into();
+    /// Open `shell` in a window of its own, or split beside the block it
+    /// names.
+    pub async fn open(&self, shell: &Shell<'_>) -> Result<Opened> {
+        match shell.beside {
+            Some(anchor) => self.split(shell, anchor).await,
+            None => self.open_window(shell).await,
         }
+    }
+
+    /// Open `shell` in a new window labelled as the shell is.
+    async fn open_window(&self, shell: &Shell<'_>) -> Result<Opened> {
         let input = json!({
-            "session_id": window.session,
-            "focus": window.focus,
-            "window_label": window.label,
-            "layout": {"block": {"flavor": SHELL_FLAVOR, "label": window.label, "options": options}},
+            "session_id": shell.session,
+            "focus": shell.focus,
+            "window_label": shell.label,
+            "layout": shell.layout()?,
         });
-        let opened: NewWindow =
+        let opened: NewBlocks =
             serde_json::from_slice(&self.call("session.new_window", input).await?)
                 .context("invalid Rex window")?;
-        let block = opened
-            .block_ids
-            .into_iter()
-            .flatten()
-            .flatten()
-            .next()
-            .context("Rex opened a window without a block")?;
+        let window = opened
+            .window_id
+            .clone()
+            .context("Rex opened a window without an ID")?;
         Ok(Opened {
-            window: opened
-                .window_id
-                .context("Rex opened a window without an ID")?,
-            block,
+            window: Some(window),
+            block: opened.block()?,
+        })
+    }
+
+    /// Open `shell` to the right of `anchor`, splitting the anchor's space.
+    async fn split(&self, shell: &Shell<'_>, anchor: &str) -> Result<Opened> {
+        let input = json!({
+            "session_id": shell.session,
+            "anchor_id": anchor,
+            "direction": "horizontal",
+            "side": "after",
+            "focus": shell.focus,
+            "layout": shell.layout()?,
+        });
+        let opened: NewBlocks =
+            serde_json::from_slice(&self.call("session.new_split", input).await?)
+                .context("invalid Rex split")?;
+        Ok(Opened {
+            window: None,
+            block: opened.block()?,
         })
     }
 
@@ -337,7 +369,7 @@ impl Rex {
     }
 }
 
-/// Rex blocks carry no Shoal labels, so the daemon's records of the blocks
+/// Rex blocks carry no ownership marks, so the daemon's records of the blocks
 /// Shoal created are the only proof of ownership: discovery finds none, and
 /// a close needs a recorded block. Rex never reuses IDs, so a recorded block
 /// that still exists is the one Shoal created.
@@ -427,9 +459,23 @@ struct Created {
 }
 
 #[derive(Deserialize)]
-struct NewWindow {
+struct NewBlocks {
+    /// Set when Rex opened a window for the blocks.
+    #[serde(default)]
     window_id: Option<String>,
     block_ids: Option<Vec<Option<String>>>,
+}
+
+impl NewBlocks {
+    /// The only new block, a shell.
+    fn block(self) -> Result<String> {
+        self.block_ids
+            .into_iter()
+            .flatten()
+            .flatten()
+            .next()
+            .context("Rex opened no block")
+    }
 }
 
 #[derive(Deserialize)]

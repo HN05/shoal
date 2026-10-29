@@ -158,19 +158,20 @@ async fn a_new_window_types_its_input_into_a_shell() {
         r#"{('api', 'call', 'session.new_window'): (0, '{"window_id": "window:1", "block_ids": ["block:1"], "revision": 2}')}"#,
     );
     let opened = rex
-        .open(&Window {
+        .open(&Shell {
             session: "session:1",
             label: "shoal#1",
             cwd: Path::new("/work"),
             focus: false,
             input: Some(" shoal internal launch /tmp/f\r"),
+            beside: None,
         })
         .await
         .unwrap();
     assert_eq!(
         opened,
         Opened {
-            window: "window:1".into(),
+            window: Some("window:1".into()),
             block: "block:1".into()
         }
     );
@@ -241,6 +242,46 @@ async fn renaming_a_block_beside_others_leaves_their_window_alone() {
     assert_eq!(renamed[1]["method"], "session.set_window_label");
     assert_eq!(renamed[1]["window_id"], "window:1");
     assert_eq!(renamed[1]["label"], "placed");
+}
+
+#[tokio::test]
+async fn a_split_types_its_input_into_a_shell_beside_its_anchor() {
+    let (root, rex) = fake(
+        r#"{('api', 'call', 'session.new_split'): (0, '{"anchor_id": "block:1", "block_ids": ["block:2"], "split_ids": ["split:1"], "revision": 3}')}"#,
+    );
+    let opened = rex
+        .open(&Shell {
+            session: "session:1",
+            label: "shoal#1",
+            cwd: Path::new("/work"),
+            focus: true,
+            input: Some(" shoal internal launch /tmp/f\r"),
+            beside: Some("block:1"),
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        opened,
+        Opened {
+            window: None,
+            block: "block:2".into()
+        }
+    );
+    let call = calls(&root).pop().unwrap();
+    let input: serde_json::Value = serde_json::from_str(call.last().unwrap()).unwrap();
+    assert_eq!(input["anchor_id"], "block:1");
+    assert_eq!(
+        (&input["direction"], &input["side"]),
+        (&"horizontal".into(), &"after".into())
+    );
+    assert_eq!(input["focus"], true);
+    assert!(input.get("window_label").is_none());
+    let block = &input["layout"]["block"];
+    assert_eq!(block["label"], "shoal#1");
+    assert_eq!(
+        block["options"]["initial_input"],
+        " shoal internal launch /tmp/f\r"
+    );
 }
 
 #[tokio::test]

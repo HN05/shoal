@@ -14,7 +14,7 @@ use super::{
 };
 use crate::sessions::{
     HostName, Origin,
-    rex::{Block, Rex as Server, Window},
+    rex::{Block, Rex as Server, Shell},
 };
 
 /// Rex serves the blocks it runs Shoal in, and runs windows for a terminal
@@ -312,12 +312,13 @@ async fn open_window(start: &Start<'_>) -> Result<Origin> {
         .context("the Rex origin names no session")?;
     let typed = Typed::new(start.state, start.argv, start.env)?;
     let opened = server
-        .open(&Window {
+        .open(&Shell {
             session,
             label: start.label,
             cwd: start.cwd,
             focus: start.focus,
             input: Some(typed.text()),
+            beside: None,
         })
         .await?;
     typed.hand_over()?;
@@ -329,7 +330,7 @@ async fn open_window(start: &Start<'_>) -> Result<Origin> {
     if start.focus && !in_rex() {
         let block = Block {
             session: session.to_owned(),
-            window: Some(opened.window),
+            window: opened.window,
         };
         reveal(&server, &block, &opened.block, start.label).await?;
     }
@@ -386,12 +387,13 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         .as_deref()
         .context("the Rex origin names no session")?;
     let opened = server
-        .open(&Window {
+        .open(&Shell {
             session,
             label: demo.label,
             cwd: demo.cwd,
             focus: false,
             input: None,
+            beside: None,
         })
         .await?;
     let place = Origin {
