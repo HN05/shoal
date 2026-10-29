@@ -677,14 +677,26 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
         )
         .await;
     for (workspace, allowed) in [(&child, true), (&parent, false), (&sibling, false)] {
-        let mut message = AgentMethod::SendAgentMessage {
-            workspace: workspace.name.clone(),
-            message: "Rebase onto main".into(),
-            attachments: Vec::new(),
-        };
-        let authorized =
-            crate::daemon::scope::authorize(&manager, Some("scope"), &mut message).await;
-        assert_eq!(authorized.is_ok(), allowed, "{}", workspace.name);
+        let name = || workspace.name.clone();
+        // Interrupting and continuing type into the agent's terminal once
+        // its agents are listed.
+        let methods = [
+            AgentMethod::SendAgentMessage {
+                workspace: name(),
+                message: "Rebase onto main".into(),
+                attachments: Vec::new(),
+            },
+            AgentMethod::WorkspaceAgents { workspace: name() },
+            AgentMethod::InterruptTurn {
+                workspace: name(),
+                execution: "e1".into(),
+            },
+        ];
+        for mut method in methods {
+            let authorized =
+                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            assert_eq!(authorized.is_ok(), allowed, "{} {method:?}", workspace.name);
+        }
     }
     for (question, allowed) in [(&below, true), (&own, false), (&beside, false)] {
         let mut answer = QuestionMethod::AnswerQuestion {

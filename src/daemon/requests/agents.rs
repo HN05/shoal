@@ -159,7 +159,6 @@ impl Scoped for AgentMethod {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentMessages { workspace }
             | AgentMethod::AgentSession { workspace }
-            | AgentMethod::WorkspaceAgents { workspace }
             | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
@@ -186,12 +185,15 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
-            AgentMethod::InterruptTurn { workspace, .. } => Some(
+            // The CLI types into the places of the agents it lists, which
+            // it interrupts or continues.
+            AgentMethod::WorkspaceAgents { workspace }
+            | AgentMethod::InterruptTurn { workspace, .. } => Some(
                 manager
                     .workspace_below(
                         caller,
                         workspace,
-                        "workspace processes interrupt only the agents of the workspaces below theirs",
+                        "workspace processes interrupt and continue only the agents of the workspaces below theirs",
                     )
                     .await?,
             ),
