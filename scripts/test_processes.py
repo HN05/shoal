@@ -41,9 +41,10 @@ class StopTests(unittest.TestCase):
 
     def test_a_run_stops_what_it_started_in_its_directory_and_nothing_else(self):
         earlier = self.detached(self.run_dir, "earlier")
-        # Start times have whole seconds; begin the run in the next one.
+        # Start times have whole seconds, which Linux can put up to a second
+        # early; begin the run in the next one, and start later ones after it.
         since = earlier.started + 1
-        while time.time() < since:
+        while time.time() < since + 1:
             time.sleep(0.05)
         left = self.detached(self.run_dir, "left")
         unrelated = self.detached(self.elsewhere, "unrelated")

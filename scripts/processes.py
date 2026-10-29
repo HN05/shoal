@@ -36,14 +36,27 @@ def become_subreaper():
             raise OSError(ctypes.get_errno(), "prctl(PR_SET_CHILD_SUBREAPER)")
 
 
+def run_start():
+    """When a run starting now began, as `ps` start times tell it. Linux
+    derives them from a boot time in whole seconds, which can put a process
+    up to a second before the clock said, so the run counts from the second
+    before."""
+    return float(int(time.time()) - 1)
+
+
 def snapshot():
-    """This user's live processes other than this one, by PID."""
-    user, own = os.getuid(), os.getpid()
+    """This user's live processes other than this one and the `ps` listing
+    them, by PID."""
+    listing = subprocess.Popen(["ps", "-axo", "pid=,ppid=,uid=,stat=,lstart="],
+                               env={**os.environ, "LC_ALL": "C"}, stdout=subprocess.PIPE,
+                               text=True)
+    output, _ = listing.communicate()
+    user, excluded = os.getuid(), {os.getpid(), listing.pid}
     found = {}
-    for line in ps("-axo", "pid=,ppid=,uid=,stat=,lstart=").splitlines():
+    for line in output.splitlines():
         pid, ppid, uid, *status = line.split()
         started = start_time(status)
-        if int(uid) == user and int(pid) != own and started is not None:
+        if int(uid) == user and int(pid) not in excluded and started is not None:
             found[int(pid)] = (int(ppid), started)
     directories = working_directories(found)
     return {pid: Process(pid, ppid, started, directories.get(pid))

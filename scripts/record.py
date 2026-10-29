@@ -25,7 +25,6 @@ import argparse
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import processes
@@ -85,8 +84,7 @@ def main():
     sandbox = Sandbox(directory / "sandbox")
     sandbox.prepare(build(), "shoal-rec")
     sandbox.env["SANDBOX"] = str(sandbox.path)
-    # `ps` reports start times in whole seconds.
-    since = float(int(time.time()))
+    since = processes.run_start()
     try:
         status = record(sandbox, tape, setup)
     finally:
