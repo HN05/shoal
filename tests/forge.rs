@@ -3992,6 +3992,22 @@ fn item_commands_act_from_a_registered_checkout() {
 }
 
 #[test]
+fn checkout_merges_go_out_without_the_agent_account() {
+    // A missing agent wrapper leaves the user's own logins usable.
+    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/missing-fj'\n");
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("POST {endpoint}/merge"): {"body": {}},
+    }));
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let merged = fixture.request(json!({"item_action": {"checkout": repository, "kind": "pr",
+        "item": "8", "action": {"action": "merge", "method": "rebase", "delete_branch": false}}}));
+    assert_eq!(merged["type"], "item", "{merged}");
+    assert_eq!(writes(&fixture)[0][0], format!("POST {endpoint}/merge"));
+}
+
+#[test]
 fn approving_a_proposal_warns_about_the_repository_conventions() {
     let fixture = Fixture::new(
         Forge::GitHub,

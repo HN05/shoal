@@ -94,7 +94,7 @@ impl Manager {
         action: Action,
     ) -> Result<Item> {
         let checkout = self.repository(selector).await?;
-        let (forge, agent) = self.checkout_forge_account(&checkout).await?;
+        let forge = self.checkout_forge(&checkout).await?;
         let (number, url) = match kind {
             ItemKind::Issue => forge.issue(input)?,
             ItemKind::Pr => forge.pull(input)?,
@@ -102,7 +102,7 @@ impl Manager {
         let account = if users_decision(&action) {
             self.user_account()
         } else {
-            agent
+            self.checkout_agent_account(&checkout).await?
         };
         let acted = forge.apply(&account, kind, number, &action).await;
         Ok(acted

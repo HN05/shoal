@@ -89,18 +89,28 @@ impl Manager {
         self.forge(&remote).await
     }
 
+    /// The agent account of the repository's settings.
+    pub(in crate::daemon::links) async fn checkout_agent_account(
+        &self,
+        repository: &Repository,
+    ) -> Result<Account> {
+        // One snapshot, so a reload cannot pair a profile with another map.
+        let config = self.config();
+        let settings = self
+            .repository_settings_from(&config, &repository.id)
+            .await?;
+        self.agent_account_from(&config, &settings)
+    }
+
     /// The forge of the registered checkout's `origin`, with the agent
     /// account of the repository's settings.
     pub(in crate::daemon::links) async fn checkout_forge_account(
         &self,
         repository: &Repository,
     ) -> Result<(ForgeRepo, Account)> {
-        // One snapshot, so a reload cannot pair a profile with another map.
-        let config = self.config();
-        let settings = self
-            .repository_settings_from(&config, &repository.id)
-            .await?;
-        let account = self.agent_account_from(&config, &settings)?;
-        Ok((self.checkout_forge(repository).await?, account))
+        Ok((
+            self.checkout_forge(repository).await?,
+            self.checkout_agent_account(repository).await?,
+        ))
     }
 }
