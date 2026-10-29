@@ -32,8 +32,9 @@ token. There is no separate Homebrew or GitHub workflow to run.
   read and write access to Contents; it creates the GitHub release and assets.
 - `MACOS_SIGNING_PEM`: Actions secret holding the unified PEM (certificate and
   private key) of Shoal's self-signed code-signing certificate, which signs the
-  macOS binaries. Store the maintainer's existing copy; a new certificate changes the requirement in
-  `.forgejo/scripts/sign-macos.sh` and makes every user grant access again.
+  macOS binaries. Store the maintainer's existing copy; a new certificate
+  changes the requirement in `.forgejo/scripts/sign-macos.sh` and makes every
+  user grant access again.
 - A `docker` Actions runner with HTTPS access to the forge, registries, and GitHub.
 
 No SSH access is needed. The workflow respects branch protection and will stop
@@ -45,5 +46,5 @@ another release, and a release whose `SHA256SUMS` is attached keeps its assets,
 while a partial upload is replaced whole.
 
 Builds run in the CI image described in AGENTS.md, which carries the pinned
-Rust toolchain, Worktrunk, Zig, cargo-zigbuild and rcodesign; rebuild it after changing
-its Containerfile. Archives include the agent skills for Homebrew installation.
+Rust toolchain, Worktrunk, Zig, cargo-zigbuild and rcodesign; rebuild it after
+changing its Containerfile. Archives include the agent skills for Homebrew installation.
