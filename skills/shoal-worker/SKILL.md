@@ -444,7 +444,11 @@ on a screen and longer on a dense one, without idle stretches. VHS renders
 headlessly, so look at the screenshots yourself before sharing them. Keep the
 tape, its output and any temporary state under the workspace's ignored build
 directory, such as `target/`, never in `/tmp` or elsewhere outside the
-workspace, so they go with it. Attach screenshots
+workspace, so they go with it. Use the repository's recording helper when it
+has one. Otherwise start what the recording needs from the tape or from a setup
+step that finishes before it, never in the background with `&` or `nohup`, and
+stop anything still running from it once the recording ends: a process left
+behind outlives your workspace. Attach screenshots
 and videos with `shoal pr comment --attach`, and put text frames in code blocks.
 
 ## Secrets

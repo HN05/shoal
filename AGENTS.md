@@ -327,9 +327,11 @@ command uses it internally.
 
 A PR that changes what Shoal prints or draws in the terminal, such as a picker,
 menu, listing or message, shows examples of the new interface, recorded as the
-shoal-worker skill describes. The tape runs a development build against a
-temporary `--state-dir` and repository under `target/`; commit the tape and its
-output only when a document uses them.
+shoal-worker skill describes. Record it with `python3 scripts/record.py <tape>`,
+which runs the tape against a development build in a sandbox beside it, under
+`target/`, and stops every process the recording started; `--help` shows how a
+setup script prepares the sandbox. Commit the tape and its output only when a
+document uses them.
 For a change to try rather than watch, offer `python3 scripts/demo.py` as a
 demo (`shoal demo start shoal -- python3 scripts/demo.py`): it runs a
 development build against sample workspaces, questions and approvals in a
