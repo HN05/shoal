@@ -805,6 +805,9 @@ pub struct PendingRestart {
     /// The run that asked for it, unless a daemon before this one took it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<String>,
+    /// The other runs whose requests joined it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub joined: Vec<String>,
 }
 
 /// The session a workspace's agent reported last, which a new agent can

@@ -71,6 +71,7 @@ impl Restart {
     fn pending(&self) -> PendingRestart {
         PendingRestart {
             run: self.run.clone(),
+            joined: self.joined.clone(),
         }
     }
 

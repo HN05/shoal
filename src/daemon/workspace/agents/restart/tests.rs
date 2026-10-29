@@ -311,7 +311,8 @@ async fn a_second_request_joins_the_restart_in_progress() {
     assert_eq!(
         listed[0].restart,
         Some(PendingRestart {
-            run: Some("first".into())
+            run: Some("first".into()),
+            joined: vec!["second".into()],
         })
     );
     // The agent's start answers both.

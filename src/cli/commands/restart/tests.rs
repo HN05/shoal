@@ -24,6 +24,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         restarted_by: Vec::new(),
         restart: Some(PendingRestart {
             run: Some("earlier".into()),
+            joined: Vec::new(),
         }),
     };
     let mut restarts = vec![Restart {

@@ -161,6 +161,7 @@ fn restarted_in(
         restarted_by: restarted_by.map(Into::into).into_iter().collect(),
         restart: restarting.map(|run| PendingRestart {
             run: Some(run.into()),
+            joined: Vec::new(),
         }),
         ..reporting(workspace, Some(AgentState::Working))
     }
@@ -188,7 +189,8 @@ fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
     assert_eq!(
         plan.restarts[0].joins,
         Some(PendingRestart {
-            run: Some("interrupted".into())
+            run: Some("interrupted".into()),
+            joined: Vec::new(),
         })
     );
     assert!(plan.restarts[0].ready());
@@ -210,4 +212,29 @@ fn without_restarts_in_progress_a_run_restarts_every_agent_under_a_new_name() {
     let plan = selection.plan(None);
     assert_eq!(restarted(&plan), ["recent"]);
     assert_ne!(plan.run, "earlier");
+}
+
+#[test]
+fn a_rerun_skips_what_any_run_of_a_pending_restart_restarted() {
+    let [pending, done] = ["pending", "done"].map(workspace);
+    // A command continuing `a` joined `b`'s restart of pending and
+    // restarted done under `a` before it was interrupted.
+    let joined = RunningAgent {
+        restart: Some(PendingRestart {
+            run: Some("b".into()),
+            joined: vec!["a".into()],
+        }),
+        ..reporting(&pending, Some(AgentState::Working))
+    };
+    let selection = Selection {
+        agents: vec![joined, restarted_in(&done, Some("a"), None)],
+        workspaces: vec![pending, done],
+        named: false,
+    };
+    let plan = selection.plan(None);
+    assert_eq!(restarted(&plan), ["pending"]);
+    assert_eq!(
+        skipped(&plan),
+        [("done", "the interrupted run restarted it already")]
+    );
 }

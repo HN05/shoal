@@ -136,7 +136,8 @@ impl Plan {
         let runs: Vec<String> = self
             .restarts
             .iter()
-            .filter_map(|restart| restart.agent.restart.as_ref()?.run.clone())
+            .filter_map(|restart| restart.agent.restart.as_ref())
+            .flat_map(|pending| pending.run.iter().chain(&pending.joined).cloned())
             .collect();
         let Some(run) = runs.first() else {
             return;
