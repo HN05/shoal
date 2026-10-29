@@ -1,5 +1,5 @@
 //! Move every repository directory into a new `root_dir`.
-use super::resume::Queued;
+use super::resume::{Queued, Stopped};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -16,6 +16,7 @@ use crate::{
         ui,
     },
     config::{Config, edit::Change},
+    execution::recovery::Saved,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     protocol::RepositoryMethod,
     repository,
@@ -46,7 +47,7 @@ pub(super) async fn run(
     if let Some(root) = root {
         save_root(ctx, &root).await?;
     }
-    let mut stopped = Vec::new();
+    let mut stopped = Stopped::new();
     let moved = async {
         stop_running(ctx, &moves.executions, confirmed, &mut stopped).await?;
         move_repositories(ctx, regular_dir).await
@@ -74,31 +75,41 @@ async fn plan_moves(
 }
 
 /// Stop the workspaces `executions` run in, keeping their agents' sessions,
-/// and add to `stopped` the executions each ran as it stopped, including
-/// any started since the plan. An execution Shoal cannot prove ended stops
-/// once the user confirms it did, or when `confirmed`.
+/// and add to `stopped` the executions each stop saved for `shoal resume`,
+/// by workspace, including any started since the plan or ended by a stop
+/// that failed. An execution Shoal cannot prove ended stops once the user
+/// confirms it did, or when `confirmed`.
 async fn stop_running(
     ctx: &Context,
     executions: &[Execution],
     confirmed: bool,
-    stopped: &mut Vec<Execution>,
+    stopped: &mut Stopped,
 ) -> Result<()> {
     let workspaces: BTreeSet<_> = executions.iter().map(|e| &e.workspace_id).collect();
     for workspace in workspaces {
-        let running = client::inspect(&ctx.paths, workspace.clone())
-            .await?
-            .executions;
+        let saved_before = saved_executions(ctx, workspace)?;
         let result = ctx
             .progress(
                 "Stopping commands and agents",
                 super::stop::stop(ctx, workspace, confirmed),
             )
             .await;
-        // A failed stop may have ended some of them.
-        stopped.extend(running);
+        let saved = saved_executions(ctx, workspace)?;
+        stopped.insert(
+            workspace.clone(),
+            saved.difference(&saved_before).cloned().collect(),
+        );
         result?;
     }
     Ok(())
+}
+
+/// The executions whose stopped work the workspace saves for `shoal resume`.
+fn saved_executions(ctx: &Context, workspace: &str) -> Result<BTreeSet<String>> {
+    Ok(Saved::load(&ctx.paths, workspace)?
+        .execution_ids()
+        .into_iter()
+        .collect())
 }
 
 async fn move_repositories(ctx: &Context, regular_dir: bool) -> Result<Vec<MovedRepository>> {
@@ -163,13 +174,13 @@ async fn retrust(ctx: &Context, before: &Registrations) {
     }
 }
 
-/// Queue the restores of the agents `executions` ran, warning when that
+/// Queue the restores of the agents among `stopped`, warning when that
 /// fails, since `shoal resume` still restores them.
-async fn resume_stopped(ctx: &Context, executions: &[Execution]) -> Option<Queued> {
-    if executions.is_empty() {
+async fn resume_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
+    if stopped.is_empty() {
         return None;
     }
-    match super::resume::queue_stopped(ctx, executions).await {
+    match super::resume::queue_stopped(ctx, stopped).await {
         Ok(queued) => Some(queued),
         Err(error) => {
             eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");
