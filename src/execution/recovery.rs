@@ -587,6 +587,13 @@ pub(crate) fn discard_undelivered(paths: &Paths, workspace_id: &str, id: &str) -
     }
 }
 
+/// The workspace whose process stopped the agent that execution `id` of
+/// `workspace_id` keeps as a last session, when one did.
+pub(crate) fn stopped_by(paths: &Paths, workspace_id: &str, id: &str) -> Result<Option<String>> {
+    let path = LastSession::path(paths, workspace_id, id);
+    Ok(LastSession::load(&path)?.and_then(|last| last.stopped_by))
+}
+
 /// The file keeping the agent stopped as `id`: its recovery record, or else
 /// its last session.
 pub(crate) fn saved_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {

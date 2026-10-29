@@ -5,8 +5,8 @@ use crate::{
     },
     model::{CleanupReason, Workspace, WorkspaceRef},
     protocol::{
-        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, RemovalMethod,
-        WorkspaceMethod,
+        AgentMethod, ApprovalMethod, AssignmentMethod, Operation, QuestionMethod, QueueMethod,
+        RemovalMethod, WorkspaceMethod,
     },
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{manager, repository},
@@ -239,6 +239,108 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
     let kept = manager.workspace(&child.id).await.unwrap();
     assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
     assert!(kept.path.exists());
+}
+
+#[tokio::test]
+async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let create = |name: &str| manager.create_workspace(&repo.id, name.into(), None, None, None);
+    let parent = create("parent").await.unwrap();
+    let sibling = create("sibling").await.unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let grandchild = manager
+        .split_workspace(&child.id, "grandchild".into(), None)
+        .await
+        .unwrap();
+    manager
+        .executions
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    // The parent stopped the child's agent and the child its own child's;
+    // the user stopped the other agent of each.
+    for (workspace, stopped_by) in [(&child, &parent), (&grandchild, &child)] {
+        for (execution, stopped_by) in [("ours", Some(stopped_by.id.clone())), ("users", None)] {
+            crate::execution::recovery::LastSession {
+                execution: execution.into(),
+                agent: "claude".into(),
+                session: None,
+                moved: false,
+                origin: None,
+                stopped_by,
+            }
+            .write(&manager.paths, &workspace.id)
+            .unwrap();
+        }
+    }
+    let stop = |workspace: &str, acknowledge_unproven| {
+        Operation::from(RemovalMethod::StopWorkspace {
+            workspace: workspace.into(),
+            acknowledge_unproven,
+        })
+    };
+    let restore = |workspace: &str, execution: &str| {
+        Operation::from(QueueMethod::QueueRestore {
+            workspace: workspace.into(),
+            execution: execution.into(),
+            env: Default::default(),
+        })
+    };
+    for (target, allowed) in [
+        (&child.name, true),
+        (&grandchild.name, true),
+        (&parent.name, false),
+        (&sibling.name, false),
+    ] {
+        for mut method in [stop(target, false), restore(target, "ours")] {
+            let authorized =
+                crate::daemon::scope::authorize(&manager, Some("scope"), &mut method).await;
+            assert_eq!(authorized.is_ok(), allowed, "{target}: {method:?}");
+        }
+        let mut users = restore(target, "users");
+        let authorized = crate::daemon::scope::authorize(&manager, Some("scope"), &mut users).await;
+        assert!(authorized.is_err(), "{target}");
+    }
+    // The child resumes what it stopped, but not what its parent stopped.
+    manager
+        .executions
+        .issue_scope(
+            "child".into(),
+            Caller {
+                workspace_id: child.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    let mut method = restore(&grandchild.name, "ours");
+    crate::daemon::scope::authorize(&manager, Some("child"), &mut method)
+        .await
+        .unwrap();
+    let mut method = restore(&child.name, "ours");
+    assert!(
+        crate::daemon::scope::authorize(&manager, Some("child"), &mut method)
+            .await
+            .is_err()
+    );
+    // Only the user can tell that an execution Shoal cannot prove ended did.
+    let mut acknowledged = stop(&child.name, true);
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut acknowledged)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("ask the user"), "{error:#}");
 }
 
 #[tokio::test]

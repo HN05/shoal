@@ -63,12 +63,16 @@ impl Scoped for QueueMethod {
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueMove { .. } => None,
             QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
+            QueueMethod::QueueRestore {
+                workspace,
+                execution,
+                ..
+            } => Some(manager.stopped_below(caller, workspace, execution).await?),
             QueueMethod::QueuedPlan { .. }
             | QueueMethod::QueueStart { .. }
             | QueueMethod::QueueHold { .. }
             | QueueMethod::QueueAttach { .. }
-            | QueueMethod::QueueFail { .. }
-            | QueueMethod::QueueRestore { .. } => return Err(denied()),
+            | QueueMethod::QueueFail { .. } => return Err(denied()),
         })
     }
 }

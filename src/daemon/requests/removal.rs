@@ -1,7 +1,7 @@
 //! The daemon's answers to [`RemovalMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::super::{
     answer::Answer,
@@ -100,6 +100,23 @@ impl Scoped for RemovalMethod {
                 .unheld_workspace_below(caller, workspace, REFUSAL)
                 .await
                 .map(Some),
+            RemovalMethod::StopWorkspace {
+                workspace,
+                acknowledge_unproven,
+            } => {
+                ensure!(
+                    !*acknowledge_unproven,
+                    "only the user can confirm that an execution Shoal cannot prove ended did; ask the user to stop this workspace"
+                );
+                manager
+                    .workspace_below(
+                        caller,
+                        workspace,
+                        "workspace processes stop only the workspaces below theirs",
+                    )
+                    .await
+                    .map(Some)
+            }
             _ => Err(denied()),
         }
     }

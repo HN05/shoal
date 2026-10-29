@@ -5,6 +5,7 @@ use anyhow::{Context, Result, ensure};
 use super::Caller;
 use crate::{
     daemon::{approvals::ApprovalRequest, questions::Question, workspace::Manager},
+    execution::recovery,
     model::{Chat, QueueEntry, QueueRequest, Repository, Workspace, WorkspaceTarget},
     repository::Selector,
 };
@@ -65,6 +66,36 @@ impl Manager {
         ensure!(
             self.workspace(workspace).await?.id != caller.workspace_id,
             "{refusal}"
+        );
+        Ok(workspace)
+    }
+
+    /// `workspace`, which must be one below the caller's whose agent stopped
+    /// as `execution` the caller's process or one below it stopped: an agent
+    /// the user or Shoal stopped, or that exited on its own, is the user's
+    /// to resume.
+    pub(in crate::daemon) async fn stopped_below<'a>(
+        &self,
+        caller: &Caller,
+        workspace: &'a mut String,
+        execution: &str,
+    ) -> Result<&'a mut String> {
+        let workspace = self
+            .workspace_below(
+                caller,
+                workspace,
+                "workspace processes resume agents only in the workspaces below theirs",
+            )
+            .await?;
+        let id = self.workspace(workspace).await?.id;
+        let stopper = recovery::stopped_by(&self.paths, &id, execution)?;
+        let ours = match stopper {
+            Some(stopper) => self.within_subtree(&caller.workspace_id, &stopper).await?,
+            None => false,
+        };
+        ensure!(
+            ours,
+            "workspace processes resume only the agents that they or the workspaces below them stopped with shoal stop; ask the user to resume this one"
         );
         Ok(workspace)
     }

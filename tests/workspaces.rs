@@ -2098,12 +2098,12 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
                 .any(|line| line == "own-only")
         );
     }
-    for args in [
-        vec!["status", "context-other"],
-        vec!["status", "missing"],
-        vec!["stop"],
-        vec!["stop", "context-other"],
-        vec!["config", "show", "context-other"],
+    for (args, refusal) in [
+        (vec!["status", "context-other"], "scope"),
+        (vec!["status", "missing"], "scope"),
+        (vec!["stop"], "stop only the workspaces below theirs"),
+        (vec!["stop", "context-other"], "scope"),
+        (vec!["config", "show", "context-other"], "scope"),
     ] {
         let output = command(other_path, true, false)
             .args(&args)
@@ -2111,7 +2111,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
             .unwrap();
         assert!(!output.status.success(), "{args:?}");
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("scope"),
+            String::from_utf8_lossy(&output.stderr).contains(refusal),
             "{output:?}"
         );
     }
@@ -5619,7 +5619,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
         "stop",
     ]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("workspace processes can only"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("workspace processes stop only the workspaces below theirs")
+    );
 }
 
 #[test]
