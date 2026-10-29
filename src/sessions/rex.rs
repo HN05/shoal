@@ -433,7 +433,8 @@ struct BlockInfo {
 }
 
 /// A terminal's processes: the program Rex started, what runs in the
-/// foreground, and that process's ancestors up to the program.
+/// foreground, and that process's ancestors up to the program. The shell is
+/// at its prompt when it is the foreground process itself.
 #[derive(Deserialize)]
 struct Processes {
     last_exit: Option<serde_json::Value>,
@@ -446,16 +447,25 @@ struct Processes {
 #[derive(Deserialize)]
 struct Process {
     pid: i64,
+    #[serde(default)]
+    name: String,
 }
+
+/// Programs that are shells, by name; a shell that ran `exec` keeps its
+/// process but not its name.
+const SHELLS: &[&str] = &[
+    "sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "elvish", "xonsh",
+];
 
 impl Processes {
     /// The shell is in the foreground when nothing but the program Rex
     /// started, such as `login`, stands between it and the terminal.
     fn shell_in_foreground(&self) -> bool {
-        let (Some(child), Some(_)) = (&self.child, &self.foreground) else {
+        let (Some(child), Some(foreground)) = (&self.child, &self.foreground) else {
             return false;
         };
         self.last_exit.is_none()
+            && SHELLS.contains(&foreground.name.trim_start_matches('-'))
             && self
                 .ancestors
                 .iter()

@@ -67,6 +67,12 @@ fn only_the_shell_rex_started_in_the_foreground_is_at_its_prompt() {
     )
     .unwrap();
     assert!(!busy.shell_in_foreground());
+    // A shell that ran `exec vim` keeps its process, now the editor's.
+    let replaced: Processes = serde_json::from_str(
+        r#"{"last_exit":null,"child":{"pid":2057,"name":"login"},"foreground":{"pid":3049,"name":"vim"},"ancestors":[{"pid":2057,"name":"login"}]}"#,
+    )
+    .unwrap();
+    assert!(!replaced.shell_in_foreground());
     let exited: Processes = serde_json::from_str(
         r#"{"last_exit":{"code":0},"child":{"pid":2057},"foreground":{"pid":2057},"ancestors":[]}"#,
     )
