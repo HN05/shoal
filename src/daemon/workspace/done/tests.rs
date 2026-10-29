@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     daemon::links::pr::Action,
+    model::CleanupReason,
     test_support::{commit, git, manager, repository},
 };
 use std::{fs, sync::Arc};
@@ -561,4 +562,73 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .unwrap();
     manager.sweep_prs().await.unwrap();
     assert!(!workspace.path.exists());
+}
+
+#[tokio::test]
+async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
+    let (_root, manager, base, workspace) = stacked_fixture().await;
+    fs::write(base.path.join("base-work"), "base").unwrap();
+    commit(&base.path, "base-work");
+    cherry_pick(&base.path, &workspace.branch);
+    // The idle rule counts the commits as kept as well.
+    assert!(
+        manager
+            .cleanup_snapshot(&workspace.id)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(!workspace.path.exists());
+    // Neither a remote nor the default branch has its commits.
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    assert_ne!(git(&repo.path, &["branch", "--list", "part"]), "");
+}
+
+#[tokio::test]
+async fn completion_retains_commits_the_start_branch_took_adapted() {
+    let (_root, manager, base, workspace) = stacked_fixture().await;
+    fs::write(base.path.join("part-work"), "adapted").unwrap();
+    commit(&base.path, "part-work");
+    assert_eq!(
+        manager.cleanup_candidacy(&workspace.id).await.unwrap(),
+        Err(CleanupReason::Unpushed { commits: 1 })
+    );
+    manager.mark_done(&workspace.id, false).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert_error(&manager, &workspace, "neither pushed").await;
+}
+
+/// A workspace `part` stacked on the workspace `finished`, with one commit
+/// of its own.
+async fn stacked_fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace, Workspace) {
+    let (root, manager, base) = fixture().await;
+    let workspace = manager
+        .create_workspace(
+            &base.repository_id,
+            "part".into(),
+            Some(base.branch.clone()),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+    fs::write(workspace.path.join("part-work"), "part").unwrap();
+    commit(&workspace.path, "part-work");
+    (root, manager, base, workspace)
+}
+
+fn cherry_pick(repo: &std::path::Path, revision: &str) {
+    git(
+        repo,
+        &[
+            "-c",
+            "user.name=Shoal Test",
+            "-c",
+            "user.email=shoal@example.invalid",
+            "cherry-pick",
+            revision,
+        ],
+    );
 }

@@ -1588,8 +1588,7 @@ hook takes no resource guard, so an agent-exit hook may signal it; configured
 completion hooks cannot nest inside another guarded hook. A completion without
 cleanup suppresses idle and PR cleanup until another completion requests cleanup or
 the user removes it; merged cleanup still applies. Completion
-cleanup without a PR registration requires clean files and every commit pushed or
-merged; an existing PR registration keeps its merge checks.
+cleanup without a PR registration requires clean files and every commit kept; an existing PR registration keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
 HEAD, including after hooks. Tracked agent exits wake the cleanup sweep after
 their exit hook, without waiting for the polling interval. Changed HEAD retains
@@ -1694,7 +1693,10 @@ belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point
-(rebase merges); merged commits count as retained. Every removal deletes a branch
+(rebase merges); merged commits count as retained. Commits whose changes the
+branch the workspace builds on has, its base workspace's branch or else the local
+branch it was created from, are kept there for completion and idle cleanup, but
+are neither merged nor enough to delete the branch. Every removal deletes a branch
 whose commits a remote-tracking branch or the default branch all have, since
 deleting it loses nothing, and keeps any other: users should not have to decide
 about branches. The default branch, and every branch while the default branch
@@ -1710,8 +1712,8 @@ default branch or belongs to a workspace again is forgotten; one checked out, or
 the start or target of a rebase or bisect elsewhere, waits. Removal records name the branches kept before Shoal remembered them.
 `shoal cleanup` deletes the kept branches the user picks, several at once, after
 checking each is still at the commit removal left it on and not checked out.
-Automatic cleanup removes only clean, idle worktrees whose commits are all on a
-remote or merged, with no executions, directory users, leases, or
+Automatic cleanup removes only clean, idle worktrees whose commits are all kept,
+with no executions, directory users, leases, or
 permits, rechecked immediately before deletion, without fetching. Every unattended
 removal except for disk space first waits `[cleanup] grace_minutes`, because
 removal stops the agent the user may still want to continue: the first attempt

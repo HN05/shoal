@@ -2344,8 +2344,8 @@ Issue associations suppress idle cleanup, not merged cleanup.
 Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
 sweep after their exit hook instead of waiting for the next poll. It stops tracked
 commands using normal branch retention and resource release. Without a PR registration,
-files must be clean and all commits pushed or merged; an
-existing registration keeps its merge requirements. Files and the completed HEAD
+files must be clean and all commits pushed as
+[automatic cleanup](#automatic-cleanup) means it; an existing registration keeps its merge requirements. Files and the completed HEAD
 are checked again after stopping and removal hooks. Failure retains ownership;
 `status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
 requires a new `done` signal before completion cleanup can proceed.
@@ -2931,8 +2931,9 @@ it when it expires.
 Running/unknown commands, saved stopped work, directory users (including shells),
 dirty/unpushed work,
 simulator leases, permits, holds, open [questions](#questions), pending PR proposals and failed checks block cleanup. Pushed means reachable
-from locally known remote branches, or merged into the default branch as removal
-decides; no fetch.
+from locally known remote branches, merged into the default branch as removal
+decides, or with its changes on the branch the workspace builds on: its base
+workspace's branch, otherwise the local branch it was created from; no fetch.
 A restore of an idle agent waiting for an update blocks nothing: removal cancels
 it and keeps the agent stopped, so `shoal work restore` brings it back for
 `shoal resume`.

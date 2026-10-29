@@ -33,6 +33,11 @@ pub struct RemovalCheck {
     /// The local default branch or its remote-tracking branch records HEAD's
     /// tree or has its changes, merged, squashed or rebased.
     pub matches_default_branch: bool,
+    /// The local branch the workspace builds on, other than the default
+    /// branch, has HEAD's changes that neither a remote nor the default
+    /// branch has: they are kept there under these or other commits.
+    #[serde(default)]
+    pub integrated: bool,
     /// The default branch used by this inspection, when it could be resolved.
     ///
     /// This is daemon state used to keep the removal decision consistent with
@@ -227,9 +232,15 @@ impl RemovalCheck {
         self.running_commands == 0 && self.processes.is_empty()
     }
 
-    /// Nothing would be lost: idle, clean, and every commit pushed or landed.
+    /// Every commit is pushed or landed, or the branch the workspace builds
+    /// on has their changes.
+    pub fn commits_kept(&self) -> bool {
+        self.unpushed_commits == 0 || self.integrated
+    }
+
+    /// Nothing would be lost: idle, clean, and every commit kept.
     pub fn safe(&self) -> bool {
-        self.unused() && !self.dirty && self.unpushed_commits == 0
+        self.unused() && !self.dirty && self.commits_kept()
     }
 }
 
@@ -297,6 +308,7 @@ pub(crate) async fn inspect(
         branch: None,
         head: None,
         matches_default_branch: false,
+        integrated: false,
         default_branch: default_branch.map(str::to_owned),
     };
     if !check.workspace.path.exists() {
@@ -320,9 +332,40 @@ pub(crate) async fn inspect(
         check.unpushed_commits =
             git::status::unretained_commits(path, "HEAD", default_refs.first().map(String::as_str))
                 .await?;
+        check.integrated = check.unpushed_commits > 0
+            && start_branch_retains_head(&check.workspace, default_branch, &tree).await?;
     }
     if policy == InspectionPolicy::IncludeDirectoryProcesses {
         check.load_directory_processes().await?;
     }
     Ok(check)
+}
+
+/// Whether the local branch the workspace builds on, unless it is the
+/// default branch, has HEAD's changes.
+async fn start_branch_retains_head(
+    workspace: &Workspace,
+    default_branch: Option<&str>,
+    tree: &str,
+) -> Result<bool> {
+    let Some(name) = start_branch(workspace).filter(|name| Some(*name) != default_branch) else {
+        return Ok(false);
+    };
+    let Some(reference) = git::status::local_branch(&workspace.path, name).await? else {
+        return Ok(false);
+    };
+    git::status::retains(&workspace.path, &[reference], "HEAD", tree).await
+}
+
+/// The branch the workspace builds on: its base workspace's branch,
+/// otherwise the local branch its recorded base names; never its own.
+fn start_branch(workspace: &Workspace) -> Option<&str> {
+    let branch = match &workspace.base_workspace {
+        Some(base) => base.branch.as_str(),
+        None => workspace
+            .base_ref
+            .as_deref()?
+            .strip_prefix(git::LOCAL_REFS)?,
+    };
+    (branch != workspace.branch).then_some(branch)
 }

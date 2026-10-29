@@ -175,8 +175,8 @@ impl<'a> Removal<'a> {
                     "workspace has uncommitted or untracked work; retaining it"
                 );
                 ensure!(
-                    check.unpushed_commits == 0,
-                    "workspace has commits neither pushed nor on the local default branch; retaining it"
+                    check.commits_kept(),
+                    "workspace has commits neither pushed nor on the local default branch or the branch it builds on; retaining it"
                 );
             }
             (Removal::Merged { .. }, _) => ensure!(
@@ -236,7 +236,7 @@ fn worktree_cleanup_reason(check: &RemovalCheck) -> Option<CleanupReason> {
         Some(CleanupReason::MissingDirectory)
     } else if check.dirty {
         Some(CleanupReason::Dirty)
-    } else if check.unpushed_commits > 0 {
+    } else if !check.commits_kept() {
         Some(CleanupReason::Unpushed {
             commits: check.unpushed_commits,
         })

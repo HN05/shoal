@@ -88,8 +88,9 @@ when behavior changes, distinguishing decisions from proposals.
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
   with commits; only holds, open questions and pending PR proposals keep them. Automatic removal is only for idle,
-  clean worktrees with all commits pushed or merged into the default branch (including
-  squash and rebase merges), or deleted worktrees. Unattended removals except for disk
+  clean worktrees with all commits pushed, merged into the default branch (including
+  squash and rebase merges) or with their changes on the branch the workspace builds
+  on, or deleted worktrees. Unattended removals except for disk
   space first wait `[cleanup] grace_minutes` (default 10) of continuous eligibility,
   persisted across restarts except where idle timers start over. Keep one removal path for manual and automatic
   cleanup, deleting a branch only when a remote or the default branch has all its
@@ -101,8 +102,8 @@ when behavior changes, distinguishing decisions from proposals.
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
   open questions, child workspaces and queued agent launches keep a workspace.
-  Completion cleanup without a PR registration requires every commit pushed or
-  merged, retaining dirty or newer work through the same
+  Completion cleanup without a PR registration requires every commit kept that way,
+  retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
   Associated issues suppress idle cleanup, not merged cleanup; holds, open
   questions, child workspaces and queued agent launches suppress every unattended removal. Holds belong to the user and
