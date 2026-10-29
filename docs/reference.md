@@ -281,7 +281,7 @@ A stop whose wrappers do not finish in time fails naming each execution it
 waited on and its step: not started, still running, or verifying after exit.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
 closing its terminal, logging out or shutting down sends, is saved as stopped
-work with the signal as its stop reason, and its restore waits in the
+work with the signal as its stop reason, before its wrapper stops it, and its restore waits in the
 [agent queue](#agent-queue) once its execution has ended, so it comes back after
 a reboot without a command; run `shoal stop --all` first to keep agents down. An
 agent that was idle comes back only when an update arrives for it, unless

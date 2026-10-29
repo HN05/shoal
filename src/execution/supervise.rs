@@ -103,6 +103,16 @@ impl Outcome {
     }
 }
 
+/// How a supervised command is restored from a saved record and saved for a
+/// later restore.
+pub(super) struct Saving<'a, F> {
+    /// The saved record a restored agent consumes once it is registered.
+    pub restored_from: Option<&'a Path>,
+    /// Saves what restores the command before a signal that ends its
+    /// session stops it.
+    pub ending: F,
+}
+
 /// Launch the command, register its process group, and wait for it to exit or
 /// for a stop request.
 pub(super) async fn supervise(
@@ -112,12 +122,12 @@ pub(super) async fn supervise(
     command: &[OsString],
     mode: &Mode,
     auth: Option<&AgentLaunch>,
-    recovery_record: Option<&Path>,
+    saving: Saving<'_, impl Fn(&Halt)>,
 ) -> Result<Outcome> {
     let signals = ExecutionSignals::new()?;
     let (mut child, group, _terminal, _scope) =
-        register_child(link, paths, plan, command, mode, auth, recovery_record).await?;
-    let outcome = wait_for_child(link, &mut child, &group, signals).await?;
+        register_child(link, paths, plan, command, mode, auth, saving.restored_from).await?;
+    let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending).await?;
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     Ok(outcome)
@@ -229,6 +239,7 @@ async fn wait_for_child(
     child: &mut Child,
     group: &ProcessGroup,
     mut signals: ExecutionSignals,
+    ending: impl Fn(&Halt),
 ) -> Result<Outcome> {
     // While the daemon is away the link reattaches in the background and the
     // command keeps the terminal; nothing is written to it.
@@ -237,14 +248,8 @@ async fn wait_for_child(
             // A hangup reaches the command and this wrapper together, so the
             // wrapper's signal goes first when both are ready.
             biased;
-            _ = signals.hangup.recv() => {
-                let status = stop(child, group, libc::SIGHUP).await?;
-                return Ok(Outcome::ended(status, Halt::ended_by(libc::SIGHUP)));
-            }
-            _ = signals.terminate.recv() => {
-                let status = stop(child, group, libc::SIGTERM).await?;
-                return Ok(Outcome::ended(status, Halt::ended_by(libc::SIGTERM)));
-            }
+            _ = signals.hangup.recv() => return end_session(child, group, libc::SIGHUP, &ending).await,
+            _ = signals.terminate.recv() => return end_session(child, group, libc::SIGTERM, &ending).await,
             _ = signals.interrupt.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGINT).await?, None)),
             _ = signals.quit.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGQUIT).await?, None)),
             status = child.wait() => {
@@ -265,6 +270,23 @@ async fn wait_for_child(
             }
         }
     }
+}
+
+/// Stop the command whose session `signal` ended, after `ending` saved what
+/// restores it: the session's end, such as a shutdown, may kill this wrapper
+/// before the command exits.
+async fn end_session(
+    child: &mut Child,
+    group: &ProcessGroup,
+    signal: i32,
+    ending: impl Fn(&Halt),
+) -> Result<Outcome> {
+    let halt = Halt::ended_by(signal);
+    if let Some(halt) = &halt {
+        ending(halt);
+    }
+    let status = stop(child, group, signal).await?;
+    Ok(Outcome::ended(status, halt))
 }
 
 struct ExecutionSignals {

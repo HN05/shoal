@@ -215,7 +215,8 @@ impl Recovery {
         }
     }
 
-    /// `restorer` brings the agent back besides `shoal resume`.
+    /// Save the stopped agent; `restorer` brings it back besides `shoal
+    /// resume`.
     pub(super) fn save(
         &self,
         paths: &Paths,
@@ -225,16 +226,42 @@ impl Recovery {
         place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
-        let mut record = Record::new(&self.agent, reason, Stage::Stopped, place);
-        if let Restorer::Wrapper(wrapper) = &restorer {
-            record.waiting = Some(wrapper.clone());
-        }
-        let path = write_record(paths, workspace_id, id, record)?;
-        if let Restorer::Queue(env) = &restorer {
-            request_restore(paths, workspace_id, id, env)?;
-        }
-        Ok(path)
+        let record = Record::new(&self.agent, reason, Stage::Stopped, place);
+        save_restorable(paths, workspace_id, id, record, restorer)
     }
+
+    /// Save the agent as `save` does before a stop reaches it, so the record
+    /// survives this wrapper; saving it once stopped completes the record.
+    pub(super) fn save_stopping(
+        &self,
+        paths: &Paths,
+        workspace_id: &str,
+        id: &str,
+        reason: Option<&str>,
+        place: Option<Origin>,
+        restorer: Restorer,
+    ) -> Result<PathBuf> {
+        let record = Record::new(&self.agent, reason, Stage::Stopping, place);
+        save_restorable(paths, workspace_id, id, record, restorer)
+    }
+}
+
+/// Save `record` with what `restorer` needs to bring its agent back.
+fn save_restorable(
+    paths: &Paths,
+    workspace_id: &str,
+    id: &str,
+    mut record: Record,
+    restorer: Restorer,
+) -> Result<PathBuf> {
+    if let Restorer::Wrapper(wrapper) = &restorer {
+        record.waiting = Some(wrapper.clone());
+    }
+    let path = write_record(paths, workspace_id, id, record)?;
+    if let Restorer::Queue(env) = &restorer {
+        request_restore(paths, workspace_id, id, env)?;
+    }
+    Ok(path)
 }
 
 /// What brings a stopped agent back besides `shoal resume`.

@@ -208,7 +208,9 @@ prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers cannot stop executions. A hangup
 or terminate signal to an agent's wrapper or agent saves the agent as manual stop
 does: closing a terminal, logging out and shutting down end the agent's session
-without the agent choosing to quit, and the daemon may already be gone. Unlike a
+without the agent choosing to quit, and the daemon may already be gone. The
+wrapper saves it before stopping the agent, as the daemon does before a
+protection stop, since shutting down may kill the wrapper first. Unlike a
 manual stop, the agent then comes back on its own through the agent queue: a
 request beside its record asks for the restore, which the daemon queues once the
 execution has ended, so agents a reboot interrupted return without a command.

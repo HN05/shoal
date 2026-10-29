@@ -13,10 +13,10 @@ use super::{
     completion::report_completion,
     demo,
     link::Link,
-    pause::{AfterPause, Halt, pause_agent, record_stopped_command},
+    pause::{AfterPause, Halt, pause_agent, record_stopped_command, save_ending_agent},
     recovery,
     spawn::AgentLaunch,
-    supervise::{Outcome, supervise},
+    supervise::{Outcome, Saving, supervise},
     wake,
 };
 use crate::{
@@ -103,14 +103,18 @@ impl TrackedLaunch {
         }
         // Prompts only while this child runs, which reports its state.
         let _waker = wake.map(|session| wake::start(paths, &self.plan.workspace.id, session));
+        let (plan, recovery) = (&self.plan, self.recovery.as_ref());
         supervise(
             &mut self.link,
             paths,
-            &self.plan,
+            plan,
             &self.command,
             mode,
             self.auth.as_ref(),
-            self.record.as_deref(),
+            Saving {
+                restored_from: self.record.as_deref(),
+                ending: |stop: &Halt| save_ending_agent(paths, plan, mode, recovery, stop),
+            },
         )
         .await
     }

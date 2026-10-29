@@ -101,7 +101,7 @@ async fn adjacent_controls_child() {
             ],
             &Mode::Command { record: false },
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap();
@@ -289,7 +289,7 @@ async fn reattachment_child() {
             &waiting("never"),
             &mode,
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap();
@@ -327,7 +327,7 @@ async fn reattachment_child() {
             &waiting("release"),
             &mode,
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap();
@@ -359,7 +359,7 @@ async fn reattachment_child() {
             &waiting("never"),
             &mode,
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap();
@@ -435,7 +435,7 @@ async fn ended_session_child() {
             &run("while :; do sleep 1; done"),
             &mode,
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap()
@@ -467,7 +467,7 @@ async fn ended_session_child() {
             &run("kill -TERM $$; sleep 60"),
             &mode,
             None,
-            None,
+            unsaved(),
         )
         .await
         .unwrap()
@@ -485,4 +485,12 @@ async fn ended_session_child() {
         ),
         "{outcome:?}"
     );
+}
+
+/// Nothing restores the supervised command or saves it.
+fn unsaved() -> Saving<'static, fn(&Halt)> {
+    Saving {
+        restored_from: None,
+        ending: |_| {},
+    }
 }

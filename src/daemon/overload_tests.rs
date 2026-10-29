@@ -418,6 +418,18 @@ async fn tracked_agent_child() {
     run_tracked_agent("trap 'exit 0' TERM; touch started; while :; do sleep 1; done").await;
 }
 
+/// An agent that keeps running when stopped, writing `terminated` once the
+/// stop reaches it.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_holding_on() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    run_tracked_agent("trap 'touch terminated' TERM; touch started; while :; do sleep 1; done")
+        .await;
+}
+
 /// Like `tracked_agent_child`, with a background command in its own process
 /// group, as Claude Code runs shell commands. It writes its PID to `background`
 /// and keeps running in Python: macOS hides platform binaries' environments.
@@ -854,6 +866,58 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     let record = Record::load(&saved.agents[0].1).unwrap().unwrap();
     assert_eq!(record.stop_reason.as_deref(), Some("its terminal closed"));
     assert_eq!(record.session.as_deref(), Some("closed-session"));
+    serving.abort();
+}
+
+/// A shutdown terminates the wrapper and may kill it before its agent exits,
+/// so the record is saved before the agent is stopped.
+#[tokio::test]
+async fn an_agent_whose_session_ends_is_saved_before_it_stops() {
+    use crate::execution::recovery::{Record, record_path, restore_requests};
+    let (_root, manager, workspace, serving) = fixture().await;
+    let agent = launch_child(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_agent_holding_on",
+    );
+    wait_started(&manager, &workspace).await;
+    report_session(&manager, &workspace, "ending-session").await;
+    let execution = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions
+        .remove(0);
+    let wrapper = execution.wrapper.clone().unwrap();
+    crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
+    // The agent traps the stop the wrapper sends it, which follows the save.
+    bounded(async {
+        while !workspace.path.join("terminated").is_file() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    crate::process::identity::signal(&wrapper, libc::SIGKILL).unwrap();
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 128 + libc::SIGKILL);
+    // SAFETY: the killed wrapper's agent group, which nothing else stops.
+    unsafe {
+        libc::kill(-(execution.group_id.unwrap() as i32), libc::SIGKILL);
+    }
+    let path = record_path(&manager.paths, &workspace.id, &execution.id);
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.agent, "fixture");
+    assert_eq!(
+        record.stop_reason.as_deref(),
+        Some("its session was terminated")
+    );
+    assert_eq!(record.session.as_deref(), Some("ending-session"));
+    // It comes back through the agent queue once its execution has ended.
+    let requested: Vec<_> = restore_requests(&manager.paths, &workspace.id)
+        .unwrap()
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(requested, [execution.id]);
     serving.abort();
 }
 

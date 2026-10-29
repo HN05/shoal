@@ -141,18 +141,53 @@ fn save_paused_agent(
     stop: &Halt,
     restorer: Restorer,
 ) -> Result<PathBuf> {
-    // A detached agent never ran in the launching terminal.
-    let place = (!matches!(mode, Mode::Detached { .. }))
-        .then(crate::cli::terminal::current_origin)
-        .flatten();
     recovery.save(
         paths,
         &plan.workspace.id,
         &plan.id,
         stop.saved_reason(),
-        place,
+        agent_place(mode),
         restorer,
     )
+}
+
+/// Save the recovery record of an agent whose session `stop` ended before
+/// stopping it, as protection saves one before its stop: the session's end,
+/// such as a shutdown, may kill this wrapper before the agent exits. Pausing
+/// the stopped agent completes the record.
+pub(super) fn save_ending_agent(
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    mode: &Mode,
+    recovery: Option<&recovery::Recovery>,
+    stop: &Halt,
+) {
+    let Some(recovery) = recovery else {
+        return;
+    };
+    let saved = recovery.save_stopping(
+        paths,
+        &plan.workspace.id,
+        &plan.id,
+        stop.saved_reason(),
+        agent_place(mode),
+        restorer(recovery, stop, recovery.automatic && stop.recovers()),
+    );
+    if let Err(error) = saved {
+        // The terminal may have closed with the session.
+        let _ = writeln!(
+            std::io::stderr(),
+            "warning: cannot save recovery command: {error:#}"
+        );
+    }
+}
+
+/// Where the agent runs, as its terminal host names it. A detached agent
+/// never ran in the launching terminal.
+fn agent_place(mode: &Mode) -> Option<crate::sessions::Origin> {
+    (!matches!(mode, Mode::Detached { .. }))
+        .then(crate::cli::terminal::current_origin)
+        .flatten()
 }
 
 /// Tell the daemon the agent paused. Awaiting a restore keeps the link armed
