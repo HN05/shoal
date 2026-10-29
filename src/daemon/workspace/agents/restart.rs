@@ -109,8 +109,7 @@ impl Manager {
     }
 
     /// Wait for the restart of `execution` in progress as [`Self::restart_agent`]
-    /// does; a restart that ended already left its agent running again, since
-    /// one that failed ends with the agent's wrapper.
+    /// does, or answer as the restart that already ended did.
     pub(crate) async fn join_restart(&self, execution: &str) -> Result<()> {
         let joined = self
             .executions
@@ -118,12 +117,17 @@ impl Manager {
                 let agent = agents
                     .get_mut(execution)
                     .with_context(|| format!("no connected agent runs execution {execution}"))?;
-                anyhow::Ok(agent.restart.as_mut().map(Restart::answer))
+                anyhow::Ok(match &mut agent.restart {
+                    Some(restart) => Ok(restart.answer()),
+                    None => Err(agent.restarted.clone().unwrap_or_else(|| {
+                        Err(format!("no restart of {} is in progress", agent.name))
+                    })),
+                })
             })
             .await?;
         match joined {
-            Some(answer) => restarted(answer).await,
-            None => Ok(()),
+            Ok(answer) => restarted(answer).await,
+            Err(ended) => ended.map_err(|reason| anyhow!(reason)),
         }
     }
 
@@ -251,9 +255,11 @@ impl Manager {
         let restart = self
             .executions
             .with_agent(id, |agent| {
-                agent
+                let restart = agent
                     .restart
-                    .take_if(|restart| restart.resumed || !once_resumed)
+                    .take_if(|restart| restart.resumed || !once_resumed)?;
+                agent.restarted = Some(outcome.clone());
+                Some(restart)
             })
             .await
             .flatten();

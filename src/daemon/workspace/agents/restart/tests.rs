@@ -350,3 +350,47 @@ async fn a_request_joining_a_waiting_restart_is_answered_with_what_it_waits_for_
     );
     assert!(manager.restart_requested(&id).await);
 }
+
+#[tokio::test]
+async fn a_late_join_answers_as_the_restart_ended() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let error = manager.join_restart(&id).await.unwrap_err();
+    assert_eq!(format!("{error}"), "no restart of claude is in progress");
+
+    let failed = manager.request_restart(&id).await.unwrap();
+    manager
+        .fail_restart(&id, "automatic restore failed".into())
+        .await;
+    assert!(failed.await.unwrap().is_err());
+    let error = manager.join_restart(&id).await.unwrap_err();
+    assert_eq!(format!("{error}"), "automatic restore failed");
+    assert!(!manager.restart_requested(&id).await);
+}
+
+#[tokio::test]
+async fn a_late_join_of_a_cancelled_restart_fails() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let cancelled = manager.request_restart(&id).await.unwrap();
+    manager
+        .executions
+        .with_agent(&id, |agent| agent.cancel_recovery())
+        .await;
+    // The request in progress learns it too.
+    assert!(cancelled.await.is_err());
+    let error = manager.join_restart(&id).await.unwrap_err();
+    assert_eq!(format!("{error}"), "the restart was cancelled");
+}
