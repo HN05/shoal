@@ -671,7 +671,7 @@ without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, a pending PR proposal, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
@@ -1762,8 +1762,8 @@ own branch and worktree. The parent must be ready. `--base` works as for
 `shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
 from their own workspace, act on every workspace below it and `shoal rm` one
-without holds, which is the only workspace creation and removal scope allows;
-the rest stays with the user.
+unless the user holds it or a workspace below it, which is the only workspace
+creation and removal scope allows; the rest stays with the user.
 
 The parent's agent receives the issue and PR activity of its children that have
 no agent of their own, and of their children in turn, through its hooks and an
@@ -1771,11 +1771,27 @@ unfiltered or kind-filtered `watch`; each such update names its workspace in
 `workspace`. A child with an agent of its own, one that reports its turn state,
 any agent Shoal tracks there or one whose restore waits in the
 [agent queue](#agent-queue), receives its own activity
-and its subtree's instead. A child keeps its parent from every unattended removal,
-completion and PR cleanup included, with `cleanup_reason` `children`, until the
-child is removed; each child completes on its own with `shoal done`. Removing a
-parent moves its children to its own parent, or to none, and records a
-`parent_changed` event. `work` lists children indented below their parent;
+and its subtree's instead.
+
+A child never keeps its parent: the parent's idle, merged, completion and PR
+cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
+the cleanup of its deleted directory, first removes the workspaces below it,
+deepest first, whatever their work, holds or questions: each stops its agents,
+keeps a checkpoint of its HEAD and unsaved files, and keeps its branch unless a
+remote or the default branch has its commits, so `shoal work restore` brings it
+back. A child that cannot go retains the parent. `shoal rm` names the children
+before asking, and its result names them in `children`; each child's journal
+records a `removed` event with the cause `parent`, and the user is notified of
+those an unattended removal took. Exporting one workspace with children is
+refused; `export --all` exports each.
+
+While a parent's `done` with cleanup stands at its HEAD, each workspace below it
+has `cleanup_reason` `ancestor_completed` and goes after the grace period,
+whatever its own work, with the cause `parent_completion`; a hold, open
+question, pending PR proposal or queued agent launch of its own keeps it, as do
+workspaces still below it until they go. `undone`, a commit after `done`, or a
+`done` without cleanup leaves the children. A child's own `done` follows the
+usual rules. `work` lists children indented below their parent;
 `status` shows both directions, and `work --json` and `status --json` give
 `parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
 
@@ -2575,18 +2591,25 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions, pending PR proposals, child workspaces and queued agent launches do; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions, pending PR proposals and queued agent launches do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
-timer after release. Explicit removal and deleted-directory cleanup release holds.
+timer after release. Removal releases holds, a parent's removal those below it too;
+a hold never keeps the workspace's parent.
 Upgrading turns a `shoal continue` from earlier versions into a hold named
 `continue` with the reason “Converted from an earlier Shoal version”, which the
 next explicit `done` releases.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.
-Release remains available while the workspace record exists. Holds belong to the
-user and to apps hosting external sessions: scoped callers can list their own
-workspace's holds but not acquire or release them. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
+Release remains available while the workspace record exists. Each hold records
+in `placed_by` whether the user or an app hosting an external session placed it
+(`user`), or an agent (`agent`). Workspace processes hold and release the
+workspaces below their own directly. Holding their own workspace is an approval
+request with the target `hold/<name>`, which needs `--reason` and goes to the
+workspace's coordinating agent, which needs no grant to decide it, or to the
+user without one; approval places the hold, and acquiring again returns it.
+Workspace processes release only the holds agents placed, on their own workspace
+or below it; the user's stay theirs to release. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges
@@ -4020,7 +4043,9 @@ pass the request up with `shoal approvals --escalate <number>`, to the next coor
 agent with such a grant, or to the user. Each coordinating agent passed over
 without a grant receives a message saying so. Without a deciding coordinator,
 the user is notified as above. A land request names its own branch and commit,
-which no other workspace holds a grant for, so it always reaches the user. The
+which no other workspace holds a grant for, so it always reaches the user. A
+request to hold the workspace goes to the nearest coordinating agent, which
+needs no grant for it. The
 request records its `decider`, the coordinator's workspace, while one decides
 it; the user may still decide it.
 

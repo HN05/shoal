@@ -100,7 +100,7 @@ instead of the PR delivery guidance below.
   for the same state directory); without a target a scoped command acts on the child
   whose directory it runs in, while agent hooks always report for the own workspace.
   Workspace allocation other than `split`, removal other than of a workspace below their own
-  without holds, recovery and shared repository/service administration stay denied. For the workspaces below their own, scoped callers queue agents,
+  the user holds nothing below, recovery and shared repository/service administration stay denied. For the workspaces below their own, scoped callers hold them, queue agents,
   which the daemon starts detached so they never inherit the caller's scope, cancel their queue
   entries or move them back, send agent messages,
   answer questions, stop their executions, queue restores of the agents they or the workspaces below them stopped and
@@ -154,10 +154,14 @@ instead of the PR delivery guidance below.
   manual acknowledgements bind to exactly the recorded HEAD. Completion cleanup
   requires preserved commits without a PR registration, honors existing merge
   checks, and rechecks its recorded HEAD; a completion without cleanup blocks idle
-  and PR cleanup. Holds, open questions, a pending PR proposal, child workspaces and queued agent
+  and PR cleanup. Holds, open questions, a pending PR proposal and queued agent
   launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
-  questions for good. A scoped land
+  questions for good. Children never keep their parent: every removal kind first
+  removes the subtree, deepest first, through the shared path whatever keeps it,
+  and a child that fails retains the parent. A standing completion with cleanup
+  removes the workspaces below it that nothing of their own keeps, whatever
+  their work, after the grace period. A scoped land
   is an approval request bound to the branch HEAD unless `[land] requires_approval`
   is false; approval never skips a landing check and lands only the approved commit.
   Under `[approvals] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
@@ -181,8 +185,9 @@ instead of the PR delivery guidance below.
   with successful removal. Active permits block automatic cleanup. Caller-named workspace holds persist
   across restarts, block automatic removal without deferring completion, and are
   released with successful removal; deleted-worktree cleanup still forgets them.
-  Holds belong to the user and host apps: scoped callers list their own
-  workspace's holds but cannot acquire or release them. Permit hooks
+  Holds record who placed them: scoped callers hold and release the workspaces
+  below their own, request approval to hold their own, which the coordinator
+  decides without a grant, and release only agents' holds. Permit hooks
   run after persistent acquisition and before release, including removal while
   the worktree exists; failure retains leases. Retrying acquisition reruns its
   hook. Permit/lifecycle changes cannot overlap resource hooks in one workspace;
@@ -298,7 +303,7 @@ instead of the PR delivery guidance below.
   canonical URL persists before tracked setup or agent launch and cannot be replaced.
   Reopening follows the issue association before its derived local branch name.
   Withdrawing completion preserves associations and merge checks but never defers
-  cleanup; only holds, open questions, child workspaces and queued agent launches keep a workspace.
+  cleanup; only holds, open questions and queued agent launches keep a workspace.
   Associated issues suppress idle cleanup, not merged cleanup.
   Tracked agent exits wake cleanup after the exit hook, retaining its usual checks.
   Merged cleanup ignores links, watches, completion and saved stopped work,

@@ -520,11 +520,17 @@ its workspace, through the same cursors, deliveries and acknowledgements as its
 own; a child's own agent, which reports its turn state or which Shoal tracks
 there, as it tracks custom and Happy agents that report none, takes over its
 subtree, and so does one whose restore is queued, since it receives what
-arrived once it starts. A parent stays until its children are removed, through every unattended
-removal like a hold, so one `done` at the top leaves the tree until its PRs
-merge; each child completes on its own. The parent owns its children, so its
-processes may remove them, except one with holds, which are the user's. Removing
-a parent moves its children up to its own parent and journals the change. `work` lists children below their
+arrived once it starts. A child never keeps its parent and never outlives it:
+the parent is cleaned up by its own rules, and every removal of it, manual or
+unattended, first removes the workspaces below it, deepest first, through the
+shared removal path with a checkpoint and kept branch each, whatever their work,
+holds or questions; one that cannot go retains the parent, and the journal and
+the removal's output name those taken. While a parent's completion with cleanup
+stands at its HEAD, its children go too after the grace period, whatever their
+own work, unless one of their own keep-reasons, or a workspace still below them,
+keeps them; a child's own `done` follows the usual rules. The parent owns its
+children, so its processes may remove and hold them, except that the user's
+holds anywhere below refuse the removal. `work` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
 own through the agent queue, and `split --fork` gives it the parent's agent
 from a fork of its session, the one the caller's agent or else the parent's only
@@ -548,7 +554,8 @@ confirming that an execution Shoal cannot prove ended did, stay the user's.
 Stopping a workspace stops the workspaces below it unless `--skip-children`
 says otherwise, since their agents work for it. Approval
 requests go to the coordinator too when it holds an approved grant for the same
-thing; it decides them or passes them up, the user deciding at the top.
+thing, and a child agent's request to hold its own workspace goes to it without
+one; it decides them or passes them up, the user deciding at the top.
 The worker skill steers agents to a subagent working in the child's directory
 over `--agent`: the child then has no agent of its own, so its activity reaches
 the parent, and the subagent reports to the parent directly, supervision Shoal
@@ -699,7 +706,7 @@ Tracked executions and processes started with exported workspace environments
 inherit a daemon-validated scope token that
 confines them to their own workspace and the child workspaces split from it:
 status, inspect, execute, setup, and resources.
-Creation other than splitting a child, removal other than of a descendant without holds,
+Creation other than splitting a child, removal other than of a descendant the user holds nothing below,
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `land` is an
 approval request bound to the branch and its HEAD unless `[land] requires_approval`
@@ -1762,13 +1769,16 @@ automatic removal while the worktree exists; releasing the last hold restores
 normal cleanup eligibility. Explicit
 removal lists holders and releases holds with the workspace record; deleted-worktree
 cleanup still forgets missing worktrees. Release remains available through failed or
-active lifecycle operations and hooks. Holds belong to the user and to apps hosting
-external sessions; scoped callers list their own workspace's holds but cannot change
-them. Removal is reversible through checkpoints, so agents have no way to keep a
+active lifecycle operations and hooks. Each hold records who placed it: the user
+or an app hosting an external session, or an agent. Scoped callers hold and
+release the workspaces below their own directly; holding their own is an approval
+request, which approval carries out, so a coordinator keeps what its children
+need. Agents release only the holds agents placed; the user's and host apps'
+stay theirs. A hold never keeps a parent or survives its removal. Removal is
+reversible through checkpoints, so an agent otherwise has no way to keep a
 workspace: one that needs the user asks, and an open question, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included. So
-does a child workspace, until the child is removed, and an agent launch waiting
-in the agent queue to start in the workspace.
+does an agent launch waiting in the agent queue to start in the workspace.
 
 Workspace completion uses `[done] cleanup` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
@@ -1785,8 +1795,8 @@ removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
 files go with it. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: only holds, open questions, a pending PR proposal, child workspaces
-and queued agent launches keep a workspace.
+defers cleanup: only holds, open questions, a pending PR proposal and queued
+agent launches keep a workspace.
 The daemon runs `post_done_cmd`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.

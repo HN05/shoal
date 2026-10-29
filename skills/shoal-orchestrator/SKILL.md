@@ -113,7 +113,9 @@ new SHAs,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal acquire hold --workspace <workspace> --name review` and release the hold
-afterwards; `shoal work restore <workspace>` reopens a removed one, or lists an
+afterwards. Removing a workspace removes the child workspaces below it first,
+held ones included, and its `done` with cleanup removes the unheld ones after
+the grace period. `shoal work restore <workspace>` reopens a removed one, or lists an
 existing one's checkpoints, and `shoal work restore <workspace> <number>` returns it
 to a checkpoint. To move a workspace to another machine, run
 `shoal export <workspace> --yes -o - | ssh <host> shoal --json import -`, then
