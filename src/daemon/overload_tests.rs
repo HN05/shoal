@@ -177,18 +177,19 @@ async fn built_in_restore_child() {
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages and may work in
-        // the temporary directories and the child workspaces beside theirs.
+        // `/tmp`, the default agent directory, and the child workspaces
+        // beside theirs.
         let directory = workspace.path.parent().unwrap();
         let tools = crate::ai::Table::default().tools;
         let tool = &tools[agent];
-        let directories = crate::cli::agents::temp_dirs()
-            .into_iter()
-            .chain([directory.to_path_buf()]);
+        let directories = [fs::canonicalize("/tmp").unwrap(), directory.to_path_buf()];
         let launch_args = crate::cli::agents::hook_args(tool.integration, false)
             .unwrap()
             .into_iter()
             .chain(
-                directories.flat_map(|directory| tool.launch.arguments.add_dir_args(&directory)),
+                directories
+                    .iter()
+                    .flat_map(|directory| tool.launch.arguments.add_dir_args(directory)),
             );
         let mut prompt = String::from(
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",

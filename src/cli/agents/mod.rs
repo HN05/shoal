@@ -673,9 +673,9 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Ve
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
-/// and forwarded arguments: Shoal's hooks, and the temporary directories and
-/// the repository's workspaces directory as other working directories, so it
-/// may also work in the child workspaces it splits there.
+/// and forwarded arguments: Shoal's hooks, and the configured agent
+/// directories and the repository's workspaces directory as other working
+/// directories, so it may also work in the child workspaces it splits there.
 pub(crate) async fn workspace_args(
     paths: &crate::paths::Paths,
     settings: &Effective,
@@ -684,29 +684,31 @@ pub(crate) async fn workspace_args(
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
     let mut args = hook_args(settings.integration(name), proxied)?;
-    args.extend(temp_dir_args(settings, name));
+    args.extend(agent_dir_args(settings, name, &paths.home));
     if let Some(directory) = workspaces_dir(paths, workspace).await {
         args.extend(settings.launch(name).arguments.add_dir_args(&directory));
     }
     Ok(args)
 }
 
-/// The arguments that give agent `name` the temporary directories as other
-/// working directories, so it may read the output the tools it runs leave
-/// there.
-pub(crate) fn temp_dir_args(settings: &Effective, name: &str) -> Vec<OsString> {
+/// The arguments that give agent `name` the configured agent directories as
+/// other working directories, so it may read what the tools it runs leave
+/// there without a permission prompt.
+pub(crate) fn agent_dir_args(settings: &Effective, name: &str, home: &Path) -> Vec<OsString> {
     let arguments = &settings.launch(name).arguments;
-    temp_dirs()
+    agent_dirs(settings, home)
         .iter()
         .flat_map(|directory| arguments.add_dir_args(directory))
         .collect()
 }
 
-/// `/tmp` and the system temporary directory, resolved as agents compare
-/// paths, each once.
-pub(crate) fn temp_dirs() -> BTreeSet<PathBuf> {
-    [PathBuf::from("/tmp"), std::env::temp_dir()]
-        .into_iter()
+/// The configured agent directories, `~/` naming a path under `home`,
+/// resolved as agents compare paths, each once.
+fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
+    settings
+        .agent_dirs
+        .iter()
+        .map(|directory| fsutil::expand_home(Path::new(directory), home))
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))
         .collect()
 }

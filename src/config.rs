@@ -13,7 +13,12 @@ pub mod value;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::PathBuf, time::Duration};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
@@ -88,6 +93,7 @@ pub struct Config {
     #[serde(rename = "agent_template")]
     pub renamed_agent_template: Option<String>,
     pub chat_template: Option<String>,
+    pub agent_dirs: Option<Vec<String>>,
     pub agent_auth: crate::agent_auth::Config,
     pub bitbucket: crate::forge::backends::bitbucket::Credentials,
     /// Forge hosts whose type is set instead of asked.
@@ -198,6 +204,18 @@ impl Ports {
     pub fn validate(&self) -> Result<()> {
         validate_port_range(Some(self.start), Some(self.end))
     }
+}
+
+/// Agent directories are absolute or under the home directory (`~/`), since
+/// agents run in different working directories.
+pub fn validate_agent_dirs(directories: &[String]) -> Result<()> {
+    for directory in directories {
+        ensure!(
+            Path::new(directory).is_absolute() || directory.starts_with("~/"),
+            "agent_dirs entry {directory} must be an absolute path or start with ~/"
+        );
+    }
+    Ok(())
 }
 
 /// The bounds one layer states; a range split across layers is checked
@@ -630,6 +648,7 @@ impl Config {
             rex: self.rex.clone(),
             happy: self.happy.clone(),
             copy_ignored: self.copy_ignored,
+            agent_dirs: self.agent_dirs.clone(),
             pre_setup_cmd: self.pre_setup_cmd.clone(),
             post_setup_cmd: self.post_setup_cmd.clone(),
             pre_remove_cmd: self.pre_remove_cmd.clone(),
@@ -709,6 +728,7 @@ impl Config {
         }
         crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
         crate::env::validate_configured_environment(&config.env)?;
+        validate_agent_dirs(config.agent_dirs.as_deref().unwrap_or_default())?;
         crate::caches::validate(&config.caches)?;
         crate::demos::validate(&config.demos)?;
         crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;

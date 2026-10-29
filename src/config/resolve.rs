@@ -42,6 +42,7 @@ pub struct Effective {
     pub rex: config::Rex,
     pub happy: config::Happy,
     pub copy_ignored: bool,
+    pub agent_dirs: Vec<String>,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -260,6 +261,7 @@ impl Effective {
                 default_mode: built_in(merged.codex.default_mode, "codex.default_mode")?,
             },
             copy_ignored: built_in(merged.copy_ignored, "copy_ignored")?,
+            agent_dirs: built_in(merged.agent_dirs, "agent_dirs")?,
             setup_cmd: merged.setup_cmd,
             pre_setup_cmd: merged.pre_setup_cmd,
             post_remove_cmd: merged.post_remove_cmd,
@@ -402,6 +404,7 @@ fn built_in() -> RepoConfig {
             default_mode: Some(Shortcut::default().default_mode),
         },
         copy_ignored: Some(true),
+        agent_dirs: Some(vec!["/tmp".into()]),
         ports: config::repo::PortDefaults {
             on_conflict: Some(ports.on_conflict),
             start: Some(ports.start),
@@ -735,6 +738,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(rex.close_when_done),
         scalar!(happy.enabled),
         scalar!(copy_ignored),
+        scalar!(agent_dirs),
     ];
     fields.extend(
         HookKind::ALL

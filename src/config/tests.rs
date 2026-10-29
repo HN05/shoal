@@ -543,3 +543,14 @@ BAD = "a\u0000b""#,
         assert!(repo::parse(text).is_err(), "{text}");
     }
 }
+
+#[test]
+fn agent_directories_are_absolute_or_under_home() {
+    for valid in ["agent_dirs = ['/tmp', '~/cache']", "agent_dirs = []"] {
+        repo::parse(valid).unwrap();
+    }
+    for invalid in ["relative", "~someone/cache", ""] {
+        let error = repo::parse(&format!("agent_dirs = [{invalid:?}]")).unwrap_err();
+        assert!(format!("{error:#}").contains("agent_dirs"), "{error:#}");
+    }
+}

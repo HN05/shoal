@@ -4872,8 +4872,20 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
-fn workspace_agents_get_the_temporary_and_workspaces_directories_ahead_of_their_prompt() {
+fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prompt() {
     let fixture = Fixture::new();
+    // Every agent gets the configured agent directories.
+    let agent_tmp = fixture.root.path().join("agent-tmp");
+    fs::create_dir(&agent_tmp).unwrap();
+    let config = fixture.root.path().join(".config/shoal/config.toml");
+    let text = fs::read_to_string(&config).unwrap();
+    let text = format!("agent_dirs = ['/tmp', '{}']\n{text}", agent_tmp.display());
+    fs::write(&config, text).unwrap();
+    assert!(fixture.run(&["daemon", "reload"]).status.success());
+    let agent_tmp = format!(
+        "--add-dir={}",
+        fs::canonicalize(&agent_tmp).unwrap().display()
+    );
     let workspace = fixture.add("directories");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let directory = fs::canonicalize(path.parent().unwrap()).unwrap();
@@ -4884,7 +4896,7 @@ fn workspace_agents_get_the_temporary_and_workspaces_directories_ahead_of_their_
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
     let claude_dir = format!("--add-dir={directory}");
-    // Every agent may also read the temporary directories.
+    // Every agent may also read `/tmp`, the default agent directory.
     let tmp_dir = format!("--add-dir={}", fs::canonicalize("/tmp").unwrap().display());
     for (agent, expected) in [
         ("claude", vec![claude_dir.as_str(), "user prompt"]),
@@ -4915,6 +4927,7 @@ fn workspace_agents_get_the_temporary_and_workspaces_directories_ahead_of_their_
         }
         if agent == "claude" {
             assert!(args.contains(&tmp_dir.as_str()), "{args:?}");
+            assert!(args.contains(&agent_tmp.as_str()), "{args:?}");
         }
     }
 }
@@ -23301,8 +23314,8 @@ fn chat_args(fixture: &Fixture) -> Vec<String> {
         .collect()
 }
 
-/// `args` after the leading arguments that give an agent the temporary
-/// directories, once they are checked to name `/tmp`.
+/// `args` after the leading arguments that give an agent the agent
+/// directories, once they are checked to name `/tmp`, the default one.
 fn after_temp_dirs<S: AsRef<str>>(args: &[S]) -> &[S] {
     let mut directories = Vec::new();
     let mut rest = args;

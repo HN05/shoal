@@ -82,6 +82,8 @@ pub struct RepoConfig {
     pub happy: Happy,
     /// Copy the main checkout's ignored files into the worktree before setup.
     pub copy_ignored: Option<bool>,
+    /// Directories every agent and chat gets as other working directories.
+    pub agent_dirs: Option<Vec<String>>,
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -318,6 +320,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     }
     crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
     crate::env::validate_configured_environment(&config.env)?;
+    crate::config::validate_agent_dirs(config.agent_dirs.as_deref().unwrap_or_default())?;
     crate::caches::validate(&config.caches)?;
     crate::demos::validate(&config.demos)?;
     crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;

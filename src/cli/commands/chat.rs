@@ -5,6 +5,7 @@
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
+    path::Path,
 };
 
 use anyhow::{Context as _, Result, ensure};
@@ -154,7 +155,15 @@ pub(super) async fn begin(
         return Ok(0);
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
-    let command = command(&settings, &repo, &agent, instructions, opening, args)?;
+    let command = command(
+        &settings,
+        &ctx.paths.home,
+        &repo,
+        &agent,
+        instructions,
+        opening,
+        args,
+    )?;
     let chat = client::start_chat(
         &ctx.paths,
         &repo,
@@ -310,10 +319,11 @@ async fn start_beside(
 }
 
 /// The agent's configured launcher with the chat instructions, its opening
-/// task, the hooks that deliver its messages and the temporary directories,
-/// run at the checkout.
+/// task, the hooks that deliver its messages and the agent directories, `~/`
+/// naming a path under `home`, run at the checkout.
 fn command(
     settings: &Effective,
+    home: &Path,
     repo: &Repository,
     agent: &Agent,
     instructions: String,
@@ -336,7 +346,7 @@ fn command(
         opening,
         [
             agents::chat_hook_args(settings.integration(name))?,
-            agents::temp_dir_args(settings, name),
+            agents::agent_dir_args(settings, name, home),
         ]
         .concat(),
         args,

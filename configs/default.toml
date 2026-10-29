@@ -15,6 +15,10 @@ root_dir = "~/shoal"
 # A built-in launcher or a name defined in [commands].
 # default_agent = "codex"
 
+# Directories every agent and chat may read without a permission prompt, as
+# other working directories. Entries are absolute or start with ~/.
+agent_dirs = ["/tmp"]
+
 # Agents that run at once; by default `dynamic` starts them one at a time while
 # measured load stays below the warning thresholds `load` sets. `shoal add`
 # queues the rest and starts them as slots free. Set a positive number for a

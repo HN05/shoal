@@ -167,25 +167,33 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
 }
 
 #[test]
-fn agents_get_each_temporary_directory_as_they_resolve_it() {
-    let config: crate::config::Config = toml::from_str("").unwrap();
-    let settings = config
-        .resolve(&crate::config::repo::ConfigLayers::default())
-        .unwrap();
-    let directories: BTreeSet<PathBuf> = [PathBuf::from("/tmp"), std::env::temp_dir()]
-        .iter()
-        .map(|directory| fs::canonicalize(directory).unwrap())
-        .collect();
-    let claude: Vec<OsString> = directories
-        .iter()
-        .map(|directory| format!("--add-dir={}", directory.display()).into())
-        .collect();
-    assert_eq!(temp_dir_args(&settings, "claude"), claude);
-    let codex: Vec<OsString> = directories
-        .iter()
-        .flat_map(|directory| ["--add-dir".into(), directory.into()])
-        .collect();
-    assert_eq!(temp_dir_args(&settings, "codex"), codex);
+fn agents_get_each_configured_directory_as_they_resolve_it() {
+    let settings = |text: &str| {
+        let config: crate::config::Config = toml::from_str(text).unwrap();
+        config
+            .resolve(&crate::config::repo::ConfigLayers::default())
+            .unwrap()
+    };
+    let home = tempfile::tempdir().unwrap();
+    let defaults = settings("");
+    let tmp = fs::canonicalize("/tmp").unwrap();
+    assert_eq!(
+        agent_dir_args(&defaults, "claude", home.path()),
+        [OsString::from(format!("--add-dir={}", tmp.display()))]
+    );
+    assert_eq!(
+        agent_dir_args(&defaults, "codex", home.path()),
+        [OsString::from("--add-dir"), tmp.clone().into()]
+    );
     // A tool that takes no other working directory gets none.
-    assert!(temp_dir_args(&settings, "pi").is_empty());
+    assert!(agent_dir_args(&defaults, "pi", home.path()).is_empty());
+    // `~/` names a path under the home directory; a repeated one counts once.
+    let configured = settings("agent_dirs = ['/tmp', '~/cache', '/private/tmp']\n");
+    let cache = home.path().join("cache");
+    fs::create_dir(&cache).unwrap();
+    assert_eq!(
+        agent_dirs(&configured, home.path()),
+        BTreeSet::from([tmp, fs::canonicalize(&cache).unwrap()])
+    );
+    assert!(agent_dirs(&settings("agent_dirs = []\n"), home.path()).is_empty());
 }
