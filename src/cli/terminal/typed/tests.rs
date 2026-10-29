@@ -9,11 +9,11 @@ fn the_typed_line_stays_out_of_history_and_keeps_the_directive_in_the_shell() {
         "/tmp/f".into(),
     ];
     assert_eq!(
-        typed_text(&launch, None),
+        typed_text(&launch, None, false),
         " /opt/shoal internal launch /tmp/f\r"
     );
     assert_eq!(
-        typed_text(&launch, Some("/tmp/a b")),
+        typed_text(&launch, Some("/tmp/a b"), false),
         " export SHOAL_SHELL_DIRECTIVE='/tmp/a b'; /opt/shoal internal launch /tmp/f\r"
     );
 }
@@ -56,5 +56,14 @@ fn the_launch_step_names_the_state_directory_and_output_as_workers_do() {
             "launch",
             "/tmp/f"
         ]
+    );
+}
+
+#[test]
+fn a_command_that_ends_its_shell_exits_after_it() {
+    let launch = ["/opt/shoal".to_owned(), "launch".into()];
+    assert_eq!(
+        typed_text(&launch, None, true),
+        " /opt/shoal launch; exit\r"
     );
 }

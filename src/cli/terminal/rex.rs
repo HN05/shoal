@@ -367,7 +367,8 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         owned: true,
         ..origin.clone()
     };
-    let typed = Typed::new(demo.state, &(demo.worker)(&place)?, demo.env)?;
+    // The demo's shell ends with it, so no later command reuses its block.
+    let typed = Typed::ending_shell(demo.state, &(demo.worker)(&place)?, demo.env)?;
     server.send(place.id(), typed.text()).await?;
     typed.hand_over()?;
     Ok(place)

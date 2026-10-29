@@ -27,8 +27,24 @@ struct Launch {
 
 impl Typed {
     /// Write `argv` and `env` to a new private file and name the command,
-    /// for the state directory `state`, that runs them from it.
+    /// for the state directory `state`, that runs them from it. The shell
+    /// stays once it ends.
     pub fn new(state: &Path, argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
+        Self::write(state, argv, env, false)
+    }
+
+    /// [`Typed::new`] for a command whose end also ends the shell, closing
+    /// its place, as a demo's does.
+    pub fn ending_shell(state: &Path, argv: &[OsString], env: &[(&str, String)]) -> Result<Self> {
+        Self::write(state, argv, env, true)
+    }
+
+    fn write(
+        state: &Path,
+        argv: &[OsString],
+        env: &[(&str, String)],
+        ends_shell: bool,
+    ) -> Result<Self> {
         let launch = Launch {
             argv: argv
                 .iter()
@@ -50,7 +66,7 @@ impl Typed {
             .iter()
             .find(|(name, _)| *name == env::SHELL_DIRECTIVE)
             .map(|(_, path)| path.as_str());
-        let text = typed_text(&launch_argv(state, &file)?, directive);
+        let text = typed_text(&launch_argv(state, &file)?, directive, ends_shell);
         Ok(Self { text, file })
     }
 
@@ -76,9 +92,10 @@ fn launch_argv(state: &Path, file: &Path) -> Result<Vec<String>> {
         .context("Shoal's launch path is not UTF-8")
 }
 
-/// The line to type: a leading space keeps it out of shells' history, and
-/// the shell keeps the `directive` it enters the workspace through.
-fn typed_text(launch: &[String], directive: Option<&str>) -> String {
+/// The line to type: a leading space keeps it out of shells' history, the
+/// shell keeps the `directive` it enters the workspace through, and it exits
+/// after the command when it `ends_shell`.
+fn typed_text(launch: &[String], directive: Option<&str>, ends_shell: bool) -> String {
     let export = directive.map_or_else(String::new, |path| {
         format!(
             "export {}={}; ",
@@ -86,7 +103,8 @@ fn typed_text(launch: &[String], directive: Option<&str>) -> String {
             crate::shell::quote(&[path])
         )
     });
-    format!(" {export}{}\r", crate::shell::quote(launch))
+    let exit = if ends_shell { "; exit" } else { "" };
+    format!(" {export}{}{exit}\r", crate::shell::quote(launch))
 }
 
 /// The launch step: run the command `file` carries, after deleting it.
