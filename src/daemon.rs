@@ -18,6 +18,7 @@ pub mod environment;
 pub mod events;
 mod execution_connection;
 mod execution_recovery;
+mod file_copies;
 pub(crate) mod forge_hosts;
 pub(crate) mod handoff;
 mod keep_awake;
