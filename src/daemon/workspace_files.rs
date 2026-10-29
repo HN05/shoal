@@ -48,6 +48,21 @@ pub fn check_results(results: &[PathBuf]) -> Result<()> {
     Ok(())
 }
 
+/// The `names` and record `ids` that none of `files` has, as an error
+/// names them.
+pub fn missing_selection(files: &[AttachedFile], names: &[String], ids: &[i64]) -> Vec<String> {
+    names
+        .iter()
+        .filter(|name| !files.iter().any(|file| file.name == **name))
+        .cloned()
+        .chain(
+            ids.iter()
+                .filter(|id| !files.iter().any(|file| file.id == **id))
+                .map(|id| format!("number {id}")),
+        )
+        .collect()
+}
+
 /// A file attached to a workspace: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {
@@ -143,8 +158,7 @@ impl Manager {
     }
 
     /// Copies of the files `results` that `workspace` hands back with its
-    /// completion, recorded as its results, which outlive its removal; returns
-    /// their names.
+    /// completion, recorded as its results, which outlive its removal.
     pub(crate) async fn keep_results(
         &self,
         workspace: &Workspace,
@@ -184,16 +198,7 @@ impl Manager {
         let id = owner.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
         if !names.is_empty() || !ids.is_empty() {
-            let missing: Vec<_> = names
-                .iter()
-                .filter(|name| !files.iter().any(|file| file.name == **name))
-                .cloned()
-                .chain(
-                    ids.iter()
-                        .filter(|id| !files.iter().any(|file| file.id == **id))
-                        .map(|id| format!("number {id}")),
-                )
-                .collect();
+            let missing = missing_selection(&files, &names, &ids);
             ensure!(
                 missing.is_empty(),
                 "workspace {} has no attached file {}",

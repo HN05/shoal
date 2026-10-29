@@ -101,6 +101,9 @@ pub(super) async fn remove(
     yes: bool,
 ) -> Result<i32> {
     let workspace = ui::select_workspace_filter(ctx, scope).await?;
+    if let Some(workspace) = &workspace {
+        check_selected(ctx, workspace, &names, &ids).await?;
+    }
     if !yes && let Some(action) = confirmation(ctx, workspace.as_deref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
@@ -120,6 +123,30 @@ pub(super) async fn remove(
     };
     ctx.emit(&text, &deleted)?;
     Ok(0)
+}
+
+/// Refuse names and records the workspace's files do not have before asking
+/// anything; the daemon checks again as it deletes.
+async fn check_selected(
+    ctx: &Context,
+    workspace: &str,
+    names: &[String],
+    ids: &[i64],
+) -> Result<()> {
+    if names.is_empty() && ids.is_empty() {
+        return Ok(());
+    }
+    let method = FileMethod::ListFiles {
+        workspace: workspace.to_owned(),
+    };
+    let files = client::pages::<AttachedFile>(&ctx.paths, method).await?;
+    let missing = crate::daemon::workspace_files::missing_selection(&files, names, ids);
+    ensure!(
+        missing.is_empty(),
+        "the workspace has no attached file {}",
+        missing.join(", ")
+    );
+    Ok(())
 }
 
 /// What deleting the files of `workspace`, or of every workspace, asks the

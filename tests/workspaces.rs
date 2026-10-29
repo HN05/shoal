@@ -19633,6 +19633,32 @@ fn done_hands_back_files_that_shoal_files_lists() {
 }
 
 #[test]
+fn files_rm_refuses_unknown_names_before_asking() {
+    let fixture = Fixture::new();
+    fixture.add("busy");
+    let mut command = fixture
+        .command()
+        .args(["run", "--workspace", "busy", "--"])
+        .args(READABLE_SLEEP)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_registered_execution(&fixture, "busy");
+    // Without --yes a running workspace would ask first; the name fails sooner.
+    let output = fixture.run(&["--json", "files", "rm", "missing.md", "--workspace", "busy"]);
+    command.kill().unwrap();
+    command.wait().unwrap();
+    assert!(!output.status.success(), "{output:?}");
+    let printed = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(printed.contains("no attached file missing.md"), "{printed}");
+}
+
+#[test]
 fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
     let fixture = Fixture::new();
     fixture.add("cached");
