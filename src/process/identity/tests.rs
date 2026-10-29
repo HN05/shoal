@@ -378,6 +378,32 @@ fn a_parent_that_forked_and_exited_between_listing_and_reading_stays_remembered(
     Ok(())
 }
 
+#[test]
+fn a_live_parent_is_judged_by_its_reading_not_its_remembered_owner() -> Result<()> {
+    use Evidence::{Unmarked, Unreadable};
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    inventory(
+        &owners,
+        [unique(observed(10, 9, false, marked("execution")), 100, 90)],
+    )
+    .attribute(Marker::Execution, &ids)?;
+    // The parent replaced its image without the marker and started a child
+    // whose environment cannot be read.
+    let later = inventory(
+        &owners,
+        [
+            unique(observed(10, 9, false, Unmarked), 100, 90),
+            unique(observed(11, 10, false, Unreadable), 101, 100),
+        ],
+    );
+    assert_eq!(
+        describe(later.resolve(11, &mut HashMap::new())),
+        "unknown under 11"
+    );
+    Ok(())
+}
+
 /// An agent's job whose shell and agent were killed stays the agent's: the
 /// daemon remembers who owned it from an inventory made while they lived.
 #[tokio::test]

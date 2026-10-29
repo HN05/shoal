@@ -669,14 +669,25 @@ impl<'a> Inventory<'a> {
     /// its exited parent, otherwise unknown under it. A process told to be no
     /// execution's stays so whatever its parent was.
     fn remembered(&self, lineage: &Lineage) -> Attribution {
-        [lineage.unique, lineage.parent]
-            .into_iter()
-            .flatten()
-            .find_map(|unique| self.owners.recall(unique))
-            .map_or_else(
-                || Attribution::Unknown(lineage.identity.clone()),
-                Attribution::Remembered,
-            )
+        [
+            lineage.unique,
+            lineage.parent.filter(|_| !self.parent_observed(lineage)),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(|unique| self.owners.recall(unique))
+        .map_or_else(
+            || Attribution::Unknown(lineage.identity.clone()),
+            Attribution::Remembered,
+        )
+    }
+
+    /// Whether this inventory observed `lineage`'s parent itself, whose own
+    /// evidence now outranks what earlier inventories told about it.
+    fn parent_observed(&self, lineage: &Lineage) -> bool {
+        self.observed
+            .get(&lineage.parent_pid)
+            .is_some_and(|parent| parent.lineage.unique == lineage.parent)
     }
 
     /// `pid`'s owner by its own environment, or for a hidden one by the
