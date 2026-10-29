@@ -1,70 +1,93 @@
 //! The `shoal approvals` picker: requests chosen to open or decide.
 use anyhow::{Context as _, Result, ensure};
 
-use super::{about, ensure_scope_token, list_requests, show_request, submit};
+use super::{about, ensure_scope_token, list_requests, listed_pending, show_request, submit};
 use crate::{
     cli::{
+        args::approvals::Decision,
         context::Context,
+        internal::{self, Worker},
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
     daemon::approvals::{ApprovalRequest, DecisionStatus, proposals::ProposalDecision},
 };
 
-/// Open the chosen request, or decide it with a key and choose again while
-/// pending requests remain; leaving the picker after a decision succeeds.
-pub(super) async fn pick_and_decide(
+/// Open the chosen request; Ctrl-A approves and Ctrl-D denies the
+/// highlighted one in place, with the outcome shown in the list.
+pub(super) async fn pick_and_open(
     ctx: &Context,
     workspace: Option<String>,
-    mut requests: Vec<ApprovalRequest>,
+    requests: Vec<ApprovalRequest>,
 ) -> Result<i32> {
-    let mut decided = false;
-    loop {
-        let (selected, decision) = match pick_request(ctx, requests) {
-            Err(error) if decided && error.is::<ui::SelectionCanceled>() => return Ok(0),
-            picked => picked?,
-        };
-        let Some(approve) = decision else {
-            return show_request(ctx, selected).await;
-        };
-        ensure_scope_token(ctx)?;
-        submit(
-            ctx,
-            selected.id,
-            approve,
-            Some(selected),
-            ProposalDecision::default(),
-        )
-        .await?;
-        decided = true;
-        requests = list_requests(ctx, workspace.clone()).await?;
-        if !requests
-            .iter()
-            .any(|request| request.status == DecisionStatus::Pending)
-        {
-            return Ok(0);
-        }
-    }
+    let worker = |worker| internal::shell_command(&ctx.paths, worker);
+    let decide = |key, label, decision| -> Result<_> {
+        Ok(ui::InPlaceKey {
+            key,
+            label,
+            command: worker(Worker::ApprovalDecide { decision })?,
+        })
+    };
+    let keys = [
+        decide("ctrl-a", "approve", Decision::Approve)?,
+        decide("ctrl-d", "deny", Decision::Deny)?,
+    ];
+    let reload = worker(Worker::ApprovalRows {
+        workspace: workspace.as_deref(),
+    })?;
+    let row = ui::pick_in_place(
+        ctx,
+        "Approval> ",
+        listed_rows(requests),
+        "open",
+        &keys,
+        &reload,
+    )?;
+    let (id, created_at) = parse_row(&row)?;
+    let request = list_requests(ctx, workspace)
+        .await?
+        .into_iter()
+        .find(|request| request.id == id && request.created_at == created_at)
+        .with_context(|| format!("approval request {id} changed since it was listed"))?;
+    show_request(ctx, Box::new(request)).await
 }
 
-/// Choose a request, pending ones first, and how to act on it.
-fn pick_request(
+/// Print the list's rows for the picker to reload after a decision.
+pub(in crate::cli::commands) async fn print_rows(
     ctx: &Context,
-    mut requests: Vec<ApprovalRequest>,
-) -> Result<(Box<ApprovalRequest>, Option<bool>)> {
+    workspace: Option<String>,
+) -> Result<i32> {
+    for (id, label) in listed_rows(list_requests(ctx, workspace).await?) {
+        outln!("{}", ui::picker_line(&id, &label));
+    }
+    Ok(0)
+}
+
+/// Approve or deny the pending request the picker's `row` names, and print
+/// the outcome for the picker to show.
+pub(in crate::cli::commands) async fn decide_row(
+    ctx: &Context,
+    row: &str,
+    decision: Decision,
+) -> Result<i32> {
+    ensure_scope_token(ctx)?;
+    let (id, created_at) = parse_row(row)?;
+    let request = listed_pending(ctx, id, created_at).await?;
+    let approve = decision == Decision::Approve;
+    submit(
+        ctx,
+        id,
+        approve,
+        Some(Box::new(request)),
+        ProposalDecision::default(),
+    )
+    .await
+}
+
+/// Every request's row, pending ones first.
+fn listed_rows(mut requests: Vec<ApprovalRequest>) -> Entries {
     requests.sort_by_key(|request| request.status != DecisionStatus::Pending);
-    let bindings = ui::KeyBindings(&[
-        ("enter", "open", None),
-        ("ctrl-a", "approve", Some(true)),
-        ("ctrl-d", "deny", Some(false)),
-    ]);
-    let picked = ui::pick_with_keys(ctx, "Approval> ", picker_rows(&requests), bindings)?;
-    let id: i64 = picked.id.parse()?;
-    let selected = requests
-        .into_iter()
-        .find(|request| request.id == id)
-        .context("unknown approval request")?;
-    Ok((Box::new(selected), picked.action))
+    picker_rows(&requests)
 }
 
 pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
@@ -74,15 +97,17 @@ pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
         .filter(|request| request.status == DecisionStatus::Pending)
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
-    let id: i64 = ui::pick(ctx, "Approval> ", picker_rows(&pending))?.parse()?;
+    let (id, created_at) = parse_row(&ui::pick(ctx, "Approval> ", picker_rows(&pending))?)?;
     pending
         .into_iter()
-        .find(|request| request.id == id)
+        .find(|request| request.id == id && request.created_at == created_at)
         .context("picker returned an unknown approval request")
 }
 
-/// One aligned row per request: its number, its status once decided, the
-/// workspace, and what it asks for and why, cut to fit the picker.
+/// One aligned row per request, by its number and when it was made since a
+/// later request may reuse the number: the number, its status once
+/// decided, the workspace, and what it asks for and why, cut to fit the
+/// picker.
 fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
     let cells = requests
         .iter()
@@ -103,7 +128,17 @@ fn picker_rows(requests: &[ApprovalRequest]) -> Entries {
     let labels = ui::aligned_to(cells, Palette::picker(), limit);
     requests
         .iter()
-        .map(|request| request.id.to_string())
+        .map(|request| format!("{}:{}", request.id, request.created_at))
         .zip(labels)
         .collect()
+}
+
+/// The number and creation time a row's id holds.
+fn parse_row(row: &str) -> Result<(i64, u64)> {
+    let invalid = || anyhow::anyhow!("picker returned an invalid approval request");
+    let (id, created_at) = row.split_once(':').ok_or_else(invalid)?;
+    Ok((
+        id.parse().map_err(|_| invalid())?,
+        created_at.parse().map_err(|_| invalid())?,
+    ))
 }

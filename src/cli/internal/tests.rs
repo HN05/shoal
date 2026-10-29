@@ -166,6 +166,37 @@ fn menu_workers_round_trip_their_view() {
 }
 
 #[test]
+fn approval_workers_round_trip_their_workspace_and_decision() {
+    for workspace in [None, Some("agent")] {
+        let InternalCommand::ApprovalRows { workspace: parsed } =
+            parse(Worker::ApprovalRows { workspace }, false)
+        else {
+            panic!("expected approval rows worker");
+        };
+        assert_eq!(parsed.as_deref(), workspace);
+    }
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    for decision in [Decision::Approve, Decision::Deny] {
+        // The picker appends the highlighted row.
+        let mut args =
+            internal_command(&paths, false, Worker::ApprovalDecide { decision }).unwrap();
+        args.push("3:12".into());
+        let Some(Command::Internal {
+            command:
+                InternalCommand::ApprovalDecide {
+                    decision: parsed,
+                    row,
+                },
+        }) = Cli::try_parse_from(args).unwrap().command
+        else {
+            panic!("expected approval decide worker");
+        };
+        assert_eq!((parsed, row.as_str()), (decision, "3:12"));
+    }
+}
+
+#[test]
 fn copy_ignored_round_trips_optional_setup_command() {
     for setup_cmd in [None, Some(Path::new("/repo/--setup 'literal'.sh"))] {
         let InternalCommand::CopyIgnored {

@@ -4,6 +4,8 @@ use serde_json::{Value, json};
 
 mod picker;
 
+pub(super) use picker::{decide_row, print_rows};
+
 use super::EXIT_BUSY;
 use crate::{
     cli::{
@@ -229,7 +231,14 @@ pub(super) async fn decide(
 /// grants in view.
 pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let request = list_requests(ctx, None)
+    let request = listed_pending(ctx, id, created_at).await?;
+    prompt_decision(ctx, Box::new(request)).await
+}
+
+/// The pending request `id` created at `created_at`, refusing one that
+/// replaced it or was decided since a list showed it.
+async fn listed_pending(ctx: &Context, id: i64, created_at: u64) -> Result<ApprovalRequest> {
+    list_requests(ctx, None)
         .await?
         .into_iter()
         .find(|request| {
@@ -237,8 +246,7 @@ pub(super) async fn decide_listed(ctx: &Context, id: i64, created_at: u64) -> Re
                 && request.created_at == created_at
                 && request.status == DecisionStatus::Pending
         })
-        .with_context(|| format!("approval request {id} changed since it was listed"))?;
-    prompt_decision(ctx, Box::new(request)).await
+        .with_context(|| format!("approval request {id} changed since it was listed"))
 }
 
 /// Send the decision on request `id`, which `shown` names when the user
@@ -324,7 +332,7 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let requests = list_requests(ctx, workspace.clone()).await?;
     if ctx.interactive_output() && !requests.is_empty() {
-        return picker::pick_and_decide(ctx, workspace, requests).await;
+        return picker::pick_and_open(ctx, workspace, requests).await;
     }
     ctx.show(&requests, |requests| {
         for request in requests {

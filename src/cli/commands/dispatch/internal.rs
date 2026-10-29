@@ -3,7 +3,8 @@ use anyhow::Result;
 use crate::cli::{
     args::internal::InternalCommand,
     commands::{
-        agent_queue, agent_state, events, menu, messages, subagents, workspaces, worktree_hooks,
+        agent_queue, agent_state, approvals, events, menu, messages, subagents, workspaces,
+        worktree_hooks,
     },
     context::Context,
     terminal,
@@ -14,6 +15,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::Events { follow, since } => events::run(&ctx, follow, since).await,
         InternalCommand::MenuRows { view } => menu::print_rows(&ctx, view).await,
         InternalCommand::MenuNext => menu::print_next(&ctx),
+        InternalCommand::ApprovalRows { workspace } => approvals::print_rows(&ctx, workspace).await,
+        InternalCommand::ApprovalDecide { decision, row } => {
+            approvals::decide_row(&ctx, &row, decision).await
+        }
         InternalCommand::ProxyReport { report } => {
             crate::proxy::send_relayed(&ctx.paths, &report).await
         }

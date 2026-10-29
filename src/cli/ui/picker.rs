@@ -71,6 +71,72 @@ pub fn pick_with_keys<T: Clone>(
     })
 }
 
+/// A key that acts on the highlighted entry without leaving the picker.
+pub struct InPlaceKey<'a> {
+    pub key: &'a str,
+    pub label: &'a str,
+    /// Shell text that, given the entry's id as its last argument, acts on
+    /// it and prints the outcome.
+    pub command: String,
+}
+
+impl InPlaceKey<'_> {
+    /// Run the command on the highlighted entry, show its output or error
+    /// above `hints`, then reload the rows. The reload goes last so its
+    /// shell text can contain any character.
+    fn binding(&self, hints: &str, reload: &str) -> Result<String> {
+        let header = format!(
+            "{} {{1}} 2>&1; printf '%s\\n' {}",
+            self.command,
+            crate::shell::quote(&[hints])
+        );
+        let header = enclosed("transform-header", &header)?;
+        Ok(format!("{}:{header}+reload:{reload}", self.key))
+    }
+}
+
+/// Choose an entry with Enter, labeled `enter`, while `keys` act on the
+/// highlighted one in place and the rows reload from `reload`. The entry may
+/// come from a reload, so the caller checks the id.
+pub fn pick_in_place(
+    ctx: &Context,
+    prompt: &str,
+    entries: Entries,
+    enter: &str,
+    keys: &[InPlaceKey<'_>],
+    reload: &str,
+) -> Result<String> {
+    let hints = std::iter::once(format!("enter: {enter}"))
+        .chain(keys.iter().map(|key| format!("{}: {}", key.key, key.label)))
+        .collect::<Vec<_>>()
+        .join("   ");
+    let mut args = vec!["--header".into(), hints.clone()];
+    for key in keys {
+        args.extend(["--bind".into(), key.binding(&hints, reload)?]);
+    }
+    Ok(entry_id(&picker_output(ctx, prompt, &entries, &args)?))
+}
+
+/// The fzf `action` with `argument` between delimiters it accepts, chosen
+/// so that the argument does not close them.
+fn enclosed(action: &str, argument: &str) -> Result<String> {
+    const DELIMITERS: [(char, char); 8] = [
+        ('(', ')'),
+        ('[', ']'),
+        ('<', '>'),
+        ('~', '~'),
+        ('!', '!'),
+        ('@', '@'),
+        ('#', '#'),
+        ('^', '^'),
+    ];
+    DELIMITERS
+        .into_iter()
+        .find(|(_, close)| !argument.contains(*close))
+        .map(|(open, close)| format!("{action}{open}{argument}{close}"))
+        .context("the picker command contains every fzf delimiter")
+}
+
 /// Choose an open issue or PR, returning its number; `kind` names them when
 /// there are none.
 pub fn pick_item(
@@ -230,3 +296,6 @@ pub(super) fn entry_id(line: &str) -> String {
         .trim()
         .to_owned()
 }
+
+#[cfg(test)]
+mod tests;

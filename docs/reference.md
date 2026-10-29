@@ -3837,8 +3837,8 @@ by workspace. Scoped callers can inspect requests in their workspace tree. On a 
 `shoal approvals` opens a picker; selecting a pending request or naming its number
 shows its recorded settings and prompts for `y` to approve or `n` to deny,
 case-insensitively; any other input cancels. In the list, Ctrl-A approves
-and Ctrl-D denies the selected request directly, and the list reopens while
-pending requests remain. JSON and nonterminal output
+and Ctrl-D denies the highlighted request without leaving it: the outcome or
+error shows above the key hints and the list updates. JSON and nonterminal output
 print records without prompting. An unscoped user
 reviews the recorded settings and uses `shoal approvals --approve [number]` or
 `shoal approvals --deny [number]`; without a number, they pick among pending requests, shown

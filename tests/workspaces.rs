@@ -20390,7 +20390,7 @@ fn approval_picker_inspects_before_deciding_the_selected_request() {
     ));
     let id = pending["id"].to_string();
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "pending");
-    let (output, rows) = fixture.pick(&["approvals"], &id, "Y\n");
+    let (output, rows) = fixture.pick(&["approvals"], &approval_row(&pending), "Y\n");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.contains("serve preview"), "{rows}");
     assert_eq!(fixture.ok(&["approvals", &id])["status"], "approved");
@@ -20421,23 +20421,32 @@ fn approval_prompt_accepts_only_case_insensitive_y_or_n() {
 }
 
 #[test]
-fn approval_list_shortcuts_decide_the_shown_request() {
+fn approval_list_shortcuts_decide_in_place_and_reload_the_list() {
     for (key, status) in [("ctrl-a", "approved"), ("ctrl-d", "denied")] {
         let fixture = Fixture::new();
         set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
-        fixture.add("agent");
-        let pending = pending_approval(scoped_command(
-            &fixture,
-            "agent",
-            &["acquire", "port", "web", "--reason", "serve preview"],
-        ));
+        let mut pending = Vec::new();
+        for agent in ["first", "second"] {
+            fixture.add(agent);
+            pending.push(pending_approval(scoped_command(
+                &fixture,
+                agent,
+                &["acquire", "port", "web", "--reason", "serve preview"],
+            )));
+        }
+        // Runs the key's actions on the first row as fzf would, then leaves.
         install_test_script(
             fixture.root.path().join("bin/fzf"),
             r#"#!/bin/sh
 cat > "$HOME/picker-input"
-printf '%s\n' "$@" > "$HOME/picker-args"
-printf '%s\n' "$SHOAL_TEST_KEY"
-head -1 "$HOME/picker-input"
+row=$(head -1 "$HOME/picker-input" | cut -f1)
+for arg in "$@"; do
+  case "$arg" in "$SHOAL_TEST_KEY:transform-header("*) bind=${arg#*transform-header(} ;; esac
+done
+header=$(printf '%s' "${bind%%)+reload:*}" | sed "s/{1}/'$row'/")
+sh -c "$header" > "$HOME/picker-header"
+sh -c "${bind#*)+reload:}" > "$HOME/picker-reload"
+exit 130
 "#,
         );
         let (output, transcript) = fixture.terminal_command(
@@ -20448,51 +20457,32 @@ head -1 "$HOME/picker-input"
             "",
             true,
         );
-        assert!(output.status.success(), "{transcript}");
-        let args = fs::read_to_string(fixture.root.path().join("picker-args")).unwrap();
-        assert!(args.contains("--expect=ctrl-a,ctrl-d"), "{args}");
-        assert_eq!(
-            fixture.ok(&["approvals", &pending["id"].to_string()])["status"],
-            status
+        assert_eq!(output.status.code(), Some(130), "{transcript}");
+        let read = |name: &str| fs::read_to_string(fixture.root.path().join(name)).unwrap();
+        let header = read("picker-header");
+        let statuses: Vec<_> = pending
+            .iter()
+            .map(|request| fixture.ok(&["approvals", &request["id"].to_string()])["status"].clone())
+            .collect();
+        let decided = statuses
+            .iter()
+            .position(|decided| decided == status)
+            .unwrap_or_else(|| panic!("{statuses:?} {header}"));
+        assert!(statuses.contains(&Value::from("pending")), "{statuses:?}");
+        let id = &pending[decided]["id"];
+        assert!(
+            header.starts_with(&format!("Approval {id} {status}")),
+            "{header}"
         );
+        assert!(
+            header.contains("ctrl-a: approve   ctrl-d: deny"),
+            "{header}"
+        );
+        let reload = read("picker-reload");
+        let first = reload.lines().next().unwrap_or_default();
+        let last = reload.lines().last().unwrap_or_default();
+        assert!(!first.contains(status) && last.contains(status), "{reload}");
     }
-}
-
-#[test]
-fn approval_list_shortcuts_reopen_the_list_while_requests_are_pending() {
-    let fixture = Fixture::new();
-    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
-    let mut pending = Vec::new();
-    for agent in ["first", "second"] {
-        fixture.add(agent);
-        pending.push(pending_approval(scoped_command(
-            &fixture,
-            agent,
-            &["acquire", "port", "web", "--reason", "serve preview"],
-        )));
-    }
-    // Decides the first row, then leaves the reopened list.
-    install_test_script(
-        fixture.root.path().join("bin/fzf"),
-        r#"#!/bin/sh
-cat > "$HOME/picker-input"
-echo run >> "$HOME/picker-runs"
-[ "$(wc -l < "$HOME/picker-runs")" -gt 1 ] && exit 130
-printf 'ctrl-a\n'
-head -1 "$HOME/picker-input"
-"#,
-    );
-    let (output, transcript) =
-        fixture.terminal_command(fixture.command().arg("approvals"), "", true);
-    assert!(output.status.success(), "{transcript}");
-    let runs = fs::read_to_string(fixture.root.path().join("picker-runs")).unwrap();
-    assert_eq!(runs.lines().count(), 2, "{transcript}");
-    let statuses: Vec<_> = pending
-        .iter()
-        .map(|request| fixture.ok(&["approvals", &request["id"].to_string()])["status"].clone())
-        .collect();
-    assert!(statuses.contains(&Value::from("approved")), "{statuses:?}");
-    assert!(statuses.contains(&Value::from("pending")), "{statuses:?}");
 }
 
 #[test]
@@ -20575,13 +20565,14 @@ fn approval_decisions_pick_an_omitted_pending_request() {
         "agent",
         &["acquire", "port", "web", "--reason", "serve preview"],
     ));
+    let (signing_row, web_row) = (approval_row(&signing), approval_row(&web));
     let (signing, web) = (signing["id"].to_string(), web["id"].to_string());
-    let (output, rows) = fixture.pick(&["approvals", "--approve"], &web, "");
+    let (output, rows) = fixture.pick(&["approvals", "--approve"], &web_row, "");
     assert!(output.status.success(), "{output:?}");
-    assert!(rows.contains(&format!("{signing}\t")) && rows.contains(&format!("{web}\t")));
-    let (output, rows) = fixture.pick(&["approvals", "--deny"], &signing, "");
+    assert!(rows.contains(&format!("{signing_row}\t")) && rows.contains(&format!("{web_row}\t")));
+    let (output, rows) = fixture.pick(&["approvals", "--deny"], &signing_row, "");
     assert!(output.status.success(), "{output:?}");
-    assert!(!rows.contains(&format!("{web}\t")), "{rows:?}");
+    assert!(!rows.contains(&format!("{web_row}\t")), "{rows:?}");
     let statuses: Vec<_> = fixture
         .ok(&["approvals"])
         .as_array()
@@ -20612,6 +20603,11 @@ fn agents_withdraw_requests_they_no_longer_need() {
         String::from_utf8_lossy(&refused.stderr).contains("is withdrawn"),
         "{refused:?}"
     );
+}
+
+/// The picker row id of an approval request.
+fn approval_row(request: &Value) -> String {
+    format!("{}:{}", request["id"], request["created_at"])
 }
 
 fn pending_approval(output: Output) -> Value {

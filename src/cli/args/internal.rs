@@ -21,6 +21,18 @@ pub enum InternalCommand {
     MenuRows { view: commands::menu::View },
     /// Print the fzf actions that switch the bare `shoal` picker to its next view.
     MenuNext,
+    /// Print the `shoal approvals` picker's rows for it to reload.
+    #[command(name = internal::APPROVAL_ROWS)]
+    ApprovalRows {
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+    /// Decide the request a `shoal approvals` picker row names, and print the outcome.
+    #[command(name = internal::APPROVAL_DECIDE)]
+    ApprovalDecide {
+        decision: crate::cli::args::approvals::Decision,
+        row: String,
+    },
     /// Send a proxy's report for an agent wrapper of an older release, which
     /// an upgraded daemon's protocol no longer accepts.
     #[command(name = internal::PROXY_REPORT)]

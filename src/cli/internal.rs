@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::paths::Paths;
+use crate::{cli::args::approvals::Decision, paths::Paths};
 
 /// The hidden command that holds every worker below.
 pub const GROUP: &str = "internal";
@@ -22,6 +22,8 @@ pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
 pub const MENU_ROWS: &str = "menu-rows";
 pub const MENU_NEXT: &str = "menu-next";
+pub const APPROVAL_ROWS: &str = "approval-rows";
+pub const APPROVAL_DECIDE: &str = "approval-decide";
 pub const PROXY_REPORT: &str = "proxy-report";
 pub const TAKE_OVER: &str = "take-over";
 
@@ -91,6 +93,14 @@ pub enum Worker<'a> {
     },
     /// Print the fzf actions that switch the picker to its next view.
     MenuNext,
+    /// Print the `shoal approvals` picker's rows, of `workspace` only when given.
+    ApprovalRows {
+        workspace: Option<&'a str>,
+    },
+    /// Make `decision` on the request whose picker row the picker appends.
+    ApprovalDecide {
+        decision: Decision,
+    },
     /// Send `report`, the JSON of a proxy's report, for a wrapper of an
     /// older release that the upgraded daemon no longer speaks to.
     ProxyReport {
@@ -257,6 +267,19 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
         }
         Worker::MenuRows { view } => args.extend([MENU_ROWS.into(), view.into()]),
         Worker::MenuNext => args.push(MENU_NEXT.into()),
+        Worker::ApprovalRows { workspace } => {
+            args.push(APPROVAL_ROWS.into());
+            if let Some(workspace) = workspace {
+                args.extend(["--workspace".into(), workspace.into()]);
+            }
+        }
+        Worker::ApprovalDecide { decision } => {
+            let decision = match decision {
+                Decision::Approve => "approve",
+                Decision::Deny => "deny",
+            };
+            args.extend([APPROVAL_DECIDE.into(), decision.into()]);
+        }
         Worker::ProxyReport { report } => args.extend([PROXY_REPORT.into(), report.into()]),
         Worker::Launch { file } => args.extend([LAUNCH.into(), file.as_os_str().to_owned()]),
         Worker::TakeOver {

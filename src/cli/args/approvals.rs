@@ -1,5 +1,5 @@
 //! Arguments of `shoal approvals`.
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 
 use crate::cli::args::BodyArgs;
 
@@ -49,4 +49,11 @@ pub enum ApprovalsCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+}
+
+/// What a picker key decides.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum Decision {
+    Approve,
+    Deny,
 }

@@ -1650,8 +1650,8 @@ join again.
 Approvals are the daemon-owned way a scoped caller asks the user for a yes or no;
 `shoal approvals` opens a request picker on a terminal, and a numbered request
 shows its details and prompts for a decision. Ctrl-A approves and Ctrl-D denies
-the selected request directly from the list, which stays open while pending
-requests remain. Decisions bind to the displayed or
+the highlighted request inside the list, which fzf updates in place rather than
+closing and reopening. Decisions bind to the displayed or
 authorized record through mutation, including when a coordinating agent decides. Explicit `--approve` and `--deny` flags decide every kind: landing
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
