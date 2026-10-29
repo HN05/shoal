@@ -152,6 +152,7 @@ fn snapshot(text: &str, number: u64, branch: Option<&str>) -> Result<Snapshot> {
     );
     let mut snapshot = Snapshot {
         state,
+        head: pull["headRefOid"].as_str().unwrap_or_default().into(),
         conflict: match pull["mergeable"].as_str() {
             Some("CONFLICTING") => Some(true),
             Some("MERGEABLE") => Some(false),

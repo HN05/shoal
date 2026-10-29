@@ -49,6 +49,15 @@ impl CheckResult {
             "failure" | "error" | "timed_out" | "startup_failure"
         )
     }
+
+    /// Whether the check finished and passed; any other finished result,
+    /// such as a cancelled one, may need attention.
+    pub fn passed(&self) -> bool {
+        matches!(
+            self.result.as_str(),
+            "success" | "neutral" | "skipped" | "warning"
+        )
+    }
 }
 
 impl PrStatus {

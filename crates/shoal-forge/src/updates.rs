@@ -66,6 +66,9 @@ pub struct Snapshot {
     #[serde(deserialize_with = "comments::saved")]
     pub(crate) comments: BTreeMap<String, Entry>,
     pub(crate) checks: BTreeMap<String, Check>,
+    /// The PR's head commit, which its checks run on; empty for an issue.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) head: String,
     pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
     #[serde(default)]
@@ -292,6 +295,16 @@ impl Snapshot {
         &self.state
     }
 
+    /// The PR's head commit, empty for an issue.
+    pub fn head(&self) -> &str {
+        &self.head
+    }
+
+    /// Whether a check on the head commit has not finished.
+    pub fn checks_pending(&self) -> bool {
+        self.checks.values().any(|check| !check.complete)
+    }
+
     /// Take `state` as already seen, even before a first observation, whose
     /// other activity is still reported.
     pub fn adopt_state(&mut self, state: &str) {
@@ -404,6 +417,7 @@ impl Snapshot {
     /// An open PR's mergeability and the CI checks on its head commit. A
     /// failed check lookup keeps the previous checks.
     pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
+        self.head = pull.head_sha.clone().unwrap_or_default();
         self.conflict = pull.conflict;
         self.conflict_at = MergeRevision {
             head: pull.head_sha.clone().unwrap_or_default(),
