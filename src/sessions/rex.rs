@@ -250,25 +250,31 @@ impl Rex {
     /// Show `block`'s window in the connected Mac app, returning whether one
     /// was connected.
     pub async fn show_in_app(&self, block: &Block) -> Result<bool> {
-        let clients: Clients =
-            serde_json::from_slice(&self.run(&["client", "ls", "--json"]).await?)
-                .context("invalid Rex client list")?;
+        let clients = self.clients().await?;
         let Some(app) = clients.mac_app() else {
             return Ok(false);
         };
-        let mut select = vec![
-            "-C".to_owned(),
-            app.to_owned(),
-            "do".to_owned(),
-            "session.select".to_owned(),
-            format!("session_id={}", block.session),
-        ];
-        if let Some(window) = &block.window {
-            select.push(format!("window_id={window}"));
-        }
-        let select: Vec<_> = select.iter().map(String::as_str).collect();
-        self.run(&select).await?;
+        self.select(app, block).await?;
         Ok(true)
+    }
+
+    /// The clients connected to the server.
+    async fn clients(&self) -> Result<Clients> {
+        let output = self.run(&["client", "ls", "--json"]).await?;
+        serde_json::from_slice(&output).context("invalid Rex client list")
+    }
+
+    /// Have the client `app` show `block`'s session and window.
+    async fn select(&self, app: &str, block: &Block) -> Result<()> {
+        let session = format!("session_id={}", block.session);
+        let window = block
+            .window
+            .as_ref()
+            .map(|window| format!("window_id={window}"));
+        let mut select = vec!["-C", app, "do", "session.select", &session];
+        select.extend(window.as_deref());
+        self.run(&select).await?;
+        Ok(())
     }
 
     /// The label of `block`'s window.
