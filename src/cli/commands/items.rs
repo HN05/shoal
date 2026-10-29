@@ -10,7 +10,8 @@ use crate::{
         args::{
             BodyArgs,
             changes::{
-                AttachArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs, PrCommand,
+                AttachArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs,
+                OpenPullArgs, PrCommand, PrEditArgs,
             },
         },
         client,
@@ -42,47 +43,10 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
         PrCommand::Ci { command } => return ci(ctx, command).await,
         PrCommand::List(args) => return list(ctx, ItemKind::Pr, args).await,
-        PrCommand::Open {
-            workspace,
-            title,
-            body,
-            files,
-            base,
-            draft,
-            no_draft,
-            labels,
-            reviewers,
-        } => {
-            let (body, attachments) = read_content(body, files)?;
-            let options = PullOptions {
-                title,
-                body,
-                base,
-                draft: (draft || no_draft).then_some(draft),
-                labels,
-                reviewers,
-                attachments,
-            };
-            return open_pr(ctx, workspace, options).await;
+        PrCommand::Open { workspace, pull } => {
+            return open_pr(ctx, workspace, pull_options(pull)?).await;
         }
-        PrCommand::Edit {
-            item,
-            edit,
-            base,
-            add_reviewers,
-            remove_reviewers,
-            draft,
-            no_draft,
-        } => {
-            let edit = Edit {
-                base,
-                add_reviewers,
-                remove_reviewers,
-                draft: (draft || no_draft).then_some(draft),
-                ..edit_fields(edit)?
-            };
-            (item, Action::Edit(edit), "PR updated")
-        }
+        PrCommand::Edit { item, edit } => (item, Action::Edit(pr_edit(edit)?), "PR updated"),
         PrCommand::Comment { item, body, files } => {
             (item, comment(body, files)?, "Commented on PR")
         }
@@ -94,25 +58,15 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             comment,
             item,
             body,
-        } => {
-            let reply = read_body(body)?.context("a reply needs --body or --body-file")?;
-            (
-                item,
-                thread(comment, Some(reply), None),
-                "Replied in thread",
-            )
-        }
+        } => (item, reply(comment, body)?, "Replied in thread"),
         PrCommand::Resolve {
             comment,
             item,
             body,
             confirmation,
         } => {
-            let reply = read_body(body)?;
-            if reply.is_none() && !confirmation.yes {
-                confirm_unanswered(ctx, &item, comment).await?;
-            }
-            (item, thread(comment, reply, Some(true)), "Thread resolved")
+            let action = resolve(ctx, &item, comment, body, confirmation.yes).await?;
+            (item, action, "Thread resolved")
         }
         PrCommand::Unresolve { comment, item } => (
             item,
@@ -385,6 +339,31 @@ fn print_warnings(opened: &Opened) {
     }
 }
 
+/// What a new PR is opened with, its files checked and its body read.
+fn pull_options(pull: OpenPullArgs) -> Result<PullOptions> {
+    let (body, attachments) = read_content(pull.body, pull.files)?;
+    Ok(PullOptions {
+        title: pull.title,
+        body,
+        base: pull.base,
+        draft: (pull.draft || pull.no_draft).then_some(pull.draft),
+        labels: pull.labels,
+        reviewers: pull.reviewers,
+        attachments,
+    })
+}
+
+/// The edit of a PR, with the changes only PRs take.
+fn pr_edit(edit: PrEditArgs) -> Result<Edit> {
+    Ok(Edit {
+        base: edit.base,
+        add_reviewers: edit.add_reviewers,
+        remove_reviewers: edit.remove_reviewers,
+        draft: (edit.draft || edit.no_draft).then_some(edit.draft),
+        ..edit_fields(edit.edit)?
+    })
+}
+
 fn edit_fields(edit: EditArgs) -> Result<Edit> {
     let (body, attachments) = read_content(edit.body, edit.files)?;
     Ok(Edit {
@@ -407,6 +386,28 @@ fn comment(body: BodyArgs, files: AttachArgs) -> Result<Action> {
         body: body.unwrap_or_default(),
         attachments,
     })
+}
+
+/// A reply in the thread of `comment`, which needs a body.
+fn reply(comment: u64, body: BodyArgs) -> Result<Action> {
+    let reply = read_body(body)?.context("a reply needs --body or --body-file")?;
+    Ok(thread(comment, Some(reply), None))
+}
+
+/// Resolving the thread of `comment`, after replying with the body given.
+/// Without one, it first asks unless `confirmed`.
+async fn resolve(
+    ctx: &Context,
+    item: &ItemSelector,
+    comment: u64,
+    body: BodyArgs,
+    confirmed: bool,
+) -> Result<Action> {
+    let reply = read_body(body)?;
+    if reply.is_none() && !confirmed {
+        confirm_unanswered(ctx, item, comment).await?;
+    }
+    Ok(thread(comment, reply, Some(true)))
 }
 
 fn thread(comment: u64, reply: Option<String>, resolve: Option<bool>) -> Action {

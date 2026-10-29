@@ -90,50 +90,15 @@ pub enum PrCommand {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,
-        /// PR title; defaults to the linked issue's title, then the last commit's subject.
-        #[arg(long)]
-        title: Option<String>,
         #[command(flatten)]
-        body: BodyArgs,
-        #[command(flatten)]
-        files: AttachArgs,
-        /// Base branch; defaults to the base workspace's branch, then the default branch.
-        #[arg(long)]
-        base: Option<String>,
-        /// Open the PR as a draft, overriding [pr] draft.
-        #[arg(long, overrides_with = "no_draft")]
-        draft: bool,
-        /// Open the PR ready for review, overriding [pr] draft.
-        #[arg(long, overrides_with = "draft")]
-        no_draft: bool,
-        /// Add a label; repeat for more.
-        #[arg(long = "label", value_name = "LABEL")]
-        labels: Vec<String>,
-        /// Request a review; repeat for more.
-        #[arg(long = "reviewer", value_name = "LOGIN")]
-        reviewers: Vec<String>,
+        pull: OpenPullArgs,
     },
     /// Change a PR's title, description, base, labels, reviewers or draft state.
     Edit {
         #[command(flatten)]
         item: ItemSelector,
         #[command(flatten)]
-        edit: EditArgs,
-        /// New base branch.
-        #[arg(long)]
-        base: Option<String>,
-        /// Request a review; repeat for more.
-        #[arg(long = "add-reviewer", value_name = "LOGIN")]
-        add_reviewers: Vec<String>,
-        /// Withdraw a review request; repeat for more.
-        #[arg(long = "remove-reviewer", value_name = "LOGIN")]
-        remove_reviewers: Vec<String>,
-        /// Mark the PR as a draft.
-        #[arg(long, conflicts_with = "no_draft")]
-        draft: bool,
-        /// Mark the PR ready for review.
-        #[arg(long)]
-        no_draft: bool,
+        edit: PrEditArgs,
     },
     /// Comment on a PR.
     Comment {
@@ -317,6 +282,55 @@ pub struct ItemSelector {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+// What a new PR is opened with.
+#[derive(Debug, Args)]
+pub struct OpenPullArgs {
+    /// PR title; defaults to the linked issue's title, then the last commit's subject.
+    #[arg(long)]
+    pub title: Option<String>,
+    #[command(flatten)]
+    pub body: BodyArgs,
+    #[command(flatten)]
+    pub files: AttachArgs,
+    /// Base branch; defaults to the base workspace's branch, then the default branch.
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Open the PR as a draft, overriding [pr] draft.
+    #[arg(long, overrides_with = "no_draft")]
+    pub draft: bool,
+    /// Open the PR ready for review, overriding [pr] draft.
+    #[arg(long, overrides_with = "draft")]
+    pub no_draft: bool,
+    /// Add a label; repeat for more.
+    #[arg(long = "label", value_name = "LABEL")]
+    pub labels: Vec<String>,
+    /// Request a review; repeat for more.
+    #[arg(long = "reviewer", value_name = "LOGIN")]
+    pub reviewers: Vec<String>,
+}
+
+// The changes a PR takes besides those of any item.
+#[derive(Debug, Args)]
+pub struct PrEditArgs {
+    #[command(flatten)]
+    pub edit: EditArgs,
+    /// New base branch.
+    #[arg(long)]
+    pub base: Option<String>,
+    /// Request a review; repeat for more.
+    #[arg(long = "add-reviewer", value_name = "LOGIN")]
+    pub add_reviewers: Vec<String>,
+    /// Withdraw a review request; repeat for more.
+    #[arg(long = "remove-reviewer", value_name = "LOGIN")]
+    pub remove_reviewers: Vec<String>,
+    /// Mark the PR as a draft.
+    #[arg(long, conflicts_with = "no_draft")]
+    pub draft: bool,
+    /// Mark the PR ready for review.
+    #[arg(long)]
+    pub no_draft: bool,
 }
 
 // A review's verdict, body and comments on lines of the PR's diff.
