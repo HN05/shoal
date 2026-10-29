@@ -89,23 +89,34 @@ impl ForgeRepo {
         details: &mut Details,
     ) -> Result<()> {
         let login = self.kind.own_login(self, account).await?;
-        let number = details.number;
         let subjects = subjects(details);
-        let reactions: Vec<Vec<Reaction>> = futures_util::stream::iter(&subjects)
-            .map(|&subject| {
-                let login = login.as_deref();
-                async move {
-                    let listed = self
-                        .listed_reactions(account, kind, number, subject)
-                        .await?;
-                    Ok::<_, anyhow::Error>(tally(&listed, login))
-                }
-            })
-            .buffered(CONCURRENT_READS)
-            .try_collect()
+        let reactions = self
+            .tallied_reactions(account, kind, details.number, &subjects, login.as_deref())
             .await?;
         place(details, reactions);
         Ok(())
+    }
+
+    /// The reactions on each of `subjects` of item `number` as `login`
+    /// sees them, in the same order, read a few at a time.
+    async fn tallied_reactions(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        subjects: &[Subject],
+        login: Option<&str>,
+    ) -> Result<Vec<Vec<Reaction>>> {
+        futures_util::stream::iter(subjects)
+            .map(|&subject| async move {
+                let listed = self
+                    .listed_reactions(account, kind, number, subject)
+                    .await?;
+                Ok::<_, anyhow::Error>(tally(&listed, login))
+            })
+            .buffered(CONCURRENT_READS)
+            .try_collect()
+            .await
     }
 
     /// Apply `change` to item `number` as `account`, leaving a reaction that
