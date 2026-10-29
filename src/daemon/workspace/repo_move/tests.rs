@@ -547,3 +547,53 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     assert!(copy.exists());
     Ok(())
 }
+
+#[tokio::test]
+async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
+    let (_temp, manager, repo, workspace, _root) = cloned().await?;
+    let mut wrapper = tokio::process::Command::new("sleep")
+        .arg("600")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()?;
+    let identity = crate::process::identity::capture(wrapper.id().context("no PID")?)?
+        .context("wrapper exited")?;
+    let execution = manager
+        .begin_execution(&workspace.id, Some(identity), ExecutionKind::Command, None)
+        .await?;
+
+    // The wrapper stops with its execution, so it does not count.
+    let plan = manager.plan_repository_moves(None, Layout::Regular).await?;
+    assert_eq!(plan.repositories.len(), 1);
+    let [listed] = plan.executions.as_slice() else {
+        anyhow::bail!("expected one execution: {:?}", plan.executions);
+    };
+    assert_eq!(listed.id, execution.plan.id);
+
+    let error = manager
+        .move_repositories(Layout::Regular)
+        .await
+        .err()
+        .context("moved with a command running")?;
+    assert!(format!("{error:#}").contains("stop it first"), "{error:#}");
+    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
+
+    // Another process in the directory keeps even the plan from passing.
+    let mut other = tokio::process::Command::new("sleep")
+        .arg("600")
+        .current_dir(&workspace.path)
+        .kill_on_drop(true)
+        .spawn()?;
+    let error = manager
+        .plan_repository_moves(None, Layout::Regular)
+        .await
+        .err()
+        .context("planned with another process in the directory")?;
+    assert!(
+        format!("{error:#}").contains("processes are using"),
+        "{error:#}"
+    );
+    other.kill().await?;
+    wrapper.kill().await?;
+    Ok(())
+}

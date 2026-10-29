@@ -10,7 +10,7 @@ use super::{
 use crate::{
     daemon::{log, store},
     fsutil, git,
-    model::{MovedRepository, Repository, RepositoryMoves, Workspace},
+    model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     process, repository, seed,
     state::WorkspaceState,
 };
@@ -21,6 +21,17 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+/// What checking a repository makes of the commands and agents running in
+/// its workspaces.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Running {
+    /// They keep it from moving.
+    Refused,
+    /// The caller stops them before the move, so they and their processes
+    /// do not count.
+    StoppedFirst,
+}
 
 /// A recorded repository directory move.
 struct Intent {
@@ -40,7 +51,8 @@ struct Intent {
 
 impl Manager {
     /// The repositories [`Self::move_repositories`] would move into `root`, or
-    /// the configured `root_dir`, in `layout`, refusing as it would before
+    /// the configured `root_dir`, in `layout`, and the executions running in
+    /// them, which must stop first, refusing as the move would before
     /// anything moves or changes.
     pub async fn plan_repository_moves(
         &self,
@@ -53,10 +65,17 @@ impl Manager {
         if let Some(root) = root {
             target.path = root.to_owned();
         }
-        let (plan, repositories) = self.movable_repositories(&target).await?;
+        let (plan, repositories) = self
+            .movable_repositories(&target, Running::StoppedFirst)
+            .await?;
+        let mut executions = Vec::new();
+        for repo in &repositories {
+            executions.extend(self.repository_executions(&repo.id).await?);
+        }
         Ok(RepositoryMoves {
             directory: plan.destination()?,
             repositories,
+            executions,
         })
     }
 
@@ -68,7 +87,7 @@ impl Manager {
         let _registry = self.gates.lock_registry().await;
         let mut target = self.configured_root()?;
         target.layout = layout;
-        let (plan, moving) = self.movable_repositories(&target).await?;
+        let (plan, moving) = self.movable_repositories(&target, Running::Refused).await?;
         plan.apply()?;
         let root = plan.destination()?;
         let mut moved = Vec::with_capacity(moving.len());
@@ -88,6 +107,7 @@ impl Manager {
     async fn movable_repositories(
         &self,
         target: &registry::ConfiguredRoot,
+        running: Running,
     ) -> Result<(spotlight::Plan, Vec<Repository>)> {
         self.finish_repository_moves().await?;
         let repositories = self.repositories().await?;
@@ -98,7 +118,7 @@ impl Manager {
             .filter(|repo| outside(repo, &root))
             .collect();
         for repo in &moving {
-            self.check_movable(repo).await?;
+            self.check_movable(repo, running).await?;
         }
         let directories: Vec<_> = moving
             .iter()
@@ -153,7 +173,7 @@ impl Manager {
 
     /// Refuse a repository whose directory is missing or in use, or whose
     /// workspaces are busy or not verifiably its own.
-    async fn check_movable(&self, repo: &Repository) -> Result<()> {
+    async fn check_movable(&self, repo: &Repository, running: Running) -> Result<()> {
         self.ensure_repository_available(&repo.id).await?;
         let directory = repo
             .workspaces_dir
@@ -167,9 +187,10 @@ impl Manager {
         self.ensure_only_its_own(repo, directory).await?;
         let id = repo.id.clone();
         self.store
-            .run(move |db| movable_records(db, &id).map(drop))
+            .run(move |db| movable_records(db, &id, running).map(drop))
             .await?;
-        let processes = process::in_directory(directory).await?;
+        let stopping = self.stopping_processes(&repo.id, running).await?;
+        let processes = process::in_directory_except(directory, &stopping).await?;
         ensure!(
             processes.is_empty(),
             "processes are using {}: {}; stop them or leave the directory first",
@@ -188,6 +209,17 @@ impl Manager {
             }
         }
         Ok(())
+    }
+
+    /// The processes that stopping the repository's commands and agents
+    /// ends, when `running` has the caller stop them first.
+    async fn stopping_processes(&self, id: &str, running: Running) -> Result<Vec<u32>> {
+        if running == Running::Refused {
+            return Ok(Vec::new());
+        }
+        let executions = self.repository_executions(id).await?;
+        let workspaces = self.repository_workspaces(id).await?;
+        execution_processes(&executions, &workspaces).await
     }
 
     /// Refuse a directory holding Shoal's state or another repository's
@@ -230,7 +262,7 @@ impl Manager {
         let _git = self.gates.lock_git(&repo.id).await;
         let _files = self.gates.lock_message_files(&repo.id).await;
         let repo = self.repository(&repo.id).await?;
-        self.check_movable(&repo).await?;
+        self.check_movable(&repo, Running::Refused).await?;
         let workspaces = self.repository_workspaces(&repo.id).await?;
         let _resources = self.exclude_resource_hooks(&workspaces).await?;
         let source = repo
@@ -297,6 +329,13 @@ impl Manager {
         registry::reserve_directory(root, name, &self.repositories().await?, &workspaces)
     }
 
+    async fn repository_executions(&self, repository_id: &str) -> Result<Vec<Execution>> {
+        let id = repository_id.to_owned();
+        self.store
+            .run(move |db| store::repository_executions(db, &id))
+            .await
+    }
+
     async fn repository_workspaces(&self, repository_id: &str) -> Result<Vec<Workspace>> {
         Ok(self
             .list_workspaces()
@@ -319,7 +358,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let states = movable_records(&tx, &id)?;
+                let states = movable_records(&tx, &id, Running::Refused)?;
                 // A workspace recorded there since the reservation would be
                 // deleted with the destination if the move failed.
                 store::ensure_path_unrecorded(&tx, &claimed)
@@ -542,6 +581,33 @@ fn outside(repo: &Repository, root: &Path) -> bool {
         .is_some_and(|directory| directory.parent() != Some(root))
 }
 
+/// The processes of `executions`, running in `workspaces`, which stopping
+/// them ends: those a stop would signal, their wrappers and the processes
+/// that started the wrappers, such as a terminal session that closes with
+/// them.
+async fn execution_processes(
+    executions: &[Execution],
+    workspaces: &[Workspace],
+) -> Result<Vec<u32>> {
+    let ids = executions.iter().map(|e| e.id.clone()).collect();
+    let scan = process::identity::scan(ids).await?;
+    let mut pids = Vec::new();
+    for execution in executions {
+        let workspace = workspaces
+            .iter()
+            .find(|workspace| workspace.id == execution.workspace_id)
+            .context("an execution's workspace is missing")?;
+        let processes =
+            process::execution::Processes::inspect(execution, &workspace.path, &scan).await?;
+        pids.extend(processes.owned.iter().map(|process| process.pid));
+        if let Some(wrapper) = &processes.wrapper {
+            pids.push(wrapper.pid);
+            pids.extend(process::identity::parent_of(wrapper));
+        }
+    }
+    Ok(pids)
+}
+
 fn utf8(path: &Path) -> Result<String> {
     Ok(path
         .to_str()
@@ -550,11 +616,13 @@ fn utf8(path: &Path) -> Result<String> {
 }
 
 /// Refuse a repository whose records show it in use: a lease that handed its
-/// checkout to a caller, a command, agent, chat or queued launch, or a
-/// workspace in another lifecycle operation. Returns each workspace's state.
+/// checkout to a caller, a command or agent unless `running` lets the caller
+/// stop it, a chat or queued launch, or a workspace in another lifecycle
+/// operation. Returns each workspace's state.
 fn movable_records(
     db: &rusqlite::Connection,
     id: &str,
+    running: Running,
 ) -> Result<BTreeMap<String, WorkspaceState>> {
     ensure!(
         !store::exists(
@@ -565,7 +633,7 @@ fn movable_records(
         "the repository checkout is leased as a resource; release it first"
     );
     ensure!(
-        !store::repository_has_executions(db, id)?,
+        running == Running::StoppedFirst || !store::repository_has_executions(db, id)?,
         "a command or agent is running in a workspace of the repository; stop it first"
     );
     for (table, what) in [

@@ -44,6 +44,10 @@ pub struct RepositoryRemoval {
 pub struct RepositoryMoves {
     pub directory: PathBuf,
     pub repositories: Vec<Repository>,
+    /// The commands and agents running in their workspaces, which must stop
+    /// before the move.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub executions: Vec<Execution>,
 }
 
 /// A repository directory moved into the configured `root_dir`.

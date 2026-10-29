@@ -1051,6 +1051,17 @@ pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
         .flatten())
 }
 
+/// The executions running in the workspaces of repository `repository_id`.
+pub fn repository_executions(db: &Connection, repository_id: &str) -> Result<Vec<Execution>> {
+    Ok(db
+        .prepare(&format!(
+            "SELECT {EXECUTION_COLUMNS} FROM executions
+                WHERE workspace_id IN (SELECT id FROM workspaces WHERE repository_id=?1)"
+        ))?
+        .query_map([repository_id], execution)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {
     Ok(db
         .prepare(&format!("SELECT {EXECUTION_COLUMNS} FROM executions"))?

@@ -175,6 +175,15 @@ pub fn alive(identity: &Identity) -> Result<bool> {
     Ok(capture(identity.pid)?.as_ref() == Some(identity))
 }
 
+/// The parent of the live process `identity` names, `None` once it has
+/// exited.
+pub fn parent_of(identity: &Identity) -> Option<u32> {
+    if !alive(identity).unwrap_or(false) {
+        return None;
+    }
+    parent(identity.pid)
+}
+
 /// The process group of the live process `identity` names, `None` once it
 /// has exited.
 pub fn group_of(identity: &Identity) -> Option<u32> {
