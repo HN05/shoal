@@ -350,9 +350,9 @@ struct PostRemoveHook {
 }
 
 impl Manager {
-    /// What removing the workspace at the user's request would do, with its
-    /// changed files and whether removal archives them when
-    /// `include_changes` is set and it has any.
+    /// What removing the workspace at the user's request would do, with the
+    /// workspaces below it it takes, and its changed files and whether
+    /// removal archives them when `include_changes` is set and it has any.
     pub async fn check_manual_removal(
         &self,
         selector: &str,
@@ -361,6 +361,15 @@ impl Manager {
         let mut check = self
             .check_removal(selector, InspectionPolicy::GitOnly)
             .await?;
+        for id in self
+            .subtree(&check.workspace.id)
+            .await?
+            .into_iter()
+            .skip(1)
+            .rev()
+        {
+            check.children.push(self.workspace(&id).await?.name);
+        }
         if include_changes && check.dirty {
             check.load_changed_files().await?;
             check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;

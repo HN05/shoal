@@ -44,6 +44,10 @@ pub struct RemovalCheck {
     /// the inspection; it is not part of the CLI protocol response.
     #[serde(skip)]
     pub(crate) default_branch: Option<String>,
+    /// The workspaces below it, which removal takes first, each after those
+    /// below it; filled in for a manual removal's check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<String>,
     /// The restores of idle agents, which `running_commands` and
     /// `processes` leave out; daemon state like `default_branch`.
     #[serde(skip)]
@@ -305,6 +309,7 @@ pub(crate) async fn inspect(
         workspace,
         running_commands,
         idle_restores,
+        children: vec![],
         processes: vec![],
         dirty: false,
         changed_files: vec![],

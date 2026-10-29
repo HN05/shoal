@@ -383,6 +383,12 @@ async fn export_workspace(
     output: &Output,
 ) -> Result<ExportedWorkspace> {
     let check = check_export(ctx, workspace, output).await?;
+    // Removing it here would take them without exporting them.
+    ensure!(
+        check.children.is_empty(),
+        "workspaces were split from it ({}); export them with it using shoal export --all, or remove them first",
+        check.children.join(", ")
+    );
     let action = format!(
         "Export workspace: {}\nRemoves it here and releases its holds:",
         check.workspace.name

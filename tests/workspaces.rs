@@ -27068,3 +27068,37 @@ assert terminal_settings() == before, (before, terminal_settings())
     demo(&fixture, &["stop", "--workspace", "tried"]);
     processes.await_end();
 }
+
+#[test]
+fn removing_a_parent_lists_and_removes_its_children() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let child_path = Path::new(child["path"].as_str().unwrap()).to_owned();
+    // A clean parent still asks, naming the children it takes.
+    let piped = fixture.run(&["rm", "parent"]);
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
+    let (no, prompt) = fixture.interactive(&["rm", "parent"], "n\n");
+    assert!(!no.status.success());
+    assert!(
+        prompt.contains("Removes the workspaces split from it first") && prompt.contains("child"),
+        "{prompt}"
+    );
+    assert!(child_path.exists());
+    let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
+    assert!(yes.status.success(), "{prompt}");
+    let stdout = String::from_utf8_lossy(&yes.stdout);
+    assert!(stdout.contains("also removed child"), "{stdout}");
+    assert!(!child_path.exists());
+    assert!(!fixture.run(&["status", "child"]).status.success());
+
+    fixture.add("parent");
+    fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let removed = fixture.ok(&["rm", "parent", "--yes"]);
+    assert_eq!(
+        removed["children"],
+        serde_json::json!(["child"]),
+        "{removed}"
+    );
+}
