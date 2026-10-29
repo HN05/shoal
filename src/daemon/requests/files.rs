@@ -24,8 +24,17 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: FileMethod) -> Result
             ids,
         } => manager.remove_workspace_files(&workspace, names, ids).await,
         FileMethod::RemoveFiles {
-            workspace: None, ..
-        } => manager.remove_idle_files().await,
+            workspace: None,
+            names,
+            ids,
+        } => {
+            // Names and records belong to one workspace's files.
+            ensure!(
+                names.is_empty() && ids.is_empty(),
+                "name the workspace whose files to delete by name"
+            );
+            manager.remove_idle_files().await
+        }
     };
     Ok(Answer::pages(files, Body::AttachedFiles))
 }

@@ -100,7 +100,13 @@ pub(super) async fn remove(
     ids: Vec<i64>,
     yes: bool,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace_filter(ctx, scope).await?;
+    // Names and records belong to one workspace, so they offer no choice of
+    // every workspace.
+    let workspace = if names.is_empty() && ids.is_empty() {
+        ui::select_workspace_filter(ctx, scope).await?
+    } else {
+        Some(ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?)
+    };
     if let Some(workspace) = &workspace {
         check_selected(ctx, workspace, &names, &ids).await?;
     }

@@ -52,3 +52,47 @@ async fn long_file_listings_go_in_pages() {
         .sum();
     assert_eq!(listed, 1000);
 }
+
+#[tokio::test]
+async fn deleting_by_name_needs_a_workspace() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "receiver".into(), None, None, None)
+        .await
+        .unwrap();
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    manager
+        .add_workspace_files(&workspace.name, vec![file])
+        .await
+        .unwrap();
+    let refused = handle(
+        &manager,
+        FileMethod::RemoveFiles {
+            workspace: None,
+            names: vec!["notes.md".into()],
+            ids: vec![],
+        },
+    )
+    .await;
+    let Err(error) = refused else {
+        panic!("deleting by name without a workspace was accepted");
+    };
+    assert!(
+        error.to_string().contains("name the workspace"),
+        "{error:#}"
+    );
+    assert_eq!(
+        manager
+            .workspace_files(&workspace.name)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
