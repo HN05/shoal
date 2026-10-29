@@ -20,6 +20,7 @@ pub struct Provider {
     pub(super) instructions: Option<&'static [&'static str]>,
     pub(super) resume: Option<&'static [&'static str]>,
     pub(super) resume_latest: Option<&'static [&'static str]>,
+    pub(super) fork: Option<&'static [&'static str]>,
     pub(super) add_dir: Option<&'static [&'static str]>,
     /// How long its prompt cache lives after its last request, for a tool
     /// that cannot tell Shoal from its own settings.
@@ -67,6 +68,7 @@ pub const PROVIDERS: &[Provider] = &[
         // Codex's worktrees feature widens `--last` to every linked worktree
         // of the repository; restore this workspace's session.
         resume_latest: Some(&["resume", "--last", "-c", "features.worktrees=false"]),
+        fork: Some(&["fork", "{session}"]),
         add_dir: Some(&["--add-dir", "{directory}"]),
         // The least OpenAI keeps a GPT-5.6 or later cache, which each read
         // renews; Codex has no setting for it.
@@ -80,6 +82,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: Some(&["--append-system-prompt", "{instructions}"]),
         resume: Some(&["--resume", "{session}"]),
         resume_latest: Some(&["--continue"]),
+        fork: Some(&["--resume", "{session}", "--fork-session"]),
         // `--add-dir` takes every following argument up to the next option,
         // which would include a prompt; the joined form takes one.
         add_dir: Some(&["--add-dir={directory}"]),
@@ -95,6 +98,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        fork: None,
         add_dir: None,
         prompt_cache: None,
     },
@@ -106,6 +110,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        fork: None,
         add_dir: None,
         prompt_cache: None,
     },
@@ -117,6 +122,7 @@ pub const PROVIDERS: &[Provider] = &[
         instructions: None,
         resume: None,
         resume_latest: None,
+        fork: None,
         add_dir: None,
         prompt_cache: None,
     },

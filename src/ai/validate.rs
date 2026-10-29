@@ -50,6 +50,7 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
             ),
             ("resume", &agent.resume, &["{session}"][..]),
             ("resume_latest", &agent.resume_latest, &[][..]),
+            ("fork", &agent.fork, &["{session}"][..]),
         ] {
             if let Some(argv) = argv {
                 validate_arguments(argv, placeholders)

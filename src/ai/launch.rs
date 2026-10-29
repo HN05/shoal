@@ -54,6 +54,7 @@ pub struct Arguments {
     pub instructions: Option<Vec<String>>,
     pub resume: Option<Vec<String>>,
     pub resume_latest: Option<Vec<String>>,
+    pub fork: Option<Vec<String>>,
     pub add_dir: Option<Vec<String>>,
 }
 
@@ -88,6 +89,14 @@ impl Arguments {
                 .as_ref()
                 .map(|template| substitute(template, &[])),
         }
+    }
+
+    /// The arguments that start a new session from a fork of `session`;
+    /// `None` when the agent cannot fork one.
+    pub fn fork_args(&self, session: &str) -> Option<Vec<OsString>> {
+        self.fork
+            .as_ref()
+            .map(|template| substitute(template, &[("{session}", session)]))
     }
 
     /// The arguments that give the agent `directory` as another working

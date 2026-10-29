@@ -100,6 +100,37 @@ fn configured_arguments_replace_built_in_ones_entry_by_entry() {
 }
 
 #[test]
+fn fork_arguments_name_the_forked_session() {
+    let agents = parse(
+        "[ai.droid]\ncommand = ['droid']\nfork = ['--fork', '{session}']\n\
+             [ai.claude-direct]\nbase = 'claude'\n",
+    )
+    .unwrap();
+    assert_eq!(
+        arguments(&agents, "claude-direct").fork_args("s1"),
+        Some(vec![
+            OsString::from("--resume"),
+            "s1".into(),
+            "--fork-session".into()
+        ])
+    );
+    assert_eq!(
+        arguments(&agents, "codex").fork_args("s1"),
+        Some(vec![OsString::from("fork"), "s1".into()])
+    );
+    assert_eq!(
+        arguments(&agents, "droid").fork_args("s1"),
+        Some(vec![OsString::from("--fork"), "s1".into()])
+    );
+    assert_eq!(arguments(&agents, "pi").fork_args("s1"), None);
+    let error = format!(
+        "{:#}",
+        parse("[ai.droid]\ncommand = ['droid']\nfork = ['--fork']\n").unwrap_err()
+    );
+    assert!(error.contains("ai.droid.fork"), "{error}");
+}
+
+#[test]
 fn arguments_describe_a_launcher_defined_in_commands() {
     let agents = parse(
         "[ai.helper]\nresume_latest = ['--continue']\n\

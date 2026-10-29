@@ -216,6 +216,10 @@ fn arguments(configured: &[&Agent], builtin: Option<&Provider>) -> Arguments {
             |agent| agent.resume_latest.as_ref(),
             builtin.and_then(|provider| provider.resume_latest),
         ),
+        fork: pick(
+            |agent| agent.fork.as_ref(),
+            builtin.and_then(|provider| provider.fork),
+        ),
         add_dir: pick(
             |agent| agent.add_dir.as_ref(),
             builtin.and_then(|provider| provider.add_dir),
