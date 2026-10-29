@@ -5737,11 +5737,11 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
             .filter(|execution| execution["state"] == "running")
             .count()
     };
-    // A planned stop detaches the wrappers, which keep their commands running.
-    let output = fixture.run(&["daemon", "stop"]);
-    assert!(output.status.success(), "{output:?}");
-    assert!(!String::from_utf8_lossy(&output.stdout).contains("shoal resume"));
-    fixture.daemon.child.wait().unwrap();
+    // A restart detaches the wrappers, which keep their commands running.
+    // The request is the one `shoal daemon restart` sends a managed daemon.
+    let exited = fixture.raw_request(0, 1, serde_json::json!({"exit": "restart"}));
+    assert_eq!(exited["type"], "ok", "{exited}");
+    assert!(fixture.daemon.child.wait().unwrap().success());
     assert!(agent.try_wait().unwrap().is_none());
     assert!(command.try_wait().unwrap().is_none());
     assert!(saved().is_empty(), "{:?}", saved());
@@ -5779,6 +5779,62 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
     );
     assert!(fixture.ok(&["alerts", "clear"])["cleared"].as_u64() >= Some(1));
     assert_eq!(fixture.ok(&["alerts", "--all"]), Value::Array(vec![]));
+}
+
+#[test]
+fn daemon_stop_stops_tracked_agents() {
+    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("stopped");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    fs::write(
+        path.join("agent.sh"),
+        "touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    let state = fixture
+        .root
+        .path()
+        .join("state/workspaces")
+        .join(workspace["id"].as_str().unwrap());
+    let start = |fixture: &Fixture| {
+        let _ = fs::remove_file(path.join("agent-started"));
+        let agent = fixture
+            .command()
+            .args(["claude", "stopped"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        wait_until("agent to start", || path.join("agent-started").exists());
+        agent
+    };
+    let saved = || {
+        let mut saved = fs::read_dir(&state)
+            .map(|entries| {
+                entries
+                    .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        saved.sort();
+        saved
+    };
+    // `shoal daemon stop` stops the agent as `shoal stop` does, so it stays
+    // down until `shoal resume`.
+    let mut agent = start(&fixture);
+    let output = fixture.run(&["daemon", "stop"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    assert!(agent.wait().unwrap().success());
+    let stopped = saved();
+    assert!(
+        !stopped.is_empty()
+            && stopped
+                .iter()
+                .all(|name| name.ends_with(".last-session.json")),
+        "{stopped:?}"
+    );
 }
 
 #[test]

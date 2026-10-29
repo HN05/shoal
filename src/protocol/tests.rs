@@ -75,7 +75,6 @@ fn daemon_error_codes_preserve_wire_spellings() {
         (ErrorCode::InvalidRequest, "invalid_request"),
         (ErrorCode::ProtocolMismatch, "protocol_mismatch"),
         (ErrorCode::ScopeDenied, "scope_denied"),
-        (ErrorCode::ManagedService, "managed_service"),
         (ErrorCode::OperationFailed, "operation_failed"),
         (ErrorCode::ExecutionFailed, "execution_failed"),
         (ErrorCode::UnprovenStop, "unproven_stop"),

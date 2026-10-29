@@ -425,7 +425,6 @@ crate::state::open_enum! {
         InvalidRequest => "invalid_request",
         ProtocolMismatch => "protocol_mismatch",
         ScopeDenied => "scope_denied",
-        ManagedService => "managed_service",
         OperationFailed => "operation_failed",
         ExecutionFailed => "execution_failed",
         /// Stopping needs the user to confirm that an execution Shoal cannot

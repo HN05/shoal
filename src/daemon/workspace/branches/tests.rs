@@ -1281,7 +1281,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 ExecutionMethod::CheckLanding.into(),
                 kind == ExecutionKind::Land,
             ),
-            (DaemonMethod::Shutdown.into(), false),
+            (DaemonMethod::ReloadConfig.into(), false),
             (
                 RemovalMethod::StopWorkspace {
                     workspace: workspace.id.clone(),

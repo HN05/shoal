@@ -1,13 +1,13 @@
 //! The daemon's answers to [`DaemonMethod`] and exit requests, and who may
 //! send them.
 use anyhow::Result;
-use tokio::{net::UnixStream, sync::mpsc};
+use tokio::net::UnixStream;
 
 use super::super::{
     Server,
     answer::{Answer, OperationGuard},
     scope::{self, Caller, Scoped, denied},
-    workspace::{Ending, Manager},
+    workspace::Manager,
 };
 use crate::protocol::{self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitRequest, Response};
 
@@ -15,16 +15,6 @@ use crate::protocol::{self, Body, DaemonMethod, DaemonStatus, ErrorCode, ExitReq
 pub(super) async fn handle(server: &Server, method: DaemonMethod) -> Result<Answer> {
     Ok(Answer::Body(match method {
         DaemonMethod::Status => Body::Status(status(server).await?),
-        DaemonMethod::Shutdown if server.managed => Body::error(
-            ErrorCode::ManagedService,
-            "stop the daemon through the OS service manager",
-        ),
-        DaemonMethod::Shutdown => {
-            let exit = server.exit.clone();
-            return Ok(Answer::connection(move |stream, request_id, guard| {
-                shut_down(stream, request_id, exit, guard)
-            }));
-        }
         DaemonMethod::ReloadConfig => {
             server.manager.reload_config_and_recheck().await?;
             Body::Ok
@@ -36,7 +26,7 @@ impl Scoped for DaemonMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             DaemonMethod::Status => None,
-            DaemonMethod::Shutdown | DaemonMethod::ReloadConfig => return Err(denied()),
+            DaemonMethod::ReloadConfig => return Err(denied()),
         })
     }
 }
@@ -82,18 +72,4 @@ pub(in crate::daemon) async fn exit(
         let _ = server.exit.try_send(request.exit.into());
     }
     replied
-}
-
-/// Reply to the shutdown request, then shut the daemon down.
-async fn shut_down(
-    mut stream: UnixStream,
-    request_id: u64,
-    exit: mpsc::Sender<Ending>,
-    guard: OperationGuard,
-) -> Result<()> {
-    // The reply is written under the operation, as every reply is.
-    let _operation = guard;
-    protocol::write(&mut stream, &Response::new(request_id, Body::Ok)).await?;
-    let _ = exit.try_send(Ending::Detach);
-    Ok(())
 }

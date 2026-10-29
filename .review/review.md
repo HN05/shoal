@@ -393,7 +393,10 @@ configured command for another agent, plus proven child
   Critical disk space stops every agent the same way, restoring once the cleanup
   threshold is free, and other executions as manual stop does; recovery requires
   that free space too.
-  Manual stop, refused reattachment and graceful shutdown of wrappers that cannot
+  Service commands ask the daemon how to exit over the socket at any protocol
+  version: a restart detaches wrappers, and `shoal daemon stop` stops work as
+  `shoal stop --all` does.
+  Manual stop, refused reattachment and a restart's stop of wrappers that cannot
   reattach save agent recovery and user command arguments for explicit resume,
   preserve work and leases, and never rerun a recorded command. Every daemon stop
   carries its cause, which the wrapper prints after the agent stops. A hangup or

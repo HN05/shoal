@@ -884,8 +884,46 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let upgraded = fs::read_to_string(&pid_path).unwrap();
     run(&["daemon", "install"]);
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), upgraded);
+    // A restart keeps a running execution, which reattaches to the next daemon.
+    let (marker, finish) = (
+        root.path().join("restarting"),
+        root.path().join("restarted"),
+    );
+    let mut execution = command(root.path())
+        .args([
+            "run",
+            "--workspace",
+            "keep-running",
+            "--",
+            "sh",
+            "-c",
+            "touch \"$1\"; while [ ! -f \"$2\" ]; do sleep 0.05; done",
+            "sh",
+        ])
+        .arg(&marker)
+        .arg(&finish)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("execution to start", || {
+        assert!(
+            execution.try_wait().unwrap().is_none(),
+            "execution exited before the restart"
+        );
+        marker.exists()
+    });
     run(&["daemon", "restart"]);
-    assert_ne!(fs::read_to_string(&pid_path).unwrap(), original);
+    assert_ne!(fs::read_to_string(&pid_path).unwrap(), upgraded);
+    wait_until("execution to reattach", || {
+        assert!(execution.try_wait().unwrap().is_none());
+        let inspection: Value =
+            serde_json::from_slice(&run(&["--json", "status", "keep-running"]).stdout).unwrap();
+        inspection["executions"][0]["state"] == "running"
+    });
+    fs::write(&finish, "").unwrap();
+    let status = wait_for("execution to finish", || execution.try_wait().unwrap());
+    assert!(status.success());
     run(&["daemon", "stop"]);
     run(&["daemon", "stop"]);
     run(&["daemon", "start"]);

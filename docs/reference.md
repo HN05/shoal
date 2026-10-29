@@ -82,8 +82,9 @@ it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 user. Service commands target the one registered per-user service, whose state
 directory must match. `daemon status` exits 1 when offline. A daemon that
 owns the state directory but does not answer is reported with its PID by every
-command. `daemon status`, `stop` and `restart` need no request capacity, and stop
-a foreground daemon whose status fails, as while it starts, with SIGTERM. `daemon start`
+command. `daemon status`, `stop` and `restart` need no request capacity, and send
+a daemon that does not answer SIGTERM, through the service manager or directly
+for a foreground daemon, as while it starts. `daemon start`
 without an installed service offers to run `shoal daemon install` in an interactive terminal.
 
 `shoal daemon install` preserves the invoked executable's symlink path and captures the
@@ -114,10 +115,18 @@ state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux s
 
 ### Daemon restarts
 
-Stopping, restarting or losing the daemon does not interrupt tracked agents and
-commands, nor an agent's wait for its automatic restore after a protection stop.
-Their wrappers keep the command and terminal, write nothing while it runs, and
-reconnect once a daemon listens again, which continues the wait; until then the command's own
+How the daemon exits decides what becomes of tracked agents and commands:
+
+- `shoal daemon restart`, `shoal daemon install` when it replaces an
+  incompatible daemon, an update, SIGTERM or SIGINT, and a crash leave them
+  running.
+- `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
+  until `shoal resume`, then stops the daemon.
+
+The service commands ask the daemon how to exit over its socket, whatever its
+release; one that does not answer gets SIGTERM. When work keeps running, its
+wrappers keep the command and terminal, write nothing while it runs, and
+reconnect once a daemon listens again; until then the command's own
 `shoal` calls fail. The new daemon checks the execution record, scope token and
 process identities, then restores the agent's name and automatic recovery
 setting, so stop, overload protection, exit notifications and
@@ -126,8 +135,9 @@ away reports its exit code once reattached; after it exits the wrapper prints
 that it is waiting and gives up after two minutes or on Ctrl-C, leaving the
 execution for `shoal stop`. When the daemon refuses an execution, the wrapper
 stops the command and saves what `shoal stop` saves. Waiting executions stay
-active for cleanup and removal. Setup, landing and wrappers from releases before
-reattachment stop on shutdown as `shoal stop` does, and `shoal daemon restart`
+active for cleanup and removal. An agent's wait for its automatic restore after
+a protection stop continues the same way. Setup, landing and wrappers from releases before
+reattachment stop on a restart as `shoal stop` does, and `shoal daemon restart`
 then suggests `shoal resume --all`.
 
 ### Overload protection

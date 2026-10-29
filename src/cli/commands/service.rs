@@ -8,7 +8,7 @@ use crate::{
     cli::{args::service::DaemonCommand, client, context::Context, output::Style, ui},
     daemon,
     paths::Paths,
-    protocol::DaemonMethod,
+    protocol::Exit,
     service::{self, Platform},
     shell,
 };
@@ -50,7 +50,8 @@ pub(super) async fn install(
             if !ctx.json {
                 eprintln!("Updating daemon service after a protocol change...");
             }
-            ctx.progress("Stopping incompatible daemon", stop(&ctx.paths)).await.context(
+            let stopping = stop(&ctx.paths, Exit::Restart);
+            ctx.progress("Stopping incompatible daemon", stopping).await.context(
                 "could not stop the incompatible daemon service; stop any foreground daemon before rerunning `shoal daemon install`",
             )?;
             false
@@ -187,7 +188,8 @@ pub(super) async fn run(
             ctx.emit_styled(Style::Success, "Daemon started", json!({"running": true}))?;
         }
         DaemonCommand::Stop => {
-            ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
+            ctx.progress("Stopping daemon", stop(&ctx.paths, Exit::Stop))
+                .await?;
             emit_stopped_work(&ctx, "Daemon stopped", false)?;
         }
         DaemonCommand::Reload => {
@@ -212,7 +214,8 @@ pub(super) async fn run(
                     "foreground daemon: stop it and run `shoal daemon run` again"
                 );
             }
-            ctx.progress("Stopping daemon", stop(&ctx.paths)).await?;
+            ctx.progress("Stopping daemon", stop(&ctx.paths, Exit::Restart))
+                .await?;
             start(&ctx).await?;
             emit_stopped_work(&ctx, "Daemon restarted", true)?;
         }
@@ -220,7 +223,8 @@ pub(super) async fn run(
     Ok(0)
 }
 
-/// Shutdown saves running agents and commands; point to restoring them.
+/// Stopping saves running agents and commands, as does a restart for those
+/// that cannot reattach; point to restoring them.
 fn emit_stopped_work(ctx: &Context, message: &str, running: bool) -> Result<()> {
     let stopped = crate::execution::recovery::any_pending(&ctx.paths);
     let message = if stopped {
@@ -242,21 +246,41 @@ async fn start(ctx: &Context) -> Result<()> {
         .await
 }
 
-/// Stop a foreground daemon over the socket, or with SIGTERM when it does not
-/// answer status, as while it starts, or a managed one via the OS.
-async fn stop(paths: &Paths) -> Result<()> {
+/// Ask the daemon to exit with `exit`, then unload its service. A daemon that
+/// does not answer gets SIGTERM, which stops its work saved first.
+async fn stop(paths: &Paths, exit: Exit) -> Result<()> {
+    if !client::exit(paths, exit).await? {
+        return terminate(paths).await;
+    }
+    client::wait(paths, false).await?;
+    // The service manager keeps a daemon's service loaded after it exits.
+    if service::installed(paths) {
+        service::stop(paths).await?;
+    }
+    Ok(())
+}
+
+/// Stop a daemon with SIGTERM through the OS service manager, or directly
+/// when it runs in the foreground or does not answer status without an
+/// installed service, as while it starts.
+async fn terminate(paths: &Paths) -> Result<()> {
     match client::status(paths).await {
         Ok(Some(status)) if !status.managed => {
-            client::request::<()>(paths, DaemonMethod::Shutdown).await?;
+            signal_owner(
+                paths,
+                anyhow::anyhow!("the foreground daemon does not answer"),
+            )?;
         }
         Err(error) if !service::file(paths, Platform::current()?).exists() => {
-            let Some(owner) = crate::daemon::ownership::owner(paths) else {
-                return Err(error);
-            };
-            // The daemon shuts down on SIGTERM as on a shutdown request.
-            crate::process::identity::signal(&owner, libc::SIGTERM)?;
+            signal_owner(paths, error)?;
         }
         _ => service::stop(paths).await?,
     }
     client::wait(paths, false).await
+}
+
+/// SIGTERM to the daemon owning the state directory; `missing` when none does.
+fn signal_owner(paths: &Paths, missing: anyhow::Error) -> Result<()> {
+    let owner = crate::daemon::ownership::owner(paths).ok_or(missing)?;
+    crate::process::identity::signal(&owner, libc::SIGTERM)
 }

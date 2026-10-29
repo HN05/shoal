@@ -17,8 +17,8 @@ use crate::{
     model::{Chat, Inspection, Repository, Workspace},
     paths::Paths,
     protocol::{
-        self, Body, ChatMethod, DaemonMethod, DaemonStatus, ItemMethod, Method, RepositoryMethod,
-        Request, Response, WorkspaceMethod, timing,
+        self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
+        RepositoryMethod, Request, Response, WorkspaceMethod, timing,
     },
 };
 
@@ -408,6 +408,30 @@ pub async fn reload_config(paths: &Paths) -> Result<bool> {
         Ok(_) => Ok(true),
         Err(error) if not_running(&error) => Ok(false),
         Err(error) => Err(error),
+    }
+}
+
+/// Ask the daemon to exit with `exit`, whatever its release; `false` when no
+/// daemon answers the request, as when none runs, it is still starting, or
+/// its release predates the request. A refusal fails.
+pub async fn exit(paths: &Paths, exit: Exit) -> Result<bool> {
+    let request = Request::new(exit);
+    let asked = async {
+        let mut stream = UnixStream::connect(&paths.socket).await.ok()?;
+        protocol::write(&mut stream, &request).await.ok()?;
+        protocol::read::<Response>(&mut stream).await.ok()
+    };
+    // The answer reads the same in every protocol version.
+    let Ok(Some(response)) = timeout(timing::ADMIN_REQUEST_TIMEOUT, asked).await else {
+        return Ok(false);
+    };
+    match response.body {
+        Body::Ok => Ok(true),
+        Body::Error {
+            code: ErrorCode::InvalidRequest | ErrorCode::ProtocolMismatch,
+            ..
+        } => Ok(false),
+        body => body.into_result().map(|_| false),
     }
 }
 

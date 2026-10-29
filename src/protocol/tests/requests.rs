@@ -10,7 +10,6 @@ use super::*;
 const REQUESTS: &[&str] = &[
     // Daemon administration.
     r#""status""#,
-    r#""shutdown""#,
     r#""reload_config""#,
     // Repositories.
     r#""list_repositories""#,

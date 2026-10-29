@@ -103,9 +103,16 @@ scope token. The daemon verifies these against the record, restores scope and
 agent metadata, and serves the connection as before; a command that exits
 meanwhile reports once reattached. A refusal stops the command as manual stop
 does. Reattachment is a permanent protocol method accepted at every version, and
-wrappers advertise it when they register: graceful shutdown detaches those and
+wrappers advertise it when they register: a restart, an update or a signal detaches those and
 stops the rest as manual stop does, within the workspace stop timeout. Setup and
 landing hold daemon gates, so they never reattach.
+The service commands ask the daemon over its socket how to exit:
+`shoal daemon restart` and an install that replaces an incompatible daemon ask
+it to detach its wrappers, and `shoal daemon stop` to stop work as `shoal stop
+--all` does, so agents stay down until `shoal resume`. The request is permanent
+like reattachment and answered before the protocol check, since restarting is
+how an upgrade reaches a daemon of another release; a daemon that does not
+answer gets SIGTERM.
 
 Overload protection is configured machine-wide: memory is enabled by default,
 CPU is opt-in and requires sustained aggregate busy time. One `load` setting
