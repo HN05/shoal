@@ -230,10 +230,11 @@ fn shoal_command(ctx: &Context, args: &[OsString]) -> Result<Vec<OsString>> {
 }
 
 /// Refuse a background start that the daemon's worker could not run from
-/// this terminal under `settings`, such as one whose host is not installed:
-/// the first host a queued start from here would try.
+/// this terminal under `settings`: one no host takes, or whose first host a
+/// queued start from here would try is not installed.
 pub(in crate::cli) fn ensure_background(settings: &Effective) -> Result<()> {
     groups::first_queued_host(settings, current_origin().as_ref())
+        .context(NO_QUEUED_HOST)?
         .host
         .ensure_installed()
 }

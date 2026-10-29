@@ -786,7 +786,8 @@ zmx session (`ZMX_SESSION` is set), in a Herdr pane with `herdr.enabled` or in a
 Rex block with `rex.enabled` runs in place. On a terminal outside zmx, a missing
 zmx refuses the agent as a missing agent executable does. The top-level
 `default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
-[Rex](#rex) instead.
+[Rex](#rex) instead. With that host turned off they run in place, a queued
+start that no other host takes fails, and a demo runs as a background process.
 
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
@@ -883,10 +884,9 @@ placeholder, and Shoal reuses the first workspace with that label or creates
 it. A focused start, a chat or an agent launch then attaches the terminal to
 the Herdr session holding its tab, as `shoal attach` does, until you detach; a
 background start says where it went. With `herdr.enabled = false` these
-launches use zmx, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
+launches run in place, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
 tab in the workspace it was queued from, then falls back to the
-`workspace_name` workspace on the same server, then to `default_host`, then to
-zmx.
+`workspace_name` workspace on the same server, then to `default_host`.
 
 #### Rex
 
@@ -921,13 +921,13 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 With `default_host = "rex"`, launches from a terminal outside Herdr and Rex
 open their windows in the `session_name` session on the local Rex server; `{repo}` is the only
 placeholder, and Shoal reuses the oldest session with that label or creates it;
-with `rex.enabled = false` these launches use zmx, and `new_window = false`
+with `rex.enabled = false` these launches run in place, and `new_window = false`
 keeps queued ones out of Rex.
 Rex has no terminal client, so a focused start there selects the window in the
 connected Mac Rex app and gives the terminal its shell back; without a
 connected app it says to open Rex. A start queued from Rex opens a background
 window in the session it was queued from, then falls back to the
-`session_name` session on the same server, then to `default_host`, then to zmx.
+`session_name` session on the same server, then to `default_host`.
 Shoal finds `rex` in Rex's bin directory, on PATH, then in the Rex app, and
 needs Rex API revision 7 or later.
 
@@ -1408,8 +1408,8 @@ update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
 The daemon
 starts it as it starts a queued launch: in the Herdr pane or Rex block the agent
 stopped in once that is back at its prompt, otherwise in a background tab or
-window where `herdr.new_tab` or `rex.new_window` allows, otherwise in a detached
-zmx session. A restore whose
+window where `herdr.new_tab` or `rex.new_window` allows, otherwise where
+`default_host` puts it. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way

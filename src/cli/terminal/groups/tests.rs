@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::HostName;
 
 fn settings(global: &str) -> Effective {
     let config: crate::config::Config = toml::from_str(global).unwrap();
@@ -41,21 +42,21 @@ fn order(settings: &Effective, origin: Option<&Origin>) -> Vec<(HostName, bool)>
 }
 
 #[test]
-fn a_start_falls_back_to_its_group_then_the_default_host_then_zmx() {
+fn a_start_falls_back_to_its_group_then_the_default_host() {
     use HostName::*;
     for host in [Herdr, Rex] {
         assert_eq!(
             order(&settings(""), Some(&origin(host))),
-            [(host, true), (host, false), (Zmx, false), (Zmx, false)]
+            [(host, true), (host, false), (Zmx, false)]
         );
     }
     assert_eq!(
         order(&settings("default_host = 'rex'"), None),
-        [(Rex, false), (Zmx, false)]
+        [(Rex, false)]
     );
     assert_eq!(
         order(&settings("default_host = 'herdr'"), Some(&origin(Rex))),
-        [(Rex, true), (Rex, false), (Herdr, false), (Zmx, false)]
+        [(Rex, true), (Rex, false), (Herdr, false)]
     );
 }
 
@@ -64,32 +65,33 @@ fn hosts_turned_off_go_straight_to_the_default_host() {
     use HostName::*;
     assert_eq!(
         order(&settings("[rex]\nnew_window = false"), Some(&origin(Rex))),
-        [(Zmx, false), (Zmx, false)]
+        [(Zmx, false)]
     );
     assert_eq!(
         order(&settings("[herdr]\nnew_tab = false"), Some(&origin(Herdr))),
-        [(Zmx, false), (Zmx, false)]
+        [(Zmx, false)]
     );
-    assert_eq!(order(&settings(""), None), [(Zmx, false), (Zmx, false)]);
+    assert_eq!(order(&settings(""), None), [(Zmx, false)]);
 }
 
 #[test]
 fn a_start_queued_from_a_place_outside_a_group_goes_to_the_default_host() {
     use HostName::*;
     let session = Origin::created(Zmx, "session".into());
+    assert_eq!(order(&settings(""), Some(&session)), [(Zmx, false)]);
     assert_eq!(
-        order(&settings(""), Some(&session)),
-        [(Zmx, false), (Zmx, false)]
+        order(&settings("default_host = 'herdr'"), Some(&session)),
+        [(Herdr, false)]
     );
     let ungrouped = Origin::created(Rex, "block".into());
     assert_eq!(
         order(&settings("default_host = 'herdr'"), Some(&ungrouped)),
-        [(Herdr, false), (Zmx, false)]
+        [(Herdr, false)]
     );
 }
 
 #[test]
-fn a_default_host_config_turns_off_leaves_queued_starts_to_zmx() {
+fn a_default_host_config_turns_off_leaves_queued_starts_no_host() {
     use HostName::*;
     let turned_off = [
         ("default_host = 'rex'", "[rex]\nenabled = false"),
@@ -99,21 +101,23 @@ fn a_default_host_config_turns_off_leaves_queued_starts_to_zmx() {
     ];
     for (global, repository) in turned_off {
         let settings = repository_settings(global, repository);
-        let hosts = order(&settings, None);
-        assert!(
-            hosts.iter().all(|(host, _)| *host == Zmx),
-            "{repository}: {hosts:?}"
-        );
-        // A background start's preflight checks the host queued starts use.
-        assert_eq!(first_queued_host(&settings, None).host.name(), Zmx);
+        assert_eq!(order(&settings, None), [], "{repository}");
+        // A background start's preflight refuses what no host would start.
+        assert!(first_queued_host(&settings, None).is_none(), "{repository}");
     }
-    let disabled = repository_settings("default_host = 'herdr'", "[herdr]\nenabled = false");
-    assert_eq!(Configured::default_host(&disabled).host.name(), Zmx);
+    // A start from a grouped place still joins its group.
+    let settings = repository_settings("default_host = 'herdr'", "[herdr]\nenabled = false");
+    assert_eq!(
+        order(&settings, Some(&origin(Rex))),
+        [(Rex, true), (Rex, false)]
+    );
     for (global, host) in [
+        ("", Zmx),
         ("default_host = 'rex'", Rex),
         ("default_host = 'herdr'", Herdr),
     ] {
         let settings = repository_settings(global, "");
-        assert_eq!(first_queued_host(&settings, None).host.name(), host);
+        let first = first_queued_host(&settings, None).map(|first| first.host.name());
+        assert_eq!(first, Some(host));
     }
 }

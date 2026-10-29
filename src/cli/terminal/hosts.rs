@@ -114,12 +114,11 @@ impl Configured {
             .unwrap_or_else(|| Self::plain(settings))
     }
 
-    /// The host `default_host` names for a terminal no host serves, or zmx
-    /// where config turns that host off.
-    pub(super) fn default_host(settings: &Effective) -> Self {
+    /// The host `default_host` names for a terminal no host serves, unless
+    /// config turns it off.
+    pub(super) fn default_host(settings: &Effective) -> Option<Self> {
         Self::all(settings)
             .find(|host| host.host.name() == settings.default_host && host.options.enabled)
-            .unwrap_or_else(|| Self::named(settings, HostName::Zmx))
     }
 
     /// The plain terminal, which every terminal falls back to.
@@ -151,8 +150,8 @@ impl Configured {
 
     /// Whether a queued start from `origin`, the place that queued it, joins
     /// its group here: a place of this host in a group, such as a Herdr tab
-    /// in its workspace. A zmx session is in none, so a start queued from it
-    /// goes to the default host first.
+    /// in its workspace. A start queued from a place in no group, such as a
+    /// zmx session, goes to the default host.
     pub(super) fn takes_queued(&self, origin: &Origin) -> bool {
         self.options.enabled
             && self.places().is_some()
@@ -214,12 +213,14 @@ impl Host for Plain {
 }
 
 /// The host serving this terminal under `settings`. A terminal no host
-/// serves goes to the default host, and a process without a terminal runs
-/// in place.
+/// serves goes to the default host, and a process without a terminal, or
+/// whose default host config turns off, runs in place.
 pub(super) fn current(settings: &Effective) -> Configured {
     match Configured::all(settings).find(Configured::serves) {
         Some(host) => host.serving(),
-        None if on_terminal() => Configured::default_host(settings),
+        None if on_terminal() => {
+            Configured::default_host(settings).unwrap_or_else(|| Configured::plain(settings))
+        }
         None => Configured::plain(settings),
     }
 }

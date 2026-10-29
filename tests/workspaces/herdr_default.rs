@@ -229,6 +229,39 @@ fn demos_without_a_herdr_pane_open_in_the_repository_workspace() {
     fixture.ok(&["demo", "stop", "--workspace", "tried"]);
 }
 
+#[test]
+fn a_default_host_config_turns_off_leaves_zmx_alone() {
+    let fixture = Fixture::with_config(Some(
+        "default_host = 'herdr'\n[herdr]\nenabled = false\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n",
+    ));
+    let bin = fixture.root.path().join("bin");
+    install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
+    install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
+    fixture.add("tried");
+    // A demo without a host runs as a background process.
+    let started = fixture.ok(&[
+        "demo",
+        "start",
+        "--workspace",
+        "tried",
+        "--",
+        "sleep",
+        "600",
+    ]);
+    assert_eq!(started["host"], "terminal", "{started}");
+    fixture.ok(&["demo", "stop", "--workspace", "tried"]);
+    // A queued start without a host is refused before the child exists.
+    let refused = fixture.run(&["split", "child", "--workspace", "tried", "--agent", "droid"]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("no terminal host can start queued agents"),
+        "{stderr}"
+    );
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    assert_eq!(zmx_calls(&fixture), Vec::<Vec<String>>::new());
+}
+
 /// Commands the fake `herdr` runs in its panes, as Herdr would, until the
 /// test ends: closing a pane, which ends them in Herdr, does not in the fake.
 struct RunningPanes(PathBuf);

@@ -833,7 +833,9 @@ the host never calls the daemon. A host
 declares the variables naming its places, and a zmx session drops the
 other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
-server, then to `default_host`, then to zmx. Rex cannot set a new terminal's
+server, then to `default_host`; with that host turned off, a terminal no host
+serves runs work in place, a queued start without another fallback fails, and
+a demo runs as a background process. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
 of shell history, and the shell stays as in a Herdr tab. Rex blocks and Herdr
@@ -870,7 +872,7 @@ the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
 starts labels itself once its workspace exists. A start queued from a zmx
-session joins no group, so it goes to `default_host` first. Launches without a terminal, inside a zmx session, or in
+session joins no group, so it goes to `default_host`. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.

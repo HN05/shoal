@@ -1,8 +1,7 @@
 //! The group a new place joins: the caller's own, otherwise the one a host's
 //! config names for the repository. A queued start that cannot open its
 //! place falls back from its origin's group to its host's configured group
-//! on the same server, then to the default host's configured group, then to
-//! zmx.
+//! on the same server, then to the default host's configured group.
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
@@ -12,7 +11,6 @@ use crate::{
     cli::{client, context::Context},
     config::Effective,
     model::Repository,
-    sessions::HostName,
 };
 
 /// The repository whose name a configured group's name takes, looked up
@@ -118,12 +116,15 @@ pub(super) async fn first_queued<T>(
     failure.map_or(Ok(None), Err)
 }
 
-/// The first host a queued start from `origin` tries.
-pub(super) fn first_queued_host(settings: &Effective, origin: Option<&Origin>) -> Configured {
-    fallbacks(settings, origin).into_iter().next().map_or_else(
-        || Configured::named(settings, HostName::Zmx),
-        |fallback| fallback.host,
-    )
+/// The first host a queued start from `origin` tries, unless none can.
+pub(super) fn first_queued_host(
+    settings: &Effective,
+    origin: Option<&Origin>,
+) -> Option<Configured> {
+    fallbacks(settings, origin)
+        .into_iter()
+        .next()
+        .map(|fallback| fallback.host)
 }
 
 /// A host a queued start may run in, and the group it joins there.
@@ -140,8 +141,8 @@ enum Group<'a> {
 }
 
 /// Where a queued start from `origin` may run, in the order to try: its own
-/// group, its host's configured group on the same server, the default
-/// host's configured group, then zmx.
+/// group, its host's configured group on the same server, then the default
+/// host's configured group.
 fn fallbacks<'a>(settings: &Effective, origin: Option<&'a Origin>) -> Vec<Fallback<'a>> {
     let mut fallbacks = Vec::new();
     if let Some(origin) = origin
@@ -159,14 +160,9 @@ fn fallbacks<'a>(settings: &Effective, origin: Option<&'a Origin>) -> Vec<Fallba
             });
         }
     }
-    for host in [
-        Configured::default_host(settings),
-        Configured::named(settings, HostName::Zmx),
-    ] {
-        // Config that keeps a host from opening places keeps queued starts out.
-        if !host.options.opens_places {
-            continue;
-        }
+    // Config that keeps a host from opening places keeps queued starts out.
+    if let Some(host) = Configured::default_host(settings).filter(|host| host.options.opens_places)
+    {
         fallbacks.push(Fallback {
             host,
             group: Group::Configured(None),

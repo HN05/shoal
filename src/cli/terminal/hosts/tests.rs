@@ -39,9 +39,20 @@ fn every_host_but_the_plain_terminal_can_be_the_default() {
             .unwrap()
             .resolve(&crate::config::repo::ConfigLayers::default())
             .unwrap();
-        assert_eq!(Configured::default_host(&settings).host.name(), name);
+        let host = Configured::default_host(&settings).map(|host| host.host.name());
+        assert_eq!(host, Some(name));
         assert_eq!(registered.host.name(), name);
     }
+}
+
+#[test]
+fn a_default_host_config_turns_off_is_none() {
+    let config: crate::config::Config =
+        toml::from_str("default_host = 'herdr'\n[herdr]\nenabled = false").unwrap();
+    let settings = config
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
+    assert!(Configured::default_host(&settings).is_none());
 }
 
 #[test]
