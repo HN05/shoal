@@ -809,15 +809,23 @@ pub(in crate::cli) async fn sessions(
     {
         sessions.extend(host.running(owner).await?);
     }
-    let mut seen = HashSet::new();
-    for place in places {
-        if seen.insert((place.host, place.id()))
-            && let Some(host) = enabled_host(settings, place.host).and_then(Host::sessions)
-        {
+    for place in distinct_places(places) {
+        if let Some(host) = enabled_host(settings, place.host).and_then(Host::sessions) {
             sessions.extend(host.session_at(place).await?);
         }
     }
     Ok(sessions)
+}
+
+/// `places` without repeats of a place: the same ID in the same host and
+/// its data, which tells servers of one host apart.
+fn distinct_places<'a>(places: &[&'a Origin]) -> Vec<&'a Origin> {
+    let mut seen = HashSet::new();
+    places
+        .iter()
+        .copied()
+        .filter(|place| seen.insert((place.host, place.id(), &place.data)))
+        .collect()
 }
 
 /// The IDs of the owners of `kind` with at least one agent session in any
