@@ -4,7 +4,7 @@ use anyhow::{Context as _, Result, bail, ensure};
 use super::links;
 use crate::{
     cli::{
-        args::items::ItemArgs,
+        args::items::{ItemArgs, ViewArgs},
         browser, client,
         context::Context,
         forge_hosts::ForgeHosts,
@@ -15,7 +15,7 @@ use crate::{
         ForgeRepo,
         account::Account,
         capability::Capability,
-        ci::checks::CheckLog,
+        ci::{checks::CheckLog, run_view::JobRef},
         items::{
             link::{ItemKind, Selection},
             reaction::Reaction,
@@ -27,8 +27,30 @@ use crate::{
     repository,
 };
 
+/// Show or open what `args` selects: a CI run as `ci` reads it, otherwise
+/// issues and PRs.
+pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
+    let job = args.job.map(JobRef::Name).or(args.job_id.map(JobRef::Id));
+    if args.items.selects_ci() {
+        ensure!(
+            args.check.is_none(),
+            "--check reads a PR's check; use --job for a run's"
+        );
+        return super::ci::view(ctx, args.items, job, args.web).await;
+    }
+    ensure!(
+        job.is_none(),
+        "--job and --job-id read a CI run's job: view ci RUN --job NAME"
+    );
+    if args.web {
+        open(ctx, args.items).await
+    } else {
+        view(ctx, args.items, args.no_comments, args.check).await
+    }
+}
+
 /// Exits 1 when an item could not be read; its error is in the output.
-pub(super) async fn view(
+async fn view(
     ctx: &Context,
     items: ItemArgs,
     no_comments: bool,
@@ -80,7 +102,7 @@ fn render_views(views: &[ItemView], json: bool) {
 
 /// Open the selected items in the browser and print each URL, also when
 /// the opener fails, for a terminal elsewhere; workspace processes cannot.
-pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
+async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
     may_open_browser(ctx)?;
     let (context, selection) = links::select_in_context(ctx, items).await?;
     let selected = links::select_items(ctx, &context, selection).await?;

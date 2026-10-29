@@ -23,7 +23,7 @@ use crate::{
             changes::ChangesCommand,
             coordination::{CoordinationCommand, QuestionsArgs},
             create::CreateCommand,
-            items::{ItemArgs, ItemsCommand},
+            items::{ItemArgs, ItemsCommand, ViewArgs},
             lifecycle::LifecycleCommand,
             sessions::SessionsCommand,
             workspace::{WorkCommand, WorkspaceCommand},
@@ -612,7 +612,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         Row::Ready {
             workspace,
             url: Some(url),
-        } => Command::Items(ItemsCommand::View {
+        } => Command::Items(ItemsCommand::View(ViewArgs {
             items: ItemArgs {
                 kind_or_url: Some(url),
                 item: None,
@@ -623,7 +623,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             job: None,
             job_id: None,
             web: false,
-        }),
+        })),
         Row::Ready {
             workspace,
             url: None,
@@ -718,7 +718,7 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
     let items = linked_items(ctx, &workspace).await?;
     ensure!(!items.is_empty(), "the workspace links no issue or PR");
     let (url, web) = pick_linked(ctx, &items)?;
-    Ok(Command::Items(ItemsCommand::View {
+    Ok(Command::Items(ItemsCommand::View(ViewArgs {
         items: ItemArgs {
             kind_or_url: Some(url),
             item: None,
@@ -729,7 +729,7 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
         job: None,
         job_id: None,
         web,
-    }))
+    })))
 }
 
 /// The issues and PRs `workspace` links in its own repository, the only

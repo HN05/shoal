@@ -35,25 +35,7 @@ pub enum ItemsCommand {
     /// Show linked items, one kind, or a selected issue, PR or CI run: `view ci 2765`.
     ///
     /// Issues and PRs show their status and discussion, and CI runs their jobs.
-    View {
-        #[command(flatten)]
-        items: ItemArgs,
-        /// Leave out comments and reviews.
-        #[arg(long)]
-        no_comments: bool,
-        /// Show only this failed check's log, where the forge reads job logs.
-        #[arg(long, value_name = "NAME", conflicts_with_all = ["job", "job_id"])]
-        check: Option<String>,
-        /// Show only the log of this job of a CI run.
-        #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
-        job: Option<String>,
-        /// Show only the log of the CI run's job with this ID, for jobs that share a name.
-        #[arg(long, value_name = "ID")]
-        job_id: Option<u64>,
-        /// Open the items in the browser instead.
-        #[arg(long, conflicts_with_all = ["no_comments", "check", "job", "job_id"])]
-        web: bool,
-    },
+    View(ViewArgs),
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]
@@ -68,6 +50,28 @@ pub enum ItemsCommand {
         #[arg(long, requires = "undo", overrides_with = "draft")]
         no_draft: bool,
     },
+}
+
+// What `shoal view` shows and how.
+#[derive(Debug, Args)]
+pub struct ViewArgs {
+    #[command(flatten)]
+    pub items: ItemArgs,
+    /// Leave out comments and reviews.
+    #[arg(long)]
+    pub no_comments: bool,
+    /// Show only this failed check's log, where the forge reads job logs.
+    #[arg(long, value_name = "NAME", conflicts_with_all = ["job", "job_id"])]
+    pub check: Option<String>,
+    /// Show only the log of this job of a CI run.
+    #[arg(long, value_name = "NAME", conflicts_with = "job_id")]
+    pub job: Option<String>,
+    /// Show only the log of the CI run's job with this ID, for jobs that share a name.
+    #[arg(long, value_name = "ID")]
+    pub job_id: Option<u64>,
+    /// Open the items in the browser instead.
+    #[arg(long, conflicts_with_all = ["no_comments", "check", "job", "job_id"])]
+    pub web: bool,
 }
 
 // An optional item selection followed by its relation.
