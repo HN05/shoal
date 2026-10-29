@@ -50,6 +50,7 @@ mod split;
 mod stop;
 mod subagents;
 mod transfer;
+mod turns;
 mod update;
 mod view;
 mod work;

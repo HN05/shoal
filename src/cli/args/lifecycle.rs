@@ -18,6 +18,12 @@ pub enum LifecycleCommand {
         /// Keep running the workspaces below the selected ones.
         #[arg(long, conflicts_with = "all")]
         skip_children: bool,
+        /// Cancel the current turns of the agents instead, keeping them running.
+        ///
+        /// Shoal types each agent's interrupt key into its terminal session, records its turn
+        /// as ended, and leaves agents without a running turn alone.
+        #[arg(long, conflicts_with_all = ["all", "yes", "skip_children"])]
+        interrupt: bool,
     },
     /// Remove workspaces and release their resources.
     ///

@@ -338,6 +338,18 @@ agents that it or a workspace below it stopped, which the daemon starts
 detached. An agent the user or Shoal stopped, or that exited on its own, is the
 user's to resume.
 
+`shoal stop --interrupt [workspace...]` cancels the current turn of each agent
+in the selected workspaces and keeps the agent running with its background
+shells and subagents, ready for the next message. Shoal types the agent's own
+interrupt key, Esc for Claude Code and Ctrl-C for Codex, into the terminal
+session it runs in through that session's terminal host, as `shoal demo send`
+types into demos, and records the agent idle. An agent without a running turn,
+including one whose turn Shoal has not heard of since a daemon restart, is left
+alone. An agent that runs outside a terminal host, such as in Happy, or that
+Shoal knows no interrupt key for fails the command. Messages and item activity
+reach an interrupted agent as they reach any idle one. A workspace process
+interrupts only the agents of the workspaces below its own.
+
 `shoal restart [workspace...]` restarts running agents in place: the wrapper
 stops the agent and starts its saved session again in the same terminal with the
 continuation prompt, as an automatic restore does, so `shoal attach` keeps
@@ -3337,7 +3349,9 @@ be woken by a hook: when a Codex launched in a zmx session reports its turn
 finished and has undelivered messages or activity, Shoal types `Shoal: new
 messages or activity on this workspace's issues and PRs.` into the session and
 submits it, once until Codex starts another turn, and its prompt hook delivers
-them. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
+them. Claude Code's wake hook does not follow a turn
+`shoal stop --interrupt` ended, so Shoal wakes a Claude Code launched in a zmx
+session the same way while it idles after one. Text typed but not yet sent in that prompt is sent with it. Codex runs the hooks only after you trust them in Codex's
 hook review. The hook reads the event from stdin and prints nothing when there
 is nothing new; failures go to stderr and never fail the agent. Other agents
 whose hooks accept Claude Code's `hookSpecificOutput.additionalContext` output can

@@ -187,6 +187,14 @@ stagger after the previous start.
 Agents without a restore command and executions whose wrapper is gone are left
 to `shoal stop` and `shoal resume`; a restart that cannot start the agent leaves
 its record for `shoal resume`.
+`shoal stop --interrupt` redirects an agent without stopping it: the agent's
+own interrupt key cancels its turn and keeps its process, background shells
+and subagents, which a stop and resume would end and start again. The CLI types
+the key through the terminal host of the place the daemon recorded for the
+agent, so a client driving Shoal need not know each agent's key or each host,
+and the daemon records the turn's end, which no hook reports. The daemon keeps
+the interruption with the agent's transient metadata until a turn starts or
+ends again.
 The daemon also samples what each workspace's processes use, attributed by
 the workspace identity in their environment, so the user can see which
 workspace loads the machine; protection, warnings and admission do not use it
@@ -1238,9 +1246,12 @@ idle agent with no wait until its next turn; waits outlast a daemon restart,
 including the time before the next daemon listens and knows the agent's scope. Codex
 has no hook that can start a turn, so its tracked wrapper types a fixed prompt
 into the zmx session it runs in once Codex is idle with updates, at most once
-per idle stretch, and the prompt's hook delivers them. That is the only input
-Shoal writes to an agent's terminal: the daemon never does, the prompt carries
-no forge text, and it is appended to anything typed but not yet sent. Shoal does not
+per idle stretch, and the prompt's hook delivers them. Claude Code's wake hook
+does not run after an interrupted turn, so its wrapper prompts it the same way
+while it idles after one. Besides that prompt, Shoal writes to an agent's
+terminal only the interrupt key `shoal stop --interrupt` sends: the daemon
+never does, the prompt carries no forge text, and it is appended to anything
+typed but not yet sent. Shoal does not
 pre-trust hooks where the agent requires review. Identical unread messages collapse.
 A message may attach files, which the daemon copies from paths the CLI checked
 into the repository directory beside its workspaces: agents get that directory

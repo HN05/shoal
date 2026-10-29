@@ -175,6 +175,7 @@ shoal questions 3 --answer 2  # Answer question 3 with its second choice
 shoal stop fix-login          # Stop agents and commands here and below; they stay down until shoal resume
 shoal stop fix-login api      # Stop several; the picker selects them with Tab or Ctrl-A
 shoal stop --all              # Stop every workspace; a reboot saves agents too
+shoal stop --interrupt fix-login  # Cancel its agent's turn; the agent keeps running
 shoal restart --all --agent claude  # Restart Claude agents in place, such as after an update
 shoal restart --all --sequential    # Restart one at a time, idle agents first
 shoal resume --all            # Queue the restore of stopped agents; report stopped commands

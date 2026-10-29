@@ -700,6 +700,7 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             },
             yes: false,
             skip_children: false,
+            interrupt: false,
         }),
         Key::Attach => Command::Sessions(SessionsCommand::Attach {
             target: workspace,

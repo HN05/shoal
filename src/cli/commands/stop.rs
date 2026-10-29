@@ -139,7 +139,7 @@ fn with_descendants(ids: Vec<String>, workspaces: &[Workspace]) -> Vec<String> {
 /// workspace in. The daemon refuses each workspace not below the caller's,
 /// which needs the scope token; refusing its own here, before any stops,
 /// keeps the stop from taking the workspaces below it alone.
-async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
+pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<()> {
     const REFUSAL: &str = "workspace processes stop only the workspaces below theirs; finish their own with shoal done";
     let own = std::env::var(crate::env::WORKSPACE_ID).context(REFUSAL)?;
     ensure!(crate::env::is_scoped(), "{REFUSAL}");

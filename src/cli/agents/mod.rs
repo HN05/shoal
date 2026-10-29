@@ -818,6 +818,12 @@ pub(crate) enum PromptWake {
     AfterInterrupt,
 }
 
+/// The key that cancels the running turn of agent `name` under `settings`,
+/// unless Shoal knows none.
+pub(in crate::cli) fn interrupt_key(settings: &Effective, name: &str) -> Option<&'static str> {
+    agent_integration(settings, name).interrupt_key()
+}
+
 /// When the wrapper of an agent with integration `kind` wakes it by typing
 /// a prompt, unless it never does.
 pub(crate) fn prompt_wake(kind: IntegrationKind) -> Option<PromptWake> {

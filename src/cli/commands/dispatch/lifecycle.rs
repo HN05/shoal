@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::lifecycle::{ExportArgs, ImportArgs, LifecycleCommand},
-    commands::{cleanup, stop, transfer, workspaces},
+    commands::{cleanup, stop, transfer, turns, workspaces},
     context::Context,
 };
 
@@ -10,8 +10,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
     match command {
         LifecycleCommand::Stop {
             targets,
+            interrupt: true,
+            ..
+        } => turns::interrupt(&ctx, targets.workspace).await,
+        LifecycleCommand::Stop {
+            targets,
             yes,
             skip_children,
+            interrupt: false,
         } => stop::run(&ctx, targets, yes, skip_children).await,
         LifecycleCommand::Rm {
             workspace,
