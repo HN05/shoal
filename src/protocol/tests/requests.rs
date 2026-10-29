@@ -84,6 +84,7 @@ const REQUESTS: &[&str] = &[
     r#"{"report_turn_failure":{"workspace":"fix","failure":"rate_limited","turn_end":{"prompt_cache_secs":300}}}"#,
     r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
+    r#"{"report_attached":{"workspace":"fix","execution":"e1","attached":true}}"#,
     r#"{"await_agent_wake":{"workspace":"fix","due":true}}"#,
     // Executions.
     r#"{"execute":{"workspace":"fix","wrapper":{"pid":2,"birth":"b"},"kind":"command","agent":null,"recover":false,"reattach":false,"queue_entry":null}}"#,
@@ -123,7 +124,7 @@ const REQUESTS: &[&str] = &[
     r#"{"set_pr":{"workspace":"fix","url":"7","clear":false}}"#,
     r#"{"pr_wait":{"workspace":"fix","timeout_secs":60}}"#,
     r#"{"watch_items":{"workspace":"fix","selection":{"kind":null,"input":"7"},"timeout_secs":null}}"#,
-    r#"{"acknowledge_pr_updates":{"workspace":"fix","deliveries":["d1"],"messages":[3]}}"#,
+    r#"{"acknowledge_pr_updates":{"workspace":"fix","deliveries":["d1"],"messages":[3],"attached":true}}"#,
     r#"{"open_pull":{"workspace":"fix","options":{"title":null,"body":null,"base":null,"draft":true,"labels":[],"reviewers":[],"attachments":[]}}}"#,
     r#"{"open_issue":{"workspace":"fix","issue":{"title":"Bug","body":"","labels":[],"attachments":[]},"repository":null,"link":false}}"#,
     r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"close"}}}"#,
