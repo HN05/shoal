@@ -8,7 +8,8 @@ refused, report it with `shoal alerts send` instead of working around it.
 While watched PRs are open, {updates} Messages from the user and Shoal arrive
 the same way; follow them.
 
-When the assignment is finished, with every watched PR merged or no PR needed,
-run `shoal done` as your last command. Do not end your session without it.
 After taking another workspace's commits into your branch under new SHAs, run
 `shoal done --integrated <workspace>`.
+
+When the assignment is finished, with every watched PR merged or no PR needed,
+run `shoal done` as your last command. Do not end your session without it.
