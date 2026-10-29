@@ -1,7 +1,7 @@
 //! GitLab's award emoji as reactions, under GitHub's names for the ones
 //! both forges have.
 use anyhow::{Context, Result};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::username;
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject},
     },
-    transport::api::Request,
+    transport::api::{HttpMethod, Request},
 };
 
 /// GitHub's reaction names and GitLab's emoji for them, where they differ.
@@ -38,7 +38,7 @@ pub(super) fn listed(award: &Value) -> Result<Listed> {
     let name = text(&award["name"]).context("an award emoji has no name")?;
     Ok(Listed {
         id: award["id"].clone(),
-        content: github_name(name),
+        content: github_name(&name),
         login: username(&award["user"]),
     })
 }
@@ -48,11 +48,30 @@ pub(super) async fn own_login(repo: &ForgeRepo, account: &Account) -> Result<Str
     text(&user["username"]).context("GitLab did not report your username")
 }
 
-fn github_name(name: String) -> String {
+pub(super) fn add(endpoint: String, content: &str) -> Request {
+    let name = NAMES
+        .iter()
+        .find(|(github, _)| *github == content)
+        .map_or(content, |(_, emoji)| emoji);
+    Request::new(HttpMethod::Post, endpoint, Some(json!({ "name": name })))
+}
+
+pub(super) fn remove(endpoint: String, own: &Listed) -> Result<Request> {
+    let id = own.number()?;
+    Ok(Request::new(
+        HttpMethod::Delete,
+        format!("{endpoint}/{id}"),
+        None,
+    ))
+}
+
+/// GitHub's name for GitLab's emoji `name`, where GitHub has the reaction.
+pub(super) fn github_name(name: &str) -> String {
     NAMES
         .iter()
         .find(|(_, emoji)| *emoji == name)
-        .map_or(name, |(content, _)| (*content).to_owned())
+        .map_or(name, |(content, _)| content)
+        .to_owned()
 }
 
 #[cfg(test)]

@@ -440,6 +440,34 @@ pub(crate) trait Backend {
     /// The login `account` signs in to the forge as.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String>;
 
+    /// What reacting to comment `comment` of item `number` reacts to: by
+    /// default a comment, where the forge keeps inline comments with the
+    /// others.
+    async fn comment_subject(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _kind: ItemKind,
+        _number: u64,
+        comment: u64,
+    ) -> Result<Subject> {
+        Ok(Subject::Comment(comment))
+    }
+
+    /// The content [`Self::listed_reaction`] reports for a reaction the
+    /// forge names `name`; by default the name itself.
+    fn reaction_content(&self, name: &str) -> String {
+        name.to_owned()
+    }
+
+    /// The request that adds a reaction of `content` to the reactions at
+    /// `endpoint`.
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request>;
+
+    /// The request that removes `own`, the account's reaction, from the
+    /// reactions at `endpoint`.
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
+
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
         &self,
@@ -1030,6 +1058,29 @@ impl Backend for ForgeKind {
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<String> {
         dispatch!(self, backend => backend.own_login(repo, account).await)
+    }
+
+    async fn comment_subject(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: u64,
+    ) -> Result<Subject> {
+        dispatch!(self, backend => backend.comment_subject(repo, account, kind, number, comment).await)
+    }
+
+    fn reaction_content(&self, name: &str) -> String {
+        dispatch!(self, backend => backend.reaction_content(name))
+    }
+
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
+        dispatch!(self, backend => backend.add_reaction(endpoint, content))
+    }
+
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
+        dispatch!(self, backend => backend.remove_reaction(endpoint, own))
     }
 
     async fn ci_checks(

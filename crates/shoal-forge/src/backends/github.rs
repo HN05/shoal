@@ -601,6 +601,40 @@ impl Backend for GitHub {
         github_rest::own_login(repo, account).await
     }
 
+    /// GitHub numbers a PR's inline comments apart from its comments.
+    async fn comment_subject(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: u64,
+    ) -> Result<Subject> {
+        if kind == ItemKind::Pr {
+            let threads = threads::threads(repo, account, number).await?;
+            if threads
+                .iter()
+                .any(|thread| thread.comments.contains(&comment))
+            {
+                return Ok(Subject::ReviewComment(comment));
+            }
+        }
+        Ok(Subject::Comment(comment))
+    }
+
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
+        Ok(github_rest::add_reaction(endpoint, content))
+    }
+
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
+        let id = own.number()?;
+        Ok(Request::new(
+            HttpMethod::Delete,
+            format!("{endpoint}/{id}"),
+            None,
+        ))
+    }
+
     /// Only each check's latest attempt, not those reruns replaced, and
     /// each commit status, which reports no Actions job.
     async fn ci_checks(

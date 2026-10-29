@@ -15,6 +15,7 @@ use crate::{
         attach::{Attachment, Holder, Pending},
         item::{Current, Item, ItemState},
         link::ItemKind,
+        reaction::ReactionChange,
     },
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
@@ -73,6 +74,7 @@ pub enum Action {
     },
     Thread(ThreadChange),
     Review(NewReview),
+    React(ReactionChange),
 }
 
 /// Fields left empty stay as they are; base, reviewers and draft state are
@@ -122,6 +124,8 @@ impl Action {
                 None => "reply",
             },
             Self::Review(_) => "review",
+            Self::React(change) if change.remove => "unreact",
+            Self::React(_) => "react",
         }
     }
 
@@ -156,6 +160,7 @@ impl Action {
                 };
                 lines.into_iter().chain(verdict).collect()
             }
+            Self::React(_) => vec![Capability::Reactions],
             _ => Vec::new(),
         }
     }
@@ -201,6 +206,7 @@ impl Action {
                 pr_only("reviews")?;
                 review.validate()?;
             }
+            Self::React(change) => change.validate()?,
             Self::Close | Self::Reopen => {}
         }
         Ok(())
@@ -284,8 +290,10 @@ impl ForgeRepo {
         action.validate(kind)?;
         // Refused before anything is read or posted.
         self.require_all(action.needs(kind))?;
-        if let Action::Review(review) = action {
-            return self.submit_review(account, number, review).await;
+        match action {
+            Action::Review(review) => return self.submit_review(account, number, review).await,
+            Action::React(change) => return self.react(account, kind, number, change).await,
+            _ => {}
         }
         let per_item = self.check_uploads(account, action.attachments()).await?;
         let current = self.read(account, kind, number).await?;
@@ -475,6 +483,9 @@ impl ForgeRepo {
             }
             Action::Thread(_) => anyhow::bail!("a review thread change is planned from its thread"),
             Action::Review(_) => anyhow::bail!("a review is planned from the PR's diff"),
+            Action::React(_) => {
+                anyhow::bail!("a reaction is planned from the reactions it changes")
+            }
         })
     }
 }

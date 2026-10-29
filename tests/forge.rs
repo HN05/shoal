@@ -958,6 +958,92 @@ fn views_count_reactions_and_mark_the_logins_own() {
     assert!(text.contains("comment 9"), "{text}");
 }
 
+#[test]
+fn github_reactions_find_inline_comments_and_remove_by_id() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
+        "pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [{"id": "T_1", "isResolved": false, "comments": {"nodes": [{"databaseId": 5}]}}]}}}}});
+    let own =
+        |id: u64, content: &str| json!({"id": id, "content": content, "user": {"login": "me"}});
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "POST graphql": {"body": threads},
+        "GET user": {"body": {"login": "me"}},
+        "GET repos/team/project/pulls/comments/5/reactions?per_page=100&page=1": {"body": []},
+        "POST repos/team/project/pulls/comments/5/reactions": {"status": 201, "body": own(7, "+1")},
+        "GET repos/team/project/issues/comments/6/reactions?per_page=100&page=1":
+            {"body": [own(3, "-1")]},
+        "DELETE repos/team/project/issues/comments/6/reactions/3": {"status": 204},
+        "GET repos/team/project/issues/8/reactions?per_page=100&page=1": {"body": [own(4, "heart")]},
+    }));
+    let pr = ["--workspace", "topic", "8"];
+    let added = fixture.ok(&[&["pr", "react", "+1", "--comment", "5"][..], &pr].concat());
+    assert_eq!(added["number"], 8, "{added}");
+    fixture.ok(&[
+        &["pr", "react", "-1", "--comment", "6", "--remove"][..],
+        &pr,
+    ]
+    .concat());
+    // A reaction that is already there is not sent again.
+    fixture.ok(&[&["pr", "react", "heart"][..], &pr].concat());
+    let mut writes = writes(&fixture);
+    writes.retain(|request| request[0] != "POST graphql");
+    assert_eq!(
+        writes,
+        [
+            json!(["POST repos/team/project/pulls/comments/5/reactions", {"content": "+1"}]),
+            json!([
+                "DELETE repos/team/project/issues/comments/6/reactions/3",
+                null
+            ]),
+        ]
+    );
+    let event = fixture
+        .events()
+        .into_iter()
+        .rfind(|event| event["kind"] == "item_changed")
+        .unwrap();
+    assert_eq!(event["item"]["action"], "react", "{event}");
+}
+
+#[test]
+fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let issue = "repos/team/project/issues/3";
+    fixture.respond(json!({
+        format!("GET {issue}"): {"body": {"number": 3, "title": "Crash", "state": "open",
+            "labels": [], "user": {"login": "ann"}}},
+        "GET user": {"body": {"login": "me"}},
+        format!("GET {issue}/reactions?limit=50&page=1"): {"body": null},
+        format!("POST {issue}/reactions"): {"status": 201, "body": {"content": "eyes"}},
+        "GET repos/team/project/issues/comments/9/reactions?limit=50&page=1":
+            {"body": [{"content": "heart", "user": {"login": "Me"}}]},
+        "DELETE repos/team/project/issues/comments/9/reactions": {"body": null},
+    }));
+    let target = ["--workspace", "topic", "3"];
+    fixture.ok(&[&["issue", "react", "eyes"][..], &target].concat());
+    fixture.ok(&[
+        &["issue", "react", "heart", "--comment", "9", "--remove"][..],
+        &target,
+    ]
+    .concat());
+    // Removing a reaction that is not there changes nothing.
+    fixture.ok(&[&["issue", "react", "heart", "--remove"][..], &target].concat());
+    assert_eq!(
+        writes(&fixture),
+        [
+            json!([format!("POST {issue}/reactions"), {"content": "eyes"}]),
+            json!(["DELETE repos/team/project/issues/comments/9/reactions", {"content": "heart"}]),
+        ]
+    );
+    let refused = fixture.run(&[&["issue", "react", "two words"][..], &target].concat());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("name the reaction"),
+        "{refused:?}"
+    );
+}
+
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
 /// beside them that references the image.
 fn attachment_files(fixture: &Fixture) -> [String; 3] {

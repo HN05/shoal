@@ -124,6 +124,13 @@ pub enum PrCommand {
         #[command(flatten)]
         review: ReviewArgs,
     },
+    /// Add a reaction to a PR or one of its comments, or remove it.
+    React {
+        #[command(flatten)]
+        reaction: ReactArgs,
+        #[command(flatten)]
+        item: ItemSelector,
+    },
     /// Reply in the thread of a review comment.
     Reply {
         /// ID of any comment in the thread, as `shoal view` shows it.
@@ -243,6 +250,13 @@ pub enum IssueCommand {
         #[command(flatten)]
         files: AttachArgs,
     },
+    /// Add a reaction to an issue or one of its comments, or remove it.
+    React {
+        #[command(flatten)]
+        reaction: ReactArgs,
+        #[command(flatten)]
+        item: ItemSelector,
+    },
     /// Close an issue.
     Close {
         #[command(flatten)]
@@ -253,6 +267,21 @@ pub enum IssueCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
+}
+
+// A reaction to add or remove, and the comment it is on.
+#[derive(Debug, Args)]
+pub struct ReactArgs {
+    /// Reaction: +1, -1, laugh, hooray, confused, heart, rocket or eyes, or a
+    /// name the forge has.
+    #[arg(allow_hyphen_values = true)]
+    pub reaction: String,
+    /// React to this comment or inline comment instead, by its ID as `shoal view` shows it.
+    #[arg(long, value_name = "ID")]
+    pub comment: Option<u64>,
+    /// Remove the reaction.
+    #[arg(long)]
+    pub remove: bool,
 }
 
 // Which issues or PRs of the workspace's repository to list.

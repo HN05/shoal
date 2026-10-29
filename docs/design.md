@@ -1332,7 +1332,11 @@ the user's own login. A forge that refuses a verdict, such as on its author's
 own PR, says so itself rather than Shoal guessing first. A review's line
 comments are checked against the PR's diff before anything is sent, so a
 review is refused whole rather than posted in part. Review
-threads are named by any of their comments' IDs. Listing issues and PRs also
+threads are named by any of their comments' IDs. Reactions use GitHub's names
+on every forge, so a client offers one set, and are read for a view with its
+comments, which costs a request per comment on forges that list them per comment;
+reacting reads first and changes only a reaction not already as asked, since
+forges differ in whether adding one twice fails. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under

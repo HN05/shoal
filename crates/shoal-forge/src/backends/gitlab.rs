@@ -599,6 +599,18 @@ impl Backend for GitLab {
         reactions::own_login(repo, account).await.hint_login(self)
     }
 
+    fn reaction_content(&self, name: &str) -> String {
+        reactions::github_name(name)
+    }
+
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
+        Ok(reactions::add(endpoint, content))
+    }
+
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
+        reactions::remove(endpoint, own)
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,

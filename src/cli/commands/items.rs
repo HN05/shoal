@@ -11,7 +11,7 @@ use crate::{
             BodyArgs,
             changes::{
                 AttachArgs, CiCommand, EditArgs, IssueCommand, ItemSelector, ListArgs,
-                OpenPullArgs, PrCommand, PrEditArgs,
+                OpenPullArgs, PrCommand, PrEditArgs, ReactArgs,
             },
         },
         client,
@@ -30,6 +30,7 @@ use crate::{
             item::{Item, ItemState, Opened},
             link::{ItemKind, Selection},
             list::Search,
+            reaction::ReactionChange,
         },
     },
     git,
@@ -54,6 +55,10 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         }
         PrCommand::Review { item, review } => {
             let (action, outcome) = review::review(review)?;
+            (item, action, outcome)
+        }
+        PrCommand::React { reaction, item } => {
+            let (action, outcome) = react(reaction);
             (item, action, outcome)
         }
         PrCommand::Reply {
@@ -147,6 +152,10 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
         }
         IssueCommand::Comment { item, body, files } => {
             (item, comment(body, files)?, "Commented on issue")
+        }
+        IssueCommand::React { reaction, item } => {
+            let (action, outcome) = react(reaction);
+            (item, action, outcome)
         }
         IssueCommand::Close { item } => (item, Action::Close, "Issue closed"),
         IssueCommand::Reopen { item } => (item, Action::Reopen, "Issue reopened"),
@@ -388,6 +397,21 @@ fn comment(body: BodyArgs, files: AttachArgs) -> Result<Action> {
         body: body.unwrap_or_default(),
         attachments,
     })
+}
+
+/// The reaction change `args` describe, and what to report once it is made.
+fn react(args: ReactArgs) -> (Action, &'static str) {
+    let outcome = if args.remove {
+        "Reaction removed"
+    } else {
+        "Reaction added"
+    };
+    let change = ReactionChange {
+        comment: args.comment,
+        content: args.reaction,
+        remove: args.remove,
+    };
+    (Action::React(change), outcome)
 }
 
 /// A reply in the thread of `comment`, which needs a body.

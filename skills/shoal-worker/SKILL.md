@@ -47,6 +47,9 @@ and videos and links other files where it references them as `![alt](FILE)`.
 Answer each review finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
+`shoal pr react <reaction> [--comment <comment-id>]` and `shoal issue react` add
+a reaction such as `+1` or `heart` to the item or one of its comments, and
+`--remove` takes it back; `shoal view --json` lists each one's reactions.
 Review a PR with `shoal pr review [<number>] --comment --body-file F` and
 comments on lines of its diff: repeated `--line PATH:LINE 'text'`, `--old-line`
 for a removed line, or `--comments-file F` with a JSON array of `{"path",

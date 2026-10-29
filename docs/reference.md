@@ -2634,6 +2634,11 @@ an fj login.
 thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 `--body` or `--body-file`; `resolve` posts one as a reply first when given.
 Resolving a thread that has no reply asks for confirmation; `--yes` skips it.
+`react REACTION` adds a reaction to the item, or with `--comment ID` to one of
+its comments or inline comments as `shoal view` shows it, and `--remove`
+removes it; the reaction is GitHub's name, as `shoal view` shows it, or one the
+forge has, such as a GitLab emoji. A reaction already as asked is left
+unchanged. Bitbucket has no reactions.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `review` submits one review with exactly one of `--comment`, `--approve` or

@@ -537,6 +537,14 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 
+    fn add_reaction(&self, _endpoint: String, _content: &str) -> Result<Request> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
+    fn remove_reaction(&self, _endpoint: String, _own: &Listed) -> Result<Request> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
     /// No CI job Shoal can act on, since it reads no Pipelines jobs.
     async fn ci_checks(
         &self,

@@ -370,3 +370,11 @@ pub(crate) async fn own_login(repo: &ForgeRepo, account: &Account) -> Result<Str
     let user = repo.send(account, &Request::get("user".into())).await?;
     text(&user["login"]).context("the forge did not report your login")
 }
+
+pub(crate) fn add_reaction(endpoint: String, content: &str) -> Request {
+    Request::new(
+        HttpMethod::Post,
+        endpoint,
+        Some(json!({ "content": content })),
+    )
+}

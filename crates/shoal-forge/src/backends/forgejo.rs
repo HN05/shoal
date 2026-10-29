@@ -502,6 +502,19 @@ impl Backend for Forgejo {
         github_rest::own_login(repo, account).await.hint_login(self)
     }
 
+    fn add_reaction(&self, endpoint: String, content: &str) -> Result<Request> {
+        Ok(github_rest::add_reaction(endpoint, content))
+    }
+
+    /// Forgejo removes the account's reaction by its content.
+    fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
+        Ok(Request::new(
+            HttpMethod::Delete,
+            endpoint,
+            Some(json!({ "content": own.content })),
+        ))
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,

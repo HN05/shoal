@@ -157,6 +157,7 @@ impl Scoped for ItemMethod {
                     | Action::Comment { .. }
                     | Action::Thread(_)
                     | Action::Review(_)
+                    | Action::React(_)
                     | Action::Close
                     | Action::Reopen,
                 ..

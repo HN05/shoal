@@ -1,12 +1,20 @@
-//! Reactions on an issue, a PR or one of their comments, read for item
-//! views.
-use anyhow::Result;
+//! Reactions on an issue, a PR or one of their comments: read for item
+//! views, and added or removed as the acting account's own.
+use anyhow::{Context, Result, ensure};
 use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::link::ItemKind, review::view::Details,
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    items::{
+        action::{Acted, after_send},
+        link::ItemKind,
+    },
+    review::view::Details,
+    transport::api::Request,
 };
 
 /// Reaction lists read at once for a view.
@@ -22,6 +30,27 @@ pub struct Reaction {
     pub count: u64,
     /// Whether the login the view reads as is among them.
     pub reacted: bool,
+}
+
+/// Adding or removing the acting account's reaction on an item, or on one
+/// of its comments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactionChange {
+    /// The ID of a comment or inline comment, as `shoal view` shows it.
+    pub comment: Option<u64>,
+    /// GitHub's name for the reaction, or the forge's own.
+    pub content: String,
+    pub remove: bool,
+}
+
+impl ReactionChange {
+    pub(crate) fn validate(&self) -> Result<()> {
+        ensure!(
+            !self.content.is_empty() && !self.content.contains(char::is_whitespace),
+            "name the reaction, such as +1 or heart"
+        );
+        Ok(())
+    }
 }
 
 /// What a reaction is on.
@@ -42,6 +71,15 @@ pub(crate) struct Listed {
     pub id: Value,
     pub content: String,
     pub login: String,
+}
+
+impl Listed {
+    /// The reaction's numeric ID, which some forges remove it by.
+    pub(crate) fn number(&self) -> Result<u64> {
+        self.id
+            .as_u64()
+            .context("the forge did not report the reaction's ID")
+    }
 }
 
 impl ForgeRepo {
@@ -71,6 +109,66 @@ impl ForgeRepo {
             .await?;
         place(details, reactions);
         Ok(())
+    }
+
+    /// Apply `change` to item `number` as `account`, leaving a reaction that
+    /// is already as asked unchanged, and return the item afterwards.
+    pub(crate) async fn react(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        change: &ReactionChange,
+    ) -> Result<Acted> {
+        let subject = match change.comment {
+            Some(id) => {
+                self.kind
+                    .comment_subject(self, account, kind, number, id)
+                    .await?
+            }
+            None => Subject::Item,
+        };
+        let request = self
+            .plan_reaction(account, kind, number, subject, change)
+            .await?;
+        if let Some(request) = &request {
+            self.send(account, request).await?;
+        }
+        let item = self
+            .read(account, kind, number)
+            .await
+            .map_err(|error| after_send(error, request.is_some()))?
+            .item;
+        Ok(Acted {
+            item,
+            authored: Vec::new(),
+        })
+    }
+
+    /// The request that makes `change` to the reactions on `subject`, after
+    /// reading them; none when the account's reaction is already as asked.
+    async fn plan_reaction(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        change: &ReactionChange,
+    ) -> Result<Option<Request>> {
+        let content = self.kind.reaction_content(&change.content);
+        let login = self.kind.own_login(self, account).await?;
+        let listed = self
+            .listed_reactions(account, kind, number, subject)
+            .await?;
+        let own = listed.iter().find(|reaction| {
+            reaction.content == content && reaction.login.eq_ignore_ascii_case(&login)
+        });
+        let endpoint = self.kind.reactions_endpoint(self, kind, number, subject)?;
+        Ok(match (own, change.remove) {
+            (None, false) => Some(self.kind.add_reaction(endpoint, &content)?),
+            (Some(own), true) => Some(self.kind.remove_reaction(endpoint, own)?),
+            (Some(_), false) | (None, true) => None,
+        })
     }
 
     /// The reactions on `subject` of item `number`, as the forge lists them.
