@@ -10,7 +10,7 @@ pub enum AssignmentMethod {
     WorkspaceDone {
         workspace: String,
         cleanup: bool,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
     },
     WorkspaceUndone {
