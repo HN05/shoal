@@ -2659,7 +2659,12 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
         "{running}"
     );
 
-    let moved = fixture.ok(&["repo", "migrate", "~/moved", "--yes"]);
+    let output = fixture.run(&["--json", "repo", "migrate", "~/moved", "--yes"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    // The repository stays registered, so its agents' configs stay known.
+    assert!(!stderr.contains("warning"), "{stderr}");
+    let moved: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
     assert!(agent.wait_with_output().unwrap().status.success());
     let path = fs::canonicalize(fixture.root.path())

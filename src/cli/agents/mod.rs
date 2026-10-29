@@ -929,15 +929,39 @@ pub(in crate::cli) async fn trust_checkout(
 }
 
 /// Remove every integration's trust entries for a repository after its
-/// deletion succeeds, both where agents running with this process's
-/// environment keep them and where the daemon kept that its agents ran
-/// with, which it then forgets. Cleanup is best effort and never fails the
-/// removal.
+/// deletion succeeds, as [`cleanup_moved_trust`] does, then have the daemon
+/// forget where its agents kept their configs. Cleanup is best effort and
+/// never fails the removal.
 pub(crate) async fn cleanup_repository_trust(
     ctx: &Context,
     repository: &Repository,
     workspace_paths: &[PathBuf],
 ) {
+    if cleanup_trust(ctx, repository, workspace_paths).await {
+        forget_agent_environments(ctx, repository).await;
+    }
+}
+
+/// Remove every integration's trust entries for the paths a repository had
+/// before it moved, `repository` as recorded then, both where agents running
+/// with this process's environment keep them and where the daemon kept that
+/// its agents ran with. Failures only warn.
+pub(crate) async fn cleanup_moved_trust(
+    ctx: &Context,
+    repository: &Repository,
+    workspace_paths: &[PathBuf],
+) {
+    cleanup_trust(ctx, repository, workspace_paths).await;
+}
+
+/// Remove the trust entries [`cleanup_moved_trust`] removes, warning about
+/// each failure; whether the daemon said where its agents kept their
+/// configs.
+async fn cleanup_trust(
+    ctx: &Context,
+    repository: &Repository,
+    workspace_paths: &[PathBuf],
+) -> bool {
     let agent_environments = agent_environments(ctx, repository).await;
     let warnings = forget_repository_trust(
         &ctx.paths.home,
@@ -948,9 +972,7 @@ pub(crate) async fn cleanup_repository_trust(
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
-    if agent_environments.is_some() {
-        forget_agent_environments(ctx, repository).await;
-    }
+    agent_environments.is_some()
 }
 
 /// Where the removed repository's tracked agents kept their configuration;

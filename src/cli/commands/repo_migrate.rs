@@ -109,7 +109,7 @@ async fn retrust(ctx: &Context, repositories: &[Repository], moved: &[MovedRepos
             .iter()
             .find(|repo| repo.id == moved.repository.id)
         {
-            agents::cleanup_repository_trust(ctx, old, &moved.workspace_paths).await;
+            agents::cleanup_moved_trust(ctx, old, &moved.workspace_paths).await;
         }
     }
     let workspaces = match client::workspaces(&ctx.paths).await {
