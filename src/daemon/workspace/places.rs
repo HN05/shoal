@@ -6,40 +6,38 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::Manager;
 use crate::sessions::{HostName, Origin};
 
-impl Manager {
-    /// Record that `execution` runs at `origin`. When it runs an agent, a
-    /// place Shoal created for another workspace now belongs to the agent's,
-    /// as a relabelled zmx session does, so the earlier workspace's removal
-    /// leaves it open; a command such as a nested `shoal run` takes nothing.
-    pub(crate) async fn record_execution_origin(
-        &self,
-        execution: &str,
-        origin: Origin,
-        agent: bool,
-    ) -> Result<()> {
-        let execution = execution.to_owned();
-        let _ownership = self.place_ownership.lock().await;
-        self.store
-            .run(move |db| {
-                let tx = db.transaction()?;
-                tx.execute(
-                    "UPDATE executions SET origin=?2 WHERE id=?1",
-                    params![execution, serde_json::to_string(&origin)?],
-                )?;
-                if agent {
-                    tx.execute(
-                        "UPDATE owned_places SET workspace_id=
-                            (SELECT workspace_id FROM executions WHERE id=?1)
-                         WHERE host=?2 AND place=?3",
-                        params![execution, origin.host, origin.id()],
-                    )?;
-                }
-                tx.commit()?;
-                Ok(())
-            })
-            .await
-    }
+/// Where an execution runs in a terminal host, as its wrapper reports it.
+pub(crate) struct ExecutionPlace {
+    pub origin: Origin,
+    /// It runs an agent, which takes over a place Shoal created for another
+    /// workspace, as a relabelled zmx session does, so the earlier
+    /// workspace's end leaves it open. A command such as a nested `shoal
+    /// run` takes nothing.
+    pub agent: bool,
+}
 
+/// Record `place` for `execution` of `workspace` in its registration, so
+/// an agent that cannot take its place over never starts.
+pub(super) fn record_execution_place(
+    tx: &rusqlite::Transaction<'_>,
+    execution: &str,
+    workspace: &str,
+    place: &ExecutionPlace,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE executions SET origin=?2 WHERE id=?1",
+        params![execution, serde_json::to_string(&place.origin)?],
+    )?;
+    if place.agent {
+        tx.execute(
+            "UPDATE owned_places SET workspace_id=?1 WHERE host=?2 AND place=?3",
+            params![workspace, place.origin.host, place.origin.id()],
+        )?;
+    }
+    Ok(())
+}
+
+impl Manager {
     /// Record `origin`, a place Shoal created for the workspace `selector`
     /// names, as owned by it.
     pub(crate) async fn record_owned_place(

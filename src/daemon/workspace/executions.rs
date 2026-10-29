@@ -2,7 +2,7 @@
 //! crate::execution, in the invoking CLI process.
 mod completion;
 
-use super::{GuardMode, Manager, ResourceGuard};
+use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace};
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
@@ -214,6 +214,7 @@ struct ExecutionRecord {
     wrapper: Option<Identity>,
     scope_token: String,
     demo: Option<Launch>,
+    place: Option<ExecutionPlace>,
 }
 
 struct RegisteredExecution {
@@ -290,6 +291,7 @@ impl Manager {
     /// Register an execution and issue its scope token, recording the demo it
     /// runs with it. The returned receiver fires when the workspace asks its
     /// commands to stop.
+    #[cfg(test)]
     pub(crate) async fn begin_execution_running(
         &self,
         selector: &str,
@@ -297,6 +299,22 @@ impl Manager {
         kind: ExecutionKind,
         caller: Option<&Caller>,
         demo: Option<Launch>,
+    ) -> Result<StartedExecution> {
+        self.begin_execution_placed(selector, wrapper, kind, caller, demo, None)
+            .await
+    }
+
+    /// Register an execution and issue its scope token, recording the demo it
+    /// runs and the `place` it runs at with it. The returned receiver fires
+    /// when the workspace asks its commands to stop.
+    pub(crate) async fn begin_execution_placed(
+        &self,
+        selector: &str,
+        wrapper: Option<Identity>,
+        kind: ExecutionKind,
+        caller: Option<&Caller>,
+        demo: Option<Launch>,
+        place: Option<ExecutionPlace>,
     ) -> Result<StartedExecution> {
         let (workspace, preparation) = self
             .prepare_execution(selector, wrapper.as_ref(), kind, caller.is_some())
@@ -317,6 +335,7 @@ impl Manager {
                 kind,
                 caller.and_then(Caller::execution_id),
                 demo,
+                place,
             )
             .await?;
         // Setup releases its Git gate before the hook; resources remain guarded
@@ -347,6 +366,7 @@ impl Manager {
         kind: ExecutionKind,
         parent_execution: Option<&str>,
         demo: Option<Launch>,
+        place: Option<ExecutionPlace>,
     ) -> Result<RegisteredExecution> {
         let mut connections = self.executions.connections().await;
         connections.ensure_accepting()?;
@@ -368,6 +388,7 @@ impl Manager {
                     wrapper,
                     scope_token: scope_token.clone(),
                     demo,
+                    place,
                 },
                 repository.clone(),
                 settings.caches.clone(),
@@ -410,7 +431,13 @@ impl Manager {
             wrapper,
             scope_token,
             demo,
+            place,
         } = record;
+        // A place's ownership moves only under the lock its closes hold.
+        let _ownership = match place {
+            Some(_) => Some(self.place_ownership.lock().await),
+            None => None,
+        };
         // Only commands may reattach: setup and landing hold daemon gates
         // that a restart releases.
         let reattach_token = (kind == ExecutionKind::Command).then_some(scope_token);
@@ -430,6 +457,9 @@ impl Manager {
                 )?;
                 if let Some(demo) = &demo {
                     super::demos::record(&tx, &id, &workspace_id, demo)?;
+                }
+                if let Some(place) = &place {
+                    super::places::record_execution_place(&tx, &id, &workspace_id, place)?;
                 }
                 let ports = store::ports(&tx, Some(&workspace_id))?;
                 // Under the write lock emptying caches takes, and undone with

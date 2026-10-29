@@ -520,14 +520,17 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
         .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
         .await?;
     host.add("shared", &workspace.id)?;
-    let started = manager
-        .begin_execution(&taker.id, None, ExecutionKind::Command, None)
-        .await?;
-    manager
-        .record_execution_origin(
-            &started.plan.id,
-            Origin::created(HostName::Rex, "shared".into()),
-            true,
+    let _started = manager
+        .begin_execution_placed(
+            &taker.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            None,
+            Some(crate::daemon::workspace::places::ExecutionPlace {
+                origin: Origin::created(HostName::Rex, "shared".into()),
+                agent: true,
+            }),
         )
         .await?;
     // The first workspace's removal and its watcher leave the block open.
@@ -567,14 +570,17 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
     host.add("parent", &workspace.id)?;
     host.add("chatted", &workspace.id)?;
     // A parent agent's `shoal run --workspace child` runs in the parent's block.
-    let nested = manager
-        .begin_execution(&child.id, None, ExecutionKind::Command, None)
-        .await?;
-    manager
-        .record_execution_origin(
-            &nested.plan.id,
-            Origin::created(HostName::Rex, "parent".into()),
-            false,
+    let _nested = manager
+        .begin_execution_placed(
+            &child.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            None,
+            Some(crate::daemon::workspace::places::ExecutionPlace {
+                origin: Origin::created(HostName::Rex, "parent".into()),
+                agent: false,
+            }),
         )
         .await?;
     assert_eq!(

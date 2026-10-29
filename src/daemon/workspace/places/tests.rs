@@ -15,14 +15,21 @@ async fn an_execution_reports_where_it_runs() -> Result<()> {
     let workspace = manager
         .create_workspace(&repo.id, "placed".into(), None, None, None)
         .await?;
-    let started = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
-        .await?;
     let mut origin = Origin::created(HostName::Rex, "block:1".into());
     origin.owned = false;
     origin.group = Some("session:1".into());
-    manager
-        .record_execution_origin(&started.plan.id, origin.clone(), true)
+    let _started = manager
+        .begin_execution_placed(
+            &workspace.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            None,
+            Some(crate::daemon::workspace::places::ExecutionPlace {
+                origin: origin.clone(),
+                agent: true,
+            }),
+        )
         .await?;
     let executions = manager.inspect_workspace(&workspace.id).await?.executions;
     assert_eq!(executions.len(), 1);

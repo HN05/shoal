@@ -13,11 +13,10 @@ use tokio::{
 use super::{
     approvals::Undecided,
     execution_recovery,
-    log::log,
     scope::Caller,
     workspace::{
         Completing, ExecutionKind, Manager, ReattachedExecution, Save, StartedExecution,
-        StopRequest,
+        StopRequest, places::ExecutionPlace,
     },
 };
 use crate::{
@@ -106,7 +105,17 @@ pub(super) async fn execute(
         stop,
         _git_guard,
     } = match manager
-        .begin_execution_running(&workspace, Some(wrapper), kind, caller.as_ref(), demo)
+        .begin_execution_placed(
+            &workspace,
+            Some(wrapper),
+            kind,
+            caller.as_ref(),
+            demo,
+            origin.map(|origin| ExecutionPlace {
+                origin,
+                agent: agent.is_some(),
+            }),
+        )
         .await
     {
         Ok(begun) => begun,
@@ -123,13 +132,6 @@ pub(super) async fn execute(
     };
     if !reattach {
         manager.executions.mark_unattachable(&plan.id);
-    }
-    if let Some(origin) = origin
-        && let Err(error) = manager
-            .record_execution_origin(&plan.id, origin, agent.is_some())
-            .await
-    {
-        log!("execution {}: cannot record its place: {error:#}", plan.id);
     }
     if kind == ExecutionKind::Command
         && let Some(agent) = &agent
