@@ -8,7 +8,6 @@ use crate::{
         args::changes::{IssueCommand, ItemSelector, PrCommand},
         client,
         context::Context,
-        ui,
     },
     forge::items::{
         action::Action,
@@ -159,22 +158,10 @@ async fn act(
 
 /// The PR `selector` names, or the workspace's linked ones.
 async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
-    let workspace = ui::select_workspace(
-        ctx,
-        selector.workspace.clone(),
-        ui::Fallback::CurrentDirectory,
-    )
-    .await?;
+    let context = select_context(ctx, selector.workspace.clone()).await?;
     let selection = Selection {
         kind: Some(ItemKind::Pr),
         input: selector.item.clone(),
     };
-    client::request(
-        &ctx.paths,
-        ItemMethod::SelectItems {
-            workspace,
-            selection,
-        },
-    )
-    .await
+    super::links::select_items(ctx, &context, selection).await
 }

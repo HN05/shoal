@@ -48,6 +48,60 @@ pub(super) async fn select_in_context(
     }
 }
 
+/// The items `selection` names: in the workspace, where it may name linked
+/// ones, or in the repository of the registered checkout.
+pub(super) async fn select_items(
+    ctx: &Context,
+    context: &ItemContext,
+    selection: Selection,
+) -> Result<Selected> {
+    match context {
+        ItemContext::Workspace(workspace) => {
+            let workspace = workspace.clone();
+            let method = ItemMethod::SelectItems {
+                workspace,
+                selection,
+            };
+            client::request(&ctx.paths, method).await
+        }
+        ItemContext::Checkout(repository) => checkout_selected(ctx, repository, selection).await,
+    }
+}
+
+/// The item `selection` names in the repository of its registered checkout,
+/// where nothing is linked.
+async fn checkout_selected(
+    ctx: &Context,
+    repository: &str,
+    selection: Selection,
+) -> Result<Selected> {
+    let input = selection
+        .input
+        .context("outside a workspace, nothing is linked; pass a number or URL")?;
+    let repo = client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|repo| repo.id == repository)
+        .context("the checkout's repository is no longer registered")?;
+    let forge = super::issues::origin_forge(ctx, &repo).await?;
+    let kind = match selection.kind {
+        Some(kind) => kind,
+        None => {
+            forge
+                .item_kind(&ctx.forge_account()?, input.parse()?)
+                .await?
+        }
+    };
+    let (_, url) = match kind {
+        ItemKind::Issue => forge.issue(&input)?,
+        ItemKind::Pr => forge.pull(&input)?,
+    };
+    Ok(Selected {
+        path: repo.path,
+        items: vec![SelectedItem { url, kind }],
+    })
+}
+
 /// Give a number selected without a kind the kind of the linked item with
 /// that number, otherwise the kind the forge reports for it.
 async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> Result<Selection> {

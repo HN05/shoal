@@ -3946,6 +3946,13 @@ fn item_commands_act_from_a_registered_checkout() {
         "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
         "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky":
             {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project": {"body": {"owner": {"login": "team", "type": "User"}}},
+        "GET repos/team/project/assignees?per_page=100&page=1": {"body": [{"login": "kim"}]},
+        "POST graphql": {"body": {"data": {"repository": {"pullRequest": {"reviewThreads": {
+            "pageInfo": {"hasNextPage": false, "endCursor": null},
+            "nodes": [{"id": "T_1", "isResolved": false,
+                "comments": {"nodes": [{"databaseId": 5}, {"databaseId": 6}]}}]}}}}}},
     }));
     let in_checkout = |args: &[&str]| {
         fixture
@@ -3968,6 +3975,12 @@ fn item_commands_act_from_a_registered_checkout() {
     let viewed = in_checkout(&["--json", "view", "issue", "40", "--no-comments"]);
     let viewed: Value = serde_json::from_slice(&viewed.stdout).unwrap();
     assert_eq!(viewed[0]["url"], format!("{}/issues/40", fixture.web));
+    // Commands that read the PR before acting read it from the checkout too.
+    let reviewers = in_checkout(&["--json", "pr", "reviewers", "8"]);
+    let reviewers: Value = serde_json::from_slice(&reviewers.stdout).unwrap();
+    assert_eq!(reviewers[0]["name"], "kim", "{reviewers}");
+    let resolved = in_checkout(&["--json", "pr", "resolve", "6", "8"]);
+    assert!(resolved.status.success(), "{resolved:?}");
     // A checkout links nothing, so the item must be named.
     for args in [&["issue", "close"][..], &["view"]] {
         let refused = in_checkout(args);
