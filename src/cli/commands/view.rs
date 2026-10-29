@@ -42,27 +42,40 @@ pub(super) async fn view(
         return show_log(ctx, workspace, selection, check).await;
     }
     let selected = links::select_items(ctx, &context, selection).await?;
-    let views = ctx
-        .progress("Reading items", async {
-            let hosts = ctx.forge_hosts()?;
-            let mut views = read(&selected, &hosts, &ctx.forge_account()?, !no_comments).await?;
-            if let ItemContext::Workspace(workspace) = &context {
-                read_failed_logs(ctx, &hosts, workspace, &mut views).await;
-            }
-            Ok::<_, anyhow::Error>(views)
-        })
-        .await?;
-    let palette = Palette::stdout(ctx.json);
-    let emoji = output::stdout_shows_emoji(ctx.json);
-    ctx.show(&views, |views| {
-        for (index, view) in views.iter().enumerate() {
-            if index > 0 {
-                outln!();
-            }
-            render(view, palette, emoji);
-        }
-    })?;
+    let views = read_views(ctx, &context, &selected, !no_comments).await?;
+    ctx.show(&views, |views| render_views(views, ctx.json))?;
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+}
+
+/// Each selected item as the forge reports it now, with its failed job
+/// logs where a workspace reads them.
+async fn read_views(
+    ctx: &Context,
+    context: &ItemContext,
+    selected: &Selected,
+    comments: bool,
+) -> Result<Vec<ItemView>> {
+    ctx.progress("Reading items", async {
+        let hosts = ctx.forge_hosts()?;
+        let mut views = read(selected, &hosts, &ctx.forge_account()?, comments).await?;
+        if let ItemContext::Workspace(workspace) = context {
+            read_failed_logs(ctx, &hosts, workspace, &mut views).await;
+        }
+        Ok(views)
+    })
+    .await
+}
+
+/// The items one after another, separated by a blank line.
+fn render_views(views: &[ItemView], json: bool) {
+    let palette = Palette::stdout(json);
+    let emoji = output::stdout_shows_emoji(json);
+    for (index, view) in views.iter().enumerate() {
+        if index > 0 {
+            outln!();
+        }
+        render(view, palette, emoji);
+    }
 }
 
 /// Open the selected items in the browser and print each URL, also when
