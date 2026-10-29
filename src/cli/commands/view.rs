@@ -5,8 +5,9 @@ use super::links;
 use crate::{
     cli::{
         args::items::{ItemArgs, ViewArgs},
-        browser, client,
+        client,
         context::Context,
+        desktop,
         forge_hosts::ForgeHosts,
         output::{self, Palette, Style},
     },
@@ -114,7 +115,7 @@ async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
 
 /// Open `urls` in the browser and print each, also when the opener fails.
 pub(super) fn open_urls(ctx: &Context, urls: Vec<String>) -> Result<i32> {
-    let failed = urls.iter().find_map(|url| browser::open(url).err());
+    let failed = urls.iter().find_map(|url| desktop::open(url).err());
     ctx.show(&urls, |urls| {
         for url in urls {
             outln!("{url}");

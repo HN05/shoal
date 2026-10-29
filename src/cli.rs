@@ -1,11 +1,11 @@
 pub(crate) mod agents;
 pub mod args;
 pub mod availability;
-mod browser;
 pub mod client;
 pub mod commands;
 pub mod completion;
 pub mod context;
+mod desktop;
 pub mod forge_hosts;
 mod help;
 pub(crate) mod installed;
