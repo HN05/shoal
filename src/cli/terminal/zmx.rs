@@ -263,12 +263,12 @@ async fn start_detached(start: &Start<'_>) -> Result<()> {
         start.argv,
         &NewSession {
             environment: start.env,
-            clear: &super::foreign_place_variables(HostName::Zmx),
             labels: vec![
                 CREATED.into(),
                 crate::sessions::zmx::state_label(start.state)?,
             ],
             keep_failed_shell: true,
+            ..Default::default()
         },
     )
     .await
@@ -286,11 +286,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
         &(demo.worker)(&place)?,
         &NewSession {
             environment: demo.env,
-            clear: &[
-                super::NOT_INHERITED_BY_DEMOS,
-                &super::foreign_place_variables(HostName::Zmx),
-            ]
-            .concat(),
+            clear: super::NOT_INHERITED_BY_DEMOS,
             labels: vec![
                 labels(Owner::Workspace(demo.workspace), ""),
                 CREATED.into(),
@@ -369,7 +365,12 @@ async fn create_session(name: &str, cwd: &Path, launch: &NewSession<'_>) -> Resu
         .current_dir(cwd)
         .envs(launch.environment.iter().map(|(name, value)| (name, value)))
         .stdin(std::process::Stdio::null());
-    for name in launch.clear {
+    for name in launch
+        .clear
+        .iter()
+        .copied()
+        .chain(super::foreign_place_variables(HostName::Zmx))
+    {
         create.env_remove(name);
     }
     Run::new(create)
