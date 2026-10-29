@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 mod actions;
 mod organization;
 mod review;
+mod reviewers;
 mod sniff;
 pub(crate) mod tea;
 pub(crate) mod threads;
@@ -306,24 +307,11 @@ impl Backend for Forgejo {
     /// The users Forgejo offers as reviewers, and the teams of an
     /// organization's repository.
     async fn reviewers(&self, repo: &ForgeRepo, account: &Account) -> Result<Vec<Reviewer>> {
-        let request = Request::get(repo.repo_endpoint("reviewers"));
         let (users, teams) = tokio::try_join!(
-            repo.send(account, &request),
-            organization::teams(repo, account),
+            reviewers::users(repo, account),
+            reviewers::teams(repo, account),
         )?;
-        let users = users.as_array().context("reviewers are not a list")?;
-        let owner = repo.owner();
-        let users = users.iter().filter_map(|user| {
-            Some(Reviewer::user(
-                text(&user["login"])?,
-                user["full_name"].as_str(),
-            ))
-        });
-        let teams = teams
-            .iter()
-            .flatten()
-            .filter_map(|team| Some(Reviewer::team(owner, team["name"].as_str()?, None)));
-        Ok(users.chain(teams).collect())
+        Ok(users.into_iter().chain(teams).collect())
     }
 
     /// Forgejo keeps draft state in the title.
