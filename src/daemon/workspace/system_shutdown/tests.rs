@@ -78,6 +78,10 @@ async fn a_shutdown_stops_running_work_and_holds_the_queue_until_cancelled() {
             if reason == "the system is shutting down"
     ));
     assert!(manager.agent_queue.suspended());
+    assert!(
+        manager.gates.try_quiesce().is_none(),
+        "an update must wait for the stop"
+    );
     // The wrapper saves an agent whose restore waits for the user.
     recovery::save_record(
         &manager.paths,
