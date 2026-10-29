@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
             for field, value in (("NAME", "Shoal Demo"), ("EMAIL", "demo@example.invalid"))}
 # Variables that would reach the user's agents, terminal hosts or daemon.
-LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_")
+LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_")
 DAEMON_START_SECONDS = 60
 
 
