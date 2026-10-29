@@ -22,26 +22,12 @@ impl Manager {
     /// queue until the shutdown is cancelled, so nothing starts again before
     /// it. The user learns what to continue. An update waits for the stop.
     pub(crate) async fn stop_for_system_shutdown(&self) {
-        let _operation = self.gates.operation().await;
-        self.agent_queue.suspend(true).await;
-        let targets = match self.stop_targets().await {
-            Ok(targets) => targets,
-            Err(error) => {
-                log!("system shutdown: running workspaces unavailable: {error:#}");
-                return;
-            }
-        };
-        let results = join_all(targets.iter().map(|workspace| {
-            self.stop_keeping_restores(&workspace.id, StopRequest::system_shutdown())
-        }))
-        .await;
-        let mut stopped = Vec::new();
-        for (workspace, result) in targets.iter().zip(results) {
-            match result {
-                Ok(()) => stopped.push(workspace),
-                Err(error) => self.notify_shutdown_stop_failed(workspace, &error).await,
-            }
-        }
+        let stopped = self
+            .stop_every_target("before the system shut down", |workspace| async move {
+                self.stop_keeping_restores(&workspace, StopRequest::system_shutdown())
+                    .await
+            })
+            .await;
         self.notify_shutdown_stop(&stopped).await;
     }
 
@@ -50,18 +36,47 @@ impl Manager {
         self.agent_queue.suspend(false).await;
     }
 
-    async fn notify_shutdown_stop_failed(&self, workspace: &Workspace, error: &anyhow::Error) {
-        log!("system shutdown: {} not stopped: {error:#}", workspace.name);
+    /// Stop each workspace `shoal stop --all` stops with `stop`, given its
+    /// ID, in parallel, holding the agent queue so nothing starts again, and
+    /// tell the user of each that failed to stop `moment`. Returns those
+    /// stopped.
+    pub(super) async fn stop_every_target<F, Fut>(&self, moment: &str, stop: F) -> Vec<Workspace>
+    where
+        F: Fn(String) -> Fut,
+        Fut: Future<Output = Result<()>>,
+    {
+        let _operation = self.gates.operation().await;
+        self.agent_queue.suspend(true).await;
+        let targets = match self.stop_targets().await {
+            Ok(targets) => targets,
+            Err(error) => {
+                log!("stop {moment}: running workspaces unavailable: {error:#}");
+                return Vec::new();
+            }
+        };
+        let results = join_all(targets.iter().map(|workspace| stop(workspace.id.clone()))).await;
+        let mut stopped = Vec::new();
+        for (workspace, result) in targets.into_iter().zip(results) {
+            match result {
+                Ok(()) => stopped.push(workspace),
+                Err(error) => self.notify_stop_failed(moment, &workspace, &error).await,
+            }
+        }
+        stopped
+    }
+
+    async fn notify_stop_failed(&self, moment: &str, workspace: &Workspace, error: &anyhow::Error) {
+        log!("stop {moment}: {} not stopped: {error:#}", workspace.name);
         self.notify_about(
             About::workspace(&workspace.name, &workspace.id),
             NotificationKind::StopFailed,
-            format!("Could not stop tracked executions before the system shut down: {error:#}"),
+            format!("Could not stop tracked executions {moment}: {error:#}"),
         )
         .await;
     }
 
     /// Tell the user what the stop of `stopped` saved and how it continues.
-    async fn notify_shutdown_stop(&self, stopped: &[&Workspace]) {
+    async fn notify_shutdown_stop(&self, stopped: &[Workspace]) {
         if stopped.is_empty() {
             return;
         }
@@ -74,7 +89,6 @@ impl Manager {
             });
         let waiting: Vec<&Workspace> = stopped
             .iter()
-            .copied()
             .filter(|workspace| {
                 waits_for_resume(&self.paths, workspace, &queued).unwrap_or_else(|error| {
                     log!(
