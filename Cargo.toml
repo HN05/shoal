@@ -67,6 +67,8 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1", features = ["fs"] }
+# systemd-logind's shutdown delay lock and announcements, over the system bus.
+zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

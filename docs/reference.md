@@ -283,7 +283,14 @@ An agent whose wrapper or agent process receives a hangup or terminate signal, a
 closing its terminal, logging out or shutting down sends, is saved as stopped
 work with the signal as its stop reason, before its wrapper stops it, and its restore waits in the
 [agent queue](#agent-queue) once its execution has ended, so it comes back after
-a reboot without a command; run `shoal stop --all` first to keep agents down. An
+a reboot without a command; run `shoal stop --all` first to keep agents down.
+On Linux the daemon also holds a systemd-logind shutdown delay lock while it
+runs. When a shutdown starts, it stops what `shoal stop --all` stops, each
+wrapper saving its agent as for that signal, and admits nothing from the agent
+queue until the shutdown is cancelled; then it releases the lock, which logind
+honours for at most its `InhibitDelayMaxSec`. A `system_shutdown` notification
+says whether `shoal resume --all` is needed, a workspace that does not stop
+records `stop_failed`, and a refused lock `environment_problem`. An
 agent that was idle comes back only when an update arrives for it, unless
 processes it started outside its process group were still running. An
 agent whose restore needs a session picker, or whose assignment is done, waits

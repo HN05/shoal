@@ -219,6 +219,12 @@ protection stop, since shutting down may kill the wrapper first. Unlike a
 manual stop, the agent then comes back on its own through the agent queue: a
 request beside its record asks for the restore, which the daemon queues once the
 execution has ended, so agents a reboot interrupted return without a command.
+The signals alone depend on each wrapper receiving one and saving before the
+session ends, so on Linux the daemon holds logind's shutdown delay lock and,
+once a shutdown starts, stops running work itself with the same save-first stop
+while it and the wrappers still run, then releases the lock. A delay lock, not
+a blocking one: a shutdown never waits on Shoal beyond logind's limit, and the
+records saved first survive a stop that outlasts it.
 As after a protection stop, an agent stopped between turns returns only for an
 update, counting processes still running outside its process group as a turn
 in flight, and its restore keeps its workspace from no cleanup meanwhile; `shoal resume` asks for the agent itself, so its restore waits for
