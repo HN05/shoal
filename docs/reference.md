@@ -1065,7 +1065,9 @@ environment it runs with sets that variable; a lifetime in
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`);
 `fork` starts a new session from a copy of session `{session}`, which
-[`split --fork`](#child-workspaces) uses and which leaves that session unchanged.
+[`split --fork`](#child-workspaces) uses and which leaves that session unchanged;
+`{directory}` names the workspace it works in, for a tool such as Codex that
+otherwise keeps the forked session's directory.
 `add_dir` gives an agent, fresh or restored, another working directory
 `{directory}`, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent_dirs`

@@ -91,12 +91,15 @@ impl Arguments {
         }
     }
 
-    /// The arguments that start a new session from a fork of `session`;
-    /// `None` when the agent cannot fork one.
-    pub fn fork_args(&self, session: &str) -> Option<Vec<OsString>> {
-        self.fork
-            .as_ref()
-            .map(|template| substitute(template, &[("{session}", session)]))
+    /// The arguments that start a new session in `directory` from a fork
+    /// of `session`; `None` when the agent cannot fork one.
+    pub fn fork_args(&self, session: &str, directory: &str) -> Option<Vec<OsString>> {
+        self.fork.as_ref().map(|template| {
+            substitute(
+                template,
+                &[("{session}", session), ("{directory}", directory)],
+            )
+        })
     }
 
     /// The arguments that give the agent `directory` as another working

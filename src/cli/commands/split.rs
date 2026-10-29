@@ -102,8 +102,8 @@ async fn child_agent(
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(parent.to_owned())).await?;
     agents::ensure_available(agent.name(), &settings)?;
     terminal::ensure_background(&settings)?;
-    if let Some(session) = &session {
-        agents::fork_args(&settings, agent.name(), &session.session)?;
+    if session.is_some() {
+        agents::ensure_forks(&settings, agent.name())?;
     }
     Ok(Some(ChildAgent {
         agent,

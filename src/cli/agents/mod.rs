@@ -360,7 +360,7 @@ pub(super) async fn launch_agent(
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let integration = agent_integration(&settings, agent.name());
     let fork = match &options.fork {
-        Some(session) => fork_args(&settings, agent.name(), session)?,
+        Some(session) => fork_args(&settings, agent.name(), session, &workspace.path)?,
         None => Vec::new(),
     };
     let app = opens_app(
@@ -522,25 +522,39 @@ pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Resu
     ensure_installed(name, &settings.commands)
 }
 
-/// The arguments that start agent `name` from a fork of `session`; an
-/// error for an agent that cannot start from one, including one an app runs
-/// apart from any terminal.
-pub(in crate::cli) fn fork_args(
-    settings: &Effective,
-    name: &str,
-    session: &str,
-) -> Result<Vec<OsString>> {
+/// Refuse agent `name` when it cannot start from a fork of a session: it
+/// has no arguments for one, or an app runs it apart from any terminal.
+pub(in crate::cli) fn ensure_forks(settings: &Effective, name: &str) -> Result<()> {
     if let Some(app) = agent_integration(settings, name).detached() {
         anyhow::bail!(
             "cannot fork a session of {name}: {} cannot start one from a fork",
             app.name()
         );
     }
-    settings
+    ensure!(
+        settings.launch(name).arguments.fork.is_some(),
+        "cannot fork a session of {name}: configure [ai.{name}] fork"
+    );
+    Ok(())
+}
+
+/// The arguments that start agent `name` in `directory` from a fork of
+/// `session`, refusing an agent [`ensure_forks`] refuses.
+fn fork_args(
+    settings: &Effective,
+    name: &str,
+    session: &str,
+    directory: &Path,
+) -> Result<Vec<OsString>> {
+    ensure_forks(settings, name)?;
+    let directory = directory
+        .to_str()
+        .context("cannot fork a session in a directory whose path is not UTF-8")?;
+    Ok(settings
         .launch(name)
         .arguments
-        .fork_args(session)
-        .with_context(|| format!("cannot fork a session of {name}: configure [ai.{name}] fork"))
+        .fork_args(session, directory)
+        .unwrap_or_default())
 }
 
 /// The proxy agent `name`'s API requests go through, if it names one; an

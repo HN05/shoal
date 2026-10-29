@@ -107,7 +107,7 @@ fn fork_arguments_name_the_forked_session() {
     )
     .unwrap();
     assert_eq!(
-        arguments(&agents, "claude-direct").fork_args("s1"),
+        arguments(&agents, "claude-direct").fork_args("s1", "/work/child"),
         Some(vec![
             OsString::from("--resume"),
             "s1".into(),
@@ -115,14 +115,22 @@ fn fork_arguments_name_the_forked_session() {
         ])
     );
     assert_eq!(
-        arguments(&agents, "codex").fork_args("s1"),
-        Some(vec![OsString::from("fork"), "s1".into()])
+        arguments(&agents, "codex").fork_args("s1", "/work/child"),
+        Some(vec![
+            OsString::from("fork"),
+            "s1".into(),
+            "--cd".into(),
+            "/work/child".into()
+        ])
     );
     assert_eq!(
-        arguments(&agents, "droid").fork_args("s1"),
+        arguments(&agents, "droid").fork_args("s1", "/work/child"),
         Some(vec![OsString::from("--fork"), "s1".into()])
     );
-    assert_eq!(arguments(&agents, "pi").fork_args("s1"), None);
+    assert_eq!(
+        arguments(&agents, "pi").fork_args("s1", "/work/child"),
+        None
+    );
     let error = format!(
         "{:#}",
         parse("[ai.droid]\ncommand = ['droid']\nfork = ['--fork']\n").unwrap_err()

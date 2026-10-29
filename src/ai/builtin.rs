@@ -68,7 +68,9 @@ pub const PROVIDERS: &[Provider] = &[
         // Codex's worktrees feature widens `--last` to every linked worktree
         // of the repository; restore this workspace's session.
         resume_latest: Some(&["resume", "--last", "-c", "features.worktrees=false"]),
-        fork: Some(&["fork", "{session}"]),
+        // A forked session keeps its directory, or asks for one, unless
+        // told where to work.
+        fork: Some(&["fork", "{session}", "--cd", "{directory}"]),
         add_dir: Some(&["--add-dir", "{directory}"]),
         // The least OpenAI keeps a GPT-5.6 or later cache, which each read
         // renews; Codex has no setting for it.

@@ -205,11 +205,19 @@ fn only_agents_with_fork_arguments_start_from_a_fork() {
     let config: crate::config::Config =
         toml::from_str("[ai.droid]\ncommand = ['droid']\n").unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
+    let child = Path::new("/work/child");
     assert_eq!(
-        fork_args(&settings, "claude", "s1").unwrap(),
+        fork_args(&settings, "claude", "s1", child).unwrap(),
         ["--resume", "s1", "--fork-session"]
     );
-    let error = fork_args(&settings, "droid", "s1").unwrap_err().to_string();
+    // Codex works where the forked session was unless told the child's directory.
+    assert_eq!(
+        fork_args(&settings, "codex", "s1", child).unwrap(),
+        ["fork", "s1", "--cd", "/work/child"]
+    );
+    let error = fork_args(&settings, "droid", "s1", child)
+        .unwrap_err()
+        .to_string();
     assert!(
         error.contains("cannot fork a session of droid: configure [ai.droid] fork"),
         "{error}"

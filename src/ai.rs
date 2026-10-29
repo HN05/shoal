@@ -36,7 +36,7 @@ pub struct Agent {
     /// Arguments that resume the workspace's latest session.
     pub resume_latest: Option<Vec<String>>,
     /// Arguments that start a new session from a fork of the one with ID
-    /// `{session}`, which stays unchanged.
+    /// `{session}`, which stays unchanged, working in `{directory}`.
     pub fork: Option<Vec<String>>,
     /// Arguments that give the agent another working directory,
     /// `{directory}`; empty gives none.
