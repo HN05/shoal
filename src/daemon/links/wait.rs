@@ -201,7 +201,9 @@ impl Manager {
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
-                    return with_quiet_messages(updates, messages);
+                    // Including those queued while the wait ran.
+                    let unread = self.agent_messages(&workspace.id).await?;
+                    return with_unread_messages(updates, unread);
                 }
                 next = self.next_agent_messages(&workspace.id, &mut queued) => messages = next?,
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
@@ -1244,10 +1246,9 @@ impl Updates {
     }
 }
 
-/// `updates` with the unread `messages`, none of which wakes an agent, when
-/// the wait found updates and both fit one response; otherwise the messages
-/// wait for a later delivery.
-fn with_quiet_messages(mut updates: Updates, messages: Vec<AgentMessage>) -> Result<Updates> {
+/// `updates` with the unread `messages` when the wait found updates and both
+/// fit one response; otherwise the messages wait for a later delivery.
+fn with_unread_messages(mut updates: Updates, messages: Vec<AgentMessage>) -> Result<Updates> {
     if updates.updates.is_empty() || messages.is_empty() {
         return Ok(updates);
     }

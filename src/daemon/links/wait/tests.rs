@@ -1098,6 +1098,68 @@ async fn quiet_messages_come_with_the_next_updates() {
 }
 
 #[tokio::test]
+async fn messages_queued_during_a_wait_come_with_its_updates() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    register_watch(&manager, &child.id, "child-pr").await;
+    let prs = Selection {
+        kind: Some(ItemKind::Pr),
+        input: None,
+    };
+    // Holding the child's gate stops the wait's poll, which takes the
+    // parent's gate first, after the wait read its messages.
+    let held = manager.gates.lock_prs([&child.id]).await;
+    let wait = tokio::spawn({
+        let manager = manager.clone();
+        let id = parent.id.clone();
+        async move { manager.wait_items(&id, &prs, None).await }
+    });
+    tokio::time::timeout(Duration::from_secs(60), async {
+        while manager.gates.pr_gates_in_use() < 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the wait polls");
+    manager
+        .queue_agent_message_delivered(
+            &parent.id,
+            "Memory is low".into(),
+            crate::daemon::agent_messages::Delivery::Quiet,
+        )
+        .await
+        .unwrap();
+    drop(held);
+    manager
+        .queue_background_updates(
+            &child.id,
+            vec![("child-pr".into(), snapshot("first"))],
+            crate::time::unix_seconds(),
+        )
+        .await
+        .unwrap();
+    let updates = tokio::time::timeout(Duration::from_secs(60), wait)
+        .await
+        .expect("the wait ends")
+        .unwrap()
+        .unwrap();
+    assert_eq!(updates.updates.len(), 1);
+    assert_eq!(updates.messages[0].message, "Memory is low");
+}
+
+#[tokio::test]
 async fn recorded_updates_count_while_the_pr_gate_is_held() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

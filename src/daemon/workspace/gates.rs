@@ -205,7 +205,7 @@ impl Gates {
 
     /// How many PR gates someone holds or awaits.
     #[cfg(test)]
-    fn pr_gates_in_use(&self) -> usize {
+    pub(crate) fn pr_gates_in_use(&self) -> usize {
         self.prs.len()
     }
 }
