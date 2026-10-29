@@ -24,8 +24,8 @@ pub(super) enum Told {
 #[derive(Default)]
 pub(super) struct Owners(Mutex<HashMap<u64, Entry>>);
 
-/// What an inventory told about a process, and when it began, before it read
-/// anything; an answer taken from memory keeps the time it was first told.
+/// What an inventory told about a process, and when it read the process; an
+/// answer taken from memory keeps the time it was first read.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Evidence {
     pub(super) told: Told,

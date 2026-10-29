@@ -412,6 +412,8 @@ async fn list_processes() -> Result<Listing> {
 struct Observed {
     lineage: Lineage,
     evidence: Evidence,
+    /// When its evidence was read, which orders it against other readings.
+    read: std::time::Instant,
 }
 
 /// The markers of Shoal's identity an environment carries.
@@ -543,7 +545,11 @@ fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
         Visibility::Unreadable => Evidence::Unreadable,
         Visibility::Gone => return Ok(None),
     };
-    Ok(Some(Observed { lineage, evidence }))
+    Ok(Some(Observed {
+        lineage,
+        evidence,
+        read: std::time::Instant::now(),
+    }))
 }
 
 /// Observe `pid`, a setuid program this user started, unless it has exited.
@@ -551,6 +557,7 @@ fn observe_elevated(pid: u32) -> Result<Option<Observed>> {
     Ok(elevated_lineage(pid)?.map(|lineage| Observed {
         lineage,
         evidence: Evidence::Elevated,
+        read: std::time::Instant::now(),
     }))
 }
 
@@ -599,8 +606,7 @@ impl<'a> Inventory<'a> {
                 continue;
             }
             let identity = &process.lineage.identity;
-            let direct = matches!(process.evidence, Evidence::Marked(_) | Evidence::Unmarked);
-            let evidence = match self.evidence(self.resolve(*pid, &mut attributions), direct) {
+            let evidence = match self.evidence(self.resolve(*pid, &mut attributions), process) {
                 Ok(evidence) => evidence,
                 Err(head) => {
                     scan.unreadable.push(Unattributed {
@@ -625,24 +631,24 @@ impl<'a> Inventory<'a> {
         Ok(scan)
     }
 
-    /// What `attribution` tells about a process's owner, `direct` when read
-    /// from its own environment, observed by this inventory unless it was
-    /// remembered, or the head of the processes it leaves unknown.
+    /// What `attribution` tells about the owner of `process`, observed when
+    /// this inventory read it unless it was remembered, or the head of the
+    /// processes it leaves unknown.
     fn evidence(
         &self,
         attribution: Attribution,
-        direct: bool,
+        process: &Observed,
     ) -> Result<owners::Evidence, Identity> {
         let (told, observed) = match attribution {
             Attribution::Remembered(evidence) => (evidence.told, evidence.observed),
             Attribution::Unknown(head) => return Err(head),
-            Attribution::Owned(marks) => (owners::Told::Owner(marks), self.started),
-            Attribution::Foreign => (owners::Told::NoExecution, self.started),
+            Attribution::Owned(marks) => (owners::Told::Owner(marks), process.read),
+            Attribution::Foreign => (owners::Told::NoExecution, process.read),
         };
         Ok(owners::Evidence {
             told,
             observed,
-            direct,
+            direct: matches!(process.evidence, Evidence::Marked(_) | Evidence::Unmarked),
         })
     }
 

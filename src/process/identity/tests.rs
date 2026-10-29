@@ -181,7 +181,14 @@ fn observed(pid: u32, parent: u32, adopted: bool, evidence: Evidence) -> (u32, O
         parent_pid: parent,
         adopted,
     };
-    (pid, Observed { lineage, evidence })
+    (
+        pid,
+        Observed {
+            lineage,
+            evidence,
+            read: std::time::Instant::now(),
+        },
+    )
 }
 
 /// `observed` with the unique IDs of the process and its parent.
@@ -442,6 +449,38 @@ fn an_inventory_keeps_what_a_later_one_named_with_older_evidence() {
 }
 
 #[test]
+fn a_reading_is_ordered_by_when_it_was_read_not_when_its_inventory_began() -> Result<()> {
+    use Evidence::Unmarked;
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    let began = std::time::Instant::now();
+    let owned_read = began + Duration::from_secs(1);
+    let unmarked_read = began + Duration::from_secs(2);
+    let process = |evidence, read| {
+        let (pid, mut process) = unique(observed(10, 9, false, evidence), 100, 90);
+        process.read = read;
+        (pid, process)
+    };
+    // An inventory that began later read the process as the execution's...
+    Inventory {
+        started: owned_read,
+        ..inventory(&owners, [process(marked("execution"), owned_read)])
+    }
+    .attribute(Marker::Execution, &ids)?;
+    // ...before one that began earlier read it without the marker.
+    Inventory {
+        started: began,
+        ..inventory(&owners, [process(Unmarked, unmarked_read)])
+    }
+    .attribute(Marker::Execution, &ids)?;
+    assert_eq!(
+        owners.recall(100).map(|evidence| evidence.told),
+        Some(owners::Told::NoExecution)
+    );
+    Ok(())
+}
+
+#[test]
 fn a_remembered_owner_keeps_when_it_was_told() -> Result<()> {
     use Evidence::Hidden;
     let owners = owners::Owners::default();
@@ -579,6 +618,7 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
                     Observed {
                         lineage: elevated.lineage.clone(),
                         evidence: Evidence::Elevated,
+                        read: std::time::Instant::now(),
                     },
                 ),
                 observed(std::process::id(), 1, false, evidence),
