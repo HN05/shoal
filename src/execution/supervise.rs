@@ -76,7 +76,17 @@ impl Outcome {
                     resumes_when,
                 },
             },
-            Ok(Control::Pause { reason, removed }) => Self::Paused {
+            Ok(Control::Pause {
+                reason,
+                shutdown: true,
+                ..
+            }) => Self::Paused {
+                code,
+                stop: Halt::Shutdown { reason },
+            },
+            Ok(Control::Pause {
+                reason, removed, ..
+            }) => Self::Paused {
                 code,
                 stop: Halt::Pause { reason, removed },
             },
@@ -108,8 +118,9 @@ impl Outcome {
 pub(super) struct Saving<'a, F> {
     /// The saved record a restored agent consumes once it is registered.
     pub restored_from: Option<&'a Path>,
-    /// Saves what restores the command before a signal that ends its
-    /// session stops it.
+    /// Saves what restores the command before a stop that may end this
+    /// wrapper first, a signal ending its session or a system shutdown,
+    /// stops it.
     pub ending: F,
 }
 
@@ -264,6 +275,9 @@ async fn wait_for_child(
                 };
                 if let Ok(Control::OverloadStop { reason, .. }) = &control {
                     eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
+                }
+                if let Ok(Control::Pause { reason, shutdown: true, .. }) = &control {
+                    ending(&Halt::Shutdown { reason: reason.clone() });
                 }
                 let status = stop(child, group, libc::SIGTERM).await?;
                 return Outcome::stopped_by(control, exit_code(status));

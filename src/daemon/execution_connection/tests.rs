@@ -162,7 +162,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     assert!(!manager.executions.is_connected(&detaching).await);
     assert!(matches!(
         read(&mut legacy).await,
-        Control::Pause { reason: Some(reason), removed: false } if reason == "the Shoal daemon shut down"
+        Control::Pause { reason: Some(reason), removed: false, shutdown: false } if reason == "the Shoal daemon shut down"
     ));
     protocol::write(legacy.get_mut(), &ExecutionEvent::Finished { exit_code: 0 })
         .await

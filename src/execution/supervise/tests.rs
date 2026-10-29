@@ -485,6 +485,64 @@ async fn ended_session_child() {
         ),
         "{outcome:?}"
     );
+
+    // A stop before a system shutdown saves the session before the command
+    // sees it, since the shutdown may end the wrapper first.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let (ready, saved) = (root.join("ready"), root.join("saved"));
+    let shutdown = async {
+        acknowledge_start(&mut daemon).await;
+        // The command traps the stop only once it has said so.
+        while !ready.exists() {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let control = Control::Pause {
+            reason: Some("the system is shutting down".into()),
+            removed: false,
+            shutdown: true,
+        };
+        protocol::write(daemon.get_mut(), &control).await.unwrap();
+    };
+    let wrapper = async {
+        supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &run(&format!(
+                "trap 'test -f {} && exit 3; exit 4' TERM; touch {}; while :; do sleep 0.05; done",
+                saved.display(),
+                ready.display()
+            )),
+            &mode,
+            None,
+            Saving {
+                restored_from: None,
+                ending: |stop: &Halt| std::fs::write(&saved, format!("{stop:?}")).unwrap(),
+            },
+        )
+        .await
+        .unwrap()
+    };
+    let ((), outcome) = tokio::join!(shutdown, wrapper);
+    assert!(
+        matches!(
+            &outcome,
+            Outcome::Paused {
+                code: 3,
+                stop: Halt::Shutdown { reason: Some(reason) },
+            } if reason == "the system is shutting down"
+        ),
+        "{outcome:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&saved).unwrap(),
+        format!(
+            "{:?}",
+            Halt::Shutdown {
+                reason: Some("the system is shutting down".into())
+            }
+        )
+    );
 }
 
 /// Nothing restores the supervised command or saves it.

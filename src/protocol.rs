@@ -746,6 +746,11 @@ pub enum Control {
         /// The workspace is being removed; its removal record keeps the session.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         removed: bool,
+        /// The system is shutting down, which may end the wrapper before its
+        /// command: save the session first, as a signal ending it does.
+        /// Older wrappers pause as `shoal stop` does.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        shutdown: bool,
     },
     OverloadStop {
         recover: bool,

@@ -118,13 +118,14 @@ async fn await_restore(
 
 /// What restores the paused agent besides `shoal resume`: this wrapper when
 /// protection stopped it to restore it `automatic`ally, the agent queue when a
-/// signal ended its session and its restore needs no user, otherwise nothing.
+/// signal ended its session or the system shut down and its restore needs no
+/// user, otherwise nothing.
 fn restorer(recovery: &recovery::Recovery, stop: &Halt, automatic: bool) -> Restorer {
     if automatic {
         return this_wrapper().map_or(Restorer::User, Restorer::Wrapper);
     }
     match stop {
-        Halt::Ended { .. } if recovery.automatic => {
+        Halt::Ended { .. } | Halt::Shutdown { .. } if recovery.automatic => {
             Restorer::Queue(crate::cli::terminal::start_environment())
         }
         _ => Restorer::User,
@@ -151,10 +152,10 @@ fn save_paused_agent(
     )
 }
 
-/// Save the recovery record of an agent whose session `stop` ended before
-/// stopping it, as protection saves one before its stop: the session's end,
-/// such as a shutdown, may kill this wrapper before the agent exits. Pausing
-/// the stopped agent completes the record.
+/// Save the recovery record of an agent before `stop`, the end of its session
+/// or a system shutdown, stops it, as protection saves one before its stop:
+/// either may kill this wrapper before the agent exits. Pausing the stopped
+/// agent completes the record.
 pub(super) fn save_ending_agent(
     paths: &Paths,
     plan: &ExecutionPlan,
@@ -244,6 +245,9 @@ pub(super) enum Halt {
     /// closing its terminal, logging out or shutting down does; the reason is
     /// saved for `shoal resume`.
     Ended { reason: &'static str },
+    /// The daemon stopped it before the system shut down; the reason is
+    /// saved for `shoal resume`.
+    Shutdown { reason: Option<String> },
 }
 
 impl Halt {
@@ -262,7 +266,7 @@ impl Halt {
                 reason: reason.clone(),
                 resumes_when: resumes_when.clone(),
             }),
-            Self::Pause { .. } | Self::Ended { .. } => None,
+            Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => None,
         }
     }
 
@@ -270,6 +274,7 @@ impl Halt {
         match self {
             Self::Protection { reason, .. } => Some(reason),
             Self::Ended { reason } => Some(reason),
+            Self::Shutdown { reason } => reason.as_deref(),
             Self::Pause { .. } => None,
         }
     }
@@ -292,9 +297,12 @@ impl Halt {
             | Self::Pause {
                 reason: Some(reason),
                 ..
+            }
+            | Self::Shutdown {
+                reason: Some(reason),
             } => format!(": {reason}"),
             Self::Ended { reason } => format!(": {reason}"),
-            Self::Pause { reason: None, .. } => String::new(),
+            Self::Pause { reason: None, .. } | Self::Shutdown { reason: None } => String::new(),
         }
     }
 
@@ -302,7 +310,7 @@ impl Halt {
     fn manual_restore(&self, workspace: &str, execution: &str) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
-            Self::Pause { .. } | Self::Ended { .. } => String::new(),
+            Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => String::new(),
         };
         format!(
             "shoal: agent stopped{}; {condition}{}",

@@ -205,7 +205,8 @@ fn pause_reasons_are_optional_on_the_wire() {
         control,
         Control::Pause {
             reason: None,
-            removed: false
+            removed: false,
+            shutdown: false,
         }
     ));
     let control: Control = serde_json::from_value(json!({"type": "stop"})).unwrap();
@@ -219,6 +220,7 @@ fn pause_reasons_are_optional_on_the_wire() {
     let wire = serde_json::to_value(Control::Pause {
         reason: Some("shoal stop".into()),
         removed: false,
+        shutdown: false,
     })
     .unwrap();
     assert_eq!(wire, json!({"type": "pause", "reason": "shoal stop"}));
@@ -231,6 +233,29 @@ fn pause_reasons_are_optional_on_the_wire() {
     assert!(matches!(
         serde_json::from_value::<Legacy>(wire).unwrap(),
         Legacy::Pause
+    ));
+}
+
+#[test]
+fn wrappers_from_before_shutdown_stops_read_them_as_pauses() {
+    let wire = serde_json::to_value(Control::Pause {
+        reason: Some("the system is shutting down".into()),
+        removed: false,
+        shutdown: true,
+    })
+    .unwrap();
+    assert_eq!(
+        wire,
+        json!({"type": "pause", "reason": "the system is shutting down", "shutdown": true})
+    );
+    #[derive(Deserialize)]
+    #[serde(tag = "type", rename_all = "snake_case")]
+    enum Legacy {
+        Pause { reason: Option<String> },
+    }
+    assert!(matches!(
+        serde_json::from_value::<Legacy>(wire).unwrap(),
+        Legacy::Pause { reason: Some(reason) } if reason == "the system is shutting down"
     ));
 }
 

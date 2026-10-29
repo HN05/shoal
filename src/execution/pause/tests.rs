@@ -47,7 +47,7 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
 }
 
 #[test]
-fn only_a_signal_stop_of_an_agent_that_restores_unattended_queues_its_restore() {
+fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues_its_restore() {
     let recovery = |automatic| recovery::Recovery {
         agent: "claude".into(),
         command: vec![],
@@ -67,6 +67,18 @@ fn only_a_signal_stop_of_an_agent_that_restores_unattended_queues_its_restore() 
         restorer(&recovery(false), &closed, false),
         Restorer::User
     ));
+    let shutdown = Halt::Shutdown {
+        reason: Some("the system is shutting down".into()),
+    };
+    assert!(matches!(
+        restorer(&recovery(true), &shutdown, false),
+        Restorer::Queue(_)
+    ));
+    assert!(matches!(
+        restorer(&recovery(false), &shutdown, false),
+        Restorer::User
+    ));
+    assert_eq!(shutdown.saved_reason(), Some("the system is shutting down"));
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
