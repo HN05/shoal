@@ -183,14 +183,19 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
             .unwrap()
             .iter()
             .any(|workspace| workspace["name"] == "placed")
-            && sessions(&fixture, "placed") == ["placed"]
     });
     assert!(rex.windows(&session).contains(&"placed".to_owned()));
     // Every rex call above was a client that has since disconnected; the
-    // agent keeps running in its block once setup's execution has ended.
-    wait_until("only the agent to run", || {
-        executions(&fixture, "placed") == 1
+    // agent keeps running in its block. Setup records its place too, so
+    // only once it finished is the one execution the agent's.
+    wait_until("setup to finish with the agent running", || {
+        let status = fixture.ok(&["status", "placed"]);
+        status["setup_finished"] == true
+            && status["executions"]
+                .as_array()
+                .is_some_and(|runs| runs.len() == 1)
     });
+    assert_eq!(sessions(&fixture, "placed"), ["placed"]);
 
     // An agent in the user's own block is recorded where it runs, but the
     // block stays the user's.
