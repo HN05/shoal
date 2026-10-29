@@ -20,7 +20,10 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: NotificationMethod) -
             }));
         }
         NotificationMethod::ListNotifications { unread_only, limit } => {
-            Body::Notifications(manager.notifications(unread_only, limit).await?)
+            // A listing of the most notifications a client asks for need not
+            // fit one frame.
+            let listed = manager.notifications(unread_only, limit).await;
+            return Ok(Answer::pages(listed, Body::Notifications));
         }
         NotificationMethod::SendMessage { workspace, message } => {
             Body::Sent(manager.send_message(&workspace, message).await?)
@@ -86,3 +89,6 @@ async fn watch_notifications(
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

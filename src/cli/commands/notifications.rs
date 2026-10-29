@@ -25,7 +25,7 @@ pub(super) async fn list(ctx: &Context, all: bool, keep_unread: bool, limit: u32
         unread_only: !all,
         limit,
     };
-    let notifications = request::<Vec<Notification>>(&ctx.paths, method).await?;
+    let notifications = client::pages::<Notification>(&ctx.paths, method).await?;
     ctx.show(&notifications, |notifications| {
         let now = crate::time::unix_seconds() as i64;
         let rows = notifications.iter().map(|n| cells(n, now)).collect();

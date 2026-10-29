@@ -474,7 +474,7 @@ async fn notification_rows(ctx: &Context) -> Result<Entries> {
         unread_only: false,
         limit: NOTIFICATIONS_SHOWN,
     };
-    let notifications = request::<Vec<Notification>>(&ctx.paths, method).await?;
+    let notifications = client::pages::<Notification>(&ctx.paths, method).await?;
     let labels = notification_labels(&notifications);
     mark_read(ctx, &notifications).await?;
     Ok(notifications
