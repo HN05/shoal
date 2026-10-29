@@ -913,6 +913,63 @@ async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
 }
 
 #[tokio::test]
+async fn passes_held_past_one_response_are_delivered_in_parts() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "many-checks".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    let names = (0..40)
+        .map(|n| format!("{n:02}{}", "x".repeat(2000)))
+        .collect::<Vec<_>>();
+    // Each poll passes ten more checks while the last stays pending.
+    for passed in [0, 10, 20, 30, 39, 40] {
+        let checks = names
+            .iter()
+            .enumerate()
+            .map(|(n, name)| {
+                (
+                    name.as_str(),
+                    if n < passed { "success" } else { "pending" },
+                )
+            })
+            .collect::<Vec<_>>();
+        manager
+            .queue_background_updates(
+                &workspace.id,
+                vec![("pr".into(), checks_at("a", &checks))],
+                crate::time::unix_seconds(),
+            )
+            .await
+            .unwrap();
+    }
+    let mut received = Vec::new();
+    while received.len() < names.len() {
+        let delivered = manager.agent_updates(&workspace.id).await.unwrap();
+        assert!(!delivered.updates.is_empty() && delivered.updates.len() < names.len());
+        manager
+            .acknowledge_pr_updates(
+                &workspace.id,
+                delivered
+                    .updates
+                    .iter()
+                    .map(|update| update.delivery.clone())
+                    .collect(),
+            )
+            .await
+            .unwrap();
+        received.extend(delivered.updates);
+    }
+    assert_eq!(received.len(), names.len());
+}
+
+#[tokio::test]
 async fn own_changes_are_not_reported_back_to_the_workspace() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

@@ -449,7 +449,7 @@ impl Manager {
             Ok(items) => {
                 observations.splice(0..0, items);
                 let mut updates = self
-                    .record_observed(id, observations, selection, observed_at)
+                    .deliver_observed(id, observations, selection, observed_at)
                     .await?;
                 self.summarize_failed_checks(id, &mut updates).await;
                 Ok(updates)
@@ -457,7 +457,7 @@ impl Manager {
             // A failed item lookup must not hold back the branch's conflicts.
             Err(error) => {
                 let updates = self
-                    .record_observed(id, observations, selection, observed_at)
+                    .deliver_observed(id, observations, selection, observed_at)
                     .await?;
                 if updates.is_empty() {
                     self.notify_rate_limit(&error).await;
@@ -466,6 +466,21 @@ impl Manager {
                 Ok(updates)
             }
         }
+    }
+
+    /// Record `observations` and return the updates that fit one response;
+    /// the rest stay pending for the next.
+    async fn deliver_observed(
+        &self,
+        id: &str,
+        observations: Vec<(String, Snapshot)>,
+        selection: &Selection,
+        observed_at: u64,
+    ) -> Result<Vec<Update>> {
+        let updates = self
+            .record_observed(id, observations, selection, observed_at)
+            .await?;
+        self.fit_response(own_batch(id, updates), 0).await
     }
 
     /// The activity of `items`, each read from the forge its URL names, so
@@ -795,8 +810,6 @@ impl Manager {
                 let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at, held: previous.held };
                 tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
-            ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,
-                "too many updates for one response; select fewer items");
             tx.commit()?;
             Ok(updates)
         }).await
