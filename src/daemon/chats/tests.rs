@@ -373,6 +373,46 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     );
 }
 
+#[tokio::test]
+async fn concurrent_renames_keep_each_chats_files_under_its_name() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    for round in 0..20 {
+        let mut chats = Vec::new();
+        for name in ["first", "second"] {
+            let chat = manager
+                .start_chat(
+                    repo.id.clone().into(),
+                    format!("{name}-{round}"),
+                    "happy-claude".into(),
+                    std::process::id(),
+                    None,
+                )
+                .await
+                .unwrap();
+            let log = manager.paths.chat_files(&chat).with_extension("log");
+            std::fs::create_dir_all(log.parent().unwrap()).unwrap();
+            std::fs::write(&log, &chat.id).unwrap();
+            chats.push(chat);
+        }
+        // The second chat takes the first's name while the first leaves it,
+        // in whichever order the two arrive.
+        let (first, second) = (&chats[0], &chats[1]);
+        let _ = tokio::join!(
+            manager.rename_chat(first.id.clone(), format!("moved-{round}")),
+            manager.rename_chat(second.id.clone(), first.name.clone()),
+        );
+        for chat in manager.chats().await.unwrap() {
+            let log = manager.paths.chat_files(&chat).with_extension("log");
+            assert_eq!(std::fs::read_to_string(&log).unwrap(), chat.id, "{chat:?}");
+        }
+    }
+}
+
 #[test]
 fn suffixed_names_fit_the_name_limit() {
     let long = "a".repeat(crate::validate::MAX_NAME_LEN);

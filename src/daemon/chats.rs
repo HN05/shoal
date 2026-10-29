@@ -85,14 +85,21 @@ impl Manager {
     pub async fn rename_chat(&self, chat: String, name: String) -> Result<Chat> {
         crate::validate::name("chat", &name)?;
         self.end_finished_chats().await?;
-        let (old, renamed) = self.store.run(move |db| rename(db, &chat, &name)).await?;
-        // The chat has its new name even when its files stay behind.
-        if old.name != renamed.name
-            && let Err(error) = move_chat_files(&self.paths, &old, &renamed)
-        {
-            log!("chat {}: {error:#}", renamed.id);
-        }
-        Ok(renamed)
+        let paths = self.paths.clone();
+        // The store's one thread moves the files after the rename commits,
+        // so no other rename or chat start reaches either name in between.
+        self.store
+            .run(move |db| {
+                let (old, renamed) = rename(db, &chat, &name)?;
+                // The chat has its new name even when its files stay behind.
+                if old.name != renamed.name
+                    && let Err(error) = move_chat_files(&paths, &old, &renamed)
+                {
+                    log!("chat {}: {error:#}", renamed.id);
+                }
+                Ok(renamed)
+            })
+            .await
     }
 
     /// Make process `pid` the one whose life a running chat lasts.
