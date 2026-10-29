@@ -5,7 +5,7 @@ use anyhow::{Context as _, Result};
 use tokio::process::Command;
 
 use super::{AgentStatus, TabInfo, pane, query};
-use crate::{cli::terminal::PlaceState, subprocess::Run};
+use crate::{cli::terminal::PlaceState, sessions::herdr, subprocess::Run};
 
 /// The tab holding a place, with the agent status Herdr shows for the place.
 struct Holding {
@@ -15,13 +15,13 @@ struct Holding {
 
 /// The tab holding `place`, or `None` once Herdr reports the place gone.
 async fn holding(place: &str) -> Result<Option<Holding>> {
-    if let Some(pane) = pane(Command::new("herdr"), place).await? {
+    if let Some(pane) = pane(here(), place).await? {
         return Ok(Some(Holding {
             tab: pane.tab_id,
             status: pane.agent_status,
         }));
     }
-    let tab = query::<TabInfo>(Command::new("herdr"), "tab", place).await?;
+    let tab = query::<TabInfo>(here(), "tab", place).await?;
     Ok(tab.map(|info| Holding {
         tab: place.to_owned(),
         status: info.result.tab.agent_status,
@@ -73,8 +73,14 @@ pub(super) async fn rename(place: &str, label: &str) {
 }
 
 async fn run<const N: usize>(args: [&str; N]) -> Result<()> {
-    let mut command = Command::new("herdr");
+    let mut command = here();
     command.args(args);
     Run::new(command).checked().await?;
     Ok(())
+}
+
+/// A `herdr` command reaching the server this process runs under, through
+/// the `herdr` its variables name.
+fn here() -> Command {
+    herdr::command(&super::workspaces::server_here())
 }

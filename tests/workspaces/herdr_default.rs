@@ -131,6 +131,30 @@ fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
 }
 
 #[test]
+fn a_herdr_only_herdr_bin_path_names_serves_a_focused_start() {
+    let fixture = Fixture::with_config(Some("default_host = 'herdr'\n"));
+    install_fake_herdr(&fixture);
+    let home = fixture.root.path();
+    let elsewhere = home.join("herdr-elsewhere");
+    fs::create_dir_all(&elsewhere).unwrap();
+    fs::rename(home.join("bin/herdr"), elsewhere.join("herdr")).unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .args(["add", repo, "shell"])
+            .env("HERDR_BIN_PATH", elsewhere.join("herdr")),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert_eq!(
+        calls_of(&fixture, &["session", "attach"]),
+        [["session", "attach", "default"]]
+    );
+}
+
+#[test]
 fn a_start_queued_outside_herdr_keeps_the_herdr_session_it_chose() {
     let fixture = Fixture::with_config(Some(
         "max_agents = 1\ndefault_host = 'herdr'\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",

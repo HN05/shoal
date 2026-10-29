@@ -5,7 +5,6 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, bail};
 use serde::Deserialize;
-use tokio::process::Command;
 
 use super::{Pane, TabInfo, TabState, herdr};
 use crate::{
@@ -34,7 +33,7 @@ pub(super) async fn reveal(place: &Origin) -> Result<()> {
     let pane = pane(place).await?.context("the Herdr pane is gone")?;
     focus_tab(place, &pane.tab_id).await?;
     match client {
-        Some(session) => attach_client(&session.name().await?).await,
+        Some(session) => attach_client(place, &session.name(place).await?).await,
         None => Ok(()),
     }
 }
@@ -51,13 +50,13 @@ enum HerdrSession<'a> {
 }
 
 impl HerdrSession<'_> {
-    /// The session's name, from Herdr's list of sessions unless the record
-    /// names it.
-    async fn name(&self) -> Result<String> {
+    /// The session's name, from the list of sessions of the `herdr` that
+    /// reaches `place` unless the record names it.
+    async fn name(&self, place: &Origin) -> Result<String> {
         if let Self::Named(name) = self {
             return Ok((*name).to_owned());
         }
-        self.find(&listed_sessions().await?)
+        self.find(&listed_sessions(place).await?)
             .map(|session| session.name.clone())
             .context("Herdr lists no session holding the tab; open it in Herdr")
     }
@@ -72,9 +71,9 @@ impl HerdrSession<'_> {
     }
 }
 
-/// The sessions Herdr lists.
-async fn listed_sessions() -> Result<Vec<ListedSession>> {
-    let mut list = Command::new("herdr");
+/// The sessions the `herdr` that reaches `place` lists.
+async fn listed_sessions(place: &Origin) -> Result<Vec<ListedSession>> {
+    let mut list = herdr(place);
     list.args(["session", "list", "--json"]);
     let output = Run::new(list)
         .checked()
@@ -166,9 +165,10 @@ async fn focus_tab(place: &Origin, tab: &str) -> Result<()> {
     Ok(())
 }
 
-/// Attach this terminal to Herdr `session` until the user detaches.
-async fn attach_client(session: &str) -> Result<()> {
-    let status = Command::new("herdr")
+/// Attach this terminal to Herdr `session`, through the `herdr` that
+/// reaches `place`, until the user detaches.
+async fn attach_client(place: &Origin, session: &str) -> Result<()> {
+    let status = herdr(place)
         .args(["session", "attach", session])
         .status()
         .await
