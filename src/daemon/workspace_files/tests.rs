@@ -519,3 +519,23 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     assert_eq!(sent.source, FileSource::Message);
     assert!(sent.path.exists());
 }
+
+#[tokio::test]
+async fn results_whose_paths_overflow_a_completion_are_refused() {
+    let (temp, manager) = manager().await;
+    let audit = workspace(&temp, &manager).await;
+    let results: Vec<_> = (0..super::MAX_RESULTS)
+        .map(|n| {
+            let path = temp.path().join(format!("{n:0>3}{}.md", "x".repeat(230)));
+            std::fs::write(&path, "finding").unwrap();
+            path
+        })
+        .collect();
+    let error = manager
+        .mark_done(&audit.id, false, false, results)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("paths too long"), "{error:#}");
+    assert!(manager.completion(&audit.id).await.unwrap().is_none());
+    assert!(manager.workspace_files(&audit.id).await.unwrap().is_empty());
+}
