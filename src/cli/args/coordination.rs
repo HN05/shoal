@@ -31,6 +31,11 @@ pub enum CoordinationCommand {
         /// Request cleanup even when [done] cleanup is false; preserve dirty or unpushed work.
         #[arg(long, conflicts_with = "undo")]
         cleanup: bool,
+        /// Another branch has this work under new commits, such as after a
+        /// cherry-pick or an edited rebase; unpushed commits no longer keep
+        /// the workspace.
+        #[arg(long, conflicts_with = "undo")]
+        integrated: bool,
         /// Withdraw a recorded completion without keeping the workspace.
         #[arg(long)]
         undo: bool,

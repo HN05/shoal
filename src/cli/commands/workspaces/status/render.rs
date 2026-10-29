@@ -179,7 +179,12 @@ fn render_assignment(status: &WorkspaceStatus, palette: Palette) {
         } else {
             "no cleanup requested"
         };
-        outln!("Completion:    done ({choice})");
+        let integrated = if completion.integrated {
+            ", integrated elsewhere"
+        } else {
+            ""
+        };
+        outln!("Completion:    done ({choice}{integrated})");
         if let Some(error) = &completion.error {
             outln!("  {}", palette.paint(Style::Warning, error));
         }

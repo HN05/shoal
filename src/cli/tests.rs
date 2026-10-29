@@ -398,6 +398,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
         assert!(!command.is_administrative());
         let Command::Coordination(CoordinationCommand::Done {
             cleanup,
+            integrated,
             workspace,
             undo,
             keep_demos,
@@ -406,12 +407,23 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
             panic!("wrong command");
         };
         assert_eq!(cleanup, expected);
-        assert!(!undo && !keep_demos);
+        assert!(!integrated && !undo && !keep_demos);
         assert!(workspace.is_none());
     }
     assert!(Cli::try_parse_from(["shoal", "done", "--keep"]).is_err());
     assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--cleanup"]).is_err());
     assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--keep-demos"]).is_err());
+    assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--integrated"]).is_err());
+    assert!(matches!(
+        Cli::try_parse_from(["shoal", "done", "--integrated"])
+            .unwrap()
+            .command,
+        Some(Command::Coordination(CoordinationCommand::Done {
+            integrated: true,
+            cleanup: false,
+            ..
+        }))
+    ));
     assert!(matches!(
         Cli::try_parse_from(["shoal", "done", "--keep-demos"])
             .unwrap()

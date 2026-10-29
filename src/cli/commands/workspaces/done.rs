@@ -26,16 +26,25 @@ pub(in crate::cli::commands) async fn undone(
     Ok(0)
 }
 
+/// How `shoal done` records the completion, and what it leaves running.
+#[derive(Default)]
+pub(in crate::cli::commands) struct Done {
+    /// Request cleanup even when `[done] cleanup` is false.
+    pub cleanup: bool,
+    /// Another branch has HEAD's work under other commits.
+    pub integrated: bool,
+    pub keep_demos: bool,
+}
+
 /// Stop the workspace's demos unless `keep_demos`, then record completion.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
     workspace: Option<String>,
-    cleanup: bool,
-    keep_demos: bool,
+    options: Done,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     // Before completion, whose cleanup may remove the workspace at once.
-    if !keep_demos {
+    if !options.keep_demos {
         request::<()>(
             &ctx.paths,
             DemoMethod::StopDemos {
@@ -49,16 +58,26 @@ pub(in crate::cli::commands) async fn done(
         &ctx.paths,
         AssignmentMethod::WorkspaceDone {
             workspace,
-            cleanup,
-            integrated: false,
+            cleanup: options.cleanup,
+            integrated: options.integrated,
         },
     )
     .await?;
-    let message = if completion.cleanup {
-        "Assignment marked done; cleanup requested. Tracked commands may stop and the workspace may be removed."
-    } else {
-        "Assignment marked done; no cleanup requested."
-    };
-    ctx.emit(message, &completion)?;
+    ctx.emit(&done_message(&completion), &completion)?;
     Ok(0)
+}
+
+fn done_message(completion: &Completion) -> String {
+    let marked = if completion.integrated {
+        "Assignment marked done; integrated elsewhere"
+    } else {
+        "Assignment marked done"
+    };
+    if completion.cleanup {
+        format!(
+            "{marked}; cleanup requested. Tracked commands may stop and the workspace may be removed."
+        )
+    } else {
+        format!("{marked}; no cleanup requested.")
+    }
 }

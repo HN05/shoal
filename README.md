@@ -174,6 +174,7 @@ shoal resume fix-login --now  # Restore its stopped agent at once in the backgro
 shoal resume fix-login --focus # Restore its stopped agent in this terminal
 shoal done fix-login          # Mark finished and request safe cleanup
 shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
+shoal done --integrated fix-login # Another branch has its work under new commits
 shoal done fix-login --undo        # Withdraw a recorded done
 shoal rm fix-login            # Remove the workspace
 shoal rm fix-login old-spike  # Remove several; the picker selects them with Tab or Ctrl-A

@@ -1588,7 +1588,12 @@ hook takes no resource guard, so an agent-exit hook may signal it; configured
 completion hooks cannot nest inside another guarded hook. A completion without
 cleanup suppresses idle and PR cleanup until another completion requests cleanup or
 the user removes it; merged cleanup still applies. Completion
-cleanup without a PR registration requires clean files and every commit kept; an existing PR registration keeps its merge checks.
+cleanup without a PR registration requires clean files and every commit kept,
+or a completion marked integrated: another branch has HEAD's work under commits
+whose patches were edited, which no check can match, so only the agent that took
+them can say so. The mark binds to HEAD like the completion and keeps the branch,
+since no remote or default branch has its commits. An existing PR registration
+keeps its merge checks.
 The daemon stops tracked executions through shared removal and rechecks files and
 HEAD, including after hooks. Tracked agent exits wake the cleanup sweep after
 their exit hook, without waiting for the polling interval. Changed HEAD retains
@@ -1769,7 +1774,8 @@ mergeable. An
 unfiltered watch without a linked PR runs the `conflicts` check on each poll as a
 cursor item named by the branch, so work without a PR still learns of conflicts. It
 leaves out conflicts with a target that already has HEAD's changes, as merged cleanup
-decides, since merging could only repeat them; `conflicts` still reports them. A
+decides, since merging could only repeat them, and those of a completion marked
+integrated at HEAD; `conflicts` still reports them. A
 linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads
 come from its REST API rather than fj's output, which has no structured form,
 and work anonymously for public repositories. The watch shares a

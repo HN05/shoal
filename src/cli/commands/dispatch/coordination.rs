@@ -67,13 +67,19 @@ pub(in crate::cli::commands) async fn run(
         CoordinationCommand::Done {
             workspace,
             cleanup,
+            integrated,
             undo,
             keep_demos,
         } => {
             if undo {
                 workspaces::undone(&ctx, workspace).await
             } else {
-                workspaces::done(&ctx, workspace, cleanup, keep_demos).await
+                let options = workspaces::Done {
+                    cleanup,
+                    integrated,
+                    keep_demos,
+                };
+                workspaces::done(&ctx, workspace, options).await
             }
         }
     }

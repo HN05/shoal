@@ -136,8 +136,13 @@ workspace goes. `shoal done` closes your open questions, and `shoal done --undo`
 not reopen them. Holds belong to the user and host apps; you can list them with
 `shoal leases hold` but not acquire or release them. `--cleanup` overrides a
 `[done] cleanup = false` default. Dirty or newer work is retained;
-completion without a PR watch also requires every commit pushed or on the local
-default branch. Completion does not claim a merge occurred. Inspect
+completion without a PR watch also requires every commit pushed, on the local
+default branch, or with its changes on the branch the workspace builds on. After
+taking another workspace's commits into your branch under new SHAs, as with a
+rebase or cherry-pick whose conflicts you resolved, run
+`shoal done --integrated <workspace>`: until its HEAD moves, its unpushed commits
+no longer keep it and its conflict watch stops. Completion does not claim a merge
+occurred. Inspect
 `completion.error` and `pr_cleanup.error` for cleanup or lookup failures.
 
 When a linked PR is ready to merge (checks pass, review findings handled, no

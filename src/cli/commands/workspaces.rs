@@ -22,7 +22,7 @@ pub(in crate::cli) use add::{AddPlan, Creation, execute_add, start_queued};
 pub(super) use adopt::adopt;
 pub(super) use cd::cd;
 pub(super) use changes::{conflicts, diff};
-pub(super) use done::{done, undone};
+pub(super) use done::{Done, done, undone};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use environment::environment;
 pub(super) use land::{land, land_worker};

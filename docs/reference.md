@@ -2288,11 +2288,16 @@ starts a new one, telling it the workspace moved, instead of running
 
 `shoal done [workspace]` records that the assignment is finished and notifies the
 user. It replaces a recorded completion at another HEAD, with another cleanup
-choice or a cleanup error, and fails when it would change nothing: the same
+choice, another `--integrated` choice or a cleanup error, and fails when it would change nothing: the same
 completion with no open question to close and no `post_done_cmd` to rerun.
 `[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
-them running until cleanup. The setting follows normal repository and worktree configuration
+them running until cleanup. `--integrated` records that another branch has the
+work under new commits, as after a cherry-pick or a rebase that edited them: until
+HEAD moves, commits no remote or default branch has no longer keep the workspace
+from completion cleanup, and the [watch](#linked-items-and-cleanup) stops reporting its
+branch conflicts. Uncommitted files still keep it, and removal keeps its branch.
+`status` shows it as integrated elsewhere. The setting follows normal repository and worktree configuration
 precedence. Scoped agents may mark only their own workspace or a child workspace done; completion does
 not verify or assert a merge. Completion without cleanup keeps the workspace from
 idle and PR cleanup, not from [merged cleanup](#merged-workspaces). Removal is
@@ -2345,7 +2350,8 @@ Cleanup runs in the daemon without an idle delay; tracked agent exits trigger a
 sweep after their exit hook instead of waiting for the next poll. It stops tracked
 commands using normal branch retention and resource release. Without a PR registration,
 files must be clean and all commits pushed as
-[automatic cleanup](#automatic-cleanup) means it; an existing registration keeps its merge requirements. Files and the completed HEAD
+[automatic cleanup](#automatic-cleanup) means it, unless the completion is
+integrated; an existing registration keeps its merge requirements. Files and the completed HEAD
 are checked again after stopping and removal hooks. Failure retains ownership;
 `status` and `inspect` show the completion choice and cleanup errors. Changed HEAD
 requires a new `done` signal before completion cleanup can proceed.
@@ -2792,7 +2798,8 @@ persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
 branch newly conflicts with the default target of `shoal conflicts`, naming the
 branch and the conflicted paths, unless that target already has HEAD's changes as
-[removal](#remove-a-workspace) decides merges; with nothing linked, it waits for that alone.
+[removal](#remove-a-workspace) decides merges or the assignment is done at HEAD
+with `--integrated`; with nothing linked, it waits for that alone.
 A new [agent message](#agent-messages) ends a watch at once, ahead of item
 activity, even when the watch would otherwise fail for lack of linked items.
 Each update includes its item URL, kind and message; a comment update counts the

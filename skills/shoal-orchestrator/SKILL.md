@@ -106,7 +106,9 @@ ask the user about the rest.
 ## Finish and clean up
 
 Agents run `shoal done` themselves when their assignment is finished. For a
-workspace the user wants ended, use `shoal done <workspace>`,
+workspace the user wants ended, use `shoal done <workspace>`, or
+`shoal done --integrated <workspace>` once another branch took its commits under
+new SHAs,
 `shoal stop <workspace>` to stop its commands, or `shoal rm <workspace>` to
 remove it, which asks what to do with unmerged work. To keep one for review,
 hold it with `shoal acquire hold --workspace <workspace> --name review` and release the hold
