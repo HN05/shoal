@@ -9,8 +9,8 @@ use serde_json::Value;
 use crate::{
     config::{
         self, Api, Approvals, AutoCleanup, Cleanup, Config, Done, IdleStop, Issue, Land,
-        MergedCleanup, Ports, Pr, PrCleanup, Ready, Restore, Review, Shortcut, Simulators, Unready,
-        named_commands,
+        MergedCleanup, Messages, Ports, Pr, PrCleanup, Ready, Restore, Review, Shortcut,
+        Simulators, Unready, named_commands,
         repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig},
     },
     hooks::HookKind,
@@ -67,6 +67,7 @@ pub struct Effective {
     pub done: Done,
     pub idle_stop: IdleStop,
     pub review: Review,
+    pub messages: Messages,
     pub ready: Ready,
     pub unready: Unready,
     pub pr: Pr,
@@ -331,6 +332,12 @@ impl Effective {
             review: Review {
                 post: built_in(merged.review.post, "review.post")?,
             },
+            messages: Messages {
+                settle_seconds: built_in(
+                    merged.messages.settle_seconds,
+                    "messages.settle_seconds",
+                )?,
+            },
             ready: Ready {
                 undraft: built_in(merged.ready.undraft, "ready.undraft")?,
             },
@@ -447,6 +454,9 @@ fn built_in() -> RepoConfig {
         },
         review: config::repo::Review {
             post: Some(Review::default().post),
+        },
+        messages: config::repo::Messages {
+            settle_seconds: Some(Messages::default().settle_seconds),
         },
         ready: config::repo::Ready {
             undraft: Some(Ready::default().undraft),
@@ -778,6 +788,7 @@ fn build_fields() -> Vec<Box<dyn Field + Send + Sync>> {
         scalar!(done.cleanup),
         scalar!(idle_stop.enabled),
         scalar!(review.post),
+        scalar!(messages.settle_seconds),
         scalar!(ready.undraft),
         scalar!(unready.draft),
         scalar!(pr.draft),

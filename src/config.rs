@@ -142,6 +142,7 @@ pub struct Config {
     pub done: repo::Done,
     pub idle_stop: repo::IdleStop,
     pub review: repo::Review,
+    pub messages: repo::Messages,
     pub ready: repo::Ready,
     pub unready: repo::Unready,
     pub pr: repo::Pr,
@@ -374,6 +375,19 @@ pub struct Review {
 impl Default for Review {
     fn default() -> Self {
         Self { post: true }
+    }
+}
+
+/// How agent messages that arrive in quick succession are held to reach the
+/// agent together.
+#[derive(Debug, Serialize)]
+pub struct Messages {
+    pub settle_seconds: u64,
+}
+
+impl Default for Messages {
+    fn default() -> Self {
+        Self { settle_seconds: 5 }
     }
 }
 
@@ -686,6 +700,7 @@ impl Config {
             done: self.done,
             idle_stop: self.idle_stop,
             review: self.review,
+            messages: self.messages,
             ready: self.ready,
             unready: self.unready,
             pr: self.pr.clone(),
@@ -715,6 +730,7 @@ impl Config {
         config.root_dir(paths)?;
         templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
+        config.messages.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;
         config.git.validate()?;

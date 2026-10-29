@@ -121,6 +121,7 @@ pub struct RepoConfig {
     pub done: Done,
     pub idle_stop: IdleStop,
     pub review: Review,
+    pub messages: Messages,
     pub ready: Ready,
     pub unready: Unready,
     pub pr: Pr,
@@ -311,6 +312,7 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
         kind.validate(kind.repository_command(&config))?;
     }
     config.cleanup.validate()?;
+    config.messages.validate()?;
     crate::config::validate_port_range(config.ports.start, config.ports.end)?;
     for (name, definition) in &config.ports.definitions {
         crate::validate::lowercase_name("port", name)
@@ -446,6 +448,22 @@ pub struct Done {
 #[serde(default, deny_unknown_fields)]
 pub struct Review {
     pub post: Option<bool>,
+}
+
+/// Repository values for the global `[messages]`.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Messages {
+    pub settle_seconds: Option<u64>,
+}
+
+impl Messages {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if let Some(seconds) = self.settle_seconds {
+            anyhow::ensure!(seconds <= 60, "messages.settle_seconds must be at most 60");
+        }
+        Ok(())
+    }
 }
 
 /// Whether `shoal ready` takes marked PRs out of draft.
