@@ -28,14 +28,14 @@ impl Manager {
     /// workspaces are gone.
     pub(crate) async fn delete_repository_files(&self, repo: &Repository) -> Result<()> {
         let _files = self.gates.lock_message_files(&repo.id).await;
+        // Records outlive copies a failed deletion leaves, so they stay listed.
+        if let Some(layout) = Layout::of(repo) {
+            tokio::task::spawn_blocking(move || layout.remove()).await??;
+        }
         let id = repo.id.clone();
         self.store
             .run(move |db| records::forget_repository(db, &id))
-            .await?;
-        let Some(layout) = Layout::of(repo) else {
-            return Ok(());
-        };
-        tokio::task::spawn_blocking(move || layout.remove()).await?
+            .await
     }
 
     /// Delete the results of removed workspaces whose removal record has

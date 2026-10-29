@@ -589,3 +589,32 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     assert!(files.iter().all(|file| file.source == FileSource::Message));
     reopened.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
+    use std::os::unix::fs::PermissionsExt;
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let added = manager
+        .add_workspace_files(&workspace.name, vec![file])
+        .await
+        .unwrap();
+    // The copy's directory refuses to give it up.
+    let directory = added[0].path.parent().unwrap().to_owned();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o500)).unwrap();
+    let repo = manager.repository(&workspace.repository_id).await.unwrap();
+    let deleted = manager.delete_repository_files(&repo).await;
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(deleted.is_err(), "the copy could not be deleted");
+    assert!(added[0].path.exists());
+    assert_eq!(
+        manager
+            .workspace_files(&workspace.name)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+}
