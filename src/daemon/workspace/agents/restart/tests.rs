@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::workspace::{ExecutionKind, Manager, RestartWaits},
     execution::recovery,
     model::{RunningAgent, Workspace},
     state::AgentState,
@@ -237,4 +237,39 @@ async fn a_restart_answers_once_the_agent_runs_again_or_with_why_not() {
     manager.fail_restart(&id, "cancelled".into()).await;
     let error = restarting.await.unwrap().unwrap_err();
     assert_eq!(format!("{error}"), "cancelled");
+}
+
+#[tokio::test]
+async fn a_restart_waiting_for_processes_answers_at_once_and_still_resumes() {
+    let (root, manager) = manager().await;
+    let workspace = workspace(root.path(), &manager).await;
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    let id = execution.plan.id.clone();
+    track(&manager, &workspace, &id, "claude", true).await;
+    let restarting = tokio::spawn({
+        let manager = manager.clone();
+        let id = id.clone();
+        async move { manager.restart_agent(&id).await }
+    });
+    let mut stop = execution.stop.clone();
+    stop.wait_for(|stopping| *stopping).await.unwrap();
+
+    let issue = "unreadable live process environments (PID 7)";
+    manager.notify_restore_waits(&id, issue).await;
+    let error = restarting.await.unwrap().unwrap_err();
+    assert!(error.downcast_ref::<RestartWaits>().is_some());
+    assert_eq!(
+        format!("{error}"),
+        format!(
+            "claude restarts once its remaining processes exit: {issue}; shoal stop agents cancels the restart"
+        )
+    );
+    // The restart goes on, and its start no longer has a request to answer.
+    assert!(manager.restart_requested(&id).await);
+    assert!(manager.resume_agent_execution(&id, None).await.unwrap());
+    manager.agent_started(&id).await;
+    assert!(!manager.restart_requested(&id).await);
 }

@@ -100,6 +100,8 @@ impl Answer {
 fn error_code(error: &anyhow::Error) -> ErrorCode {
     if error.downcast_ref::<workspace::UnprovenStop>().is_some() {
         ErrorCode::UnprovenStop
+    } else if error.downcast_ref::<workspace::RestartWaits>().is_some() {
+        ErrorCode::RestartWaits
     } else {
         ErrorCode::OperationFailed
     }

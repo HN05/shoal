@@ -21,6 +21,7 @@ mod forks;
 mod interrupts;
 mod queue_move;
 mod restart;
+pub use restart::RestartWaits;
 
 pub(crate) struct Agent {
     name: String,
@@ -394,7 +395,7 @@ impl Manager {
     }
 
     /// Tell the user why a protection-stopped agent's automatic restore waits
-    /// beyond healthy readings.
+    /// beyond healthy readings, and a waiting `shoal restart` of it.
     pub(crate) async fn notify_restore_waits(&self, id: &str, issue: &str) {
         let Some((name, workspace)) = self
             .executions
@@ -408,6 +409,11 @@ impl Manager {
             Some(&workspace),
             NotificationKind::RecoveryBlocked,
             format!("Automatic restore of {name} waits until its remaining processes exit: {issue}; shoal stop {workspace} cancels the restore"),
+        )
+        .await;
+        self.restart_waits(
+            id,
+            format!("{name} restarts once its remaining processes exit: {issue}; shoal stop {workspace} cancels the restart"),
         )
         .await;
     }

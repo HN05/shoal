@@ -51,6 +51,7 @@ mod usage;
 mod xcode;
 
 pub(crate) use agent_queue::Grant;
+pub use agents::RestartWaits;
 pub(crate) use agents::{Pause, Protection};
 pub(crate) use branches::NewWorktreeOptions;
 pub(crate) use daemon_exit::Ending;

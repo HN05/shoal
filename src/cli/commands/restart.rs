@@ -20,7 +20,7 @@ use crate::{
     daemon::workspace::capacity::STAGGER,
     execution::recovery,
     model::{RunningAgent, Workspace},
-    protocol::ExecutionMethod,
+    protocol::{ErrorCode, ExecutionMethod, RemoteError},
     state::AgentState,
 };
 
@@ -231,15 +231,19 @@ impl Restart {
             },
         )
         .await;
-        restarted.map_err(
-            |error| match recovery::pending(&ctx.paths, &self.workspace.id) {
-                Ok(true) => anyhow::anyhow!(
+        restarted.map_err(|error| {
+            // A restart that waits still restores the agent itself.
+            let waits = error
+                .downcast_ref::<RemoteError>()
+                .is_some_and(|remote| remote.code == ErrorCode::RestartWaits);
+            match recovery::pending(&ctx.paths, &self.workspace.id) {
+                Ok(true) if !waits => anyhow::anyhow!(
                     "{error:#}; restore it with shoal resume {}",
                     self.workspace.name
                 ),
                 _ => error,
-            },
-        )
+            }
+        })
     }
 }
 

@@ -430,6 +430,9 @@ crate::state::open_enum! {
         /// Stopping needs the user to confirm that an execution Shoal cannot
         /// prove ended did.
         UnprovenStop => "unproven_stop",
+        /// A restart continues once the stopped agent's remaining processes
+        /// exit, which the message names.
+        RestartWaits => "restart_waits",
     }
 }
 

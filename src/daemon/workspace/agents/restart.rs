@@ -12,17 +12,18 @@ use crate::{
 
 /// A restart in progress, which answers its request.
 pub(super) struct Restart {
-    done: oneshot::Sender<Result<(), String>>,
+    /// Taken by the answer, which may come before the restart ends.
+    done: Option<oneshot::Sender<Result<()>>>,
     /// The stopped agent was resumed, so its wrapper's next start is the
     /// restarted agent rather than the first one.
     resumed: bool,
 }
 
 impl Restart {
-    fn new() -> (Self, oneshot::Receiver<Result<(), String>>) {
+    fn new() -> (Self, oneshot::Receiver<Result<()>>) {
         let (done, answer) = oneshot::channel();
         let restart = Self {
-            done,
+            done: Some(done),
             resumed: false,
         };
         (restart, answer)
@@ -81,12 +82,11 @@ impl Manager {
         let restarted = self.request_restart(execution).await?;
         restarted
             .await
-            .unwrap_or_else(|_| Err("the agent did not start again".into()))
-            .map_err(|reason| anyhow!(reason))
+            .unwrap_or_else(|_| Err(anyhow!("the agent did not start again")))
     }
 
     /// Ask the agent's wrapper to stop it for a restart.
-    async fn request_restart(&self, id: &str) -> Result<oneshot::Receiver<Result<(), String>>> {
+    async fn request_restart(&self, id: &str) -> Result<oneshot::Receiver<Result<()>>> {
         self.executions
             .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id)))
             .await
@@ -98,7 +98,7 @@ impl Manager {
         &self,
         id: &str,
         agent: Option<&mut Agent>,
-    ) -> Result<oneshot::Receiver<Result<(), String>>> {
+    ) -> Result<oneshot::Receiver<Result<()>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         ensure!(
             agent.recover,
@@ -176,11 +176,26 @@ impl Manager {
 
     /// The restart of `id` ends without the agent running again.
     pub(crate) async fn fail_restart(&self, id: &str, reason: String) {
-        self.answer_restart(id, false, Err(reason)).await;
+        self.answer_restart(id, false, Err(anyhow!(reason))).await;
     }
 
-    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<(), String>) {
-        let restart = self
+    /// The restart of `id` waits for the stopped agent's processes to exit,
+    /// which may take until the user ends them. Its request is answered with
+    /// `issue` now, while the restart continues.
+    pub(crate) async fn restart_waits(&self, id: &str, issue: String) {
+        let done = self
+            .executions
+            .with_agent(id, |agent| agent.restart.as_mut()?.done.take())
+            .await
+            .flatten();
+        if let Some(done) = done {
+            // The request may have gone with its client.
+            let _ = done.send(Err(RestartWaits(issue).into()));
+        }
+    }
+
+    async fn answer_restart(&self, id: &str, once_resumed: bool, outcome: Result<()>) {
+        let done = self
             .executions
             .with_agent(id, |agent| {
                 agent
@@ -188,13 +203,27 @@ impl Manager {
                     .take_if(|restart| restart.resumed || !once_resumed)
             })
             .await
-            .flatten();
-        if let Some(restart) = restart {
+            .flatten()
+            .and_then(|restart| restart.done);
+        if let Some(done) = done {
             // The request may have gone with its client.
-            let _ = restart.done.send(outcome);
+            let _ = done.send(outcome);
         }
     }
 }
+
+/// A restart that continues after its request was answered, once the
+/// stopped agent's remaining processes exit.
+#[derive(Debug)]
+pub struct RestartWaits(pub String);
+
+impl std::fmt::Display for RestartWaits {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for RestartWaits {}
 
 #[cfg(test)]
 mod tests;
