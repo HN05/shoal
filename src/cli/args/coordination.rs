@@ -25,9 +25,12 @@ pub enum CoordinationCommand {
         #[command(flatten)]
         args: QuestionsArgs,
     },
-    /// List the files attached to a workspace: sent to its agents with a
-    /// message, added, or handed back with done.
+    /// List, add or delete the files attached to a workspace: sent to its
+    /// agents with a message, added, or handed back with done.
+    #[command(args_conflicts_with_subcommands = true)]
     Files {
+        #[command(subcommand)]
+        command: Option<FilesCommand>,
         workspace: Option<String>,
         /// Print only the paths of Shoal's copies, one per line.
         #[arg(long)]
@@ -50,6 +53,21 @@ pub enum CoordinationCommand {
         /// Leave the workspace's demos running until cleanup removes it.
         #[arg(long, conflicts_with = "undo")]
         keep_demos: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum FilesCommand {
+    /// Attach copies of files to a workspace without a message; its agents
+    /// can read them.
+    Add {
+        /// Files to attach.
+        #[arg(required = true, value_name = "FILE")]
+        files: Vec<PathBuf>,
+        /// Workspace to use; defaults to the current workspace or picker.
+        #[arg(long)]
+        workspace: Option<String>,
     },
 }
 

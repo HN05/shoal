@@ -42,7 +42,7 @@ pub(super) async fn send(
 
 /// The absolute paths of the files to attach, which the daemon reads, each
 /// checked before a workspace is picked.
-fn attachment_paths(files: &[PathBuf]) -> Result<Vec<PathBuf>> {
+pub(super) fn attachment_paths(files: &[PathBuf]) -> Result<Vec<PathBuf>> {
     files
         .iter()
         .map(|file| {

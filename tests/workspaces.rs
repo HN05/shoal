@@ -19554,6 +19554,36 @@ fn messages_carry_copies_of_attached_files() {
 }
 
 #[test]
+fn files_add_attaches_copies_without_a_message() {
+    let fixture = Fixture::new();
+    fixture.add("receiver");
+    fs::write(fixture.root.path().join("notes.md"), "plan").unwrap();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "--json",
+            "files",
+            "add",
+            "notes.md",
+            "--workspace",
+            "receiver",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let added: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(added[0]["source"], "added", "{added}");
+    let copy = Path::new(added[0]["path"].as_str().unwrap());
+    assert_eq!(fs::read_to_string(copy).unwrap(), "plan");
+    assert_eq!(fixture.ok(&["files", "receiver"]), added);
+    assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
+    // A missing file fails before anything is picked or copied.
+    let missing = fixture.run(&["files", "add", "missing.md", "--workspace", "receiver"]);
+    assert!(!missing.status.success(), "{missing:?}");
+}
+
+#[test]
 fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
     let fixture = Fixture::new();
     fixture.add("cached");

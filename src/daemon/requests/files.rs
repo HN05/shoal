@@ -15,13 +15,18 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: FileMethod) -> Result
         FileMethod::ListFiles { workspace } => {
             Body::AttachedFiles(manager.workspace_files(&workspace).await?)
         }
+        FileMethod::AddFiles { workspace, files } => {
+            Body::AttachedFiles(manager.add_workspace_files(&workspace, files).await?)
+        }
     }))
 }
 
 impl Scoped for FileMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            FileMethod::ListFiles { workspace } => Some(workspace),
+            FileMethod::ListFiles { workspace } | FileMethod::AddFiles { workspace, .. } => {
+                Some(workspace)
+            }
         })
     }
 }

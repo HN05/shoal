@@ -68,3 +68,41 @@ async fn files_sent_with_messages_are_listed_until_removal() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+#[tokio::test]
+async fn added_files_need_no_message() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("config.toml");
+    std::fs::write(&file, "port = 1").unwrap();
+    let added = manager
+        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .await
+        .unwrap();
+    let [copy] = added.as_slice() else {
+        panic!("{added:?}");
+    };
+    assert_eq!(copy.source, FileSource::Added);
+    assert_eq!(std::fs::read_to_string(&copy.path).unwrap(), "port = 1");
+    // Adding it again keeps the copy; sending it is a separate copy.
+    manager
+        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .await
+        .unwrap();
+    manager
+        .send_agent_message(&workspace.name, String::new(), vec![file])
+        .await
+        .unwrap();
+    let files = manager.workspace_files(&workspace.name).await.unwrap();
+    let sources: Vec<_> = files.iter().map(|file| file.source).collect();
+    assert_eq!(sources, [FileSource::Added, FileSource::Message]);
+    assert!(
+        manager
+            .agent_messages(&workspace.name)
+            .await
+            .unwrap()
+            .iter()
+            .all(|message| message.attachments.len() == 1),
+        "adding sends no message"
+    );
+}

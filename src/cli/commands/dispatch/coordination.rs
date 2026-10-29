@@ -1,7 +1,9 @@
 use anyhow::Result;
 
 use crate::cli::{
-    args::coordination::{CoordinationCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand},
+    args::coordination::{
+        CoordinationCommand, FilesCommand, MessagesCommand, QuestionAskArgs, QuestionsCommand,
+    },
     commands::{files, messages, questions, workspaces},
     context::Context,
 };
@@ -65,7 +67,15 @@ pub(in crate::cli::commands) async fn run(
                 messages::show(&ctx, workspace).await
             }
         }
-        CoordinationCommand::Files { workspace, path } => files::list(&ctx, workspace, path).await,
+        CoordinationCommand::Files {
+            command: Some(FilesCommand::Add { files, workspace }),
+            ..
+        } => files::add(&ctx, workspace, files).await,
+        CoordinationCommand::Files {
+            command: None,
+            workspace,
+            path,
+        } => files::list(&ctx, workspace, path).await,
         CoordinationCommand::Done {
             workspace,
             cleanup,

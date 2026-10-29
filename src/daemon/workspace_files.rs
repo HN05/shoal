@@ -25,6 +25,8 @@ mod tests;
 states!(FileSource {
     /// Sent with a message to the workspace's agents.
     Message => "message",
+    /// Added with `shoal files add`.
+    Added => "added",
 });
 
 /// A file attached to a workspace: Shoal's copy and how it came.
@@ -87,6 +89,21 @@ pub(crate) fn record(
         )?;
     }
     Ok(())
+}
+
+/// The text copies of added files are kept under, which tells them from a
+/// message that is only its files.
+const ADDED: &str = "shoal files add";
+
+/// The records of the copies `paths`, in their order.
+fn recorded(tx: &Transaction<'_>, paths: &[PathBuf]) -> Result<Vec<AttachedFile>> {
+    let mut statement = tx.prepare(&format!(
+        "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"
+    ))?;
+    paths
+        .iter()
+        .map(|path| Ok(statement.query_row([path.to_string_lossy()], row)?))
+        .collect()
 }
 
 /// Point the recorded copies of repository `repository_id` from `source` to
@@ -152,6 +169,35 @@ impl Manager {
                     .collect::<rusqlite::Result<_>>()?)
             })
             .await
+    }
+
+    /// Attach copies of `files` to the workspace `selector` names, without a
+    /// message, and return their records. Adding the same files again keeps
+    /// the copies they have.
+    pub async fn add_workspace_files(
+        &self,
+        selector: &str,
+        files: Vec<PathBuf>,
+    ) -> Result<Vec<AttachedFile>> {
+        ensure!(!files.is_empty(), "give the files to add");
+        let workspace = self.workspace(selector).await?;
+        let (layout, _files) = self.lock_files(&workspace).await?;
+        let kept = keep(layout, &workspace.id, ADDED, files).await?;
+        let (id, paths, bytes) = (workspace.id.clone(), kept.paths.clone(), kept.bytes.clone());
+        let added = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                record(&tx, &id, FileSource::Added, &paths, &bytes)?;
+                let added = recorded(&tx, &paths)?;
+                tx.commit()?;
+                Ok(added)
+            })
+            .await;
+        if added.is_err() {
+            discard(kept).await;
+        }
+        added
     }
 
     /// Hold the gate of the files attached to `workspace`, with

@@ -3434,14 +3434,17 @@ messages and send messages only to the agents of the [workspaces below their own
 ```sh
 shoal files [workspace]          # The workspace's attached files, oldest first
 shoal files [workspace] --path   # Only the paths of Shoal's copies
+shoal files add notes.md [--workspace W]  # Attach files without a message
 ```
 
 `shoal files` lists the files attached to a workspace: each one's name, size,
-how it came (`message` for a file sent with `shoal messages send --attach`),
-when, and the path of Shoal's copy in the repository directory's
-`.attachments`. `--json` gives each as a record with `source`, `path` and
-`bytes`. Scoped agents may list their own workspace's files and those of the
-workspaces split from it.
+how it came (`message` for a file sent with `shoal messages send --attach`,
+`added` for one from `shoal files add`), when, and the path of Shoal's copy in
+the repository directory's `.attachments`. `--json` gives each as a record with
+`source`, `path` and `bytes`. `shoal files add` copies files of at most 100 MiB
+there without telling the workspace's agents; adding the same file again keeps
+its copy. The copies stay until the workspace is removed. Scoped agents may
+list and add files for their own workspace and those split from it.
 
 ### Questions
 
