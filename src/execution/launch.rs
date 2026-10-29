@@ -28,7 +28,7 @@ use crate::{
     env,
     model::ExecutionPlan,
     paths::Paths,
-    process,
+    process::{self, identity::Identity},
     protocol::{Body, ExecutionMethod, Reattach},
     sessions::Origin,
 };
@@ -52,38 +52,42 @@ pub(super) async fn run_tracked(
     mode: Mode,
     agent: Option<String>,
 ) -> Result<i32> {
-    let mut launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
-    let wake = launch.wake_session(&mode);
-    let mut restarts = demo::Restarts::default();
-    let result = loop {
-        let started = Instant::now();
-        let outcome = launch.run(paths, &mode, wake.clone()).await;
-        if let Some(refusal) = launch.link.refusal() {
-            eprintln!("shoal: {refusal}; command stopped");
-        }
-        let ran = started.elapsed();
-        // A failure after the run, such as a restored agent's proxy that
-        // cannot start, still reports the execution's end; a restore record
-        // it did not consume stays for `shoal resume`.
-        let next = match outcome {
-            Ok(outcome) => {
-                launch
-                    .after_run(paths, &mode, outcome, &mut restarts, ran)
-                    .await
-            }
-            Err(error) => Err(error),
-        };
-        match next {
-            Ok(Some(code)) => break Ok(code),
-            Ok(None) => {}
-            Err(error) => break Err(error),
-        }
-    };
-    let result = roll_back_failed_land(&launch.plan, result).await;
-    launch.finish(&mode, result).await
+    let launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
+    launch.run_to_end(paths, &mode).await
 }
 
 impl TrackedLaunch {
+    /// Run the command until the execution ends, then report its end.
+    async fn run_to_end(mut self, paths: &Paths, mode: &Mode) -> Result<i32> {
+        let wake = self.wake_session(mode);
+        let mut restarts = demo::Restarts::default();
+        let result = loop {
+            let started = Instant::now();
+            let outcome = self.run(paths, mode, wake.clone()).await;
+            if let Some(refusal) = self.link.refusal() {
+                eprintln!("shoal: {refusal}; command stopped");
+            }
+            let ran = started.elapsed();
+            // A failure after the run, such as a restored agent's proxy that
+            // cannot start, still reports the execution's end; a restore record
+            // it did not consume stays for `shoal resume`.
+            let next = match outcome {
+                Ok(outcome) => {
+                    self.after_run(paths, mode, outcome, &mut restarts, ran)
+                        .await
+                }
+                Err(error) => Err(error),
+            };
+            match next {
+                Ok(Some(code)) => break Ok(code),
+                Ok(None) => {}
+                Err(error) => break Err(error),
+            }
+        };
+        let result = roll_back_failed_land(&self.plan, result).await;
+        self.finish(mode, result).await
+    }
+
     /// The terminal session to wake the agent in when it is idle.
     fn wake_session(&self, mode: &Mode) -> Option<wake::Wake> {
         let integration = self.auth.as_ref().and_then(|auth| auth.integration);
@@ -258,11 +262,7 @@ async fn prepare_tracked_launch(
     if agent.is_some() {
         crate::cli::installed::remember_started();
     }
-    // A detached command or a demo never runs in the caller's terminal.
-    let place = match mode {
-        Mode::Detached { .. } | Mode::Demo { .. } => None,
-        _ => crate::cli::terminal::current_place().await,
-    };
+    let place = terminal_place(mode).await;
     let mut auth =
         prepare_agent_launch(paths, &workspace, mode, agent.as_deref(), place.as_ref()).await?;
     let recovery = if let Some(agent) = &agent {
@@ -276,12 +276,7 @@ async fn prepare_tracked_launch(
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
         Ok(command) => command,
-        Err(error) => {
-            if let Err(report) = report_completion(&mut link, 1, mode).await {
-                eprintln!("warning: unable to report execution completion: {report:#}");
-            }
-            return Err(error);
-        }
+        Err(error) => return Err(fail_launch(&mut link, mode, error).await),
     };
     Ok(TrackedLaunch {
         link,
@@ -291,6 +286,24 @@ async fn prepare_tracked_launch(
         recovery,
         record: None,
     })
+}
+
+/// Report the end of a registered execution whose launch failed with `error`,
+/// which lets the daemon forget it, and return the error.
+async fn fail_launch(link: &mut Link, mode: &Mode, error: anyhow::Error) -> anyhow::Error {
+    if let Err(report) = report_completion(link, 1, mode).await {
+        eprintln!("warning: unable to report execution completion: {report:#}");
+    }
+    error
+}
+
+/// Where the wrapper runs in a terminal host. A detached command or a demo
+/// never runs in the caller's terminal.
+async fn terminal_place(mode: &Mode) -> Option<Origin> {
+    match mode {
+        Mode::Detached { .. } | Mode::Demo { .. } => None,
+        _ => crate::cli::terminal::current_place().await,
+    }
 }
 
 /// Start the agent's proxy for the registered `plan`, and the command it
@@ -317,8 +330,7 @@ async fn open_execution(
     recover: bool,
     place: Option<Origin>,
 ) -> Result<(Link, ExecutionPlan)> {
-    let wrapper = process::identity::capture(std::process::id())?
-        .context("cannot identify execution wrapper")?;
+    let wrapper = this_wrapper()?;
     let method = ExecutionMethod::Execute {
         workspace,
         wrapper: wrapper.clone(),
@@ -346,23 +358,41 @@ async fn open_execution(
         body => ExecutionPlan::try_from(body)?,
     };
     if mode.reattaches() {
-        link.allow_reattach(
-            paths,
-            Reattach {
-                execution: plan.id.clone(),
-                wrapper,
-                child: None,
-                group_id: 0,
-                scope_token: plan.scope_token.clone(),
-                agent,
-                recover,
-                running_ms: 0,
-                awaiting_restore: None,
-                between_runs: false,
-            },
-        );
+        allow_reattach(&mut link, paths, &plan, wrapper, agent, recover);
     }
     Ok((link, plan))
+}
+
+/// This process, as the daemon records an execution's wrapper.
+fn this_wrapper() -> Result<Identity> {
+    process::identity::capture(std::process::id())?.context("cannot identify execution wrapper")
+}
+
+/// Let the execution of `plan`, which `wrapper` runs, reattach to the next
+/// daemon once its command runs.
+fn allow_reattach(
+    link: &mut Link,
+    paths: &Paths,
+    plan: &ExecutionPlan,
+    wrapper: Identity,
+    agent: Option<String>,
+    recover: bool,
+) {
+    link.allow_reattach(
+        paths,
+        Reattach {
+            execution: plan.id.clone(),
+            wrapper,
+            child: None,
+            group_id: 0,
+            scope_token: plan.scope_token.clone(),
+            agent,
+            recover,
+            running_ms: 0,
+            awaiting_restore: None,
+            between_runs: false,
+        },
+    );
 }
 
 async fn prepare_agent_launch(
