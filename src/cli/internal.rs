@@ -59,6 +59,8 @@ pub enum Worker<'a> {
         agent: &'a str,
         records: &'a [PathBuf],
         command: &'a [OsString],
+        /// The host that opened the place.
+        host: &'a str,
         close_in: Option<&'a str>,
     },
     /// A demo's wrapper; `launch` is its JSON [`crate::demos::Launch`].
@@ -187,9 +189,11 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             agent,
             records,
             command,
+            host,
             close_in,
         } => {
             args.extend([SESSION.into(), workspace.into(), agent.into()]);
+            args.extend(["--host".into(), host.into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
             }

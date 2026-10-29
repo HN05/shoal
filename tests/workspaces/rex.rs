@@ -291,3 +291,28 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
         "{transcript}"
     );
 }
+
+#[test]
+fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 'none'\n[rex]\nenabled = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
+    let Some(rex) = RexServer::start(&fixture) else {
+        return;
+    };
+    fixture.add("plain");
+    let (session, block) = rex.session("mine", &fixture.repo);
+    // With Rex off, the agent runs in a zmx session, which inherits the
+    // block's Rex variables.
+    let (output, transcript) = fixture.terminal_command(
+        rex.inside(fixture.command().args(["pi", "plain"]), &session, &block),
+        "",
+        true,
+    );
+    assert!(output.status.success(), "{output:?} {transcript}");
+    let zmx_calls = fs::read_to_string(fixture.root.path().join("zmx-calls")).unwrap_or_default();
+    assert!(zmx_calls.contains("attach"), "{zmx_calls} {transcript}");
+    fixture.ok(&["rm", "plain", "--yes"]);
+    fixture.ok(&["cleanup"]);
+    assert!(rex.block_open(&block));
+}

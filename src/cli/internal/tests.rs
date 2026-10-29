@@ -257,6 +257,7 @@ fn session_round_trips_records_and_literal_arguments() {
             agent,
             records: parsed_records,
             command: parsed_command,
+            host,
             close_in: parsed_close_in,
         } = parse(
             Worker::Session {
@@ -264,6 +265,7 @@ fn session_round_trips_records_and_literal_arguments() {
                 agent: "claude",
                 records: &records,
                 command: &command,
+                host: "rex",
                 close_in,
             },
             false,
@@ -275,6 +277,7 @@ fn session_round_trips_records_and_literal_arguments() {
         assert_eq!(agent, "claude");
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
+        assert_eq!(host, "rex");
         assert_eq!(parsed_close_in.as_deref(), close_in);
     }
 }

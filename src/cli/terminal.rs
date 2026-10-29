@@ -931,10 +931,12 @@ async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
     }
 }
 
-/// Record the place this process runs in, one Shoal created for
-/// `workspace`, as [`record_owned`] does.
-pub(in crate::cli) async fn record_owned_here(ctx: &Context, workspace: &str) {
-    if let Some(place) = current_origin() {
+/// Record the place this process runs in, one the host named `host`
+/// created for `workspace`, as [`record_owned`] does. Only that host names
+/// it: another host's variables this process inherited name a place Shoal
+/// did not create.
+pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspace: &str) {
+    if let Some(place) = named(host).and_then(|host| host.origin()) {
         record_owned(ctx, workspace, place).await;
     }
 }
@@ -967,6 +969,7 @@ pub(in crate::cli) async fn run_agent(
             agent,
             records,
             command,
+            host: host.name().as_str(),
             close_in: closes_when_done.then(|| host.name().as_str()),
         },
     )?;
@@ -1280,7 +1283,7 @@ pub(in crate::cli) async fn host_workspace(
                 )
                 .await?;
             place.host.rename_place(&place.id, label).await;
-            record_owned_here(ctx, &workspace.id).await;
+            record_owned_here(ctx, place.host.name().as_str(), &workspace.id).await;
             if place.closes_when_done {
                 closing::start_watcher(ctx, place.host, &place.id, &workspace.id).await?;
             }

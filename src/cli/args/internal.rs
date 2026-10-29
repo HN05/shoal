@@ -131,6 +131,9 @@ pub enum InternalCommand {
         agent: String,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
+        /// The host that opened the place.
+        #[arg(long)]
+        host: String,
         /// Close the place of this host once the workspace is done.
         #[arg(long)]
         close_in: Option<String>,
