@@ -25,6 +25,7 @@ fn origin(host: HostName) -> Origin {
         place: Some("place".into()),
         data: Default::default(),
         owned: false,
+        instance: None,
     }
 }
 

@@ -8,6 +8,7 @@ fn a_place_round_trips_without_its_empty_fields() {
         place: Some("block:2".into()),
         data: BTreeMap::from([("server".into(), "unix:///rex.sock".into())]),
         owned: true,
+        instance: None,
     };
     let json = serde_json::to_string(&origin).unwrap();
     assert_eq!(serde_json::from_str::<Origin>(&json).unwrap(), origin);

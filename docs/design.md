@@ -702,7 +702,9 @@ theirs even after an agent ran in it. The daemon records the sessions Shoal
 creates as it does other hosts' places, so `attach` still finds one whose launch
 failed and left its shell, but labels carry ownership: zmx reuses session names,
 so a recorded name does not prove a later session under it Shoal's, while a
-label goes with the session, and a close from the record checks it. Creation
+label goes with the session, and a close from the record checks it. A record
+names its session's process and creation time, so `attach` passes over a later
+session under the name, whose own record replaces it. Creation
 sets `shoal.created=1`, which relabelling never adds. The daemon closes a
 workspace's sessions when it removes the workspace, whatever `close_when_done`
 says, and startup and cleanup sweeps close those whose workspace record is gone,

@@ -295,6 +295,7 @@ fn earlier_place<'de, D: serde::Deserializer<'de>>(
             place: Some(pane),
             data: BTreeMap::new(),
             owned: false,
+            instance: None,
         },
     }))
 }

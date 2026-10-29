@@ -200,7 +200,7 @@ pub struct ChatEvent {
 enum Record {
     Chat {
         kind: ChatEventKind,
-        chat: crate::model::Chat,
+        chat: Box<crate::model::Chat>,
     },
     Workspace(Box<EventDetails>),
 }
@@ -383,7 +383,7 @@ impl Manager {
                 let (id,created_at,record) = row?;
                 items.push(match serde_json::from_str(&record)? {
                     Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details: *details })),
-                    Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent { id,created_at,kind,chat })),
+                    Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent { id,created_at,kind,chat: *chat })),
                 });
             }
             Ok(items)

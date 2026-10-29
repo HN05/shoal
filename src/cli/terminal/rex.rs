@@ -275,6 +275,7 @@ fn origin() -> Option<Origin> {
         place: var("REX_BLOCK"),
         data: server.data(),
         owned: false,
+        instance: None,
     })
 }
 
@@ -298,6 +299,7 @@ async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origi
         place: None,
         data: server.data(),
         owned: false,
+        instance: None,
     })
 }
 

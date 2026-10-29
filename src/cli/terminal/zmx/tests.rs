@@ -68,3 +68,15 @@ fn a_failed_demo_worker_ends_its_shell() -> Result<()> {
     assert!(!marker.exists());
     Ok(())
 }
+
+#[test]
+fn a_recorded_session_is_only_the_instance_it_recorded() {
+    let sessions = parse_list("  name=shared\tpid=2\tcreated=20\n");
+    let (name, fields) = &sessions[0];
+    let mut place = Origin::created(HostName::Zmx, "shared".into());
+    assert!(is_instance(name, fields, &place));
+    place.instance = Some("2:20".into());
+    assert!(is_instance(name, fields, &place));
+    place.instance = Some("1:10".into());
+    assert!(!is_instance(name, fields, &place));
+}

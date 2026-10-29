@@ -688,11 +688,25 @@ async fn record_owned(ctx: &Context, workspace: &str, place: Origin) {
 /// Record the place this process runs in, one the host named `host`
 /// created for `workspace`, as [`record_owned`] does. Only that host names
 /// it: another host's variables this process inherited name a place Shoal
-/// did not create.
+/// did not create. A host that reuses IDs tells this place apart from an
+/// earlier one under its ID, whose record it replaces.
 pub(in crate::cli) async fn record_owned_here(ctx: &Context, host: &str, workspace: &str) {
-    if let Some(place) = named(host).and_then(Host::places).and_then(Places::origin) {
-        record_owned(ctx, workspace, place).await;
+    let Some(host) = named(host) else {
+        return;
+    };
+    let Some(mut place) = host.places().and_then(Places::origin) else {
+        return;
+    };
+    if let Some(watches) = host.watches() {
+        match watches.place_instance(place.id()).await {
+            Ok(instance) => place.instance = instance,
+            Err(error) => {
+                eprintln!("warning: cannot record the place Shoal opened: {error:#}");
+                return;
+            }
+        }
     }
+    record_owned(ctx, workspace, place).await;
 }
 
 /// Run a tracked agent's `command` in a new session and attach this terminal

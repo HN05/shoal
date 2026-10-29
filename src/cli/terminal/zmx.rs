@@ -129,6 +129,7 @@ impl Places for Zmx {
             place: Some(self.this_place()?),
             data: BTreeMap::new(),
             owned: false,
+            instance: None,
         })
     }
 
@@ -574,12 +575,12 @@ fn ended(status: ExitStatus) -> Result<()> {
 }
 
 /// The session `place` names, with its attached terminals, while zmx keeps
-/// it.
+/// it. A later session under its name is another one.
 async fn session_at(place: &Origin) -> Result<Option<Session>> {
     Ok(list()
         .await?
         .into_iter()
-        .find(|(name, _)| name == place.id())
+        .find(|(name, fields)| is_instance(name, fields, place))
         .map(|(name, fields)| Session {
             clients: field(&fields, "clients")
                 .and_then(|clients| clients.parse().ok())
@@ -587,6 +588,16 @@ async fn session_at(place: &Origin) -> Result<Option<Session>> {
             name,
             place: place.clone(),
         }))
+}
+
+/// Whether the session `name` with `fields` is `place`, the instance it
+/// recorded when it has one.
+fn is_instance(name: &str, fields: &Fields, place: &Origin) -> bool {
+    name == place.id()
+        && place
+            .instance
+            .as_ref()
+            .is_none_or(|recorded| *recorded == instance(fields))
 }
 
 /// Whether `sessions` list the watched session: under its name, labelled

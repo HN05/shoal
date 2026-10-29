@@ -46,6 +46,10 @@ pub struct Origin {
     /// Shoal created the place, so it may close it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub owned: bool,
+    /// What tells the place apart from a later one under the same ID, for a
+    /// host that reuses IDs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance: Option<String>,
 }
 
 impl Origin {
@@ -57,6 +61,7 @@ impl Origin {
             place: Some(place),
             data: BTreeMap::new(),
             owned: true,
+            instance: None,
         }
     }
 

@@ -122,11 +122,17 @@ impl Manager {
     }
 }
 
-/// Record `origin` as owned by `workspace` unless it is recorded already.
+/// Record `origin` as owned by `workspace` unless that place is recorded
+/// already. A record of an earlier instance under the same ID, which a host
+/// that reuses IDs left, gives way to it.
 fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()> {
     db.execute(
         "INSERT INTO owned_places(host,place,workspace_id,origin)
-         VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO NOTHING",
+         VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO UPDATE
+         SET workspace_id=excluded.workspace_id, origin=excluded.origin
+         WHERE json_extract(excluded.origin,'$.instance') IS NOT NULL
+           AND json_extract(excluded.origin,'$.instance')
+               IS NOT json_extract(owned_places.origin,'$.instance')",
         params![
             origin.host,
             origin.id(),
