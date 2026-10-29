@@ -334,3 +334,35 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         .unwrap();
 }
 
+#[tokio::test]
+async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let added = manager
+        .add_workspace_files(&workspace.name, vec![file])
+        .await
+        .unwrap();
+    // The copy's directory now leads elsewhere, to a file of the same name.
+    let elsewhere = temp.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::fs::write(elsewhere.join("notes.md"), "keep me").unwrap();
+    let directory = added[0].path.parent().unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, directory).unwrap();
+    let error = manager
+        .remove_workspace_files(&workspace.name, None)
+        .await
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("is not among the repository's attached files"),
+        "{error:#}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(elsewhere.join("notes.md")).unwrap(),
+        "keep me"
+    );
+}

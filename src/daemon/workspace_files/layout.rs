@@ -115,6 +115,46 @@ impl Layout {
         })
     }
 
+    /// Delete Shoal's copy at `path`, and the directories that held only it,
+    /// once the path is inside this repository's attached files, which Shoal
+    /// created, and stays there through any symbolic link.
+    pub(crate) fn delete_copy(&self, path: &Path) -> Result<()> {
+        ensure!(
+            is_marked_dir(&self.root, &self.owner),
+            "{} is not a directory Shoal created for attached files",
+            self.root.display()
+        );
+        let shown = path.display();
+        let inside = path.starts_with(&self.root)
+            && path
+                .parent()
+                .is_some_and(|parent| match parent.canonicalize() {
+                    Ok(parent) => self
+                        .root
+                        .canonicalize()
+                        .is_ok_and(|root| parent.starts_with(root)),
+                    // Nothing is left to delete there.
+                    Err(error) => error.kind() == ErrorKind::NotFound,
+                });
+        ensure!(
+            inside,
+            "{shown} is not among the repository's attached files"
+        );
+        match std::fs::remove_file(path) {
+            Err(error) if error.kind() != ErrorKind::NotFound => {
+                return Err(error).with_context(|| format!("delete {shown}"));
+            }
+            _ => {}
+        }
+        // A copy sits in a directory of its own, below the files attached with it.
+        for directory in path.ancestors().skip(1).take(2) {
+            if std::fs::remove_dir(directory).is_err() {
+                break;
+            }
+        }
+        Ok(())
+    }
+
     /// Delete the files attached for the workspace `workspace_id`.
     pub(crate) fn remove_workspace(&self, workspace_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
@@ -192,23 +232,6 @@ pub(crate) fn check(path: &Path) -> Result<()> {
         "{shown}: attached files must be at most {} MiB",
         MAX_FILE_BYTES / 1024 / 1024
     );
-    Ok(())
-}
-
-/// Delete Shoal's copy at `path`, and the directories that held only it.
-pub(crate) fn delete_copy(path: &Path) -> Result<()> {
-    match std::fs::remove_file(path) {
-        Err(error) if error.kind() != ErrorKind::NotFound => {
-            return Err(error).with_context(|| format!("delete {}", path.display()));
-        }
-        _ => {}
-    }
-    // A copy sits in a directory of its own, below the files attached with it.
-    for directory in path.ancestors().skip(1).take(2) {
-        if std::fs::remove_dir(directory).is_err() {
-            break;
-        }
-    }
     Ok(())
 }
 

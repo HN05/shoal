@@ -11,7 +11,7 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::workspace::Manager,
-    model::Workspace,
+    model::{Repository, Workspace},
     state::{WorkspaceState, states},
 };
 
@@ -265,7 +265,8 @@ impl Manager {
         name: Option<String>,
     ) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
-        let _files = self.gates.lock_message_files(&owner.repository_id).await;
+        let repo = self.repository(&owner.repository_id).await?;
+        let _files = self.gates.lock_message_files(&repo.id).await;
         let (id, wanted) = (owner.id.clone(), name.clone());
         let files: Vec<AttachedFile> = self
             .store
@@ -286,7 +287,7 @@ impl Manager {
                 owner.name
             );
         }
-        self.delete_files(files).await
+        self.delete_files(&repo, files).await
     }
 
     /// Delete the attached files of every workspace without a running agent
@@ -314,17 +315,22 @@ impl Manager {
                         .collect::<rusqlite::Result<Vec<_>>>()?)
                 })
                 .await?;
-            deleted.extend(self.delete_files(files).await?);
+            deleted.extend(self.delete_files(&repo, files).await?);
         }
         Ok(deleted)
     }
 
-    /// Delete the copies `files` and then their records. Callers hold the
-    /// gate of their repository's attached files.
-    async fn delete_files(&self, files: Vec<AttachedFile>) -> Result<Vec<AttachedFile>> {
+    /// Delete the copies `files` of `repo` and then their records. Callers
+    /// hold the gate of the repository's attached files.
+    async fn delete_files(
+        &self,
+        repo: &Repository,
+        files: Vec<AttachedFile>,
+    ) -> Result<Vec<AttachedFile>> {
+        let layout = Layout::of(repo).context("the repository has no directory")?;
         let paths: Vec<PathBuf> = files.iter().map(|file| file.path.clone()).collect();
         tokio::task::spawn_blocking(move || {
-            paths.iter().try_for_each(|path| layout::delete_copy(path))
+            paths.iter().try_for_each(|path| layout.delete_copy(path))
         })
         .await??;
         let ids: Vec<i64> = files.iter().map(|file| file.id).collect();
