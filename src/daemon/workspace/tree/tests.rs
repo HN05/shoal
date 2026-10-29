@@ -223,15 +223,22 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
         .acquire_hold(&child.id, "editor".into(), None)
         .await
         .unwrap();
-    let mut held = remove(&child.name);
-    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut held)
+    // The check refuses too, so a batch refuses before removing any.
+    for mut method in [check(&child.name), remove(&child.name)] {
+        let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("has holds"), "{error:#}");
+    }
+    // So does the removal itself, for a hold acquired after authorization.
+    let error = manager
+        .remove_unheld_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("has holds"), "{error:#}");
-    let mut checked = check(&child.name);
-    crate::daemon::scope::authorize(&manager, Some("scope"), &mut checked)
-        .await
-        .unwrap();
+    assert!(format!("{error:#}").contains("has holds"), "{error:#}");
+    let kept = manager.workspace(&child.id).await.unwrap();
+    assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
+    assert!(kept.path.exists());
 }
 
 #[tokio::test]

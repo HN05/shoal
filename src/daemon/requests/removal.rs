@@ -14,7 +14,11 @@ use crate::{
     removal::InspectionPolicy,
 };
 
-pub(super) async fn handle(manager: &Arc<Manager>, method: RemovalMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: RemovalMethod,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
     Ok(Answer::Body(match method {
         RemovalMethod::RemovedWorkspaces => {
             let listed = manager.removed_workspaces().await;
@@ -38,11 +42,20 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: RemovalMethod) -> Res
                 .check_manual_removal(&workspace, include_changes)
                 .await?,
         ),
-        RemovalMethod::RemoveWorkspace { workspace, unsaved } => Body::RemovalResult(
-            manager
-                .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
-                .await?,
-        ),
+        RemovalMethod::RemoveWorkspace { workspace, unsaved } => {
+            Body::RemovalResult(match caller {
+                Some(_) => {
+                    manager
+                        .remove_unheld_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
+                        .await?
+                }
+                None => {
+                    manager
+                        .remove_workspace(&workspace, unsaved, InspectionPolicy::GitOnly)
+                        .await?
+                }
+            })
+        }
         RemovalMethod::Cleanup { dry_run, selection } => {
             Body::Cleanup(cleanup::on_request(manager, dry_run, &selection).await?)
         }
@@ -80,11 +93,9 @@ impl Scoped for RemovalMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         const REFUSAL: &str = "workspace processes remove only the workspaces split from theirs; finish their own with shoal done";
         match self {
-            RemovalMethod::CheckRemoval { workspace, .. } => manager
-                .workspace_below(caller, workspace, REFUSAL)
-                .await
-                .map(Some),
-            RemovalMethod::RemoveWorkspace { workspace, .. } => manager
+            // The check refuses holds too, so a batch refuses before removing any.
+            RemovalMethod::CheckRemoval { workspace, .. }
+            | RemovalMethod::RemoveWorkspace { workspace, .. } => manager
                 .unheld_workspace_below(caller, workspace, REFUSAL)
                 .await
                 .map(Some),

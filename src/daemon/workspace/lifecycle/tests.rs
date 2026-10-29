@@ -291,6 +291,7 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
     let removal = Removal::Manual {
         unsaved: &unsaved,
         inspection: InspectionPolicy::GitOnly,
+        release_holds: true,
     };
     manager.remove(&workspace.id, removal).await.unwrap();
     assert!(!workspace.path.exists());
@@ -317,6 +318,7 @@ git --git-dir="$common" worktree add "$SHOAL_WORKSPACE_PATH" "$branch""#;
             Some(ref unsaved) => Removal::Manual {
                 unsaved,
                 inspection: InspectionPolicy::GitOnly,
+                release_holds: true,
             },
         };
         let error = manager.remove(&workspace.id, removal).await.unwrap_err();
@@ -492,6 +494,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             Removal::Manual {
                 unsaved: &NOTHING,
                 inspection: InspectionPolicy::GitOnly,
+                release_holds: true,
             },
             false,
         ),
@@ -499,6 +502,7 @@ async fn directory_activity_distinguishes_inspection_from_removal_checks() {
             Removal::Manual {
                 unsaved: &NOTHING,
                 inspection: InspectionPolicy::IncludeDirectoryProcesses,
+                release_holds: true,
             },
             true,
         ),
@@ -559,6 +563,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             Removal::Manual {
                 unsaved: &UnsavedWork::All,
                 inspection: InspectionPolicy::GitOnly,
+                release_holds: true,
             },
             Removal::Automatic {
                 snapshot: Snapshot {
@@ -769,6 +774,7 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             Removal::Manual {
                 unsaved: &NOTHING,
                 inspection: InspectionPolicy::GitOnly,
+                release_holds: true,
             }
         };
         manager.remove(&workspace.id, removal).await.unwrap();

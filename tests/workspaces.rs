@@ -5279,6 +5279,21 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
         let output = scoped_command(&fixture, "parent", &["rm", name, "--yes"]);
         assert!(!output.status.success(), "{name}: {output:?}");
     }
+    // A held child is the user's: a batch naming it removes none.
+    let held = scoped_command(&fixture, "parent", &["split", "held"]);
+    assert!(held.status.success(), "{held:?}");
+    fixture.ok(&["acquire", "hold", "--workspace", "held", "--name", "review"]);
+    let refused = scoped_command(&fixture, "parent", &["rm", "child", "held", "--yes"]);
+    assert!(!refused.status.success(), "{refused:?}");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("none was removed") && stderr.contains("held has holds"),
+        "{stderr}"
+    );
+    assert_eq!(
+        fixture.ok(&["status", "child"])["workspace"]["state"],
+        "preparing"
+    );
     let removed = scoped_command(&fixture, "parent", &["rm", "child", "--yes"]);
     assert!(removed.status.success(), "{removed:?}");
     let again = scoped_command(&fixture, "parent", &["split", "child"]);

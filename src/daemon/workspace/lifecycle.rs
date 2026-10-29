@@ -1,5 +1,5 @@
 //! One removal path for explicit removal and automatic cleanup.
-use super::{Manager, executions::StopPolicy};
+use super::{Manager, RemovalRules, executions::StopPolicy};
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
@@ -80,9 +80,11 @@ enum Removal<'a> {
         cause: EventCause,
     },
     /// A user request; work no branch or remote keeps needs their consent.
+    /// A workspace process's request also leaves the user's holds in place.
     Manual {
         unsaved: &'a UnsavedWork,
         inspection: InspectionPolicy,
+        release_holds: bool,
     },
     /// Idle or disk-space cleanup; only safe, unchanged workspaces may go.
     Automatic {
@@ -383,6 +385,27 @@ impl Manager {
             Removal::Manual {
                 unsaved,
                 inspection,
+                release_holds: true,
+            },
+        )
+        .await
+    }
+
+    /// Remove the workspace as [`Self::remove_workspace`] does, refusing it
+    /// while it has holds, which are the user's and host apps'.
+    pub async fn remove_unheld_workspace(
+        &self,
+        selector: &str,
+        unsaved: UnsavedWork,
+        inspection: InspectionPolicy,
+    ) -> Result<RemovalResult> {
+        let unsaved = &unsaved;
+        self.remove(
+            selector,
+            Removal::Manual {
+                unsaved,
+                inspection,
+                release_holds: false,
             },
         )
         .await
@@ -811,7 +834,7 @@ impl Manager {
         }
     }
 
-    /// Reserve `workspace` for `removal`. The user's removal also takes one
+    /// Reserve `workspace` for `removal`. A manual removal also takes one
     /// whose setup never started, as when the command creating it was
     /// interrupted; the repository's Git gate waits for its creation to end.
     async fn reserve_removal(
@@ -820,14 +843,24 @@ impl Manager {
         removal: Removal<'_>,
         present: bool,
     ) -> Result<WorkspaceState> {
-        let awaiting_setup = matches!(removal, Removal::Manual { .. })
-            && workspace.state == WorkspaceState::Preparing;
-        let _created = if awaiting_setup {
+        let rules = RemovalRules {
+            allow_pending_rename: !present,
+            awaiting_setup: matches!(removal, Removal::Manual { .. })
+                && workspace.state == WorkspaceState::Preparing,
+            refuse_holds: matches!(
+                removal,
+                Removal::Manual {
+                    release_holds: false,
+                    ..
+                }
+            ),
+        };
+        let _created = if rules.awaiting_setup {
             Some(self.gates.lock_git(&workspace.repository_id).await)
         } else {
             None
         };
-        self.reserve_lifecycle_for_removal(&workspace.id, !present, awaiting_setup)
+        self.reserve_lifecycle_for_removal(&workspace.id, rules)
             .await
     }
 

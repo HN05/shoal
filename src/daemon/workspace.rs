@@ -756,33 +756,24 @@ impl Manager {
         id: &str,
         state: WorkspaceState,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(id, state, false, false).await
+        self.reserve_lifecycle_inner(id, state, RemovalRules::default())
+            .await
     }
 
-    /// Reserve the workspace for removal; `awaiting_setup` also takes a
-    /// preparing one whose setup never started, which the caller excludes
-    /// from creation by holding the repository's Git gate.
     async fn reserve_lifecycle_for_removal(
         &self,
         id: &str,
-        allow_pending_rename: bool,
-        awaiting_setup: bool,
+        rules: RemovalRules,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(
-            id,
-            WorkspaceState::Removing,
-            allow_pending_rename,
-            awaiting_setup,
-        )
-        .await
+        self.reserve_lifecycle_inner(id, WorkspaceState::Removing, rules)
+            .await
     }
 
     async fn reserve_lifecycle_inner(
         &self,
         id: &str,
         state: WorkspaceState,
-        allow_pending_rename: bool,
-        awaiting_setup: bool,
+        rules: RemovalRules,
     ) -> Result<WorkspaceState> {
         let _resources = self.gates.resource_guard(id, GuardMode::Shared)?;
         let id = id.to_owned();
@@ -791,7 +782,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 // Removal checks pending intent after reserving the lifecycle,
                 // so a confirmed-deleted worktree can release its ownership.
-                if state != WorkspaceState::Reconciling && !allow_pending_rename {
+                if state != WorkspaceState::Reconciling && !rules.allow_pending_rename {
                     store::ensure_no_pending_rename(&tx, &id)?;
                 }
                 store::ensure_no_pending_move(&tx, &id)?;
@@ -806,7 +797,7 @@ impl Manager {
                     // Setup registers its execution as it reserves the
                     // workspace, so none recorded means none started.
                     Some(current @ WorkspaceState::Preparing)
-                        if awaiting_setup
+                        if rules.awaiting_setup
                             && !store::exists(
                                 &tx,
                                 "SELECT 1 FROM executions WHERE workspace_id=?1",
@@ -822,6 +813,17 @@ impl Manager {
                         "workspace is {current}; wait for that operation to finish before another lifecycle operation"
                     ),
                 };
+                // Holds need a ready workspace, so none can arrive once it is
+                // reserved.
+                ensure!(
+                    !rules.refuse_holds
+                        || !store::exists(
+                            &tx,
+                            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1",
+                            [&id],
+                        )?,
+                    "workspace has holds, which are the user's; ask the user to remove it"
+                );
                 tx.execute(
                     "UPDATE workspaces SET state=?2 WHERE id=?1",
                     params![id, state],
@@ -979,6 +981,19 @@ async fn existing_base(repo: &crate::model::Repository, branch: &str) -> Result<
             .trim()
             .to_owned(),
     )
+}
+
+/// What reserving a workspace for removal accepts besides a ready or failed
+/// workspace, and what it refuses.
+#[derive(Clone, Copy, Default)]
+struct RemovalRules {
+    /// A pending rename, which removing a deleted worktree releases.
+    allow_pending_rename: bool,
+    /// A preparing workspace whose setup never started; the caller excludes
+    /// its creation by holding the repository's Git gate.
+    awaiting_setup: bool,
+    /// A workspace with holds, whose removal would release them.
+    refuse_holds: bool,
 }
 
 /// Fill in what a workspace record reads from its related tables.
