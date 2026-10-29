@@ -615,9 +615,31 @@ async fn with_instance(host: &dyn Host, mut place: Origin) -> Result<Origin> {
 }
 
 /// Whether the place this process runs in closes once `workspace` is
-/// removed, ending anything it streams.
-pub(in crate::cli) async fn closes_with(paths: &crate::paths::Paths, workspace: &str) -> bool {
-    closing::closes_with(paths, workspace).await
+/// removed, ending anything it streams: a watcher closes it then, or the
+/// daemon does, which records it as a place Shoal created for the workspace
+/// or whose host labels it as the workspace's session.
+pub(in crate::cli) async fn closes_with(
+    paths: &crate::paths::Paths,
+    workspace: &str,
+) -> Result<bool> {
+    if closing::closes_with(paths, workspace).await {
+        return Ok(true);
+    }
+    match current_place().await {
+        Some(place) => Ok(
+            super::client::place_ownership(paths, workspace, &place).await?
+                == crate::sessions::PlaceOwnership::Workspace,
+        ),
+        None => Ok(false),
+    }
+}
+
+/// The place of `host` this process runs in as the daemon records it, with
+/// the server its data names.
+fn record_here(host: &dyn Host) -> Option<Origin> {
+    host.places()
+        .and_then(Places::origin)
+        .filter(|origin| origin.place.is_some())
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that

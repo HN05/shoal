@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::PlaceOwnership;
 use crate::{
     daemon::workspace::ExecutionKind,
     sessions::HostName,
@@ -60,7 +61,7 @@ async fn a_later_instance_under_a_reused_id_takes_its_record() -> Result<()> {
     };
     let owner = async || -> Result<Option<String>> {
         Ok(manager
-            .place_owner(HostName::Zmx, "shared")
+            .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
             .await?
             .and_then(|(owner, _)| owner))
     };
@@ -107,7 +108,7 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
     // A close read the first record, then a later session's record replaced
     // it before the close forgot what it read.
     let (_, closed) = manager
-        .place_owner(HostName::Zmx, "shared")
+        .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
         .await?
         .context("the first record")?;
     manager
@@ -115,10 +116,79 @@ async fn closing_an_earlier_instance_keeps_the_record_that_replaced_it() -> Resu
         .await?;
     manager.forget_owned_place(closed).await?;
     let (owner, kept) = manager
-        .place_owner(HostName::Zmx, "shared")
+        .place_owner(&Origin::created(HostName::Zmx, "shared".into()))
         .await?
         .context("the later record")?;
     assert_eq!(owner.as_ref(), Some(&workspaces[1]));
     assert_eq!(kept.instance.as_deref(), Some("2:2"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_place_closes_with_the_workspace_its_record_names() -> Result<()> {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_string_lossy().into_owned().into(), None, None)
+        .await?;
+    let tabbed = manager
+        .create_workspace(&repo.id, "tabbed".into(), None, None, None)
+        .await?;
+    let other = manager
+        .create_workspace(&repo.id, "other".into(), None, None, None)
+        .await?;
+    let pane = Origin::created(HostName::Herdr, "w1:p9".into());
+    manager.record_owned_place(&tabbed.id, pane.clone()).await?;
+    assert!(
+        manager
+            .place_ownership(
+                &tabbed.id,
+                &Origin::created(HostName::Herdr, "w1:p9".into())
+            )
+            .await?
+            == PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(&other.id, &Origin::created(HostName::Herdr, "w1:p9".into()))
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(
+                &tabbed.id,
+                &Origin::created(HostName::Herdr, "w1:p8".into())
+            )
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(&tabbed.id, &Origin::created(HostName::Rex, "w1:p9".into()))
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    // A place the daemon does not know is no one's it knows of.
+    assert_eq!(
+        manager
+            .place_ownership(
+                &tabbed.id,
+                &Origin::created(HostName::Herdr, "w1:p8".into())
+            )
+            .await?,
+        PlaceOwnership::Unknown
+    );
+    // A chat that takes the place over takes it from the workspace.
+    manager.release_place(&pane).await?;
+    assert_eq!(
+        manager
+            .place_ownership(
+                &tabbed.id,
+                &Origin::created(HostName::Herdr, "w1:p9".into())
+            )
+            .await?,
+        PlaceOwnership::Elsewhere
+    );
     Ok(())
 }

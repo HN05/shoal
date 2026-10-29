@@ -4,7 +4,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
-use crate::sessions::{HostName, Origin};
+use crate::sessions::{Origin, PlaceOwnership};
 
 /// Where an execution runs in a terminal host, as its wrapper reports it.
 pub(crate) struct ExecutionPlace {
@@ -29,9 +29,10 @@ pub(super) fn record_execution_place(
         params![execution, serde_json::to_string(&place.origin)?],
     )?;
     if place.agent {
+        let origin = &place.origin;
         tx.execute(
-            "UPDATE owned_places SET workspace_id=?1 WHERE host=?2 AND place=?3",
-            params![workspace, place.origin.host, place.origin.id()],
+            "UPDATE owned_places SET workspace_id=?1 WHERE host=?2 AND server=?3 AND place=?4",
+            params![workspace, origin.host, origin.server(), origin.id()],
         )?;
     }
     Ok(())
@@ -73,19 +74,45 @@ impl Manager {
             .await
     }
 
-    /// The record of `place` of `host`, with the workspace it names its
-    /// owner, `None` once a chat took the place over.
+    /// Whose `place` is for the workspace `selector` names: the record's
+    /// owner when the daemon records it, otherwise the workspace's when its
+    /// host labels it as the workspace's session.
+    pub(crate) async fn place_ownership(
+        &self,
+        selector: &str,
+        place: &Origin,
+    ) -> Result<PlaceOwnership> {
+        let workspace = self.workspace(selector).await?;
+        if let Some((owner, _)) = self.place_owner(place).await? {
+            return Ok(if owner.as_deref() == Some(workspace.id.as_str()) {
+                PlaceOwnership::Workspace
+            } else {
+                PlaceOwnership::Elsewhere
+            });
+        }
+        let labelled = self
+            .labels_session(place.host, place.id(), &workspace.id)
+            .await?;
+        Ok(if labelled {
+            PlaceOwnership::Workspace
+        } else {
+            PlaceOwnership::Unknown
+        })
+    }
+
+    /// The record of `place`, with the workspace it names its owner, `None`
+    /// once a chat took the place over.
     pub(super) async fn place_owner(
         &self,
-        host: HostName,
-        place: &str,
+        place: &Origin,
     ) -> Result<Option<(Option<String>, Origin)>> {
-        let place = place.to_owned();
+        let (host, server, place) = (place.host, place.server(), place.id().to_owned());
         self.store
             .run(move |db| {
                 db.query_row(
-                    "SELECT workspace_id,origin FROM owned_places WHERE host=?1 AND place=?2",
-                    params![host, place],
+                    "SELECT workspace_id,origin FROM owned_places
+                     WHERE host=?1 AND server=?2 AND place=?3",
+                    params![host, server, place],
                     |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?)),
                 )
                 .optional()?
@@ -98,13 +125,14 @@ impl Manager {
     /// Take `place` from the workspace it was created for, as a chat
     /// starting there does: no workspace's end closes it then.
     pub(crate) async fn release_place(&self, place: &Origin) -> Result<()> {
-        let (host, place) = (place.host, place.id().to_owned());
+        let (host, server, place) = (place.host, place.server(), place.id().to_owned());
         let _ownership = self.place_ownership.lock().await;
         self.store
             .run(move |db| {
                 db.execute(
-                    "UPDATE owned_places SET workspace_id=NULL WHERE host=?1 AND place=?2",
-                    params![host, place],
+                    "UPDATE owned_places SET workspace_id=NULL
+                     WHERE host=?1 AND server=?2 AND place=?3",
+                    params![host, server, place],
                 )?;
                 Ok(())
             })
@@ -121,9 +149,9 @@ impl Manager {
 /// under its ID keeps its own record.
 fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
     db.execute(
-        "DELETE FROM owned_places WHERE host=?1 AND place=?2
-         AND json_extract(origin,'$.instance') IS ?3",
-        params![place.host, place.id(), place.instance],
+        "DELETE FROM owned_places WHERE host=?1 AND server=?2 AND place=?3
+         AND json_extract(origin,'$.instance') IS ?4",
+        params![place.host, place.server(), place.id(), place.instance],
     )?;
     Ok(())
 }
@@ -133,14 +161,15 @@ fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
 /// that reuses IDs left, gives way to it.
 fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()> {
     db.execute(
-        "INSERT INTO owned_places(host,place,workspace_id,origin)
-         VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO UPDATE
+        "INSERT INTO owned_places(host,server,place,workspace_id,origin)
+         VALUES (?1,?2,?3,?4,?5) ON CONFLICT(host,server,place) DO UPDATE
          SET workspace_id=excluded.workspace_id, origin=excluded.origin
          WHERE json_extract(excluded.origin,'$.instance') IS NOT NULL
            AND json_extract(excluded.origin,'$.instance')
                IS NOT json_extract(owned_places.origin,'$.instance')",
         params![
             origin.host,
+            origin.server(),
             origin.id(),
             workspace,
             serde_json::to_string(origin)?

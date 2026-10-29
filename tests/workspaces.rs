@@ -21653,6 +21653,21 @@ else:
     sys.exit(1)
 "#;
 
+/// The `zmx list` line of session `name`, one Shoal created for `workspace`
+/// in the fixture's state directory.
+fn created_zmx_session(fixture: &Fixture, name: &str, workspace: &str) -> String {
+    use sha2::Digest;
+
+    let state = fs::canonicalize(fixture.root.path().join("state")).unwrap();
+    let state: String = sha2::Sha256::digest(state.as_os_str().as_encoded_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!(
+        "  name={name}\tpid=1\tshoal.created=1\tshoal.state={state}\tshoal.workspace={workspace}\n"
+    )
+}
+
 fn zmx_calls(fixture: &Fixture) -> Vec<Vec<String>> {
     fs::read_to_string(fixture.root.path().join("zmx-calls"))
         .unwrap_or_default()
@@ -21688,10 +21703,13 @@ elif args[:2] == ['pane', 'run']:
     (root / 'herdr-worker').write_text(json.dumps(shlex.split(args[3])))
 elif args[:2] == ['tab', 'rename'] and (root / 'fail-rename').exists():
     sys.exit('rename-failed')
+elif args[:2] == ['pane', 'close'] and (root / 'herdr-unreachable').exists():
+    print(json.dumps({'error': {'code': 'server_not_running'}}), file=sys.stderr)
+    sys.exit(1)
 elif args[1:2] == ['get']:
     # Panes `w1:pN` and `w1:pN.M` are in tab `w1:tN`, and go with it.
     if (root / 'herdr-unreachable').exists():
-        print(json.dumps({'error': {'code': 'server_not_running'}}))
+        print(json.dumps({'error': {'code': 'server_not_running'}}), file=sys.stderr)
         sys.exit(1)
     kind, id = args[0], args[2]
     tab = id.replace(':p', ':t').split('.')[0]
@@ -21700,7 +21718,7 @@ elif args[1:2] == ['get']:
         return path.exists() and value in path.read_text().split()
     if not id.split(':')[-1].startswith(kind[0]) or listed('closed-tabs', tab) \
             or listed('closed-panes', id):
-        print(json.dumps({'error': {'code': kind + '_not_found'}}))
+        print(json.dumps({'error': {'code': kind + '_not_found'}}), file=sys.stderr)
         sys.exit(1)
     if kind == 'pane':
         print(json.dumps({'result': {'pane': {'pane_id': id, 'tab_id': tab}}}))
@@ -21740,6 +21758,7 @@ fn herdr_worker_command(fixture: &Fixture) -> Command {
         .env_remove("SHOAL_STATE_DIR")
         .args(&herdr_worker(fixture)[1..])
         .env("HERDR_ENV", "1")
+        .env("HERDR_WORKSPACE_ID", "w1")
         .env("HERDR_TAB_ID", "w1:t9")
         .env("HERDR_PANE_ID", "w1:p9");
     let calls = herdr_calls(fixture);
@@ -21761,6 +21780,15 @@ fn herdr_tab_directive(fixture: &Fixture) -> PathBuf {
         .find_map(|arg| arg.strip_prefix("SHOAL_SHELL_DIRECTIVE="))
         .map(PathBuf::from)
         .unwrap()
+}
+
+/// The `herdr` calls that change something, without the pane reads Shoal
+/// makes to find where a place runs.
+fn herdr_changes(fixture: &Fixture) -> Vec<Vec<String>> {
+    herdr_calls(fixture)
+        .into_iter()
+        .filter(|call| call[..2] != ["pane", "get"])
+        .collect()
 }
 
 fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
@@ -21844,7 +21872,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
         "unset\n"
     );
     assert!(!fixture.root.path().join("injected").exists());
-    assert_eq!(herdr_calls(&fixture).len(), 3);
+    assert_eq!(herdr_changes(&fixture).len(), 3);
 }
 
 #[test]
@@ -22278,7 +22306,7 @@ fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
             .trim(),
         workspace["workspace"]["path"].as_str().unwrap()
     );
-    assert_eq!(herdr_calls(&fixture).len(), 3);
+    assert_eq!(herdr_changes(&fixture).len(), 3);
     fixture.ok(&["rm", "herdr-shell", "--yes"]);
     wait_for_herdr_close(&fixture);
 }
@@ -22347,9 +22375,9 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     );
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
     assert!(worker.status.success(), "{worker:?}");
-    assert_eq!(herdr_calls(&fixture).len(), 3);
+    assert_eq!(herdr_changes(&fixture).len(), 3);
     fixture.ok(&["done", "retain"]);
-    assert_eq!(herdr_calls(&fixture).len(), 3);
+    assert_eq!(herdr_changes(&fixture).len(), 3);
     // Enable closure, then fail setup before the agent can start.
     fs::write(
         fixture.repo.join(".shoal.toml"),
@@ -22388,7 +22416,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     assert!(caller.status.success());
     let (worker, _) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "\n");
     assert_eq!(worker.status.code(), Some(1));
-    assert_eq!(herdr_calls(&fixture).len(), 6);
+    assert_eq!(herdr_changes(&fixture).len(), 6);
 }
 
 #[test]
@@ -22456,7 +22484,7 @@ fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
             .unwrap()
             .is_empty()
     });
-    assert_eq!(herdr_calls(&fixture).len(), 3);
+    assert_eq!(herdr_changes(&fixture).len(), 3);
     fixture.restart();
     fixture.ok(&["done", "happy-tab"]);
     wait_for_herdr_close(&fixture);
@@ -22517,10 +22545,72 @@ fn herdr_tab_watchers_end_with_their_tab_whatever_the_daemon_reports() {
     assert!(!fixture.root.path().join("herdr-calls").exists());
 }
 
+/// Wait for Shoal to close the pane it opened the tab with, which closes
+/// the tab.
 fn wait_for_herdr_close(fixture: &Fixture) {
-    wait_until("Herdr tab closure", || {
-        herdr_calls(fixture).last().unwrap() == &["tab", "close", "w1:t9"]
-    });
+    wait_until("Herdr pane closure", || herdr_closed(fixture));
+}
+
+fn herdr_closed(fixture: &Fixture) -> bool {
+    herdr_calls(fixture)
+        .iter()
+        .any(|call| call == &["pane", "close", "w1:p9"])
+}
+
+#[test]
+fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
+    let fixture = Fixture::with_config(Some(
+        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    let (caller, _) = herdr_call(
+        &fixture,
+        &[
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "tabbed",
+            "--agent",
+            "pi",
+        ],
+        "",
+    );
+    assert!(caller.status.success());
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+    assert!(worker.status.success(), "{worker:?} {transcript}");
+    let closes = |fixture: &Fixture| {
+        herdr_calls(fixture)
+            .iter()
+            .filter(|call| call.as_slice() == ["pane", "close", "w1:p9"])
+            .count()
+    };
+    // The daemon's records of the places Shoal created, which a background
+    // sweep may retry closing at any time.
+    let recorded = |fixture: &Fixture| {
+        fixture.request(serde_json::json!("owned_places"))["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|place| place["origin"]["place"] == "w1:p9")
+    };
+    assert!(recorded(&fixture));
+    // A server Shoal cannot reach keeps the record for the next sweep.
+    let unreachable = fixture.root.path().join("herdr-unreachable");
+    fs::write(&unreachable, "").unwrap();
+    fixture.ok(&["rm", "tabbed", "--yes"]);
+    assert!(closes(&fixture) >= 1);
+    assert!(recorded(&fixture));
+    let alerts = fixture.ok(&["alerts"]).to_string();
+    assert!(
+        alerts.contains("terminal session cleanup failed"),
+        "{alerts}"
+    );
+    fs::remove_file(unreachable).unwrap();
+    fixture.ok(&["cleanup", "workspaces"]);
+    assert!(!recorded(&fixture));
+    // The pane is closed and forgotten; a later sweep leaves it alone.
+    let closed = closes(&fixture);
+    fixture.ok(&["cleanup", "workspaces"]);
+    assert_eq!(closes(&fixture), closed);
 }
 
 #[test]

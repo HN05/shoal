@@ -390,3 +390,77 @@ fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow:
     );
     Ok(())
 }
+
+#[test]
+fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("sessioned");
+    fixture.add("other");
+    let id = workspace["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("workspace ID"))?;
+    let home = fixture.root.path();
+    install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The session Shoal created for the workspace, as its labels say.
+    fs::write(
+        home.join("zmx-sessions"),
+        created_zmx_session(&fixture, "sessioned", id),
+    )?;
+    let in_session = |session: &str, args: &[&str]| {
+        fixture
+            .command()
+            .env("ZMX_SESSION", session)
+            .args(args)
+            .output()
+    };
+    let export = in_session("sessioned", &["export", "sessioned", "-o", "-"])?;
+    assert!(!export.status.success());
+    assert!(
+        String::from_utf8_lossy(&export.stderr).contains("closes when the export removes"),
+        "{export:?}"
+    );
+    let removal = in_session("sessioned", &["rm", "sessioned", "other", "--yes"])?;
+    assert!(!removal.status.success());
+    assert!(
+        String::from_utf8_lossy(&removal.stderr)
+            .contains("this terminal closes with the workspace"),
+        "{removal:?}"
+    );
+    assert_eq!(fixture.ok(&["work"]).as_array().map(Vec::len), Some(2));
+    // Another session goes on with the batch.
+    let removal = in_session("elsewhere", &["rm", "sessioned", "other", "--yes"])?;
+    assert!(removal.status.success(), "{removal:?}");
+    Ok(())
+}
+
+#[test]
+fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> {
+    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    install_fake_herdr(&fixture);
+    let repo = fixture.repo.to_str().unwrap_or_default();
+    let (caller, _) = herdr_call(&fixture, &["add", repo, "tabbed", "--agent", "pi"], "");
+    assert!(caller.status.success());
+    // The worker records the pane Shoal opened, which removal closes alone.
+    let (worker, transcript) = fixture.interactive_command(&mut herdr_worker_command(&fixture), "");
+    assert!(worker.status.success(), "{worker:?} {transcript}");
+    let export = |pane: &str| {
+        fixture
+            .command()
+            .args(["export", "tabbed", "-o", "-"])
+            .env("HERDR_ENV", "1")
+            .env("HERDR_TAB_ID", "w1:t9")
+            .env("HERDR_PANE_ID", pane)
+            .output()
+    };
+    let refused = export("w1:p9")?;
+    assert!(!refused.status.success());
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("closes when the export removes"),
+        "{refused:?}"
+    );
+    // A pane the user split off the tab stays open, and keeps its stream.
+    let exported = export("w1:p9.2")?;
+    assert!(exported.status.success(), "{exported:?}");
+    assert!(exported.stdout.starts_with(b"shoal workspace 1\n"));
+    Ok(())
+}

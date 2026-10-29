@@ -148,15 +148,12 @@ pub(super) async fn handle(
         WorkspaceMethod::Conflicts { workspace, target } => {
             Body::Conflicts(manager.check_conflicts(&workspace, target).await?)
         }
-        WorkspaceMethod::CloseOwnedPlace {
-            workspace,
-            host,
-            place,
-        } => Body::PlaceClose(
-            manager
-                .close_recorded_place(&workspace, host, &place)
-                .await?,
-        ),
+        WorkspaceMethod::CloseOwnedPlace { workspace, place } => {
+            Body::PlaceClose(manager.close_recorded_place(&workspace, &place).await?)
+        }
+        WorkspaceMethod::PlaceOwnership { workspace, place } => {
+            Body::PlaceOwnership(manager.place_ownership(&workspace, &place).await?)
+        }
         WorkspaceMethod::OwnedPlaces => Body::OwnedPlaces(
             manager
                 .owned_places(None)
@@ -207,6 +204,7 @@ impl Scoped for WorkspaceMethod {
             | WorkspaceMethod::KeepAgentEnvironment { workspace, .. }
             | WorkspaceMethod::RecordOwnedPlace { workspace, .. }
             | WorkspaceMethod::CloseOwnedPlace { workspace, .. }
+            | WorkspaceMethod::PlaceOwnership { workspace, .. }
             | WorkspaceMethod::LayeredConfig {
                 target: ConfigTarget::Workspace(workspace),
             } => Some(workspace),

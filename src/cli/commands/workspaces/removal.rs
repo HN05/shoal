@@ -27,7 +27,7 @@ pub(in crate::cli::commands) async fn ensure_batch_removable(
         "workspace is {state}; wait for that operation to finish"
     );
     ensure!(
-        !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id).await,
+        !crate::cli::terminal::closes_with(&ctx.paths, &check.workspace.id).await?,
         "this terminal closes with the workspace, ending the {noun} of the others; {verb} from another terminal"
     );
     Ok(())

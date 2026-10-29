@@ -17,7 +17,7 @@ mod demo;
 mod tabs;
 use crate::{
     config,
-    sessions::{HostName, Origin},
+    sessions::{HostName, Origin, herdr},
     state::AgentState,
     subprocess::Run,
 };
@@ -224,9 +224,7 @@ const WORKSPACE_VAR: &str = "HERDR_WORKSPACE_ID";
 
 /// A `herdr` command reaching the server of `origin`.
 fn herdr(origin: &Origin) -> Command {
-    let mut command = Command::new("herdr");
-    command.envs(&origin.data);
-    command
+    herdr::command(&origin.data)
 }
 
 /// Whether this process runs in Herdr, so new tabs can open beside it.
@@ -391,12 +389,12 @@ async fn query<T: DeserializeOwned>(mut herdr: Command, kind: &str, id: &str) ->
             .map(Some)
             .with_context(|| format!("invalid Herdr {kind} response"));
     }
-    if failed_with(&output.stdout, &format!("{kind}_not_found")) {
+    if herdr::not_found(&output, &format!("{kind}_not_found")) {
         return Ok(None);
     }
     bail!(
         "herdr {kind} get {id} failed: {}",
-        String::from_utf8_lossy(&output.stdout).trim()
+        crate::subprocess::diagnostic(&output.stderr).trim()
     )
 }
 
@@ -436,22 +434,6 @@ struct TabState {
     #[serde(default)]
     agent_status: AgentStatus,
     label: Option<String>,
-}
-
-/// Herdr's answer to a failed query; a missing server is not a missing tab
-/// or pane, since a replacement server can keep them.
-#[derive(Deserialize)]
-struct QueryFailure {
-    error: QueryError,
-}
-#[derive(Deserialize)]
-struct QueryError {
-    code: String,
-}
-
-/// Whether Herdr answered a failed query with error `code`.
-fn failed_with(stdout: &[u8], code: &str) -> bool {
-    serde_json::from_slice::<QueryFailure>(stdout).is_ok_and(|failure| failure.error.code == code)
 }
 
 /// Herdr's view of an agent; `Done` is a finished turn not yet seen.

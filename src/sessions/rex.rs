@@ -26,6 +26,12 @@ const BIN_DIR: &str = "bin_dir";
 const APP_BIN_DIR: &str = "Library/Application Support/com.superlogical.rex/RexServer/Versions/Current/Rex Server.app/Contents/MacOS";
 const SHELL_FLAVOR: &str = "com.superlogical.terminal.shell";
 
+/// The address of the server `data` records, empty for the local default;
+/// which `rex` reaches it does not tell servers apart.
+pub(crate) fn server(data: &BTreeMap<String, String>) -> String {
+    data.get(SERVER).cloned().unwrap_or_default()
+}
+
 /// A Rex server and the `rex` that reaches it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Rex {

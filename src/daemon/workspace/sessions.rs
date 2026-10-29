@@ -44,6 +44,23 @@ impl Manager {
         Ok(())
     }
 
+    /// Whether `host` labels its session `place` as one Shoal created for
+    /// `workspace`, which the workspace's removal closes.
+    pub(super) async fn labels_session(
+        &self,
+        host: HostName,
+        place: &str,
+        workspace: &str,
+    ) -> Result<bool> {
+        let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) else {
+            return Ok(false);
+        };
+        let sessions = host.sessions(&self.paths.state).await?;
+        Ok(sessions
+            .iter()
+            .any(|session| session.name == place && session.workspace == workspace))
+    }
+
     /// Read ownership fresh for each session: a stale list must not classify a
     /// newly registered workspace as removed.
     pub(crate) async fn cleanup_orphan_sessions(&self) {
@@ -76,34 +93,33 @@ impl Manager {
         };
         for (owner, place) in places {
             let removed = !sweep || matches!(self.find_workspace(&owner).await, Ok(None));
-            if removed
-                && let Err(error) = self
-                    .close_recorded_place(&owner, place.host, place.id())
-                    .await
-            {
+            if removed && let Err(error) = self.close_recorded_place(&owner, &place).await {
                 self.session_cleanup_failed(None, &error).await;
             }
         }
     }
 
-    /// Close `place` of `host`, recorded as one Shoal created, and forget
-    /// it while its record still names `workspace` its owner: an agent of
-    /// another workspace may have taken it over since. A host the daemon
-    /// cannot close places of leaves that to the place's watcher.
+    /// Close `place`, recorded as one Shoal created, and forget it while
+    /// its record still names `workspace` its owner: an agent of another
+    /// workspace may have taken it over since. A host the daemon cannot
+    /// close places of leaves that to the place's watcher.
     pub(crate) async fn close_recorded_place(
         &self,
         workspace: &str,
-        host: HostName,
-        place: &str,
+        place: &Origin,
     ) -> Result<PlaceClose> {
         let _ownership = self.place_ownership.lock().await;
-        let Some((owner, origin)) = self.place_owner(host, place).await? else {
-            return Ok(PlaceClose::NotRecorded);
+        let Some((owner, origin)) = self.place_owner(place).await? else {
+            return self.close_labelled_session(workspace, place).await;
         };
         if owner.as_deref() != Some(workspace) {
             return Ok(PlaceClose::OwnedElsewhere);
         }
-        let Some(host) = self.session_hosts.iter().find(|known| known.name() == host) else {
+        let host = self
+            .session_hosts
+            .iter()
+            .find(|known| known.name() == place.host);
+        let Some(host) = host else {
             self.forget_owned_place(origin).await?;
             return Ok(PlaceClose::HostCloses);
         };
@@ -114,6 +130,30 @@ impl Manager {
         )
         .await?;
         self.forget_owned_place(origin).await?;
+        Ok(PlaceClose::Closed)
+    }
+
+    /// Close `place`, which the daemon keeps no record of, when its host
+    /// labels it as `workspace`'s session, as zmx does a session from before
+    /// Shoal recorded them; the host's close verifies the labels again.
+    async fn close_labelled_session(&self, workspace: &str, place: &Origin) -> Result<PlaceClose> {
+        if !self
+            .labels_session(place.host, place.id(), workspace)
+            .await?
+        {
+            return Ok(PlaceClose::NotRecorded);
+        }
+        let host = self
+            .session_hosts
+            .iter()
+            .find(|known| known.name() == place.host)
+            .context("the host that labels the session is gone")?;
+        host.close(
+            &self.paths.state,
+            place,
+            &Owner::Workspace(workspace.to_owned()),
+        )
+        .await?;
         Ok(PlaceClose::Closed)
     }
 

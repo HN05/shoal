@@ -800,7 +800,7 @@ Herdr pane as a plain terminal:
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
 # tab_name = "{repo}: {branch}" # Customize the tab name
-# close_when_done = true # Close after done keeps the workspace, or at removal
+# close_when_done = true # Close after done keeps the workspace
 ```
 
 `tab_name` supports `{repo}`, `{branch}`, `{issue_number}`, and `{issue_title}`,
@@ -812,9 +812,12 @@ Failures before agent execution leave the tab open. Agent exits leave the tab
 open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
-them, as Herdr does, unless stopped work waits for `shoal resume`, and workspace
-removal closes it immediately. A background tab `shoal resume` opens closes the
-same way; a pane it reuses keeps its tab's behavior. `add`
+them, as Herdr does, unless stopped work waits for `shoal resume`. Workspace
+removal closes it immediately, regardless of `close_when_done`, and daemon
+startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
+only the pane it opened the tab with, so a pane you split off keeps the tab
+open, and a tab you opened stays open. A background tab `shoal resume` opens
+closes the same way; a pane it reuses keeps its tab's behavior. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
@@ -845,7 +848,7 @@ new_window = true       # Open windows beside the caller
 placement = "window"    # "split" opens beside the caller's block instead
 session_name = "{repo}" # The session for windows Shoal opens outside one
 # window_name = "{repo}: {branch}" # Customize the window name, as tab_name
-# close_when_done = true # Close after done keeps the workspace, or at removal
+# close_when_done = true # Close after done keeps the workspace
 ```
 
 The top-level `default_host` sets where launches from a terminal outside Herdr
@@ -2275,8 +2278,8 @@ writes its removal record and checkpoint to a new file, or to standard output fo
 with the workspace, as its Herdr tab does. It refuses before removing anything
 when the file exists or lies inside the workspace, when the daemon cannot create
 a file in its directory within 30 seconds, when a checkpoint cannot keep
-the uncommitted files, or when `-` would stream from a Herdr tab or zmx session
-that closes with the workspace, and asks before releasing holds unless given
+the uncommitted files, or when `-` would stream from a Herdr pane, Rex block or
+zmx session Shoal opened for the workspace, which closes with it, and asks before releasing holds unless given
 `--yes`. A workspace already removed is exported from its removal record without
 another removal. The checkpoint travels as a Git bundle without the commits of
 the default remote's default branch; a checkpoint that branch already has

@@ -65,6 +65,17 @@ impl Origin {
         }
     }
 
+    /// What names the server holding the place among its host's servers,
+    /// as the host reads its data; empty for a host with one server. Places
+    /// of different servers may share an ID.
+    pub fn server(&self) -> String {
+        match self.host {
+            HostName::Herdr => super::herdr::server(&self.data),
+            HostName::Rex => super::rex::server(&self.data),
+            HostName::Terminal | HostName::Zmx => String::new(),
+        }
+    }
+
     /// The place's ID; empty for a group alone.
     pub fn id(&self) -> &str {
         self.place.as_deref().unwrap_or_default()

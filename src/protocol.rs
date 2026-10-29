@@ -68,7 +68,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 150;
+pub const VERSION: u32 = 151;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -484,6 +484,7 @@ response_bodies! {
     RunningAgents(Vec<crate::model::RunningAgent>),
     OwnedPlaces(Vec<crate::model::OwnedPlace>),
     PlaceClose(crate::sessions::PlaceClose),
+    PlaceOwnership(crate::sessions::PlaceOwnership),
     QueueEntry(crate::model::QueueEntry),
     MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),

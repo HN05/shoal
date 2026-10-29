@@ -706,10 +706,15 @@ tab's watcher as it was. Top-level `close_when_done` applies to every host, and
 `herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,
-whatever the daemon reports; one refused for a protocol mismatch restarts
-from the installation path Shoal was started through, never a resolved versioned
-binary, once another binary is installed there, so tabs opened before an upgrade
-still close.
+whatever the daemon reports. It asks the daemon whose its place is until the
+daemon answers; a place the daemon records, for its workspace or another
+owner, or whose host labels it, is the daemon's, and the watcher closes it at
+removal only when the daemon knows nothing of it, such as a tab opened before
+Shoal recorded its places, never before an answer, which could close what
+removal already did. Only such a watcher, whose host closes more than the
+place, keeps the marker. One refused for a protocol mismatch restarts from the installation path Shoal was started through, never a
+resolved versioned binary, once another binary is installed there, so tabs
+opened before an upgrade still close.
 
 Shoal closes only the zmx sessions it created; a session the user opened stays
 theirs even after an agent ran in it. The daemon records the sessions Shoal
@@ -758,18 +763,22 @@ falls back from its origin's group to its host's configured group on the same
 server, then to `default_host`, then to zmx. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
-of shell history, and the shell stays as in a Herdr tab. Rex blocks carry no
-ownership marks, so the daemon's records of the places Shoal created are the proof of
-ownership, closed through the same removal hook, orphan sweep and pending-close
-retries as zmx sessions; Rex never reuses IDs, so a recorded block that still
-exists is Shoal's, and each state directory knows only its own. An agent of
-another workspace that starts in a recorded block takes it over and a chat
+of shell history, and the shell stays as in a Herdr tab. Rex blocks and Herdr
+panes carry no ownership marks, so the daemon's records of the places Shoal
+created are the proof of ownership, closed through the same removal hook,
+orphan sweep and pending-close retries as zmx sessions; neither host reuses
+IDs on one server, Herdr not even across its restarts, so a recorded place that
+still exists is Shoal's, and each state directory knows only its own. Servers
+number places alike, so a record names its place by host, the server the host
+reads from its data, and ID. An agent of
+another workspace that starts in a recorded place takes it over and a chat
 releases it from its workspace, as relabelling does for a zmx session, while a
 nested command takes nothing; place watchers close recorded places
 through the daemon, which reads the owner and closes under one lock, or forgets
 the record and leaves the close to the watcher for a host it cannot close
-places of, such as Herdr. A close ends
-only that block, leaving the user's other blocks in its window. Rex's own
+places of. A close ends only that block or pane, leaving the user's other
+blocks in its window and panes in its tab; Herdr closes a tab with its last
+pane. Rex's own
 `own_block` arbitrates terminal size between clients and is not ownership.
 
 Terminal agent launches run in zmx sessions so agents outlive the terminal:

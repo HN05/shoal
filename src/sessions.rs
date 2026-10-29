@@ -1,5 +1,6 @@
 //! Terminal sessions Shoal created, shared by the CLI and daemon. Places the
 //! user opened stay theirs, even when Shoal runs an agent in them.
+pub(crate) mod herdr;
 mod locking;
 mod origin;
 pub(crate) mod rex;
@@ -25,6 +26,20 @@ pub(crate) struct Session {
 pub(crate) enum Owner {
     Workspace(String),
     Demo(String),
+}
+
+/// Whose a place is, as the daemon knows it when asked for a workspace.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceOwnership {
+    /// The workspace's: its record names the workspace, or its host labels
+    /// it as the workspace's session, so the workspace's removal closes it.
+    Workspace,
+    /// Another workspace's agent or a chat took it over.
+    Elsewhere,
+    /// Neither recorded nor labelled, as a place opened before Shoal
+    /// recorded its places.
+    Unknown,
 }
 
 /// What happened to a recorded place a watcher asked the daemon to close.
@@ -63,6 +78,10 @@ pub(crate) fn hosts() -> Vec<Arc<dyn Host>> {
     if cfg!(test) {
         Vec::new()
     } else {
-        vec![Arc::new(zmx::Zmx), Arc::new(rex::Cleanup)]
+        vec![
+            Arc::new(zmx::Zmx),
+            Arc::new(rex::Cleanup),
+            Arc::new(herdr::Cleanup),
+        ]
     }
 }

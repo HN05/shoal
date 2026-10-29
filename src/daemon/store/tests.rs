@@ -271,6 +271,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 79 {
         db.execute_batch(include_str!("execution_unretried_turns.sql"))?;
     }
+    if version >= 80 {
+        super::place_servers::key_by_server(&db)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -287,6 +290,35 @@ fn schema_snapshot(db: &Connection) -> Result<Vec<String>> {
         .query_map([], |row| row.get::<_, String>(0))?
         .map(|sql| Ok(sql?.split_whitespace().collect()))
         .collect::<rusqlite::Result<_>>()?)
+}
+
+#[test]
+fn recorded_places_keep_the_server_their_data_names() -> Result<()> {
+    let mut db = historical_database(79)?;
+    let mut pane =
+        crate::sessions::Origin::created(crate::sessions::HostName::Herdr, "w1:p1".into());
+    pane.data.insert("HERDR_SOCKET_PATH".into(), "/sock".into());
+    pane.data.insert("HERDR_ENV".into(), "1".into());
+    let block = crate::sessions::Origin::created(crate::sessions::HostName::Rex, "b1".into());
+    for place in [&pane, &block] {
+        db.execute(
+            "INSERT INTO owned_places(host,place,workspace_id,origin) VALUES (?1,?2,'workspace',?3)",
+            rusqlite::params![place.host, place.id(), serde_json::to_string(place)?],
+        )?;
+    }
+    migrate(&mut db)?;
+    let servers: Vec<(String, String)> = db
+        .prepare("SELECT place,server FROM owned_places ORDER BY rowid")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        servers,
+        [
+            ("w1:p1".to_owned(), "HERDR_SOCKET_PATH=/sock".to_owned()),
+            ("b1".to_owned(), String::new()),
+        ]
+    );
+    Ok(())
 }
 
 #[test]

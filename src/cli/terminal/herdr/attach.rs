@@ -7,10 +7,11 @@ use anyhow::{Context as _, Result, bail};
 use tokio::process::Command;
 
 use super::{Pane, TabInfo, herdr};
-use crate::{cli::terminal::Session, sessions::Origin, subprocess::Run};
-
-/// The variables naming the Herdr server a pane runs in, most specific first.
-const SERVER_VARS: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSION"];
+use crate::{
+    cli::terminal::Session,
+    sessions::{Origin, herdr::SERVER_VARS},
+    subprocess::Run,
+};
 
 /// The session at `place`, named after its tab, while its pane is open.
 pub(super) async fn session_at(place: &Origin) -> Result<Option<Session>> {

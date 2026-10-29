@@ -1,4 +1,5 @@
 use super::*;
+use crate::sessions::PlaceOwnership;
 use crate::{
     removal::{InspectionPolicy, UnsavedWork},
     sessions::{Host, HostName, Origin, Session},
@@ -54,6 +55,10 @@ impl Host for FakeHost {
     }
     fn sessions<'a>(&'a self, _: &'a Path) -> BoxFuture<'a, Result<Vec<Session>>> {
         Box::pin(async {
+            // Herdr labels no panes, so discovery finds none.
+            if self.name == Some(HostName::Herdr) {
+                return Ok(Vec::new());
+            }
             Ok(self
                 .remaining
                 .lock()
@@ -84,8 +89,9 @@ impl Host for FakeHost {
             {
                 return Ok(());
             }
-            // A Rex block carries no labels: the daemon's record proves it Shoal's.
-            let owned = self.name == Some(HostName::Rex)
+            // A Rex block or a Herdr pane carries no labels: the daemon's
+            // record proves it Shoal's.
+            let owned = matches!(self.name, Some(HostName::Rex | HostName::Herdr))
                 || match owner {
                     crate::sessions::Owner::Workspace(workspace) => self
                         .remaining
@@ -502,7 +508,7 @@ async fn places_of_hosts_without_cleanup_are_forgotten_with_their_workspace() ->
     manager
         .record_owned_place(
             &workspace.id,
-            Origin::created(HostName::Herdr, "w1:p1".into()),
+            Origin::created(HostName::Terminal, "w1:p1".into()),
         )
         .await?;
     manager.close_owned_places(Some(workspace.id.clone())).await;
@@ -544,7 +550,10 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
     manager.close_owned_places(Some(workspace.id.clone())).await;
     assert_eq!(
         manager
-            .close_recorded_place(&workspace.id, HostName::Rex, "shared")
+            .close_recorded_place(
+                &workspace.id,
+                &Origin::created(HostName::Rex, "shared".into())
+            )
             .await?,
         PlaceClose::OwnedElsewhere
     );
@@ -552,14 +561,14 @@ async fn an_agent_of_another_workspace_takes_over_a_block_shoal_created() -> Res
     // It closes with the workspace whose agent took it over.
     assert_eq!(
         manager
-            .close_recorded_place(&taker.id, HostName::Rex, "shared")
+            .close_recorded_place(&taker.id, &Origin::created(HostName::Rex, "shared".into()))
             .await?,
         PlaceClose::Closed
     );
     assert_eq!(host.closed()?, ["shared"]);
     assert_eq!(
         manager
-            .close_recorded_place(&taker.id, HostName::Rex, "shared")
+            .close_recorded_place(&taker.id, &Origin::created(HostName::Rex, "shared".into()))
             .await?,
         PlaceClose::NotRecorded
     );
@@ -574,12 +583,15 @@ async fn a_recorded_place_the_daemon_cannot_close_is_left_to_its_host() -> Resul
     manager
         .record_owned_place(
             &workspace.id,
-            Origin::created(HostName::Herdr, "w1:p9".into()),
+            Origin::created(HostName::Terminal, "w1:p9".into()),
         )
         .await?;
     assert_eq!(
         manager
-            .close_recorded_place(&workspace.id, HostName::Herdr, "w1:p9")
+            .close_recorded_place(
+                &workspace.id,
+                &Origin::created(HostName::Terminal, "w1:p9".into())
+            )
             .await?,
         PlaceClose::HostCloses
     );
@@ -614,7 +626,7 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
         .await?;
     assert_eq!(
         manager
-            .close_recorded_place(&child.id, HostName::Rex, "parent")
+            .close_recorded_place(&child.id, &Origin::created(HostName::Rex, "parent".into()))
             .await?,
         PlaceClose::OwnedElsewhere
     );
@@ -635,10 +647,134 @@ async fn a_nested_command_or_a_chat_leaves_the_owner_of_a_block() -> Result<()> 
     manager.cleanup_orphan_sessions().await;
     assert_eq!(
         manager
-            .close_recorded_place(&workspace.id, HostName::Rex, "chatted")
+            .close_recorded_place(
+                &workspace.id,
+                &Origin::created(HostName::Rex, "chatted".into())
+            )
             .await?,
         PlaceClose::OwnedElsewhere
     );
     assert_eq!(host.closed()?, ["parent"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_session_closes_with_the_workspace_its_host_labels_it_for() -> Result<()> {
+    let (_root, manager, workspace, host) = fixture().await?;
+    let other = manager
+        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .await?;
+    host.add("labelled", &workspace.id)?;
+    assert!(
+        manager
+            .place_ownership(
+                &workspace.id,
+                &Origin::created(HostName::Zmx, "labelled".into())
+            )
+            .await?
+            == PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(
+                &other.id,
+                &Origin::created(HostName::Zmx, "labelled".into())
+            )
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(
+                &workspace.id,
+                &Origin::created(HostName::Zmx, "unlabelled".into())
+            )
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    assert!(
+        manager
+            .place_ownership(
+                &workspace.id,
+                &Origin::created(HostName::Rex, "labelled".into())
+            )
+            .await?
+            != PlaceOwnership::Workspace
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn panes_of_different_servers_under_one_id_are_different_places() -> Result<()> {
+    use crate::daemon::workspace::ExecutionKind;
+
+    let (_root, manager, workspace, host) = fixture_for("herdr").await?;
+    let taker = manager
+        .create_workspace(&workspace.repository_id, "taker".into(), None, None, None)
+        .await?;
+    let on = |server: &str| {
+        let mut pane = Origin::created(HostName::Herdr, "w1:p1".into());
+        pane.data.insert("HERDR_SOCKET_PATH".into(), server.into());
+        pane
+    };
+    manager
+        .record_owned_place(&workspace.id, on("first"))
+        .await?;
+    host.add("w1:p1", &workspace.id)?;
+    // An agent in the user's pane of the same ID on another server takes
+    // nothing over, and records nothing.
+    let mut users = on("second");
+    users.owned = false;
+    let _started = manager
+        .begin_execution_placed(
+            &taker.id,
+            None,
+            ExecutionKind::Command,
+            None,
+            None,
+            Some(crate::daemon::workspace::places::ExecutionPlace {
+                origin: users.clone(),
+                agent: true,
+            }),
+        )
+        .await?;
+    assert!(
+        manager.place_ownership(&workspace.id, &on("first")).await? == PlaceOwnership::Workspace
+    );
+    // A variable of the pane's that names no server leaves it the same place.
+    let mut shell = on("first");
+    shell.data.insert("HERDR_THEME".into(), "dark".into());
+    assert!(manager.place_ownership(&workspace.id, &shell).await? == PlaceOwnership::Workspace);
+    assert!(manager.place_ownership(&taker.id, &on("first")).await? != PlaceOwnership::Workspace);
+    assert!(manager.place_ownership(&workspace.id, &users).await? != PlaceOwnership::Workspace);
+    manager.close_owned_places(Some(taker.id.clone())).await;
+    assert!(host.closed()?.is_empty());
+    manager.close_owned_places(Some(workspace.id.clone())).await;
+    assert_eq!(host.closed()?, ["w1:p1"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_session_its_host_labels_closes_through_the_host_without_a_record() -> Result<()> {
+    use crate::sessions::PlaceClose;
+
+    let (_root, manager, workspace, host) = fixture().await?;
+    let other = manager
+        .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
+        .await?;
+    host.add("labelled", &workspace.id)?;
+    let session = Origin::created(HostName::Zmx, "labelled".into());
+    assert_eq!(
+        manager.close_recorded_place(&other.id, &session).await?,
+        PlaceClose::NotRecorded
+    );
+    assert!(host.closed()?.is_empty());
+    assert_eq!(
+        manager
+            .close_recorded_place(&workspace.id, &session)
+            .await?,
+        PlaceClose::Closed
+    );
+    assert_eq!(host.closed()?, ["labelled"]);
     Ok(())
 }

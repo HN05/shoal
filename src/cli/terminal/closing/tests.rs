@@ -166,10 +166,11 @@ impl Closes for FakeHost {
 
 /// Watch `host`'s place, begun under the completion at `kept_at`, with a
 /// daemon reporting `lifecycles` in turn, the last one from then on, for at
-/// most `looks` looks.
+/// most `looks` looks; `at_removal` closes it at removal.
 async fn watch_from(
     host: &FakeHost,
     kept_at: Option<&str>,
+    at_removal: Option<AtRemoval>,
     lifecycles: &[Option<Lifecycle>],
     looks: usize,
 ) -> usize {
@@ -187,15 +188,17 @@ async fn watch_from(
     };
     let earlier = EarlierCompletion(kept_at.map(str::to_owned));
     let close = async || host.close_place(&place.id).await;
-    close_when_due(host, &place, earlier, next, close, watching)
+    let at_removal = || async move { at_removal };
+    close_when_due(host, &place, earlier, at_removal, next, close, watching)
         .await
         .unwrap();
     looked.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-/// [`watch_from`] a workspace not done when the watch began.
+/// [`watch_from`] a workspace not done when the watch began, whose place
+/// the daemon closes at removal.
 async fn watch_fake(host: &FakeHost, lifecycles: &[Option<Lifecycle>], looks: usize) -> usize {
-    watch_from(host, None, lifecycles, looks).await
+    watch_from(host, None, Some(AtRemoval::Daemon), lifecycles, looks).await
 }
 
 /// A kept completion at `head` while the agent runs with `turn`.
@@ -211,9 +214,6 @@ fn kept(head: &str, turn: Option<AgentState>) -> Option<Lifecycle> {
 #[tokio::test(start_paused = true)]
 async fn the_watcher_closes_a_place_once_its_workspace_is_done() {
     let active = Some(Lifecycle::Active);
-    let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    assert_eq!(watch_fake(&host, &[Some(Lifecycle::Removed)], 5).await, 1);
-    assert_eq!(host.closed(), ["place-1"]);
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     let idle = kept("head", Some(AgentState::Idle));
     assert_eq!(watch_fake(&host, &[active.clone(), idle], 5).await, 2);
@@ -234,7 +234,7 @@ async fn the_watcher_keeps_a_place_without_proof() {
         ),
         // A failed daemon or host query proves nothing.
         (Ok(PlaceState::Open(None)), vec![active, None]),
-        (Err(()), vec![Some(Lifecycle::Removed)]),
+        (Err(()), vec![kept("head", Some(AgentState::Idle))]),
     ] {
         let host = FakeHost::new(state);
         assert_eq!(watch_fake(&host, &lifecycles, 3).await, 3);
@@ -247,21 +247,23 @@ async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
     let idle = || kept("head", Some(AgentState::Idle));
     // An agent started in a workspace already done is new work.
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
-    assert_eq!(watch_from(&host, Some("head"), &[idle()], 3).await, 3);
+    assert_eq!(
+        watch_from(&host, Some("head"), Some(AtRemoval::Daemon), &[idle()], 3).await,
+        3
+    );
     assert!(host.closed().is_empty());
     // One made after the watch began closes, even before the first look.
     let host = FakeHost::new(Ok(PlaceState::Open(None)));
     assert_eq!(watch_fake(&host, &[idle()], 3).await, 1);
     assert_eq!(host.closed(), ["place-1"]);
-    // Removal, a withdrawn completion and one at another HEAD all count.
+    // A withdrawn completion and one at another HEAD count.
     for later in [
-        vec![Some(Lifecycle::Removed)],
         vec![Some(Lifecycle::Active), idle()],
         vec![kept("next", Some(AgentState::Idle))],
     ] {
         let host = FakeHost::new(Ok(PlaceState::Open(None)));
         let lifecycles: Vec<_> = [idle()].into_iter().chain(later).collect();
-        watch_from(&host, Some("head"), &lifecycles, 5).await;
+        watch_from(&host, Some("head"), Some(AtRemoval::Daemon), &lifecycles, 5).await;
         assert_eq!(host.closed(), ["place-1"]);
     }
 }
@@ -269,7 +271,25 @@ async fn a_completion_before_the_watch_closes_nothing_until_it_changes() {
 #[tokio::test(start_paused = true)]
 async fn the_watcher_ends_once_the_host_reports_its_place_gone() {
     let host = FakeHost::new(Ok(PlaceState::Gone));
-    assert_eq!(watch_fake(&host, &[Some(Lifecycle::Removed)], 5).await, 1);
+    assert_eq!(watch_fake(&host, &[kept("head", None)], 5).await, 1);
+    assert!(host.closed().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_watcher_closes_at_removal_only_what_the_daemon_does_not() {
+    let lifecycles = [Some(Lifecycle::Active), Some(Lifecycle::Removed)];
+    let host = FakeHost::new(Ok(PlaceState::Open(Some(AgentState::Idle))));
+    assert_eq!(watch_fake(&host, &lifecycles, 5).await, 2);
+    assert!(host.closed().is_empty());
+    // Such as a tab opened before Shoal recorded its places.
+    let host = FakeHost::new(Ok(PlaceState::Open(None)));
+    let looks = watch_from(&host, None, Some(AtRemoval::Watcher), &lifecycles, 5).await;
+    assert_eq!(looks, 2);
+    assert_eq!(host.closed(), ["place-1"]);
+    // A daemon that never said leaves the place alone rather than close
+    // what it may have closed already.
+    let host = FakeHost::new(Ok(PlaceState::Open(None)));
+    assert_eq!(watch_from(&host, None, None, &lifecycles, 5).await, 2);
     assert!(host.closed().is_empty());
 }
 
@@ -371,18 +391,39 @@ async fn the_host_closes_what_the_daemon_leaves_to_it() {
         labelled: false,
         ..FakeHost::new(Ok(PlaceState::Open(None)))
     };
+    let watcher = Some(AtRemoval::Watcher);
     for closed in [
         PlaceClose::HostCloses,
         PlaceClose::NotRecorded,
         PlaceClose::Closed,
         PlaceClose::OwnedElsewhere,
     ] {
-        close_left_to_host(&labelled, &place, closed).await.unwrap();
+        close_left_to_host(&labelled, &place, closed, watcher)
+            .await
+            .unwrap();
         // A Rex block whose creation record failed may hold another agent now.
-        close_left_to_host(&unlabelled, &place, closed)
+        close_left_to_host(&unlabelled, &place, closed, watcher)
             .await
             .unwrap();
     }
     assert_eq!(labelled.closed(), ["place-1", "place-1"]);
     assert!(unlabelled.closed().is_empty());
+}
+
+#[tokio::test]
+async fn a_forgotten_record_of_a_place_the_daemon_closes_closes_nothing_more() {
+    let place = Watched {
+        id: "place-1".into(),
+        workspace: "workspace".into(),
+        instance: None,
+    };
+    // A kept completion's close reached the daemon only after removal had
+    // closed and forgotten the place, or before the daemon said who closes it.
+    for at_removal in [Some(AtRemoval::Daemon), None] {
+        let host = FakeHost::new(Ok(PlaceState::Open(None)));
+        close_left_to_host(&host, &place, PlaceClose::NotRecorded, at_removal)
+            .await
+            .unwrap();
+        assert!(host.closed().is_empty());
+    }
 }

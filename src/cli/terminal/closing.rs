@@ -1,10 +1,18 @@
-//! When a place a host opened for a workspace closes: once the workspace is
-//! removed, or once a completion that keeps the workspace has its agent's
-//! final turn finished. A place whose agent is stopped and waits for
-//! `shoal resume` stays open, showing why it stopped and where it resumes.
-//! A detached watcher decides this for each place, and a marker it keeps
-//! tells commands run in the place that it closes with the workspace.
-use std::{future::Future, path::PathBuf, process::Stdio, time::Duration};
+//! When a place a host opened for a workspace closes once a completion that
+//! keeps the workspace has its agent's final turn finished. A place whose
+//! agent is stopped and waits for `shoal resume` stays open, showing why it
+//! stopped and where it resumes. A detached watcher decides this for each
+//! place, and at removal only for a place the daemon does not close then,
+//! such as a tab opened before Shoal recorded its places. A marker the
+//! watcher keeps tells commands run in the place that it closes with the
+//! workspace.
+use std::{
+    cell::{Cell, RefCell},
+    future::Future,
+    path::PathBuf,
+    process::Stdio,
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result};
 
@@ -14,7 +22,7 @@ use crate::{
     env,
     model::Inspection,
     paths::Paths,
-    sessions::PlaceClose,
+    sessions::{Origin, PlaceClose, PlaceOwnership},
     state::AgentState,
 };
 
@@ -33,6 +41,16 @@ pub(in crate::cli) struct Watched {
     pub id: String,
     pub workspace: String,
     pub instance: Option<String>,
+}
+
+/// Who closes a watched place once its workspace is removed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AtRemoval {
+    /// The daemon, which records the place, as the workspace's or another
+    /// owner's, or whose host labels it as the workspace's.
+    Daemon,
+    /// The watcher, for a place the daemon does not know.
+    Watcher,
 }
 
 /// Start a detached watcher that closes `place` of `host` with `workspace`.
@@ -111,12 +129,9 @@ pub async fn watch(
     let watches = host
         .watches()
         .with_context(|| format!("{} cannot read places", host.name()))?;
-    let _closing = Marker::record(
-        &ctx.paths,
-        host.name().as_str(),
-        &place.workspace,
-        &place.id,
-    );
+    // The daemon's record of the place, as its environment names it.
+    let record =
+        super::record_here(host).unwrap_or_else(|| Origin::created(host.name(), place.id.clone()));
     let executable = installed::Executable::current();
     let lifecycle = || async {
         match workspace_lifecycle(ctx, &place.workspace).await {
@@ -131,59 +146,120 @@ pub async fn watch(
         }
     };
     let earlier = EarlierCompletion(kept_at);
-    let close = async || close_place(ctx, host, &place).await;
-    close_when_due(watches, &place, earlier, lifecycle, close, || {
-        ctx.paths.state.exists()
-    })
+    let known = Cell::new(None);
+    // Only a watcher that closes its place through the host, which closes
+    // more than the place, as Herdr does a tab, keeps the marker.
+    let closing = RefCell::new(None);
+    let at_removal = || async {
+        if known.get().is_none() {
+            known.set(at_removal(ctx, &place.workspace, &record).await);
+            if known.get() == Some(AtRemoval::Watcher) {
+                *closing.borrow_mut() = Some(Marker::record(
+                    &ctx.paths,
+                    host.name().as_str(),
+                    &place.workspace,
+                    &place.id,
+                ));
+            }
+        }
+        known.get()
+    };
+    let close = async || close_place(ctx, host, &place, &record, known.get()).await;
+    close_when_due(
+        watches,
+        &place,
+        earlier,
+        at_removal,
+        lifecycle,
+        close,
+        || ctx.paths.state.exists(),
+    )
     .await?;
     discard_inherited_directive();
     Ok(0)
 }
 
-/// Close `place` through the daemon while it records the place as its
-/// workspace's, otherwise through its host. A place another workspace's
-/// agent took over since stays open.
-async fn close_place(ctx: &Context, host: &dyn Host, place: &Watched) -> Result<()> {
-    let closed =
-        client::close_owned_place(&ctx.paths, &place.workspace, host.name(), &place.id).await?;
-    close_left_to_host(host, place, closed).await
+/// Who closes the place the daemon knows as `record` once `workspace` is
+/// removed, as the daemon says; `None` while it cannot say. A place another
+/// workspace or a chat took over is the daemon's to keep: only one it does
+/// not know is the watcher's.
+async fn at_removal(ctx: &Context, workspace: &str, record: &Origin) -> Option<AtRemoval> {
+    match client::place_ownership(&ctx.paths, workspace, record).await {
+        Ok(PlaceOwnership::Workspace | PlaceOwnership::Elsewhere) => Some(AtRemoval::Daemon),
+        Ok(PlaceOwnership::Unknown) => Some(AtRemoval::Watcher),
+        Err(_) => None,
+    }
+}
+
+/// Close `place`, which the daemon knows as `record`, through the daemon
+/// while it records the place as its workspace's, otherwise through its
+/// host as `at_removal` allows. A place another workspace's agent took over
+/// since stays open.
+async fn close_place(
+    ctx: &Context,
+    host: &dyn Host,
+    place: &Watched,
+    record: &Origin,
+    at_removal: Option<AtRemoval>,
+) -> Result<()> {
+    let closed = client::close_owned_place(&ctx.paths, &place.workspace, record).await?;
+    close_left_to_host(host, place, closed, at_removal).await
 }
 
 /// Close `place` through its host when the daemon, which `closed` says
 /// what it did, leaves that to the host: it cannot close the host's places,
-/// or it keeps no record of the place. Only a host whose places prove their
-/// own ownership closes them.
-async fn close_left_to_host(host: &dyn Host, place: &Watched, closed: PlaceClose) -> Result<()> {
-    match closed {
-        PlaceClose::HostCloses | PlaceClose::NotRecorded => match host.closes() {
-            Some(closes) => closes.close_place(&place.id).await,
-            None => Ok(()),
-        },
-        PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
+/// or it keeps no record of a place it said it leaves to the watcher. Only a
+/// host whose places prove their own ownership closes them. A missing
+/// record of a place the daemon closes, or has not answered for, means
+/// removal closed and forgot it, and the host would close more than the
+/// place, such as a Herdr tab with the panes the user split off.
+async fn close_left_to_host(
+    host: &dyn Host,
+    place: &Watched,
+    closed: PlaceClose,
+    at_removal: Option<AtRemoval>,
+) -> Result<()> {
+    match (closed, at_removal) {
+        (PlaceClose::HostCloses, _) | (PlaceClose::NotRecorded, Some(AtRemoval::Watcher)) => {
+            match host.closes() {
+                Some(closes) => closes.close_place(&place.id).await,
+                None => Ok(()),
+            }
+        }
+        (PlaceClose::NotRecorded, Some(AtRemoval::Daemon) | None)
+        | (PlaceClose::Closed | PlaceClose::OwnedElsewhere, _) => Ok(()),
     }
 }
 
 /// Close `place` with `close` once `lifecycle` and the host say so,
-/// looking again while `watching` holds. A missing daemon or a failed query
+/// looking again while `watching` holds. At the workspace's removal it
+/// closes only a place `at_removal` says the daemon leaves to it, and
+/// nothing while the daemon has not said. A missing daemon or a failed query
 /// does not prove completion or removal, so `lifecycle` gives `None` then,
 /// or the failure that ends the watch. A closed place leaves nothing to
 /// close, whatever the daemon reports; a failed host query, like a failed
 /// daemon query, proves neither, and neither does the `earlier` completion.
-async fn close_when_due<F>(
+async fn close_when_due<F, R>(
     host: &dyn Watches,
     place: &Watched,
     mut earlier: EarlierCompletion,
+    mut at_removal: impl FnMut() -> R,
     mut lifecycle: impl FnMut() -> F,
     close: impl AsyncFn() -> Result<()>,
     watching: impl Fn() -> bool,
 ) -> Result<()>
 where
     F: Future<Output = Result<Option<Lifecycle>>>,
+    R: Future<Output = Option<AtRemoval>>,
 {
     while watching() {
+        let at_removal = at_removal().await;
         let lifecycle = lifecycle()
             .await?
             .filter(|lifecycle| !earlier.only_one_in(lifecycle));
+        if lifecycle == Some(Lifecycle::Removed) && at_removal != Some(AtRemoval::Watcher) {
+            break;
+        }
         let reported = match host.place_state(place).await {
             Ok(PlaceState::Gone) => break,
             Ok(PlaceState::Open(agent)) => Some(agent),
