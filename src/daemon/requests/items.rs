@@ -45,12 +45,12 @@ pub(super) async fn handle(
             )));
         }
         ItemMethod::ListItems {
-            workspace,
+            context,
             kind,
             search,
         } => {
             let listed = manager
-                .list_items(&workspace, kind, &search, caller.is_some())
+                .list_items(&context, kind, &search, caller.is_some())
                 .await;
             return Ok(Answer::pages(listed, Body::Items));
         }
@@ -65,11 +65,11 @@ pub(super) async fn handle(
             return Ok(Answer::pages(response, Body::ApiResponse));
         }
         ItemMethod::ItemAction {
-            workspace,
+            context,
             kind,
             item,
             action,
-        } => Body::Item(manager.item_action(&workspace, kind, item, action).await?),
+        } => Body::Item(manager.item_action(&context, kind, item, action).await?),
         ItemMethod::OpenPull { workspace, options } => {
             Body::Opened(manager.open_pull(&workspace, options, caller).await?)
         }
@@ -142,16 +142,10 @@ impl Scoped for ItemMethod {
             } if review.has_verdict() => bail!(
                 "approving and requesting changes are the user's decision; ask them with shoal alerts send"
             ),
-            ItemMethod::OpenIssue { context, .. } => Some(context_workspace(context)?),
-            ItemMethod::SetIssue { workspace, .. }
-            | ItemMethod::LinkItem { workspace, .. }
-            | ItemMethod::UnlinkItems { workspace, .. }
-            | ItemMethod::SetPr { workspace, .. }
-            | ItemMethod::PrWait { workspace, .. }
-            | ItemMethod::WatchItems { workspace, .. }
-            | ItemMethod::OpenPull { workspace, .. }
+            ItemMethod::OpenIssue { context, .. }
+            | ItemMethod::ListItems { context, .. }
             | ItemMethod::ItemAction {
-                workspace,
+                context,
                 action:
                     Action::Edit(_)
                     | Action::Comment { .. }
@@ -161,8 +155,14 @@ impl Scoped for ItemMethod {
                     | Action::Close
                     | Action::Reopen,
                 ..
-            }
-            | ItemMethod::ListItems { workspace, .. }
+            } => Some(context_workspace(context)?),
+            ItemMethod::SetIssue { workspace, .. }
+            | ItemMethod::LinkItem { workspace, .. }
+            | ItemMethod::UnlinkItems { workspace, .. }
+            | ItemMethod::SetPr { workspace, .. }
+            | ItemMethod::PrWait { workspace, .. }
+            | ItemMethod::WatchItems { workspace, .. }
+            | ItemMethod::OpenPull { workspace, .. }
             | ItemMethod::ForgeApi { workspace, .. }
             | ItemMethod::SelectItems { workspace, .. } => Some(workspace),
         })

@@ -21,22 +21,45 @@ use crate::{
         },
     },
     model::{Relation, ReviewMark, Workspace},
+    protocol::ItemContext,
 };
 
 mod accounts;
 mod open_issue;
 
 impl Manager {
-    /// Apply `action` to the item `input` names in the workspace's repository,
-    /// or to its linked item of `kind`.
+    /// Apply `action` to the item `input` names in the repository of
+    /// `context`, or to the workspace's linked item of `kind`.
     pub async fn item_action(
+        &self,
+        context: &ItemContext,
+        kind: ItemKind,
+        input: Option<String>,
+        action: Action,
+    ) -> Result<Item> {
+        action.validate(kind)?;
+        match context {
+            ItemContext::Workspace(selector) => {
+                self.workspace_item_action(selector, kind, input, action)
+                    .await
+            }
+            ItemContext::Checkout(selector) => {
+                let input = input
+                    .context("outside a workspace, nothing is linked; pass a number or URL")?;
+                self.checkout_item_action(selector, kind, &input, action)
+                    .await
+            }
+        }
+    }
+
+    /// Apply `action` for the workspace and record it as its own change.
+    async fn workspace_item_action(
         &self,
         selector: &str,
         kind: ItemKind,
         input: Option<String>,
         action: Action,
     ) -> Result<Item> {
-        action.validate(kind)?;
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let forge = self.workspace_forge(&workspace).await?;
@@ -59,6 +82,32 @@ impl Manager {
         let target = Target { kind, number, url };
         self.apply_own(&workspace.id, &forge, &account, target, &action)
             .await
+    }
+
+    /// Apply `action` from the repository's registered checkout, which no
+    /// workspace watches.
+    async fn checkout_item_action(
+        &self,
+        selector: &str,
+        kind: ItemKind,
+        input: &str,
+        action: Action,
+    ) -> Result<Item> {
+        let checkout = self.repository(selector).await?;
+        let (forge, agent) = self.checkout_forge_account(&checkout).await?;
+        let (number, url) = match kind {
+            ItemKind::Issue => forge.issue(input)?,
+            ItemKind::Pr => forge.pull(input)?,
+        };
+        let account = if users_decision(&action) {
+            self.user_account()
+        } else {
+            agent
+        };
+        let acted = forge.apply(&account, kind, number, &action).await;
+        Ok(acted
+            .with_context(|| format!("could not {} {url}", action.name()))?
+            .item)
     }
 
     /// Move the workspace's open PRs at `urls` into or out of draft as its

@@ -2628,7 +2628,10 @@ required_labels = ["area/", "type/"] # Default: []
 ```
 
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
-number or URL given, otherwise the linked issue or the only linked PR. `edit`
+number or URL given, otherwise the linked issue or the only linked PR. Outside a
+workspace, such as in a chat, they act on the repository of the registered
+checkout they run in, as its agent account, and take only a number or URL;
+outside both, a non-interactive call fails saying so. `edit`
 takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
 `--remove-reviewer`, which take a team as `owner/team` on GitHub and Forgejo,
@@ -2716,8 +2719,8 @@ other item command reports. Bitbucket's `--author` matches a nickname.
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Outside
 a workspace, such as in a chat, it opens the issue in the repository of the
-registered checkout it runs in, as that repository's agent account and under its
-settings, records it nowhere, and refuses `--link`. Its JSON
+registered checkout it runs in, under that repository's settings, records it
+nowhere, and refuses `--link`. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
 [convention](#repository-conventions) warnings, a failure to label, attach files
 or read the issue once the forge opened it, which still records it as posted,

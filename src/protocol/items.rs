@@ -56,18 +56,20 @@ pub enum ItemMethod {
         repository: Option<String>,
         link: bool,
     },
-    /// Change an issue or PR of the workspace's repository: the one `item`
+    /// Change an issue or PR of the context's repository: the one `item`
     /// names, or the workspace's linked one of `kind`.
     ItemAction {
-        workspace: String,
+        #[serde(flatten)]
+        context: ItemContext,
         kind: crate::forge::items::link::ItemKind,
         item: Option<String>,
         action: crate::forge::items::action::Action,
     },
-    /// Issues or PRs of the workspace's repository that `search` matches,
+    /// Issues or PRs of the context's repository that `search` matches,
     /// answered in one or more `items` frames and then `ok`.
     ListItems {
-        workspace: String,
+        #[serde(flatten)]
+        context: ItemContext,
         kind: crate::forge::items::link::ItemKind,
         search: crate::forge::items::list::Search,
     },

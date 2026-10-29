@@ -1,6 +1,6 @@
 //! `shoal pr`, `shoal pr ci` and `shoal issue`: ask the daemon to list, open or
-//! change items of the workspace's repository and report them as the forge
-//! now does.
+//! change items of the repository of the workspace or registered checkout and
+//! report them as the forge now does.
 use anyhow::Result;
 
 use crate::{
@@ -33,6 +33,7 @@ mod thread;
 use self::{
     ci::ci,
     content::{comment, edit_fields, pr_edit, read_content},
+    context::select_context,
     list::list,
     open::{open_issue, open_pr, pull_options},
     react::react,
@@ -142,12 +143,10 @@ async fn act(
     outcome: &str,
 ) -> Result<i32> {
     action.validate(kind)?;
-    let workspace =
-        ui::select_workspace(ctx, selector.workspace, ui::Fallback::CurrentDirectory).await?;
     let item: Item = client::request(
         &ctx.paths,
         ItemMethod::ItemAction {
-            workspace,
+            context: select_context(ctx, selector.workspace).await?,
             kind,
             item: selector.item,
             action,

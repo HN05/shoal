@@ -1,9 +1,11 @@
-//! `shoal pr list` and `shoal issue list`: search the workspace repository's
-//! items.
+//! `shoal pr list` and `shoal issue list`: search the items of the
+//! repository of the workspace or registered checkout.
 use anyhow::Result;
 
+use super::context::select_context;
+
 use crate::{
-    cli::{args::changes::ListArgs, client, context::Context, ui},
+    cli::{args::changes::ListArgs, client, context::Context},
     forge::items::{
         item::{Item, ItemState},
         link::ItemKind,
@@ -23,10 +25,8 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
     };
     // Refuse a bad filter before the workspace picker asks for anything.
     search.check()?;
-    let workspace =
-        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
     let method = ItemMethod::ListItems {
-        workspace,
+        context: select_context(ctx, args.workspace).await?,
         kind,
         search,
     };

@@ -3938,6 +3938,42 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
 }
 
 #[test]
+fn item_commands_act_from_a_registered_checkout() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    fixture.respond(json!({
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
+        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky":
+            {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
+    }));
+    let in_checkout = |args: &[&str]| {
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .args(args)
+            .output()
+            .unwrap()
+    };
+
+    let commented = in_checkout(&["--json", "issue", "comment", "40", "--body", "Seen"]);
+    assert!(commented.status.success(), "{commented:?}");
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues/40/comments", {"body": "Seen"}])]
+    );
+    let listed = in_checkout(&["--json", "issue", "list", "flaky"]);
+    let listed: Value = serde_json::from_slice(&listed.stdout).unwrap();
+    assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
+    // A checkout links nothing, so the item must be named.
+    let closed = in_checkout(&["issue", "close"]);
+    assert!(
+        String::from_utf8_lossy(&closed.stderr).contains("nothing is linked"),
+        "{closed:?}"
+    );
+}
+
+#[test]
 fn approving_a_proposal_warns_about_the_repository_conventions() {
     let fixture = Fixture::new(
         Forge::GitHub,
