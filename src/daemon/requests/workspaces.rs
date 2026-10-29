@@ -157,6 +157,17 @@ pub(super) async fn handle(
                 .close_recorded_place(&workspace, host, &place)
                 .await?,
         ),
+        WorkspaceMethod::OwnedPlaces => Body::OwnedPlaces(
+            manager
+                .owned_places(None)
+                .await?
+                .into_iter()
+                .map(|(workspace_id, origin)| crate::model::OwnedPlace {
+                    workspace_id,
+                    origin,
+                })
+                .collect(),
+        ),
         WorkspaceMethod::RecordOwnedPlace { workspace, origin } => {
             manager.record_owned_place(&workspace, origin).await?;
             Body::Ok
@@ -211,6 +222,7 @@ impl Scoped for WorkspaceMethod {
                 target: ConfigTarget::Repository(_),
             }
             | WorkspaceMethod::UntrackedWorktrees
+            | WorkspaceMethod::OwnedPlaces
             | WorkspaceMethod::WatchWorkspaceEvents { .. } => return Err(denied()),
         })
     }

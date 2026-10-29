@@ -61,7 +61,7 @@ impl Manager {
     /// The places Shoal created for `workspace`, or for every workspace,
     /// with the workspace each belongs to; places a chat took are no
     /// workspace's.
-    pub(super) async fn owned_places(
+    pub(crate) async fn owned_places(
         &self,
         workspace: Option<String>,
     ) -> Result<Vec<(String, Origin)>> {

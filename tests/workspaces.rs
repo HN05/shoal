@@ -24607,7 +24607,8 @@ fn attach_selects_a_session_of_the_workspace() {
 #[test]
 fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
     let fixture = Fixture::new();
-    fixture.add("failed");
+    let workspace = fixture.add("failed");
+    fixture.add("finished");
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     // A detached launch whose setup failed keeps its shell, which no
     // execution records.
@@ -24615,17 +24616,31 @@ fn attach_reaches_a_session_shoal_opened_for_a_workspace_without_an_agent() {
         "workspace": "failed", "origin": {"host": "zmx", "place": "failed"}
     }}));
     assert_eq!(response["type"], "ok", "{response}");
+    // The record of a session that has ended outlives it.
+    let response = fixture.request(serde_json::json!({"record_owned_place":{
+        "workspace": "finished", "origin": {"host": "zmx", "place": "finished"}
+    }}));
+    assert_eq!(response["type"], "ok", "{response}");
     fs::write(
         fixture.root.path().join("zmx-sessions"),
         "  name=failed\tpid=1\tclients=0\n",
     )
     .unwrap();
+    let attached = || {
+        zmx_calls(&fixture)
+            .into_iter()
+            .rfind(|call| call[0] == "attach")
+            .unwrap()
+    };
     let (output, transcript) = fixture.interactive(&["attach", "failed"], "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
-    let attached = zmx_calls(&fixture)
-        .into_iter()
-        .rfind(|call| call[0] == "attach");
-    assert_eq!(attached.unwrap(), ["attach", "failed"]);
+    assert_eq!(attached(), ["attach", "failed"]);
+    // The picker offers the workspace whose session is open, and only it.
+    let (output, rows) = fixture.pick(&["attach"], workspace["id"].as_str().unwrap(), "");
+    assert!(output.status.success(), "{output:?}");
+    let rows = rows.lines().collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(attached(), ["attach", "failed"]);
     assert_eq!(
         fixture.ok(&["status", "failed"])["sessions"],
         serde_json::json!([{"name": "failed", "clients": 0}])

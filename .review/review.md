@@ -466,9 +466,9 @@ configured command for another agent, plus proven child
   through the same removal, sweep and retry path, and a close ends only that block.
   Places are host-neutral origin records whose host data generic code never reads.
   Attach, status and attach completion find sessions of every host only through
-  the places the daemon recorded for executions, chats and, for attach and
-  status, the places Shoal created for the workspace, never through labels; zmx
-  labels and their lock serve cleanup ownership alone.
+  the places the daemon recorded for executions, chats and the places Shoal
+  created for workspaces, asking the host whether each is open, never through
+  labels; zmx labels and their lock serve cleanup ownership alone.
   Failed detached handoffs close only the originally observed process and creation time.
   A demo session closes after verified execution completion, including a disconnected stop, only
   while its host still verifies the launch ownership. Failed demo closes persist

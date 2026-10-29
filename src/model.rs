@@ -712,6 +712,13 @@ pub struct Chat {
     pub origin: Option<crate::sessions::Origin>,
 }
 
+/// A place Shoal created for a workspace, which closes with it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OwnedPlace {
+    pub workspace_id: String,
+    pub origin: crate::sessions::Origin,
+}
+
 /// A connected agent, or an execution whose wrapper is gone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunningAgent {

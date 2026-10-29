@@ -473,6 +473,7 @@ response_bodies! {
     QueueAdmission(crate::model::QueueAdmission),
     QueueEntries(Vec<crate::model::QueueEntry>),
     RunningAgents(Vec<crate::model::RunningAgent>),
+    OwnedPlaces(Vec<crate::model::OwnedPlace>),
     PlaceClose(crate::sessions::PlaceClose),
     QueueEntry(crate::model::QueueEntry),
     MovedEntry(crate::model::MovedEntry),

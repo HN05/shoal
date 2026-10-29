@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    model::{Chat, RunningAgent},
+    model::{Chat, OwnedPlace, RunningAgent},
     protocol::{self, Body, ChatMethod, ExecutionMethod, Method, Operation, Request, Response},
     sessions::{HostName, Origin},
     state::WorkspaceState,
@@ -48,9 +48,13 @@ async fn attach_candidates_follow_recorded_places() -> Result<()> {
 fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let bin = root.join("bin");
     fs::create_dir(&bin)?;
-    // Candidates come from the daemon's records alone, never from zmx.
+    // Only the session Shoal created for `second` is asked about; its
+    // record outlives `gone`'s.
     let script = bin.join("zmx");
-    fs::write(&script, "#!/bin/sh\nexit 1\n")?;
+    fs::write(
+        &script,
+        "#!/bin/sh\n[ \"$*\" = list ] || exit 1\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
+    )?;
     fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
     Ok(())
 }
@@ -81,13 +85,17 @@ async fn attach_candidates_child() -> Result<()> {
     let names: BTreeSet<_> = candidates.iter().map(|value| value.get_value()).collect();
     assert_eq!(
         names,
-        BTreeSet::from([OsStr::new("first"), OsStr::new("chat")])
+        BTreeSet::from([
+            OsStr::new("first"),
+            OsStr::new("second"),
+            OsStr::new("chat")
+        ])
     );
     Ok(())
 }
 
 async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) -> Result<()> {
-    for _ in 0..3 {
+    for _ in 0..4 {
         let (mut stream, _) = listener.accept().await?;
         let request: Request = protocol::read(&mut stream).await?;
         let body = if matches!(
@@ -102,6 +110,18 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 state: None,
                 origin: Some(Origin::created(HostName::Zmx, "workspace-session".into())),
             }])
+        } else if matches!(
+            request.method,
+            Method::Operation(Operation::Workspace(WorkspaceMethod::OwnedPlaces))
+        ) {
+            Body::OwnedPlaces(
+                [("w2", "retained"), ("w3", "gone")]
+                    .map(|(workspace, session)| OwnedPlace {
+                        workspace_id: workspace.into(),
+                        origin: Origin::created(HostName::Zmx, session.into()),
+                    })
+                    .into(),
+            )
         } else if matches!(
             request.method,
             Method::Operation(Operation::Chat(ChatMethod::ListChats))
@@ -128,7 +148,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
 }
 
 fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
-    [("w1", "first"), ("w2", "second")]
+    [("w1", "first"), ("w2", "second"), ("w3", "third")]
         .into_iter()
         .map(|(id, name)| {
             let mut workspace = Workspace::new_record(

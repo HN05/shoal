@@ -121,6 +121,8 @@ pub enum WorkspaceMethod {
         workspace: String,
         origin: crate::sessions::Origin,
     },
+    /// The places Shoal created for every workspace.
+    OwnedPlaces,
     /// Close `place` of `host`, a place Shoal created for `workspace`, while
     /// the daemon's record still names that workspace its owner. The
     /// workspace may already be removed.

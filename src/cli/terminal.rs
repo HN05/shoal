@@ -872,6 +872,23 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
         .collect()
 }
 
+/// The IDs of the owners of `places`, recorded for owners by ID, with a
+/// session still open there. A place whose host cannot say counts as closed.
+pub(in crate::cli) async fn open_session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
+    let mut owners = HashSet::new();
+    for (owner, place) in places {
+        if owners.contains(*owner) {
+            continue;
+        }
+        if let Some(host) = kept_by(place).sessions()
+            && let Ok(Some(_)) = host.session_at(place).await
+        {
+            owners.insert((*owner).to_owned());
+        }
+    }
+    owners
+}
+
 /// Attach this terminal to `session` through the host that keeps it, then
 /// say how to return to it by `name` when it outlives the attach.
 pub(in crate::cli) async fn attach(name: &str, session: &Session) -> Result<i32> {

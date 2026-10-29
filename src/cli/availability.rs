@@ -217,23 +217,35 @@ impl Availability {
     }
 }
 
-/// Workspaces whose running executions would block setup. Setup exempts
-/// the caller's own execution, so the caller's workspace counts only with
-/// another execution, as its inspection lists them.
 /// The IDs of workspaces with agent sessions, counting the places their
-/// running agents were recorded in.
+/// running agents were recorded in and those Shoal created for them, such as
+/// a session left at its shell after a failed launch.
 async fn session_workspaces(paths: &Paths) -> HashSet<String> {
     let agents: Vec<crate::model::RunningAgent> =
         client::request(paths, crate::protocol::ExecutionMethod::ListAgents)
+            .await
+            .unwrap_or_default();
+    let owned: Vec<crate::model::OwnedPlace> =
+        client::request(paths, crate::protocol::WorkspaceMethod::OwnedPlaces)
             .await
             .unwrap_or_default();
     let places: Vec<_> = agents
         .iter()
         .filter_map(|agent| Some((agent.workspace_id.as_str(), agent.origin.as_ref()?)))
         .collect();
-    terminal::session_owners(&places)
+    // A place Shoal created outlives its session in the daemon's records.
+    let owned: Vec<_> = owned
+        .iter()
+        .map(|place| (place.workspace_id.as_str(), &place.origin))
+        .collect();
+    let mut owners = terminal::session_owners(&places);
+    owners.extend(terminal::open_session_owners(&owned).await);
+    owners
 }
 
+/// Workspaces whose running executions would block setup. Setup exempts
+/// the caller's own execution, so the caller's workspace counts only with
+/// another execution, as its inspection lists them.
 async fn busy_workspaces(paths: &Paths, workspaces: &[Workspace]) -> HashSet<String> {
     let own = std::env::var(crate::env::EXECUTION_ID).ok();
     let mut busy = HashSet::new();
