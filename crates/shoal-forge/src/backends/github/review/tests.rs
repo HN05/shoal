@@ -39,6 +39,7 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         body: "Fix a",
         comments: diff.place(&comments)?,
         head: Some("c0ffee"),
+        bases: None,
     };
     let submission = review(&repo, 7, &placed);
     assert!(submission.drafts.is_empty());
@@ -62,6 +63,7 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         body: "",
         comments: Vec::new(),
         head: None,
+        bases: None,
     };
     let body = review(&repo, 7, &approval).requests[0].body.clone();
     assert_eq!(body, Some(json!({"event": "APPROVE", "comments": []})));

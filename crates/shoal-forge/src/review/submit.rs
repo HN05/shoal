@@ -12,7 +12,7 @@ use crate::{
         action::{Acted, after_post},
         link::ItemKind,
     },
-    review::diff::{Diff, Placed},
+    review::diff::{Bases, Diff, Placed},
     state::states,
     transport::api::Request,
 };
@@ -105,6 +105,7 @@ pub(crate) struct PlacedReview<'a> {
     pub comments: Vec<Placed<'a>>,
     /// The PR's head commit when Shoal read it, which the review is of.
     pub head: Option<&'a str>,
+    pub bases: Option<&'a Bases>,
 }
 
 /// The requests that submit a review.
@@ -124,6 +125,42 @@ impl Submission {
             requests,
         }
     }
+
+    /// Send the drafts, then the requests in order, to `forge`, stopping
+    /// at the first failure. A failure before the review is published
+    /// deletes the drafts created, so nothing of it shows.
+    async fn send(self, forge: &impl Exchange) -> Submitted {
+        let mut drafts = Vec::new();
+        for request in &self.drafts {
+            match forge.exchange(request).await {
+                Ok(draft) => drafts.push(draft),
+                Err(error) => {
+                    return Submitted::unpublished(discarded(forge, &drafts, error).await);
+                }
+            }
+        }
+        let mut responses = drafts.clone();
+        for request in &self.requests {
+            match forge.exchange(request).await {
+                Ok(response) => responses.push(response),
+                Err(error) if responses.len() == drafts.len() => {
+                    return Submitted::unpublished(discarded(forge, &drafts, error).await);
+                }
+                Err(error) => {
+                    return Submitted {
+                        responses,
+                        failure: Some(error),
+                        published: true,
+                    };
+                }
+            }
+        }
+        Submitted {
+            responses,
+            failure: None,
+            published: true,
+        }
+    }
 }
 
 /// What sending a submission left: the responses to the requests sent, in
@@ -133,6 +170,53 @@ struct Submitted {
     failure: Option<anyhow::Error>,
     /// Whether a request that posts the review reached the forge.
     published: bool,
+}
+
+/// Where a submission's requests go.
+trait Exchange {
+    /// The forge's response to `request`.
+    async fn exchange(&self, request: &Request) -> Result<Value>;
+
+    /// The request that deletes the draft a draft request's response
+    /// describes.
+    fn discard(&self, draft: &Value) -> Result<Request>;
+}
+
+/// The PR `number` on `repo`, reached as `account`.
+struct Forge<'a> {
+    repo: &'a ForgeRepo,
+    account: &'a Account,
+    number: u64,
+}
+
+impl Exchange for Forge<'_> {
+    async fn exchange(&self, request: &Request) -> Result<Value> {
+        self.repo.send(self.account, request).await
+    }
+
+    fn discard(&self, draft: &Value) -> Result<Request> {
+        let repo = self.repo;
+        Ok(repo
+            .kind
+            .discard_draft(repo, self.number, draft)?
+            .repeatable())
+    }
+}
+
+/// `error`, after deleting through `forge` the `drafts` it left behind.
+async fn discarded(forge: &impl Exchange, drafts: &[Value], error: anyhow::Error) -> anyhow::Error {
+    for draft in drafts {
+        let discarded = match forge.discard(draft) {
+            Ok(request) => forge.exchange(&request).await.map(drop),
+            Err(discard) => Err(discard),
+        };
+        if let Err(discard) = discarded {
+            return error.context(format!(
+                "deleting the review's drafts also failed, so some remain: {discard:#}"
+            ));
+        }
+    }
+    error
 }
 
 impl ForgeRepo {
@@ -155,9 +239,15 @@ impl ForgeRepo {
             body: &review.body,
             comments: diff.place(&review.comments)?,
             head: current.head_sha.as_deref(),
+            bases: diff.bases.as_ref(),
         };
         let submission = self.kind.review(self, number, &placed)?;
-        let submitted = self.send_submission(account, number, submission).await;
+        let forge = Forge {
+            repo: self,
+            account,
+            number,
+        };
+        let submitted = submission.send(&forge).await;
         let authored = self.posted_keys(account, number, &placed, &submitted).await;
         if let Some(error) = submitted.failure {
             return Err(after_post(error, submitted.published, &authored));
@@ -188,71 +278,6 @@ impl ForgeRepo {
             .kind
             .review_keys(self, account, number, review, responses);
         keys.await.unwrap_or_default()
-    }
-
-    /// Send `submission`'s drafts, then its requests in order, stopping at
-    /// the first failure. A failure before the review is published deletes
-    /// the drafts created, so nothing of it shows.
-    async fn send_submission(
-        &self,
-        account: &Account,
-        number: u64,
-        submission: Submission,
-    ) -> Submitted {
-        let mut drafts = Vec::new();
-        for request in &submission.drafts {
-            match self.send(account, request).await {
-                Ok(draft) => drafts.push(draft),
-                Err(error) => {
-                    let failure = self.discard_drafts(account, number, &drafts, error).await;
-                    return Submitted::unpublished(failure);
-                }
-            }
-        }
-        let mut responses = drafts.clone();
-        for request in &submission.requests {
-            match self.send(account, request).await {
-                Ok(response) => responses.push(response),
-                Err(error) if responses.len() == drafts.len() => {
-                    let failure = self.discard_drafts(account, number, &drafts, error).await;
-                    return Submitted::unpublished(failure);
-                }
-                Err(error) => {
-                    return Submitted {
-                        responses,
-                        failure: Some(error),
-                        published: true,
-                    };
-                }
-            }
-        }
-        Submitted {
-            responses,
-            failure: None,
-            published: true,
-        }
-    }
-
-    /// `error`, after deleting the `drafts` of PR `number` it left behind.
-    async fn discard_drafts(
-        &self,
-        account: &Account,
-        number: u64,
-        drafts: &[Value],
-        error: anyhow::Error,
-    ) -> anyhow::Error {
-        for draft in drafts {
-            let discarded = match self.kind.discard_draft(self, number, draft) {
-                Ok(request) => self.send(account, &request.repeatable()).await.map(drop),
-                Err(discard) => Err(discard),
-            };
-            if let Err(discard) = discarded {
-                return error.context(format!(
-                    "deleting the review's drafts also failed, so some remain: {discard:#}"
-                ));
-            }
-        }
-        error
     }
 }
 

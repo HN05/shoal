@@ -82,17 +82,17 @@ impl Backend for Bitbucket {
             Capability::RerunJobs
             | Capability::CancelJobs
             | Capability::ReadJobLogs
-            | Capability::ReadRuns
-            | Capability::LineComments
-            | Capability::ApprovePrs
-            | Capability::RequestChanges => Support::Unsupported(None),
+            | Capability::ReadRuns => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::DraftPrs
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
             | Capability::ForkPrs
-            | Capability::StartRuns => Support::Supported,
+            | Capability::StartRuns
+            | Capability::LineComments
+            | Capability::ApprovePrs
+            | Capability::RequestChanges => Support::Supported,
             Capability::Forks => Support::Unsupported(Some(
                 "fork it on Bitbucket, add the fork as a remote and set remote.pushDefault to it",
             )),

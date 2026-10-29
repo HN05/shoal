@@ -21,6 +21,7 @@ fn reviews_place_each_comment_on_its_side_and_are_keyed_by_review() -> Result<()
         body: "",
         comments: diff.place(&comments)?,
         head: Some("c0ffee"),
+        bases: None,
     };
     let submission = review(&repo, 7, &placed);
     assert_eq!(

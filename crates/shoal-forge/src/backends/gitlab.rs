@@ -95,10 +95,10 @@ impl Backend for GitLab {
             | Capability::DraftPrs
             | Capability::Attachments
             | Capability::MergeCommit
-            | Capability::SquashMerge => Support::Supported,
-            Capability::LineComments | Capability::ApprovePrs | Capability::RequestChanges => {
-                Support::Unsupported(None)
-            }
+            | Capability::SquashMerge
+            | Capability::LineComments
+            | Capability::ApprovePrs
+            | Capability::RequestChanges => Support::Supported,
         }
     }
 
@@ -482,7 +482,22 @@ impl Backend for GitLab {
     }
 
     fn review(&self, repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Result<Submission> {
-        Ok(review::review(repo, number, review))
+        review::review(repo, number, review)
+    }
+
+    fn discard_draft(&self, repo: &ForgeRepo, number: u64, draft: &Value) -> Result<Request> {
+        review::discard_draft(repo, number, draft)
+    }
+
+    async fn review_keys(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        number: u64,
+        review: &PlacedReview<'_>,
+        _responses: &[Value],
+    ) -> Result<Vec<String>> {
+        review::keys(repo, account, number, review).await
     }
 
     async fn issue_activity(

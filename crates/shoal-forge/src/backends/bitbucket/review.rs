@@ -1,6 +1,8 @@
 //! Bitbucket Cloud reviews: a pull request's diff as the Git diff
-//! Bitbucket serves between two commits.
+//! Bitbucket serves between two commits, and a review as a comment for
+//! each line, then the body, then the verdict.
 use anyhow::{Context, Result};
+use serde_json::json;
 
 use crate::{
     ForgeRepo,
@@ -8,7 +10,7 @@ use crate::{
     items::{item::Current, link::ItemKind},
     review::{
         diff::Diff,
-        submit::{PlacedReview, Submission},
+        submit::{PlacedReview, ReviewVerdict, Side, Submission},
     },
     transport::api::{HttpMethod, Request},
 };
@@ -31,12 +33,38 @@ fn diff_endpoint(repo: &ForgeRepo, current: &Current) -> Result<String> {
     Ok(repo.repo_endpoint(&format!("diff/{head}..{base}?topic=true")))
 }
 
-/// The request that posts `review` of pull request `number`, its body as
-/// a comment.
+/// The requests that post `review` of pull request `number` in order: an
+/// inline comment on each line, the body as a comment, then approving or
+/// requesting changes.
 pub(super) fn review(repo: &ForgeRepo, number: u64, review: &PlacedReview) -> Submission {
-    let endpoint = format!("{}/comments", repo.item_endpoint(ItemKind::Pr, number));
-    let body = serde_json::json!({ "content": { "raw": review.body } });
-    Submission::posting(vec![Request::new(HttpMethod::Post, endpoint, Some(body))])
+    let pull = repo.item_endpoint(ItemKind::Pr, number);
+    let comment = |body: serde_json::Value| {
+        Request::new(HttpMethod::Post, format!("{pull}/comments"), Some(body))
+    };
+    let mut requests: Vec<_> = (review.comments.iter())
+        .map(|placed| {
+            let side = match placed.comment.side {
+                Side::New => "to",
+                Side::Old => "from",
+            };
+            comment(json!({
+                "content": { "raw": placed.comment.body },
+                "inline": { "path": placed.file.path, side: placed.comment.line },
+            }))
+        })
+        .collect();
+    if !review.body.is_empty() {
+        requests.push(comment(json!({ "content": { "raw": review.body } })));
+    }
+    let verdict = match review.verdict {
+        ReviewVerdict::Comment => None,
+        ReviewVerdict::Approve => Some("approve"),
+        ReviewVerdict::RequestChanges => Some("request-changes"),
+    };
+    requests.extend(
+        verdict.map(|verdict| Request::new(HttpMethod::Post, format!("{pull}/{verdict}"), None)),
+    );
+    Submission::posting(requests)
 }
 
 #[cfg(test)]

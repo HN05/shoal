@@ -68,3 +68,79 @@ fn line_comments_read_from_json_default_to_the_new_side_and_refuse_unknowns() {
     let unknown_side = r#"[{"path": "a.rs", "line": 4, "body": "x", "side": "left"}]"#;
     assert!(serde_json::from_str::<Vec<LineComment>>(unknown_side).is_err());
 }
+
+/// A submission of `drafts` and `requests`, each a POST to its endpoint.
+fn submission(drafts: &[&str], requests: &[&str]) -> Submission {
+    let post = |endpoint: &&str| {
+        Request::new(
+            crate::transport::api::HttpMethod::Post,
+            (*endpoint).into(),
+            None,
+        )
+    };
+    Submission {
+        drafts: drafts.iter().map(post).collect(),
+        requests: requests.iter().map(post).collect(),
+    }
+}
+
+/// A forge that fails the request to `failing` and records the requests
+/// it receives, in order.
+struct Scripted {
+    failing: &'static str,
+    sent: std::cell::RefCell<Vec<String>>,
+}
+
+impl Exchange for Scripted {
+    async fn exchange(&self, request: &Request) -> Result<Value> {
+        let line = format!("{} {}", request.method.as_str(), request.endpoint);
+        self.sent.borrow_mut().push(line);
+        anyhow::ensure!(request.endpoint != self.failing, "{} failed", self.failing);
+        Ok(serde_json::json!({ "id": self.sent.borrow().len() }))
+    }
+
+    fn discard(&self, draft: &Value) -> Result<Request> {
+        let endpoint = format!("drafts/{}", draft["id"]);
+        Ok(Request::new(
+            crate::transport::api::HttpMethod::Delete,
+            endpoint,
+            None,
+        ))
+    }
+}
+
+/// Send `submission`, failing the request to `failing`, and return what it
+/// left with the requests sent, in order.
+async fn send(submission: Submission, failing: &'static str) -> (Submitted, Vec<String>) {
+    let forge = Scripted {
+        failing,
+        sent: Default::default(),
+    };
+    let submitted = submission.send(&forge).await;
+    (submitted, forge.sent.into_inner())
+}
+
+#[tokio::test]
+async fn a_failure_before_publishing_deletes_the_drafts_created() {
+    let (submitted, sent) = send(submission(&["d", "e", "f"], &["publish"]), "e").await;
+    assert_eq!(sent, ["POST d", "POST e", "DELETE drafts/1"]);
+    assert!(!submitted.published);
+    assert_eq!(submitted.failure.unwrap().to_string(), "e failed");
+
+    let (submitted, sent) = send(submission(&["d"], &["publish", "approve"]), "publish").await;
+    assert_eq!(sent, ["POST d", "POST publish", "DELETE drafts/1"]);
+    assert!(!submitted.published);
+}
+
+#[tokio::test]
+async fn a_failure_after_publishing_keeps_what_was_posted() {
+    let (submitted, sent) = send(submission(&["d"], &["publish", "approve"]), "approve").await;
+    assert_eq!(sent, ["POST d", "POST publish", "POST approve"]);
+    assert!(submitted.published);
+    assert_eq!(submitted.responses.len(), 2);
+    assert!(submitted.failure.is_some());
+
+    let (submitted, sent) = send(submission(&[], &["a", "b"]), "none").await;
+    assert_eq!(sent, ["POST a", "POST b"]);
+    assert!(submitted.published && submitted.failure.is_none());
+}
