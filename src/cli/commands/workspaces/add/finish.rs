@@ -64,6 +64,7 @@ async fn add_planned(
         issue: _,
         agent,
         args,
+        fork,
         queue_entry,
         chat,
         workspace,
@@ -111,7 +112,7 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
     }
-    agent.launch(ctx, workspace, issue, args).await
+    agent.launch(ctx, workspace, issue, args, fork).await
 }
 
 /// Whether the caller's shell enters the added `workspace`, where `agent`

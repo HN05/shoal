@@ -142,12 +142,15 @@ pub(super) async fn resolve_add_agent(
 }
 
 impl ResolvedAddAgent {
+    /// Start the agent in `workspace`, from a fork of session `fork` when
+    /// given, else open a shell there.
     pub(super) async fn launch(
         self,
         ctx: &Context,
         workspace: Workspace,
         issue: Option<issues::Issue>,
         args: Vec<OsString>,
+        fork: Option<String>,
     ) -> Result<i32> {
         let Some(agent) = self.agent else {
             return terminal::open_shell(ctx, &workspace.path).await;
@@ -155,6 +158,7 @@ impl ResolvedAddAgent {
         let prompt = issue.map(|issue| issue.prompt());
         let options = agents::LaunchOptions {
             tracked: self.tracked,
+            fork,
             ..Default::default()
         };
         agents::launch_agent(ctx, agent, workspace, prompt, args, options).await

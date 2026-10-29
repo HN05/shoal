@@ -199,3 +199,19 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     );
     assert!(agent_dirs(&settings("agent_dirs = []\n"), home.path()).is_empty());
 }
+
+#[test]
+fn only_agents_with_fork_arguments_start_from_a_fork() {
+    let config: crate::config::Config =
+        toml::from_str("[ai.droid]\ncommand = ['droid']\n").unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    assert_eq!(
+        fork_args(&settings, "claude", "s1").unwrap(),
+        ["--resume", "s1", "--fork-session"]
+    );
+    let error = fork_args(&settings, "droid", "s1").unwrap_err().to_string();
+    assert!(
+        error.contains("cannot fork a session of droid: configure [ai.droid] fork"),
+        "{error}"
+    );
+}

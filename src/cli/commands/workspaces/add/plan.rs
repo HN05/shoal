@@ -73,6 +73,7 @@ pub(super) async fn plan_addition(
         issue: issue.map(|issue| issue.url.clone()),
         agent,
         args,
+        fork: None,
         queue_entry: None,
         chat: env::chat(),
         workspace: None,
@@ -114,6 +115,9 @@ pub(in crate::cli) struct AddPlan {
     pub(super) issue: Option<String>,
     pub(super) agent: ResolvedAddAgent,
     pub(super) args: Vec<OsString>,
+    /// The session the agent starts from a fork of.
+    #[serde(default)]
+    pub(super) fork: Option<String>,
     /// The agent queue entry whose slot this launch uses.
     #[serde(default)]
     pub queue_entry: Option<String>,
@@ -127,12 +131,14 @@ pub(in crate::cli) struct AddPlan {
 
 impl AddPlan {
     /// A launch of `agent` in the existing `workspace`, prompted with the
-    /// issue at `issue` or with `args`. It runs detached, so it stays tracked.
+    /// issue at `issue` or with `args`, from a fork of session `fork` when
+    /// given. It runs detached, so it stays tracked.
     pub(in crate::cli::commands) fn agent_in(
         workspace: &Workspace,
         agent: Agent,
         issue: Option<&issues::Issue>,
         args: Vec<OsString>,
+        fork: Option<String>,
     ) -> Self {
         Self {
             repository: workspace.repository_id.as_str().into(),
@@ -147,6 +153,7 @@ impl AddPlan {
                 tracked: true,
             },
             args,
+            fork,
             queue_entry: None,
             chat: None,
             workspace: Some(workspace.id.clone()),

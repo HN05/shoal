@@ -481,7 +481,9 @@ merge; each child completes on its own. The parent owns its children, so its
 processes may remove them, except one with holds, which are the user's. Removing
 a parent moves its children up to its own parent and journals the change. `work` lists children below their
 parent, and `status` names both. `split --agent` gives a child an agent of its
-own through the agent queue; the daemon starts every launch in an existing
+own through the agent queue, and `split --fork` gives it the parent's agent
+from a fork of its session, the one the caller's agent or else the parent's only
+agent reported last, so the parent need not restate what it learned; the daemon starts every launch in an existing
 workspace itself, detached, so the agent never inherits the caller's scope, and
 scoped callers may queue only for the workspaces below theirs, and cancel those
 entries or move them back, but never ahead of other work. A workspace's

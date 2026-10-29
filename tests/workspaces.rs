@@ -4132,6 +4132,70 @@ fn split_refuses_an_unavailable_agent_before_creating_the_child() {
 }
 
 #[test]
+fn split_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let output = fixture.run(&["split", "child", "--workspace", "parent", "--fork"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("parent has no running agent to fork"),
+        "{stderr}"
+    );
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+}
+
+/// The parent's agent splits a child whose agent starts from a fork of its
+/// session, prompted with the arguments after `--`.
+#[test]
+fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
+    let fixture = Fixture::with_config(Some(
+        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+    ));
+    // The daemon's worker starts the child's agent in a detached session.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
+    // The parent reports its session as Claude Code's hooks do and splits
+    // the child; the forked agent records its arguments.
+    fs::write(
+        fixture.root.path().join("agent.sh"),
+        format!(
+            "if [ \"$1\" = --resume ]; then printf '%s\\0' \"$@\" > \"$HOME/forked.tmp\"; mv \"$HOME/forked.tmp\" \"$HOME/forked\"; exit 0; fi\n\
+             printf '{{\"session_id\":\"parent-session\"}}' | '{shoal}' internal agent-state idle >/dev/null || exit 3\n\
+             '{shoal}' --json split child --fork -- 'Take the child part' > \"$HOME/split.json\" 2> \"$HOME/split.err\"\n",
+            shoal = env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    fixture.add("parent");
+    let output = fixture
+        .command()
+        .args(["claude", "parent"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let home = fixture.root.path();
+    let split: Value = serde_json::from_str(&fs::read_to_string(home.join("split.json")).unwrap())
+        .unwrap_or_else(|error| {
+            panic!(
+                "{error}: {}",
+                fs::read_to_string(home.join("split.err")).unwrap()
+            )
+        });
+    assert_eq!(split["agent"]["agent"], "claude", "{split}");
+    let forked = home.join("forked");
+    wait_until("the forked agent start", || forked.exists());
+    let args = fs::read_to_string(&forked).unwrap();
+    let args: Vec<_> = args.trim_end_matches('\0').split('\0').collect();
+    assert_eq!(
+        args[..3],
+        ["--resume", "parent-session", "--fork-session"],
+        "{args:?}"
+    );
+    assert_eq!(args.last(), Some(&"Take the child part"), "{args:?}");
+}
+
+#[test]
 fn split_rejects_an_invalid_branch_before_choosing_a_parent() {
     let fixture = Fixture::new();
     fixture.add("parent");

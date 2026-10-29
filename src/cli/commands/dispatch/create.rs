@@ -57,6 +57,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             base,
             workspace,
             agent,
+            fork,
             args,
         } => {
             let split = split::Split {
@@ -64,6 +65,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                 issue,
                 base,
                 agent,
+                fork,
                 args,
             };
             split::run(&ctx, workspace, split).await

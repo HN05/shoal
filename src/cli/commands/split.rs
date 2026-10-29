@@ -1,6 +1,7 @@
 //! `shoal split`: a child workspace on a new branch, which the parent
 //! workspace's agent works on and receives the activity of, or which an agent
-//! of its own works on.
+//! of its own works on, which may start from a fork of the parent agent's
+//! session.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -16,8 +17,8 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
-    model::{QueueEntry, Workspace},
-    protocol::{ConfigTarget, ItemMethod, WorkspaceMethod},
+    model::{AgentSession, QueueEntry, Workspace},
+    protocol::{AgentMethod, ConfigTarget, ItemMethod, WorkspaceMethod},
     shell,
     state::{QueueState, WorkspaceState},
 };
@@ -30,7 +31,16 @@ pub(super) struct Split {
     pub issue: Option<String>,
     pub base: Option<String>,
     pub agent: Option<Agent>,
+    /// Whether the child's agent starts from a fork of the parent agent's
+    /// session.
+    pub fork: bool,
     pub args: Vec<OsString>,
+}
+
+/// The agent the child starts, from a fork of session `fork` when given.
+struct ChildAgent {
+    agent: Agent,
+    fork: Option<String>,
 }
 
 /// The ready child and the queue entry of its agent, when one was started.
@@ -48,14 +58,7 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
         crate::git::check_branch_name(None, branch).await?;
     }
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    // An agent that cannot start, or its detached launcher, fails before
-    // any work is created.
-    if let Some(agent) = &split.agent {
-        let settings =
-            client::settings(&ctx.paths, ConfigTarget::Workspace(parent.clone())).await?;
-        agents::ensure_available(agent.name(), &settings)?;
-        terminal::ensure_background(&settings)?;
-    }
+    let agent = child_agent(ctx, &parent, split.agent, split.fork).await?;
     let issue = match &split.issue {
         Some(input) => Some(load_issue(ctx, &parent, input).await?),
         None => None,
@@ -69,12 +72,51 @@ pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) 
     let Some(child) = prepare(ctx, child).await? else {
         return Ok(1);
     };
-    let agent = match split.agent {
+    let agent = match agent {
         Some(agent) => Some(start_agent(ctx, &child, agent, issue.as_ref(), split.args).await?),
         None => None,
     };
     report(ctx, &child, agent.as_ref())?;
     Ok(0)
+}
+
+/// The agent the child of `parent` starts: the named one, or with `fork` the
+/// parent's own from a fork of its session. One that cannot start, or its
+/// detached launcher, fails before any work is created.
+async fn child_agent(
+    ctx: &Context,
+    parent: &str,
+    agent: Option<Agent>,
+    fork: bool,
+) -> Result<Option<ChildAgent>> {
+    let session = if fork {
+        Some(parent_session(ctx, parent).await?)
+    } else {
+        None
+    };
+    let agent = match (agent, &session) {
+        (Some(agent), _) => agent,
+        (None, Some(session)) => session.agent.parse()?,
+        (None, None) => return Ok(None),
+    };
+    let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(parent.to_owned())).await?;
+    agents::ensure_available(agent.name(), &settings)?;
+    terminal::ensure_background(&settings)?;
+    if let Some(session) = &session {
+        agents::fork_args(&settings, agent.name(), &session.session)?;
+    }
+    Ok(Some(ChildAgent {
+        agent,
+        fork: session.map(|session| session.session),
+    }))
+}
+
+/// The session of the agent in `parent` that a fork starts from.
+async fn parent_session(ctx: &Context, parent: &str) -> Result<AgentSession> {
+    let method = AgentMethod::AgentSession {
+        workspace: parent.to_owned(),
+    };
+    request(&ctx.paths, method).await
 }
 
 /// Record the child of `parent` on a new branch named `name`, assigned `issue`.
@@ -126,11 +168,11 @@ pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Wo
 async fn start_agent(
     ctx: &Context,
     child: &Workspace,
-    agent: Agent,
+    ChildAgent { agent, fork }: ChildAgent,
     issue: Option<&Issue>,
     args: Vec<OsString>,
 ) -> Result<QueueEntry> {
-    let plan = AddPlan::agent_in(child, agent.clone(), issue, args);
+    let plan = AddPlan::agent_in(child, agent.clone(), issue, args, fork);
     let title = issue.map(|issue| issue.title.clone());
     super::agent_queue::queue_in(ctx, &plan, child, String::from(agent), title).await
 }

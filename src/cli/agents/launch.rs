@@ -122,8 +122,9 @@ pub(super) async fn tracked(
     execution::run_recovery(&ctx.paths, workspace.id, command, name, replaces).await
 }
 
-/// The agent's configured command with Shoal's instructions, its workspace
-/// arguments, the prompt and the forwarded arguments.
+/// The agent's configured command with the arguments that fork a session,
+/// Shoal's instructions, its workspace arguments, the prompt and the
+/// forwarded arguments.
 async fn command(
     ctx: &Context,
     integration: &dyn Integration,
@@ -135,6 +136,7 @@ async fn command(
         settings,
         prompt,
         args,
+        fork,
         ..
     } = launch;
     let instructions = templates::instructions(
@@ -150,6 +152,7 @@ async fn command(
         super::workspace_args(&ctx.paths, settings, name, workspace).await?,
         args.clone(),
     );
+    let args = fork.iter().cloned().chain(args).collect();
     configured::expand_with_fields(
         &ctx.paths,
         &settings.commands,

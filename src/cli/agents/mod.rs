@@ -278,6 +278,9 @@ pub(in crate::cli) struct Launch {
     /// The first message, such as an issue prompt.
     pub prompt: Option<String>,
     pub args: Vec<OsString>,
+    /// The arguments that start the agent from a fork of a session, which
+    /// lead the others as a subcommand does.
+    pub fork: Vec<OsString>,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -324,6 +327,8 @@ pub(in crate::cli) struct LaunchOptions {
     pub tracked: bool,
     /// As [`Launch::replaces`].
     pub replaces: Vec<PathBuf>,
+    /// The session the agent starts from a fork of, which stays unchanged.
+    pub fork: Option<String>,
 }
 
 /// Whether a launch of `agent` under `settings` runs in a session this
@@ -354,6 +359,10 @@ pub(super) async fn launch_agent(
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     let integration = agent_integration(&settings, agent.name());
+    let fork = match &options.fork {
+        Some(session) => fork_args(&settings, agent.name(), session)?,
+        None => Vec::new(),
+    };
     let app = opens_app(
         agent_options(&settings, agent.name()),
         prompt.is_some(),
@@ -365,6 +374,7 @@ pub(super) async fn launch_agent(
         settings,
         prompt,
         args,
+        fork,
         replaces: options.replaces,
     };
     let replaces = launch.replaces.clone();
@@ -510,6 +520,27 @@ pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Resu
     }
     launch_proxy(settings, name)?;
     ensure_installed(name, &settings.commands)
+}
+
+/// The arguments that start agent `name` from a fork of `session`; an
+/// error for an agent that cannot start from one, including one an app runs
+/// apart from any terminal.
+pub(in crate::cli) fn fork_args(
+    settings: &Effective,
+    name: &str,
+    session: &str,
+) -> Result<Vec<OsString>> {
+    if let Some(app) = agent_integration(settings, name).detached() {
+        anyhow::bail!(
+            "cannot fork a session of {name}: {} cannot start one from a fork",
+            app.name()
+        );
+    }
+    settings
+        .launch(name)
+        .arguments
+        .fork_args(session)
+        .with_context(|| format!("cannot fork a session of {name}: configure [ai.{name}] fork"))
 }
 
 /// The proxy agent `name`'s API requests go through, if it names one; an

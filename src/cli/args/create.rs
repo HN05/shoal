@@ -70,6 +70,7 @@ pub enum CreateCommand {
     /// The parent workspace's agent works on the child and receives its
     /// issue and PR activity; the parent's cleanup waits until its children
     /// are removed.
+    #[command(group(clap::ArgGroup::new("child_agent").args(["agent", "fork"])))]
     Split {
         /// Git branch name; a portable workspace name is derived from it.
         #[arg(required_unless_present = "issue")]
@@ -88,8 +89,13 @@ pub enum CreateCommand {
         /// it starts detached, from the agent queue.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        /// Start the parent's agent in the child as --agent does, from a fork of its
+        /// session, so it begins with the parent's conversation; the parent's session
+        /// stays unchanged.
+        #[arg(long)]
+        fork: bool,
         /// Arguments forwarded to the agent, such as its prompt.
-        #[arg(last = true, requires = "agent")]
+        #[arg(last = true, requires = "child_agent")]
         args: Vec<OsString>,
     },
 }

@@ -1681,6 +1681,7 @@ shoal split part-two --base fix-api  # Stacked on the parent's branch
 shoal split fix-typo --workspace fix-api
 shoal split --issue 43 --agent claude                  # A child with an agent of its own
 shoal split api-part --agent codex -- "Move the API client into its own crate"
+shoal split api-part --fork -- "Implement the API part of the plan"  # Forks the parent agent's session
 ```
 
 `shoal split` creates a workspace on a new branch in the parent's repository,
@@ -1714,6 +1715,14 @@ the caller's; Codex runs as its CLI. The agent and that launcher, zmx outside a
 Herdr that opens tabs, are checked before the child is created, and the launch
 reopens only the child, failing if it was removed meanwhile. `--json` adds the
 queue entry as `agent`.
+`--fork` starts the parent's agent there the same way, from a fork of its
+session, so the child begins with the parent's conversation and the prompt after
+`--`; the parent's session stays unchanged. Run from an agent, it forks that
+agent's session, otherwise that of the parent's only running agent, which must
+have reported its session through its hooks. The agent copies the session when
+it starts, so a queued fork includes what the parent did meanwhile. An agent
+without [`fork`](#agents) arguments, or one an app such as Happy runs,
+refuses it before the child is created.
 Workspace processes may queue agents only in the workspaces below their own,
 and cancel or move back only those agents' entries.
 

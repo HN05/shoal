@@ -302,10 +302,13 @@ supervise only through Shoal's messages:
 ```sh
 shoal split --issue 43 --agent claude
 shoal split api-part --agent codex -- "Move the API client into its own crate"
+shoal split api-part --fork -- "Implement the API part of the plan we agreed"
 ```
 
 It starts from the agent queue, detached, as the child's own agent, and its
-issue and PR activity goes to it rather than to you. You coordinate it: its
+issue and PR activity goes to it rather than to you. `--fork` starts your own
+agent there from a fork of your session, so it begins with your conversation
+and needs only its task after `--`. You coordinate it: its
 messages, questions, completion and ready marks, and its exits, reach you as
 messages naming the child instead of reaching the user. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
