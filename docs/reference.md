@@ -3258,13 +3258,18 @@ workspace and withdraw those messages. Read entries older than the newest
 ```sh
 shoal messages send "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
 shoal messages send --body-file plan.md [--workspace W]    # Queue a file's text as one message
+shoal messages send "Crash on launch" --attach shot.png    # Attach files; repeat --attach for more
 shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
 `shoal messages send` queues a message of at most 8 KiB, without control characters
 other than newlines and tabs, for the agents working in a workspace, and is
 refused while the workspace is being removed; output indents a message's later
-lines under its first. Agents read messages with
+lines under its first. `--attach` copies a file of at most 100 MiB into the
+repository directory's `.attachments`, which agents can read, and the message
+lists each copy's path as an `Attached file:` line, or in `attachments` with
+`--json`; a message may be its files alone. The copies stay until the workspace
+is removed. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 

@@ -66,11 +66,15 @@ pub enum MessagesCommand {
     /// Queue a message for the agents working in a workspace.
     Send {
         /// Text such as "Stop the dev server before running tests".
-        #[arg(required_unless_present = "body_file")]
+        #[arg(required_unless_present_any = ["body_file", "attach"])]
         message: Option<String>,
         /// Read the message from a file, such as multi-line instructions.
         #[arg(long, value_name = "PATH", conflicts_with = "message")]
         body_file: Option<PathBuf>,
+        /// Attach a file, such as a screenshot or log, which Shoal copies
+        /// where the agents can read it; repeat for more.
+        #[arg(long = "attach", value_name = "FILE")]
+        attach: Vec<PathBuf>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

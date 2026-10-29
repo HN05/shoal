@@ -22,15 +22,21 @@ pub(super) async fn send(
     workspace: Option<String>,
     message: Option<String>,
     body_file: Option<PathBuf>,
+    attach: Vec<PathBuf>,
 ) -> Result<i32> {
-    let message = message_text(message, body_file)?;
+    let message = message_text(message, body_file, !attach.is_empty())?;
+    // The daemon reads the files, so it gets their absolute paths.
+    let attachments = attach
+        .iter()
+        .map(|path| std::path::absolute(path).with_context(|| format!("read {}", path.display())))
+        .collect::<Result<_>>()?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
         AgentMethod::SendAgentMessage {
             workspace,
             message,
-            attachments: Vec::new(),
+            attachments,
         },
     )
     .await?;
@@ -39,14 +45,20 @@ pub(super) async fn send(
 }
 
 /// The message given inline or read from `body_file`, without the file's
-/// trailing newline.
-fn message_text(message: Option<String>, body_file: Option<PathBuf>) -> Result<String> {
+/// trailing newline; empty when the `attached` files are the message.
+fn message_text(
+    message: Option<String>,
+    body_file: Option<PathBuf>,
+    attached: bool,
+) -> Result<String> {
     match body_file {
         Some(path) => Ok(std::fs::read_to_string(&path)
             .with_context(|| format!("read {}", path.display()))?
             .trim_end()
             .to_owned()),
-        None => message.context("give a message or --body-file"),
+        None => message
+            .or_else(|| attached.then(String::new))
+            .context("give a message, --body-file or --attach"),
     }
 }
 
@@ -64,7 +76,7 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
             outln!(
                 "{}  {}",
                 palette.paint(Style::Muted, time),
-                hanging_indent(&message.message, &indent)
+                hanging_indent(&shown(message), &indent)
             );
         }
         if messages.is_empty() {
@@ -355,7 +367,7 @@ fn hook_context(heading: &str, updates: &Updates) -> String {
             updates
                 .messages
                 .iter()
-                .map(|message| format!("- {}", hanging_indent(&message.message, "  "))),
+                .map(|message| format!("- {}", hanging_indent(&shown(message), "  "))),
         );
     }
     if !updates.updates.is_empty() {
@@ -374,6 +386,19 @@ fn attachment_notice(attached: bool) -> &'static str {
     } else {
         "The user is not attached to this session."
     }
+}
+
+/// The message's text followed by a line for each file attached to it.
+pub(super) fn shown(message: &AgentMessage) -> String {
+    let attached = message
+        .attachments
+        .iter()
+        .map(|path| format!("Attached file: {}", path.display()));
+    std::iter::once(message.message.clone())
+        .filter(|text| !text.is_empty())
+        .chain(attached)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// `text` with its later lines indented by `indent`, so a multi-line message

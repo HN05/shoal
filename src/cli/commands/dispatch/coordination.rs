@@ -49,10 +49,11 @@ pub(in crate::cli::commands) async fn run(
                 Some(MessagesCommand::Send {
                     message,
                     body_file,
+                    attach,
                     workspace,
                 }),
             ..
-        } => messages::send(&ctx, workspace, message, body_file).await,
+        } => messages::send(&ctx, workspace, message, body_file, attach).await,
         CoordinationCommand::Messages {
             command: None,
             workspace,

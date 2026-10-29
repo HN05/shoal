@@ -186,7 +186,8 @@ The user and Shoal can send messages to your workspace, such as a request to
 free memory or disk space. Claude Code and Codex launched through Shoal receive
 them with PR activity, as described above; a new message also ends `shoal watch pr`
 with a `messages` array, and `shoal messages` shows new ones. Each
-message is shown once. Follow it.
+message is shown once. Follow it. A message lists each file attached to it,
+such as a screenshot, as an `Attached file:` path you can read.
 
 Claude Code and Codex also hear whether the user is attached to your session,
 when that changes. While the user is attached, ask questions and report status
@@ -310,9 +311,9 @@ messages naming the child instead of reaching the user. Answer its questions
 with `shoal questions <number> --answer <answer>`, or ask the user yourself with
 `shoal questions ask` when the decision is theirs. Send it instructions with
 `shoal messages send --workspace <child> "<text>"`, or `--body-file <path>` for
-several lines. When a stopped child agent should not come back, such as one
-whose work is done, forget its saved session with
-`shoal resume <child> --discard`.
+several lines; `--attach FILE` hands it a file such as a log or screenshot.
+When a stopped child agent should not come back, such as one whose work is
+done, forget its saved session with `shoal resume <child> --discard`.
 
 A child agent's approval request comes to you when you hold an approved grant
 for the same thing; otherwise it passes you by, with a message saying so. Decide

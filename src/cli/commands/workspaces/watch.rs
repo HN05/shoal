@@ -34,7 +34,7 @@ pub(in crate::cli::commands) async fn watch_items(
         for message in &updates.messages {
             outln!(
                 "Message: {}",
-                messages::hanging_indent(&message.message, "         ")
+                messages::hanging_indent(&messages::shown(message), "         ")
             );
         }
         for update in &updates.updates {

@@ -19094,6 +19094,33 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
 }
 
 #[test]
+fn messages_carry_copies_of_attached_files() {
+    let fixture = Fixture::new();
+    fixture.add("receiver");
+    fs::write(fixture.root.path().join("shot.png"), "image").unwrap();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "messages",
+            "send",
+            "--attach",
+            "shot.png",
+            "--workspace",
+            "receiver",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    fs::remove_file(fixture.root.path().join("shot.png")).unwrap();
+    let messages = fixture.ok(&["messages", "receiver"]);
+    assert_eq!(messages[0]["message"], "");
+    let copy = Path::new(messages[0]["attachments"][0].as_str().unwrap());
+    assert!(copy.starts_with(fixture.shoal_dir()), "{copy:?}");
+    assert_eq!(fs::read_to_string(copy).unwrap(), "image");
+}
+
+#[test]
 fn a_turns_end_shows_when_the_agents_prompt_cache_expires() {
     let fixture = Fixture::new();
     fixture.add("cached");

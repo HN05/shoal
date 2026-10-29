@@ -10,6 +10,39 @@ fn multi_line_messages_stay_one_entry() {
 }
 
 #[test]
+fn attached_files_follow_the_message_text() {
+    let message = |text: &str| AgentMessage {
+        id: 1,
+        created_at: 0,
+        message: text.into(),
+        attachments: vec!["/repo/.attachments/w/k/0/shot.png".into()],
+    };
+    let updates = Updates {
+        updates: Vec::new(),
+        messages: vec![message("See the crash"), message("")],
+        timed_out: false,
+        superseded: false,
+        attached: None,
+    };
+    assert_eq!(
+        Inbox::Workspace("worker".into()).hook_context(&updates),
+        "New Shoal messages for this workspace:\n\
+         - See the crash\n  Attached file: /repo/.attachments/w/k/0/shot.png\n\
+         - Attached file: /repo/.attachments/w/k/0/shot.png"
+    );
+}
+
+#[test]
+fn files_alone_may_be_the_message() {
+    assert_eq!(message_text(None, None, true).unwrap(), "");
+    assert_eq!(
+        message_text(Some("Look".into()), None, true).unwrap(),
+        "Look"
+    );
+    assert!(message_text(None, None, false).is_err());
+}
+
+#[test]
 fn hook_output_names_the_event_it_answers() {
     let updates = Updates {
         updates: vec![Update {
