@@ -145,8 +145,7 @@ enum Group<'a> {
 fn fallbacks<'a>(settings: &Effective, origin: Option<&'a Origin>) -> Vec<Fallback<'a>> {
     let mut fallbacks = Vec::new();
     if let Some(origin) = origin
-        && let Some(host) = Configured::all(settings)
-            .find(|host| host.host.name() == origin.host && host.takes_queued(Some(origin)))
+        && let Some(host) = Configured::all(settings).find(|host| host.takes_queued(origin))
     {
         let keeps_groups = host.options.group_template.is_some();
         fallbacks.push(Fallback {

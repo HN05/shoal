@@ -79,13 +79,6 @@ impl Host for Zmx {
 }
 
 impl Places for Zmx {
-    /// A detached session needs no terminal, so it takes any queued start.
-    /// A session is no group a later place joins, so a start queued from
-    /// one goes to the default host first.
-    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
-        origin.is_none_or(|origin| origin.host != HostName::Zmx)
-    }
-
     /// A detached session; a focused start runs in one this terminal
     /// attaches to instead.
     fn open<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<Origin>> {

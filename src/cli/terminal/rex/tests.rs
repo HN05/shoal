@@ -30,14 +30,6 @@ fn split_placement_opens_splits() {
     assert!(options(&config).opens_splits);
 }
 
-#[test]
-fn queued_starts_from_rex_open_windows_and_others_do_not() {
-    let place = |host| Origin::created(host, "block:1".into());
-    assert!(Rex.takes_queued(Some(&place(HostName::Rex))));
-    assert!(!Rex.takes_queued(Some(&place(HostName::Herdr))));
-    assert!(!Rex.takes_queued(None));
-}
-
 #[tokio::test]
 async fn a_block_whose_rex_is_gone_is_no_place_to_rerun_in() {
     let root = tempfile::tempdir().unwrap();

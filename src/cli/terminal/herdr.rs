@@ -64,11 +64,6 @@ impl Host for Herdr {
 }
 
 impl Places for Herdr {
-    /// A tab in the Herdr workspace the start was queued from.
-    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
-        origin.is_some_and(|origin| origin.host == HostName::Herdr)
-    }
-
     fn group<'a>(
         &'a self,
         near: Option<&'a Origin>,

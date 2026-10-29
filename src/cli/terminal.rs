@@ -160,13 +160,15 @@ impl Configured {
         self.options.enabled && self.host.serves()
     }
 
-    /// Whether a queued start from `origin` runs here; the daemon's worker
-    /// has no terminal.
-    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
+    /// Whether a queued start from `origin`, the place that queued it, joins
+    /// its group here: a place of this host in a group, such as a Herdr tab
+    /// in its workspace. A zmx session is in none, so a start queued from it
+    /// goes to the default host first.
+    fn takes_queued(&self, origin: &Origin) -> bool {
         self.options.enabled
-            && self
-                .places()
-                .is_some_and(|places| places.takes_queued(origin))
+            && self.places().is_some()
+            && origin.host == self.host.name()
+            && origin.group.is_some()
     }
 
     /// How the host opens places, where config lets it.

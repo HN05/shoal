@@ -66,10 +66,6 @@ pub(in crate::cli) trait Host: Sync {
 /// where config lets the host open places; what a place this process runs in
 /// tells, it reads whatever config says.
 pub(in crate::cli) trait Places: Sync {
-    /// Whether a queued start from `origin`, the place that queued it, runs
-    /// here.
-    fn takes_queued(&self, origin: Option<&Origin>) -> bool;
-
     /// Run `start` in a new place, returning the place: one of its own in
     /// the group of `start`'s origin, or splitting the place `start` names.
     /// A focused place becomes the host's current one; generic code shows

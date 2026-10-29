@@ -61,11 +61,6 @@ impl Host for Rex {
 }
 
 impl Places for Rex {
-    /// A background window in the session the start was queued from.
-    fn takes_queued(&self, origin: Option<&Origin>) -> bool {
-        origin.is_some_and(|origin| origin.host == HostName::Rex)
-    }
-
     fn group<'a>(
         &'a self,
         near: Option<&'a Origin>,

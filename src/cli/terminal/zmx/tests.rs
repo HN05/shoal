@@ -22,13 +22,6 @@ fn relabelling_replaces_the_other_owner_kind_and_a_demo() {
 }
 
 #[test]
-fn a_queued_start_from_a_session_goes_to_the_default_host_first() {
-    assert!(Zmx.takes_queued(None));
-    assert!(!Zmx.takes_queued(Some(&Origin::created(HostName::Zmx, "s".into()))));
-    assert!(Zmx.takes_queued(Some(&Origin::created(HostName::Rex, "b".into()))));
-}
-
-#[test]
 fn a_watch_follows_only_the_session_it_began_with() {
     let sessions = parse_list(
         "  name=fix\tpid=7\tcreated=100\tshoal.workspace=w1\n\

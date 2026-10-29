@@ -74,6 +74,21 @@ fn hosts_turned_off_go_straight_to_the_default_host() {
 }
 
 #[test]
+fn a_start_queued_from_a_place_outside_a_group_goes_to_the_default_host() {
+    use HostName::*;
+    let session = Origin::created(Zmx, "session".into());
+    assert_eq!(
+        order(&settings(""), Some(&session)),
+        [(Zmx, false), (Zmx, false)]
+    );
+    let ungrouped = Origin::created(Rex, "block".into());
+    assert_eq!(
+        order(&settings("default_host = 'herdr'"), Some(&ungrouped)),
+        [(Herdr, false), (Zmx, false)]
+    );
+}
+
+#[test]
 fn a_default_host_config_turns_off_leaves_queued_starts_to_zmx() {
     use HostName::*;
     let turned_off = [
