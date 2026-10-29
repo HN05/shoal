@@ -26049,6 +26049,43 @@ fn demos_refuse_cleared_scopes_and_leave_no_log_after_removal() {
     );
 }
 
+/// The process groups of a workspace's only demo: its wrapper's, which a
+/// background demo leads, and its command's. Shoal stops neither when the
+/// fixture kills the daemon, so a test that ends early kills them here.
+struct DemoProcesses {
+    groups: [u32; 2],
+    ended: bool,
+}
+
+impl DemoProcesses {
+    fn of(fixture: &Fixture, workspace: &str) -> Self {
+        let execution = wait_registered_execution(fixture, workspace);
+        let pid = |process: &str| execution[process]["pid"].as_u64().unwrap() as u32;
+        Self {
+            groups: [pid("wrapper"), pid("child")],
+            ended: false,
+        }
+    }
+
+    /// Wait until the stopped demo's wrapper and command have exited.
+    fn await_end(&mut self) {
+        wait_until("the demo's processes to exit", || {
+            !self.groups.iter().any(|&pid| process_alive(pid))
+        });
+        self.ended = true;
+    }
+}
+
+impl Drop for DemoProcesses {
+    fn drop(&mut self) {
+        if !self.ended {
+            for group in self.groups {
+                unsafe { libc::kill(-(group as i32), libc::SIGKILL) };
+            }
+        }
+    }
+}
+
 #[test]
 fn a_demo_opener_leaves_the_terminal_as_it_found_it() {
     let fixture = Fixture::new();
@@ -26068,6 +26105,7 @@ fn a_demo_opener_leaves_the_terminal_as_it_found_it() {
             "exec sleep 600",
         ],
     );
+    let mut processes = DemoProcesses::of(&fixture, "tried");
     let (mut master, slave) = pty::open();
     let mut driver = support::isolated(fixture.root.path(), "python3");
     let mut child = driver
@@ -26111,5 +26149,7 @@ assert terminal_settings() == before, (before, terminal_settings())
     drop(slave);
     let _ = master.read_to_string(&mut transcript);
     assert!(finished.unwrap().success(), "{transcript}");
+    // A stop only asks the wrapper, which ends after reporting to the daemon.
     demo(&fixture, &["stop", "--workspace", "tried"]);
+    processes.await_end();
 }
