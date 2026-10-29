@@ -115,6 +115,12 @@ struct Lineage {
 }
 
 impl Lineage {
+    /// Its parent exited and launchd or init adopted it. Linux cannot tell
+    /// init's own children from adopted ones, so all of them count.
+    fn detached(&self) -> bool {
+        self.adopted || (cfg!(target_os = "linux") && self.parent_pid == 1)
+    }
+
     /// Whether `parent`, observed after this process, is the process it was
     /// forked from rather than a later one reusing its PID: that one is born
     /// after this process and has another unique ID.
@@ -239,6 +245,38 @@ impl Unattributed {
             identity,
         }
     }
+}
+
+/// The live same-user processes among `pids` that are detached, or descend
+/// from a detached one through parents all among `pids`.
+pub fn detached_among(pids: &HashSet<u32>) -> Result<Vec<Identity>> {
+    let mut lineages = HashMap::new();
+    for pid in pids {
+        if let Some(lineage) = lineage(*pid)? {
+            lineages.insert(*pid, lineage);
+        }
+    }
+    Ok(lineages
+        .values()
+        .filter(|lineage| descends_from_detached(lineage, &lineages))
+        .map(|lineage| lineage.identity.clone())
+        .collect())
+}
+
+/// Whether `lineage` is detached, or its parent among `lineages` is the
+/// process it was forked from and descends from a detached one.
+fn descends_from_detached(lineage: &Lineage, lineages: &HashMap<u32, Lineage>) -> bool {
+    let mut current = lineage;
+    for _ in 0..MAX_ANCESTRY {
+        if current.detached() {
+            return true;
+        }
+        match lineages.get(&current.parent_pid) {
+            Some(parent) if current.forked_from(parent) => current = parent,
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// Live same-user processes carrying one of the execution markers `ids`.

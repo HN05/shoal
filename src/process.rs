@@ -20,6 +20,32 @@ pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
 
 /// The processes using the directory besides those of `excluded`.
 pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<String>> {
+    Ok(directory_users(root)
+        .await?
+        .into_iter()
+        .filter(|(pid, _)| !excluded.contains(pid))
+        .map(|(pid, name)| format!("{name} (PID {pid})"))
+        .collect())
+}
+
+/// The detached processes running from the directory: those launchd or init
+/// adopted when their parent exited, with the descendants they started there.
+/// No terminal or other process outside the directory keeps them, so they
+/// belong to whatever owns the directory.
+pub async fn detached_in_directory(root: &Path) -> Result<Vec<identity::Identity>> {
+    let pids = directory_users(root)
+        .await?
+        .into_iter()
+        .map(|(pid, _)| pid)
+        .collect();
+    tokio::task::spawn_blocking(move || identity::detached_among(&pids))
+        .await
+        .context("process lineage worker failed")?
+}
+
+/// This user's processes whose working directory is in the directory, other
+/// than this one, with their command names.
+async fn directory_users(root: &Path) -> Result<Vec<(u32, String)>> {
     let own = std::process::id();
     let mut command = Command::new(Tool::Lsof.program());
     command
@@ -52,10 +78,9 @@ pub async fn in_directory_except(root: &Path, excluded: &[u32]) -> Result<Vec<St
             name = value.to_owned();
         } else if let Some(value) = line.strip_prefix('n')
             && pid != own
-            && !excluded.contains(&pid)
             && Path::new(value).starts_with(&root)
         {
-            found.push(format!("{name} (PID {pid})"));
+            found.push((pid, name.clone()));
         }
     }
     Ok(found)

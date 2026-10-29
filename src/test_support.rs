@@ -128,3 +128,53 @@ pub async fn assert_pending(future: impl std::future::Future) {
     })
     .await;
 }
+
+/// A shell left running from `dir` after its parent exited, as a recording's
+/// setup script is, with a `sleep` it started there. Dropping it kills both.
+pub struct Detached {
+    pub shell: u32,
+    pub child: u32,
+}
+
+impl Detached {
+    /// Start it, recording its PIDs in `pids`, which must lie outside `dir`.
+    pub async fn start(dir: &Path, pids: &Path) -> Self {
+        let script = format!(
+            "sh -c 'sleep 300 & echo $$ $! > {pids}.tmp; mv {pids}.tmp {pids}; wait' \
+             >/dev/null 2>&1 &",
+            pids = pids.display()
+        );
+        let status = tokio::process::Command::new("sh")
+            .args(["-c", &script])
+            .current_dir(dir)
+            .status()
+            .await
+            .unwrap();
+        assert!(status.success());
+        // A generous hang guard; the shell writes the file once both run.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        while !pids.exists() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "detached shell never started"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        let text = fs::read_to_string(pids).unwrap();
+        let mut fields = text.split_whitespace().map(|pid| pid.parse().unwrap());
+        Self {
+            shell: fields.next().unwrap(),
+            child: fields.next().unwrap(),
+        }
+    }
+}
+
+impl Drop for Detached {
+    fn drop(&mut self) {
+        for pid in [self.child, self.shell] {
+            if crate::process::identity::capture(pid).is_ok_and(|live| live.is_some()) {
+                unsafe { libc::kill(pid as i32, libc::SIGKILL) };
+            }
+        }
+    }
+}
