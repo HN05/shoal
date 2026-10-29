@@ -5886,7 +5886,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
 
     for args in [vec!["status"], vec!["attach"], vec!["rm", "--yes"]] {
         if args[0] == "rm" {
-            stop_agents(&fixture, "available", agent.take());
+            drop(agent.take());
         }
         let deleted = fixture.root.path().join("deleted");
         fs::create_dir(&deleted).unwrap();
@@ -24392,9 +24392,33 @@ fn attach_returns_to_chats_by_name() {
     }
 }
 
-/// Run a Claude that waits to be stopped for `workspace` inside the fake zmx
-/// session `session`, returning once the daemon recorded it there.
-fn agent_in_session(fixture: &Fixture, workspace: &str, session: &str) -> Child {
+/// A Claude that waits to be stopped, running for a workspace inside a fake
+/// zmx session. Dropping it stops the agent, so a test that fails first leaves
+/// nothing running.
+struct SessionAgent<'a> {
+    fixture: &'a Fixture,
+    workspace: String,
+    agent: Child,
+}
+
+impl Drop for SessionAgent<'_> {
+    fn drop(&mut self) {
+        // The wrapper ignores SIGTERM; the daemon stops it and its agent.
+        let _ = self
+            .fixture
+            .command()
+            .args(["stop", &self.workspace])
+            .output();
+        if try_wait_for(|| self.agent.try_wait().ok().flatten()).is_none() {
+            let _ = self.agent.kill();
+            let _ = self.agent.wait();
+        }
+    }
+}
+
+/// Run a [`SessionAgent`] for `workspace` inside the fake zmx session
+/// `session`, returning once the daemon recorded it there.
+fn agent_in_session<'a>(fixture: &'a Fixture, workspace: &str, session: &str) -> SessionAgent<'a> {
     let bin = fixture.root.path().join("bin");
     install_test_script(bin.join("zmx"), PASSTHROUGH_ZMX);
     install_test_script(
@@ -24402,7 +24426,7 @@ fn agent_in_session(fixture: &Fixture, workspace: &str, session: &str) -> Child 
         "#!/bin/sh\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
     );
     let errors = fixture.root.path().join(format!("agent-{session}.err"));
-    let mut agent = fixture
+    let agent = fixture
         .command()
         .env("ZMX_SESSION", session)
         .args(["claude", workspace])
@@ -24411,8 +24435,13 @@ fn agent_in_session(fixture: &Fixture, workspace: &str, session: &str) -> Child 
         .stderr(fs::File::create(&errors).unwrap())
         .spawn()
         .unwrap();
+    let mut agent = SessionAgent {
+        fixture,
+        workspace: workspace.to_owned(),
+        agent,
+    };
     wait_until("the agent's recorded session", || {
-        if let Some(status) = agent.try_wait().unwrap() {
+        if let Some(status) = agent.agent.try_wait().unwrap() {
             panic!(
                 "the agent exited with {status}: {}",
                 fs::read_to_string(&errors).unwrap()
@@ -24425,14 +24454,6 @@ fn agent_in_session(fixture: &Fixture, workspace: &str, session: &str) -> Child 
             .any(|execution| execution["origin"]["place"] == session)
     });
     agent
-}
-
-/// Stop the agents `agent_in_session` started for `workspace`.
-fn stop_agents(fixture: &Fixture, workspace: &str, agents: impl IntoIterator<Item = Child>) {
-    fixture.ok(&["stop", workspace]);
-    for mut agent in agents {
-        agent.wait().unwrap();
-    }
 }
 
 #[test]
@@ -24600,8 +24621,7 @@ fn attach_selects_a_session_of_the_workspace() {
     let output = fixture.run(&["attach", "persist"]);
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("attach requires a terminal"));
-    stop_agents(&fixture, "persist", [persist, second]);
-    stop_agents(&fixture, "other", [other]);
+    drop((persist, second, other));
 }
 
 #[test]
@@ -24680,8 +24700,9 @@ fn status_lists_workspace_sessions_and_survives_a_failed_listing() {
             .contains("list zmx sessions"),
         "{status}"
     );
+    // The agent stops through the daemon, which reads zmx again.
     install_test_script(home.join("bin/zmx"), PASSTHROUGH_ZMX);
-    stop_agents(&fixture, "persist", [agent]);
+    drop(agent);
 }
 
 #[test]
