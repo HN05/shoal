@@ -71,11 +71,9 @@ impl Origin {
     /// as the host reads its data; empty for a host with one server. Places
     /// of different servers may share an ID.
     pub fn server(&self) -> String {
-        match self.host {
-            HostName::Herdr => super::herdr::server(&self.data),
-            HostName::Rex => super::rex::server(&self.data),
-            HostName::Terminal | HostName::Zmx => String::new(),
-        }
+        super::host(self.host)
+            .map(|host| host.server(&self.data))
+            .unwrap_or_default()
     }
 
     /// The place's ID; empty for a group alone.

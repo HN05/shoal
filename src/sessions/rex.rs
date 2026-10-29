@@ -28,7 +28,7 @@ const SHELL_FLAVOR: &str = "com.superlogical.terminal.shell";
 
 /// The address of the server `data` records, empty for the local default;
 /// which `rex` reaches it does not tell servers apart.
-pub(crate) fn server(data: &BTreeMap<String, String>) -> String {
+fn server(data: &BTreeMap<String, String>) -> String {
     data.get(SERVER).cloned().unwrap_or_default()
 }
 
@@ -402,6 +402,10 @@ pub(super) struct Cleanup;
 impl super::Host for Cleanup {
     fn name(&self) -> super::HostName {
         super::HostName::Rex
+    }
+
+    fn server(&self, data: &BTreeMap<String, String>) -> String {
+        server(data)
     }
 
     fn sessions<'a>(

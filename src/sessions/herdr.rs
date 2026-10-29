@@ -21,7 +21,7 @@ pub(crate) const SERVER_SELECTION: &[&str] = &["HERDR_SOCKET_PATH", "HERDR_SESSI
 
 /// The server whose variables `data` records, by the variable that routes
 /// to it: the most specific one present, as `herdr` reads them.
-pub(crate) fn server(data: &BTreeMap<String, String>) -> String {
+fn server(data: &BTreeMap<String, String>) -> String {
     SERVER_VARS
         .iter()
         .find_map(|name| Some(format!("{name}={}", data.get(*name)?)))
@@ -93,6 +93,10 @@ pub(super) struct Cleanup;
 impl super::Host for Cleanup {
     fn name(&self) -> super::HostName {
         super::HostName::Herdr
+    }
+
+    fn server(&self, data: &BTreeMap<String, String>) -> String {
+        server(data)
     }
 
     fn sessions<'a>(&'a self, _state: &'a Path) -> BoxFuture<'a, Result<Vec<super::Session>>> {
