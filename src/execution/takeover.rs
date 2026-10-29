@@ -43,9 +43,24 @@ fn runs_daemon_binary(candidate: &Path, daemon: Option<FileIdentity>) -> bool {
 }
 
 /// How long the installed binary may prepare the agent it restores: its
-/// secret and key commands run while the daemon awaits the agent's start
-/// without taking stops.
+/// terminal lookup and secret and key commands run while the daemon awaits
+/// the agent's start without taking stops.
 pub(super) const PREPARATION_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// `prepare`, unless it takes longer than [`PREPARATION_LIMIT`]; the agent
+/// then stays stopped for `shoal resume`.
+pub(super) async fn within_preparation_limit<T>(
+    prepare: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
+    tokio::time::timeout(PREPARATION_LIMIT, prepare)
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "preparing the agent took longer than {}s; restore it with shoal resume",
+                PREPARATION_LIMIT.as_secs()
+            )
+        })?
+}
 
 /// The agent a wrapper hands over, which the binary it continues from
 /// restores.

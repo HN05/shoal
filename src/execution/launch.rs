@@ -349,10 +349,8 @@ async fn prepare_taken_over_launch(
         ..
     } = taken;
     let mut link = takeover::connection(connection)?;
-    let place = terminal_place(mode).await;
     let registered = async {
-        let (auth, recovery) =
-            prepare_restore(paths, &workspace, &agent, mode, place.as_ref()).await?;
+        let (place, auth, recovery) = prepare_restore(paths, &workspace, &agent, mode).await?;
         let plan = takeover::register_again(&mut link, place).await?;
         anyhow::Ok((auth, recovery, plan, this_wrapper()?))
     }
@@ -392,29 +390,22 @@ async fn prepare_taken_over_launch(
     })
 }
 
-/// Prepare the agent of `workspace` that a taken-over wrapper restores, within
-/// [`takeover::PREPARATION_LIMIT`]; one that takes longer stays stopped for
-/// `shoal resume`.
+/// Prepare the agent of `workspace` that a taken-over wrapper restores, with
+/// the place it runs in, within [`takeover::PREPARATION_LIMIT`].
 async fn prepare_restore(
     paths: &Paths,
     workspace: &str,
     agent: &str,
     mode: &Mode,
-    place: Option<&Origin>,
-) -> Result<(Option<AgentLaunch>, recovery::Recovery)> {
-    let prepare = async {
-        let auth = prepare_agent_launch(paths, workspace, mode, Some(agent), place).await?;
+) -> Result<(Option<Origin>, Option<AgentLaunch>, recovery::Recovery)> {
+    takeover::within_preparation_limit(async {
+        let place = terminal_place(mode).await;
+        let auth =
+            prepare_agent_launch(paths, workspace, mode, Some(agent), place.as_ref()).await?;
         let recovery = recovery::Recovery::for_launch(paths, workspace, agent).await;
-        anyhow::Ok((auth, recovery))
-    };
-    tokio::time::timeout(takeover::PREPARATION_LIMIT, prepare)
-        .await
-        .map_err(|_| {
-            anyhow::anyhow!(
-                "preparing the agent took longer than {}s; restore it with shoal resume",
-                takeover::PREPARATION_LIMIT.as_secs()
-            )
-        })?
+        Ok((place, auth, recovery))
+    })
+    .await
 }
 
 /// Report the end of a registered execution whose launch failed with `error`,
