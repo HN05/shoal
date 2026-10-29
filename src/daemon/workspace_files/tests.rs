@@ -285,3 +285,52 @@ async fn results_outlive_removal_as_long_as_its_record() {
     assert!(!result.exists());
     assert!(manager.workspace_files("audit").await.is_err());
 }
+
+#[tokio::test]
+async fn results_stay_reachable_when_a_workspace_between_goes() {
+    use crate::daemon::scope::{self, Caller};
+    use crate::protocol::FileMethod;
+    let (temp, manager) = manager().await;
+    let top = workspace(&temp, &manager).await;
+    let middle = manager
+        .split_workspace(&top.id, "middle".into(), None)
+        .await
+        .unwrap();
+    let bottom = manager
+        .split_workspace(&middle.id, "bottom".into(), None)
+        .await
+        .unwrap();
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    manager
+        .mark_done(&bottom.id, false, false, vec![report])
+        .await
+        .unwrap();
+    for removed in [&bottom, &middle] {
+        manager
+            .remove_workspace(
+                &removed.id,
+                crate::removal::UnsavedWork::default(),
+                crate::removal::InspectionPolicy::GitOnly,
+            )
+            .await
+            .unwrap();
+    }
+    manager
+        .executions
+        .issue_scope(
+            "top".into(),
+            Caller {
+                workspace_id: top.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
+        workspace: "bottom".into(),
+    });
+    scope::authorize(&manager, Some("top"), &mut list)
+        .await
+        .unwrap();
+}
+

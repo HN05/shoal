@@ -13,18 +13,30 @@ use crate::{
 impl Manager {
     /// Delete the files attached to `workspace` once it is removed, with
     /// their records; its results stay until [`Manager::expire_results`].
+    /// Results it was the parent of move to its own parent, as its children
+    /// do, so the workspaces above keep reaching them.
     pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
         let _files = self
             .gates
             .lock_message_files(&workspace.repository_id)
             .await;
         let id = workspace.id.clone();
+        let parent = workspace
+            .parent_workspace
+            .as_ref()
+            .map(|parent| parent.id.clone());
         self.store
             .run(move |db| {
-                db.execute(
+                let tx = db.transaction()?;
+                tx.execute(
                     "DELETE FROM workspace_files WHERE workspace_id=?1 AND source!=?2",
                     params![id, FileSource::Result],
                 )?;
+                tx.execute(
+                    "UPDATE workspace_files SET parent_id=?2 WHERE parent_id=?1",
+                    params![id, parent],
+                )?;
+                tx.commit()?;
                 Ok(())
             })
             .await?;
