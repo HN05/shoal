@@ -878,13 +878,43 @@ pub(in crate::cli) async fn sessions(
     settings: &Effective,
     places: &[&Origin],
 ) -> Result<Vec<Session>> {
-    let mut sessions = Vec::new();
-    for place in distinct_places(places) {
-        if let Some(host) = enabled_host(settings, place.host).and_then(Host::sessions) {
-            sessions.extend(host.session_at(place).await?);
+    let places = distinct_places(places);
+    let found = open_at(&places, |host| {
+        enabled_host(settings, host).and_then(Host::sessions)
+    })
+    .await?;
+    Ok(found.into_iter().flatten().collect())
+}
+
+/// The session open at each of `places`, in order, asking each host that
+/// `sessions_of` names about all of its places at once; a place without one
+/// has none.
+async fn open_at(
+    places: &[&Origin],
+    sessions_of: impl Fn(HostName) -> Option<&'static dyn Sessions>,
+) -> Result<Vec<Option<Session>>> {
+    let mut found = vec![None; places.len()];
+    let mut hosts = Vec::new();
+    for place in places {
+        if !hosts.contains(&place.host) {
+            hosts.push(place.host);
         }
     }
-    Ok(sessions)
+    for host in hosts {
+        let Some(sessions) = sessions_of(host) else {
+            continue;
+        };
+        let (indices, group): (Vec<usize>, Vec<&Origin>) = places
+            .iter()
+            .enumerate()
+            .filter(|(_, place)| place.host == host)
+            .map(|(index, place)| (index, *place))
+            .unzip();
+        for (index, session) in indices.into_iter().zip(sessions.sessions_at(&group).await?) {
+            found[index] = session;
+        }
+    }
+    Ok(found)
 }
 
 /// `places` without repeats of a place: the same ID in the same host, its
@@ -916,18 +946,16 @@ pub(in crate::cli) fn session_owners(places: &[(&str, &Origin)]) -> HashSet<Stri
 /// The IDs of the owners of `places`, recorded for owners by ID, with a
 /// session still open there. A place whose host cannot say counts as closed.
 pub(in crate::cli) async fn open_session_owners(places: &[(&str, &Origin)]) -> HashSet<String> {
-    let mut owners = HashSet::new();
-    for (owner, place) in places {
-        if owners.contains(*owner) {
-            continue;
-        }
-        if let Some(host) = kept_by(place).sessions()
-            && let Ok(Some(_)) = host.session_at(place).await
-        {
-            owners.insert((*owner).to_owned());
-        }
-    }
-    owners
+    let origins: Vec<&Origin> = places.iter().map(|(_, place)| *place).collect();
+    let found = open_at(&origins, |host| kept_by_host(host).sessions())
+        .await
+        .unwrap_or_default();
+    places
+        .iter()
+        .zip(found)
+        .filter(|(_, session)| session.is_some())
+        .map(|((owner, _), _)| (*owner).to_owned())
+        .collect()
 }
 
 /// Attach this terminal to `session` through the host that keeps it, then
@@ -1047,9 +1075,14 @@ fn names_places(host: &dyn Host) -> bool {
 
 /// The host, or the plain terminal, that keeps `place`.
 fn kept_by(place: &Origin) -> &'static dyn Host {
+    kept_by_host(place.host)
+}
+
+/// The host named `name`, or the plain terminal.
+fn kept_by_host(name: HostName) -> &'static dyn Host {
     hosts()
         .chain([&Plain as &dyn Host])
-        .find(|host| host.name() == place.host)
+        .find(|host| host.name() == name)
         .unwrap_or(&Plain)
 }
 

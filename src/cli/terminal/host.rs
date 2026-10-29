@@ -221,6 +221,21 @@ pub(in crate::cli) trait Sessions: Sync {
         Box::pin(async { Ok(None) })
     }
 
+    /// The session open at each of `places`, in order, for a host that reads
+    /// them all at once more cheaply than one at a time.
+    fn sessions_at<'a>(
+        &'a self,
+        places: &'a [&'a Origin],
+    ) -> BoxFuture<'a, Result<Vec<Option<Session>>>> {
+        Box::pin(async move {
+            let mut found = Vec::with_capacity(places.len());
+            for place in places {
+                found.push(self.session_at(place).await?);
+            }
+            Ok(found)
+        })
+    }
+
     /// Whether the places recorded for agents of this host are sessions
     /// [`Sessions::session_at`] finds.
     fn attaches_places(&self) -> bool {

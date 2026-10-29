@@ -239,6 +239,8 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
         .into_iter()
         .map(|(agent, place)| (agent.workspace_id.as_str(), place))
         .collect();
+    let mut owners = terminal::session_owners(&connected);
+    // Each host lists its sessions once for the owners still in question.
     let recorded: Vec<_> = unknown
         .into_iter()
         .map(|(agent, place)| (agent.workspace_id.as_str(), place))
@@ -247,8 +249,8 @@ async fn session_workspaces(paths: &Paths) -> HashSet<String> {
                 .iter()
                 .map(|place| (place.workspace_id.as_str(), &place.origin)),
         )
+        .filter(|(owner, _)| !owners.contains(*owner))
         .collect();
-    let mut owners = terminal::session_owners(&connected);
     owners.extend(terminal::open_session_owners(&recorded).await);
     owners
 }

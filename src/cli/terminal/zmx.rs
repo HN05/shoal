@@ -200,7 +200,15 @@ impl Sessions for Zmx {
 
     /// The session under the recorded name, while zmx keeps it.
     fn session_at<'a>(&'a self, place: &'a Origin) -> BoxFuture<'a, Result<Option<Session>>> {
-        Box::pin(session_at(place))
+        Box::pin(async move { Ok(sessions_at(&[place]).await?.pop().flatten()) })
+    }
+
+    /// One listing answers for every place.
+    fn sessions_at<'a>(
+        &'a self,
+        places: &'a [&'a Origin],
+    ) -> BoxFuture<'a, Result<Vec<Option<Session>>>> {
+        Box::pin(sessions_at(places))
     }
 
     fn attaches_places(&self) -> bool {
@@ -574,20 +582,26 @@ fn ended(status: ExitStatus) -> Result<()> {
     Ok(())
 }
 
-/// The session `place` names, with its attached terminals, while zmx keeps
-/// it. A later session under its name is another one.
-async fn session_at(place: &Origin) -> Result<Option<Session>> {
-    Ok(list()
-        .await?
-        .into_iter()
-        .find(|(name, fields)| is_instance(name, fields, place))
-        .map(|(name, fields)| Session {
-            clients: field(&fields, "clients")
-                .and_then(|clients| clients.parse().ok())
-                .unwrap_or(0),
-            name,
-            place: place.clone(),
-        }))
+/// The session each of `places` names, with its attached terminals, while
+/// zmx keeps it, from one listing. A later session under its name is another
+/// one.
+async fn sessions_at(places: &[&Origin]) -> Result<Vec<Option<Session>>> {
+    let sessions = list().await?;
+    Ok(places
+        .iter()
+        .map(|place| {
+            sessions
+                .iter()
+                .find(|(name, fields)| is_instance(name, fields, place))
+                .map(|(name, fields)| Session {
+                    clients: field(fields, "clients")
+                        .and_then(|clients| clients.parse().ok())
+                        .unwrap_or(0),
+                    name: name.clone(),
+                    place: (*place).clone(),
+                })
+        })
+        .collect())
 }
 
 /// Whether the session `name` with `fields` is `place`, the instance it

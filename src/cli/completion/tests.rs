@@ -42,6 +42,8 @@ async fn attach_candidates_follow_recorded_places() -> Result<()> {
     .await
     .context("attach candidate discovery stalled")??;
     assert!(output.status.success(), "{output:?}");
+    // One listing answers for every recorded place.
+    assert_eq!(fs::read_to_string(root.path().join("zmx-lists"))?, "list\n");
     Ok(())
 }
 
@@ -53,7 +55,10 @@ fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     let script = bin.join("zmx");
     fs::write(
         &script,
-        "#!/bin/sh\n[ \"$*\" = list ] || exit 1\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
+        format!(
+            "#!/bin/sh\n[ \"$*\" = list ] || exit 1\necho list >> '{}'\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
+            root.join("zmx-lists").display()
+        ),
     )?;
     fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
     Ok(())
