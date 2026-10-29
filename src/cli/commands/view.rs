@@ -80,8 +80,8 @@ pub(super) async fn view(
     Ok(i32::from(views.iter().any(|view| view.details.is_none())))
 }
 
-/// Open the selected items in the browser, printing each URL for a
-/// terminal elsewhere; workspace processes cannot.
+/// Open the selected items in the browser and print each URL, also when
+/// the opener fails, for a terminal elsewhere; workspace processes cannot.
 pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
     ensure!(
         !env::inherits_scope(&ctx.paths.state),
@@ -97,15 +97,13 @@ pub(super) async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
     )
     .await?;
     let urls: Vec<_> = selected.items.into_iter().map(|item| item.url).collect();
-    for url in &urls {
-        browser::open(url)?;
-    }
+    let failed = urls.iter().find_map(|url| browser::open(url).err());
     ctx.show(&urls, |urls| {
         for url in urls {
-            outln!("Opened {url}");
+            outln!("{url}");
         }
     })?;
-    Ok(0)
+    failed.map_or(Ok(0), Err)
 }
 
 /// Each item as the forge reports it now, in selection order.

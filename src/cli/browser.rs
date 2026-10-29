@@ -1,21 +1,29 @@
 //! Opening web pages in the user's browser.
-use std::process::{Command, Stdio};
+use std::{
+    os::unix::process::CommandExt,
+    process::{Command, Stdio},
+};
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 
-/// Open `url` with the desktop's opener: `open` on macOS, `xdg-open` elsewhere.
+/// Hand `url` to the desktop's opener: `open` on macOS, `xdg-open`
+/// elsewhere. It is not waited for, since `xdg-open` may run the browser
+/// itself until the browser closes, and runs in its own process group, so
+/// it outlives the terminal's hangup when this command exits first.
 pub(in crate::cli) fn open(url: &str) -> Result<()> {
     let opener = if cfg!(target_os = "macos") {
         "open"
     } else {
         "xdg-open"
     };
-    let status = Command::new(opener)
+    let mut child = Command::new(opener)
         .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .status()
-        .with_context(|| format!("run {opener}"))?;
-    ensure!(status.success(), "{opener} could not open {url}");
+        .stderr(Stdio::null())
+        .process_group(0)
+        .spawn()
+        .with_context(|| format!("run {opener} to open {url}"))?;
+    std::thread::spawn(move || child.wait());
     Ok(())
 }

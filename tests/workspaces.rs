@@ -15860,8 +15860,17 @@ esac
     assert!(transcript.contains("PR #7: Fix crash"), "{transcript}");
     assert!(!transcript.contains("Same here"), "{transcript}");
 
-    // `--web` opens the selected items in the browser and prints each URL.
+    // `--web` opens the selected items in the browser and prints each URL,
+    // without waiting for an opener that runs the browser until it closes.
     let opened = root.join("opened");
+    let release = root.join("release");
+    assert!(
+        Command::new("mkfifo")
+            .arg(&release)
+            .status()
+            .unwrap()
+            .success()
+    );
     install_test_script(
         bin.join(if cfg!(target_os = "macos") {
             "open"
@@ -15870,22 +15879,52 @@ esac
         }),
         r#"#!/bin/sh
 printf '%s\n' "$1" >> "$HOME/opened"
+cat "$HOME/release" > /dev/null
 "#,
     );
+    let opened_lines = || {
+        fs::read_to_string(&opened)
+            .map(|text| text.lines().count())
+            .unwrap_or(0)
+    };
     let mut web = fixture.command();
     web.args(["view", "issue", "3", "--web", "--workspace", "view"]);
     let (output, transcript) = fixture.terminal_command(&mut web, "", true);
     assert!(output.status.success(), "{transcript}");
     let issue = "https://github.com/team/project/issues/3";
-    assert_eq!(fs::read_to_string(&opened).unwrap(), format!("{issue}\n"));
-    assert!(
-        transcript.contains(&format!("Opened {issue}")),
-        "{transcript}"
-    );
-    let web = fixture.ok(&["view", "pr", "7", "--web", "--workspace", "view"]);
+    assert!(transcript.contains(issue), "{transcript}");
+    wait_until("the opener's first URL", || opened_lines() == 1);
+    fs::write(&release, "").unwrap();
+    let mut web = fixture.command();
+    web.args(["--json", "view", "pr", "7", "--web", "--workspace", "view"]);
+    let (output, transcript) = fixture.terminal_command(&mut web, "", false);
+    assert!(output.status.success(), "{transcript}");
+    let pr = "https://github.com/team/project/pull/7";
+    let web: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(web, serde_json::json!([pr]));
+    wait_until("the opener's second URL", || opened_lines() == 2);
+    fs::write(&release, "").unwrap();
     assert_eq!(
-        web,
-        serde_json::json!(["https://github.com/team/project/pull/7"])
+        fs::read_to_string(&opened).unwrap(),
+        format!("{issue}\n{pr}\n")
+    );
+    // Without an opener the URL is still printed, and the command fails.
+    let nothing = root.join("no-programs");
+    fs::create_dir(&nothing).unwrap();
+    let missing = fixture
+        .command()
+        .env("PATH", &nothing)
+        .args(["view", "issue", "3", "--web", "--workspace", "view"])
+        .output()
+        .unwrap();
+    assert!(!missing.status.success(), "{missing:?}");
+    assert!(
+        String::from_utf8_lossy(&missing.stdout).contains(issue),
+        "{missing:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("open"),
+        "{missing:?}"
     );
     // A workspace process cannot open windows on the user's screen.
     let scoped = fixture.run(&[

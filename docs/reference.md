@@ -2977,7 +2977,8 @@ whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
 `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
 without one keeps its GitLab name.
 `--web` opens the selected items in the browser instead, with `open` on macOS
-and `xdg-open` elsewhere, and prints each URL; workspace processes cannot.
+and `xdg-open` elsewhere, without waiting for the browser, and prints each URL,
+also when the opener fails; workspace processes cannot.
 
 `shoal watch` polls all linked items every ~30 seconds, and the daemon queues
 what its own polling of a ready workspace's linked items observes for the next
