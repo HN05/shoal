@@ -4,6 +4,13 @@ use crate::{
     test_support::{manager, repository},
 };
 
+/// Whether permissions bind this test process; root reads and deletes past
+/// them, as in CI's containers.
+fn permissions_bind() -> bool {
+    // SAFETY: geteuid has no arguments or memory-safety preconditions.
+    (unsafe { libc::geteuid() }) != 0
+}
+
 async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> crate::model::Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -625,6 +632,9 @@ async fn upgrading_records_the_copies_messages_attached_before() {
 #[tokio::test]
 async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     use std::os::unix::fs::PermissionsExt;
+    if !permissions_bind() {
+        return;
+    }
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
     let file = temp.path().join("notes.md");
