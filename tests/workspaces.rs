@@ -20521,6 +20521,32 @@ fn approval_list_shortcuts_refuse_a_request_that_changed_since_it_was_listed() {
 }
 
 #[test]
+fn approval_list_shortcuts_find_requests_of_workspaces_below_the_caller() {
+    let fixture = Fixture::new();
+    set_repository_toml(&fixture, "[ports.web]\nrequires_approval=true\n");
+    fixture.add("parent");
+    let split = scoped_command(&fixture, "parent", &["split", "child"]);
+    assert!(split.status.success(), "{split:?}");
+    let pending = pending_approval(scoped_command(
+        &fixture,
+        "child",
+        &["acquire", "port", "web", "--reason", "serve preview"],
+    ));
+    let row = approval_row(&fixture, &pending);
+    // The parent lists the child's requests with `--workspace child`; its
+    // decision reaches the daemon, which decides only routed requests.
+    let output = scoped_command(
+        &fixture,
+        "parent",
+        &["internal", "approval-decide", "approve", &row],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(!stderr.contains("changed since it was listed"), "{stderr}");
+    assert!(stderr.contains("routed to them"), "{stderr}");
+}
+
+#[test]
 fn question_picker_answers_the_selected_question_with_a_suggestion() {
     let fixture = Fixture::new();
     fixture.add("asker");

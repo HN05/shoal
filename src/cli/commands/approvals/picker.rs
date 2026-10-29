@@ -6,12 +6,14 @@ use super::{about, ensure_scope_token, list_requests, show_request, submit};
 use crate::{
     cli::{
         args::approvals::Decision,
+        client::request,
         context::Context,
         internal::{self, Worker},
         output::{Palette, Style},
         ui::{self, Entries, WidthLimit},
     },
     daemon::approvals::{ApprovalRequest, DecisionStatus, proposals::ProposalDecision},
+    protocol::ApprovalMethod,
 };
 
 /// Open the chosen request; Ctrl-A approves and Ctrl-D denies the
@@ -22,7 +24,7 @@ pub(super) async fn pick_and_open(
     requests: Vec<ApprovalRequest>,
 ) -> Result<i32> {
     let row = choose(ctx, workspace.as_deref(), requests)?;
-    let request = displayed(ctx, workspace, &row).await?;
+    let request = displayed(ctx, &row).await?;
     show_request(ctx, Box::new(request)).await
 }
 
@@ -45,7 +47,7 @@ pub(in crate::cli::commands) async fn decide_row(
     decision: Decision,
 ) -> Result<i32> {
     ensure_scope_token(ctx)?;
-    let request = displayed(ctx, None, row).await?;
+    let request = displayed(ctx, row).await?;
     let approve = decision == Decision::Approve;
     submit(
         ctx,
@@ -93,12 +95,20 @@ fn decision_key<'a>(
     })
 }
 
-/// The request `row` shows, refusing one that changed or replaced it since.
-async fn displayed(ctx: &Context, workspace: Option<String>, row: &str) -> Result<ApprovalRequest> {
-    let mut requests = list_requests(ctx, workspace).await?.into_iter();
-    requests
-        .find(|request| row_id(request).is_ok_and(|id| id == row))
-        .context("the approval request changed since it was listed")
+/// The request `row` shows, by its number wherever its workspace is,
+/// refusing one that changed or replaced it since.
+async fn displayed(ctx: &Context, row: &str) -> Result<ApprovalRequest> {
+    let id = row
+        .split_once(':')
+        .and_then(|(id, _)| id.parse().ok())
+        .context("picker returned an invalid approval request")?;
+    let request =
+        request::<Box<ApprovalRequest>>(&ctx.paths, ApprovalMethod::ShowApproval { id }).await?;
+    ensure!(
+        row_id(&request)? == row,
+        "approval request {id} changed since it was listed"
+    );
+    Ok(*request)
 }
 
 /// Every request's row, pending ones first.
