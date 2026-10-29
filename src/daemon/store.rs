@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 81;
+const SCHEMA_VERSION: i64 = 82;
 
 #[cfg(test)]
 mod benchmark;
@@ -424,7 +424,17 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (79, include_str!("store/execution_unretried_turns.sql"), None),
     (80, "", Some(place_servers::key_by_server)),
     (81, PROMPT_CACHE_EXPIRY, None),
+    (82, CHAT_RENAMES, None),
 ];
+
+/// Journal a running chat's new name.
+const CHAT_RENAMES: &str = "CREATE TRIGGER chat_renamed AFTER UPDATE OF name ON chats
+WHEN NEW.name IS NOT OLD.name BEGIN
+    INSERT INTO workspace_events(record) VALUES (json_object(
+        'kind','chat_renamed','chat',json_object('id',NEW.id,'repository_id',NEW.repository_id,
+            'name',NEW.name,'agent',NEW.agent,'pid',NEW.pid,'started_at',NEW.started_at)
+    ));
+END;";
 
 /// The agent each execution runs, which keeps its reported session once the
 /// execution ends without a stop of its own, as at a reboot.

@@ -80,6 +80,21 @@ impl Manager {
         self.store.run(move |db| free_name(db, &base)).await
     }
 
+    /// Give the running chat `chat`, by ID or name, the name `name`, which
+    /// must be free as a new chat's, and move its files to that name.
+    pub async fn rename_chat(&self, chat: String, name: String) -> Result<Chat> {
+        crate::validate::name("chat", &name)?;
+        self.end_finished_chats().await?;
+        let (old, renamed) = self.store.run(move |db| rename(db, &chat, &name)).await?;
+        // The chat has its new name even when its files stay behind.
+        if old.name != renamed.name
+            && let Err(error) = move_chat_files(&self.paths, &old, &renamed)
+        {
+            log!("chat {}: {error:#}", renamed.id);
+        }
+        Ok(renamed)
+    }
+
     /// Make process `pid` the one whose life a running chat lasts.
     pub async fn move_chat(&self, chat: &str, pid: u32) -> Result<Chat> {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
@@ -90,7 +105,7 @@ impl Manager {
     /// Running chats in start order, after ending those whose process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.end_finished_chats().await?;
-        self.store.run(running).await
+        self.store.run(|db| running(db)).await
     }
 
     /// Delete chats whose process has exited, which returns their workspaces
@@ -211,6 +226,44 @@ pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
     name
 }
 
+/// Rename the running chat `chat`, by ID or name, to `name` unless another
+/// holds it. Returns the chat before and after.
+fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
+    let tx = db.transaction()?;
+    let old = running(&tx)?
+        .into_iter()
+        .find(|running| running.id == chat || running.name == chat)
+        .with_context(|| format!("no running chat {chat}"))?;
+    if old.name != name {
+        store::ensure_name_available(&tx, name, None)?;
+        tx.execute(
+            "UPDATE chats SET name=?2 WHERE id=?1",
+            params![old.id, name],
+        )?;
+    }
+    tx.commit()?;
+    let renamed = Chat {
+        name: name.to_owned(),
+        ..old.clone()
+    };
+    Ok((old, renamed))
+}
+
+/// Move the files kept under `old`'s name to `renamed`'s, replacing those
+/// an ended chat of that name left. A running session keeps writing to the
+/// log it holds open.
+fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> Result<()> {
+    let (from, to) = (paths.chat_files(old), paths.chat_files(renamed));
+    for extension in [crate::paths::SESSION_LOG, crate::paths::SESSION_PROMPT] {
+        let (from, to) = (from.with_extension(extension), to.with_extension(extension));
+        match std::fs::rename(&from, &to) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            moved => moved.with_context(|| format!("cannot move {}", from.display()))?,
+        }
+    }
+    Ok(())
+}
+
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
         "UPDATE chats SET pid=?2,birth=?3 WHERE id=?1",
@@ -223,7 +276,7 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
         .context("the chat ended")
 }
 
-fn running(db: &mut Connection) -> Result<Vec<Chat>> {
+fn running(db: &Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
             "SELECT id,repository_id,name,agent,pid,started_at,origin FROM chats

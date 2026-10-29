@@ -95,6 +95,7 @@ const REQUESTS: &[&str] = &[
     r#"{"start_chat":{"repository":"app","name":"app-chat","agent":"claude","pid":4}}"#,
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
     r#""list_chats""#,
+    r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
     r#"{"free_chat_name":{"name":"app-chat"}}"#,
     r#"{"chat_updates":{"chat":"c1"}}"#,

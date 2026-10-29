@@ -23,6 +23,11 @@ pub enum ChatMethod {
         pid: u32,
     },
     ListChats,
+    /// Give the running chat `chat`, by ID or name, the name `name`.
+    RenameChat {
+        chat: String,
+        name: String,
+    },
     /// Refuse a name a new chat could not take now.
     CheckChatName {
         name: String,

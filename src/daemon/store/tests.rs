@@ -277,6 +277,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 81 {
         db.execute_batch(PROMPT_CACHE_EXPIRY)?;
     }
+    if version >= 82 {
+        db.execute_batch(CHAT_RENAMES)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

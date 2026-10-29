@@ -47,6 +47,8 @@ states!(
     ChatEventKind {
         Started => "chat_started",
         Ended => "chat_ended",
+        /// The chat took a new name, which its `chat` carries.
+        Renamed => "chat_renamed",
     }
 );
 

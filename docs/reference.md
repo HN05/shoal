@@ -3121,9 +3121,10 @@ when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.
 
-A `type: "chat"` line records a chat's start or end: its `id`, `created_at`,
-`kind` (`chat_started` or `chat_ended`) and a `chat` object with its `id`,
-`repository_id`, `name`, `agent`, `pid` and Unix-seconds `started_at`.
+A `type: "chat"` line records a chat's start, rename or end: its `id`,
+`created_at`, `kind` (`chat_started`, `chat_renamed` or `chat_ended`) and a
+`chat` object with its `id`, `repository_id`, `name` (the new one after a
+rename), `agent`, `pid` and Unix-seconds `started_at`.
 
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.

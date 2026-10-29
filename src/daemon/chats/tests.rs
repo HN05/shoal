@@ -304,6 +304,75 @@ async fn chats_and_workspaces_share_one_namespace() {
     assert!(refusal(start("talk", std::process::id()).await).contains("workspace name"));
 }
 
+#[tokio::test]
+async fn a_renamed_chat_takes_a_free_name_with_its_files() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let start = |name: &str| {
+        manager.start_chat(
+            repo.id.clone().into(),
+            name.into(),
+            "happy-claude".into(),
+            std::process::id(),
+            None,
+        )
+    };
+    let talk = start("talk").await.unwrap();
+    start("other").await.unwrap();
+    let files = manager.paths.chat_files(&talk);
+    std::fs::create_dir_all(files.parent().unwrap()).unwrap();
+    std::fs::write(files.with_extension("log"), "talk log").unwrap();
+    std::fs::write(files.with_extension("prompt.md"), "talk prompt").unwrap();
+    // An ended chat named topic left its log.
+    let topic_log = files.with_file_name("topic.log");
+    std::fs::write(&topic_log, "ended log").unwrap();
+    let refusal = |result: Result<Chat>| format!("{:#}", result.unwrap_err());
+
+    // The new name is refused where a new chat's would be.
+    let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
+    assert!(refusal(rename("talk", "worker").await).contains("workspace name"));
+    assert!(refusal(rename("talk", "other").await).contains("running chat"));
+    assert!(refusal(rename("talk", "-topic").await).contains("chat names must"));
+    assert!(refusal(rename("gone", "topic").await).contains("no running chat gone"));
+    assert_eq!(rename("talk", "talk").await.unwrap(), talk);
+
+    let renamed = rename(&talk.id, "topic").await.unwrap();
+    assert_eq!(
+        renamed,
+        Chat {
+            name: "topic".into(),
+            ..talk.clone()
+        }
+    );
+    assert!(manager.chats().await.unwrap().contains(&renamed));
+    assert_eq!(std::fs::read_to_string(&topic_log).unwrap(), "talk log");
+    assert_eq!(
+        std::fs::read_to_string(files.with_file_name("topic.prompt.md")).unwrap(),
+        "talk prompt"
+    );
+    assert!(!files.with_extension("log").exists());
+
+    // The old name is free, and the rename is journaled.
+    start("talk").await.unwrap();
+    assert_eq!(
+        chat_events(&manager).await,
+        [
+            format!("{} talk", ChatEventKind::Started),
+            format!("{} other", ChatEventKind::Started),
+            format!("{} topic", ChatEventKind::Renamed),
+            format!("{} talk", ChatEventKind::Started),
+        ]
+    );
+}
+
 #[test]
 fn suffixed_names_fit_the_name_limit() {
     let long = "a".repeat(crate::validate::MAX_NAME_LEN);
