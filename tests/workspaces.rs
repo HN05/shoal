@@ -14703,7 +14703,7 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
 }
 
 #[test]
-fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
+fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("watch");
     fixture.add("other");
@@ -14745,12 +14745,12 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         .iter()
         .map(|update| update["kind"].as_str().unwrap())
         .collect();
-    assert_eq!(kinds, ["comment", "ci_completed"]);
+    // The passing check waits for the one still running.
+    assert_eq!(kinds, ["comment"]);
     assert_eq!(
         first["updates"][0]["message"],
         "1 new inline comment from bot; read them with shoal view https://github.com/team/project/pull/7"
     );
-    assert_eq!(first["updates"][1]["message"], "review: SUCCESS");
     assert_eq!(
         first["updates"][0]["url"],
         "https://github.com/team/project/pull/7"
@@ -14791,9 +14791,10 @@ fn pr_wait_wakes_for_individual_ci_reviews_and_conflicts_with_own_scope() {
         String::from_utf8_lossy(&result.stderr)
     );
     let second: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(second["updates"].as_array().unwrap().len(), 1);
+    assert_eq!(second["updates"].as_array().unwrap().len(), 2);
+    assert_eq!(second["updates"][0]["message"], "review: SUCCESS");
     // This gh answers no log lookup; tests/forge.rs covers what it adds.
-    let message = second["updates"][0]["message"].as_str().unwrap();
+    let message = second["updates"][1]["message"].as_str().unwrap();
     assert!(message.starts_with("rust: FAILURE; "), "{message}");
     // A conflict is reported once a second poll sees it at the same commits.
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
@@ -15234,8 +15235,9 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     forgejo_api(home, reviews, &review("A finding"));
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
     let first = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(first["updates"].as_array().unwrap().len(), 2, "{first}");
-    assert_eq!(first["updates"][1]["message"], "review/default: Success");
+    // The passing check waits for rust.
+    assert_eq!(first["updates"].as_array().unwrap().len(), 1, "{first}");
+    assert_eq!(first["updates"][0]["kind"], "comment");
     // A failed CI lookup reports itself without hiding a new review.
     fs::remove_file(
         home.join("api")
@@ -15251,9 +15253,10 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
     forgejo_api(home, "repos/team/repo/pulls/7", &conflicting);
     forgejo_api(home, &status, &checks("failure"));
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
-    assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
+    assert_eq!(third["updates"].as_array().unwrap().len(), 2, "{third}");
+    assert_eq!(third["updates"][0]["message"], "review/default: Success");
     assert!(
-        third["updates"][0]["message"]
+        third["updates"][1]["message"]
             .as_str()
             .unwrap()
             .starts_with("rust: Failure; log unavailable:")
