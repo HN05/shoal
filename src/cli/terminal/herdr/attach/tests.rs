@@ -54,27 +54,57 @@ fn tab_info_reads_the_label() {
 }
 
 #[test]
-fn outside_herdr_only_a_recorded_session_is_attached() {
+fn outside_herdr_the_session_holding_the_recorded_server_is_attached() {
     let outside = |_: &str| None;
+    let plain = Origin::created(HostName::Herdr, "w1:p1".to_owned());
     let socket_only = Origin {
         data: vars(&[("HERDR_SOCKET_PATH", "/h/work/herdr.sock")]),
-        ..Origin::created(HostName::Herdr, "w1:p1".to_owned())
+        ..plain.clone()
     };
-    let error = client_session(&socket_only, outside).unwrap_err();
-    assert!(
-        error.to_string().contains("recorded no session"),
-        "{error:#}"
+    let named = Origin {
+        data: vars(&[
+            ("HERDR_SESSION", "work"),
+            ("HERDR_SOCKET_PATH", "/h/work/herdr.sock"),
+        ]),
+        ..plain.clone()
+    };
+    let attached = |place| client_session(place, outside).unwrap();
+    assert_eq!(attached(&plain), Some(HerdrSession::Default));
+    assert_eq!(
+        attached(&socket_only),
+        Some(HerdrSession::AtSocket("/h/work/herdr.sock"))
     );
-    let recorded = Origin {
-        data: vars(&[("HERDR_SESSION", "work")]),
-        ..socket_only.clone()
-    };
-    assert_eq!(client_session(&recorded, outside).unwrap(), Some("work"));
+    assert_eq!(attached(&named), Some(HerdrSession::Named("work")));
     // A pane of the same server already shows it.
     let inside = |name: &str| match name {
         "HERDR_ENV" => Some("1".to_owned()),
         "HERDR_SESSION" => Some("work".to_owned()),
         _ => None,
     };
+    let recorded = Origin {
+        data: vars(&[("HERDR_SESSION", "work")]),
+        ..plain
+    };
     assert_eq!(client_session(&recorded, inside).unwrap(), None);
+}
+
+#[test]
+fn herdr_lists_the_session_at_a_socket_or_its_default() {
+    let listed: Sessions = serde_json::from_str(
+        r#"{"sessions":[
+            {"default":true,"name":"default","running":true,"socket_path":"/h/herdr.sock"},
+            {"default":false,"name":"work","running":true,"socket_path":"/h/work/herdr.sock"}]}"#,
+    )
+    .unwrap();
+    let name = |session: HerdrSession| {
+        session
+            .find(&listed.sessions)
+            .map(|session| session.name.as_str())
+    };
+    assert_eq!(name(HerdrSession::Default), Some("default"));
+    assert_eq!(
+        name(HerdrSession::AtSocket("/h/work/herdr.sock")),
+        Some("work")
+    );
+    assert_eq!(name(HerdrSession::AtSocket("/h/gone/herdr.sock")), None);
 }

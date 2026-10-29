@@ -751,7 +751,10 @@ split never renames the user's window. A terminal no host
 serves goes to `default_host`, zmx unless set to Herdr or Rex, whose places
 then join the group the host's config names, `herdr.workspace_name` or
 `rex.session_name`; generic code reads the setting and renders the name, and a
-host only finds or creates a group by label. Shoal remembers
+host only finds or creates a group by label. Showing a focused place to a
+terminal outside the host is the host's own: Herdr attaches the terminal to
+the session holding the tab, as `shoal attach` does, while Rex, without a
+terminal client, selects the window in its app. Shoal remembers
 every place as one host-neutral origin record: the host, its group and place,
 host-defined data, and whether Shoal created the place. The place is the one ID
 a host names it by, for its watcher as well: a Herdr place is the pane, whose

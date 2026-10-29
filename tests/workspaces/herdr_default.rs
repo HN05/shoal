@@ -84,6 +84,53 @@ fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
 }
 
 #[test]
+fn focused_starts_attach_the_terminal_to_their_herdr_tab() {
+    let fixture = Fixture::with_config(Some(
+        "max_agents = 'none'\ndefault_host = 'herdr'\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    fixture.add("agent");
+    let repo = fixture.repo.to_str().unwrap();
+    for args in [
+        vec!["add", repo, "shell"],
+        vec!["chat", repo, "--name", "talk", "--agent", "pi"],
+        vec!["pi", "agent"],
+    ] {
+        fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap_or_default();
+        let (output, transcript) = plain_terminal(&fixture, &args);
+        assert!(output.status.success(), "{args:?}: {output:?} {transcript}");
+        let tab = &calls_of(&fixture, &["tab", "create"])[0];
+        assert!(tab.iter().any(|arg| arg == "--focus"), "{args:?}: {tab:?}");
+        // The tab's pane runs the start, then the terminal shows its tab.
+        let changes: Vec<_> = herdr_changes(&fixture)
+            .into_iter()
+            .filter(|call| call[0] != "workspace")
+            .map(|call| call[..2].join(" "))
+            .collect();
+        assert_eq!(
+            changes,
+            [
+                "tab create",
+                "pane run",
+                "tab focus",
+                "session list",
+                "session attach"
+            ],
+            "{args:?}"
+        );
+        assert_eq!(
+            calls_of(&fixture, &["session", "attach"])[0],
+            ["session", "attach", "default"]
+        );
+    }
+    assert!(
+        !fs::read_to_string(fixture.root.path().join("zmx-calls"))
+            .unwrap_or_default()
+            .contains("attach")
+    );
+}
+
+#[test]
 fn demos_without_a_herdr_pane_open_in_the_repository_workspace() {
     let fixture = Fixture::with_config(Some("default_host = 'herdr'\n"));
     install_fake_herdr(&fixture);

@@ -835,8 +835,10 @@ With `default_host = "herdr"`, launches from a terminal outside Herdr and Rex
 open their tabs in the `workspace_name` workspace of the Herdr server the
 terminal's `herdr` reaches, which must be running; `{repo}` is the only
 placeholder, and Shoal reuses the first workspace with that label or creates
-it. With `herdr.enabled = false` these launches use zmx, and `new_tab = false`
-keeps queued ones out of Herdr. A start queued from Herdr opens a background
+it. A focused start, a chat or an agent launch then attaches the terminal to
+the Herdr session holding its tab, as `shoal attach` does, until you detach; a
+background start says where it went. With `herdr.enabled = false` these
+launches use zmx, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
 tab in the workspace it was queued from, then falls back to the
 `workspace_name` workspace on the same server, then to `default_host`, then to
 zmx.

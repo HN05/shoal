@@ -25,7 +25,8 @@ use crate::{
 
 /// Herdr opens tabs beside the caller's pane and reads agent state from the
 /// pane's process, so agents in its panes run in place. As the default host,
-/// it opens tabs for a terminal no host serves in a workspace of its own.
+/// it opens tabs for a terminal no host serves in a workspace of its own,
+/// and attaches that terminal to Herdr to show a focused one.
 pub(super) struct Herdr;
 
 impl Host for Herdr {
@@ -87,7 +88,7 @@ impl Places for Herdr {
 
     /// A background tab.
     fn run_in_background<'a>(&'a self, start: &'a Start<'a>) -> BoxFuture<'a, Result<()>> {
-        Box::pin(open_tab(start))
+        Box::pin(async move { open_tab(start).await.map(drop) })
     }
 
     /// A pane back at its shell prompt, as it is after the wrapper exits.
@@ -155,14 +156,21 @@ impl Closes for Herdr {
 /// Herdr keeps no sessions of its own: an agent or chat in one of its panes
 /// is reached through its tab.
 impl Sessions for Herdr {
-    /// Agents in a Herdr pane run in place.
+    /// Outside Herdr, a focused tab this terminal attaches to; agents in a
+    /// Herdr pane run in place.
     fn run_agent<'a>(
         &'a self,
-        _start: &'a Start<'a>,
+        start: &'a Start<'a>,
         _owner: Owner<'a>,
         _agent: &'a str,
     ) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async { Ok(None) })
+        Box::pin(async move {
+            if in_herdr() {
+                return Ok(None);
+            }
+            let opened = open_tab(start).await?;
+            Ok(Some(opened.id().to_owned()))
+        })
     }
 
     /// The pane, under its tab's label, while it is open.
@@ -288,9 +296,13 @@ fn current_pane() -> Option<String> {
         .filter(|pane| !pane.is_empty())
 }
 
-/// Run `start` in a new tab.
-async fn open_tab(start: &Start<'_>) -> Result<()> {
-    let origin = start.origin.context("Shoal does not run in a Herdr pane")?;
+/// Run `start` in a new tab, returning its pane. A focused tab opened from
+/// outside Herdr shows in this terminal, attached to the tab's Herdr
+/// session until the user detaches.
+async fn open_tab(start: &Start<'_>) -> Result<Origin> {
+    let origin = start
+        .origin
+        .context("Shoal has no Herdr workspace to open a tab in")?;
     let created = created(tab_command(
         origin,
         start.cwd,
@@ -299,7 +311,16 @@ async fn open_tab(start: &Start<'_>) -> Result<()> {
         start.env,
     )?)
     .await?;
-    run_in_pane(origin, &created.root_pane.pane_id, start.argv).await
+    let place = Origin {
+        place: Some(created.root_pane.pane_id),
+        owned: true,
+        ..origin.clone()
+    };
+    run_in_pane(origin, place.id(), start.argv).await?;
+    if start.focus && !in_herdr() {
+        attach::reveal(&place).await?;
+    }
+    Ok(place)
 }
 
 /// The command that creates a tab at `cwd` with `env` in the Herdr
