@@ -368,7 +368,9 @@ workspace and `--agent <name>` only agents of that name. Agents restart
 together; `--sequential` restarts one at a time, idle ones first, each once the
 previous one runs again and at least 10 seconds after it started. With
 `--wait`, each restarts only once its own turn ends, where a permission prompt or
-an agent without turn reports counts as working. A
+an agent without turn reports counts as working. Interrupting the run leaves
+its restarts to the daemon and names them; a run that selects an agent already
+restarting reports on that restart. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal resume`. An agent that does not start again

@@ -29,7 +29,7 @@ use progress::Progress;
 const PARALLEL_RESTARTS: usize = 16;
 
 /// How often `--wait` checks whether a turn ended.
-const TURN_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(super) async fn run(
     ctx: &Context,
@@ -56,16 +56,39 @@ pub(super) async fn run(
         )?;
         return Ok(0);
     }
-    let mut progress = Progress::new(plan.restarts.len() + plan.skipped.len());
+    let mut progress = Progress::new(&plan.restarts, plan.skipped.len());
     for skipped in plan.skipped {
         progress.skip(ctx, skipped);
     }
-    if sequential {
-        restart_in_turn(ctx, &mut progress, plan.restarts, wait).await?;
-    } else {
-        restart_together(ctx, &mut progress, plan.restarts, wait).await?;
+    let interrupted = tokio::select! {
+        restarted = restart_all(ctx, &mut progress, plan.restarts, wait, sequential) => {
+            restarted?;
+            false
+        }
+        signal = tokio::signal::ctrl_c() => {
+            signal?;
+            true
+        }
+    };
+    if interrupted {
+        // The daemon goes on with the restarts it was asked for.
+        return progress.interrupted(ctx, &list_agents(ctx).await?);
     }
     progress.finish(ctx)
+}
+
+async fn restart_all(
+    ctx: &Context,
+    progress: &mut Progress,
+    restarts: Vec<Restart>,
+    wait: bool,
+    sequential: bool,
+) -> Result<()> {
+    if sequential {
+        restart_in_turn(ctx, progress, restarts, wait).await
+    } else {
+        restart_together(ctx, progress, restarts, wait).await
+    }
 }
 
 impl Restart {
@@ -142,7 +165,7 @@ async fn restart_together(
     let mut told = false;
     loop {
         if wait {
-            for gone in refresh(ctx, &mut waiting).await? {
+            for gone in refresh(&mut waiting, &list_agents(ctx).await?) {
                 progress.skip(ctx, gone);
             }
         }
@@ -163,7 +186,7 @@ async fn restart_together(
         }
         tokio::select! {
             Some((restart, result)) = running.next() => progress.ended(ctx, &restart, result),
-            () = sleep(TURN_POLL_INTERVAL), if wait && !waiting.is_empty() => {}
+            () = sleep(POLL_INTERVAL), if wait && !waiting.is_empty() => {}
         }
     }
 }
@@ -191,7 +214,7 @@ async fn next_idle(
 ) -> Result<Option<Restart>> {
     let mut told = false;
     loop {
-        for gone in refresh(ctx, restarts).await? {
+        for gone in refresh(restarts, &list_agents(ctx).await?) {
             progress.skip(ctx, gone);
         }
         if restarts.is_empty() {
@@ -203,14 +226,17 @@ async fn next_idle(
         if !told {
             told = tell_waiting(ctx, restarts);
         }
-        sleep(TURN_POLL_INTERVAL).await;
+        sleep(POLL_INTERVAL).await;
     }
 }
 
-/// Read each agent's turn state again, and drop the agents that no longer
-/// run or whose wrapper is gone, returning them.
-async fn refresh(ctx: &Context, restarts: &mut Vec<Restart>) -> Result<Vec<Skipped>> {
-    let running: Vec<RunningAgent> = request(&ctx.paths, ExecutionMethod::ListAgents).await?;
+async fn list_agents(ctx: &Context) -> Result<Vec<RunningAgent>> {
+    request(&ctx.paths, ExecutionMethod::ListAgents).await
+}
+
+/// Take each agent's turn state from `running`, and drop the agents that no
+/// longer run or whose wrapper is gone, returning them.
+fn refresh(restarts: &mut Vec<Restart>, running: &[RunningAgent]) -> Vec<Skipped> {
     let mut ended = Vec::new();
     for mut restart in std::mem::take(restarts) {
         let current = running
@@ -232,5 +258,5 @@ async fn refresh(ctx: &Context, restarts: &mut Vec<Restart>) -> Result<Vec<Skipp
             }
         }
     }
-    Ok(ended)
+    ended
 }
