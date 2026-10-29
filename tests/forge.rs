@@ -630,6 +630,56 @@ fn changes_use_the_agent_account_and_merges_the_users() {
 }
 
 #[test]
+fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
+        format!("POST {endpoint}/update?style=rebase"): {"body": null},
+        format!("POST {endpoint}/update?style=merge"): {"body": null},
+    }));
+    let updated = fixture.ok(&[
+        "pr",
+        "update",
+        "8",
+        "--workspace",
+        "topic",
+        "--method",
+        "rebase",
+    ]);
+    assert_eq!(
+        updated["url"],
+        format!("{}/pulls/8", fixture.web),
+        "{updated}"
+    );
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let scoped = fixture.run(&[
+        "run",
+        "--workspace",
+        "topic",
+        "--",
+        shoal,
+        "pr",
+        "update",
+        "8",
+    ]);
+    assert!(scoped.status.success(), "{scoped:?}");
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .map(|request| request[0].clone())
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!(format!("POST {endpoint}/update?style=rebase")),
+            json!(format!("POST {endpoint}/update?style=merge")),
+        ]
+    );
+}
+
+#[test]
 fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
     let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();

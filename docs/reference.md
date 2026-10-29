@@ -2601,6 +2601,7 @@ shoal pr review 42 --comment --body-file review.md --line src/a.rs:7 'Why?'
 shoal pr review 42 --request-changes --body-file why.md --comments-file lines.json
 shoal pr close 12                   # reopen works the same way
 shoal pr reviewers 12               # users and teams who can review PR 12
+shoal pr update --method rebase    # take in the base's commits on the forge
 shoal pr merge --method rebase --delete-branch
 shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
@@ -2687,6 +2688,12 @@ removes it; the reaction is GitHub's name, as `shoal view` shows it, or one the
 forge has, such as a GitLab emoji. A comment must belong to the item, which is
 checked with the item's kind before anything is sent. A reaction already as
 asked is left unchanged. Bitbucket has no reactions.
+`update` brings an open PR's branch up to date with its base on the forge,
+`--method merge` (the default) by merging the base in and `--method rebase` by
+rebasing onto it; workspace processes may update, and then pull the branch
+before pushing again. GitHub refuses the update when the head moved since Shoal
+read it, GitLab only rebases and does so after answering, and Bitbucket cannot
+update a branch.
 `merge` takes `--method merge|rebase|squash`; `--delete-branch` deletes the
 PR's branch on the forge when it is in the repository, never a local branch.
 `--auto` has the forge merge the PR that way once its required checks and

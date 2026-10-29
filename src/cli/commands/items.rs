@@ -81,6 +81,9 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         ),
         PrCommand::Close { item } => (item, Action::Close, "PR closed"),
         PrCommand::Reopen { item } => (item, Action::Reopen, "PR reopened"),
+        PrCommand::Update { item, method } => {
+            (item, Action::Update { method }, "PR branch updated")
+        }
         PrCommand::Merge {
             item,
             method,

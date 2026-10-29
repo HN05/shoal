@@ -209,6 +209,14 @@ pub enum PrCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
+    /// Update a PR's branch from its base on the forge.
+    Update {
+        #[command(flatten)]
+        item: ItemSelector,
+        /// How to take in the base's commits.
+        #[arg(long, value_enum, default_value = "merge")]
+        method: crate::forge::items::action::UpdateMethod,
+    },
     /// Merge a PR with your own login, now or once its checks pass;
     /// workspace processes cannot merge.
     Merge {
