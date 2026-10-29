@@ -54,19 +54,7 @@ impl Manager {
         );
         origin.owned = true;
         self.store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO owned_places(host,place,workspace_id,origin)
-                     VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO NOTHING",
-                    params![
-                        origin.host,
-                        origin.id(),
-                        workspace.id,
-                        serde_json::to_string(&origin)?
-                    ],
-                )?;
-                Ok(())
-            })
+            .run(move |db| insert_owned(db, &workspace.id, &origin))
             .await
     }
 
@@ -132,6 +120,21 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Record `origin` as owned by `workspace` unless it is recorded already.
+fn insert_owned(db: &Connection, workspace: &str, origin: &Origin) -> Result<()> {
+    db.execute(
+        "INSERT INTO owned_places(host,place,workspace_id,origin)
+         VALUES (?1,?2,?3,?4) ON CONFLICT(host,place) DO NOTHING",
+        params![
+            origin.host,
+            origin.id(),
+            workspace,
+            serde_json::to_string(origin)?
+        ],
+    )?;
+    Ok(())
 }
 
 fn owned(db: &Connection, workspace: Option<&str>) -> Result<Vec<(String, Origin)>> {
