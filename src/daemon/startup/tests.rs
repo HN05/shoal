@@ -6,7 +6,10 @@ use tokio::{
 };
 
 use super::*;
-use crate::protocol::{AgentMethod, WorkspaceMethod};
+use crate::{
+    protocol::{AgentMethod, Request, WorkspaceMethod},
+    test_support::manager,
+};
 
 /// A hang guard, not the behavior under test.
 async fn bounded<T>(future: impl Future<Output = T>) -> T {
@@ -27,25 +30,30 @@ async fn send(socket: &std::path::Path, id: u64, method: impl Into<Method>) -> U
     stream
 }
 
+async fn reply(stream: UnixStream) -> Body {
+    let response: Response = bounded(protocol::read_buffered(&mut BufReader::new(stream)))
+        .await
+        .unwrap();
+    response.body
+}
+
 #[tokio::test]
-async fn startup_answers_status_with_its_step_and_holds_other_requests() {
-    let root = tempfile::tempdir_in("/tmp").unwrap();
-    let socket = root.path().join("daemon.sock");
+async fn startup_answers_status_with_its_step_and_serves_other_requests_after() {
+    let (_root, manager) = manager().await;
+    let socket = manager.paths.socket.clone();
     let startup = Startup::begin(UnixListener::bind(&socket).unwrap());
     let (unblock, blocked) = oneshot::channel::<()>();
     let audit = startup.step("auditing worktrees", blocked);
     let clients = async {
-        // Accepted in order, so the status reply proves the earlier ones were read.
-        let _held = send(&socket, 7, WorkspaceMethod::ListWorkspaces).await;
+        let waiting = send(&socket, 7, WorkspaceMethod::ListWorkspaces).await;
         let wake = AgentMethod::AwaitAgentWake {
             workspace: "w".into(),
             due: false,
         };
         let mut retried = send(&socket, 8, wake).await;
-        let mut status = BufReader::new(send(&socket, 9, DaemonMethod::Status).await);
-        let response: Response = bounded(protocol::read_buffered(&mut status)).await.unwrap();
-        let Body::Error { message, .. } = response.body else {
-            panic!("expected the startup step, got {:?}", response.body);
+        let Body::Error { message, .. } = reply(send(&socket, 9, DaemonMethod::Status).await).await
+        else {
+            panic!("expected the startup step");
         };
         assert!(
             message.contains("starting: auditing worktrees for"),
@@ -56,14 +64,24 @@ async fn startup_answers_status_with_its_step_and_holds_other_requests() {
         bounded(retried.read_to_end(&mut unanswered)).await.unwrap();
         assert!(unanswered.is_empty());
         unblock.send(()).unwrap();
-        _held
+        waiting
     };
-    let (_held, audited) = tokio::join!(clients, audit);
+    let (waiting, audited) = tokio::join!(clients, audit);
     audited.unwrap();
-    let (_listener, held) = bounded(startup.finish()).await;
-    let ids = held
-        .iter()
-        .map(|(_, request)| request.id)
-        .collect::<Vec<_>>();
-    assert_eq!(ids, [7]);
+    let (_listener, _connections) = startup.finish(crate::daemon::tests::server(manager)).await;
+    let served = reply(waiting).await;
+    assert!(matches!(served, Body::Workspaces(_)), "{served:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_client_that_never_sends_its_request_does_not_hold_up_serving() {
+    let (_root, manager) = manager().await;
+    let socket = manager.paths.socket.clone();
+    let startup = Startup::begin(UnixListener::bind(&socket).unwrap());
+    let _silent = UnixStream::connect(&socket).await.unwrap();
+    // Accepted after the silent client, so it proves that one was accepted.
+    reply(send(&socket, 1, DaemonMethod::Status).await).await;
+    let finishing = Instant::now();
+    let (_listener, _connections) = startup.finish(crate::daemon::tests::server(manager)).await;
+    assert!(finishing.elapsed() < timing::REQUEST_READ_TIMEOUT);
 }

@@ -12,19 +12,15 @@ use tokio::{
     time::Instant,
 };
 
-use super::{connections, log, read_request};
-use crate::protocol::{
-    self, Body, DaemonMethod, ErrorCode, Method, Operation, Request, Response, timing,
-};
+use super::{Server, connections, log, read_request, serve_request};
+use crate::protocol::{self, Body, DaemonMethod, ErrorCode, Method, Operation, Response, timing};
 
-/// A connection whose request waits for the daemon to finish starting.
-pub(super) type Held = (UnixStream, Request);
-
-/// The startup in progress and the task answering its connections.
+/// The startup in progress and the task accepting its connections.
 pub(super) struct Startup {
     step: Arc<Mutex<Step>>,
-    finished: watch::Sender<bool>,
-    answering: JoinHandle<(UnixListener, Vec<Held>)>,
+    /// The server once startup has finished, which waiting requests use.
+    ready: watch::Sender<Option<Server>>,
+    accepting: JoinHandle<(UnixListener, JoinSet<()>)>,
 }
 
 #[derive(Clone, Copy)]
@@ -34,18 +30,18 @@ struct Step {
 }
 
 impl Startup {
-    /// Answer connections on `listener` until [`Self::finish`].
+    /// Accept connections on `listener` until [`Self::finish`].
     pub(super) fn begin(listener: UnixListener) -> Self {
         let step = Arc::new(Mutex::new(Step {
             name: "starting",
             since: Instant::now(),
         }));
-        let (finished, watching) = watch::channel(false);
-        let answering = tokio::spawn(answer(listener, step.clone(), watching));
+        let (ready, server) = watch::channel(None);
+        let accepting = tokio::spawn(accept(listener, step.clone(), server));
         Self {
             step,
-            finished,
-            answering,
+            ready,
+            accepting,
         }
     }
 
@@ -59,34 +55,35 @@ impl Startup {
         log::when_slow(&format!("startup step {name}"), work).await
     }
 
-    /// The listener back, with the connections whose requests waited.
-    pub(super) async fn finish(mut self) -> (UnixListener, Vec<Held>) {
-        self.finished.send_replace(true);
-        (&mut self.answering)
+    /// Serve the waiting requests with `server`, and return the listener with
+    /// the connections accepted so far, which go on without holding it up.
+    pub(super) async fn finish(mut self, server: Server) -> (UnixListener, JoinSet<()>) {
+        self.ready.send_replace(Some(server));
+        (&mut self.accepting)
             .await
-            .expect("the startup connection task does not panic")
+            .expect("the startup accept task does not panic")
     }
 }
 
 impl Drop for Startup {
-    /// A startup that failed stops answering.
+    /// A startup that failed stops accepting, which drops its connections.
     fn drop(&mut self) {
-        self.answering.abort();
+        self.accepting.abort();
     }
 }
 
-async fn answer(
+async fn accept(
     listener: UnixListener,
     step: Arc<Mutex<Step>>,
-    finished: watch::Receiver<bool>,
-) -> (UnixListener, Vec<Held>) {
-    let mut reading = JoinSet::new();
+    server: watch::Receiver<Option<Server>>,
+) -> (UnixListener, JoinSet<()>) {
+    let mut connections = JoinSet::new();
     loop {
         tokio::select! {
-            _ = until_finished(finished.clone()) => break,
+            _ = ready(server.clone()) => break,
             accepted = connections::accept(&listener) => match accepted {
                 Ok(stream) => {
-                    reading.spawn(hold_or_answer(stream, step.clone(), finished.clone()));
+                    connections.spawn(connection(stream, step.clone(), server.clone()));
                 }
                 Err(error) => {
                     log!("accept connection during startup: {error}");
@@ -95,43 +92,60 @@ async fn answer(
             },
         }
     }
-    let held = reading.join_all().await.into_iter().flatten().collect();
-    (listener, held)
+    (listener, connections)
 }
 
-/// The connection when its request waits for startup, after closing a
+/// Serve a connection's request once startup has finished, after closing a
 /// request its client sends again, or answering a status request with the
 /// running step once startup outlasts [`timing::STARTUP_STATUS_WAIT`].
-async fn hold_or_answer(
+async fn connection(
     mut stream: UnixStream,
     step: Arc<Mutex<Step>>,
-    finished: watch::Receiver<bool>,
-) -> Option<Held> {
-    let request = read_request(&mut stream).await.ok().flatten()?;
+    server: watch::Receiver<Option<Server>>,
+) {
+    let Ok(Some(request)) = read_request(&mut stream).await else {
+        return;
+    };
     if request.method.retries_when_closed() {
-        return None;
+        return;
     }
     let status = matches!(
         request.method,
         Method::Operation(Operation::Daemon(DaemonMethod::Status))
     );
-    let waited = tokio::time::timeout(timing::STARTUP_STATUS_WAIT, until_finished(finished));
-    if !status || waited.await.is_ok() {
-        return Some((stream, request));
+    let server = if status {
+        match tokio::time::timeout(timing::STARTUP_STATUS_WAIT, ready(server)).await {
+            Ok(server) => server,
+            Err(_) => return answer_step(stream, request.id, &step).await,
+        }
+    } else {
+        ready(server).await
+    };
+    // A startup that failed sends no server.
+    let Some(server) = server else {
+        return;
+    };
+    let operation = server.manager.gates.owned_operation().await;
+    if let Err(error) = serve_request(stream, server, request, operation).await {
+        log!("client connection: {error:#}");
     }
-    let Step { name, since } = *lock(&step);
+}
+
+/// Refuse a status request with the startup step running and how long it has run.
+async fn answer_step(mut stream: UnixStream, request_id: u64, step: &Mutex<Step>) {
+    let Step { name, since } = *lock(step);
     let message = format!(
         "the daemon is starting: {name} for {}",
         log::elapsed(since.elapsed())
     );
-    let response = Response::new(request.id, Body::error(ErrorCode::OperationFailed, message));
+    let response = Response::new(request_id, Body::error(ErrorCode::OperationFailed, message));
     let _ = protocol::write(&mut stream, &response).await;
-    None
 }
 
-async fn until_finished(mut finished: watch::Receiver<bool>) {
-    // The sender lives as long as the startup that answers connections.
-    let _ = finished.wait_for(|finished| *finished).await;
+/// The server once startup has finished, or `None` once it failed.
+async fn ready(mut server: watch::Receiver<Option<Server>>) -> Option<Server> {
+    let ready = server.wait_for(Option::is_some).await.ok()?;
+    ready.clone()
 }
 
 fn lock(step: &Mutex<Step>) -> std::sync::MutexGuard<'_, Step> {

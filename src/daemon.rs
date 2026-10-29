@@ -97,7 +97,6 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());
     let manager = start(&startup, &paths).await?;
-    let (listener, held) = startup.finish().await;
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
     let (shutdown, mut shutdown_rx) = watch::channel(false);
@@ -154,16 +153,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         "item activity",
         poll_item_activity,
     );
-    let mut clients = JoinSet::new();
-    for (stream, request) in held {
-        let server = server.clone();
-        let operation = server.manager.gates.owned_operation().await;
-        clients.spawn(async move {
-            if let Err(error) = serve_request(stream, server, request, operation).await {
-                log!("client connection: {error:#}");
-            }
-        });
-    }
+    let (listener, mut clients) = startup.finish(server.clone()).await;
     let mut quiescence = None;
     let result = loop {
         tokio::select! {
