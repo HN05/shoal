@@ -23,6 +23,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         author: None,
         head_sha: Some("abc".into()),
         base_sha: Some("def".into()),
+        merge_commit: None,
         conflict: None,
         merges_now: false,
         reviewers: Vec::new(),

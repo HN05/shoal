@@ -23,6 +23,7 @@ fn pull(head_repository: Option<&str>) -> Current {
         author: None,
         head_sha: None,
         base_sha: None,
+        merge_commit: None,
         conflict: None,
         merges_now: false,
         reviewers: Vec::new(),

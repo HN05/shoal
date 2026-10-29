@@ -128,6 +128,9 @@ pub(crate) trait Backend {
     /// The field that holds a commit's full ID in a list of PR commits.
     fn commit_field(&self) -> &'static str;
 
+    /// The JSON pointer to a commit's message in a list of PR commits.
+    fn commit_message(&self) -> &'static str;
+
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
 
@@ -799,6 +802,10 @@ impl Backend for ForgeKind {
 
     fn commit_field(&self) -> &'static str {
         dispatch!(self, backend => backend.commit_field())
+    }
+
+    fn commit_message(&self) -> &'static str {
+        dispatch!(self, backend => backend.commit_message())
     }
 
     fn login_hint(&self) -> &'static str {

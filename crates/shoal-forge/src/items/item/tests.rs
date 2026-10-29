@@ -6,6 +6,7 @@ fn pulls_read_the_same_from_both_forges() {
     let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
     let pull = json!({"number": 7, "title": "Fix", "state": "closed",
             "merged_at": "2026-01-01T00:00:00Z", "draft": false, "node_id": "PR_1",
+            "merge_commit_sha": "abc",
             "labels": [{"name": "bug"}],
             "head": {"ref": "topic", "repo": {"full_name": "team/repo"}}, "base": {"ref": "main"}});
     let current = github.current(ItemKind::Pr, 7, &pull).unwrap();
@@ -32,14 +33,18 @@ fn pulls_read_the_same_from_both_forges() {
     clean["mergeable_state"] = json!("clean");
     assert!(github.current(ItemKind::Pr, 7, &clean).unwrap().merges_now);
 
+    assert_eq!(current.merge_commit.as_deref(), Some("abc"));
+
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
+    // An open PR's merge commit is only the forge's test merge.
     let pull = json!({"number": 7, "title": "wip: Fix", "state": "open", "merged": false,
-            "labels": [], "head": {"ref": "topic", "repo": null}, "base": {"ref": "main"}});
+            "merge_commit_sha": "abc", "labels": [], "head": {"ref": "topic", "repo": null}, "base": {"ref": "main"}});
     let current = forgejo.current(ItemKind::Pr, 7, &pull).unwrap();
     assert_eq!(current.item.url, "https://forge.example/team/repo/pulls/7");
     assert_eq!(current.item.state, ItemState::Open);
     assert!(current.item.pr.unwrap().draft);
     assert_eq!(current.head_repository, None);
+    assert_eq!(current.merge_commit, None);
 }
 
 #[test]

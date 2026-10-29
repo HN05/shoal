@@ -142,6 +142,7 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         author: None,
         head_sha: None,
         base_sha: None,
+        merge_commit: None,
         conflict: None,
         merges_now: false,
         reviewers: Vec::new(),

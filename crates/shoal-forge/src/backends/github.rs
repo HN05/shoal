@@ -139,6 +139,10 @@ impl Backend for GitHub {
         "sha"
     }
 
+    fn commit_message(&self) -> &'static str {
+        "/commit/message"
+    }
+
     fn login_hint(&self) -> &'static str {
         "check `gh auth login` and repository access"
     }

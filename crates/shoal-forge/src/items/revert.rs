@@ -1,6 +1,8 @@
-//! Revert a merged PR through a forge that opens the revert itself.
+//! Revert a merged PR: through a forge that opens the revert itself, or
+//! with what reverting its merge with Git needs.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     ForgeRepo,
@@ -11,7 +13,7 @@ use crate::{
         action::Edit,
         attach::Attachment,
         create::{Created, pending_edit},
-        item::{Item, ItemState, PrSummary},
+        item::{Current, Item, ItemState, PrSummary},
         link::ItemKind,
     },
 };
@@ -26,6 +28,18 @@ pub struct NewRevert {
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
     pub attachments: Vec<Attachment>,
+}
+
+/// A merged PR and what its merge left on the base branch, for reverting it
+/// with Git.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MergedPull {
+    pub item: Item,
+    /// The commit the merge left at the tip of the base branch: a merge
+    /// commit, the squashed commit, or the last of the rebased ones.
+    pub merge_commit: String,
+    /// The messages of the PR's commits, in the order the forge lists them.
+    pub messages: Vec<String>,
 }
 
 impl NewRevert {
@@ -52,11 +66,7 @@ impl ForgeRepo {
         revert: &NewRevert,
     ) -> Result<Created> {
         self.require_all(revert.needs())?;
-        let current = self.read(account, ItemKind::Pr, number).await?;
-        ensure!(
-            current.item.state == ItemState::Merged,
-            "PR #{number} has not merged, so there is nothing to revert"
-        );
+        let current = self.merged(account, number).await?;
         let base = current
             .item
             .pr
@@ -97,6 +107,45 @@ impl ForgeRepo {
         };
         Ok(self.finish_posted(account, posted, &follow_up).await)
     }
+
+    /// The merged PR `number` with its merge commit and commit messages.
+    pub async fn merged_pull(&self, account: &Account, number: u64) -> Result<MergedPull> {
+        let current = self.merged(account, number).await?;
+        let merge_commit = current.merge_commit.with_context(|| {
+            format!("the forge did not report the commit PR #{number} merged as")
+        })?;
+        let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
+        let commits = self.pages(account, &endpoint).await?;
+        Ok(MergedPull {
+            item: current.item,
+            merge_commit,
+            messages: messages(&commits, self.kind.commit_message())?,
+        })
+    }
+
+    /// The PR `number`, refused unless it has merged.
+    async fn merged(&self, account: &Account, number: u64) -> Result<Current> {
+        let current = self.read(account, ItemKind::Pr, number).await?;
+        ensure!(
+            current.item.state == ItemState::Merged,
+            "PR #{number} has not merged, so there is nothing to revert"
+        );
+        Ok(current)
+    }
+}
+
+/// The message at `pointer` in each of a list of PR commits.
+fn messages(commits: &[Value], pointer: &str) -> Result<Vec<String>> {
+    commits
+        .iter()
+        .map(|commit| {
+            commit
+                .pointer(pointer)
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .context("PR commit has no message")
+        })
+        .collect()
 }
 
 #[cfg(test)]

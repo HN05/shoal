@@ -137,6 +137,10 @@ impl Backend for Bitbucket {
         "hash"
     }
 
+    fn commit_message(&self) -> &'static str {
+        "/message"
+    }
+
     fn login_hint(&self) -> &'static str {
         "Bitbucket API request failed; private repositories need [bitbucket] token_command"
     }
@@ -209,6 +213,7 @@ impl Backend for Bitbucket {
             author: text(&value["author"]["account_id"]),
             head_sha: text(&value["source"]["commit"]["hash"]),
             base_sha: text(&value["destination"]["commit"]["hash"]),
+            merge_commit: text(&value["merge_commit"]["hash"]),
             // Bitbucket does not report whether a pull request conflicts.
             conflict: None,
             merges_now: false,

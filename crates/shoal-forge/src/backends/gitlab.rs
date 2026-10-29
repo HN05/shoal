@@ -140,6 +140,10 @@ impl Backend for GitLab {
         "id"
     }
 
+    fn commit_message(&self) -> &'static str {
+        "/message"
+    }
+
     fn login_hint(&self) -> &'static str {
         "GitLab API request failed; check `glab auth login` for the host"
     }
@@ -219,6 +223,14 @@ impl Backend for GitLab {
             author: text(&value["author"]["username"]),
             head_sha: text(&value["sha"]),
             base_sha: None,
+            // A fast-forward merge leaves the source branch's head.
+            merge_commit: (state == ItemState::Merged)
+                .then(|| {
+                    text(&value["merge_commit_sha"])
+                        .or_else(|| text(&value["squash_commit_sha"]))
+                        .or_else(|| text(&value["sha"]))
+                })
+                .flatten(),
             conflict,
             merges_now: false,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),

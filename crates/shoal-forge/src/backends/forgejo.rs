@@ -141,6 +141,10 @@ impl Backend for Forgejo {
         "sha"
     }
 
+    fn commit_message(&self) -> &'static str {
+        "/commit/message"
+    }
+
     fn login_hint(&self) -> &'static str {
         "Forgejo API request failed; private repositories need an fj or tea login"
     }
