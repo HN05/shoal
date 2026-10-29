@@ -127,6 +127,20 @@ impl Manager {
         execution: Option<String>,
         session: Option<String>,
     ) -> Result<AgentStatus> {
+        self.record_agent_state(selector, state, execution, session, false)
+            .await
+    }
+
+    /// [`Manager::set_agent_state`] for a report that a failure ended the
+    /// agent's turn when `turn_failed`.
+    async fn record_agent_state(
+        &self,
+        selector: &str,
+        state: AgentState,
+        execution: Option<String>,
+        session: Option<String>,
+        turn_failed: bool,
+    ) -> Result<AgentStatus> {
         let id = self.workspace(selector).await?.id;
         if let Some(execution) = &execution {
             self.record_agent_turn(execution, state).await;
@@ -140,6 +154,7 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction()?;
+                let previous = get(&tx, &id)?.map(|status| status.state);
                 let changed = tx.execute(
                     "INSERT INTO workspace_agent_state(workspace_id,state,execution_id,since)
                      VALUES (?1,?2,?3,?4)
@@ -151,6 +166,10 @@ impl Manager {
                     params![id, state, execution, now],
                 )?;
                 super::turn_retry::follow_state(&tx, &id, state)?;
+                if !turn_failed {
+                    let execution = execution.as_deref();
+                    super::turn_retry::unretried::follow_state(&tx, execution, previous, state)?;
+                }
                 let status = get(&tx, &id)?.expect("agent state was just recorded");
                 tx.commit()?;
                 Ok((status, changed > 0))
@@ -175,7 +194,7 @@ impl Manager {
         if let Some(execution) = &execution {
             self.retry_failed_turn(selector, failure, execution).await;
         }
-        self.set_agent_state(selector, AgentState::Idle, execution, session)
+        self.record_agent_state(selector, AgentState::Idle, execution, session, true)
             .await
     }
 }

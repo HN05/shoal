@@ -3,19 +3,22 @@
 //! had time to pass, or once the reset its upstream named has passed, and
 //! again after each turn that still fails, until one succeeds. The retry is
 //! persisted, so it outlasts a daemon restart, and knows no agent: any
-//! report of a failed turn schedules one.
+//! report of a failed turn schedules one, or tells of a turn Shoal does not
+//! retry.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 
+use self::unretried::Unretried;
 use super::Manager;
 use crate::{
-    daemon::{agent_messages, log, notifications::NotificationKind},
-    model::Workspace,
+    daemon::{agent_messages, log},
     state::{AgentState, TurnFailure},
 };
+
+pub(super) mod unretried;
 
 /// The wait before the first attempt, doubling for each later one.
 const FIRST_DELAY_SECS: u64 = 30;
@@ -365,7 +368,8 @@ fn continuation(failure: TurnFailure, attempt: u32) -> String {
 
 impl Manager {
     /// Schedule the retry of the turn `failure` ended in `execution` when
-    /// its agent has `retry` on; a failure no retry fixes notifies instead.
+    /// its agent has `retry` on and a retry fixes the failure, or tell of
+    /// the turn Shoal does not retry.
     /// Failures only log, since the report still records the agent idle.
     pub(super) async fn retry_failed_turn(
         &self,
@@ -384,12 +388,14 @@ impl Manager {
         failure: TurnFailure,
         execution: &str,
     ) -> Result<()> {
-        let Some(agent) = self.retrying_agent(execution).await else {
+        let Some(agent) = self.agent_name(execution).await else {
             return Ok(());
         };
         let workspace = self.workspace(selector).await?;
-        if !failure.retryable() {
-            return self.give_up_turn(&workspace, &agent).await;
+        if let Some(reason) = Unretried::of(failure, self.retries(&agent)) {
+            return self
+                .leave_failed_turn(&workspace, execution, &agent, failure, reason)
+                .await;
         }
         let (id, execution) = (workspace.id.clone(), execution.to_owned());
         let (now, spread) = (i64::try_from(crate::time::unix_seconds())?, spread());
@@ -418,30 +424,13 @@ impl Manager {
         Ok(())
     }
 
-    /// The name of the agent `execution` runs when its AI tool has `retry`
-    /// on.
-    async fn retrying_agent(&self, execution: &str) -> Option<String> {
-        let agent = self.agent_name(execution).await?;
-        let retries = self
-            .config()
+    /// Whether the AI tool `agent` names has `retry` on.
+    fn retries(&self, agent: &str) -> bool {
+        self.config()
             .ai
             .tools
-            .get(&agent)
-            .is_some_and(|tool| tool.retry);
-        retries.then_some(agent)
-    }
-
-    /// Drop the workspace's retry and tell whoever receives its agent's
-    /// events that a retry does not fix its failure.
-    async fn give_up_turn(&self, workspace: &Workspace, agent: &str) -> Result<()> {
-        let id = workspace.id.clone();
-        self.store.run(move |db| cancel(db, &id)).await?;
-        let message = format!(
-            "{agent}'s turn ended with an API error that a retry does not fix; check the agent"
-        );
-        self.notify(Some(&workspace.name), NotificationKind::TurnFailed, message)
-            .await;
-        Ok(())
+            .get(agent)
+            .is_some_and(|tool| tool.retry)
     }
 
     /// Deliver the retries due now; when the next one is due.

@@ -1023,7 +1023,10 @@ integration that can report why a turn failed maps the agent's error to Shoal's 
 daemon persists the retry and asks the idle agent to continue through its
 messages, so hook-woken and prompt-woken agents get it alike. A retry is tied to
 the reporting execution and cancelled by any new turn, so it never competes with
-the user or with another delivery.
+the user or with another delivery. A turn Shoal does not retry, with `retry` off or a
+failure no retry fixes, notifies once per execution until the agent ends a turn
+normally, so an idle agent whose turns fail is never silent and a run of failures
+is one notification.
 The retrying proxy lives in `crates/shoal-proxy`, which knows the wire protocols
 but no Shoal code, like `shoal-forge`. Each tracked agent that names one gets its
 own, run by its wrapper, so a daemon restart never cuts a stream and the proxy

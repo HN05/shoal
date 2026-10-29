@@ -924,9 +924,11 @@ refuses requests until, such as a usage limit's reset from its error or
 headers, the retry waits until half a minute past it instead, until the
 upstream answers again. Claude Code's
 failure hook names no reset time, so without a proxy a usage limit is checked
-about hourly. An error a retry does not fix, such as failed authentication, gets
-no retry: Shoal records a `turn_failed` notification, which a child workspace's
-coordinating agent receives instead. A pending retry outlasts a daemon restart;
+about hourly. A turn Shoal does not retry, because `retry` is off or the error is
+one a retry does not fix, such as failed authentication, gets a `turn_failed`
+notification naming the failure, which a child workspace's coordinating agent
+receives instead; later failed turns of the same agent add none until one of its
+turns ends normally. A pending retry outlasts a daemon restart;
 `status` shows it, and `--json` gives `turn_retry` with `failure`, `attempt`,
 `due_at` and `delivered`.
 

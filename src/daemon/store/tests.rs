@@ -268,6 +268,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 78 {
         db.execute_batch(EXECUTION_AGENTS)?;
     }
+    if version >= 79 {
+        db.execute_batch(include_str!("execution_unretried_turns.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

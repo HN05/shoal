@@ -4,6 +4,7 @@ use anyhow::Context;
 
 use super::*;
 use crate::{
+    daemon::notifications::NotificationKind,
     model::Workspace,
     test_support::{global_config, manager, repository},
 };
@@ -229,24 +230,70 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     assert_eq!(next, Some(deferred.due_at));
 }
 
+/// The messages of the turn failures Shoal told the user of since the last
+/// look, marking them read.
+async fn turn_failures(manager: &Manager) -> Vec<String> {
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    let ids = notifications.iter().map(|notification| notification.id);
+    manager
+        .mark_notifications_read(ids.collect())
+        .await
+        .unwrap();
+    notifications
+        .into_iter()
+        .filter(|notification| notification.kind == NotificationKind::TurnFailed)
+        .map(|notification| notification.message)
+        .collect()
+}
+
 #[tokio::test]
-async fn retries_respect_opt_out_and_need_a_failure_a_retry_can_fix() {
+async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     let (_temp, manager, workspace, execution, _connection) =
         agent("[ai.claude]\nretry = false\n").await;
-    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
     assert_eq!(retry(&manager, &workspace).await, None);
-
-    manager.publish_config(global_config(""));
-    fail(&manager, &workspace, &execution, TurnFailure::Other).await;
-    assert_eq!(retry(&manager, &workspace).await, None);
-    let notifications = manager.notifications(false, 10).await.unwrap();
-    assert_eq!(notifications.len(), 1);
-    assert_eq!(notifications[0].kind, NotificationKind::TurnFailed);
+    assert!(messages(&manager, &workspace).await.is_empty());
+    let told = turn_failures(&manager).await;
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("(rate limited)"), "{told:?}");
     assert!(
-        notifications[0].message.contains("a retry does not fix"),
-        "{}",
-        notifications[0].message
+        told[0].contains("`retry = true` under `[ai.claude]`"),
+        "{told:?}"
     );
+
+    // Later turns failing, read notification or not, add nothing, and the
+    // agent waiting for the user is no turn that went through.
+    for state in [AgentState::Working, AgentState::Waiting] {
+        report(&manager, &workspace, &execution, state).await;
+        fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    }
+    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    fail(&manager, &workspace, &execution, TurnFailure::Other).await;
+    assert_eq!(turn_failures(&manager).await, Vec::<String>::new());
+
+    // Once a turn ends normally, the next failed one is told again.
+    report(&manager, &workspace, &execution, AgentState::Working).await;
+    report(&manager, &workspace, &execution, AgentState::Idle).await;
+    report(&manager, &workspace, &execution, AgentState::Working).await;
+    fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
+    let told = turn_failures(&manager).await;
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("(API overloaded)"), "{told:?}");
+}
+
+#[tokio::test]
+async fn a_failure_no_retry_fixes_is_told_whether_retry_is_on_or_off() {
+    for config in ["", "[ai.claude]\nretry = false\n"] {
+        let (_temp, manager, workspace, execution, _connection) = agent(config).await;
+        fail(&manager, &workspace, &execution, TurnFailure::Other).await;
+        assert_eq!(retry(&manager, &workspace).await, None);
+        let told = turn_failures(&manager).await;
+        assert_eq!(told.len(), 1, "{config}: {told:?}");
+        assert!(
+            told[0].contains("a retry does not fix"),
+            "{config}: {told:?}"
+        );
+    }
 }
 
 #[tokio::test]

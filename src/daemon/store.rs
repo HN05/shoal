@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 78;
+const SCHEMA_VERSION: i64 = 79;
 
 #[cfg(test)]
 mod benchmark;
@@ -420,6 +420,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (76, include_str!("store/places.sql"), None),
     (77, include_str!("store/owned_places.sql"), None),
     (78, EXECUTION_AGENTS, None),
+    (79, include_str!("store/execution_unretried_turns.sql"), None),
 ];
 
 /// The agent each execution runs, which keeps its reported session once the
