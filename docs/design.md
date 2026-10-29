@@ -2057,8 +2057,12 @@ empty environment is readable evidence, except a macOS platform binary's, which
 reads that way when hidden. A hidden environment takes the attribution of the
 nearest ancestor whose environment tells, through any setuid program the user
 started, such as a terminal's `login`, which runs as another user and is never
-stopped itself; one launchd adopted after its parent exited has none and counts
-as unreadable. An unreadable process counts only against executions of the
+stopped itself. One launchd adopted after its parent exited has no ancestor left
+to tell, so the daemon remembers, by unique process ID, the owner every inventory
+tells while a live process can still name it as itself or as its parent: such a
+process takes the owner remembered for it or for its exited parent, and counts as
+unreadable only when no inventory saw either with its owner, as for a parent that
+exited between scans or before a daemon restart. An unreadable process counts only against executions of the
 workspace it works in; one working elsewhere, such as an orphan of a removed
 workspace, or whose working directory cannot be read blocks none. The reporting wrapper may remain alive
 awaiting acknowledgement; workspace stopping allows for child registration,

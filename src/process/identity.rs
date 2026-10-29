@@ -344,7 +344,7 @@ async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
     let listing = list_processes().await?;
     tokio::task::spawn_blocking(move || {
         let settle_deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
-        let mut inventory = Inventory::new();
+        let mut inventory = Inventory::new(&owners::OWNERS);
         for pid in listing.own {
             if let Some(process) = observe(pid, settle_deadline)? {
                 inventory.observed.insert(pid, process);
@@ -559,9 +559,12 @@ enum Attribution {
     Unknown(Identity),
 }
 
-/// The inventoried processes still alive to observe.
-struct Inventory {
+/// The inventoried processes still alive to observe, with the owners earlier
+/// inventories remember.
+struct Inventory<'a> {
     observed: HashMap<u32, Observed>,
+    owners: &'a owners::Owners,
+    started: std::time::Instant,
 }
 
 /// Signalling is refused only for a live process of another user.
@@ -570,18 +573,22 @@ fn another_users(pid: u32) -> bool {
     result != 0 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
 }
 
-impl Inventory {
-    fn new() -> Self {
+impl<'a> Inventory<'a> {
+    fn new(owners: &'a owners::Owners) -> Self {
         Self {
             observed: HashMap::new(),
+            owners,
+            started: std::time::Instant::now(),
         }
     }
 
     /// Attribute every observed process and collect the scan of those whose
     /// `marker` is one of `ids`, checking that owned processes still live.
+    /// Every owner told is remembered for later inventories.
     fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
         let mut attributions = HashMap::new();
         let mut scan = Scan::default();
+        let mut attributed = Vec::new();
         for (pid, process) in &self.observed {
             if matches!(process.evidence, Evidence::Elevated) {
                 continue;
@@ -597,6 +604,9 @@ impl Inventory {
                             identity: identity.clone(),
                         });
                     }
+                    if let Some(unique) = process.lineage.unique {
+                        attributed.push((unique, marks));
+                    }
                 }
                 Attribution::Unknown(head) => scan.unreadable.push(Unattributed {
                     identity: identity.clone(),
@@ -605,13 +615,38 @@ impl Inventory {
                 Attribution::Foreign => {}
             }
         }
+        self.owners.update(self.started, attributed, &self.named());
         Ok(scan)
+    }
+
+    /// The unique IDs observed processes name as their own or their parent's.
+    fn named(&self) -> HashSet<u64> {
+        self.observed
+            .values()
+            .flat_map(|process| [process.lineage.unique, process.lineage.parent])
+            .flatten()
+            .collect()
+    }
+
+    /// The owner an earlier inventory told for `lineage`, or for its exited
+    /// parent, otherwise unknown under it.
+    fn remembered(&self, lineage: &Lineage) -> Attribution {
+        [lineage.unique, lineage.parent]
+            .into_iter()
+            .flatten()
+            .find_map(|unique| self.owners.recall(unique))
+            .map_or_else(
+                || Attribution::Unknown(lineage.identity.clone()),
+                Attribution::Owned,
+            )
     }
 
     /// `pid`'s owner by its own environment, or for a hidden one by the
     /// nearest ancestor whose environment tells, as its environment was
     /// inherited from there through any setuid programs between them. A
-    /// hidden process launchd adopted has no ancestor left to tell.
+    /// hidden process launchd adopted has no ancestor left to tell, nor one
+    /// whose parent exited otherwise; for them, and for an unreadable one,
+    /// earlier inventories may remember the owner.
     fn resolve(&self, pid: u32, attributions: &mut HashMap<u32, Attribution>) -> Attribution {
         let mut hidden: Vec<&Observed> = Vec::new();
         let mut current = pid;
@@ -621,7 +656,7 @@ impl Inventory {
                 && !child.lineage.forked_from(&parent.lineage)
             {
                 // The parent exited and its PID was reused.
-                break Attribution::Unknown(child.lineage.identity.clone());
+                break self.remembered(&child.lineage);
             }
             if let Some(attribution) = attributions.get(&current) {
                 break attribution.clone();
@@ -633,12 +668,12 @@ impl Inventory {
             match &process.evidence {
                 Evidence::Marked(marks) => break Attribution::Owned(marks.clone()),
                 Evidence::Unmarked => break Attribution::Foreign,
-                Evidence::Unreadable => break Attribution::Unknown(lineage.identity.clone()),
+                Evidence::Unreadable => break self.remembered(lineage),
                 Evidence::Hidden | Evidence::Elevated => hidden.push(process),
             }
             if lineage.parent_pid <= 1 {
                 break if lineage.adopted {
-                    Attribution::Unknown(lineage.identity.clone())
+                    self.remembered(lineage)
                 } else {
                     Attribution::Foreign
                 };
@@ -662,7 +697,7 @@ impl Inventory {
     fn unobserved_parent(&self, parent: u32, child: Option<&Observed>) -> Attribution {
         match child {
             Some(child) if parent != std::process::id() && !another_users(parent) => {
-                Attribution::Unknown(child.lineage.identity.clone())
+                self.remembered(&child.lineage)
             }
             _ => Attribution::Foreign,
         }
@@ -1451,5 +1486,6 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
     Ok(())
 }
 
+mod owners;
 #[cfg(test)]
 mod tests;

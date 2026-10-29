@@ -184,6 +184,13 @@ fn observed(pid: u32, parent: u32, adopted: bool, evidence: Evidence) -> (u32, O
     (pid, Observed { lineage, evidence })
 }
 
+/// `observed` with the unique IDs of the process and its parent.
+fn unique((pid, mut process): (u32, Observed), unique: u64, parent: u64) -> (u32, Observed) {
+    process.lineage.unique = Some(unique);
+    process.lineage.parent = Some(parent);
+    (pid, process)
+}
+
 fn marked(execution: &str) -> Evidence {
     Evidence::Marked(Marks {
         execution: Some(execution.into()),
@@ -191,9 +198,13 @@ fn marked(execution: &str) -> Evidence {
     })
 }
 
-fn inventory<const N: usize>(observed: [(u32, Observed); N]) -> Inventory {
+fn inventory<const N: usize>(
+    owners: &owners::Owners,
+    observed: [(u32, Observed); N],
+) -> Inventory<'_> {
     Inventory {
         observed: HashMap::from(observed),
+        ..Inventory::new(owners)
     }
 }
 
@@ -212,29 +223,33 @@ fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells
     let mut unlisted = std::process::Command::new("cat")
         .stdin(std::process::Stdio::piped())
         .spawn()?;
-    let inventory = inventory([
-        // A shell and its job under a marked agent.
-        observed(10, 9, false, marked("execution")),
-        observed(11, 10, false, Hidden),
-        observed(12, 11, false, Hidden),
-        // A shell under an unmarked terminal.
-        observed(20, 1, false, Unmarked),
-        observed(21, 20, false, Hidden),
-        // A job launchd adopted after its shell exited, and its child.
-        observed(31, 1, true, Hidden),
-        observed(32, 31, false, Hidden),
-        // A job launchd started.
-        observed(30, 1, false, Hidden),
-        // A shell whose listed parent exited before it was observed.
-        // Above every system's highest PID, so no process has it.
-        observed(41, 4_194_305, false, Hidden),
-        // A shell whose parent exited and left its PID to a later
-        // marked process.
-        observed(51, 60, false, Hidden),
-        observed(60, 9, false, marked("execution")),
-        // A shell whose live parent is missing from the inventory.
-        observed(u32::MAX >> 1, unlisted.id(), false, Hidden),
-    ]);
+    let owners = owners::Owners::default();
+    let inventory = inventory(
+        &owners,
+        [
+            // A shell and its job under a marked agent.
+            observed(10, 9, false, marked("execution")),
+            observed(11, 10, false, Hidden),
+            observed(12, 11, false, Hidden),
+            // A shell under an unmarked terminal.
+            observed(20, 1, false, Unmarked),
+            observed(21, 20, false, Hidden),
+            // A job launchd adopted after its shell exited, and its child.
+            observed(31, 1, true, Hidden),
+            observed(32, 31, false, Hidden),
+            // A job launchd started.
+            observed(30, 1, false, Hidden),
+            // A shell whose listed parent exited before it was observed.
+            // Above every system's highest PID, so no process has it.
+            observed(41, 4_194_305, false, Hidden),
+            // A shell whose parent exited and left its PID to a later
+            // marked process.
+            observed(51, 60, false, Hidden),
+            observed(60, 9, false, marked("execution")),
+            // A shell whose live parent is missing from the inventory.
+            observed(u32::MAX >> 1, unlisted.id(), false, Hidden),
+        ],
+    );
     let mut attributions = HashMap::new();
     let mut resolve = |pid| describe(inventory.resolve(pid, &mut attributions));
     assert_eq!(resolve(12), "owned by execution");
@@ -250,6 +265,141 @@ fn a_hidden_environment_takes_the_attribution_of_the_nearest_ancestor_that_tells
     unlisted.wait()?;
     assert_eq!(missed, format!("unknown under {}", u32::MAX >> 1));
     Ok(())
+}
+
+#[test]
+fn an_orphan_takes_the_owner_remembered_for_it_or_its_exited_parent() -> Result<()> {
+    use Evidence::Hidden;
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    // An agent's shell and its job, while the agent lives.
+    inventory(
+        &owners,
+        [
+            unique(observed(10, 9, false, marked("execution")), 100, 90),
+            unique(observed(11, 10, false, Hidden), 101, 100),
+            unique(observed(12, 11, false, Hidden), 102, 101),
+        ],
+    )
+    .attribute(Marker::Execution, &ids)?;
+    // The agent and its shell exited and launchd adopted what the shell
+    // started: the job, another job no inventory saw, and an unrelated one.
+    let later = inventory(
+        &owners,
+        [
+            unique(observed(12, 1, true, Hidden), 102, 101),
+            unique(observed(13, 1, true, Hidden), 103, 101),
+            unique(observed(14, 1, true, Hidden), 104, 999),
+        ],
+    );
+    let mut attributions = HashMap::new();
+    let mut resolve = |pid| describe(later.resolve(pid, &mut attributions));
+    assert_eq!(resolve(12), "owned by execution");
+    assert_eq!(resolve(13), "owned by execution");
+    assert_eq!(resolve(14), "unknown under 14");
+    Ok(())
+}
+
+#[test]
+fn owners_are_forgotten_once_no_live_process_names_them() -> Result<()> {
+    use Evidence::Hidden;
+    let owners = owners::Owners::default();
+    let ids = HashSet::from(["execution".to_owned()]);
+    inventory(
+        &owners,
+        [
+            unique(observed(10, 9, false, marked("execution")), 100, 90),
+            unique(observed(11, 10, false, Hidden), 101, 100),
+            unique(observed(12, 11, false, Hidden), 102, 101),
+        ],
+    )
+    .attribute(Marker::Execution, &ids)?;
+    assert_eq!(owners.len(), 3);
+    // An inventory that started after them sees only the adopted job, which
+    // names itself and its exited shell.
+    let after = || std::time::Instant::now() + Duration::from_secs(1);
+    Inventory {
+        started: after(),
+        ..inventory(&owners, [unique(observed(12, 1, true, Hidden), 102, 101)])
+    }
+    .attribute(Marker::Execution, &ids)?;
+    assert_eq!(owners.len(), 2);
+    assert!(owners.recall(100).is_none());
+    // Once the job has exited too, nothing can name them again.
+    Inventory {
+        started: after(),
+        ..inventory(&owners, [])
+    }
+    .attribute(Marker::Execution, &ids)?;
+    assert_eq!(owners.len(), 0);
+    Ok(())
+}
+
+/// An agent's job whose shell and agent were killed stays the agent's: the
+/// daemon remembers who owned it from an inventory made while they lived.
+#[tokio::test]
+async fn a_job_stays_owned_after_its_shell_and_agent_exit() -> Result<()> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut agent = tokio::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "process::identity::tests::marked_parent_of_a_shell_job",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .env(crate::env::EXECUTION_ID, &id)
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let stdout = agent.stdout.take().context("agent stdout")?;
+    let mut lines = tokio::io::AsyncBufReadExt::lines(tokio::io::BufReader::new(stdout));
+    let (shell, job) = loop {
+        let line = lines.next_line().await?.context("the agent exited")?;
+        if let Some((shell, job)) = line
+            .split_once(' ')
+            .and_then(|(shell, job)| Some((shell.parse().ok()?, job.parse().ok()?)))
+        {
+            break (shell, job);
+        }
+    };
+    let shell = capture(shell)?.context("shell")?;
+    let job = capture(job)?.context("job")?;
+    let ids = HashSet::from([id.clone()]);
+    let owned = |scan: &Scan| scan.processes.iter().any(|p| p.identity == job);
+
+    let before = scan(ids.clone()).await?;
+    agent.kill().await?;
+    agent.wait().await?;
+    signal(&shell, libc::SIGKILL)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    while lineage(job.pid)?.is_some_and(|lineage| lineage.parent_pid != 1) {
+        ensure!(
+            std::time::Instant::now() < deadline,
+            "the job was never adopted"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let after = scan(ids).await;
+    signal(&job, libc::SIGKILL)?;
+    let after = after?;
+
+    assert!(owned(&before));
+    assert!(owned(&after));
+    assert!(after.unreadable.iter().all(|u| u.identity != job));
+    Ok(())
+}
+
+#[test]
+#[ignore = "helper agent launched by ownership test"]
+fn marked_parent_of_a_shell_job() {
+    // The shell prints its PID and its job's, then waits for the job.
+    let mut shell = std::process::Command::new("/bin/sh")
+        .args(["-c", "sleep 300 </dev/null & echo $$ $!; wait"])
+        .spawn()
+        .unwrap();
+    shell.wait().unwrap();
 }
 
 /// A shell under a setuid program the user started, such as a terminal's
@@ -276,18 +426,22 @@ fn a_hidden_environment_takes_its_attribution_through_a_setuid_parent() -> Resul
         shell.lineage.identity.birth = format!("{}:0", u32::MAX);
         (pid, shell)
     };
+    let owners = owners::Owners::default();
     let starter = |evidence| {
-        inventory([
-            shell(),
-            (
-                elevated.lineage.identity.pid,
-                Observed {
-                    lineage: elevated.lineage.clone(),
-                    evidence: Evidence::Elevated,
-                },
-            ),
-            observed(std::process::id(), 1, false, evidence),
-        ])
+        inventory(
+            &owners,
+            [
+                shell(),
+                (
+                    elevated.lineage.identity.pid,
+                    Observed {
+                        lineage: elevated.lineage.clone(),
+                        evidence: Evidence::Elevated,
+                    },
+                ),
+                observed(std::process::id(), 1, false, evidence),
+            ],
+        )
     };
     let resolve =
         |inventory: Inventory| describe(inventory.resolve(u32::MAX >> 1, &mut HashMap::new()));
