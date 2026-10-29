@@ -1,6 +1,6 @@
 //! Reactions on an issue, a PR or one of their comments: read for item
 //! views, and added or removed as the acting account's own.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,10 +9,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
-    items::{
-        action::{Acted, after_send},
-        link::ItemKind,
-    },
+    items::{action::Acted, link::ItemKind},
     review::view::Details,
     transport::api::Request,
 };
@@ -112,7 +109,9 @@ impl ForgeRepo {
     }
 
     /// Apply `change` to item `number` as `account`, leaving a reaction that
-    /// is already as asked unchanged, and return the item afterwards.
+    /// is already as asked unchanged, and return the item, which a reaction
+    /// does not change. The item and comment are checked before anything is
+    /// sent.
     pub(crate) async fn react(
         &self,
         account: &Account,
@@ -120,12 +119,9 @@ impl ForgeRepo {
         number: u64,
         change: &ReactionChange,
     ) -> Result<Acted> {
+        let item = self.read(account, kind, number).await?.item;
         let subject = match change.comment {
-            Some(id) => {
-                self.kind
-                    .comment_subject(self, account, kind, number, id)
-                    .await?
-            }
+            Some(id) => self.comment_subject(account, kind, number, id).await?,
             None => Subject::Item,
         };
         let request = self
@@ -134,15 +130,42 @@ impl ForgeRepo {
         if let Some(request) = &request {
             self.send(account, request).await?;
         }
-        let item = self
-            .read(account, kind, number)
-            .await
-            .map_err(|error| after_send(error, request.is_some()))?
-            .item;
         Ok(Acted {
             item,
             authored: Vec::new(),
         })
+    }
+
+    /// Comment `comment` of item `number` as a reaction's subject, found
+    /// among the item's comments and inline comments, which forges number
+    /// apart or let a comment endpoint reach another item's.
+    async fn comment_subject(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: u64,
+    ) -> Result<Subject> {
+        let mut details = self
+            .kind
+            .view_details(self, account, kind, number, true)
+            .await?;
+        let mut errors = Vec::new();
+        details.reviews = self
+            .kind
+            .view_discussion(self, account, kind, number, &mut details, &mut errors)
+            .await?;
+        let found = subjects(&details).into_iter().find(|subject| {
+            matches!(subject, Subject::Comment(id) | Subject::ReviewComment(id) if *id == comment)
+        });
+        match (found, errors.as_slice()) {
+            (Some(subject), _) => Ok(subject),
+            (None, []) => bail!("#{number} has no comment {comment}"),
+            (None, errors) => bail!(
+                "#{number} has no comment {comment} that Shoal could read: {}",
+                errors.join("; ")
+            ),
+        }
     }
 
     /// The request that makes `change` to the reactions on `subject`, after

@@ -985,6 +985,18 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
         |id: u64, content: &str| json!({"id": id, "content": content, "user": {"login": "me"}});
     fixture.respond(json!({
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Fix",
+            "state": "open", "labels": [], "pull_request": {}}},
+        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
+            "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
+            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
+            "comments": [{"author": {"login": "ann"}, "createdAt": "t1", "body": "Nice",
+                "url": "https://github.com/team/project/pull/8#issuecomment-6"}]}},
+        "GET repos/team/project/pulls/8/reviews": {"body": [[{"id": 11, "state": "COMMENTED",
+            "user": {"login": "bot"}, "body": "", "submitted_at": "t2"}]]},
+        "GET repos/team/project/pulls/8/comments": {"body": [[{"id": 5,
+            "pull_request_review_id": 11, "user": {"login": "bot"}, "path": "a.rs",
+            "line": 3, "body": "Why?", "created_at": "t2"}]]},
         "POST graphql": {"body": threads},
         "GET user": {"body": {"login": "me"}},
         "GET repos/team/project/pulls/comments/5/reactions?per_page=100&page=1": {"body": []},
@@ -1004,8 +1016,18 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
     .concat());
     // A reaction that is already there is not sent again.
     fixture.ok(&[&["pr", "react", "heart"][..], &pr].concat());
+    // Another item's comment, and a PR named as an issue, are refused
+    // before anything is sent.
+    let missing = fixture.run(&[&["pr", "react", "+1", "--comment", "99"][..], &pr].concat());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("#8 has no comment 99"),
+        "{missing:?}"
+    );
+    let issue = ["issue", "react", "+1", "--workspace", "topic", "8"];
+    assert!(!fixture.run(&issue).status.success());
     let mut writes = writes(&fixture);
-    writes.retain(|request| request[0] != "POST graphql");
+    // gh reads the PR's comments with `pr view`, and its threads by GraphQL.
+    writes.retain(|request| request[0] != "POST graphql" && request[0] != "pr view 8");
     assert_eq!(
         writes,
         [
@@ -1031,6 +1053,7 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
     fixture.respond(json!({
         format!("GET {issue}"): {"body": {"number": 3, "title": "Crash", "state": "open",
             "labels": [], "user": {"login": "ann"}}},
+        format!("GET {issue}/comments"): {"body": [{"id": 9, "body": "Same", "user": {"login": "bob"}}]},
         "GET user": {"body": {"login": "me"}},
         format!("GET {issue}/reactions?limit=50&page=1"): {"body": null},
         format!("POST {issue}/reactions"): {"status": 201, "body": {"content": "eyes"}},

@@ -441,20 +441,6 @@ pub(crate) trait Backend {
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
 
-    /// What reacting to comment `comment` of item `number` reacts to: by
-    /// default a comment, where the forge keeps inline comments with the
-    /// others.
-    async fn comment_subject(
-        &self,
-        _repo: &ForgeRepo,
-        _account: &Account,
-        _kind: ItemKind,
-        _number: u64,
-        comment: u64,
-    ) -> Result<Subject> {
-        Ok(Subject::Comment(comment))
-    }
-
     /// The content [`Self::listed_reaction`] reports for a reaction the
     /// forge names `name`; by default the name itself.
     fn reaction_content(&self, name: &str) -> String {
@@ -1059,17 +1045,6 @@ impl Backend for ForgeKind {
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         dispatch!(self, backend => backend.own_login(repo, account).await)
-    }
-
-    async fn comment_subject(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        comment: u64,
-    ) -> Result<Subject> {
-        dispatch!(self, backend => backend.comment_subject(repo, account, kind, number, comment).await)
     }
 
     fn reaction_content(&self, name: &str) -> String {
