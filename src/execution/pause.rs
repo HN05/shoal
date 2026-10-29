@@ -95,10 +95,13 @@ async fn await_restore(
     record: Result<PathBuf>,
 ) -> Result<AfterPause> {
     match recovery::wait(link).await? {
-        recovery::Waited::Resume(ports) => {
+        recovery::Waited::Resume {
+            ports,
+            installed: daemon_installed,
+        } => {
             let record = record.ok();
             eprintln!("shoal: restoring agent session");
-            if let Some(installed) = takeover::installed(link) {
+            if let Some(installed) = takeover::installed(link, daemon_installed) {
                 return Ok(AfterPause::TakeOver { installed, record });
             }
             let (command, proxy) = recovery

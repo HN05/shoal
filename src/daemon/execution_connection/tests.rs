@@ -328,3 +328,17 @@ async fn a_wrapper_registers_again_from_where_it_runs() {
     ));
     bounded(executing).await.unwrap().unwrap();
 }
+
+#[test]
+fn only_a_daemon_running_the_installed_binary_lets_wrappers_continue_from_it() {
+    let root = tempfile::tempdir().unwrap();
+    let binary = root.path().join("shoal");
+    std::fs::write(&binary, "release").unwrap();
+    let executable = crate::cli::installed::Executable::at(binary.clone());
+    assert!(runs_installed(&executable));
+    // An upgrade puts another release in its place before the daemon's update.
+    let upgrade = root.path().join("shoal.new");
+    std::fs::write(&upgrade, "next release").unwrap();
+    std::fs::rename(&upgrade, &binary).unwrap();
+    assert!(!runs_installed(&executable));
+}

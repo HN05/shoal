@@ -737,8 +737,8 @@ pub enum ExecutionEvent {
     /// once the daemon answers [`Control::ChildReleased`].
     ChildExited,
     /// The wrapper continues from the installed binary, which an upgrade put
-    /// in place of its own, between [`Control::Resume`] and its next child's
-    /// start, and registers again from `origin`, the place it runs in. The
+    /// in place of its own, between a [`Control::Resume`] that allows it and
+    /// its next child's start, and registers again from `origin`, the place it runs in. The
     /// daemon answers [`Control::Registered`], or a stop.
     Register {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -785,6 +785,11 @@ pub enum Control {
     },
     Resume {
         ports: Vec<crate::model::PortReservation>,
+        /// The daemon runs the installed binary, which therefore speaks its
+        /// protocol, so a wrapper whose own binary an upgrade replaced may
+        /// continue from it. Older daemons leave it out.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        installed: bool,
     },
     Finished {
         complete: bool,

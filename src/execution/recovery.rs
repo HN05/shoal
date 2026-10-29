@@ -870,7 +870,11 @@ pub(super) fn save_command(
 /// How a stopped agent's wait for automatic recovery ended.
 #[derive(Debug)]
 pub(super) enum Waited {
-    Resume(Vec<crate::model::PortReservation>),
+    Resume {
+        ports: Vec<crate::model::PortReservation>,
+        /// The daemon runs the installed binary.
+        installed: bool,
+    },
     /// The restore was cancelled, with the daemon's reason if it gave one.
     Cancelled {
         reason: Option<String>,
@@ -902,10 +906,10 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
         tokio::select! {
             received = link.recv() => match received {
                 Ok(Received::Detached | Received::Reattached) => {}
-                Ok(Received::Control(Control::Resume { ports })) => {
+                Ok(Received::Control(Control::Resume { ports, installed })) => {
                     // The restored child reattaches once it is registered.
                     link.disarm();
-                    return Ok(Waited::Resume(ports));
+                    return Ok(Waited::Resume { ports, installed });
                 }
                 Ok(Received::Control(Control::Stop { reason, removed })) => {
                     return Ok(Waited::Cancelled { reason, removed });

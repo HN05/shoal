@@ -28,8 +28,11 @@ use crate::{
 
 /// The binary the wrapper continues from: the installed one, once an
 /// upgrade put it in place of the wrapper's own, while `link` can hand its
-/// connection over.
-pub(super) fn installed(link: &Link) -> Option<PathBuf> {
+/// connection over to a `daemon` that runs the installed binary too.
+pub(super) fn installed(link: &Link, daemon: bool) -> Option<PathBuf> {
+    if !daemon {
+        return None;
+    }
     link.descriptor()?;
     crate::cli::installed::started()
         .installed()
