@@ -11257,16 +11257,8 @@ fn manual_removal_stops_recorded_orphans_before_releasing_resources() {
         fixture.ok(&["leases", "resource", "--all"]),
         serde_json::json!([])
     );
-    let pid = execution["child"]["pid"].as_u64().unwrap().to_string();
-    let output = Command::new("ps")
-        .args(["-p", &pid, "-o", "stat="])
-        .output()
-        .unwrap();
-    let status = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        status.trim().is_empty() || status.trim().starts_with('Z'),
-        "owned child survived removal"
-    );
+    let pid = execution["child"]["pid"].as_u64().unwrap() as u32;
+    assert!(!process_running(pid), "owned child survived removal");
 }
 
 #[test]
@@ -15803,14 +15795,7 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         }
         let status = wait_for("landing wrapper to stop", || land.try_wait().unwrap());
         assert!(!status.success());
-        wait_until("merge driver to stop", || {
-            let output = Command::new("ps")
-                .args(["-p", &pid.to_string(), "-o", "stat="])
-                .output()
-                .unwrap();
-            let status = String::from_utf8_lossy(&output.stdout);
-            status.trim().is_empty() || status.trim().starts_with('Z')
-        });
+        wait_until("merge driver to stop", || !process_running(pid as u32));
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
         assert_eq!(
             git(&fixture.repo, &["status", "--porcelain"]),
@@ -15850,6 +15835,17 @@ fn install_fake_happy(fixture: &Fixture) -> PathBuf {
 
 fn process_alive(pid: u32) -> bool {
     unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+/// Whether `pid` runs: an orphan's zombie counts as ended, since a
+/// container's init may never reap it.
+fn process_running(pid: u32) -> bool {
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "stat="])
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&output.stdout);
+    !(status.trim().is_empty() || status.trim().starts_with('Z'))
 }
 
 fn wait_for_busy(fixture: &Fixture, workspace: &str) {
@@ -26070,7 +26066,7 @@ impl DemoProcesses {
     /// Wait until the stopped demo's wrapper and command have exited.
     fn await_end(&mut self) {
         wait_until("the demo's processes to exit", || {
-            !self.groups.iter().any(|&pid| process_alive(pid))
+            !self.groups.iter().any(|&pid| process_running(pid))
         });
         self.ended = true;
     }
