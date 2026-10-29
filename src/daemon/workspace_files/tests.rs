@@ -660,3 +660,42 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
         1
     );
 }
+
+#[tokio::test]
+async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
+    use std::os::unix::fs::PermissionsExt;
+    if !permissions_bind() {
+        return;
+    }
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    manager
+        .send_agent_message(&workspace.name, "See".into(), vec![file])
+        .await
+        .unwrap();
+    let copy = manager.workspace_files(&workspace.name).await.unwrap()[0]
+        .path
+        .clone();
+    manager
+        .store
+        .run(|db| {
+            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    // The message's directory cannot be read for now.
+    let message = copy.ancestors().nth(2).unwrap().to_owned();
+    std::fs::set_permissions(&message, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let failed = reopened.record_earlier_files().await;
+    std::fs::set_permissions(&message, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(failed.is_err(), "the unreadable directory fails the pass");
+    reopened.record_earlier_files().await.unwrap();
+    let files = reopened.workspace_files(&workspace.name).await.unwrap();
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert_eq!(files[0].path, copy);
+    reopened.store.shutdown().await;
+}

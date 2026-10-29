@@ -157,32 +157,27 @@ impl Layout {
     /// the files two directories below its own, one directory per message and
     /// one per file within it. A hidden message directory holds copies still
     /// being made; the files themselves may have any name.
-    pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Vec<PathBuf> {
+    pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Result<Vec<PathBuf>> {
         if !is_marked_dir(&self.root, &self.owner) {
-            return Vec::new();
+            return Ok(Vec::new());
         }
-        let entries = |directory: &Path| -> Vec<PathBuf> {
-            std::fs::read_dir(directory)
-                .into_iter()
-                .flatten()
-                .flatten()
-                .map(|entry| entry.path())
-                .collect()
-        };
         let staging = |path: &PathBuf| {
             path.file_name()
                 .is_some_and(|name| name.to_string_lossy().starts_with('.'))
         };
-        let mut copies: Vec<PathBuf> = entries(&self.root.join(workspace_id))
-            .iter()
-            .filter(|message| message.is_dir() && !staging(message))
-            .flat_map(|message| entries(message))
-            .filter(|file| file.is_dir())
-            .flat_map(|file| entries(&file))
-            .filter(|copy| copy.is_file())
-            .collect();
+        let mut copies = Vec::new();
+        for message in entries(&self.root.join(workspace_id))? {
+            if !message.is_dir() || staging(&message) {
+                continue;
+            }
+            for file in entries(&message)? {
+                if file.is_dir() {
+                    copies.extend(entries(&file)?.into_iter().filter(|copy| copy.is_file()));
+                }
+            }
+        }
         copies.sort();
-        copies
+        Ok(copies)
     }
 
     /// Delete the files attached for the workspace `workspace_id`.
@@ -291,6 +286,19 @@ pub(crate) fn check(path: &Path) -> Result<()> {
         MAX_FILE_BYTES / 1024 / 1024
     );
     Ok(())
+}
+
+/// The entries of `directory`, none when it does not exist.
+fn entries(directory: &Path) -> Result<Vec<PathBuf>> {
+    let listing = match std::fs::read_dir(directory) {
+        Ok(listing) => listing,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error).with_context(|| format!("read {}", directory.display())),
+    };
+    listing
+        .map(|entry| Ok(entry?.path()))
+        .collect::<std::io::Result<_>>()
+        .with_context(|| format!("read {}", directory.display()))
 }
 
 fn remove_dir(directory: &Path) -> Result<()> {

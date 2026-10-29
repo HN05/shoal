@@ -4,7 +4,7 @@
 //! no move of its directory is unfinished, which recovery finishes first.
 use std::path::PathBuf;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use super::{FileSource, layout::Layout, records};
 use crate::daemon::workspace::Manager;
@@ -53,12 +53,12 @@ impl Manager {
             .await?;
         for workspace_id in workspaces {
             let (layout, id) = (layout.clone(), workspace_id.clone());
-            let (copies, bytes) = tokio::task::spawn_blocking(move || {
-                let copies = layout.workspace_copies(&id);
-                let bytes = sizes(&copies);
-                (copies, bytes)
+            let (copies, bytes) = tokio::task::spawn_blocking(move || -> Result<_> {
+                let copies = layout.workspace_copies(&id)?;
+                let bytes = sizes(&copies)?;
+                Ok((copies, bytes))
             })
-            .await?;
+            .await??;
             self.store
                 .run(move |db| {
                     records::record(db, &workspace_id, FileSource::Message, &copies, &bytes)
@@ -69,10 +69,15 @@ impl Manager {
     }
 }
 
-/// The size of each of `copies`, or none for one that cannot be read.
-fn sizes(copies: &[PathBuf]) -> Vec<u64> {
+/// The size of each of `copies`.
+fn sizes(copies: &[PathBuf]) -> Result<Vec<u64>> {
     copies
         .iter()
-        .map(|copy| copy.metadata().map_or(0, |metadata| metadata.len()))
+        .map(|copy| {
+            let metadata = copy
+                .metadata()
+                .with_context(|| format!("read {}", copy.display()))?;
+            Ok(metadata.len())
+        })
         .collect()
 }
