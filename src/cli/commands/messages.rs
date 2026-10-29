@@ -197,19 +197,24 @@ const WAKE_RETRY_MAX: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// [`WakeWait::next`], tried again after each failure, such as a daemon that
 /// has not come back or does not yet know the agent's scope. After an upgrade
-/// changed the daemon protocol, the installed release waits instead.
+/// changed the daemon protocol, the installed release waits instead. Only
+/// the first failure is reported: whatever the hook prints reaches the agent
+/// with the updates that wake it, and a lasting failure would repeat there
+/// once per retry.
 async fn retry_next_updates(ctx: &Context, mut wait: WakeWait) -> Option<(Inbox, Updates)> {
     let executable = Executable::current();
     let mut delay = WAKE_RETRY_INITIAL;
+    let mut reported = false;
     loop {
         match wait.next(ctx).await {
             Ok(next) => return next,
             Err(error) => {
                 let error = executable.resume_or(error, || wait.resume_arguments(arguments()));
-                eprintln!(
-                    "shoal: waiting for agent updates failed; trying again in {}s: {error:#}",
-                    delay.as_secs()
-                );
+                if !std::mem::replace(&mut reported, true) {
+                    eprintln!(
+                        "shoal: waiting for agent updates failed; trying again until it succeeds: {error:#}"
+                    );
+                }
                 tokio::time::sleep(delay).await;
                 delay = (delay * 2).min(WAKE_RETRY_MAX);
             }

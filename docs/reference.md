@@ -3402,7 +3402,7 @@ exits 2, so Claude Code starts the idle agent's next turn with it. The wait
 outlasts a daemon restart, including its handover to the installed release
 after an upgrade, until the agent's wrapper reattaches; a wait that fails
 otherwise is tried again after a delay that doubles up to a minute, so the
-agent is never left idle without one. Its command
+agent is never left idle without one; only its first failure is printed. Its command
 passes Claude Code's process ID as `--agent "$PPID"`, and it exits with that
 process: Claude Code runs hooks outside its process group, so stopping the
 agent would otherwise leave the hook behind. Codex cannot
