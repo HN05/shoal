@@ -130,8 +130,8 @@ async fn queue_below(
 }
 
 /// Queue the restores of the agents among `executions`, which were stopped
-/// so their workspaces could move, and report the stopped commands of
-/// workspaces without one.
+/// so their workspaces could move; their workspaces' stopped commands go to
+/// them, and those of workspaces without one stay for `shoal resume`.
 pub(super) async fn queue_stopped(
     ctx: &Context,
     executions: &[Execution],
@@ -145,7 +145,7 @@ pub(super) async fn queue_stopped(
             .workspace;
         let mut saved = Saved::load(&ctx.paths, &workspace.id)?;
         saved.retain(|id| executions.iter().any(|execution| execution.id == id));
-        if !saved.is_empty() {
+        if !(saved.agents.is_empty() && saved.sessions.is_empty()) {
             stopped.push((workspace, saved));
         }
     }

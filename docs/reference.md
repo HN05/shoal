@@ -1980,7 +1980,9 @@ and is required for scripts and `--json`, which returns each moved
 `repository`, its old directory as `from` and its old `workspace_paths`.
 Those commands and agents stop as [`shoal stop`](#recovery) stops them,
 and once the move is done, or has failed, their agents' restores queue as
-`shoal resume` queues them, continuing their sessions in the new paths.
+`shoal resume` queues them, continuing their sessions in the new paths; a
+workspace's stopped commands go to its restored agent, or without one stay
+for `shoal resume`.
 
 Every repository is checked before the first moves: none may have a running
 chat, queued agent launches, a workspace in another lifecycle

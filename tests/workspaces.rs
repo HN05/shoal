@@ -2643,6 +2643,26 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
         .spawn()
         .unwrap();
     wait_until("agent started", || old.join("started").exists());
+    // A workspace running only a command keeps it for `shoal resume`.
+    let building = fixture.add("building");
+    let building = PathBuf::from(building["path"].as_str().unwrap());
+    let command = fixture
+        .command()
+        .args([
+            "run",
+            "--workspace",
+            "building",
+            "--",
+            "sh",
+            "-c",
+            "touch running; trap 'exit 0' TERM; while :; do sleep 1; done",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("command started", || building.join("running").exists());
     let trusted = fs::read_to_string(&claude_config).unwrap();
     assert!(
         trusted.contains(old.parent().unwrap().to_str().unwrap()),
@@ -2667,6 +2687,10 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let moved: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(moved.as_array().unwrap().len(), 1, "{moved}");
     assert!(agent.wait_with_output().unwrap().status.success());
+    command.wait_with_output().unwrap();
+    let resumed = fixture.ok(&["resume", "building"]);
+    let argv = &resumed["commands"][0]["commands"][0];
+    assert_eq!(argv[0], "sh", "{resumed}");
     let path = fs::canonicalize(fixture.root.path())
         .unwrap()
         .join("moved")
