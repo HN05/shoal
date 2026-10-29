@@ -26,7 +26,8 @@ states!(EventKind {
     ReviewCleared => "review_cleared",
     /// The workspace's base workspace was set, cleared, or removed.
     BaseChanged => "base_changed",
-    /// The workspace's parent workspace was removed and its own parent took its place.
+    /// Recorded only by earlier versions, which moved the children of a
+    /// removed workspace up to its own parent.
     ParentChanged => "parent_changed",
     /// A workspace link was added.
     Linked => "linked",
@@ -71,8 +72,11 @@ states!(EventCause {
     DiskSpace => "disk_space",
     /// The branch merged into the default branch and the workspace stayed idle.
     Merged => "merged",
-    /// The base or parent workspace was removed and its own took its place.
+    /// The base workspace was removed and its own took its place, or, in
+    /// earlier versions, the parent workspace.
     Removed => "removed",
+    /// The workspace's parent was removed, which takes its children first.
+    Parent => "parent",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

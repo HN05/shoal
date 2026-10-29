@@ -322,6 +322,10 @@ impl Manager {
             })
             .await?;
         for workspace in workspaces {
+            // Removing a parent took its children.
+            if self.find_workspace(&workspace.id).await?.is_none() {
+                continue;
+            }
             self.remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
                 .await
                 .with_context(|| {

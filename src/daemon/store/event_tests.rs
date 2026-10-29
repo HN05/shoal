@@ -193,7 +193,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_completed_again",
         "workspace_undone",
         "workspace_base_removed",
-        "workspace_parent_removed",
         "demo_started",
         "demo_stopped",
         "simulator_acquired",

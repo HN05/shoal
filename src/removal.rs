@@ -164,6 +164,10 @@ pub struct RemovalResult {
     pub branch_outcome: BranchOutcome,
     /// Removal succeeded, but its best-effort post hook failed.
     pub hook_error: Option<String>,
+    /// The workspaces below it the removal took first, each after those
+    /// below it.
+    #[serde(default)]
+    pub children: Vec<String>,
 }
 
 impl Serialize for RemovalResult {
@@ -177,6 +181,7 @@ impl Serialize for RemovalResult {
             branch_deleted: bool,
             branch_outcome: &'a BranchOutcome,
             hook_error: &'a Option<String>,
+            children: &'a [String],
         }
         Response {
             removed: self.removed,
@@ -184,6 +189,7 @@ impl Serialize for RemovalResult {
             branch_deleted: self.branch_outcome.is_deleted(),
             branch_outcome: &self.branch_outcome,
             hook_error: &self.hook_error,
+            children: &self.children,
         }
         .serialize(serializer)
     }

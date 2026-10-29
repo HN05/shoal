@@ -21,7 +21,7 @@ fn reference(workspace: &Workspace) -> WorkspaceRef {
 }
 
 #[tokio::test]
-async fn splitting_records_the_parent_and_removal_moves_children_up() {
+async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -55,57 +55,95 @@ async fn splitting_records_the_parent_and_removal_moves_children_up() {
     assert!(manager.within_subtree(&root.id, &leaf.id).await.unwrap());
     assert!(!manager.within_subtree(&leaf.id, &root.id).await.unwrap());
 
-    for (removed, parent) in [(&middle, Some(reference(&root))), (&root, None)] {
-        manager
-            .remove_workspace(
-                &removed.id,
-                UnsavedWork::default(),
-                InspectionPolicy::GitOnly,
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            manager.workspace("leaf").await.unwrap().parent_workspace,
-            parent
+    // Neither the leaf's hold nor its unsaved file keeps it; a checkpoint
+    // keeps the file.
+    manager
+        .acquire_hold(&leaf.id, "editor".into(), None)
+        .await
+        .unwrap();
+    std::fs::write(leaf.path.join("draft.txt"), "draft").unwrap();
+    let removed = manager
+        .remove_workspace(&root.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert_eq!(removed.children, ["leaf", "middle"]);
+    for workspace in [&root, &middle, &leaf] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
         );
+        assert!(!workspace.path.exists());
+    }
+    let restorable: Vec<_> = manager
+        .removed_workspaces()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|removed| removed.name)
+        .collect();
+    for name in ["root", "middle", "leaf"] {
+        assert!(restorable.iter().any(|removed| removed == name), "{name}");
     }
 
     let events = manager.workspace_events(None, 100).await.unwrap();
-    let parents: Vec<_> = events
+    let removals: Vec<_> = events
         .iter()
         .filter_map(|item| match item {
-            EventItem::Event(event)
-                if event.details.workspace_id == leaf.id
-                    && matches!(
-                        event.details.kind,
-                        EventKind::Created | EventKind::ParentChanged
-                    ) =>
-            {
-                Some((
-                    event.details.kind,
-                    event.details.cause,
-                    event.details.parent_workspace.clone(),
-                ))
+            EventItem::Event(event) if event.details.kind == EventKind::Removed => {
+                Some((event.details.name.clone(), event.details.cause))
             }
             _ => None,
         })
         .collect();
     assert_eq!(
-        parents,
+        removals,
         [
-            (EventKind::Created, None, Some(Some(reference(&middle)))),
-            (
-                EventKind::ParentChanged,
-                Some(EventCause::Removed),
-                Some(Some(reference(&root)))
-            ),
-            (
-                EventKind::ParentChanged,
-                Some(EventCause::Removed),
-                Some(None)
-            ),
+            ("leaf".to_owned(), Some(EventCause::Parent)),
+            ("middle".to_owned(), Some(EventCause::Parent)),
+            ("root".to_owned(), Some(EventCause::Manual)),
         ]
     );
+}
+
+#[tokio::test]
+async fn a_child_that_cannot_go_retains_its_parent() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    manager
+        .reserve_lifecycle(&child.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace(
+            &parent.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("child workspace child retained, so parent is too"),
+        "{error:#}"
+    );
+    let kept = manager.workspace(&parent.id).await.unwrap();
+    assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
+    assert!(kept.path.exists());
+    assert_eq!(kept.child_workspaces, [reference(&child)]);
 }
 
 #[tokio::test]
@@ -231,6 +269,31 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
             .unwrap_err();
         assert!(error.to_string().contains("has holds"), "{error:#}");
     }
+    // Removing it would release the holds of the workspaces below it too.
+    manager
+        .release_hold(&child.id, "editor".into())
+        .await
+        .unwrap();
+    let grandchild = manager
+        .split_workspace(&child.id, "grandchild".into(), None)
+        .await
+        .unwrap();
+    manager
+        .acquire_hold(&grandchild.id, "editor".into(), None)
+        .await
+        .unwrap();
+    let mut method = remove(&child.name);
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("grandchild has holds"),
+        "{error:#}"
+    );
+    manager
+        .acquire_hold(&child.id, "editor".into(), None)
+        .await
+        .unwrap();
     // So does the removal itself, for a hold acquired after authorization.
     let error = manager
         .remove_unheld_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
