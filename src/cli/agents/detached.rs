@@ -267,8 +267,9 @@ pub(super) async fn start_chat(
             .trust_checkout(ctx, repository, &Default::default())
             .await;
     }
-    // This process holds the chat until the session runs.
-    let record = client::start_chat(&ctx.paths, repository, chat_name, name).await?;
+    // This process holds the chat until the session runs, which is not in
+    // this terminal.
+    let record = client::start_chat(&ctx.paths, repository, chat_name, name, None).await?;
     let files = ctx.paths.chat_files(&record);
     let session = Session {
         paths: &ctx.paths,

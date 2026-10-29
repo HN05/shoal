@@ -151,7 +151,14 @@ pub(super) async fn begin(
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let command = command(&settings, &repo, &agent, instructions, opening, args)?;
-    let chat = client::start_chat(&ctx.paths, &repo, &name, agent.name()).await?;
+    let chat = client::start_chat(
+        &ctx.paths,
+        &repo,
+        &name,
+        agent.name(),
+        terminal::current_origin(),
+    )
+    .await?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id), agent.name()).await?;
     run_here(
         ctx,

@@ -23622,6 +23622,9 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let record = install_fake_happy(&fixture);
     let repo = fixture.repo.to_str().unwrap();
     let checkout = fs::canonicalize(&fixture.repo).unwrap();
+    // Started from a Rex block, a detached chat still runs elsewhere.
+    let rex_bin = fixture.root.path().join("rex-bin");
+    install_test_script(rex_bin.join("rex"), "#!/bin/sh\nexit 9\n");
     let chat = |agent: &str| {
         let _ = fs::remove_file(&record);
         let output = fixture
@@ -23630,6 +23633,9 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
                 "--json", "chat", repo, "--agent", agent, "--", "--model", "test",
             ])
             .env("HAPPY_RECORD", &record)
+            .env("REX_SESSION", "session:caller")
+            .env("REX_BLOCK", "block:caller")
+            .env("REX_BIN_DIR", &rex_bin)
             .output()
             .unwrap();
         assert!(output.status.success(), "{output:?}");
@@ -23655,6 +23661,7 @@ fn happy_chats_run_detached_in_the_checkout_while_their_session_lives() {
     let (started, recorded) = chat("happy-claude");
     let chat_record = &started["chat"];
     assert_eq!(chat_record["agent"], "happy-claude");
+    assert_eq!(chat_record.get("origin"), None, "{chat_record}");
     assert_eq!(chat_record["name"], CHAT_NAME);
     assert!(
         recorded.contains(&format!("cwd={}\n", checkout.display())),
