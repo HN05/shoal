@@ -848,6 +848,70 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     finish(taken).await;
 }
 
+/// An open PR at `head` with `checks` by name and state, `pending` unfinished.
+pub(super) fn checks_at(head: &str, checks: &[(&str, &str)]) -> Snapshot {
+    let checks = checks
+        .iter()
+        .map(|(name, state)| {
+            let check = json!({"name": name, "state": state, "revision": head, "complete": *state != "pending"});
+            ((*name).to_owned(), check)
+        })
+        .collect::<serde_json::Map<_, _>>();
+    serde_json::from_value(json!({
+        "comments": {}, "checks": checks, "head": head,
+        "conflict": null, "state": "open", "errors": {}
+    }))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn an_idle_agent_wakes_once_for_a_heads_passing_checks() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "checks".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    let poll = async |snapshot| {
+        manager
+            .queue_background_updates(
+                &workspace.id,
+                vec![("pr".into(), snapshot)],
+                crate::time::unix_seconds(),
+            )
+            .await
+            .unwrap();
+        manager.agent_updates(&workspace.id).await.unwrap().updates
+    };
+    let pending = [("fmt", "pending"), ("lint", "pending"), ("test", "pending")];
+    assert!(poll(checks_at("a", &pending)).await.is_empty());
+    let one = [("fmt", "success"), ("lint", "pending"), ("test", "pending")];
+    assert!(poll(checks_at("a", &one)).await.is_empty());
+    // A push drops the old head's passes.
+    assert!(poll(checks_at("b", &pending)).await.is_empty());
+    let two = [("fmt", "success"), ("lint", "success"), ("test", "pending")];
+    assert!(poll(checks_at("b", &two)).await.is_empty());
+    let all = [("fmt", "success"), ("lint", "success"), ("test", "success")];
+    let updates = poll(checks_at("b", &all)).await;
+    assert_eq!(
+        updates
+            .iter()
+            .map(|update| update.message.as_str())
+            .collect::<Vec<_>>(),
+        ["fmt: success", "lint: success", "test: success"]
+    );
+    assert!(
+        updates
+            .iter()
+            .all(|update| update.delivery == updates[0].delivery)
+    );
+}
+
 #[tokio::test]
 async fn own_changes_are_not_reported_back_to_the_workspace() {
     let (root, manager) = manager().await;

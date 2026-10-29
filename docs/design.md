@@ -1140,8 +1140,8 @@ daemon keeps a separate activity snapshot for each item and appends an
 `item_activity` event for each newly observed comment, completed check,
 conflict, closure, merge, reopen, or lookup failure. The first observation
 establishes the baseline, and watch acknowledgements do not affect this stream.
-The same poll queues each change on the workspace's watch cursor and wakes a
-running watch, so an agent receives activity without watching for it. Polls
+The same poll queues each change on the workspace's watch cursor, holding
+passing checks as the watch below describes, and wakes a running watch, so an agent receives activity without watching for it. Polls
 read through the forge crate's shared request layer, which remembers each
 account's last response per URL in daemon memory and repeats the read as a
 conditional request, so an unchanged item costs a `304 Not Modified`, which
@@ -1833,6 +1833,13 @@ Ambiguous records and conflicting actions are rejected. Own-workspace `watch`
 polls linked issue and PR activity independently of cleanup, with kind filters
 or an explicit item that does not change associations. It reports comments or
 reviews, completed CI checks, new merge conflicts, closure, reopening or merging.
+Passing checks wait on the cursor while another check on the PR's head commit is
+pending, since a pass asks nothing of the agent until the rest finish and each
+wake costs it a turn: a check that does not pass delivers them at once, the last
+pending one with itself, and a new head drops them. A check that never finishes
+keeps them held; `status` shows them meanwhile. Holding happens where the poll
+queues activity, so watches and agent hooks report the same updates, and only
+for a PR's checks; the `item_activity` stream reports each one.
 A conflict belongs to the head and base commits it was seen at, so a push or base
 change that leaves the item conflicting is reported again. A forge's conflict is
 reported once two polls in a row see it at the same commits, because Forgejo shows

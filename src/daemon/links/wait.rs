@@ -10,6 +10,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
+use self::held::HeldPasses;
 use super::pr::RegistrationKind;
 use crate::{
     daemon::{
@@ -26,6 +27,8 @@ use crate::{
     model::{ConflictCheck, Workspace, WorkspaceRef},
     repository,
 };
+
+mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -139,6 +142,8 @@ struct ActivityRecord {
     /// Shoal; observations that started by then cannot show it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     own_state_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "HeldPasses::is_empty")]
+    held: HeldPasses,
 }
 
 impl Manager {
@@ -780,13 +785,14 @@ impl Manager {
                 } else {
                     previous.own_state_at = None;
                 }
-                let mut pending = previous.snapshot.changes(&snapshot, &url);
+                let changes = previous.snapshot.changes(&snapshot, &url);
+                let mut pending = previous.held.deliver(&snapshot, changes);
                 let delivery = uuid::Uuid::new_v4().to_string();
                 for update in &mut pending {
                     update.delivery.clone_from(&delivery);
                 }
                 updates.extend(pending.clone());
-                let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at };
+                let record = ActivityRecord { snapshot, pending, authored: previous.authored, own_state_at: previous.own_state_at, held: previous.held };
                 tx.execute("INSERT INTO pr_activity(workspace_id,url,record) VALUES (?1,?2,?3) ON CONFLICT(workspace_id,url) DO UPDATE SET record=excluded.record", params![id, url, serde_json::to_string(&record)?])?;
             }
             ensure!(serde_json::to_vec(&updates)?.len() < crate::protocol::MAX_FRAME - 256,

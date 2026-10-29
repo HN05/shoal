@@ -2835,7 +2835,11 @@ PRs whose head branch is in a fork. Watches return on comments,
 reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace, except for comments, review thread replies, closing
 and reopening that the workspace itself made through Shoal; the same change made another way, such as
-with `fj` or the web interface, is reported. A PR's conflict is reported once
+with `fj` or the web interface, is reported. A passing check is held while
+another check on the PR's head commit is pending, and arrives with a check that
+fails or does not pass, or with the last pending one; a new head commit drops
+the passes held for the previous one. `shoal status` and `item_activity` events
+show each check as it completes. A PR's conflict is reported once
 two polls in a row see it at the same head and base commits, and again when it
 persists across new ones.
 An unfiltered `shoal watch` without a linked PR also returns when the workspace
