@@ -606,7 +606,9 @@ fn store_registration(
 }
 
 pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
-    let (head, branch) = git::head_and_branch(&workspace.path).await?;
+    let (head, branch) = git::head_and_branch(&workspace.path)
+        .await
+        .context("cannot check the workspace's branch")?;
     ensure!(
         branch.as_deref() == Some(workspace.branch.as_str()),
         "workspace is not on its recorded branch"

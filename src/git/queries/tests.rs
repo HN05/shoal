@@ -28,3 +28,13 @@ async fn head_and_branch_names_no_branch_when_detached() {
     git(&repo, &["checkout", "-q", "--detach"]);
     assert_eq!(head_and_branch(&repo).await.unwrap(), (commit, None));
 }
+
+#[test]
+fn head_and_branch_without_a_name_for_head_is_unknown() {
+    let error = parse_head_and_branch("abc\n").unwrap_err();
+    assert_eq!(error.to_string(), "git rev-parse printed no name for HEAD");
+    assert_eq!(
+        parse_head_and_branch("abc\nHEAD\n").unwrap(),
+        ("abc".to_owned(), None)
+    );
+}

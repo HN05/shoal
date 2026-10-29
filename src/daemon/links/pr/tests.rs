@@ -131,3 +131,25 @@ fn registration_rejects_ambiguous_records() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_failed_branch_check_does_not_claim_another_branch() {
+    use crate::test_support::{manager, repository};
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "branch".into(), None, None, None)
+        .await
+        .unwrap();
+    current_head(&workspace).await.unwrap();
+    std::fs::write(workspace.path.join(".git"), "gitdir: missing\n").unwrap();
+    let error = format!("{:#}", current_head(&workspace).await.unwrap_err());
+    assert!(
+        error.starts_with("cannot check the workspace's branch: "),
+        "{error}"
+    );
+}

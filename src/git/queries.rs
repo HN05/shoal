@@ -35,11 +35,19 @@ pub async fn symbolic_revision(
 /// one Git process instead of two.
 pub async fn head_and_branch(repo: &Path) -> Result<(String, Option<String>)> {
     let output = run(repo, &["rev-parse", "HEAD", "--symbolic-full-name", "HEAD"]).await?;
+    parse_head_and_branch(&output)
+}
+
+/// Git prints `HEAD` as the name of a detached HEAD, and nothing when it
+/// could not read the name, which leaves the branch unknown rather than
+/// detached.
+fn parse_head_and_branch(output: &str) -> Result<(String, Option<String>)> {
     let mut lines = output.lines();
     let commit = lines.next().context("git rev-parse printed no commit")?;
-    let branch = lines
+    let name = lines
         .next()
-        .and_then(|name| name.strip_prefix("refs/heads/"));
+        .context("git rev-parse printed no name for HEAD")?;
+    let branch = name.strip_prefix("refs/heads/");
     Ok((commit.to_owned(), branch.map(str::to_owned)))
 }
 
