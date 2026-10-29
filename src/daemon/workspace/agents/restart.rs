@@ -2,7 +2,7 @@
 //! in the same terminal, as after a protection stop, but at once and outside
 //! the agent queue, since the agent keeps its slot.
 use anyhow::{Context, Result, anyhow, ensure};
-use tokio::{sync::oneshot, time::Instant};
+use tokio::sync::oneshot;
 
 use super::{Agent, Manager};
 use crate::{
@@ -18,7 +18,8 @@ pub(super) struct Restart {
     /// The requests still to answer; a request for an agent already
     /// restarting joins them.
     answers: Vec<oneshot::Sender<Result<()>>>,
-    requested: Instant,
+    /// The `shoal restart` run that asked for it.
+    run: Option<String>,
     /// The stopped agent was resumed, so its wrapper's next start is the
     /// restarted agent rather than the first one.
     resumed: bool,
@@ -28,12 +29,12 @@ pub(super) struct Restart {
 }
 
 impl Restart {
-    /// A restart without requests to answer, such as one whose request ended
-    /// with the daemon that took it.
-    pub(super) fn unanswered() -> Self {
+    /// A restart for `run` without requests to answer, such as one whose
+    /// request ended with the daemon that took it.
+    pub(super) fn unanswered(run: Option<String>) -> Self {
         Self {
             answers: Vec::new(),
-            requested: Instant::now(),
+            run,
             resumed: false,
             waits: None,
         }
@@ -59,13 +60,9 @@ impl Restart {
 
     fn pending(&self) -> PendingRestart {
         PendingRestart {
-            requested_ms_ago: millis(self.requested.elapsed()),
+            run: self.run.clone(),
         }
     }
-}
-
-fn millis(duration: std::time::Duration) -> u64 {
-    u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
 }
 
 impl Manager {
@@ -89,7 +86,7 @@ impl Manager {
                             restorable: agent.is_some_and(|agent| agent.recover),
                             state: agent.and_then(|agent| agent.turn),
                             interrupted: agent.is_some_and(|agent| agent.interrupted),
-                            started_ms_ago: agent.map(|agent| millis(agent.started.elapsed())),
+                            restarted_by: agent.and_then(|agent| agent.restarted_by.clone()),
                             restart: agent
                                 .and_then(|agent| agent.restart.as_ref())
                                 .map(Restart::pending),
@@ -104,8 +101,9 @@ impl Manager {
     }
 
     /// Restart the agent of `execution`, returning once it runs again.
-    pub(crate) async fn restart_agent(&self, execution: &str) -> Result<()> {
-        restarted(self.request_restart(execution).await?).await
+    /// `run` names the `shoal restart` run that asks for it.
+    pub(crate) async fn restart_agent(&self, execution: &str, run: Option<String>) -> Result<()> {
+        restarted(self.request_restart(execution, run).await?).await
     }
 
     /// Wait for the restart of `execution` in progress as [`Self::restart_agent`]
@@ -132,9 +130,13 @@ impl Manager {
     }
 
     /// Ask the agent's wrapper to stop it for a restart.
-    async fn request_restart(&self, id: &str) -> Result<oneshot::Receiver<Result<()>>> {
+    async fn request_restart(
+        &self,
+        id: &str,
+        run: Option<String>,
+    ) -> Result<oneshot::Receiver<Result<()>>> {
         self.executions
-            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id)))
+            .with_agents(|agents| self.stop_for_restart(id, agents.get_mut(id), run))
             .await
     }
 
@@ -144,6 +146,7 @@ impl Manager {
         &self,
         id: &str,
         agent: Option<&mut Agent>,
+        run: Option<String>,
     ) -> Result<oneshot::Receiver<Result<()>>> {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         if let Some(restart) = &mut agent.restart {
@@ -166,7 +169,7 @@ impl Manager {
             agent.turn,
         )
         .context("save the agent's recovery record")?;
-        let mut restart = Restart::unanswered();
+        let mut restart = Restart::unanswered(run);
         let answer = restart.answer();
         agent.restart = Some(restart);
         if agent.stop.send(true).is_err() {
@@ -259,6 +262,9 @@ impl Manager {
                     .restart
                     .take_if(|restart| restart.resumed || !once_resumed)?;
                 agent.restarted = Some(outcome.clone());
+                if outcome.is_ok() {
+                    agent.restarted_by.clone_from(&restart.run);
+                }
                 Some(restart)
             })
             .await

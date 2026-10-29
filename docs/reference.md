@@ -370,8 +370,8 @@ previous one runs again and at least 10 seconds after it started. With
 `--wait`, each restarts only once its own turn ends, where a permission prompt or
 an agent without turn reports counts as working. Interrupting the run leaves
 its restarts to the daemon and names them; a run that selects an agent already
-restarting reports on that restart, even with `--wait`, and skips the agents
-that started since it was requested. A
+restarting continues the run that asked for it: it reports on that restart,
+even with `--wait`, and skips the agents that run restarted already. A
 restarted agent keeps its agent slot, and commands keep running. Agents without
 a command to resume their session and executions whose wrapper is gone are
 skipped, for `shoal stop` and `shoal resume`. An agent that does not start again

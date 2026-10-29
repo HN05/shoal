@@ -20,7 +20,9 @@ async fn restart_restores_the_agent_in_its_wrapper_without_waiting_for_healthy_r
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
-    bounded(manager.restart_agent(&execution)).await.unwrap();
+    bounded(manager.restart_agent(&execution, None))
+        .await
+        .unwrap();
     // The same wrapper ran the restore command, which exits at once.
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
     assert_eq!(
@@ -39,7 +41,7 @@ async fn a_restart_that_cannot_start_the_agent_leaves_it_for_shoal_resume() {
     wait_started(&manager, &workspace).await;
     let execution = agent_execution(&manager, &workspace).await;
     fs::remove_file(workspace.path.join("resume.sh")).unwrap();
-    let error = bounded(manager.restart_agent(&execution))
+    let error = bounded(manager.restart_agent(&execution, None))
         .await
         .unwrap_err();
     assert_eq!(format!("{error}"), "the agent did not start again");
@@ -75,7 +77,7 @@ async fn a_restart_resumes_only_in_a_ready_recorded_workspace() {
         })
         .await
         .unwrap();
-    let error = bounded(manager.restart_agent(&execution))
+    let error = bounded(manager.restart_agent(&execution, None))
         .await
         .unwrap_err();
     assert!(

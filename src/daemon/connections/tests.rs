@@ -161,6 +161,7 @@ fn a_pending_restart_leaves_request_capacity_to_the_wrappers_it_restores() {
     let restart = crate::protocol::ExecutionMethod::RestartAgent {
         execution: "agent".into(),
         join: false,
+        run: None,
     };
     let _restart = capacity.admit(&restart.into()).unwrap();
     // The restored wrapper's own requests still find a slot.

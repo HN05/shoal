@@ -10,7 +10,7 @@ fn agent(origin: Option<Origin>) -> RunningAgent {
         state: Some(AgentState::Working),
         interrupted: false,
         origin,
-        started_ms_ago: Some(0),
+        restarted_by: None,
         restart: None,
     }
 }

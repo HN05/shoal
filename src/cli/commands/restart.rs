@@ -61,7 +61,7 @@ pub(super) async fn run(
         progress.skip(ctx, skipped);
     }
     let interrupted = tokio::select! {
-        restarted = restart_all(ctx, &mut progress, plan.restarts, wait, sequential) => {
+        restarted = restart_all(ctx, &mut progress, plan.restarts, &plan.run, wait, sequential) => {
             restarted?;
             false
         }
@@ -81,23 +81,26 @@ async fn restart_all(
     ctx: &Context,
     progress: &mut Progress,
     restarts: Vec<Restart>,
+    run: &str,
     wait: bool,
     sequential: bool,
 ) -> Result<()> {
     if sequential {
-        restart_in_turn(ctx, progress, restarts, wait).await
+        restart_in_turn(ctx, progress, restarts, run, wait).await
     } else {
-        restart_together(ctx, progress, restarts, wait).await
+        restart_together(ctx, progress, restarts, run, wait).await
     }
 }
 
 impl Restart {
-    async fn run(&self, ctx: &Context) -> Result<()> {
+    /// Restart the agent, or join its restart, as part of `run`.
+    async fn run(&self, ctx: &Context, run: &str) -> Result<()> {
         let restarted = request::<()>(
             &ctx.paths,
             ExecutionMethod::RestartAgent {
                 execution: self.agent.execution.clone(),
                 join: self.joins,
+                run: Some(run.to_owned()),
             },
         )
         .await;
@@ -130,6 +133,7 @@ async fn restart_in_turn(
     ctx: &Context,
     progress: &mut Progress,
     mut restarts: Vec<Restart>,
+    run: &str,
     wait: bool,
 ) -> Result<()> {
     let mut previous: Option<Instant> = None;
@@ -145,7 +149,7 @@ async fn restart_in_turn(
         } else {
             restarts.remove(0)
         };
-        let result = restart.run(ctx).await;
+        let result = restart.run(ctx, run).await;
         if result.is_ok() {
             previous = Some(Instant::now());
         }
@@ -160,6 +164,7 @@ async fn restart_together(
     ctx: &Context,
     progress: &mut Progress,
     mut waiting: Vec<Restart>,
+    run: &str,
     wait: bool,
 ) -> Result<()> {
     let mut running = FuturesUnordered::new();
@@ -175,7 +180,7 @@ async fn restart_together(
         {
             let restart = waiting.remove(index);
             running.push(async move {
-                let result = restart.run(ctx).await;
+                let result = restart.run(ctx, run).await;
                 (restart, result)
             });
         }

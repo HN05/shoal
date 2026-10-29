@@ -22,6 +22,8 @@ pub(super) struct Selection {
 pub(super) struct Plan {
     pub(super) restarts: Vec<Restart>,
     pub(super) skipped: Vec<Skipped>,
+    /// Names the run to the daemon, which records it on each restart.
+    pub(super) run: String,
 }
 
 /// One agent to restart.
@@ -82,6 +84,7 @@ impl Selection {
         let mut plan = Plan {
             restarts: Vec::new(),
             skipped: Vec::new(),
+            run: uuid::Uuid::new_v4().to_string(),
         };
         for workspace in self.workspaces {
             // An execution whose wrapper is gone may run any agent.
@@ -119,7 +122,7 @@ impl Selection {
                 }
             }
         }
-        plan.skip_started_since_restarts();
+        plan.continue_earlier_run();
         plan.restarts.sort_by_key(|restart| !restart.ready());
         plan
     }
@@ -127,29 +130,35 @@ impl Selection {
 
 impl Plan {
     /// Restarts in progress come from an earlier run, which this one
-    /// continues: an agent that started since the first of them was
-    /// requested, such as one that run restarted, already runs again.
-    fn skip_started_since_restarts(&mut self) {
-        let Some(since) = self
+    /// continues under its name: an agent that run restarted already runs
+    /// again.
+    fn continue_earlier_run(&mut self) {
+        let runs: Vec<String> = self
             .restarts
             .iter()
-            .filter_map(|restart| restart.agent.restart.as_ref())
-            .map(|pending| pending.requested_ms_ago)
-            .max()
-        else {
+            .filter_map(|restart| restart.agent.restart.as_ref()?.run.clone())
+            .collect();
+        let Some(run) = runs.first() else {
             return;
         };
+        self.run.clone_from(run);
         let (again, restarts) =
             std::mem::take(&mut self.restarts)
                 .into_iter()
                 .partition(|restart: &Restart| {
                     restart.agent.restart.is_none()
-                        && restart.agent.started_ms_ago.is_some_and(|ago| ago < since)
+                        && restart
+                            .agent
+                            .restarted_by
+                            .as_ref()
+                            .is_some_and(|run| runs.contains(run))
                 });
         self.restarts = restarts;
-        self.skipped.extend(again.into_iter().map(|restart| {
-            restart.skipped("it started after the restarts in progress were requested")
-        }));
+        self.skipped.extend(
+            again
+                .into_iter()
+                .map(|restart| restart.skipped("the interrupted run restarted it already")),
+        );
     }
 }
 

@@ -143,7 +143,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                     state: None,
                     interrupted: false,
                     origin: Some(Origin::created(HostName::Zmx, session.into())),
-                    started_ms_ago: agent.map(|_| 0),
+                    restarted_by: None,
                     restart: None,
                 })
                 .into(),

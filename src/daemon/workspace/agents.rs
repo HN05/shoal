@@ -39,6 +39,8 @@ pub(crate) struct Agent {
     restart: Option<restart::Restart>,
     /// How its last restart ended, which answers a request that joins it late.
     restarted: Option<Result<(), String>>,
+    /// The `shoal restart` run whose restart last started it again.
+    restarted_by: Option<String>,
     /// The turn state the agent reported last, which the workspace's state
     /// keeps only while no other execution there reports.
     turn: Option<crate::state::AgentState>,
@@ -279,6 +281,7 @@ impl Manager {
             update_hold: None,
             restart: None,
             restarted: None,
+            restarted_by: None,
             turn: None,
             interrupted: false,
             attached: None,
@@ -488,7 +491,7 @@ impl Manager {
         self.executions
             .with_agent(id, |agent| {
                 if protection.is_restart() {
-                    agent.restart = Some(restart::Restart::unanswered());
+                    agent.restart = Some(restart::Restart::unanswered(None));
                 } else {
                     agent.overload = Some(protection);
                 }

@@ -23,7 +23,7 @@ fn running(workspace: &Workspace, agent: Option<&str>, restorable: bool) -> Runn
         state: None,
         interrupted: false,
         origin: None,
-        started_ms_ago: Some(0),
+        restarted_by: None,
         restart: None,
     }
 }
@@ -150,51 +150,58 @@ fn only_an_agents_own_report_makes_it_idle() {
     assert_eq!(order, [("idle", true), ("working", false)]);
 }
 
-/// An agent of `workspace` that started `started_ms_ago`, restarting since
-/// `requested_ms_ago` when that is given.
-fn started(
+/// An agent of `workspace` the run `restarted_by` restarted last, restarting
+/// for the run `restarting` when that is given.
+fn restarted_in(
     workspace: &Workspace,
-    started_ms_ago: u64,
-    requested_ms_ago: Option<u64>,
+    restarted_by: Option<&str>,
+    restarting: Option<&str>,
 ) -> RunningAgent {
     RunningAgent {
-        started_ms_ago: Some(started_ms_ago),
-        restart: requested_ms_ago.map(|requested_ms_ago| PendingRestart { requested_ms_ago }),
+        restarted_by: restarted_by.map(Into::into),
+        restart: restarting.map(|run| PendingRestart {
+            run: Some(run.into()),
+        }),
         ..reporting(workspace, Some(AgentState::Working))
     }
 }
 
 #[test]
-fn a_rerun_waits_for_restarts_in_progress_and_skips_agents_started_since() {
-    let [pending, again, earlier, launched] =
-        ["pending", "again", "earlier", "launched"].map(workspace);
+fn a_rerun_continues_the_interrupted_run_and_skips_what_it_restarted() {
+    let [pending, again, earlier, other] = ["pending", "again", "earlier", "other"].map(workspace);
     let selection = Selection {
         agents: vec![
-            started(&pending, 90_000, Some(60_000)),
-            started(&again, 30_000, None),
-            started(&earlier, 120_000, None),
-            started(&launched, 5_000, None),
+            restarted_in(&pending, None, Some("interrupted")),
+            // Restarted first by a sequential run, before it asked for pending.
+            restarted_in(&again, Some("interrupted"), None),
+            restarted_in(&earlier, None, None),
+            restarted_in(&other, Some("older"), None),
         ],
-        workspaces: vec![pending, again, earlier, launched],
+        workspaces: vec![pending, again, earlier, other],
         named: false,
     };
     let plan = selection.plan(None);
+    assert_eq!(plan.run, "interrupted");
     // The restart in progress comes first, ready although its turn was
     // working, since its agent is already stopped.
-    assert_eq!(restarted(&plan), ["pending", "earlier"]);
+    assert_eq!(restarted(&plan), ["pending", "earlier", "other"]);
     assert!(plan.restarts[0].joins && plan.restarts[0].ready());
     assert!(!plan.restarts[1].joins && !plan.restarts[1].ready());
-    let reason = "it started after the restarts in progress were requested";
-    assert_eq!(skipped(&plan), [("again", reason), ("launched", reason)]);
+    assert_eq!(
+        skipped(&plan),
+        [("again", "the interrupted run restarted it already")]
+    );
 }
 
 #[test]
-fn without_restarts_in_progress_recent_agents_restart_too() {
+fn without_restarts_in_progress_a_run_restarts_every_agent_under_a_new_name() {
     let recent = workspace("recent");
     let selection = Selection {
-        agents: vec![started(&recent, 1_000, None)],
+        agents: vec![restarted_in(&recent, Some("earlier"), None)],
         workspaces: vec![recent],
         named: false,
     };
-    assert_eq!(restarted(&selection.plan(None)), ["recent"]);
+    let plan = selection.plan(None);
+    assert_eq!(restarted(&plan), ["recent"]);
+    assert_ne!(plan.run, "earlier");
 }

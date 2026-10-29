@@ -18,7 +18,7 @@ fn restart(name: &str) -> Restart {
             state: None,
             interrupted: false,
             origin: None,
-            started_ms_ago: Some(0),
+            restarted_by: None,
             restart: None,
         },
         workspace,

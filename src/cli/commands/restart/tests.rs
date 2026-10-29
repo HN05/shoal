@@ -21,9 +21,9 @@ fn a_joined_restart_stays_joined_once_it_ends() {
         state: Some(AgentState::Working),
         interrupted: false,
         origin: None,
-        started_ms_ago: Some(60_000),
+        restarted_by: None,
         restart: Some(PendingRestart {
-            requested_ms_ago: 10_000,
+            run: Some("earlier".into()),
         }),
     };
     let mut restarts = vec![Restart {
@@ -33,7 +33,7 @@ fn a_joined_restart_stays_joined_once_it_ends() {
     }];
     // The restart ended before the run asked for it, and the agent works.
     let ended = RunningAgent {
-        started_ms_ago: Some(1_000),
+        restarted_by: Some("earlier".into()),
         restart: None,
         ..agent
     };
