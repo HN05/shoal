@@ -39,6 +39,11 @@ pub(super) fn installed(link: &Link, daemon: bool) -> Option<PathBuf> {
         .map(Path::to_owned)
 }
 
+/// How long the installed binary may prepare the agent it restores: its
+/// secret and key commands run while the daemon awaits the agent's start
+/// without taking stops.
+pub(super) const PREPARATION_LIMIT: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// The agent a wrapper hands over, which the binary it continues from
 /// restores.
 pub(super) struct Handover<'a> {
