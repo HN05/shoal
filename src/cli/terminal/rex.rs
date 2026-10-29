@@ -9,7 +9,7 @@ use futures_util::future::BoxFuture;
 
 use super::{
     ChatStart, Demo, Host, PlaceState, Session, Start, Watched,
-    host::{Demos, Prompts, Sessions},
+    host::{Demos, Prompts, Sessions, Watches},
     typed::Typed,
 };
 use crate::sessions::{
@@ -103,21 +103,6 @@ impl Host for Rex {
         var("REX_BLOCK")
     }
 
-    /// A block carries no ownership, so only the daemon's record closes it.
-    fn closes_unrecorded_places(&self) -> bool {
-        false
-    }
-
-    /// Rex reads no agent state, so a block is only open or gone.
-    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(async move {
-            Ok(match Server::here()?.block(&place.id).await? {
-                Some(_) => PlaceState::Open(None),
-                None => PlaceState::Gone,
-            })
-        })
-    }
-
     fn names_places(&self) -> bool {
         true
     }
@@ -140,6 +125,24 @@ impl Host for Rex {
 
     fn sessions(&self) -> Option<&dyn Sessions> {
         Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+}
+
+/// A block carries no ownership, so only the daemon's record closes it: Rex
+/// watches its blocks but closes none itself.
+impl Watches for Rex {
+    /// Rex reads no agent state, so a block is only open or gone.
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(async move {
+            Ok(match Server::here()?.block(&place.id).await? {
+                Some(_) => PlaceState::Open(None),
+                None => PlaceState::Gone,
+            })
+        })
     }
 }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::cli::terminal::host::Closes;
 use crate::{
     model::{AgentStatus, Completion, Execution, Inspection, Workspace},
     paths::Paths,
@@ -139,18 +140,16 @@ impl Host for FakeHost {
         name.to_owned()
     }
 
-    fn closes_unrecorded_places(&self) -> bool {
-        self.labelled
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
     }
 
-    fn close_place<'a>(
-        &'a self,
-        place: &'a str,
-    ) -> futures_util::future::BoxFuture<'a, Result<()>> {
-        self.closed.lock().unwrap().push(place.to_owned());
-        Box::pin(async { Ok(()) })
+    fn closes(&self) -> Option<&dyn Closes> {
+        self.labelled.then_some(self)
     }
+}
 
+impl Watches for FakeHost {
     fn place_state<'a>(
         &'a self,
         _place: &'a Watched,
@@ -159,6 +158,16 @@ impl Host for FakeHost {
             .state
             .map_err(|()| anyhow::anyhow!("the host cannot tell"));
         Box::pin(async move { state })
+    }
+}
+
+impl Closes for FakeHost {
+    fn close_place<'a>(
+        &'a self,
+        place: &'a str,
+    ) -> futures_util::future::BoxFuture<'a, Result<()>> {
+        self.closed.lock().unwrap().push(place.to_owned());
+        Box::pin(async { Ok(()) })
     }
 }
 

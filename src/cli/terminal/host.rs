@@ -32,6 +32,18 @@ pub(in crate::cli) trait Host: Sync {
         Ok(())
     }
 
+    /// How this host reads the places it opened, so a watcher closes them
+    /// with their workspace, unless it reads none.
+    fn watches(&self) -> Option<&dyn Watches> {
+        None
+    }
+
+    /// How this host closes the places it opened without the daemon's
+    /// record of them, unless only that record closes them.
+    fn closes(&self) -> Option<&dyn Closes> {
+        None
+    }
+
     /// The agent sessions this host keeps, unless it keeps none.
     fn sessions(&self) -> Option<&dyn Sessions> {
         None
@@ -117,34 +129,10 @@ pub(in crate::cli) trait Host: Sync {
         &[]
     }
 
-    /// The place this process runs in, as [`Host::close_place`] names it.
+    /// The place this process runs in, as [`Watches`] and [`Closes`] name
+    /// it.
     fn this_place(&self) -> Option<String> {
         None
-    }
-
-    /// Close `place`, one this host opened for a workspace, which the
-    /// daemon keeps no record of.
-    fn close_place<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async { anyhow::bail!("{} cannot close places", self.name()) })
-    }
-
-    /// Whether a place this host opened is Shoal's to close without the
-    /// daemon's record of it. A host whose places carry no ownership of their
-    /// own has only the record, and its places without one stay open.
-    fn closes_unrecorded_places(&self) -> bool {
-        true
-    }
-
-    /// What tells `place` apart from a later place under the same ID, for a
-    /// host that reuses IDs.
-    fn place_instance<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
-        Box::pin(async { Ok(None) })
-    }
-
-    /// Whether the watched `place` is still open, and its agent's turn as
-    /// this host reads it.
-    fn place_state<'a>(&'a self, _place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(async { anyhow::bail!("{} cannot read places", self.name()) })
     }
 
     /// Whether the places this host opens show a name.
@@ -162,6 +150,29 @@ pub(in crate::cli) trait Host: Sync {
     fn places_keep_shells(&self) -> bool {
         true
     }
+}
+
+/// A host that reads the places it opened for workspaces, so a watcher
+/// closes each once its workspace is done.
+pub(in crate::cli) trait Watches: Sync {
+    /// Whether the watched `place` is still open, and its agent's turn as
+    /// this host reads it.
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>>;
+
+    /// What tells `place` apart from a later place under the same ID, for a
+    /// host that reuses IDs.
+    fn place_instance<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
+        Box::pin(async { Ok(None) })
+    }
+}
+
+/// A host whose places carry their own ownership, so Shoal closes one the
+/// daemon keeps no record of. A host without it has only the record, and its
+/// places without one stay open.
+pub(in crate::cli) trait Closes: Sync {
+    /// Close `place`, one this host opened for a workspace, which the
+    /// daemon keeps no record of.
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>>;
 }
 
 /// A host that keeps agents in sessions of its own, which `shoal attach`

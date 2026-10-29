@@ -8,7 +8,7 @@ use std::{future::Future, path::PathBuf, process::Stdio, time::Duration};
 
 use anyhow::{Context as _, Result};
 
-use super::{Host, hosts};
+use super::{Host, host::Watches, hosts};
 use crate::{
     cli::{client, context::Context, installed, internal},
     env,
@@ -46,7 +46,10 @@ pub(super) async fn start_watcher(
     place: &str,
     workspace: &str,
 ) -> Result<()> {
-    let instance = host.place_instance(place).await?;
+    let instance = match host.watches() {
+        Some(watches) => watches.place_instance(place).await?,
+        None => None,
+    };
     let kept_at = kept_completion(ctx, workspace).await?;
     let argv = internal::internal_command(
         &ctx.paths,
@@ -105,6 +108,9 @@ pub async fn watch(
     kept_at: Option<String>,
 ) -> Result<i32> {
     let host = super::named(&host).with_context(|| format!("unknown terminal host {host}"))?;
+    let watches = host
+        .watches()
+        .with_context(|| format!("{} cannot read places", host.name()))?;
     let _closing = Marker::record(
         &ctx.paths,
         host.name().as_str(),
@@ -126,7 +132,7 @@ pub async fn watch(
     };
     let earlier = EarlierCompletion(kept_at);
     let close = async || close_place(ctx, host, &place).await;
-    close_when_due(host, &place, earlier, lifecycle, close, || {
+    close_when_due(watches, &place, earlier, lifecycle, close, || {
         ctx.paths.state.exists()
     })
     .await?;
@@ -148,10 +154,11 @@ async fn close_place(ctx: &Context, host: &dyn Host, place: &Watched) -> Result<
 /// own ownership.
 async fn close_unrecorded(host: &dyn Host, place: &Watched, closed: PlaceClose) -> Result<()> {
     match closed {
-        PlaceClose::NotRecorded if host.closes_unrecorded_places() => {
-            host.close_place(&place.id).await
-        }
-        PlaceClose::NotRecorded | PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
+        PlaceClose::NotRecorded => match host.closes() {
+            Some(closes) => closes.close_place(&place.id).await,
+            None => Ok(()),
+        },
+        PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
     }
 }
 
@@ -162,7 +169,7 @@ async fn close_unrecorded(host: &dyn Host, place: &Watched, closed: PlaceClose) 
 /// close, whatever the daemon reports; a failed host query, like a failed
 /// daemon query, proves neither, and neither does the `earlier` completion.
 async fn close_when_due<F>(
-    host: &dyn Host,
+    host: &dyn Watches,
     place: &Watched,
     mut earlier: EarlierCompletion,
     mut lifecycle: impl FnMut() -> F,

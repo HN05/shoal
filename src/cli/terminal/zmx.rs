@@ -17,7 +17,7 @@ use tokio::process::Command;
 
 use super::{
     ChatStart, Demo, Host, Owner, OwnerKind, PlaceState, Session, Start, Watched,
-    host::{Demos, Prompts, Sessions},
+    host::{Closes, Demos, Prompts, Sessions, Watches},
 };
 use crate::{
     cli::agents::ensure_program,
@@ -101,10 +101,34 @@ impl Host for Zmx {
         false
     }
 
+    fn demos(&self) -> Option<&dyn Demos> {
+        Some(self)
+    }
+
+    fn prompts(&self) -> Option<&dyn Prompts> {
+        Some(self)
+    }
+
+    fn sessions(&self) -> Option<&dyn Sessions> {
+        Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+
+    fn closes(&self) -> Option<&dyn Closes> {
+        Some(self)
+    }
+}
+
+impl Closes for Zmx {
     fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(kill(place))
     }
+}
 
+impl Watches for Zmx {
     /// zmx reuses session names, so a session is told apart by its process
     /// and creation time.
     fn place_instance<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<Option<String>>> {
@@ -128,18 +152,6 @@ impl Host for Zmx {
                 PlaceState::Gone
             })
         })
-    }
-
-    fn demos(&self) -> Option<&dyn Demos> {
-        Some(self)
-    }
-
-    fn prompts(&self) -> Option<&dyn Prompts> {
-        Some(self)
-    }
-
-    fn sessions(&self) -> Option<&dyn Sessions> {
-        Some(self)
     }
 }
 

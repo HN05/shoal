@@ -7,7 +7,10 @@ use tokio::process::Command;
 
 use futures_util::future::BoxFuture;
 
-use super::{ChatStart, Demo, Host, Options, PlaceState, Start, Watched, host::Demos};
+use super::{
+    ChatStart, Demo, Host, Options, PlaceState, Start, Watched,
+    host::{Closes, Demos, Watches},
+};
 
 mod demo;
 use crate::{
@@ -90,14 +93,6 @@ impl Host for Herdr {
         current_tab()
     }
 
-    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(close_tab(place))
-    }
-
-    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
-        Box::pin(tab_state(&place.id))
-    }
-
     fn names_places(&self) -> bool {
         true
     }
@@ -108,6 +103,26 @@ impl Host for Herdr {
 
     fn demos(&self) -> Option<&dyn Demos> {
         Some(self)
+    }
+
+    fn watches(&self) -> Option<&dyn Watches> {
+        Some(self)
+    }
+
+    fn closes(&self) -> Option<&dyn Closes> {
+        Some(self)
+    }
+}
+
+impl Closes for Herdr {
+    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
+        Box::pin(close_tab(place))
+    }
+}
+
+impl Watches for Herdr {
+    fn place_state<'a>(&'a self, place: &'a Watched) -> BoxFuture<'a, Result<PlaceState>> {
+        Box::pin(tab_state(&place.id))
     }
 }
 
