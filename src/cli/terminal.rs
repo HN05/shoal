@@ -281,9 +281,17 @@ pub(in crate::cli) trait Host: Sync {
         None
     }
 
-    /// Close `place`, one this host opened for a workspace.
+    /// Close `place`, one this host opened for a workspace, which the
+    /// daemon keeps no record of.
     fn close_place<'a>(&'a self, _place: &'a str) -> BoxFuture<'a, Result<()>> {
         Box::pin(async { anyhow::bail!("{} cannot close places", self.name()) })
+    }
+
+    /// Whether a place this host opened is Shoal's to close without the
+    /// daemon's record of it. A host whose places carry no ownership of their
+    /// own has only the record, and its places without one stay open.
+    fn closes_unrecorded_places(&self) -> bool {
+        true
     }
 
     /// What tells `place` apart from a later place under the same ID, for a

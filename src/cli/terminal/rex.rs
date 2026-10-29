@@ -116,8 +116,9 @@ impl Host for Rex {
         var("REX_BLOCK")
     }
 
-    fn close_place<'a>(&'a self, place: &'a str) -> BoxFuture<'a, Result<()>> {
-        Box::pin(async move { Server::here()?.close(place).await })
+    /// A block carries no ownership, so only the daemon's record closes it.
+    fn closes_unrecorded_places(&self) -> bool {
+        false
     }
 
     /// Rex reads no agent state, so a block is only open or gone.

@@ -138,9 +138,20 @@ pub async fn watch(
 /// workspace's, otherwise through its host. A place another workspace's
 /// agent took over since stays open.
 async fn close_place(ctx: &Context, host: &dyn Host, place: &Watched) -> Result<()> {
-    match client::close_owned_place(&ctx.paths, &place.workspace, host.name(), &place.id).await? {
-        PlaceClose::NotRecorded => host.close_place(&place.id).await,
-        PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
+    let closed =
+        client::close_owned_place(&ctx.paths, &place.workspace, host.name(), &place.id).await?;
+    close_unrecorded(host, place, closed).await
+}
+
+/// Close `place` through its host when the daemon, which `closed` says
+/// what it did, keeps no record of it, where the host's places prove their
+/// own ownership.
+async fn close_unrecorded(host: &dyn Host, place: &Watched, closed: PlaceClose) -> Result<()> {
+    match closed {
+        PlaceClose::NotRecorded if host.closes_unrecorded_places() => {
+            host.close_place(&place.id).await
+        }
+        PlaceClose::NotRecorded | PlaceClose::Closed | PlaceClose::OwnedElsewhere => Ok(()),
     }
 }
 

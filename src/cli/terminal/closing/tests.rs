@@ -104,6 +104,8 @@ async fn kept_completion_reads_the_hooks_turn_state() {
 struct FakeHost {
     state: Result<PlaceState, ()>,
     closed: std::sync::Mutex<Vec<String>>,
+    /// Whether its places prove their own ownership, as zmx labels do.
+    labelled: bool,
 }
 
 impl FakeHost {
@@ -111,6 +113,7 @@ impl FakeHost {
         Self {
             state,
             closed: std::sync::Mutex::default(),
+            labelled: true,
         }
     }
 
@@ -134,6 +137,10 @@ impl Host for FakeHost {
 
     fn background_note(&self, name: &str) -> String {
         name.to_owned()
+    }
+
+    fn closes_unrecorded_places(&self) -> bool {
+        self.labelled
     }
 
     fn close_place<'a>(
@@ -346,4 +353,29 @@ fn a_closing_place_is_recorded_until_its_watcher_ends() {
     assert!(!path.exists());
     assert_eq!(Marker::path(&paths, "herdr", "workspace", "a/b"), None);
     assert_eq!(Marker::path(&paths, "herdr", "workspace", ""), None);
+}
+
+#[tokio::test]
+async fn a_place_without_a_record_closes_only_where_it_proves_its_owner() {
+    let place = Watched {
+        id: "place-1".into(),
+        workspace: "workspace".into(),
+        instance: None,
+    };
+    let labelled = FakeHost::new(Ok(PlaceState::Open(None)));
+    let unlabelled = FakeHost {
+        labelled: false,
+        ..FakeHost::new(Ok(PlaceState::Open(None)))
+    };
+    for closed in [
+        PlaceClose::NotRecorded,
+        PlaceClose::Closed,
+        PlaceClose::OwnedElsewhere,
+    ] {
+        close_unrecorded(&labelled, &place, closed).await.unwrap();
+        // A Rex block whose creation record failed may hold another agent now.
+        close_unrecorded(&unlabelled, &place, closed).await.unwrap();
+    }
+    assert_eq!(labelled.closed(), ["place-1"]);
+    assert!(unlabelled.closed().is_empty());
 }
