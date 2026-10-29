@@ -1079,10 +1079,12 @@ environment or settings choose a lifetime.
 Agent shortcuts use the execution wrapper: by default Codex CLI gets full access without
 approvals and Claude runs with its own settings, plus permission for a workspace's
 agent to run the Shoal commands that finish its assignment, so completion never
-depends on Claude Code's auto-mode check. A workspace's agent also gets the
-repository's workspaces directory as a working directory, so it works in the
-children it splits there without leaving its sandbox or permission rules; chats
-split nothing and get none. Both trust the repository's checkout,
+depends on Claude Code's auto-mode check. Every agent, chats included, gets `/tmp`
+and the system temporary directory as working directories, so it reads what the
+tools it runs leave there without a permission prompt. A workspace's agent also
+gets the repository's workspaces directory as one, so it works in the children it
+splits there without leaving its sandbox or permission rules; chats split nothing
+and get none of that. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy

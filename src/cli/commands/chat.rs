@@ -310,7 +310,8 @@ async fn start_beside(
 }
 
 /// The agent's configured launcher with the chat instructions, its opening
-/// task and the hooks that deliver its messages, run at the checkout.
+/// task, the hooks that deliver its messages and the temporary directories,
+/// run at the checkout.
 fn command(
     settings: &Effective,
     repo: &Repository,
@@ -333,7 +334,11 @@ fn command(
         name,
         instructions,
         opening,
-        agents::chat_hook_args(settings.integration(name))?,
+        [
+            agents::chat_hook_args(settings.integration(name))?,
+            agents::temp_dir_args(settings, name),
+        ]
+        .concat(),
         args,
     );
     configured::expand_outside_workspace(

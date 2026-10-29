@@ -1055,10 +1055,11 @@ environment it runs with sets that variable; a lifetime in
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
 `resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`).
-`add_dir` gives a workspace's agent, fresh or restored, the repository's workspaces
-directory, where `shoal split` puts children, as another working directory
+`add_dir` gives an agent, fresh or restored, another working directory
 `{directory}`, so a sandbox or a setting such as Claude Code's
-`blockReadsOutsideWorkingDirectories` lets it work in them; an empty list gives none.
+`blockReadsOutsideWorkingDirectories` lets it work there: `/tmp` and the system
+temporary directory for every agent and chat, and for a workspace's agent the
+repository's workspaces directory, where `shoal split` puts children. An empty list gives none.
 Each entry replaces the built-in one for Claude, Codex and the other built-in tools.
 Otherwise, for AI tool launches, `{prompt}` combines the rendered agent guidance and
 issue prompt, separated by a blank line. Without that placeholder, nonempty context

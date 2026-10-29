@@ -427,7 +427,7 @@ on a screen and longer on a dense one, without idle stretches. VHS renders
 headlessly, so look at the screenshots yourself before sharing them. Keep the
 tape, its output and any temporary state under the workspace's ignored build
 directory, such as `target/`, never in `/tmp` or elsewhere outside the
-workspace, where reading them needs the user's permission. Attach screenshots
+workspace, so they go with it. Attach screenshots
 and videos with `shoal pr comment --attach`, and put text frames in code blocks.
 
 ## Secrets

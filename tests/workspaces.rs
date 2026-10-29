@@ -4872,7 +4872,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
-fn workspace_agents_get_the_workspaces_directory_ahead_of_their_prompt() {
+fn workspace_agents_get_the_temporary_and_workspaces_directories_ahead_of_their_prompt() {
     let fixture = Fixture::new();
     let workspace = fixture.add("directories");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -4884,6 +4884,8 @@ fn workspace_agents_get_the_workspaces_directory_ahead_of_their_prompt() {
         install_test_script_with_mode(&stub, "#!/bin/sh\nprintf '%s\\0' \"$@\"\n", 0o700);
     }
     let claude_dir = format!("--add-dir={directory}");
+    // Every agent may also read the temporary directories.
+    let tmp_dir = format!("--add-dir={}", fs::canonicalize("/tmp").unwrap().display());
     for (agent, expected) in [
         ("claude", vec![claude_dir.as_str(), "user prompt"]),
         ("codex", vec!["--add-dir", directory, "user prompt"]),
@@ -4910,6 +4912,9 @@ fn workspace_agents_get_the_workspaces_directory_ahead_of_their_prompt() {
         );
         if agent == "pi" {
             assert!(!args.iter().any(|arg| arg.contains("add-dir")), "{args:?}");
+        }
+        if agent == "claude" {
+            assert!(args.contains(&tmp_dir.as_str()), "{args:?}");
         }
     }
 }
@@ -19279,7 +19284,7 @@ fn agents_mark_their_workspace_ready_for_review_until_new_commits() {
 }
 
 /// Agent arguments without the hooks that deliver agent messages and the
-/// workspaces directory, which built-in launches add.
+/// other working directories, which built-in launches add.
 fn without_launch_arguments<'a>(args: &[&'a str]) -> Vec<&'a str> {
     let mut remaining = Vec::new();
     let mut args = args.iter();

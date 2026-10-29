@@ -165,3 +165,27 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
         assert!(!error.to_string().contains("proxy"), "{error}");
     }
 }
+
+#[test]
+fn agents_get_each_temporary_directory_as_they_resolve_it() {
+    let config: crate::config::Config = toml::from_str("").unwrap();
+    let settings = config
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
+    let directories: BTreeSet<PathBuf> = [PathBuf::from("/tmp"), std::env::temp_dir()]
+        .iter()
+        .map(|directory| fs::canonicalize(directory).unwrap())
+        .collect();
+    let claude: Vec<OsString> = directories
+        .iter()
+        .map(|directory| format!("--add-dir={}", directory.display()).into())
+        .collect();
+    assert_eq!(temp_dir_args(&settings, "claude"), claude);
+    let codex: Vec<OsString> = directories
+        .iter()
+        .flat_map(|directory| ["--add-dir".into(), directory.into()])
+        .collect();
+    assert_eq!(temp_dir_args(&settings, "codex"), codex);
+    // A tool that takes no other working directory gets none.
+    assert!(temp_dir_args(&settings, "pi").is_empty());
+}
