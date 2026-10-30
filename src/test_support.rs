@@ -122,6 +122,24 @@ pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
     command
 }
 
+/// Write `script` to `path` as an executable from a child process. A test
+/// that forks while this binary holds the file open for writing leaves the
+/// descriptor in its child until the child execs, and running the script
+/// meanwhile fails with "Text file busy".
+pub fn executable(path: &Path, script: &str) {
+    use std::io::Write as _;
+    let mut writer = Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 755 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = writer.stdin.take().unwrap();
+    input.write_all(script.as_bytes()).unwrap();
+    drop(input);
+    assert!(writer.wait().unwrap().success(), "write {}", path.display());
+}
+
 /// Poll through setup and verify that an explicit gate still holds the future.
 pub async fn assert_pending(future: impl std::future::Future) {
     tokio::pin!(future);

@@ -208,7 +208,6 @@ async fn only_an_agent_without_a_failure_hook_has_its_turn_ended_by_the_proxy() 
 
 #[tokio::test]
 async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release() {
-    use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let paths = crate::paths::Paths::for_test(root.path());
     let binary = root.path().join("shoal");
@@ -216,8 +215,7 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     let install = |script: &str| {
         // A new file, as an upgrade puts one there.
         let staged = root.path().join("staged");
-        std::fs::write(&staged, script).unwrap();
-        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_support::executable(&staged, script);
         std::fs::rename(&staged, &binary).unwrap();
     };
     install("#!/bin/sh\nexit 1\n");
