@@ -78,6 +78,11 @@ fn daemon_error_codes_preserve_wire_spellings() {
         (ErrorCode::OperationFailed, "operation_failed"),
         (ErrorCode::ExecutionFailed, "execution_failed"),
         (ErrorCode::UnprovenStop, "unproven_stop"),
+        (ErrorCode::RestartWaits, "restart_waits"),
+        (ErrorCode::NotFound, "not_found"),
+        (ErrorCode::NameTaken, "name_taken"),
+        (ErrorCode::NotReady, "not_ready"),
+        (ErrorCode::UnsavedWork, "unsaved_work"),
         (ErrorCode::Unknown("future_code".into()), "future_code"),
     ] {
         let wire = json!({"protocol": VERSION, "id": 7, "type": "error",
@@ -90,7 +95,11 @@ fn daemon_error_codes_preserve_wire_spellings() {
         assert_eq!(remote.code, code);
         assert_eq!(remote.message, "failed");
         let display = match code {
-            ErrorCode::OperationFailed => "failed".to_owned(),
+            ErrorCode::OperationFailed
+            | ErrorCode::NotFound
+            | ErrorCode::NameTaken
+            | ErrorCode::NotReady
+            | ErrorCode::UnsavedWork => "failed".to_owned(),
             _ => format!("{spelling}: failed"),
         };
         assert_eq!(error.to_string(), display);

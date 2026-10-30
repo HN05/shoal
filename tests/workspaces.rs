@@ -445,12 +445,15 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "original",
         "--",
         binary,
+        "--json",
         "branch",
         "rename",
         "other",
         "stolen",
     ]);
     assert!(!denied.status.success());
+    let error: Value = serde_json::from_slice(&denied.stderr).unwrap();
+    assert_eq!(error["error"]["code"], "scope_denied", "{error}");
     assert_eq!(
         fixture.ok(&["status", "other"])["workspace"]["branch"],
         "other"
@@ -485,6 +488,19 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     );
     let explicit = fixture.ok(&["branch", "rename", "by-directory", "explicit"]);
     assert_eq!(explicit["name"], "explicit");
+    // JSON errors name the refusal, so programs need not read the message.
+    for (args, code) in [
+        (
+            &["--json", "branch", "rename", "explicit", "other"][..],
+            "name_taken",
+        ),
+        (&["--json", "status", "missing"], "not_found"),
+    ] {
+        let output = fixture.run(args);
+        assert!(!output.status.success(), "{args:?}");
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"]["code"], code, "{args:?}: {error}");
+    }
     assert!(!fixture.run(&["branch", "rename"]).status.success());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(

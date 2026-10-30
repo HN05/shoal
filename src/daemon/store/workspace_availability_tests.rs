@@ -33,6 +33,7 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
                     ensure_name_and_branch_available(&tx, repository_id, name, "unused", except_id)
                         .unwrap_err();
                 assert_eq!(error.to_string(), diagnostic);
+                assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
             }
         }
         let error =
@@ -41,6 +42,7 @@ fn creation_and_rename_share_global_names_and_repository_branches() -> Result<()
             error.to_string(),
             "branch is already owned by workspace worker"
         );
+        assert_eq!(Reason::of(&error), Some(Reason::NameTaken));
         ensure_name_and_branch_available(&tx, "other", "free", "topic", except_id)?;
         ensure_name_and_branch_available(&tx, "repo", "free", "unused", except_id)?;
     }

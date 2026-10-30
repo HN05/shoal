@@ -958,6 +958,16 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "failed: detail",
         ),
         (
+            vec!["--json", "repo", "ls"],
+            json!({"type": "error", "data": {"code": "name_taken", "message": "name taken: worker"}}),
+            "name taken: worker",
+        ),
+        (
+            vec!["repo", "ls"],
+            json!({"type": "error", "data": {"code": "not_found", "message": "unknown workspace: gone"}}),
+            "unknown workspace: gone",
+        ),
+        (
             vec!["run", "--workspace", "worker", "--", "true"],
             json!({"type": "error", "data": {"code": "execution_failed", "message": "failed: detail"}}),
             "execution_failed: failed: detail",

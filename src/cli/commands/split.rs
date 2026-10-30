@@ -17,6 +17,7 @@ use crate::{
         terminal,
         ui::{self, Fallback},
     },
+    daemon::refusal::{Reason, Refusal},
     model::{AgentSession, QueueEntry, Workspace},
     protocol::{AgentMethod, ConfigTarget, ItemMethod, WorkspaceMethod},
     shell,
@@ -216,7 +217,7 @@ async fn load_issue(ctx: &Context, parent: &str, input: &str) -> Result<Issue> {
         .await?
         .into_iter()
         .find(|workspace| workspace.id == parent || workspace.name == parent)
-        .with_context(|| format!("unknown workspace: {parent}"))?;
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {parent}")))?;
     let repository = client::repositories(&ctx.paths)
         .await?
         .into_iter()

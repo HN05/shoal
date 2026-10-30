@@ -478,7 +478,12 @@ async fn accept(
     match scope::authorize(&server.manager, scope, operation).await {
         Ok(caller) => Ok(Some(caller)),
         Err(error) => {
-            let body = Body::error(ErrorCode::ScopeDenied, format!("{error:#}"));
+            // A target that does not exist is refused as such, not as outside the scope.
+            let code = match refusal::Reason::of(&error) {
+                Some(refusal::Reason::NotFound) => ErrorCode::NotFound,
+                _ => ErrorCode::ScopeDenied,
+            };
+            let body = Body::error(code, format!("{error:#}"));
             protocol::write(stream, &Response::new(request_id, body)).await?;
             Ok(None)
         }

@@ -1,4 +1,5 @@
-//! Refusals with a typed reason, which the client API reports as error codes.
+//! Refusals with a typed reason, which the daemon and the client API report
+//! as error codes.
 //! A refusal displays as its message alone, so the CLI shows what it showed
 //! before the reason existed.
 use std::fmt;
@@ -46,6 +47,17 @@ impl fmt::Display for Refusal {
 impl std::error::Error for Refusal {}
 
 impl Reason {
+    /// The code the daemon answers a refusal for this reason with.
+    pub(crate) fn code(self) -> crate::protocol::ErrorCode {
+        use crate::protocol::ErrorCode;
+        match self {
+            Self::NotFound => ErrorCode::NotFound,
+            Self::NameTaken => ErrorCode::NameTaken,
+            Self::NotReady => ErrorCode::NotReady,
+            Self::UnsavedWork => ErrorCode::UnsavedWork,
+        }
+    }
+
     /// The reason of the first refusal in `error`'s chain.
     pub(crate) fn of(error: &anyhow::Error) -> Option<Self> {
         error.chain().find_map(|cause| {

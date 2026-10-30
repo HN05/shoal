@@ -38,6 +38,10 @@ pub(super) fn answered(body: Body) -> Result<Body, ApiError> {
             match code {
                 protocol::ErrorCode::InvalidRequest => ErrorCode::InvalidRequest,
                 protocol::ErrorCode::ScopeDenied => ErrorCode::ScopeDenied,
+                protocol::ErrorCode::NotFound => ErrorCode::NotFound,
+                protocol::ErrorCode::NameTaken => ErrorCode::NameTaken,
+                protocol::ErrorCode::NotReady => ErrorCode::NotReady,
+                protocol::ErrorCode::UnsavedWork => ErrorCode::UnsavedWork,
                 _ => ErrorCode::OperationFailed,
             },
             message,

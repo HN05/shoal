@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    daemon::refusal::Reason,
     forge::review::status::ReviewState,
     protocol::{ErrorCode, RemoteError},
     sim::SimulatorState,
@@ -84,13 +85,15 @@ pub enum Style {
 }
 
 /// A failure as JSON output reports it: under the daemon's code when it has a
-/// specific one, otherwise `command_failed`.
+/// specific one, or the code of a refusal the CLI raised, otherwise
+/// `command_failed`.
 pub fn json_error(error: &anyhow::Error) -> serde_json::Value {
     let code = error
         .downcast_ref::<RemoteError>()
-        .map(|remote| &remote.code)
-        .filter(|code| **code != ErrorCode::OperationFailed)
-        .map_or_else(|| "command_failed".to_owned(), ToString::to_string);
+        .map(|remote| remote.code.clone())
+        .or_else(|| Reason::of(error).map(Reason::code))
+        .filter(|code| *code != ErrorCode::OperationFailed)
+        .map_or_else(|| "command_failed".to_owned(), |code| code.to_string());
     serde_json::json!({"error": {"code": code, "message": format!("{error:#}")}})
 }
 

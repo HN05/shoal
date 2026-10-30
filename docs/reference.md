@@ -13,9 +13,10 @@ a Herdr tab; the commands and shells Shoal runs only inherit one. An agent Shoal
 app launch opens, gets JSON by default only when its own environment sets it.
 
 A JSON error is `{"error": {"code": ..., "message": ...}}`. Programs tell
-failures apart by `code`, never by the message, which may change: `scope_denied`
-refuses a workspace process what its scope does not cover, `command_failed` is
-a failure without a specific code, and any other code is the daemon's, as it
+failures apart by `code`, never by the message, which may change. A refusal
+carries the client API's [error code](../crates/shoal-client/README.md#errors)
+for it, such as `not_found`, `name_taken` or `scope_denied`; `command_failed`
+is a failure without a specific code, and any other code is the daemon's, as it
 sent it. A command that waits on an approval it requested is not an error: it
 exits 2 with `code: "approval_pending"` or `"approval_denied"` on stdout.
 

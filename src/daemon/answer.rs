@@ -4,7 +4,10 @@ use anyhow::Result;
 use futures_util::{FutureExt, future::BoxFuture};
 use tokio::{io::AsyncWrite, net::UnixStream, sync::OwnedRwLockReadGuard};
 
-use super::workspace::{self, Manager};
+use super::{
+    refusal::Reason,
+    workspace::{self, Manager},
+};
 use crate::protocol::{self, Body, ErrorCode, Response};
 
 #[cfg(test)]
@@ -46,10 +49,7 @@ impl Answer {
             Ok(items) => Self::Pages(
                 protocol::frame_pages(items).map(|pages| pages.into_iter().map(page).collect()),
             ),
-            Err(error) => Self::Body(Body::error(
-                ErrorCode::OperationFailed,
-                format!("{error:#}"),
-            )),
+            Err(error) => Self::failed(&error),
         }
     }
 
@@ -103,7 +103,7 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
     } else if error.downcast_ref::<workspace::RestartWaits>().is_some() {
         ErrorCode::RestartWaits
     } else {
-        ErrorCode::OperationFailed
+        Reason::of(error).map_or(ErrorCode::OperationFailed, Reason::code)
     }
 }
 
@@ -143,8 +143,7 @@ pub(super) async fn answer_wait(
         result = wait => result,
         () = hangup(&mut stream) => return Ok(()),
     };
-    let body = result
-        .unwrap_or_else(|error| Body::error(ErrorCode::OperationFailed, format!("{error:#}")));
+    let body = result.unwrap_or_else(|error| Body::error(error_code(&error), format!("{error:#}")));
     // Hold the operation guard through the write so a restart cannot begin
     // while the reply is in flight.
     let Some(_operation) = manager.gates.try_operation() else {

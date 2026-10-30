@@ -438,6 +438,31 @@ crate::state::open_enum! {
         /// A restart continues once the stopped agent's remaining processes
         /// exit, which the message names.
         RestartWaits => "restart_waits",
+        /// The workspace, repository, link, question or approval does not exist.
+        NotFound => "not_found",
+        /// A workspace, an unfinished rename or a running chat has the name or
+        /// branch.
+        NameTaken => "name_taken",
+        /// The workspace is not ready, or its worktree is not verified as its own.
+        NotReady => "not_ready",
+        /// Removal would delete unsaved work the caller did not confirm.
+        UnsavedWork => "unsaved_work",
+    }
+}
+
+impl ErrorCode {
+    /// Whether a failure's message says all its code does: `operation_failed`
+    /// is every failure without a more specific code, and a refusal's message
+    /// states the refusal.
+    fn in_message(&self) -> bool {
+        matches!(
+            self,
+            Self::OperationFailed
+                | Self::NotFound
+                | Self::NameTaken
+                | Self::NotReady
+                | Self::UnsavedWork
+        )
     }
 }
 
@@ -596,11 +621,10 @@ pub struct RemoteError {
     pub message: String,
 }
 
-/// `operation_failed` is every failure without a more specific code, so only
-/// the specific codes add to the message.
+/// Only a code the message does not state adds to it.
 impl std::fmt::Display for RemoteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.code == ErrorCode::OperationFailed {
+        if self.code.in_message() {
             return f.write_str(&self.message);
         }
         write!(f, "{}: {}", self.code, self.message)
