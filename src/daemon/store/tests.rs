@@ -326,6 +326,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 97 {
         db.execute_batch(CHAT_QUESTIONS)?;
     }
+    if version >= 98 {
+        db.execute_batch(FILE_OWNERS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

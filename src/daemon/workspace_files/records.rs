@@ -7,9 +7,9 @@ use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use super::{AttachedFile, Attacher, FileSource, Owner, layout::Copy};
 
-const COLUMNS: &str = "id,workspace,source,name,title,path,bytes,created_at,attached_by,
-    (SELECT expires_at FROM removed_workspaces r WHERE r.workspace_id=workspace_files.workspace_id
-        AND workspace_files.workspace_id NOT IN (SELECT id FROM workspaces))";
+const COLUMNS: &str = "id,owner,source,name,title,path,bytes,created_at,attached_by,
+    (SELECT expires_at FROM removed_workspaces r WHERE r.workspace_id=workspace_files.owner_id
+        AND workspace_files.owner_id NOT IN (SELECT id FROM workspaces))";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
     Ok(AttachedFile {
@@ -65,7 +65,7 @@ pub(crate) fn record(
             .unwrap_or_default();
         tx.execute(
             "INSERT INTO workspace_files
-                (workspace_id,workspace,parent_id,repository_id,source,name,title,path,bytes,
+                (owner_id,owner,parent_id,repository_id,source,name,title,path,bytes,
                     created_at,attached_by)
                 SELECT id,name,parent_workspace_id,repository_id,?2,?3,?4,?5,?6,unixepoch(),?7
                 FROM workspaces WHERE id=?1
@@ -112,7 +112,7 @@ pub(super) fn record_all(
 pub(super) fn list(db: &Connection, workspace_id: &str) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE workspace_id=?1 ORDER BY id"
+            "SELECT {COLUMNS} FROM workspace_files WHERE owner_id=?1 ORDER BY id"
         ))?
         .query_map([workspace_id], row)?
         .collect::<rusqlite::Result<_>>()?)
@@ -124,7 +124,7 @@ pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedF
     Ok(db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
-                AND workspace_id NOT IN (SELECT workspace_id FROM executions)
+                AND owner_id NOT IN (SELECT workspace_id FROM executions)
                 ORDER BY id"
         ))?
         .query_map([repository_id], row)?
@@ -135,9 +135,9 @@ pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedF
 pub(super) fn removed_owner(db: &Connection, selector: &str) -> Result<Option<Owner>> {
     Ok(db
         .query_row(
-            "SELECT workspace_id,workspace,repository_id,parent_id FROM workspace_files
-                WHERE (workspace_id=?1 OR workspace=?1)
-                    AND workspace_id NOT IN (SELECT id FROM workspaces)
+            "SELECT owner_id,owner,repository_id,parent_id FROM workspace_files
+                WHERE (owner_id=?1 OR owner=?1)
+                    AND owner_id NOT IN (SELECT id FROM workspaces)
                 ORDER BY id DESC LIMIT 1",
             [selector],
             owner,
@@ -150,9 +150,9 @@ pub(super) fn removed_owner(db: &Connection, selector: &str) -> Result<Option<Ow
 pub(super) fn kept(db: &Connection) -> Result<Vec<Owner>> {
     Ok(db
         .prepare(
-            "SELECT workspace_id,workspace,repository_id,parent_id FROM workspace_files
-                WHERE workspace_id NOT IN (SELECT id FROM workspaces)
-                GROUP BY workspace_id ORDER BY MIN(id)",
+            "SELECT owner_id,owner,repository_id,parent_id FROM workspace_files
+                WHERE owner_id NOT IN (SELECT id FROM workspaces)
+                GROUP BY owner_id ORDER BY MIN(id)",
         )?
         .query_map([], owner)?
         .collect::<rusqlite::Result<_>>()?)
@@ -163,9 +163,9 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Owner>> {
 pub(super) fn expired(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
     Ok(db
         .prepare(
-            "SELECT DISTINCT workspace_id FROM workspace_files WHERE repository_id=?1
-                AND workspace_id NOT IN (SELECT id FROM workspaces)
-                AND workspace_id NOT IN (SELECT workspace_id FROM removed_workspaces)",
+            "SELECT DISTINCT owner_id FROM workspace_files WHERE repository_id=?1
+                AND owner_id NOT IN (SELECT id FROM workspaces)
+                AND owner_id NOT IN (SELECT workspace_id FROM removed_workspaces)",
         )?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
@@ -184,7 +184,7 @@ pub(super) fn forget(db: &mut Connection, ids: &[i64]) -> Result<()> {
 /// Forget every record of the workspace `workspace_id`.
 pub(super) fn forget_workspace(db: &Connection, workspace_id: &str) -> Result<()> {
     db.execute(
-        "DELETE FROM workspace_files WHERE workspace_id=?1",
+        "DELETE FROM workspace_files WHERE owner_id=?1",
         [workspace_id],
     )?;
     Ok(())
@@ -195,12 +195,12 @@ pub(super) fn forget_workspace(db: &Connection, workspace_id: &str) -> Result<()
 /// its own parent, in the transaction that deletes it, before its row goes.
 pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result<()> {
     tx.execute(
-        "DELETE FROM workspace_files WHERE workspace_id=?1 AND source!=?2",
+        "DELETE FROM workspace_files WHERE owner_id=?1 AND source!=?2",
         params![workspace_id, FileSource::Result],
     )?;
     tx.execute(
-        "UPDATE workspace_files SET workspace=(SELECT name FROM workspaces WHERE id=?1)
-            WHERE workspace_id=?1",
+        "UPDATE workspace_files SET owner=(SELECT name FROM workspaces WHERE id=?1)
+            WHERE owner_id=?1",
         [workspace_id],
     )?;
     tx.execute(

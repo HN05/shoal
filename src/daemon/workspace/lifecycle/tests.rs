@@ -1157,7 +1157,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .store
         .run(move |db| {
             Ok(db.query_row(
-                "SELECT parent_id FROM workspace_files WHERE workspace_id=?1",
+                "SELECT parent_id FROM workspace_files WHERE owner_id=?1",
                 [id],
                 |row| row.get(0),
             )?)

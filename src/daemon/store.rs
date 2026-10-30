@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 97;
+const SCHEMA_VERSION: i64 = 98;
 
 #[cfg(test)]
 mod benchmark;
@@ -442,6 +442,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (95, EXECUTION_AGENT_PARENTS, None),
     (96, FILE_TITLES, None),
     (97, CHAT_QUESTIONS, None),
+    (98, FILE_OWNERS, None),
 ];
 
 /// Whether an agent asked the question in its chat, where the user may
@@ -468,6 +469,11 @@ const EARLIER_ATTACHED_FILES: &str =
 
 /// What an attached file is, as whoever attached it said.
 const FILE_TITLES: &str = "ALTER TABLE workspace_files ADD COLUMN title TEXT;";
+
+/// The workspace or chat each file is attached to, whose IDs never collide,
+/// and its name then.
+const FILE_OWNERS: &str = "ALTER TABLE workspace_files RENAME COLUMN workspace_id TO owner_id;
+    ALTER TABLE workspace_files RENAME COLUMN workspace TO owner;";
 
 /// The JSON array of paths of the files attached to an agent message.
 const AGENT_MESSAGE_ATTACHMENTS: &str =
