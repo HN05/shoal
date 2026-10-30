@@ -15,6 +15,9 @@ pub enum FileMethod {
         workspace: String,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::daemon::workspace_files::NewFile>,
+        /// The chat whose agent sends the request, which attaches them.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sender_chat: Option<String>,
     },
     /// Delete the attached files of a workspace or chat, only those with one
     /// of `names` and the records `ids` when there are any; without one,

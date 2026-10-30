@@ -74,9 +74,12 @@ pub(super) async fn add(
 ) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
     let workspace = select_owner(ctx, workspace).await?;
-    let added =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::AddFiles { workspace, files })
-            .await?;
+    let method = FileMethod::AddFiles {
+        workspace,
+        files,
+        sender_chat: crate::env::chat(),
+    };
+    let added = client::pages::<AttachedFile>(&ctx.paths, method).await?;
     ctx.show(&added, |added| {
         let now = crate::time::unix_seconds() as i64;
         let rows = added.iter().map(|file| cells(file, now)).collect();

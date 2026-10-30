@@ -19,8 +19,12 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     let files = match method {
         FileMethod::ListFiles { workspace } => manager.attached_files(&workspace).await,
-        FileMethod::AddFiles { workspace, files } => {
-            let attacher = manager.attacher(caller).await;
+        FileMethod::AddFiles {
+            workspace,
+            files,
+            sender_chat,
+        } => {
+            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
             manager
                 .add_attached_files(&workspace, files, &attacher)
                 .await

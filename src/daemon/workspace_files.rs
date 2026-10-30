@@ -54,6 +54,13 @@ pub enum Attacher {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
     },
+    /// A request from a chat's agent, which runs outside any execution.
+    Chat {
+        /// The chat's agent, named as `--agent` names it.
+        agent: String,
+        /// The chat's ID.
+        chat: String,
+    },
 }
 
 /// The most files one completion hands back, which keeps the completion that
@@ -205,12 +212,17 @@ pub(crate) async fn discard(kept: Kept) {
 
 impl Manager {
     /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, else the user.
-    pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
-        let Some(agent) = (match caller {
-            Some(caller) => self.caller_agent(caller).await,
-            None => None,
-        }) else {
+    /// from, else the running chat `sender_chat` whose agent sends it
+    /// outside any workspace scope, else the user.
+    pub(crate) async fn attacher(
+        &self,
+        caller: Option<&Caller>,
+        sender_chat: Option<&str>,
+    ) -> Attacher {
+        let Some(caller) = caller else {
+            return self.chat_attacher(sender_chat).await;
+        };
+        let Some(agent) = self.caller_agent(caller).await else {
             return Attacher::User;
         };
         Attacher::Agent {
@@ -221,6 +233,26 @@ impl Manager {
             ),
             agent: agent.name,
             execution: agent.execution,
+        }
+    }
+
+    /// The running chat `sender_chat` as an attacher, else the user, as for
+    /// a chat that has ended or a request from outside any chat.
+    async fn chat_attacher(&self, sender_chat: Option<&str>) -> Attacher {
+        let running = match sender_chat {
+            Some(chat) => self.running_chat(chat).await,
+            None => return Attacher::User,
+        };
+        match running {
+            Ok(Some(chat)) => Attacher::Chat {
+                agent: chat.agent,
+                chat: chat.id,
+            },
+            Ok(None) => Attacher::User,
+            Err(error) => {
+                crate::daemon::log!("attaching chat unknown: {error:#}");
+                Attacher::User
+            }
         }
     }
 
