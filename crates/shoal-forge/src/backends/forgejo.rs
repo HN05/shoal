@@ -27,6 +27,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
+        approval::RUNS_PAGE,
         checks::{CheckLog, plain},
         run::NewRun,
         run_action::Run,
@@ -715,9 +716,9 @@ impl Backend for Forgejo {
     }
 
     /// Forgejo marks the runs that wait for approval among the commit's.
-    fn waiting_runs_path(&self, head: &str) -> Option<String> {
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
         Some(format!(
-            "actions/runs?limit=50&page=1&head_sha={}",
+            "actions/runs?limit={RUNS_PAGE}&page={page}&head_sha={}",
             encode(head, false)
         ))
     }

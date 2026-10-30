@@ -5,15 +5,15 @@ use super::*;
 #[test]
 fn each_forge_lists_the_runs_that_may_wait_its_own_way() -> Result<()> {
     let path = |remote: &str| -> Result<Option<String>> {
-        Ok(ForgeRepo::parse(remote)?.kind.waiting_runs_path("abc"))
+        Ok(ForgeRepo::parse(remote)?.kind.waiting_runs_path("abc", 2))
     };
     assert_eq!(
         path("https://github.com/team/repo")?.as_deref(),
-        Some("actions/runs?head_sha=abc&status=action_required&per_page=100")
+        Some("actions/runs?head_sha=abc&status=action_required&per_page=50&page=2")
     );
     assert_eq!(
         path("https://codeberg.org/team/repo")?.as_deref(),
-        Some("actions/runs?limit=50&page=1&head_sha=abc")
+        Some("actions/runs?limit=50&page=2&head_sha=abc")
     );
     for remote in [
         "https://gitlab.com/team/repo",

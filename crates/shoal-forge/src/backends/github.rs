@@ -21,6 +21,7 @@ use crate::{
     capability::{Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
+        approval::RUNS_PAGE,
         checks::plain,
         id,
         run::{NewRun, workflow_segment},
@@ -785,9 +786,9 @@ impl Backend for GitHub {
     }
 
     /// GitHub filters the runs that wait for approval itself.
-    fn waiting_runs_path(&self, head: &str) -> Option<String> {
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
         Some(format!(
-            "actions/runs?head_sha={}&status=action_required&per_page=100",
+            "actions/runs?head_sha={}&status=action_required&per_page={RUNS_PAGE}&page={page}",
             encode(head, false)
         ))
     }

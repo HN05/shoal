@@ -3268,7 +3268,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
             "reviews": [], "mergeable": "MERGEABLE", "statusCheckRollup": []}},
         "GET repos/team/project/pulls/8/comments": {"body": [[]]},
         "GET repos/team/project/pulls/8": {"body": open},
-        "GET repos/team/project/actions/runs?head_sha=head&status=action_required&per_page=100":
+        "GET repos/team/project/actions/runs?head_sha=head&status=action_required&per_page=50&page=1":
             {"body": {"total_count": 1, "workflow_runs": [run(21, "action_required")]}},
         "GET repos/team/project/actions/runs/21": {"body": run(21, "action_required")},
         "GET repos/team/project/actions/runs/22": {"body": run(22, "success")},
@@ -3363,8 +3363,12 @@ fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() 
         "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 0, "statuses": []}},
         "GET repos/team/project/pulls/8/reviews?limit=50&page=1": {"body": []},
         "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
-        "GET repos/team/project/actions/runs?limit=50&page=1&head_sha=head":
-            {"body": {"workflow_runs": [run(2766, true), run(2765, false)], "total_count": 2}},
+        // The waiting run is on the second page, after a full first page.
+        "GET repos/team/project/actions/runs?limit=50&page=1&head_sha=head": {"body": {
+            "workflow_runs": (2700..2750).map(|number| run(number, false)).collect::<Vec<_>>(),
+            "total_count": 51}},
+        "GET repos/team/project/actions/runs?limit=50&page=2&head_sha=head":
+            {"body": {"workflow_runs": [run(2766, true)], "total_count": 51}},
     }));
     let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--workspace", "topic"])[0];
     assert_eq!(

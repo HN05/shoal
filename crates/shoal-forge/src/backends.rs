@@ -592,10 +592,11 @@ pub(crate) trait Backend {
     /// newest first.
     fn runs_path(&self, filter: &RunFilter) -> Result<String>;
 
-    /// The path under the repository that lists the runs on the commit
-    /// `head` that may wait for approval, or `None` where the forge holds no
-    /// runs for it.
-    fn waiting_runs_path(&self, _head: &str) -> Option<String> {
+    /// The path under the repository that lists page `page` of the runs on
+    /// the commit `head` that may wait for approval,
+    /// [`crate::ci::approval::RUNS_PAGE`] to a page, or `None` where the forge
+    /// holds no runs for it.
+    fn waiting_runs_path(&self, _head: &str, _page: u32) -> Option<String> {
         None
     }
 
@@ -1264,8 +1265,8 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.runs_path(filter))
     }
 
-    fn waiting_runs_path(&self, head: &str) -> Option<String> {
-        dispatch!(self, backend => backend.waiting_runs_path(head))
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
+        dispatch!(self, backend => backend.waiting_runs_path(head, page))
     }
 
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {

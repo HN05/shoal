@@ -12,6 +12,9 @@ use crate::{
     transport::api::{HttpMethod, Request},
 };
 
+/// The runs one page of a commit's runs holds.
+pub(crate) const RUNS_PAGE: usize = 50;
+
 /// The runs an approval reached.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunsApproved {
@@ -27,27 +30,33 @@ pub struct WaitingRun {
 }
 
 impl ForgeRepo {
-    /// The runs on the commit `head` that wait for approval; none where the
-    /// forge holds no runs for it.
+    /// The runs on the commit `head` that wait for approval, reading page
+    /// after page while pages are full; none where the forge holds no runs
+    /// for it.
     pub async fn waiting_runs(&self, account: &Account, head: &str) -> Result<Vec<WaitingRun>> {
-        let Some(path) = self.kind.waiting_runs_path(head) else {
-            return Ok(Vec::new());
-        };
-        let value = self
-            .send(account, &Request::get(self.repo_endpoint(&path)))
-            .await?;
-        let runs = self
-            .kind
-            .listed_runs(&value)
-            .context("CI runs are not a list")?;
         let mut waiting = Vec::new();
-        for run in runs {
-            let run = self.kind.run_item(self, run)?;
-            if run.waiting {
-                waiting.push(WaitingRun {
-                    url: run.url,
-                    workflow: run.workflow,
-                });
+        for page in 1.. {
+            let Some(path) = self.kind.waiting_runs_path(head, page) else {
+                break;
+            };
+            let value = self
+                .send(account, &Request::get(self.repo_endpoint(&path)))
+                .await?;
+            let runs = self
+                .kind
+                .listed_runs(&value)
+                .context("CI runs are not a list")?;
+            for run in runs {
+                let run = self.kind.run_item(self, run)?;
+                if run.waiting {
+                    waiting.push(WaitingRun {
+                        url: run.url,
+                        workflow: run.workflow,
+                    });
+                }
+            }
+            if runs.len() < RUNS_PAGE {
+                break;
             }
         }
         Ok(waiting)
