@@ -372,19 +372,7 @@ impl RepoConfig {
     /// [`Stack::resolve`](crate::config::resolve::Stack::resolve) checks again.
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
-        for (name, agent) in &self.agents {
-            crate::validate::name("agent", name)?;
-            for argv in [&agent.command, &agent.resume_command]
-                .into_iter()
-                .flatten()
-            {
-                crate::config::named_commands::validate(&BTreeMap::from([(
-                    name.clone(),
-                    argv.clone(),
-                )]))
-                .with_context(|| format!("agents.{name}"))?;
-            }
-        }
+        crate::config::agents::validate(&self.agents)?;
         self.agent.forge_clis.validate()?;
         for name in [&self.git_profile, &self.agent.git_profile]
             .into_iter()

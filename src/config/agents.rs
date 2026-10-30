@@ -2,6 +2,7 @@
 //! layers, and `[machine.agents.<name>]`: what it needs of this machine.
 use std::{collections::BTreeMap, path::PathBuf};
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{agent::AgentMode, config::options::Options};
@@ -60,6 +61,24 @@ pub struct MachineAgent {
     /// The `[machine.proxies.<name>]` the tool's tracked agents reach their
     /// API through.
     pub proxy: Option<String>,
+}
+
+/// One layer's agents on their own: names and the commands they run.
+/// Bases and the rest resolve across layers, which [`crate::ai::validate`]
+/// checks once they combine.
+pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
+    for (name, agent) in agents {
+        crate::validate::name("agent", name)?;
+        for argv in [&agent.command, &agent.resume_command]
+            .into_iter()
+            .flatten()
+        {
+            let command = BTreeMap::from([(name.clone(), argv.clone())]);
+            crate::config::named_commands::validate(&command)
+                .with_context(|| format!("agents.{name}"))?;
+        }
+    }
+    Ok(())
 }
 
 /// The built-in AI tools' launchers, the lowest layer of `[agents]`.
