@@ -32,6 +32,7 @@ pub struct Run {
     command: Command,
     timeout: Option<Duration>,
     input: Option<Vec<u8>>,
+    input_file: Option<std::fs::File>,
     output_limit: Option<usize>,
 }
 
@@ -41,6 +42,7 @@ impl Run {
             command,
             timeout: None,
             input: None,
+            input_file: None,
             output_limit: None,
         }
     }
@@ -52,6 +54,13 @@ impl Run {
 
     pub fn input(mut self, input: impl Into<Vec<u8>>) -> Self {
         self.input = Some(input.into());
+        self
+    }
+
+    /// Give the child `file` as its standard input, for input too large to
+    /// hold, in place of [`Self::input`].
+    pub fn input_file(mut self, file: std::fs::File) -> Self {
+        self.input_file = Some(file);
         self
     }
 
@@ -76,13 +85,14 @@ impl Run {
     async fn run(mut self) -> io::Result<Output> {
         let described = describe(self.command.as_std());
         let capture = async {
+            let stdin = match (self.input_file, &self.input) {
+                (Some(file), _) => Stdio::from(file),
+                (None, Some(_)) => Stdio::piped(),
+                (None, None) => Stdio::null(),
+            };
             let mut child = self
                 .command
-                .stdin(if self.input.is_some() {
-                    Stdio::piped()
-                } else {
-                    Stdio::null()
-                })
+                .stdin(stdin)
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped())
                 .kill_on_drop(true)

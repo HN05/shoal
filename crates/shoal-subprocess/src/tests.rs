@@ -33,6 +33,19 @@ async fn input_and_output_can_exceed_pipe_buffers() {
 }
 
 #[tokio::test]
+async fn input_can_come_from_a_file() {
+    let mut file = tempfile::tempfile().unwrap();
+    std::io::Write::write_all(&mut file, b"from a file").unwrap();
+    std::io::Seek::rewind(&mut file).unwrap();
+    let output = Run::new(shell("cat"))
+        .input_file(file)
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(output, "from a file");
+}
+
+#[tokio::test]
 async fn output_limits_cover_both_pipes_and_interrupt_nonterminating_children() {
     let output = Run::new(shell("printf 1234; printf 5678 >&2"))
         .output_limit(4)
