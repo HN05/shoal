@@ -222,7 +222,7 @@ async fn simulator_leases_follow_the_workspace_scope() {
 async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
     let daemon = TestDaemon::start().await;
     // An agent whose command is installed wherever the tests run.
-    crate::test_support::configure(&daemon.manager, "[commands]\nprobe = [\"true\"]\n").await;
+    crate::test_support::configure(&daemon.manager, "[agents.probe]\ncommand = [\"true\"]\n").await;
     daemon.workspace("worker").await;
     let client = daemon.client().await;
     let queue = |agent: &str| QueueAgent {
