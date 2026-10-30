@@ -72,4 +72,7 @@ pub struct ImportArgs {
     /// Start new sessions even on the machine that exported the workspace.
     #[arg(long, conflicts_with = "keep_sessions")]
     pub new_sessions: bool,
+    /// Queue the restores of the agents the export stopped, as shoal resume does.
+    #[arg(long)]
+    pub resume: bool,
 }

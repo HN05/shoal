@@ -1,8 +1,11 @@
 //! Checkpoints of workspaces, and opening removed workspaces again from their
 //! removal records.
+use std::collections::BTreeSet;
+
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 
+use super::resume::{Queued, Stopped};
 use crate::{
     cli::{
         client::{self, request},
@@ -175,19 +178,24 @@ async fn reopen(ctx: &Context, workspace: String) -> Result<i32> {
             request::<RestoredWorkspace>(&ctx.paths, RemovalMethod::RestoreWorkspace { workspace }),
         )
         .await?;
-    finish_reopen(ctx, restored, "Restored").await
+    finish_reopen(ctx, restored, "Restored", false).await
 }
 
 /// Set up a workspace the daemon opened again from a removal record, and
-/// link its PRs; `action` begins the report.
+/// link its PRs, then queue its stopped agents when `resume`; `action`
+/// begins the report.
 pub(super) async fn finish_reopen(
     ctx: &Context,
     restored: RestoredWorkspace,
     action: &str,
+    resume: bool,
 ) -> Result<i32> {
-    let Some(reopened) = prepare_reopened(ctx, restored).await? else {
+    let Some(mut reopened) = prepare_reopened(ctx, restored).await? else {
         return Ok(1);
     };
+    if resume {
+        reopened.queue_agents(ctx).await;
+    }
     ctx.emit(&reopened.message(ctx, action), &reopened)?;
     if terminal::follows_caller(ctx) {
         shell::navigate(&reopened.workspace.path, ctx.json)?;
@@ -203,6 +211,9 @@ pub(super) struct Reopened {
     pub(super) workspace: Workspace,
     removed: RemovedWorkspace,
     warnings: Vec<String>,
+    /// The restores of its stopped agents, once queued.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queued: Option<Queued>,
 }
 
 impl Reopened {
@@ -219,6 +230,12 @@ impl Reopened {
             ""
         };
         let agents = match removed.agents.len() {
+            _ if self.queued.is_some() => self
+                .queued
+                .as_ref()
+                .and_then(Queued::summary)
+                .map(|summary| format!("; {summary}"))
+                .unwrap_or_default(),
             0 => String::new(),
             1 => format!(
                 "; shoal resume {} continues its stopped agent",
@@ -235,6 +252,28 @@ impl Reopened {
             workspace.branch,
             workspace.path.display()
         )
+    }
+
+    /// Queue the restores of the agents the removal stopped, warning when
+    /// that fails, since `shoal resume` still restores them.
+    pub(super) async fn queue_agents(&mut self, ctx: &Context) {
+        let executions: BTreeSet<String> = self
+            .removed
+            .agents
+            .iter()
+            .map(|agent| agent.execution.clone())
+            .collect();
+        if executions.is_empty() {
+            return;
+        }
+        let stopped = Stopped::from([(self.workspace.id.clone(), executions)]);
+        match super::resume::queue_stopped(ctx, &stopped).await {
+            Ok(queued) => self.queued = Some(queued),
+            Err(error) => eprintln!(
+                "warning: cannot queue the stopped agents; shoal resume {} restores them: {error:#}",
+                self.workspace.name
+            ),
+        }
     }
 }
 
@@ -268,6 +307,7 @@ pub(super) async fn prepare_reopened(
         workspace,
         removed,
         warnings,
+        queued: None,
     }))
 }
 

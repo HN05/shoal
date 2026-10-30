@@ -29,9 +29,11 @@ pub(super) struct ImportOptions {
     /// The repository to import into instead of the one with the export's
     /// origin.
     pub repository: Option<String>,
-    /// Whether the stopped agents keep their sessions; `None` keeps them on
-    /// the machine that exported the workspace.
+    /// Whether the stopped agents keep their sessions; `None` keeps those
+    /// on the machine that exported the workspace or whose files it carries.
     pub sessions: Option<bool>,
+    /// Whether to queue the restores of the agents the export stopped.
+    pub resume: bool,
 }
 
 /// `shoal move import`: open the workspaces exported to `files`, or to the
@@ -50,7 +52,8 @@ pub(super) async fn import(
         && !file.is_dir()
     {
         let restored = import_workspace(ctx, file, &options).await?;
-        return super::super::restore::finish_reopen(ctx, restored, "Imported").await;
+        return super::super::restore::finish_reopen(ctx, restored, "Imported", options.resume)
+            .await;
     }
     let files = import_files(files)?;
     import_each(ctx, &files, &options).await.report(ctx)
@@ -172,9 +175,13 @@ async fn import_and_prepare(
     options: &ImportOptions,
 ) -> Result<Reopened> {
     let restored = import_workspace(ctx, file, options).await?;
-    super::super::restore::prepare_reopened(ctx, restored)
+    let mut reopened = super::super::restore::prepare_reopened(ctx, restored)
         .await?
-        .context("its setup did not finish")
+        .context("its setup did not finish")?;
+    if options.resume {
+        reopened.queue_agents(ctx).await;
+    }
+    Ok(reopened)
 }
 
 /// The workspaces an import of several files opened, and the files it could

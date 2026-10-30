@@ -1054,6 +1054,43 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
+fn import_resume_queues_the_agents_the_export_stopped() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("handed");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // The agent runs until it is stopped; started again, it records that and
+    // runs until the test releases it, or for at most two minutes.
+    fs::write(
+        path.join("agent.sh"),
+        "if [ -e agent-started ]; then touch agent-restarted; \
+         i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
+         exit 0; fi\n\
+         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    let agent = fixture
+        .command()
+        .args(["claude", "handed"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("agent started", || path.join("agent-started").exists());
+    let file = fixture.root.path().join("handed.shoal");
+    let file = file.to_str().unwrap();
+    fixture.ok(&["move", "export", "handed", "-o", file]);
+    assert!(agent.wait_with_output().unwrap().status.success());
+
+    let repo = fixture.repo.to_str().unwrap();
+    let imported = fixture.ok(&["move", "import", file, "--repo", repo, "--resume"]);
+    let queued = imported["queued"]["queued"].as_array().unwrap();
+    assert_eq!(queued.len(), 1, "{imported}");
+    wait_until("agent restarted", || path.join("agent-restarted").exists());
+    fs::write(path.join("release"), "").unwrap();
+}
+
+#[test]
 fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let fixture = Fixture::new();
     // Once the test arms it, the post-setup hook fails in the second workspace.
