@@ -1140,8 +1140,9 @@ otherwise keeps the forked session's directory.
 `add_dir` gives an agent, fresh or restored, another working directory
 `{directory}`, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent_dirs`
-entry for every agent and chat, and for a workspace's agent the repository's
-workspaces directory, where `shoal split` puts children. An empty list gives none.
+entry for every agent and chat, for a workspace's agent the repository's
+workspaces directory, where `shoal split` puts children and its [temporary
+directory](#temporary-directories) lies, and for a chat its temporary directory. An empty list gives none.
 `agent_dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an
@@ -2314,6 +2315,22 @@ repository's caches, configured or not, while none of its tracked executions and
 no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.
+
+### Temporary directories
+
+Every workspace and chat has its own directory for temporary files, `.tmp/<id>`
+in the repository directory, named by the workspace's or chat's ID. Every process
+Shoal starts in a workspace, its hooks other than `post_remove_cmd`, `shoal work
+env` and a chat's agent get it as `TMPDIR`, so their scratch files stay out of the
+shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
+directory, readable only by you, when it starts a process in the workspace,
+exports its environment or records the chat, reserving the repository directory
+for a registration without one. It marks `.tmp` with the repository and refuses
+to start the process or chat while an unmarked `.tmp` is in the way.
+
+Nothing in it is kept: removing the workspace or ending the chat deletes the
+directory without a checkpoint, and cleanup deletes those that belong to no
+workspace or chat of the repository. Removing the repository deletes `.tmp`.
 
 ### Remove a workspace
 

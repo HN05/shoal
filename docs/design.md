@@ -424,6 +424,14 @@ require disambiguation.
 its source and checkout path. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
 directory only when that directory is empty.
+Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
+repository directory's `.tmp` under its ID, which never changes or comes back
+like a name. Outside the worktree it neither dirties it nor enters checkpoints,
+and its path stays short enough for the Unix sockets tools create in it on
+macOS. It is created only once its record exists and deleted with it, by
+workspace removal or the one operation that ends a chat; the cleanup sweep
+deletes any without a record, since nothing there is worth keeping. The
+post-remove hook runs after it is gone and keeps the inherited `TMPDIR`.
 A contribution is a URL clone registered for work in a repository the user does
 not maintain. `origin` stays the repository itself, so issues, PRs and syncs use
 it; when the user's login cannot push there, the user's fork, created or reused,
@@ -1161,7 +1169,7 @@ configured `agent_dirs`, `/tmp` by default, as working directories, so it reads 
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
 splits there without leaving its sandbox or permission rules; chats split nothing
-and get none of that. Both trust the repository's checkout,
+and get only their temporary directory. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
@@ -2103,7 +2111,7 @@ Implementation order: CLI/daemon, workspaces, ports, simulators, lifecycle
 polish, then filesystem restrictions. Open items:
 
 - **Storage policy:** ownership and retention for run data outside the
-  worktree, caches, logs, and audit history.
+  worktree other than temporary directories, caches, logs, and audit history.
 - **Distribution:** stable service identity across
   upgrades; native Linux service and recovery validation.
 - **Execution environments:** host/guest and cross-user coordination;
