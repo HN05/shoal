@@ -424,7 +424,8 @@ async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<
         return Ok(NamedRun::Agent);
     }
     let target = agent_target(ctx, workspace).await?;
-    let in_workspace = target.is_some();
+    // A named workspace, resolved or not, never falls back to another.
+    let in_workspace = target.is_some() || workspace.is_some();
     // A workspace that does not resolve is the command's own error to report.
     let settings = match target {
         Some(target) => client::settings(&ctx.paths, target).await.ok(),
