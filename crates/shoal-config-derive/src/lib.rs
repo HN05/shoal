@@ -36,81 +36,127 @@ pub fn derive_options(input: TokenStream) -> TokenStream {
 }
 
 fn expand(input: &DeriveInput) -> Result<Tokens> {
-    let resolved = resolved_name(input)?;
-    let Data::Struct(data) = &input.data else {
-        return Err(Error::new_spanned(input, "Options derives only on structs"));
-    };
-    let Fields::Named(named) = &data.fields else {
-        return Err(Error::new_spanned(input, "Options needs named fields"));
-    };
-    let fields = named
-        .named
-        .iter()
-        .map(Field::parse)
-        .collect::<Result<Vec<_>>>()?;
-    let written = &input.ident;
-    let (resolved, definition) = match resolved {
-        Some(name) => {
-            let definition = resolved_struct(&input.vis, written, &name, &fields);
-            (quote!(#name), definition)
-        }
-        None => {
-            if let Some(field) = fields.iter().find(|field| field.changes_type()) {
-                return Err(Error::new_spanned(
-                    &field.ident,
-                    "this option resolves to another type; name the resolved struct",
-                ));
-            }
-            (quote!(Self), quote!())
-        }
-    };
-    let built_in: Vec<_> = fields.iter().filter_map(Field::built_in).collect();
-    let rest =
-        (built_in.len() < fields.len()).then(|| quote!(..::core::default::Default::default()));
-    let merges = fields.iter().map(Field::merge);
-    let bindings = fields.iter().map(|field| &field.ident);
-    let conversions = fields.iter().filter_map(Field::conversion);
-    let values = fields.iter().map(Field::resolved_value);
-    let entries = fields.iter().map(Field::entries);
-    let repository_only = fields.iter().filter_map(Field::repository_only);
-    Ok(quote! {
-        #definition
+    let declaration = Declaration::parse(input)?;
+    let definition = declaration.resolved_struct();
+    let implementation = declaration.implementation();
+    Ok(quote!(#definition #implementation))
+}
 
-        #[allow(unused_variables)]
-        impl crate::config::options::Options for #written {
-            type Resolved = #resolved;
+/// The written struct with its options, checked.
+struct Declaration {
+    written: Ident,
+    visibility: Visibility,
+    /// The resolved struct's name; `None` when options resolve as written.
+    resolved: Option<Ident>,
+    fields: Vec<Field>,
+}
 
-            fn built_in() -> Self {
-                Self {
-                    #(#built_in,)*
-                    #rest
+impl Declaration {
+    fn parse(input: &DeriveInput) -> Result<Self> {
+        let resolved = resolved_name(input)?;
+        let Data::Struct(data) = &input.data else {
+            return Err(Error::new_spanned(input, "Options derives only on structs"));
+        };
+        let Fields::Named(named) = &data.fields else {
+            return Err(Error::new_spanned(input, "Options needs named fields"));
+        };
+        let fields = named
+            .named
+            .iter()
+            .map(Field::parse)
+            .collect::<Result<Vec<_>>>()?;
+        if resolved.is_none()
+            && let Some(field) = fields.iter().find(|field| field.changes_type())
+        {
+            return Err(Error::new_spanned(
+                &field.ident,
+                "this option resolves to another type; name the resolved struct",
+            ));
+        }
+        Ok(Self {
+            written: input.ident.clone(),
+            visibility: input.vis.clone(),
+            resolved,
+            fields,
+        })
+    }
+
+    fn resolved_type(&self) -> Tokens {
+        match &self.resolved {
+            Some(name) => quote!(#name),
+            None => quote!(Self),
+        }
+    }
+
+    /// The resolved struct, with each field's docs and resolved type.
+    fn resolved_struct(&self) -> Tokens {
+        let Some(name) = &self.resolved else {
+            return quote!();
+        };
+        let fields = self.fields.iter().map(Field::resolved_declaration);
+        let visibility = &self.visibility;
+        let doc = format!("[`{}`] after every layer.", self.written);
+        quote! {
+            #[doc = #doc]
+            #[derive(Debug, Clone, ::serde::Serialize)]
+            #visibility struct #name { #(#fields),* }
+        }
+    }
+
+    /// The `Options` implementation, one method per field walk.
+    fn implementation(&self) -> Tokens {
+        let written = &self.written;
+        let resolved = self.resolved_type();
+        let fields = &self.fields;
+        let built_in: Vec<_> = fields.iter().filter_map(Field::built_in).collect();
+        let rest =
+            (built_in.len() < fields.len()).then(|| quote!(..::core::default::Default::default()));
+        let merges = fields.iter().map(Field::merge);
+        let bindings = fields.iter().map(|field| &field.ident);
+        let conversions = fields.iter().filter_map(Field::conversion);
+        let values = fields.iter().map(Field::resolved_value);
+        let entries = fields.iter().map(Field::entries);
+        let repository_only = fields.iter().filter_map(Field::repository_only);
+        quote! {
+            #[allow(unused_variables)]
+            impl crate::config::options::Options for #written {
+                type Resolved = #resolved;
+
+                fn built_in() -> Self {
+                    Self {
+                        #(#built_in,)*
+                        #rest
+                    }
+                }
+
+                fn merge(&mut self, top: Self, merge: crate::config::options::Merge) {
+                    let Self { #(#bindings),* } = top;
+                    #(#merges)*
+                }
+
+                fn resolve(self, prefix: &str) -> ::anyhow::Result<#resolved> {
+                    #(#conversions)*
+                    Ok(#resolved { #(#values),* })
+                }
+
+                fn entries(
+                    prefix: &str,
+                    sources: &[(&Self, crate::config::repo::ConfigLayer)],
+                    entries: &mut ::std::vec::Vec<crate::config::options::Entry>,
+                ) -> ::anyhow::Result<()> {
+                    #(#entries)*
+                    Ok(())
+                }
+
+                fn repository_only(
+                    prefix: &str,
+                    keys: &mut ::std::vec::Vec<::std::string::String>,
+                ) {
+                    #(#repository_only)*
                 }
             }
-
-            fn merge(&mut self, top: Self, merge: crate::config::options::Merge) {
-                let Self { #(#bindings),* } = top;
-                #(#merges)*
-            }
-
-            fn resolve(self, prefix: &str) -> ::anyhow::Result<#resolved> {
-                #(#conversions)*
-                Ok(#resolved { #(#values),* })
-            }
-
-            fn entries(
-                prefix: &str,
-                sources: &[(&Self, crate::config::repo::ConfigLayer)],
-                entries: &mut ::std::vec::Vec<crate::config::options::Entry>,
-            ) -> ::anyhow::Result<()> {
-                #(#entries)*
-                Ok(())
-            }
-
-            fn repository_only(prefix: &str, keys: &mut ::std::vec::Vec<::std::string::String>) {
-                #(#repository_only)*
-            }
         }
-    })
+    }
 }
 
 /// The resolved struct's name; `None` for `Self`.
@@ -132,33 +178,6 @@ fn resolved_name(input: &DeriveInput) -> Result<Option<Ident>> {
         })?;
     }
     resolved.ok_or_else(|| Error::new_spanned(&input.ident, "add #[options(resolved = Name)]"))
-}
-
-fn resolved_struct(
-    visibility: &Visibility,
-    written: &Ident,
-    name: &Ident,
-    fields: &[Field],
-) -> Tokens {
-    let fields = fields.iter().map(|field| {
-        let Field {
-            ident, visibility, ..
-        } = field;
-        let docs = &field.docs;
-        let ty = field.resolved_type();
-        let serde = match &field.key {
-            Key::Flatten => quote!(#[serde(flatten)]),
-            Key::Renamed(name) => quote!(#[serde(rename = #name)]),
-            Key::Named(_) => quote!(),
-        };
-        quote!(#(#docs)* #serde #visibility #ident: #ty)
-    });
-    let doc = format!("[`{written}`] after every layer.");
-    quote! {
-        #[doc = #doc]
-        #[derive(Debug, Clone, ::serde::Serialize)]
-        #visibility struct #name { #(#fields),* }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -259,6 +278,21 @@ impl Field {
             option_inner(&parsed.ty)?;
         }
         Ok(parsed)
+    }
+
+    /// The field as the resolved struct declares it.
+    fn resolved_declaration(&self) -> Tokens {
+        let Self {
+            ident, visibility, ..
+        } = self;
+        let docs = &self.docs;
+        let ty = self.resolved_type();
+        let serde = match &self.key {
+            Key::Flatten => quote!(#[serde(flatten)]),
+            Key::Renamed(name) => quote!(#[serde(rename = #name)]),
+            Key::Named(_) => quote!(),
+        };
+        quote!(#(#docs)* #serde #visibility #ident: #ty)
     }
 
     /// Whether the resolved value has another type than the written one.
