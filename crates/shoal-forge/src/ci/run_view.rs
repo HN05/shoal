@@ -139,21 +139,28 @@ impl ForgeRepo {
         let run = self.view_run(account, input).await?;
         let mut snapshot = Snapshot::new(run.state.as_str());
         if run.state == JobState::Failed {
-            let jobs = self.jobs_of(account, &run).await?;
-            let failed = jobs.iter().filter(|job| job.state == JobState::Failed);
-            for (index, job) in failed.enumerate() {
-                // Only the jobs the update names have their logs read.
-                let step = match index < MAX_LISTED_JOBS {
-                    true => self.failed_job_step(account, &run, job).await,
-                    false => None,
-                };
-                snapshot.failed_jobs.push(FailedJob {
-                    name: job.name.clone(),
-                    step,
-                });
-            }
+            snapshot.failed_jobs = self.failed_jobs(account, &run).await?;
         }
         Ok(snapshot)
+    }
+
+    /// The failed jobs of `run`, with the failing steps of those a run's
+    /// update names; only their logs are read.
+    async fn failed_jobs(&self, account: &Account, run: &Run) -> Result<Vec<FailedJob>> {
+        let jobs = self.jobs_of(account, run).await?;
+        let failed = jobs.iter().filter(|job| job.state == JobState::Failed);
+        let mut failed_jobs = Vec::new();
+        for (index, job) in failed.enumerate() {
+            let step = match index < MAX_LISTED_JOBS {
+                true => self.failed_job_step(account, run, job).await,
+                false => None,
+            };
+            failed_jobs.push(FailedJob {
+                name: job.name.clone(),
+                step,
+            });
+        }
+        Ok(failed_jobs)
     }
 
     /// The step that failed in `job`, where the forge reads its log and the
