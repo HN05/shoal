@@ -26,7 +26,7 @@ fn fake_daemon(
             let welcome = Welcome {
                 version: crate::VERSION.into(),
                 supported_majors: vec![1],
-                features: Vec::new(),
+                features: vec![format!("connection {connections}")],
             };
             wire::write(&mut writer, &HandshakeReply::Welcome(welcome))
                 .await
@@ -59,12 +59,13 @@ fn fake_daemon(
 }
 
 #[tokio::test]
-async fn a_call_cancelled_mid_write_leaves_no_part_of_its_request_for_the_next() {
+async fn a_call_cancelled_mid_write_reconnects_for_the_next_with_its_welcome() {
     let root = tempfile::tempdir().unwrap();
     let socket = root.path().join("daemon.sock");
     let (resume, resumed) = oneshot::channel();
     let daemon = fake_daemon(UnixListener::bind(&socket).unwrap(), resumed);
     let client = Client::connect(&socket).await.unwrap();
+    assert!(client.welcome().offers("connection 1"));
     // Larger than any socket buffer, so its write cannot finish while the
     // daemon reads nothing.
     let large = AnswerQuestion {
@@ -81,6 +82,11 @@ async fn a_call_cancelled_mid_write_leaves_no_part_of_its_request_for_the_next()
         daemon.await.unwrap(),
         2,
         "the next call opens a new connection"
+    );
+    assert!(
+        client.welcome().offers("connection 2"),
+        "{:?}",
+        client.welcome()
     );
 }
 

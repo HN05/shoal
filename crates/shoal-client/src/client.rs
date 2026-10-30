@@ -68,7 +68,7 @@ impl Connector {
     pub async fn connect(self) -> Result<Client, Error> {
         let connection = self.open().await?;
         Ok(Client {
-            welcome: connection.welcome.clone(),
+            welcome: std::sync::Mutex::new(connection.welcome.clone()),
             connector: self,
             connection: Mutex::new(Some(connection)),
         })
@@ -180,7 +180,8 @@ impl Connection {
 /// daemon closed it. Calls on one client run one at a time.
 pub struct Client {
     connector: Connector,
-    welcome: Welcome,
+    /// The latest handshake's welcome.
+    welcome: std::sync::Mutex<Welcome>,
     connection: Mutex<Option<Connection>>,
 }
 
@@ -190,9 +191,13 @@ impl Client {
         Connector::new(socket).connect().await
     }
 
-    /// What the daemon serves, from the latest handshake.
-    pub fn welcome(&self) -> &Welcome {
-        &self.welcome
+    /// What the daemon serves, from the latest handshake, which a
+    /// reconnection to an upgraded daemon renews.
+    pub fn welcome(&self) -> Welcome {
+        self.welcome
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// Send `params` and wait for its result. A call cut off by the daemon
@@ -215,6 +220,16 @@ impl Client {
         self.connector.clone().subscribe(topics).await
     }
 
+    /// A new connection, whose welcome replaces the client's.
+    async fn reconnect(&self) -> Result<Connection, Error> {
+        let open = self.connector.open().await?;
+        *self
+            .welcome
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = open.welcome.clone();
+        Ok(open)
+    }
+
     /// Send `call` on the open connection, or a new one. The connection is
     /// kept only once the exchange ends cleanly: one that a cancelled or
     /// failed call left holding part of a request or reply is dropped.
@@ -222,7 +237,7 @@ impl Client {
         let mut kept = self.connection.lock().await;
         let mut open = match kept.take() {
             Some(open) => open,
-            None => self.connector.open().await?,
+            None => self.reconnect().await?,
         };
         let name = call.name();
         let exchange = async {
