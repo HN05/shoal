@@ -222,3 +222,18 @@ fn attach_workspaces(root: &std::path::Path) -> Vec<Workspace> {
     })
     .collect()
 }
+
+#[test]
+fn a_repositorys_own_agents_complete_as_agents() {
+    let layers = ConfigLayers {
+        worktree_file: crate::config::repo::parse("[agents.repo-only]\ncommand = ['repo-agent']\n")
+            .unwrap(),
+        ..Default::default()
+    };
+    let settings = layered_settings(&Config::default(), &layers);
+    assert!(settings.providers.contains("repo-only"));
+    assert!(settings.agents.iter().any(|agent| agent == "repo-only"));
+    assert_eq!(settings.commands["repo-only"], ["repo-agent"]);
+    let global = layered_settings(&Config::default(), &ConfigLayers::default());
+    assert!(!global.providers.contains("repo-only"));
+}

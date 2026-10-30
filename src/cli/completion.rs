@@ -380,27 +380,7 @@ impl Typed {
                 layers = *found;
             }
         }
-        // Agents' launchers complete beside the workspace shortcuts.
-        let mut commands: Commands = Stack::new(&global, &layers)
-            .named(|config| &config.commands)
-            .into_iter()
-            .map(|(name, (argv, _))| (name, argv))
-            .collect();
-        let tools = global.tools().unwrap_or_default();
-        let providers: BTreeSet<_> = crate::ai::agents(&tools).map(str::to_owned).collect();
-        let resolved = global.resolve(&layers);
-        if let Ok(settings) = &resolved {
-            commands.extend(settings.launchers.clone());
-        }
-        let agents = resolved.map_or_else(
-            |_| providers.iter().cloned().collect(),
-            |settings| agents::names(&settings),
-        );
-        Settings {
-            commands,
-            providers,
-            agents,
-        }
+        layered_settings(&global, &layers)
     }
 
     fn complete(&self, target: Target, current: &OsStr) -> Vec<CompletionCandidate> {
@@ -649,6 +629,36 @@ fn repository_candidates(
         }
     }
     candidates
+}
+
+/// What completion offers under `global` and the target's `layers`: a
+/// repository's own agents count as agents too.
+fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
+    // Agents' launchers complete beside the workspace shortcuts.
+    let mut commands: Commands = Stack::new(global, layers)
+        .named(|config| &config.commands)
+        .into_iter()
+        .map(|(name, (argv, _))| (name, argv))
+        .collect();
+    let resolved = global.resolve(layers);
+    // The target's agents, so a repository's own are agents here too.
+    let tools = match &resolved {
+        Ok(settings) => settings.tools.clone(),
+        Err(_) => global.tools().unwrap_or_default(),
+    };
+    let providers: BTreeSet<_> = crate::ai::agents(&tools).map(str::to_owned).collect();
+    if let Ok(settings) = &resolved {
+        commands.extend(settings.launchers.clone());
+    }
+    let agents = resolved.map_or_else(
+        |_| providers.iter().cloned().collect(),
+        |settings| agents::names(&settings),
+    );
+    Settings {
+        commands,
+        providers,
+        agents,
+    }
 }
 
 #[cfg(test)]
