@@ -340,6 +340,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
     );
     step("contributions", manager.sweep_contributions().await);
     step("proposal files", manager.sweep_proposal_files().await);
+    step("temporary directories", manager.sweep_tmp_dirs().await);
     step("grace periods", manager.end_unclaimed_grace().await);
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())

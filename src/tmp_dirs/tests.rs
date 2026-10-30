@@ -3,7 +3,7 @@ use std::os::unix::fs::PermissionsExt;
 use super::*;
 
 #[test]
-fn directories_are_private_and_removed_one_at_a_time() {
+fn directories_are_private_listed_and_removed_one_at_a_time() {
     let root = tempfile::tempdir().unwrap();
     let layout = Layout::new(root.path(), "repo");
     let workspace = layout.prepare("workspace-id").unwrap();
@@ -17,10 +17,12 @@ fn directories_are_private_and_removed_one_at_a_time() {
         "preparing again keeps files"
     );
     let chat = layout.prepare("chat-id").unwrap();
+    fs::write(layout.root().join("stray-file"), "").unwrap();
 
+    assert_eq!(layout.list().unwrap(), ["chat-id", "workspace-id"]);
     layout.remove_one("workspace-id").unwrap();
     layout.remove_one("workspace-id").unwrap();
-    assert!(!workspace.exists());
+    assert_eq!(layout.list().unwrap(), ["chat-id"]);
     assert!(chat.exists());
     layout.remove().unwrap();
     assert!(!layout.root().exists());
@@ -36,6 +38,7 @@ fn only_a_directory_marked_for_the_repository_is_used() {
         error.to_string().contains("not a directory Shoal created"),
         "{error:#}"
     );
+    assert!(layout.list().unwrap().is_empty());
     layout.remove_one("user-files").unwrap();
     layout.remove().unwrap();
     assert!(

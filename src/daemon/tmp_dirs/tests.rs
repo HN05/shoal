@@ -121,3 +121,37 @@ async fn a_tracked_execution_reserves_a_missing_repository_directory() {
     assert_eq!(started.plan.environment[env::TMPDIR], expected.as_os_str());
     assert!(expected.is_dir());
 }
+
+#[tokio::test]
+async fn the_sweep_deletes_temporary_directories_without_a_record() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "feature".into(), None, None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let layout = crate::tmp_dirs::Layout::of(&repo).unwrap();
+    let kept = layout.prepare(&workspace.id).unwrap();
+    let orphan = layout.prepare("removed-workspace-id").unwrap();
+    std::fs::write(orphan.join("scratch"), "garbage").unwrap();
+
+    manager.sweep_tmp_dirs().await.unwrap();
+    assert!(!orphan.exists());
+    assert!(kept.is_dir());
+    assert!(chat.tmp_dir.unwrap().is_dir());
+}

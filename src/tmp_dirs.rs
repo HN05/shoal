@@ -74,6 +74,25 @@ impl Layout {
         Ok(directory)
     }
 
+    /// The IDs whose temporary directories exist; none when the directory is
+    /// not the one Shoal created for this repository.
+    pub fn list(&self) -> Result<Vec<String>> {
+        if !is_marked_dir(&self.root, &self.owner) {
+            return Ok(Vec::new());
+        }
+        let entries =
+            fs::read_dir(&self.root).with_context(|| format!("read {}", self.root.display()))?;
+        let mut ids = Vec::new();
+        for entry in entries {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                ids.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+        ids.sort();
+        Ok(ids)
+    }
+
     /// Delete the temporary directory of the workspace or chat `id`.
     pub fn remove_one(&self, id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
