@@ -2,6 +2,7 @@
 //! with that operation's scope check.
 mod decisions;
 mod items;
+mod operations;
 mod repositories;
 mod resources;
 mod workspaces;
@@ -39,7 +40,14 @@ pub(super) async fn answer(session: &Session, call: Call) -> Result<serde_json::
         }
         Call::AnswerQuestion(params) => value(decisions::answer_question(session, params).await),
         Call::DecideApproval(params) => value(decisions::decide_approval(session, params).await),
-        Call::Subscribe(_) => Err(errors::invalid("a subscription is not a call")),
+        Call::CreateWorkspace(params) => value(operations::create(session, params).await),
+        Call::SplitWorkspace(params) => value(operations::split(session, params).await),
+        Call::OpenPr(params) => value(operations::open_pr(session, params).await),
+        Call::LandWorkspace(params) => value(operations::land(session, params).await),
+        Call::CancelOperation(params) => value(operations::cancel(session, params).await),
+        Call::Subscribe(_) | Call::FollowOperation(_) => {
+            Err(errors::invalid("a stream is not a call"))
+        }
     }
 }
 

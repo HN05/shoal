@@ -6,6 +6,10 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     open_enum::open_enum,
+    operations::{
+        CancelOperation, CreateWorkspace, FollowOperation, LandWorkspace, OpenPr, SplitWorkspace,
+        StartedOperation,
+    },
     records::{Approval, Hold, ItemKind, Question, Relation, Repository, Workspace},
 };
 
@@ -20,7 +24,7 @@ pub trait Method: Serialize {
 macro_rules! methods {
     (
         calls { $($(#[$meta:meta])* $wire:literal => $variant:ident -> $output:ty;)+ }
-        streams { $($(#[$stream_meta:meta])* $stream_wire:literal => $stream:ident;)+ }
+        streams { $($(#[$stream_meta:meta])* $stream_wire:literal => $stream:ident($events:ty);)+ }
     ) => {
         /// Every request, tagged with its method name.
         #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -75,7 +79,7 @@ macro_rules! methods {
             $(
                 methods.insert($stream_wire.into(), serde_json::json!({
                     "params": generator.subschema_for::<$stream>(),
-                    "events": generator.subschema_for::<crate::wire::Event>(),
+                    "events": generator.subschema_for::<$events>(),
                 }));
             )+
             methods.into()
@@ -114,11 +118,30 @@ methods! {
         /// Approve or deny a request: the user any, a workspace's agent only
         /// those its children's agents passed to it, as with `shoal approvals`.
         "approval.decide" => DecideApproval -> Approval;
+        /// Create a workspace and start its setup, as `shoal add` does; the
+        /// operation ends with the ready workspace.
+        "workspace.create" => CreateWorkspace -> StartedOperation;
+        /// Split a child from the workspace and start its setup, as
+        /// `shoal split` does.
+        "workspace.split" => SplitWorkspace -> StartedOperation;
+        /// Push the workspace's branch, then open its PR or link the open
+        /// one, as `shoal pr open` does.
+        "pr.open" => OpenPr -> StartedOperation;
+        /// Land the workspace's branch on the default branch, as `shoal
+        /// land` does; a workspace agent's landing waits for approval.
+        "workspace.land" => LandWorkspace -> StartedOperation;
+        /// Interrupt an operation's running step, as an interrupt of the
+        /// command that runs it does.
+        "operation.cancel" => CancelOperation -> ();
     }
     streams {
         /// The records of the topics asked for: a snapshot, then their
         /// changes, until the client hangs up.
-        "subscribe" => Subscribe;
+        "subscribe" => Subscribe(crate::wire::Event);
+        /// An operation's progress, from the start or after the events
+        /// already read, then its result or error. An operation can be
+        /// followed until ten minutes after it ended.
+        "operation.follow" => FollowOperation(crate::operations::OperationEvent);
     }
 }
 

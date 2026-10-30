@@ -4,8 +4,10 @@
 //! compatibility rule.
 mod client;
 mod errors;
+mod following;
 mod methods;
 mod open_enum;
+mod operations;
 pub mod records;
 pub mod schema;
 mod socket;
@@ -14,7 +16,9 @@ pub mod wire;
 
 pub use client::{Client, Connector};
 pub use errors::{ApiError, Error, ErrorCode};
+pub use following::{Followed, Following};
 pub use methods::*;
+pub use operations::*;
 pub use records::Record;
 pub use socket::{STATE_DIR_VARIABLE, default_socket, socket_in};
 pub use subscription::{Subscription, Update};

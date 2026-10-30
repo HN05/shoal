@@ -63,7 +63,9 @@ renaming anything raises it, and the daemon serves every major version it still
 supports, named in the handshake. Its requests run the daemon's own operations
 with their scope checks, approvals and connection limits, so an app and the CLI
 behave the same, and the CLI stays on the internal protocol. Its refusals carry
-codes the daemon derives from typed reasons. A subscription sends a snapshot,
+codes the daemon derives from typed reasons. Creating or splitting a workspace,
+opening a PR and landing start operations, below, whose ID a client follows for
+typed progress, then a result or a typed error. A subscription sends a snapshot,
 then each record that changed or was removed, comparing again after each stored
 change; a daemon restart closes it and the client takes a new snapshot.
 The minimum Rust version follows current stable so the code can use its newest

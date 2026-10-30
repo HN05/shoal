@@ -141,6 +141,27 @@
       ],
       "type": "object"
     },
+    "AgentToQueue": {
+      "description": "An agent to queue in a workspace once it is ready.",
+      "properties": {
+        "agent": {
+          "description": "The agent to start, such as `claude` or `codex`.",
+          "type": "string"
+        },
+        "prompt": {
+          "default": null,
+          "description": "The agent's first message; without one it waits for the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "agent"
+      ],
+      "type": "object"
+    },
     "AnswerQuestion": {
       "properties": {
         "answer": {
@@ -296,6 +317,17 @@
         }
       ]
     },
+    "CancelOperation": {
+      "properties": {
+        "operation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "type": "object"
+    },
     "Check": {
       "description": "One CI check of a PR.",
       "properties": {
@@ -332,6 +364,58 @@
       "required": [
         "head",
         "cleanup"
+      ],
+      "type": "object"
+    },
+    "CreateWorkspace": {
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentToQueue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base": {
+          "default": null,
+          "description": "What the branch starts from; the default branch when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issue": {
+          "default": null,
+          "description": "The issue the workspace is assigned, by number or URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The new branch; the workspace takes the name derived from it.",
+          "type": "string"
+        },
+        "pr": {
+          "default": null,
+          "description": "The PR the workspace works on, by number or URL, linked once it is ready.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repository": {
+          "description": "The repository's ID, name or path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository",
+        "name"
       ],
       "type": "object"
     },
@@ -376,6 +460,9 @@
             "busy",
             "not_ready",
             "unsaved_work",
+            "setup_failed",
+            "hook_failed",
+            "push_failed",
             "operation_failed"
           ]
         },
@@ -459,6 +546,24 @@
           "type": "object"
         }
       ]
+    },
+    "FollowOperation": {
+      "properties": {
+        "after": {
+          "default": 0,
+          "description": "Skip the events before this index, as when following again after\nreading them.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "operation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation"
+      ],
+      "type": "object"
     },
     "GetWorkspace": {
       "properties": {
@@ -581,6 +686,25 @@
           "type": "string"
         }
       ]
+    },
+    "LandWorkspace": {
+      "properties": {
+        "push": {
+          "default": null,
+          "description": "Push the default branch after landing; `[land] push` when absent.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
     },
     "Link": {
       "description": "An issue or PR a workspace links, with its state as the daemon last\nrecorded it from the forge.",
@@ -790,6 +914,63 @@
       ],
       "type": "object"
     },
+    "OpenPr": {
+      "properties": {
+        "base": {
+          "default": null,
+          "description": "The branch it merges into; the default branch when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "body": {
+          "default": null,
+          "description": "The description as written; `Closes #<issue>` when absent and an\nissue is linked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "draft": {
+          "default": null,
+          "description": "Open it as a draft, or not; the repository's default when absent.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "labels": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reviewers": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "title": {
+          "default": null,
+          "description": "The linked issue's title when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
     "Opening": {
       "description": "The client's first frame. Its `client_api` key tells the daemon the\nconnection speaks this API rather than Shoal's internal protocol.",
       "properties": {
@@ -801,6 +982,85 @@
         "client_api"
       ],
       "type": "object"
+    },
+    "OperationEvent": {
+      "description": "The `index`th event of an operation, from 0.",
+      "oneOf": [
+        {
+          "properties": {
+            "step": {
+              "$ref": "#/$defs/Step"
+            },
+            "type": {
+              "const": "step",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "step"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A line its processes wrote, without its line ending.",
+          "properties": {
+            "line": {
+              "type": "string"
+            },
+            "stream": {
+              "$ref": "#/$defs/OutputStream"
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "stream",
+            "line"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Progress this version does not know; ignore it.",
+          "properties": {
+            "type": {
+              "const": "unknown",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "index": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "index"
+      ],
+      "type": "object"
+    },
+    "OutputStream": {
+      "anyOf": [
+        {
+          "enum": [
+            "stdout",
+            "stderr"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
     },
     "ProposedItem": {
       "description": "The issue or PR a proposal opens.",
@@ -1543,6 +1803,91 @@
           "type": "object"
         },
         {
+          "description": "Create a workspace and start its setup, as `shoal add` does; the\noperation ends with the ready workspace.",
+          "properties": {
+            "method": {
+              "const": "workspace.create",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/CreateWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Split a child from the workspace and start its setup, as\n`shoal split` does.",
+          "properties": {
+            "method": {
+              "const": "workspace.split",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SplitWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Push the workspace's branch, then open its PR or link the open\none, as `shoal pr open` does.",
+          "properties": {
+            "method": {
+              "const": "pr.open",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/OpenPr"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Land the workspace's branch on the default branch, as `shoal\nland` does; a workspace agent's landing waits for approval.",
+          "properties": {
+            "method": {
+              "const": "workspace.land",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/LandWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Interrupt an operation's running step, as an interrupt of the\ncommand that runs it does.",
+          "properties": {
+            "method": {
+              "const": "operation.cancel",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/CancelOperation"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The records of the topics asked for: a snapshot, then their\nchanges, until the client hangs up.",
           "properties": {
             "method": {
@@ -1551,6 +1896,23 @@
             },
             "params": {
               "$ref": "#/$defs/Subscribe"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An operation's progress, from the start or after the events\nalready read, then its result or error. An operation can be\nfollowed until ten minutes after it ended.",
+          "properties": {
+            "method": {
+              "const": "operation.follow",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/FollowOperation"
             }
           },
           "required": [
@@ -1618,6 +1980,18 @@
             "event"
           ],
           "type": "object"
+        },
+        {
+          "description": "An operation's progress, until its `result` or `error`.",
+          "properties": {
+            "progress": {
+              "$ref": "#/$defs/OperationEvent"
+            }
+          },
+          "required": [
+            "progress"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -1657,6 +2031,87 @@
         "runtime"
       ],
       "type": "object"
+    },
+    "SplitWorkspace": {
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentToQueue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base": {
+          "default": null,
+          "description": "What the branch starts from; the default branch when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issue": {
+          "default": null,
+          "description": "The issue the child is assigned, by number or URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The child's new branch; the child takes the name derived from it.",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "The workspace to split the new one from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "StartedOperation": {
+      "description": "A started operation.",
+      "properties": {
+        "operation": {
+          "description": "The ID `operation.follow` and `operation.cancel` take.",
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/Workspace",
+          "description": "The workspace it works in, as it is when it starts."
+        }
+      },
+      "required": [
+        "operation",
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "Step": {
+      "anyOf": [
+        {
+          "enum": [
+            "setup_started",
+            "ready",
+            "post_setup_started",
+            "pr_linked",
+            "agent_queued",
+            "push_started",
+            "pushed",
+            "land_started"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
     },
     "StopAgent": {
       "properties": {
@@ -1999,6 +2454,30 @@
         "type": "null"
       }
     },
+    "operation.cancel": {
+      "params": {
+        "$ref": "#/$defs/CancelOperation"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "operation.follow": {
+      "events": {
+        "$ref": "#/$defs/OperationEvent"
+      },
+      "params": {
+        "$ref": "#/$defs/FollowOperation"
+      }
+    },
+    "pr.open": {
+      "params": {
+        "$ref": "#/$defs/OpenPr"
+      },
+      "result": {
+        "$ref": "#/$defs/StartedOperation"
+      }
+    },
     "question.answer": {
       "params": {
         "$ref": "#/$defs/AnswerQuestion"
@@ -2050,6 +2529,14 @@
         "$ref": "#/$defs/Subscribe"
       }
     },
+    "workspace.create": {
+      "params": {
+        "$ref": "#/$defs/CreateWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/StartedOperation"
+      }
+    },
     "workspace.done": {
       "params": {
         "$ref": "#/$defs/MarkDone"
@@ -2066,6 +2553,14 @@
         "$ref": "#/$defs/Workspace"
       }
     },
+    "workspace.land": {
+      "params": {
+        "$ref": "#/$defs/LandWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/StartedOperation"
+      }
+    },
     "workspace.remove": {
       "params": {
         "$ref": "#/$defs/RemoveWorkspace"
@@ -2080,6 +2575,14 @@
       },
       "result": {
         "$ref": "#/$defs/Workspace"
+      }
+    },
+    "workspace.split": {
+      "params": {
+        "$ref": "#/$defs/SplitWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/StartedOperation"
       }
     },
     "workspace.undo_done": {

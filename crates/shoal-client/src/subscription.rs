@@ -87,7 +87,10 @@ impl Subscription {
                 Reply::Event(Event::Removed { key }) => return Ok(Update::Removed(key)),
                 Reply::Event(Event::Changed { .. } | Event::Unknown) => {}
                 Reply::Error(error) => return Err(Error::Api(error)),
-                Reply::Event(Event::Snapshot { .. }) | Reply::Page(_) | Reply::Result(_) => {
+                Reply::Event(Event::Snapshot { .. })
+                | Reply::Page(_)
+                | Reply::Result(_)
+                | Reply::Progress(_) => {
                     return Err(Error::Protocol("unexpected reply to a subscription".into()));
                 }
             }

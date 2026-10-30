@@ -9,10 +9,10 @@ use shoal_client::{
     ApiError, ErrorCode, Subscribe,
     wire::{self, Event, Reply, Response},
 };
-use tokio::{io::AsyncReadExt as _, net::unix::OwnedWriteHalf};
+use tokio::net::unix::OwnedWriteHalf;
 
 use super::{
-    Reader, Session, errors,
+    Reader, Session, errors, hangup,
     snapshot::{self, Records, Topics},
 };
 use crate::daemon::log;
@@ -122,13 +122,6 @@ fn changes(before: &Records, after: &Records) -> Vec<Event> {
 async fn send(writer: &mut OwnedWriteHalf, id: u64, event: Event) -> Result<()> {
     let reply = Reply::Event(event);
     Ok(wire::write(writer, &Response { id, reply }).await?)
-}
-
-/// Wait until the client hangs up. It sends nothing after subscribing, so
-/// anything readable means it closed the connection.
-async fn hangup(reader: &mut Reader) {
-    let mut closed = [0u8; 1];
-    let _ = reader.get_mut().read(&mut closed).await;
 }
 
 #[cfg(test)]

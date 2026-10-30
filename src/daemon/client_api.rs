@@ -1,12 +1,14 @@
 //! The client API that `crates/shoal-client` defines: a stable protocol for
 //! apps other than the CLI, served on the daemon's socket beside the
 //! internal protocol. A connection handshakes once, then sends requests one
-//! at a time, or subscribes. Its requests run the daemon's own operations
+//! at a time, or subscribes or follows an operation. Its requests run the daemon's own operations
 //! under the internal protocol's scope rules and connection limits.
 mod agents;
 mod calls;
 mod errors;
+mod following;
 mod handshake;
+mod progress;
 mod records;
 mod snapshot;
 mod subscription;
@@ -73,11 +75,18 @@ async fn serve_connection(
                 false => return Ok(()),
             },
         };
-        if let Call::Subscribe(subscribe) = call {
-            return subscription::run(session, id, subscribe, reader, writer).await;
-        }
-        if !session.answer(&mut writer, id, call).await? {
-            return Ok(());
+        match call {
+            Call::Subscribe(subscribe) => {
+                return subscription::run(session, id, subscribe, reader, writer).await;
+            }
+            Call::FollowOperation(follow) => {
+                return following::run(session, id, follow, reader, writer).await;
+            }
+            call => {
+                if !session.answer(&mut writer, id, call).await? {
+                    return Ok(());
+                }
+            }
         }
     }
     Ok(())
@@ -174,6 +183,13 @@ async fn refuse(
 ) -> Result<bool> {
     let reply = Reply::Error(error);
     write_guarded(manager, writer, &Response { id, reply }).await
+}
+
+/// Wait until the client hangs up. It sends nothing on a stream, so
+/// anything readable means it closed the connection.
+async fn hangup(reader: &mut Reader) {
+    let mut closed = [0u8; 1];
+    let _ = tokio::io::AsyncReadExt::read(reader.get_mut(), &mut closed).await;
 }
 
 /// Send `result` to request `id`: a long list in pages, then the rest.

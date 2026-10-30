@@ -30,6 +30,12 @@ open_enum! {
         NotReady => "not_ready",
         /// Removal would delete unsaved work the request did not allow.
         UnsavedWork => "unsaved_work",
+        /// The workspace's setup command failed; the workspace is kept as failed.
+        SetupFailed => "setup_failed",
+        /// The post-setup hook failed; the ready workspace is kept.
+        HookFailed => "hook_failed",
+        /// Pushing the workspace's branch failed.
+        PushFailed => "push_failed",
         /// Any other failure; the message says what.
         OperationFailed => "operation_failed",
     }

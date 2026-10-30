@@ -104,6 +104,9 @@ Every refusal has a code and a message; act on the code.
 | `busy` | A resource or the daemon's request capacity is taken |
 | `not_ready` | The workspace is not ready, or its worktree is not verified |
 | `unsaved_work` | Removal would delete unsaved work the call did not allow |
+| `setup_failed` | The workspace's setup command failed; the workspace is kept as failed |
+| `hook_failed` | The post-setup hook failed; the ready workspace is kept |
+| `push_failed` | Pushing the workspace's branch failed |
 | `operation_failed` | Anything else; the message says what |
 
 ## Subscriptions
@@ -116,3 +119,42 @@ until the client hangs up. A record's `type` names its kind; its key is that
 kind with its ID. A daemon restart closes the connection: the crate's
 `Subscription` reconnects and reports the new snapshot with `resynced` set,
 which replaces everything known before.
+
+## Operations
+
+`workspace.create`, `workspace.split`, `pr.open` and `workspace.land` start
+work the daemon runs in a process of its own, as `shoal add`, `shoal split`,
+`shoal pr open` and `shoal land` do, and return the operation's ID with the
+workspace. The work goes on when the client hangs up. `operation.follow`
+streams its events from the start, or after the events already read, as
+`progress` frames: the steps it reaches, such as `setup_started` and `ready`,
+and each line its processes write. It ends with the operation's `result`, or
+an `error` with a code such as `setup_failed`. An operation can be followed
+until ten minutes after it ends; a daemon restart forgets it. `operation.cancel`
+interrupts its running step, as an interrupt of the command does.
+
+```rust
+use shoal_client::{CreateWorkspace, Followed, Progress};
+
+let started = client
+    .call(CreateWorkspace {
+        repository: "shoal".into(),
+        name: "fix-login".into(),
+        base: None,
+        issue: Some("42".into()),
+        pr: None,
+        agent: None,
+    })
+    .await?;
+let mut following = client.follow(started.operation).await?;
+let result = loop {
+    match following.next().await? {
+        Followed::Progress(event) => {
+            if let Progress::Output { line, .. } = event.progress {
+                println!("{line}");
+            }
+        }
+        Followed::Ended(result) => break result,
+    }
+};
+```

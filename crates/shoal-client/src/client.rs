@@ -11,6 +11,7 @@ use tokio::{
 
 use crate::{
     errors::{ApiError, Error, ErrorCode},
+    following::Following,
     methods::{Call, Method, Subscribe, Topic},
     subscription::Subscription,
     wire::{self, FrameReader, HandshakeReply, Hello, Opening, Reply, Request, Response, Welcome},
@@ -77,6 +78,12 @@ impl Connector {
     /// Subscribe to `topics` on a connection of its own.
     pub async fn subscribe(self, topics: Vec<Topic>) -> Result<Subscription, Error> {
         Subscription::open(self, topics).await
+    }
+
+    /// Follow `operation`'s progress from its `after`th event on, on a
+    /// connection of its own.
+    pub async fn follow(self, operation: String, after: u64) -> Result<Following, Error> {
+        Following::open(&self, operation, after).await
     }
 
     /// A new connection, past its handshake.
@@ -170,7 +177,9 @@ impl Connection {
                     ));
                 }
                 Reply::Error(error) => return Err(Error::Api(error)),
-                Reply::Event(_) => return Err(Error::Protocol("an event answered a call".into())),
+                Reply::Event(_) | Reply::Progress(_) => {
+                    return Err(Error::Protocol("an event answered a call".into()));
+                }
             }
         }
     }
@@ -218,6 +227,11 @@ impl Client {
     /// Subscribe to `topics` on a connection of its own.
     pub async fn subscribe(&self, topics: Vec<Topic>) -> Result<Subscription, Error> {
         self.connector.clone().subscribe(topics).await
+    }
+
+    /// Follow `operation`'s progress from its start, on a connection of its own.
+    pub async fn follow(&self, operation: impl Into<String>) -> Result<Following, Error> {
+        self.connector.clone().follow(operation.into(), 0).await
     }
 
     /// A new connection, whose welcome replaces the client's.

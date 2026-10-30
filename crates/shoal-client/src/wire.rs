@@ -9,6 +9,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use crate::{
     errors::{ApiError, Error},
     methods::Call,
+    operations::OperationEvent,
     records::{Record, RecordKey},
 };
 
@@ -90,6 +91,8 @@ pub enum Reply {
     Error(ApiError),
     /// A subscription's records, until the client hangs up.
     Event(Event),
+    /// An operation's progress, until its `result` or `error`.
+    Progress(OperationEvent),
 }
 
 /// What a subscription sends: its snapshot in one or more parts, then each

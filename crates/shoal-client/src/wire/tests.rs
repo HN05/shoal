@@ -92,3 +92,38 @@ fn a_major_version_is_its_first_number() {
     assert_eq!(major("1.4.2"), Some(1));
     assert_eq!(major("x"), None);
 }
+
+#[test]
+fn operation_progress_and_results_decode_including_unknown_ones() {
+    use crate::operations::{OperationResult, OutputStream, Progress, Step};
+
+    let response: Response = serde_json::from_value(serde_json::json!({
+        "id": 2, "progress": {"index": 4, "type": "output", "stream": "stderr", "line": "ok"}
+    }))
+    .unwrap();
+    let Reply::Progress(event) = response.reply else {
+        panic!("expected progress: {response:?}");
+    };
+    assert_eq!(event.index, 4);
+    assert_eq!(
+        event.progress,
+        Progress::Output {
+            stream: OutputStream::Stderr,
+            line: "ok".into()
+        }
+    );
+    let step: Progress =
+        serde_json::from_value(serde_json::json!({"type": "step", "step": "warming_up"})).unwrap();
+    assert_eq!(
+        step,
+        Progress::Step {
+            step: Step::Unknown("warming_up".into())
+        }
+    );
+    let unknown: Progress =
+        serde_json::from_value(serde_json::json!({"type": "percent", "value": 40})).unwrap();
+    assert_eq!(unknown, Progress::Unknown);
+    let result: OperationResult =
+        serde_json::from_value(serde_json::json!({"type": "deployed"})).unwrap();
+    assert_eq!(result, OperationResult::Unknown);
+}
