@@ -7442,7 +7442,14 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
             release.display()
         ),
     );
-    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\ntouch post-setup-ran\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
     let repo = fixture.repo.to_str().unwrap();
     // The CLI shows what setup writes, as it did when it ran setup itself.
     fs::write(&release, "").unwrap();
@@ -7469,10 +7476,15 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     add.kill().unwrap();
     add.wait().unwrap();
     fs::write(&release, "").unwrap();
-    wait_until("setup to finish", || {
-        fixture.ok(&["status", "slow"])["workspace"]["state"] == "ready"
+    // The post-setup hook runs with setup, so it runs without the CLI too.
+    wait_until("the post-setup hook to run", || {
+        path.join("post-setup-ran").exists()
     });
     assert!(path.join("setup-finished").exists());
+    assert_eq!(
+        fixture.ok(&["status", "slow"])["workspace"]["state"],
+        "ready"
+    );
 }
 
 #[test]

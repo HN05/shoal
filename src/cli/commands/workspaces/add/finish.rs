@@ -209,11 +209,13 @@ async fn finish_add_workspace(
         mut workspace,
         reused,
     } = opened;
+    // The hook runs with setup, so it goes on when this process goes.
+    let mut post_setup = None;
     if workspace.state == WorkspaceState::Preparing {
-        let Some(ready) = setup_workspace(ctx, &workspace).await? else {
+        let Some(set_up) = setup_workspace(ctx, &workspace, !reused).await? else {
             return Ok(None);
         };
-        workspace = ready;
+        (workspace, post_setup) = (set_up.workspace, set_up.post_setup);
     }
     if let Some(url) = pr {
         workspace = link_pull(ctx, workspace, url).await?;
@@ -230,10 +232,10 @@ async fn finish_add_workspace(
     )?;
     // The post-setup hook may change how the agent launches, so the shell's
     // destination waits for it; a failed hook starts no agent.
-    let post_setup = if reused {
-        Ok(())
-    } else {
-        run_post_setup(ctx, &workspace).await
+    let post_setup = match post_setup {
+        Some(result) => result,
+        None if reused => Ok(()),
+        None => run_post_setup(ctx, &workspace).await,
     };
     let starts = post_setup.is_ok().then_some(agent);
     if enters_added(ctx, &workspace, starts, prompted).await? {

@@ -17,7 +17,7 @@ use crate::{
     model::Workspace,
     protocol::{
         RemovalMethod,
-        operations::{OperationSpec, Preparation, Prepared},
+        operations::{Failure, OperationSpec, Preparation, Prepared},
     },
     removal::{RemovalResult, UnsavedWork},
     state::WorkspaceState,
@@ -61,10 +61,10 @@ pub(in crate::cli::commands) async fn setup(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let inspection = client::inspect(&ctx.paths, workspace).await?;
-    let Some(workspace) = setup_workspace(ctx, &inspection.workspace).await? else {
+    let Some(set_up) = setup_workspace(ctx, &inspection.workspace, true).await? else {
         return Ok(1);
     };
-    run_post_setup(ctx, &workspace).await?;
+    let workspace = set_up.finish(ctx).await?;
     ctx.emit_styled(
         Style::Success,
         &format!("Set up {}", workspace.name),
@@ -116,52 +116,108 @@ pub(in crate::cli::commands) async fn run_post_setup(
     Ok(())
 }
 
-/// Run the setup command in an operation the daemon starts, then let an
-/// interactive user decide what to do with a failed workspace. `None` means
-/// the workspace was deleted or kept as-is.
+/// A workspace setup made ready, and how its post-setup hook went when it
+/// ran in the same operation.
+pub(in crate::cli::commands) struct SetUp {
+    pub workspace: Workspace,
+    /// `None` when the hook did not run with setup.
+    pub post_setup: Option<Result<()>>,
+}
+
+impl SetUp {
+    /// The workspace once its post-setup hook succeeded, running it now
+    /// when it did not run with setup.
+    pub(in crate::cli::commands) async fn finish(self, ctx: &Context) -> Result<Workspace> {
+        match self.post_setup {
+            Some(result) => result?,
+            None => run_post_setup(ctx, &self.workspace).await?,
+        }
+        Ok(self.workspace)
+    }
+}
+
+/// Run the setup command, and the post-setup hook after it when
+/// `post_setup`, in one operation the daemon starts, so both go on when
+/// this process goes. Then let an interactive user decide what to do with
+/// a failed workspace, whose hook did not run. `None` means the workspace
+/// was deleted or kept as-is.
 pub(in crate::cli::commands) async fn setup_workspace(
     ctx: &Context,
     workspace: &Workspace,
-) -> Result<Option<Workspace>> {
+    post_setup: bool,
+) -> Result<Option<SetUp>> {
     let spec = OperationSpec::Prepare {
         workspace: workspace.id.clone(),
         steps: Preparation {
             setup: true,
+            post_setup,
             ..Default::default()
         },
     };
-    let result = operations::run::<Prepared>(ctx, spec).await;
-    if let Err(error) = &result
-        && let Some(failure) = error.downcast_ref::<execution::SetupVerificationFailure>()
-    {
-        return report_setup_verification_failure(ctx, workspace, failure.exit_code).await;
-    }
-    let failure = result.err().map(|error| format!("{error:#}"));
-    if let Some(error) = failure {
-        let name = &workspace.name;
-        ensure!(
-            ctx.interactive(),
-            "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, skip it with `shoal work setup {name} --skip`, or delete with `shoal rm {name} --yes`"
-        );
-        eprintln!(
-            "{} for {name}: {error}",
-            Palette::stderr(ctx.json).paint(Style::Error, "Setup failed")
-        );
-        match ui::setup_failure_choice()? {
-            ui::SetupFailureChoice::Delete => {
-                delete_failed_workspace(ctx, workspace).await?;
-                return Ok(None);
+    match operations::run::<Prepared>(ctx, spec).await {
+        Ok(prepared) => Ok(Some(SetUp {
+            workspace: *prepared.workspace,
+            post_setup: post_setup.then_some(Ok(())),
+        })),
+        Err(error) => match error.downcast::<execution::SetupVerificationFailure>() {
+            Ok(failure) => {
+                report_setup_verification_failure(ctx, workspace, failure.exit_code).await
             }
-            ui::SetupFailureChoice::Ignore => ignore_setup_failure(ctx, workspace).await?,
-            ui::SetupFailureChoice::Cancel => return Ok(None),
+            Err(error) if is_hook_failure(&error) => {
+                let workspace = client::inspect(&ctx.paths, workspace.id.clone()).await?;
+                Ok(Some(SetUp {
+                    workspace: workspace.workspace,
+                    post_setup: Some(Err(error)),
+                }))
+            }
+            Err(error) => handle_setup_failure(ctx, workspace, error).await,
+        },
+    }
+}
+
+/// Let an interactive user delete, ignore or keep the workspace whose setup
+/// failed with `error`; a workspace whose failure is ignored has not run
+/// its post-setup hook.
+async fn handle_setup_failure(
+    ctx: &Context,
+    workspace: &Workspace,
+    error: anyhow::Error,
+) -> Result<Option<SetUp>> {
+    let error = format!("{error:#}");
+    let name = &workspace.name;
+    ensure!(
+        ctx.interactive(),
+        "setup failed for {name}: {error}; workspace retained. Retry with `shoal work setup {name}`, skip it with `shoal work setup {name} --skip`, or delete with `shoal rm {name} --yes`"
+    );
+    eprintln!(
+        "{} for {name}: {error}",
+        Palette::stderr(ctx.json).paint(Style::Error, "Setup failed")
+    );
+    match ui::setup_failure_choice()? {
+        ui::SetupFailureChoice::Delete => {
+            delete_failed_workspace(ctx, workspace).await?;
+            return Ok(None);
         }
+        ui::SetupFailureChoice::Ignore => ignore_setup_failure(ctx, workspace).await?,
+        ui::SetupFailureChoice::Cancel => return Ok(None),
     }
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     ensure!(
         inspection.workspace.state == WorkspaceState::Ready,
         "workspace setup did not complete"
     );
-    Ok(Some(inspection.workspace))
+    Ok(Some(SetUp {
+        workspace: inspection.workspace,
+        post_setup: None,
+    }))
+}
+
+/// Whether the operation got past setup and failed in the post-setup hook.
+fn is_hook_failure(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<operations::Failed>(),
+        Some(operations::Failed(Failure::HookFailed { .. }))
+    )
 }
 
 /// Process uncertainty cannot be ignored or safely stopped from the still-live
@@ -170,7 +226,7 @@ async fn report_setup_verification_failure(
     ctx: &Context,
     workspace: &Workspace,
     code: i32,
-) -> Result<Option<Workspace>> {
+) -> Result<Option<SetUp>> {
     let inspection = client::inspect(&ctx.paths, workspace.id.clone()).await?;
     let name = &workspace.name;
     let reason = inspection

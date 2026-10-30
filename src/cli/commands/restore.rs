@@ -299,10 +299,10 @@ pub(super) async fn prepare_reopened(
     crate::cli::agents::trust_resumed(ctx, &opened.workspace, &removed).await;
     let mut workspace = opened.workspace;
     if workspace.state == WorkspaceState::Preparing {
-        let Some(ready) = super::workspaces::setup_workspace(ctx, &workspace).await? else {
+        let Some(set_up) = super::workspaces::setup_workspace(ctx, &workspace, false).await? else {
             return Ok(None);
         };
-        workspace = ready;
+        workspace = set_up.workspace;
     }
     for url in &removed.links.prs {
         workspace = super::workspaces::link_pull(ctx, workspace, url.clone()).await?;

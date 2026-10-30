@@ -153,15 +153,14 @@ pub(super) async fn create_child(
 
 /// Run the child's setup and post-setup hook; `None` when setup failed.
 pub(super) async fn prepare(ctx: &Context, child: Workspace) -> Result<Option<Workspace>> {
-    let child = match child.state {
-        WorkspaceState::Preparing => match super::workspaces::setup_workspace(ctx, &child).await? {
-            Some(ready) => ready,
-            None => return Ok(None),
-        },
-        _ => child,
-    };
-    super::workspaces::run_post_setup(ctx, &child).await?;
-    Ok(Some(child))
+    if child.state != WorkspaceState::Preparing {
+        super::workspaces::run_post_setup(ctx, &child).await?;
+        return Ok(Some(child));
+    }
+    match super::workspaces::setup_workspace(ctx, &child, true).await? {
+        Some(set_up) => set_up.finish(ctx).await.map(Some),
+        None => Ok(None),
+    }
 }
 
 /// Queue `agent` in `child`, prompted with `issue` or `args`; the daemon
