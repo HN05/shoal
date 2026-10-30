@@ -1286,15 +1286,7 @@ fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     let mut runs = linked_runs(db, id)?;
     let mut delivered = Vec::new();
     for url in &runs {
-        let record: Option<String> = db
-            .query_row(
-                "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
-                params![id, url],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let record: Option<ActivityRecord> =
-            record.map(|text| serde_json::from_str(&text)).transpose()?;
+        let record = cursor_record(db, id, url)?;
         if record.is_some_and(|record| record.pending.is_empty() && record.snapshot.run_finished())
         {
             delivered.push(url.clone());
@@ -1304,17 +1296,35 @@ fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     Ok(runs)
 }
 
-/// The workspace's linked runs the background poll has not seen finish.
+/// The workspace's linked runs the background poll has yet to see finish,
+/// or to queue the finish of on the workspace's cursor; the two are
+/// recorded apart, so a run is polled until both have it.
 fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
     let mut runs = linked_runs(db, id)?;
     let mut finished = Vec::new();
     for url in &runs {
-        if observed_item(db, id, url)?.is_some_and(|snapshot| snapshot.run_finished()) {
+        let observed = observed_item(db, id, url)?;
+        let queued = cursor_record(db, id, url)?;
+        if observed.is_some_and(|snapshot| snapshot.run_finished())
+            && queued.is_some_and(|record| record.snapshot.run_finished())
+        {
             finished.push(url.clone());
         }
     }
     runs.retain(|url| !finished.contains(url));
     Ok(runs)
+}
+
+/// The item's record on the workspace's watch cursor, if it has one.
+fn cursor_record(db: &rusqlite::Connection, id: &str, url: &str) -> Result<Option<ActivityRecord>> {
+    let record: Option<String> = db
+        .query_row(
+            "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+            params![id, url],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
 }
 
 /// The workspace's assigned issue and PRs, of `kind` or every kind.

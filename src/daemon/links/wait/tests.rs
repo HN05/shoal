@@ -1842,3 +1842,46 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
             if event.details.item_activity.as_deref().is_some_and(|activity|
                 activity.url == "run" && activity.update.kind == UpdateKind::CiCompleted))));
 }
+
+#[tokio::test]
+async fn background_polls_a_finished_run_until_its_finish_is_queued() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "runs".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let run = crate::model::LinkedItem {
+        kind: LinkKind::Ci,
+        url: "run".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, run)])
+        .await
+        .unwrap();
+    let polled = || {
+        let id = id.clone();
+        manager.store.run(move |db| polled_items(db, &id))
+    };
+    // The poll is interrupted after recording the finish on its baseline.
+    let finished = vec![("run".to_owned(), run_snapshot("finished"))];
+    manager
+        .record_background_activity(&id, finished.clone())
+        .await
+        .unwrap();
+    assert_eq!(polled().await.unwrap(), [("run".to_owned(), LinkKind::Ci)]);
+    // The next poll queues it for the agent's hooks, which ends the polling.
+    manager
+        .queue_background_updates(&id, finished, crate::time::unix_seconds())
+        .await
+        .unwrap();
+    assert!(polled().await.unwrap().is_empty());
+    let queued = manager.agent_updates(&id).await.unwrap().updates;
+    assert_eq!(queued[0].kind, UpdateKind::CiCompleted, "{queued:?}");
+}
