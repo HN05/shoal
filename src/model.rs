@@ -713,7 +713,7 @@ pub struct ConflictCheck {
     pub files: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PulledBranch {
     pub branch: String,
     pub repository_id: String,
@@ -755,7 +755,7 @@ pub struct SyncedRepository {
 }
 
 /// A workspace branch merged into its repository's default branch.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LandedBranch {
     pub workspace_id: String,
     pub repository_id: String,

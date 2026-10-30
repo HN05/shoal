@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{ErrorCode, Lifetime};
 use crate::{
-    daemon::links::proposals::OpenOutcome,
+    daemon::{approvals::ApprovalRequest, links::proposals::OpenOutcome},
     forge::items::create::PullOptions,
-    model::{QueueEntry, Workspace},
+    model::{LandedBranch, QueueEntry, Workspace},
 };
 
 /// Requests about operations: work the daemon starts in a worker process of
@@ -70,6 +70,11 @@ pub enum OperationSpec {
         workspace: String,
         options: PullOptions,
     },
+    /// Land the workspace's branch; `push` overrides `[land] push` when given.
+    Land {
+        workspace: String,
+        push: Option<bool>,
+    },
 }
 
 /// What preparing a workspace runs: its setup when `setup`, then its
@@ -95,7 +100,9 @@ impl OperationSpec {
     /// The workspace the operation works in.
     pub fn workspace_mut(&mut self) -> &mut String {
         match self {
-            Self::Prepare { workspace, .. } | Self::OpenPull { workspace, .. } => workspace,
+            Self::Prepare { workspace, .. }
+            | Self::OpenPull { workspace, .. }
+            | Self::Land { workspace, .. } => workspace,
         }
     }
 }
@@ -108,6 +115,7 @@ crate::state::states!(Step {
     AgentQueued => "agent_queued",
     PushStarted => "push_started",
     Pushed => "pushed",
+    LandStarted => "land_started",
 });
 
 crate::state::states!(Stream {
@@ -159,6 +167,7 @@ pub enum Ended {
 pub enum Outcome {
     Prepared(Prepared),
     Opened(OpenOutcome),
+    Landed(LandedBranch),
 }
 
 /// A prepared workspace, ready, and the agent queued in it.
@@ -184,7 +193,11 @@ macro_rules! outcomes {
     )+};
 }
 
-outcomes!(Prepared(Prepared), Opened(OpenOutcome));
+outcomes!(
+    Prepared(Prepared),
+    Opened(OpenOutcome),
+    Landed(LandedBranch)
+);
 
 /// Why an operation failed, as typed as its caller acts on it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,6 +218,10 @@ pub enum Failure {
     },
     PushFailed {
         message: String,
+    },
+    /// Landing waits for the user's decision on `request`, or was denied.
+    Approval {
+        request: Box<ApprovalRequest>,
     },
     /// The daemon refused a request of the operation.
     Refused {

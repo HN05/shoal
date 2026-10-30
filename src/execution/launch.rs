@@ -572,12 +572,16 @@ fn execution_command(
     mode: &Mode,
 ) -> Result<Vec<OsString>> {
     if let Some(land) = &plan.land {
+        let Mode::Land { push, result } = mode else {
+            anyhow::bail!("only a landing execution lands");
+        };
         return internal_command(
             paths,
-            matches!(mode, Mode::Land { json: true, .. }),
+            false,
             Worker::Land {
                 plan: &serde_json::to_string(land)?,
-                push: matches!(mode, Mode::Land { push: true, .. }),
+                push: *push,
+                result,
             },
         );
     }

@@ -16192,6 +16192,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
     assert_eq!(pending["code"], "approval_pending");
     assert_eq!(pending["request"]["target"], "land");
     assert_eq!(pending["request"]["specification"]["head"], expected.trim());
+    let refusal = fixture.root.path().join("land-result.json");
     let denied = fixture.run(&[
         "run",
         "--workspace",
@@ -16200,10 +16201,13 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
         binary,
         "internal",
         "land",
+        "--result",
+        refusal.to_str().unwrap(),
         "{}",
     ]);
     assert!(!denied.status.success());
-    assert!(String::from_utf8_lossy(&denied.stderr).contains("only an authorized landing"));
+    let refusal = fs::read_to_string(&refusal).unwrap();
+    assert!(refusal.contains("only an authorized landing"), "{refusal}");
     let repo = fixture.ok(&["repo", "ls"])[0]["id"].clone();
     fixture.ok(&[
         "config",
@@ -16644,6 +16648,9 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         let during = fixture.ok(&["status", "worker"]);
         assert_eq!(during["executions"].as_array().unwrap().len(), 1);
         assert!(during["executions"][0]["child"].is_object());
+        // The daemon starts the landing, whose wrapper restores the checkout
+        // before it exits; a killed daemon leaves it to do that after the CLI.
+        let wrapper = during["executions"][0]["wrapper"]["pid"].as_u64().unwrap() as u32;
         if interruption == "daemon" {
             fixture.daemon.kill();
         } else if interruption == "interrupt" {
@@ -16651,8 +16658,9 @@ fn land_interruptions_stop_merge_drivers_and_restore_the_default_checkout() {
         } else {
             fixture.ok(&["stop", "worker"]);
         }
-        let status = wait_for("landing wrapper to stop", || land.try_wait().unwrap());
+        let status = wait_for("land to fail", || land.try_wait().unwrap());
         assert!(!status.success());
+        wait_until("landing wrapper to stop", || !process_running(wrapper));
         wait_until("merge driver to stop", || !process_running(pid as u32));
         assert_eq!(git(&fixture.repo, &["rev-parse", "HEAD"]), before);
         assert_eq!(

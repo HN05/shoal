@@ -115,16 +115,19 @@ fn the_herdr_watcher_of_earlier_releases_still_parses() {
 #[test]
 fn land_round_trips_serialized_plan_and_globals() {
     let plan = r#"{"path":"/a path/with \"quotes\""}"#;
+    let result = Path::new("/a path/result.json");
     for (json, push) in [(false, false), (true, true)] {
         let InternalCommand::Land {
             plan: parsed_plan,
             push: parsed_push,
-        } = parse(Worker::Land { plan, push }, json)
+            result: parsed_result,
+        } = parse(Worker::Land { plan, push, result }, json)
         else {
             panic!("expected land worker");
         };
         assert_eq!(parsed_plan, plan);
         assert_eq!(parsed_push, push);
+        assert_eq!(parsed_result, result);
     }
 }
 

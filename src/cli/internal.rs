@@ -42,6 +42,7 @@ pub enum Worker<'a> {
     Land {
         plan: &'a str,
         push: bool,
+        result: &'a Path,
     },
     Detached {
         workspace: &'a str,
@@ -51,10 +52,7 @@ pub enum Worker<'a> {
     },
     /// A tool run through its secret launcher in `launchers`; the launcher
     /// appends the tool's arguments.
-    SecretTool {
-        launchers: &'a Path,
-        tool: &'a str,
-    },
+    SecretTool { launchers: &'a Path, tool: &'a str },
     /// A tracked agent inside a new place a host opened; `records` are
     /// recovery records the launch consumes once it starts. With `close_in`,
     /// the place of that host closes once the workspace is done.
@@ -76,9 +74,7 @@ pub enum Worker<'a> {
     /// Run the operation whose order the daemon writes to standard input.
     Operation,
     /// Start an admitted queue entry where its launching terminal would.
-    QueueStart {
-        entry: &'a str,
-    },
+    QueueStart { entry: &'a str },
     /// Add the workspace planned in the environment in the place `host`
     /// opened for it, closing it once the workspace is done when
     /// `close_when_done` is set.
@@ -87,33 +83,21 @@ pub enum Worker<'a> {
         close_when_done: bool,
     },
     /// Copy the checkout's ignored files, then run setup.
-    CopyIgnored {
-        setup_cmd: Option<&'a Path>,
-    },
+    CopyIgnored { setup_cmd: Option<&'a Path> },
     /// Print a bare `shoal` picker view's rows, by its name.
-    MenuRows {
-        view: &'a str,
-    },
+    MenuRows { view: &'a str },
     /// Print the fzf actions that switch the picker to its next view.
     MenuNext,
     /// Print the `shoal approvals` picker's rows, of `workspace` only when given.
-    ApprovalRows {
-        workspace: Option<&'a str>,
-    },
+    ApprovalRows { workspace: Option<&'a str> },
     /// Make `decision` on the request whose picker row the picker appends.
-    ApprovalDecide {
-        decision: Decision,
-    },
+    ApprovalDecide { decision: Decision },
     /// Send `report`, the JSON of a proxy's report, for a wrapper of an
     /// older release that the upgraded daemon no longer speaks to.
-    ProxyReport {
-        report: &'a str,
-    },
+    ProxyReport { report: &'a str },
     /// Run the command a launch file carries, for a place whose host cannot
     /// set its environment.
-    Launch {
-        file: &'a Path,
-    },
+    Launch { file: &'a Path },
     /// Continue an agent's wrapper whose binary an upgrade replaced: resume
     /// the agent of `workspace` from `record` over the daemon connection
     /// at descriptor `connection`, writing to `log` when detached. Wrappers
@@ -186,8 +170,12 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 args.extend(["--kept-at".into(), head.into()]);
             }
         }
-        Worker::Land { plan, push } => {
-            args.push(LAND.into());
+        Worker::Land { plan, push, result } => {
+            args.extend([
+                LAND.into(),
+                "--result".into(),
+                result.as_os_str().to_owned(),
+            ]);
             if push {
                 args.push("--push".into());
             }

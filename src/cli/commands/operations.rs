@@ -12,6 +12,7 @@ use tokio::{
 
 use crate::{
     cli::{client, context::Context},
+    daemon::approvals::Undecided,
     execution::SetupVerificationFailure,
     protocol::{
         Body, OperationMethod, RemoteError, Response,
@@ -36,6 +37,7 @@ impl std::fmt::Display for Failed {
                 exit_code: *exit_code,
             }
             .fmt(f),
+            Failure::Approval { request } => Undecided(request.clone()).fmt(f),
         }
     }
 }
@@ -136,6 +138,7 @@ fn show(ctx: &Context, progress: Progress) {
 fn error(failure: Failure) -> anyhow::Error {
     match failure {
         Failure::SetupUnverified { exit_code } => SetupVerificationFailure { exit_code }.into(),
+        Failure::Approval { request } => Undecided(request).into(),
         Failure::Refused { code, message } => RemoteError { code, message }.into(),
         failure => Failed(failure).into(),
     }
@@ -153,6 +156,10 @@ fn failure(error: anyhow::Error) -> Failure {
                 exit_code: failure.exit_code,
             };
         }
+        Err(error) => error,
+    };
+    let error = match error.downcast::<Undecided>() {
+        Ok(Undecided(request)) => return Failure::Approval { request },
         Err(error) => error,
     };
     if let Some(RemoteError { code, message }) = error.downcast_ref::<RemoteError>() {

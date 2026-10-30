@@ -145,9 +145,14 @@ pub async fn publish(paths: &Paths, workspace: String, command: Vec<OsString>) -
     run_tracked(paths, workspace, command, Mode::Publish, None).await
 }
 
-pub async fn land(paths: &Paths, workspace: String, json: bool, push: bool) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Land { json, push }, None).await
+/// Land the workspace's branch; its worker writes the result as a
+/// [`LandResult`] to `result`.
+pub async fn land(paths: &Paths, workspace: String, push: bool, result: PathBuf) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Land { push, result }, None).await
 }
+
+/// What a landing worker writes: what it landed, or why it could not.
+pub type LandResult = std::result::Result<crate::model::LandedBranch, String>;
 
 pub async fn setup(paths: &Paths, workspace: String) -> Result<i32> {
     run_tracked(paths, workspace, vec![], Mode::Setup, None).await

@@ -8,31 +8,22 @@ use crate::daemon::workspace::ExecutionKind;
 pub(super) enum Mode {
     /// An arbitrary command chosen by the caller; `record` keeps it for
     /// `shoal resume` to report when `shoal stop` interrupts it.
-    Command {
-        record: bool,
-    },
+    Command { record: bool },
     /// A restored agent session; `records` are consumed once it starts.
-    Recovery {
-        records: Vec<PathBuf>,
-    },
+    Recovery { records: Vec<PathBuf> },
     /// A caller-chosen command without a terminal: no stdin, output appended
     /// to `log`, and the launch reported on stdout for the spawning CLI.
-    Detached {
-        log: PathBuf,
-    },
-    Land {
-        json: bool,
-        push: bool,
-    },
+    Detached { log: PathBuf },
+    /// Landing, whose worker writes what it landed, or why it could not,
+    /// to `result`.
+    Land { push: bool, result: PathBuf },
     /// A command publishing for the workspace under its agent account, with
     /// output on stderr so stdout stays for the caller's result.
     Publish,
     /// The repository's configured setup command.
     Setup,
     /// A demo, restarted whenever its command exits until it is stopped.
-    Demo {
-        launch: Box<crate::demos::Launch>,
-    },
+    Demo { launch: Box<crate::demos::Launch> },
 }
 
 impl Mode {

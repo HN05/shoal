@@ -28,7 +28,7 @@ pub(super) use changes::{conflicts, diff};
 pub(super) use done::{Done, done, undone};
 pub(in crate::cli) use environment::agent_environment;
 pub(super) use environment::environment;
-pub(super) use land::{land, land_worker};
+pub(super) use land::{land, land_branch, land_worker};
 pub(super) use link_pull::link_pull;
 pub(super) use list::list;
 pub(super) use prepare::prepare;

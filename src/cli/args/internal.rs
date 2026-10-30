@@ -91,6 +91,9 @@ pub enum InternalCommand {
     Land {
         #[arg(long)]
         push: bool,
+        /// Where to write what it landed, or why it could not.
+        #[arg(long)]
+        result: PathBuf,
         plan: String,
     },
     /// Close a terminal host's place once its workspace completes or is removed.
