@@ -198,7 +198,7 @@ pub struct LinkEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemEvent {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     /// The action's name, such as `edit` or `merge`.
     pub action: String,
