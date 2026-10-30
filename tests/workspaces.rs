@@ -16131,7 +16131,9 @@ fn stop_preserves_the_child_exit_status_when_group_inventory_fails() {
             "--",
             "sh",
             "-c",
-            "trap 'exit 7' TERM; : > \"$READY\"; while :; do sleep 30; done",
+            // `wait` lets the trap run at once; with a foreground sleep it waits
+            // for the sleep, which misses a TERM that arrives before its exec.
+            "trap 'exit 7' TERM; : > \"$READY\"; while :; do sleep 30 & wait; done",
         ])
         // Fail only the wrapper's inventory; the daemon can still verify exit.
         .env("PATH", fixture.restricted_path(&bin))
