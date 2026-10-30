@@ -60,25 +60,34 @@ pub fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> 
             path.display()
         );
     }
-    // A file stays in place until the replacement takes its name at once,
-    // so a reader never finds it missing; a symlink is kept as it is.
+    // The current entry stays in place until the replacement takes its name
+    // at once, so a reader never finds it missing.
     let backup = path.with_extension("toml.backup");
-    let linked = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink());
-    let saved = if linked {
-        fs::rename(&path, &backup)
-    } else {
-        fs::copy(&path, &backup).map(drop)
-    };
-    let kept = match saved {
-        Ok(_) => true,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Err(error) => {
-            return Err(error)
-                .with_context(|| format!("copy {} to {}", path.display(), backup.display()));
-        }
-    };
+    let kept = keep_backup(&path, &backup)
+        .with_context(|| format!("keep {} as {}", path.display(), backup.display()))?;
     temporary
         .persist(&path)
         .with_context(|| format!("install config at {}", path.display()))?;
     Ok((path, kept.then_some(backup)))
+}
+
+/// Leave a copy of `path` at `backup`, replacing whatever is there without
+/// following it: a symlink is kept as a symlink to the same target. Whether
+/// there was a `path` to keep.
+fn keep_backup(path: &Path, backup: &Path) -> std::io::Result<bool> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    match fs::remove_file(backup) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error),
+        _ => {}
+    }
+    if metadata.is_symlink() {
+        std::os::unix::fs::symlink(fs::read_link(path)?, backup)?;
+    } else {
+        fs::copy(path, backup)?;
+    }
+    Ok(true)
 }

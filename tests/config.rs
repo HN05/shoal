@@ -250,6 +250,12 @@ fn install_preserves_symlink_targets_and_refuses_directories() {
         original
     );
     assert!(!config.is_symlink());
+    // A second replacement replaces the backup link rather than writing
+    // through it to the original.
+    assert!(run().status.success());
+    assert_eq!(fs::read_to_string(&original).unwrap(), "personal config");
+    assert!(!config.with_extension("toml.backup").is_symlink());
+    let backup = fs::read_to_string(config.with_extension("toml.backup")).unwrap();
     fs::remove_file(&config).unwrap();
     fs::create_dir(&config).unwrap();
     fs::write(config.join("keep"), "keep").unwrap();
@@ -257,6 +263,6 @@ fn install_preserves_symlink_targets_and_refuses_directories() {
     assert_eq!(fs::read_to_string(config.join("keep")).unwrap(), "keep");
     assert_eq!(
         fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
-        "personal config"
+        backup
     );
 }
