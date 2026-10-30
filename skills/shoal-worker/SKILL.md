@@ -77,8 +77,8 @@ repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`
 repository may refuse it. Before opening one, search for an
 existing issue with `shoal issue list <words>` (`--state all`, `--label`,
 `--author`, `--limit`; `pr list` takes the same), and comment there instead of
-opening a duplicate. Merging is
-the user's: `shoal pr merge` refuses workspace processes. `shoal pr revert
+opening a duplicate. Merging and deleting a PR's branch are
+the user's: `shoal pr merge` and `shoal pr delete-branch` refuse workspace processes. `shoal pr revert
 [<number>]` opens a PR that undoes a merged one; where the forge cannot, it
 opens it from a child workspace already marked done, which goes once the
 revert merges.

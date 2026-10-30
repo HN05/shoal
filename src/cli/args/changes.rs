@@ -250,6 +250,12 @@ pub enum PrCommand {
         #[arg(long, conflicts_with_all = ["method", "delete_branch", "auto"])]
         cancel_auto: bool,
     },
+    /// Delete the branch of a merged or closed PR on the forge with your own
+    /// login; workspace processes cannot delete branches.
+    DeleteBranch {
+        #[command(flatten)]
+        item: ItemSelector,
+    },
 }
 
 #[derive(Debug, Subcommand)]

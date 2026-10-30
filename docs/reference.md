@@ -2740,6 +2740,7 @@ shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr update --method rebase    # take in the base's commits on the forge
 shoal pr merge --method rebase --delete-branch
 shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
+shoal pr delete-branch 12           # delete a merged or closed PR's branch on the forge
 shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
@@ -2846,6 +2847,10 @@ GitLab's merge when the pipeline succeeds, or Forgejo's merge when checks
 succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
+`delete-branch` deletes the branch of a merged or closed PR on the forge, such
+as one merged on the forge's website, never a local branch, with your own
+login; workspace processes cannot. It refuses an open PR, a branch in a fork,
+and a branch that no longer points to the PR's head commit.
 `revert` opens a PR that undoes a merged PR into its base branch and refuses
 one that has not merged. It takes `pr open`'s options except `--base`; its
 title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,

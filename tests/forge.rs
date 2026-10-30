@@ -2416,6 +2416,93 @@ fn an_unconfirmed_github_merge_fails_and_keeps_the_branch() {
 }
 
 #[test]
+fn delete_branch_deletes_an_ended_prs_branch_unless_it_moved() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let endpoint = "repos/team/project/pulls/8";
+    let read = |state: &str| {
+        let mut pull = pull(8, state, "Fix", &[]);
+        pull["head"]["sha"] = json!("c0ffee");
+        json!({"body": pull})
+    };
+    let branch = |commit: &str| json!({"body": {"commit": {"id": commit}}});
+    let delete = |args: &[&str]| {
+        let output =
+            fixture.run(&[&["pr", "delete-branch", "8", "--workspace", "topic"], args].concat());
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        (output.status.success(), stdout, stderr)
+    };
+    fixture.respond(json!({
+        format!("GET {endpoint}"): read("merged"),
+        "GET repos/team/project/branches/topic": branch("c0ffee"),
+        "DELETE repos/team/project/branches/topic": {"status": 204},
+    }));
+    let (ok, stdout, stderr) = delete(&[]);
+    assert!(
+        ok && stdout.starts_with("PR branch deleted: "),
+        "{stdout}{stderr}"
+    );
+    let sent: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| json!([request[0], request[2]]))
+        .collect();
+    assert_eq!(
+        sent,
+        [
+            json!([format!("GET {endpoint}"), "token usertoken"]),
+            json!(["GET repos/team/project/branches/topic", "token usertoken"]),
+            json!([
+                "DELETE repos/team/project/branches/topic",
+                "token usertoken"
+            ]),
+            json!([format!("GET {endpoint}"), "token usertoken"]),
+        ]
+    );
+
+    // A branch pushed to after the PR closed keeps commits the PR lacks.
+    fixture.respond(json!({
+        format!("GET {endpoint}"): read("closed"),
+        "GET repos/team/project/branches/topic": branch("beef00"),
+    }));
+    let (ok, _, stderr) = delete(&[]);
+    assert!(
+        !ok && stderr.contains("branch topic moved to beef00 after #8 was closed"),
+        "{stderr}"
+    );
+    fixture.respond(json!({format!("GET {endpoint}"): read("open")}));
+    let (ok, _, stderr) = delete(&[]);
+    assert!(!ok && stderr.contains("#8 is open"), "{stderr}");
+    let reads = fixture.requests();
+    assert!(
+        reads
+            .iter()
+            .all(|request| request[0].as_str().unwrap().starts_with("GET")),
+        "{reads:?}"
+    );
+
+    // Deleting a branch is the user's: a workspace process is refused before
+    // any request.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let scoped = fixture.run(&[
+        "run",
+        "--workspace",
+        "topic",
+        "--",
+        shoal,
+        "pr",
+        "delete-branch",
+        "8",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&scoped.stderr)
+            .contains("deleting a PR's branch is the user's decision"),
+        "{scoped:?}"
+    );
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
 fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let endpoint = "repos/team/project/pulls/8";

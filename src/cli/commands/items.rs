@@ -99,6 +99,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             let (action, outcome) = merge(method, delete_branch, auto);
             (item, action, outcome)
         }
+        PrCommand::DeleteBranch { item } => (item, Action::DeleteBranch, "PR branch deleted"),
     };
     act(ctx, item, ItemKind::Pr, action, outcome).await
 }
