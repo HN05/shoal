@@ -42,12 +42,7 @@ impl Manager {
             .start_run(&account, &run)
             .await
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
-        if let Some(url) = &started.url {
-            let item = LinkedItem {
-                kind: LinkKind::Ci,
-                url: forge.run(url)?.1,
-                title: started.workflow.clone(),
-            };
+        if let Some(item) = started_link(&forge, &started) {
             self.record_items(&workspace.id, vec![(Relation::Opened, item)])
                 .await?;
         }
@@ -162,6 +157,21 @@ impl Manager {
     }
 }
 
+/// The link a started run gets, where the forge reports its URL and Shoal
+/// reads its runs, so a watch can follow it; a run Shoal cannot read, such
+/// as a Bitbucket pipeline, started all the same.
+fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
+    if !forge.supports(Capability::ReadRuns) {
+        return None;
+    }
+    let (_, url) = forge.run(started.url.as_deref()?).ok()?;
+    Some(LinkedItem {
+        kind: LinkKind::Ci,
+        url,
+        title: started.workflow.clone(),
+    })
+}
+
 /// Refuse a run on any branch but the workspace's.
 fn on_own_branch(workspace: &Workspace, run: &Run) -> Result<()> {
     ensure!(
@@ -171,3 +181,6 @@ fn on_own_branch(workspace: &Workspace, run: &Run) -> Result<()> {
     );
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
