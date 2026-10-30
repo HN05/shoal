@@ -353,23 +353,35 @@ impl Manager {
         repo: &Repository,
         workspaces: &[Workspace],
     ) -> Result<()> {
-        ensure!(
-            !contains_protected_directory(&repo.path, &self.paths)?,
-            "repository directory contains Shoal state or the home directory; refusing deletion"
-        );
-        for other in self.repositories().await? {
+        // Removal deletes the checkout and the local config's directory.
+        let local = repo
+            .workspaces_dir
+            .as_ref()
+            .map(|directory| directory.join(crate::config::repo::LOCAL_DIR));
+        let other_repositories = self.repositories().await?;
+        let other_workspaces = self.list_workspaces().await?;
+        for deleted in std::iter::once(&repo.path).chain(local.as_ref()) {
             ensure!(
-                other.id == repo.id || !other.path.starts_with(&repo.path),
-                "repository directory contains another registered repository: {}",
-                other.path.display()
+                !contains_protected_directory(deleted, &self.paths)?,
+                "{} contains Shoal state or the home directory; refusing deletion",
+                deleted.display()
             );
-        }
-        for other in self.list_workspaces().await? {
-            ensure!(
-                workspaces.iter().any(|w| w.id == other.id) || !other.path.starts_with(&repo.path),
-                "repository directory contains another repository's workspace: {}",
-                other.name
-            );
+            for other in &other_repositories {
+                ensure!(
+                    other.id == repo.id || !other.path.starts_with(deleted),
+                    "{} contains another registered repository: {}",
+                    deleted.display(),
+                    other.path.display()
+                );
+            }
+            for other in &other_workspaces {
+                ensure!(
+                    workspaces.iter().any(|w| w.id == other.id) || !other.path.starts_with(deleted),
+                    "{} contains another repository's workspace: {}",
+                    deleted.display(),
+                    other.name
+                );
+            }
         }
         Ok(())
     }

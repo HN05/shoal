@@ -134,3 +134,27 @@ async fn the_local_config_goes_only_when_it_is_the_repositorys_own_directory() {
     delete_local_config(Some(owned.clone())).await.unwrap();
     assert!(!owned.join(".shoal").exists());
 }
+
+#[tokio::test]
+async fn removal_refuses_a_repository_inside_its_local_config_directory() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "parent");
+    let parent = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let local = manager.local_config_path(&parent.id).await.unwrap();
+    let directory = local.parent().unwrap();
+    std::fs::create_dir_all(directory).unwrap();
+    let nested = test_support::repository(directory, "nested");
+    manager
+        .register_repository(nested.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let error = manager.remove_repository(&parent.id).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("contains another registered repository"),
+        "{error:#}"
+    );
+    assert!(nested.exists());
+}
