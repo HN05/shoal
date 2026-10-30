@@ -118,8 +118,17 @@ async fn the_local_config_goes_only_when_it_is_the_repositorys_own_directory() {
     std::os::unix::fs::symlink(&elsewhere, linked.join(".shoal")).unwrap();
     delete_local_config(Some(linked.clone())).await.unwrap();
     assert!(elsewhere.join("config.toml").exists());
+    // A redirected ancestor leads elsewhere too.
+    let target = root.path().join("target");
+    std::fs::create_dir_all(target.join("repo/.shoal")).unwrap();
+    std::fs::write(target.join("repo/.shoal/config.toml"), "").unwrap();
+    std::os::unix::fs::symlink(&target, root.path().join("redirect")).unwrap();
+    delete_local_config(Some(root.path().join("redirect/repo")))
+        .await
+        .unwrap();
+    assert!(target.join("repo/.shoal/config.toml").exists());
 
-    let owned = root.path().join("owned");
+    let owned = std::fs::canonicalize(root.path()).unwrap().join("owned");
     std::fs::create_dir_all(owned.join(".shoal")).unwrap();
     std::fs::write(owned.join(".shoal/config.toml"), "").unwrap();
     delete_local_config(Some(owned.clone())).await.unwrap();
