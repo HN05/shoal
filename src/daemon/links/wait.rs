@@ -362,7 +362,7 @@ impl Manager {
             let hold = self.message_hold(&workspace, &unread.messages).await?;
             let messages_due = wake_messages_due(unread.wakes, hold, due);
             if self
-                .agent_wake_due(&workspace, interrupted, messages_due)
+                .agent_wake_due(&workspace, interrupted, messages_due, due)
                 .await?
                 == due
             {
@@ -416,18 +416,37 @@ impl Manager {
         if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
+        self.updates_recorded(workspace).await
+    }
+
+    /// Whether updates are queued for the workspace's agent, read without
+    /// the PR gates.
+    async fn updates_recorded(&self, workspace: Workspace) -> Result<bool> {
         let children = self.delegated_workspaces(&workspace.id).await?;
         Ok(!self.queued_updates(workspace).await?.is_empty()
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 
+    /// Whether updates make a wake due for the workspace's agent. Only
+    /// `arming` a wake waits for them to be deliverable: once prompted, the
+    /// agent stays due while they are recorded, so a gate cleanup takes
+    /// meanwhile cannot end that wait and prompt it again.
+    async fn wake_updates_due(&self, workspace: Workspace, arming: bool) -> Result<bool> {
+        if arming {
+            self.updates_deliverable(workspace).await
+        } else {
+            self.updates_recorded(workspace).await
+        }
+    }
+
     /// Whether the workspace's idle agent is due a wake: `messages_due`, or
-    /// updates a hook would deliver.
+    /// updates as [`Self::wake_updates_due`] counts them when `arming`.
     async fn agent_wake_due(
         &self,
         workspace: &Workspace,
         interrupted: Option<&str>,
         messages_due: bool,
+        arming: bool,
     ) -> Result<bool> {
         if let Some(execution) = interrupted
             && !self.turn_interrupted(execution).await
@@ -442,7 +461,7 @@ impl Manager {
         if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
             return Ok(false);
         }
-        Ok(messages_due || self.updates_deliverable(workspace.clone()).await?)
+        Ok(messages_due || self.wake_updates_due(workspace.clone(), arming).await?)
     }
 
     /// The unread messages once one that wakes an idle agent is queued.

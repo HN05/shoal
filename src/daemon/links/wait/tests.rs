@@ -1964,3 +1964,39 @@ fn settling_messages_delay_a_wake_but_keep_an_issued_one_due() {
     assert!(!wake_messages_due(false, None, true));
     assert!(!wake_messages_due(false, None, false));
 }
+
+#[tokio::test]
+async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "gated".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    manager
+        .record_pr_activity(&workspace.id, vec![("pr".into(), snapshot("review"))])
+        .await
+        .unwrap();
+    let held = manager.gates.lock_prs([&workspace.id]).await;
+    assert!(
+        !manager
+            .wake_updates_due(workspace.clone(), true)
+            .await
+            .unwrap()
+    );
+    // Cleanup taking the gate after the prompt does not make the agent
+    // look finished with the updates it was prompted for.
+    assert!(
+        manager
+            .wake_updates_due(workspace.clone(), false)
+            .await
+            .unwrap()
+    );
+    drop(held);
+    assert!(manager.wake_updates_due(workspace, true).await.unwrap());
+}
