@@ -3,10 +3,12 @@
 //! the agents look for them.
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsString,
+    io::Read,
     path::{Component, Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{Result, ensure};
 
 use super::{AgentEnvironment, Integration, agent_integration, configured_environments};
 use crate::{
@@ -107,15 +109,15 @@ fn is_file_name(id: &str) -> bool {
 }
 
 /// Put the session files an import carried where the agents of `workspace`
-/// look for them, keeping a file already there, as on the machine that
-/// exported them. Failures only warn; that agent's resume then fails to
+/// look for them, as [`place`] does. A development build leaves them to the
+/// installed Shoal. Failures only warn; that agent's resume then fails to
 /// find its session.
 pub(in crate::cli) async fn install_session_files(
     ctx: &Context,
     workspace: &Workspace,
     files: &[ImportedSessionFile],
 ) {
-    if files.is_empty() {
+    if files.is_empty() || !crate::build::changes_user_files() {
         return;
     }
     let settings =
@@ -130,20 +132,10 @@ pub(in crate::cli) async fn install_session_files(
     let mut directories = BTreeMap::new();
     for imported in files {
         let agent = &imported.file.agent;
-        if !directories.contains_key(agent) {
-            let mut configured = workspace_environment.clone();
-            settings
-                .launch(agent)
-                .environment
-                .layer(&mut configured, &ctx.paths.home);
-            let environment = AgentEnvironment {
-                home: &ctx.paths.home,
-                configured: &configured,
-            };
-            let directory = agent_integration(&settings, agent).session_dir(&environment);
-            directories.insert(agent.clone(), directory);
-        }
-        let placed = match &directories[agent] {
+        let directory = directories.entry(agent.clone()).or_insert_with(|| {
+            session_dir(&settings, &workspace_environment, &ctx.paths.home, agent)
+        });
+        let placed = match directory {
             Ok(Some(directory)) => place(directory, imported),
             Ok(None) => Err(anyhow::anyhow!("{agent} keeps no session files")),
             Err(error) => Err(anyhow::anyhow!("{error:#}")),
@@ -158,20 +150,73 @@ pub(in crate::cli) async fn install_session_files(
     }
 }
 
-/// Copy `imported` into the session directory `directory` unless a file is
-/// there already.
+/// The directory agent `name`, as `settings` describes it, keeps its
+/// sessions' files in when it runs with the workspace's `[env]`,
+/// `workspace_environment`, under `home`.
+fn session_dir(
+    settings: &Effective,
+    workspace_environment: &BTreeMap<String, OsString>,
+    home: &Path,
+    name: &str,
+) -> Result<Option<PathBuf>> {
+    let mut configured = workspace_environment.clone();
+    settings
+        .launch(name)
+        .environment
+        .layer(&mut configured, home);
+    let environment = AgentEnvironment {
+        home,
+        configured: &configured,
+    };
+    agent_integration(settings, name).session_dir(&environment)
+}
+
+/// Copy `imported` into the session directory `directory`. A file already
+/// there stays unless the imported one continues it, as a session that went
+/// to another machine and came back does; one that differs otherwise is a
+/// conflict, which keeps it and warns.
 fn place(directory: &Path, imported: &ImportedSessionFile) -> Result<()> {
     let destination = directory.join(&imported.file.path);
-    if destination.exists() {
-        return Ok(());
+    let replaces = destination.exists();
+    if replaces {
+        ensure!(
+            continues(&destination, imported.contents.path())?,
+            "{} differs from the session's file here, which stays",
+            destination.display()
+        );
     }
-    if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let partial = tempfile::NamedTempFile::new_in(destination.parent().unwrap_or(directory))?;
+    let parent = destination.parent().unwrap_or(directory);
+    std::fs::create_dir_all(parent)?;
+    let partial = tempfile::NamedTempFile::new_in(parent)?;
     std::fs::copy(imported.contents.path(), partial.path())?;
-    partial.persist_noclobber(&destination)?;
+    match replaces {
+        true => partial.persist(&destination)?,
+        false => partial.persist_noclobber(&destination)?,
+    };
     Ok(())
+}
+
+/// Whether the file `imported` starts with all of `existing`, as a
+/// transcript does once its session went on.
+fn continues(existing: &Path, imported: &Path) -> std::io::Result<bool> {
+    let existing_size = std::fs::metadata(existing)?.len();
+    if existing_size > std::fs::metadata(imported)?.len() {
+        return Ok(false);
+    }
+    let mut existing = std::io::BufReader::new(std::fs::File::open(existing)?);
+    let mut imported = std::io::BufReader::new(std::fs::File::open(imported)?);
+    let mut left = [0; 8192];
+    let mut right = [0; 8192];
+    loop {
+        let read = existing.read(&mut left)?;
+        if read == 0 {
+            return Ok(true);
+        }
+        imported.read_exact(&mut right[..read])?;
+        if left[..read] != right[..read] {
+            return Ok(false);
+        }
+    }
 }
 
 /// Every file under `directory`, or with `files` false every directory in

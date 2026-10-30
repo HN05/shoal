@@ -1969,9 +1969,10 @@ Agent conversations are the agent tools' private files, which Shoal never
 reads or changes. An export copies each reported session's files unread, found
 by ID where the agent's integration says its tool keeps them, under the
 daemon's environment or one its agents ran with, and an import puts them at the
-same path under the importing agent's session directory, never replacing a file
-there; a session whose files cannot be read is left out with a warning and
-starts over. The export records the agents' sessions, with the
+same path under the importing agent's session directory, replacing a file there
+only with one that continues it, as a session that went away and came back does,
+and leaving that to the installed Shoal in a development build; a session whose
+files cannot be read is left out with a warning and starts over. The export records the agents' sessions, with the
 exporting machine's ID when it has one, beside the moved records, which older
 importers read. An import on that machine, one that received the session's
 files, or one told to keep sessions, keeps the session IDs, which the agents resume from any directory, dropping another

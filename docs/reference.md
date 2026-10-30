@@ -2546,7 +2546,7 @@ checkpoint, then restores it as `shoal work restore` does; when that restore fai
 `shoal work restore <workspace>` retries it. The export carries the files of each
 session the agents reported, such as Claude Code's and Codex's transcripts, and
 the import puts them where the agent looks for them, keeping a file already
-there, so `shoal resume` continues each session by ID on any machine; a session
+there unless the imported one continues it, so `shoal resume` continues each session by ID on any machine; a session
 whose files the export could not read is left out with a warning, and continues
 only on the machine that exported it. `--keep-sessions` keeps every session,
 such as one whose files were copied by hand, and `--new-sessions` none.
