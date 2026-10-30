@@ -568,7 +568,10 @@ impl Manager {
     ) -> Result<BTreeMap<String, (Scope, Definition)>> {
         let config = self.config();
         let repo = self.workspace_settings_from(&config, workspace).await?;
-        let global = definitions(&config.resources, &config.resource_pools)?;
+        let global = definitions(
+            &config.repository.resources,
+            &config.repository.resource_pools,
+        )?;
         let local = definitions(&repo.resources, &repo.resource_pools)?;
         let mut result: BTreeMap<_, _> = global
             .into_iter()

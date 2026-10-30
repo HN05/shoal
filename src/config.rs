@@ -1,8 +1,10 @@
 pub mod edit;
 pub mod forges;
+pub mod machine;
 pub mod named_commands;
 pub mod options;
 pub mod overload;
+mod parse;
 pub(crate) mod placeholders;
 pub mod repo;
 pub mod report;
@@ -15,7 +17,6 @@ pub mod value;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -23,6 +24,7 @@ use std::{
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
+pub use machine::Machine;
 pub use repo::{
     AutoCleanup, Cleanup, Happy, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Settings,
     Simulators,
@@ -83,87 +85,12 @@ impl<'de> Deserialize<'de> for AgentLimit {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+/// The global config: settings that describe this machine, and its values
+/// for the options a repository may override, in the repository schema.
+#[derive(Debug, Default)]
 pub struct Config {
-    pub ai: crate::ai::Table,
-    pub commands: named_commands::Commands,
-    pub agent_resume: named_commands::Commands,
-    pub worker_template: Option<String>,
-    pub chat_template: Option<String>,
-    pub agent_dirs: Option<Vec<String>>,
-    pub agent_auth: crate::agent_auth::Config,
-    pub bitbucket: crate::forge::backends::bitbucket::Credentials,
-    /// Forge hosts whose type is set instead of asked.
-    pub forges: forges::Forges,
-    pub git: crate::git_profile::Git,
-    pub git_profile: Option<String>,
-    pub copy_ignored: Option<bool>,
-    pub pre_setup_cmd: Option<String>,
-    pub post_setup_cmd: Option<String>,
-    pub pre_remove_cmd: Option<String>,
-    pub post_remove_cmd: Option<String>,
-    pub post_done_cmd: Option<String>,
-    pub post_ready_cmd: Option<String>,
-    pub post_agent_exit_cmd: Option<String>,
-    pub post_resource_acquire_cmd: Option<String>,
-    pub pre_resource_release_cmd: Option<String>,
-    pub root_dir: Option<PathBuf>,
-    /// Agent an issue workspace starts when `--agent` is omitted.
-    pub default_agent: Option<crate::agent::Agent>,
-    /// Agents running at once on this machine; defaults to measured load and
-    /// `shoal add` queues past it. Use `none` for unlimited admission.
-    pub max_agents: Option<AgentLimit>,
-    /// How hard Shoal may load this machine; sets `[overload]` defaults.
-    pub load: overload::Load,
-    /// Hold off sleep, including from a closed laptop lid, while agents have work.
-    pub keep_awake: bool,
-    /// Whether new tabs and sessions take the terminal; unset follows the launch.
-    pub focus: Option<bool>,
-    /// Whether a place Shoal opened for a workspace closes once it is done.
-    pub close_when_done: Option<bool>,
-    /// The terminal host for launches from a terminal no host serves.
-    pub default_host: Option<repo::DefaultHost>,
-    pub claude: repo::ShortcutConfig,
-    pub codex: repo::ShortcutConfig,
-    pub herdr: repo::HerdrConfig,
-    pub rex: repo::RexConfig,
-    pub happy: repo::HappyConfig,
-    pub overload: overload::Overload,
-    pub cleanup: repo::CleanupConfig,
-    pub done: repo::DoneConfig,
-    pub idle_stop: repo::IdleStopConfig,
-    pub review: repo::ReviewConfig,
-    pub ready: repo::ReadyConfig,
-    pub unready: repo::UnreadyConfig,
-    pub pr: repo::PrConfig,
-    pub issue: repo::IssueConfig,
-    pub land: repo::LandConfig,
-    pub approvals: repo::ApprovalsConfig,
-    pub api: repo::ApiConfig,
-    pub ports: PortRange,
-    /// Environment variables layered per repository and rendered for a workspace.
-    pub env: BTreeMap<String, String>,
-    pub caches: BTreeMap<String, repo::Cache>,
-    pub demos: BTreeMap<String, crate::demos::Demo>,
-    /// Build tools whose usual setup every repository's workspaces share
-    /// unless the repository names its own.
-    pub presets: Option<Vec<crate::presets::Preset>>,
-    pub secrets: crate::secrets::Secrets,
-    pub resources: std::collections::BTreeMap<String, crate::daemon::resources::ResourceConfig>,
-    pub resource_pools: std::collections::BTreeMap<String, crate::daemon::resources::PoolConfig>,
-    pub simulators: crate::sim::SimConfig,
-    /// Retrying proxies an AI tool's agents reach their API through.
-    pub proxy: crate::proxy::Proxies,
-}
-
-/// The global `[ports]` range as written, so an omitted bound stays
-/// distinguishable from its built-in default.
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct PortRange {
-    pub start: Option<u16>,
-    pub end: Option<u16>,
+    pub machine: Machine,
+    pub repository: RepoConfig,
 }
 
 impl Ports {
@@ -242,13 +169,13 @@ impl Config {
     /// Parent of every repository directory: `<root>/<repo>/` holds the
     /// repository's URL clone as `.checkout` and its workspaces as siblings.
     pub fn root_dir(&self, paths: &Paths) -> Result<PathBuf> {
-        let Some(path) = &self.root_dir else {
+        let Some(path) = &self.machine.root_dir else {
             return Ok(paths.home.join("shoal"));
         };
         let path = crate::fsutil::expand_home(path, &paths.home);
         ensure!(
             path.is_absolute(),
-            "root_dir must be an absolute path or start with ~/"
+            "machine.root_dir must be an absolute path or start with ~/"
         );
         Ok(path)
     }
@@ -399,122 +326,41 @@ impl Config {
         let mut config = Self::load(paths)?;
         let directory = Self::path(paths);
         let directory = directory.parent().context("config has no directory")?;
-        if config.worker_template.is_none() {
-            config.worker_template = templates::read(directory, templates::WORKER_FILE)?;
+        let templates = &mut config.repository;
+        if templates.worker_template.is_none() {
+            templates.worker_template = templates::read(directory, templates::WORKER_FILE)?;
         }
-        if config.chat_template.is_none() {
-            config.chat_template = templates::read(directory, templates::CHAT_FILE)?;
+        if templates.chat_template.is_none() {
+            templates.chat_template = templates::read(directory, templates::CHAT_FILE)?;
         }
         Ok(config)
     }
 
     /// This machine's repository-overridable settings as the layer below the
-    /// repository's own; machine-only settings stay out of it.
+    /// repository's own, with the launchers its AI tools add.
     pub fn repository_layer(&self) -> RepoConfig {
-        RepoConfig {
-            commands: self
-                .commands
-                .clone()
-                .into_iter()
-                .chain(crate::ai::commands(&self.ai.entries))
-                .collect(),
-            agent_resume: self.agent_resume.clone(),
-            worker_template: self.worker_template.clone(),
-            chat_template: self.chat_template.clone(),
-            agent_auth: self.agent_auth.clone(),
-            git_profile: self.git_profile.clone(),
-            default_agent: self.default_agent.clone(),
-            max_agents: self.max_agents,
-            focus: self.focus,
-            close_when_done: self.close_when_done,
-            default_host: self.default_host,
-            claude: self.claude,
-            codex: self.codex,
-            herdr: self.herdr.clone(),
-            rex: self.rex.clone(),
-            happy: self.happy.clone(),
-            copy_ignored: self.copy_ignored,
-            agent_dirs: self.agent_dirs.clone(),
-            pre_setup_cmd: self.pre_setup_cmd.clone(),
-            post_setup_cmd: self.post_setup_cmd.clone(),
-            pre_remove_cmd: self.pre_remove_cmd.clone(),
-            post_remove_cmd: self.post_remove_cmd.clone(),
-            post_done_cmd: self.post_done_cmd.clone(),
-            post_ready_cmd: self.post_ready_cmd.clone(),
-            post_agent_exit_cmd: self.post_agent_exit_cmd.clone(),
-            post_resource_acquire_cmd: self.post_resource_acquire_cmd.clone(),
-            pre_resource_release_cmd: self.pre_resource_release_cmd.clone(),
-            ports: repo::PortsConfig {
-                start: self.ports.start,
-                end: self.ports.end,
-                ..Default::default()
-            },
-            env: self.env.clone(),
-            caches: self.caches.clone(),
-            demos: self.demos.clone(),
-            presets: self.presets.clone(),
-            secrets: self.secrets.clone(),
-            resources: self.resources.clone(),
-            resource_pools: self.resource_pools.clone(),
-            simulators: repo::SimulatorsConfig {
-                requires_approval: self.simulators.requires_approval,
-                approval_lifetime: self.simulators.approval_lifetime,
-                ..Default::default()
-            },
-            cleanup: self.cleanup,
-            done: self.done,
-            idle_stop: self.idle_stop,
-            review: self.review,
-            ready: self.ready,
-            unready: self.unready,
-            pr: self.pr.clone(),
-            issue: self.issue.clone(),
-            land: self.land,
-            approvals: self.approvals,
-            api: self.api,
-            ..Default::default()
-        }
+        let mut layer = self.repository.clone();
+        layer
+            .commands
+            .extend(crate::ai::commands(&self.machine.ai.entries));
+        layer
     }
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
-        let mut config: Self = toml::from_str(text)?;
+        let mut config = Self::from_toml(text)?;
+        let machine = &mut config.machine;
         let written: toml::Table = toml::from_str(text)?;
-        let overload = written.get("overload").and_then(toml::Value::as_table);
-        config.overload.follow_load(
-            config.load,
+        let overload = written
+            .get("machine")
+            .and_then(toml::Value::as_table)
+            .and_then(|machine| machine.get("overload"))
+            .and_then(toml::Value::as_table);
+        machine.overload.follow_load(
+            machine.load,
             crate::process::load::swap(),
             overload.unwrap_or(&toml::Table::new()),
         );
-        crate::ai::validate(&config.ai.entries, &config.commands, &paths.home)?;
-        crate::proxy::validate(&config.proxy)?;
-        crate::proxy::validate_references(&config.ai.entries, &config.proxy)?;
-        config.root_dir(paths)?;
-        config.cleanup.validate()?;
-        config.overload.validate()?;
-        config.simulators.validate()?;
-        config.git.validate()?;
-        config.agent_auth.validate()?;
-        config.bitbucket.validate()?;
-        config.forges.validate()?;
-        let layer = config.repository_layer();
-        for &kind in crate::hooks::HookKind::ALL {
-            kind.validate(kind.repository_command(&layer))?;
-        }
-        named_commands::validate(&config.commands)?;
-        named_commands::validate(&config.agent_resume)?;
-        for name in [&config.git_profile, &config.agent_auth.git_profile]
-            .into_iter()
-            .flatten()
-        {
-            config.git.profile(name)?;
-        }
-        crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
-        crate::env::validate_configured_environment(&config.env)?;
-        validate_agent_dirs(config.agent_dirs.as_deref().unwrap_or_default())?;
-        crate::caches::validate(&config.caches)?;
-        crate::demos::validate(&config.demos)?;
-        crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
-        crate::secrets::validate(&config.secrets)?;
+        config.validate(paths)?;
         // A global file is complete on its own: its bounds must combine with
         // the built-in defaults, so `config set ports.end 4000` is refused
         // rather than failing every later command.
@@ -522,15 +368,46 @@ impl Config {
         Ok(config)
     }
 
+    /// The file's two parts as written, without validating their values.
+    pub fn from_toml(text: &str) -> Result<Self> {
+        let (machine, repository) = parse::global(text)?;
+        Ok(Self {
+            machine,
+            repository,
+        })
+    }
+
+    fn validate(&self, paths: &Paths) -> Result<()> {
+        let (machine, repository) = (&self.machine, &self.repository);
+        repository.validate()?;
+        crate::ai::validate(&machine.ai.entries, &repository.commands, &paths.home)?;
+        crate::proxy::validate(&machine.proxy)?;
+        crate::proxy::validate_references(&machine.ai.entries, &machine.proxy)?;
+        self.root_dir(paths)?;
+        machine.overload.validate()?;
+        machine.simulators.validate()?;
+        machine.git.validate()?;
+        machine.bitbucket.validate()?;
+        machine.forges.validate()?;
+        for name in [&repository.git_profile, &repository.agent_auth.git_profile]
+            .into_iter()
+            .flatten()
+        {
+            machine.git.profile(name)?;
+        }
+        Ok(())
+    }
+
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
         let mut settings = resolve::Stack::new(self, layers).resolve()?;
-        crate::ai::inherit_launchers(&self.ai.tools, &mut settings.commands);
+        let ai = &self.machine.ai;
+        crate::ai::inherit_launchers(&ai.tools, &mut settings.commands);
         Ok(Effective::new(
             settings,
-            self.ai.tools.clone(),
-            crate::proxy::routes(&self.ai.tools, &self.proxy),
+            ai.tools.clone(),
+            crate::proxy::routes(&ai.tools, &self.machine.proxy),
         ))
     }
 }

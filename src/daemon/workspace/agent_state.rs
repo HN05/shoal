@@ -207,7 +207,7 @@ impl Manager {
             None => None,
         };
         let config = self.config();
-        match agent.and_then(|agent| config.ai.tools.get(&agent)) {
+        match agent.and_then(|agent| config.machine.ai.tools.get(&agent)) {
             Some(tool) => tool.prompt_cache(reported),
             None => reported.unwrap_or(crate::ai::DEFAULT_PROMPT_CACHE),
         }

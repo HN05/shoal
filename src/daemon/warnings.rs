@@ -40,7 +40,8 @@ impl Warnings {
         signal: Signal,
         message: &str,
     ) {
-        let repeat = Duration::from_secs(manager.config().overload.warning.repeat_minutes * 60);
+        let repeat =
+            Duration::from_secs(manager.config().machine.overload.warning.repeat_minutes * 60);
         self.sent
             .retain(|_, sent| now.duration_since(*sent) < repeat);
         let delivery = if signal.needs_processes() {

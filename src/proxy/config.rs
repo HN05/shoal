@@ -1,4 +1,4 @@
-//! The global `[proxy.<name>]` tables and the proxy each AI tool's agents
+//! The global `[machine.proxy.<name>]` tables and the proxy each AI tool's agents
 //! reach their upstream through.
 use std::collections::BTreeMap;
 
@@ -24,14 +24,15 @@ pub struct Proxy {
 pub fn validate(proxies: &Proxies) -> Result<()> {
     for (name, proxy) in proxies {
         crate::validate::name("proxy", name)?;
-        validate_upstream(&proxy.upstream).with_context(|| format!("proxy.{name}.upstream"))?;
+        validate_upstream(&proxy.upstream)
+            .with_context(|| format!("machine.proxy.{name}.upstream"))?;
         if let Some(key) = &proxy.key {
-            key.validate(&format!("proxy.{name}.key"))?;
+            key.validate(&format!("machine.proxy.{name}.key"))?;
         }
         if let Some(Value::Written(key)) = &proxy.key {
             ensure!(
                 !key.is_empty() && key.bytes().all(|byte| byte.is_ascii_graphic()),
-                "proxy.{name}.key must be visible ASCII text"
+                "machine.proxy.{name}.key must be visible ASCII text"
             );
         }
     }
@@ -59,7 +60,7 @@ pub fn validate_references(agents: &crate::ai::Agents, proxies: &Proxies) -> Res
         if let Some(proxy) = &agent.proxy {
             ensure!(
                 proxies.contains_key(proxy),
-                "ai.{name}.proxy names {proxy:?}, which no [proxy.{proxy}] defines"
+                "machine.ai.{name}.proxy names {proxy:?}, which no [machine.proxy.{proxy}] defines"
             );
         }
     }

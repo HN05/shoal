@@ -11,7 +11,8 @@ async fn configure(manager: &Manager, text: &str) {
     crate::test_support::configure(manager, text).await;
 }
 
-const NO_PRESSURE: &str = "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false\n";
+const NO_PRESSURE: &str =
+    "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false\n";
 
 #[tokio::test]
 async fn new_workspaces_start_from_the_default_branch_build() {
@@ -128,7 +129,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     // A warning threshold above any free space defers the build.
     configure(
         &manager,
-        "[overload.memory]\nenabled = false\n[overload.warning]\ndisk_free_gib = 1000000\n",
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.warning]\ndisk_free_gib = 1000000\n",
     )
     .await;
     manager.refresh_seeds().await;

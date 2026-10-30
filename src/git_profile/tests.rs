@@ -95,7 +95,7 @@ fn profiles_are_looked_up_by_portable_name() {
             .profile("home")
             .unwrap_err()
             .to_string()
-            .contains("[git.profiles.home]")
+            .contains("[machine.git.profiles.home]")
     );
     for text in [
         "[profiles.'bad name']\nuser.email = 'x'\n",

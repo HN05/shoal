@@ -915,10 +915,10 @@ opening does, so clients do not rebuild it.
 dispatcher share one count. Slots derive from state the daemon already tracks:
 connected agents, executions awaiting reattachment, resume records and starting
 queue entries, excluding completed workspaces. Agents therefore count however
-they started, and no separate counter can leak a slot. The global value limits
-the machine and a repository's effective value limits that repository; a
-repository without its own value inherits the global one, which already bounds
-it, so normal precedence serves both. The setting defaults to `dynamic`, which
+they started, and no separate counter can leak a slot. `machine.max_agents`
+limits the machine; the repository option `max_agents` limits each repository,
+with a global default like any other option, so one name never means both caps.
+The machine setting defaults to `dynamic`, which
 admits from measured load instead of a slot count, so the machine runs as many
 agents as it can without congestion. Agents start one at a time and staggered;
 an agent reads files before it edits and compiles, so a recent start reserves
@@ -1109,7 +1109,7 @@ tracked repository config, so it arrives as a reviewable commit that every clone
 shares rather than as saved local config. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
-AI tools are providers: built-in ones plus global `[ai.<name>]` entries. A
+AI tools are providers: built-in ones plus global `[machine.ai.<name>]` entries. A
 `command` there is the tool's launcher at the global `[commands]` layer, so
 repositories can still replace it, and gives it a `shoal <name>` agent shortcut
 that `run` shares; names that built-in commands shadow are rejected. Pickers
@@ -1361,7 +1361,7 @@ Asking leaves out the tokens gh and glab read from the environment for any
 host, so a host that may be another forge never receives them. The daemon records
 each answer in its state and asks recorded hosts again when it starts or
 reloads its config, recording a changed answer with an alert. A host it cannot reach then
-keeps its answer and raises no alert, since a machine may start offline; a global `[forges."<host>"] type`
+keeps its answer and raises no alert, since a machine may start offline; a global `[machine.forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
 parse the same way, and the CLI starts out knowing the pinned ones. A pasted
@@ -1370,7 +1370,7 @@ its routes name, such as `/pull/` for GitHub
 and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
 form several forges share, falls back to the name: GitLab for a `gitlab` name
 label or a glab login, and otherwise Forgejo. Host types describe hosts rather than
-repositories, so they are global only, like `[bitbucket]`. GitLab-only concepts such as approval rules and merge trains
+repositories, so they are global only, like `[machine.bitbucket]`. GitLab-only concepts such as approval rules and merge trains
 stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as
 `[secrets]` commands do, and Shoal still stores no token; agents act with the
@@ -1560,7 +1560,7 @@ state directory, skills included, unless tests in a temporary home set
 `SHOAL_DEV_USER_FILES=1`. A changed or removed skill stays as the user left it until an
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with
-`--force` replaces them. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
+`--force` replaces them. Global `[machine.ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
 the machine and cannot be set per repository; provider launchers join named
 commands without tool-specific integrations. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, then an adjacent `shoal-skills` symlink
@@ -1577,7 +1577,11 @@ and failed removal, are allocated atomically with idempotent lease names, and
 are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
-Global TOML is machine policy, seeded by `install` with the stated defaults when
+Global TOML is `[machine]`, the settings that describe this machine, plus the
+repository schema for this machine's defaults, so nothing is declared twice and
+a setting copies between the files. Each part is deserialized strictly on its own
+from one parse: `serde(flatten)` would accept unknown keys and lose error
+positions. It is seeded by `install` with the stated defaults when
 absent; explicit key edits preserve unrelated settings and comments and validate
 once per command before saving, so dependent keys change together, while reset or named template installation replaces the file.
 Global writes keep the previous file as a backup; the daemon reads it at startup

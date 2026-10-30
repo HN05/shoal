@@ -13,7 +13,7 @@ async fn recovery_progresses_after_every_protection_is_disabled() {
     let (_root, manager) = crate::test_support::manager().await;
     crate::test_support::configure(
         &manager,
-        "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false\n",
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false\n",
     )
     .await;
     let mut ready = manager.overload_recovery.watch();
@@ -29,7 +29,7 @@ async fn recovery_progresses_after_every_protection_is_disabled() {
 async fn recovery_waits_for_free_disk_space() {
     let (_root, manager) = crate::test_support::manager().await;
     let mut config = crate::config::Config::default();
-    config.overload.memory.enabled = false;
+    config.machine.overload.memory.enabled = false;
     manager.publish_config(config);
     let mut ready = manager.overload_recovery.watch();
     tokio::time::pause();
@@ -40,7 +40,7 @@ async fn recovery_waits_for_free_disk_space() {
     manager.config_state.publish_disk_reading(Some(generation));
     let recovered = Instant::now();
     wait_published(&mut ready).await;
-    let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
+    let window = Duration::from_secs(manager.config().machine.overload.recovery.sustained_seconds);
     assert!(recovered.elapsed() >= window);
     monitor.abort();
 }
@@ -49,7 +49,7 @@ async fn recovery_waits_for_free_disk_space() {
 async fn unsafe_readings_revoke_the_recovery_epoch() {
     let (_root, manager) = crate::test_support::manager().await;
     let mut config = crate::config::Config::default();
-    config.overload.memory.enabled = false;
+    config.machine.overload.memory.enabled = false;
     manager.publish_config(config);
     let generation = manager.config_state.generation();
     manager.config_state.publish_disk_reading(Some(generation));
@@ -79,9 +79,9 @@ async fn changed_thresholds_restart_the_recovery_window() {
     let (_root, manager) = crate::test_support::manager().await;
     let config = |sustained_seconds| {
         let mut config = crate::config::Config::default();
-        config.overload.memory.enabled = false;
-        config.overload.disk.enabled = false;
-        config.overload.recovery.sustained_seconds = sustained_seconds;
+        config.machine.overload.memory.enabled = false;
+        config.machine.overload.disk.enabled = false;
+        config.machine.overload.recovery.sustained_seconds = sustained_seconds;
         config
     };
     manager.publish_config(config(60));
@@ -104,9 +104,9 @@ async fn a_reload_withdraws_published_readiness_until_a_new_window() {
     let (_root, manager) = crate::test_support::manager().await;
     let config = |memory_used_percent| {
         let mut config = crate::config::Config::default();
-        config.overload.memory.enabled = false;
-        config.overload.disk.enabled = false;
-        config.overload.recovery.memory_used_percent = memory_used_percent;
+        config.machine.overload.memory.enabled = false;
+        config.machine.overload.disk.enabled = false;
+        config.machine.overload.recovery.memory_used_percent = memory_used_percent;
         config
     };
     manager.publish_config(config(85));
@@ -119,7 +119,7 @@ async fn a_reload_withdraws_published_readiness_until_a_new_window() {
     assert_eq!(*ready.borrow_and_update(), None);
     let reloaded = Instant::now();
     wait_published(&mut ready).await;
-    let window = Duration::from_secs(manager.config().overload.recovery.sustained_seconds);
+    let window = Duration::from_secs(manager.config().machine.overload.recovery.sustained_seconds);
     assert!(reloaded.elapsed() >= window);
     monitor.abort();
 }

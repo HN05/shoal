@@ -126,8 +126,8 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n\
-         [ai.droid]\ncommand = ['droid']\n[happy]\nenabled = true\n",
+        "[commands]\nreview = ['tuicr']\n[machine.ai.pi]\nskill_dir = '~/pi-skills'\n\
+         [machine.ai.droid]\ncommand = ['droid']\n[happy]\nenabled = true\n",
     )
     .unwrap();
     install_programs(
@@ -221,8 +221,8 @@ fn agents_without_installed_executables_are_not_completed() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.droid]\ncommand = ['droid']\n\
-         [ai.claude-direct]\nbase = 'claude'\n[ai.droid-direct]\nbase = 'droid'\n",
+        "[commands]\nreview = ['tuicr']\n[machine.ai.droid]\ncommand = ['droid']\n\
+         [machine.ai.claude-direct]\nbase = 'claude'\n[machine.ai.droid-direct]\nbase = 'droid'\n",
     )
     .unwrap();
     // Only the fixture's bin, so agents installed on this machine stay out.

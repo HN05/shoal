@@ -54,9 +54,10 @@ when behavior changes, distinguishing decisions from proposals.
   failure notifies without removing them, and each explicit mark reruns it.
   Missing-worktree cleanup skips hooks. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
-  with its registration. Every option that does not describe the machine may
-  also be set per repository and resolves saved config, worktree file, global
-  config, then default; the CLI reads the global file at launch and asks the
+  with its registration. Settings that describe the machine live under the
+  global `[machine]` table; every other option follows the repository schema in
+  both files and resolves saved config, worktree file, global config, then
+  default; the CLI reads the global file at launch and asks the
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands inherit a scope token; CLI refusals also follow process

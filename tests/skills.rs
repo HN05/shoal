@@ -445,7 +445,7 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
     fs::write(
         config.join("config.toml"),
         format!(
-            "[ai.pi]\nskill_dir = '~/pi skills'\n[ai.codex]\nskill_dir = {:?}\n",
+            "[machine.ai.pi]\nskill_dir = '~/pi skills'\n[machine.ai.codex]\nskill_dir = {:?}\n",
             home.path().join("custom codex").to_str().unwrap()
         ),
     )
@@ -477,13 +477,13 @@ fn configured_ai_tools_install_selected_or_all_skills_and_override_defaults() {
 #[test]
 fn invalid_ai_config_fails_before_installing_any_skill() {
     for invalid in [
-        "[ai.pi]\nskill_dir = 'relative'",
-        "[ai.pi]\nskill_dir = ''",
-        "[ai.pi]\nskill_dir = '~someone/skills'",
-        "[ai.pi]\nskill_dir = \"/tmp/\\u0000skills\"",
-        "[ai.all]\nskill_dir = '~/skills'",
-        "[ai.'bad name']\nskill_dir = '~/skills'",
-        "[ai.pi]\nskill_directory = '~/skills'",
+        "[machine.ai.pi]\nskill_dir = 'relative'",
+        "[machine.ai.pi]\nskill_dir = ''",
+        "[machine.ai.pi]\nskill_dir = '~someone/skills'",
+        "[machine.ai.pi]\nskill_dir = \"/tmp/\\u0000skills\"",
+        "[machine.ai.all]\nskill_dir = '~/skills'",
+        "[machine.ai.'bad name']\nskill_dir = '~/skills'",
+        "[machine.ai.pi]\nskill_directory = '~/skills'",
     ] {
         let home = tempfile::tempdir().unwrap();
         let config = home.path().join(".config/shoal");

@@ -2,8 +2,10 @@ use super::*;
 
 #[test]
 fn wrappers_resolve_per_tool() {
-    let global: crate::config::Config =
-        toml::from_str("[agent_auth]\nfj = '~/bin/fj-agent'\ngh = '/global/gh-agent'\n").unwrap();
+    let global = crate::config::Config::from_toml(
+        "[agent_auth]\nfj = '~/bin/fj-agent'\ngh = '/global/gh-agent'\n",
+    )
+    .unwrap();
     let layers = crate::config::repo::ConfigLayers {
         worktree_file: crate::config::repo::parse("[agent_auth]\nfj = '/repo/fj-agent'\n").unwrap(),
         saved_repository_config: crate::config::repo::parse(

@@ -90,9 +90,9 @@ fn agent_cli_and_config_spellings_remain_compatible() {
         };
         assert_eq!(agent, Some(expected.clone()));
         let text = format!("default_agent = {spelling:?}");
-        let global: crate::config::Config = toml::from_str(&text).unwrap();
+        let global = crate::config::Config::from_toml(&text).unwrap();
         let repo: crate::config::repo::RepoConfig = toml::from_str(&text).unwrap();
-        assert_eq!(global.default_agent, agent);
+        assert_eq!(global.repository.default_agent, agent);
         assert_eq!(repo.default_agent, agent);
         assert_eq!(serde_json::to_value(&expected).unwrap(), spelling);
         assert_eq!(
@@ -103,7 +103,7 @@ fn agent_cli_and_config_spellings_remain_compatible() {
     for invalid in ["Codex", "happy-Codex", "", "two words", "-agent"] {
         assert!(Cli::try_parse_from(["shoal", "add", "--agent", invalid]).is_err());
         let text = format!("default_agent = {invalid:?}");
-        assert!(toml::from_str::<crate::config::Config>(&text).is_err());
+        assert!(crate::config::Config::from_toml(&text).is_err());
         assert!(toml::from_str::<crate::config::repo::RepoConfig>(&text).is_err());
         assert!(serde_json::from_value::<Agent>(invalid.into()).is_err());
     }

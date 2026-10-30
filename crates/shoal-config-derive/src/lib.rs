@@ -15,6 +15,7 @@
 //! - `named`: a map whose entries replace the same-named entry below them whole
 //! - `list`: a list an empty value leaves to the layer below
 //! - `template`: an `Option<String>` a repository value is appended to
+//! - `repository_only`: rejected in the global file
 //! - `default = expr`: the built-in value; an `Option<T>` resolves to `T`
 //! - `resolve = path` or `resolve = path -> Type`: converts the merged value,
 //!   given with the merged struct it belongs to, into the resolved one
@@ -71,6 +72,7 @@ fn expand(input: &DeriveInput) -> Result<Tokens> {
     let conversions = fields.iter().filter_map(Field::conversion);
     let values = fields.iter().map(Field::resolved_value);
     let entries = fields.iter().map(Field::entries);
+    let repository_only = fields.iter().filter_map(Field::repository_only);
     Ok(quote! {
         #definition
 
@@ -102,6 +104,10 @@ fn expand(input: &DeriveInput) -> Result<Tokens> {
             ) -> ::anyhow::Result<()> {
                 #(#entries)*
                 Ok(())
+            }
+
+            fn repository_only(prefix: &str, keys: &mut ::std::vec::Vec<::std::string::String>) {
+                #(#repository_only)*
             }
         }
     })
@@ -180,6 +186,7 @@ struct Field {
     key: Key,
     kind: Kind,
     default: Option<Expr>,
+    repository_only: bool,
     resolve: Option<(Path, Option<Type>)>,
 }
 
@@ -202,6 +209,7 @@ impl Field {
                 .collect(),
             kind: Kind::Scalar,
             default: None,
+            repository_only: false,
             resolve: None,
         };
         for attribute in field.attrs.iter().filter(|a| a.path().is_ident("option")) {
@@ -221,6 +229,8 @@ impl Field {
                     parsed.kind = kind;
                 } else if meta.path.is_ident("default") {
                     parsed.default = Some(meta.value()?.parse()?);
+                } else if meta.path.is_ident("repository_only") {
+                    parsed.repository_only = true;
                 } else if meta.path.is_ident("resolve") {
                     let path = meta.value()?.parse::<Path>()?;
                     let ty = if meta.input.peek(Token![->]) {
@@ -231,9 +241,10 @@ impl Field {
                     };
                     parsed.resolve = Some((path, ty));
                 } else {
-                    return Err(
-                        meta.error("expected section, named, list, template, default or resolve")
-                    );
+                    return Err(meta.error(
+                        "expected section, named, list, template, default, \
+                         repository_only or resolve",
+                    ));
                 }
                 Ok(())
             })?;
@@ -372,6 +383,17 @@ impl Field {
                 quote!(crate::config::options::template_entry(#key, #sources, entries)?;)
             }
         }
+    }
+
+    fn repository_only(&self) -> Option<Tokens> {
+        let key = self.key();
+        if self.repository_only {
+            return Some(quote!(keys.push(#key);));
+        }
+        let ty = &self.ty;
+        (self.kind == Kind::Section).then(
+            || quote!(<#ty as crate::config::options::Options>::repository_only(&#key, keys);),
+        )
     }
 }
 

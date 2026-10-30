@@ -118,7 +118,7 @@ async fn only_an_ended_execution_with_a_record_can_be_queued() {
 async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let open = create(&manager, &repo, "open").await;
     let done = create(&manager, &repo, "done").await;
     let (running, _connection) = connected_agent(&manager, &open).await;
@@ -385,7 +385,7 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
 async fn a_stop_claims_only_the_agents_nothing_stopped_before() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
     let (running, _running) = connected_agent(&manager, &workspace).await;
     // A protection stop's agent keeps its execution while its wrapper waits.
@@ -486,7 +486,7 @@ async fn a_shutdown_returns_an_admitted_restore_to_the_queue_when_its_agent_regi
 async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
     signal_stop(&manager, &workspace, "agent");
     let path = record_path(&manager.paths, &workspace.id, "agent");
@@ -506,7 +506,7 @@ async fn a_stop_forgets_a_request_while_a_resume_holds_its_record() {
 async fn a_request_whose_record_is_gone_is_forgotten() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let workspace = create(&manager, &repo, "work").await;
     signal_stop(&manager, &workspace, "agent");
     // A resume consumed the record before dispatch saw the request.

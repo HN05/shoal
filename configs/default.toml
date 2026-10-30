@@ -1,15 +1,13 @@
-# Shoal machine configuration. Values shown are the defaults; edit them in place.
+# Shoal configuration. Values shown are the defaults; edit them in place.
 # The daemon reads this file when it starts, so changes take effect after
 # `shoal daemon restart`, except agent settings, which the CLI reads on every
-# command. Commented blocks
-# are examples, not defaults: uncomment a whole block and adapt it. A repository's
-# .shoal.toml (or the config saved with `shoal repo config`) holds its named
-# ports, setup and hook commands and resource pools, and may set any value below
-# for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
-# the shared resources, load, keep_awake and overload protection.
-
-# Parent of every repository's workspaces and URL clones.
-root_dir = "~/shoal"
+# command. Commented blocks are examples, not defaults: uncomment a whole block
+# and adapt it.
+#
+# The [machine] table describes this machine. Everything outside it follows the
+# schema of a repository's .shoal.toml (or the config saved with
+# `shoal repo config`), which may set any of it for that repository and adds the
+# repository's setup command and seed.
 
 # Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
 # A built-in launcher or a name defined in [commands].
@@ -19,22 +17,9 @@ root_dir = "~/shoal"
 # other working directories. Entries are absolute or start with ~/.
 agent_dirs = ["/tmp"]
 
-# Agents that run at once; by default `dynamic` starts them one at a time while
-# measured load stays below the warning thresholds `load` sets. `shoal add`
-# queues the rest and starts them as slots free. Set a positive number for a
-# fixed limit or `none` for unlimited admission. A repository's value limits
-# its own agents.
+# Agents of one repository that run at once, as a positive number; by default
+# only [machine] max_agents limits them.
 # max_agents = 3
-
-# How hard Shoal may load this machine: "light" for a computer you work on,
-# "balanced", or "full" for one that only runs agents. It sets the default
-# CPU and memory thresholds in [overload] and dynamic agent admission.
-# load = "balanced"
-
-# Keep the machine from sleeping, including when a laptop's lid closes, while
-# an agent is working or waits on a watched open PR. macOS still sleeps on a
-# closed lid without an external display.
-# keep_awake = false
 
 # `shoal add` focuses workspace shells and agents waiting for a prompt, and
 # starts agents with input in the background: a background Herdr tab, or a
@@ -63,15 +48,111 @@ default_host = "zmx"
 # post_setup_cmd = "/path/to/attach" # After readiness, in the CLI with a terminal.
 # pre_remove_cmd = "/path/to/detach" # Before removal, in the daemon without a terminal.
 
+[machine]
+# Parent of every repository's workspaces and URL clones.
+root_dir = "~/shoal"
+
+# Agents that run at once; by default `dynamic` starts them one at a time while
+# measured load stays below the warning thresholds `load` sets. `shoal add`
+# queues the rest and starts them as slots free. Set a positive number for a
+# fixed limit or `none` for unlimited admission.
+# max_agents = 3
+
+# How hard Shoal may load this machine: "light" for a computer you work on,
+# "balanced", or "full" for one that only runs agents. It sets the default
+# CPU and memory thresholds in [machine.overload] and dynamic agent admission.
+# load = "balanced"
+
+# Keep the machine from sleeping, including when a laptop's lid closes, while
+# an agent is working or waits on a watched open PR. macOS still sleeps on a
+# closed lid without an external display.
+# keep_awake = false
+
 # Named Git settings; omitted keys keep their normal Git values.
-# [git.profiles.work]
+# [machine.git.profiles.work]
 # user.name = "Your Name"
 # user.email = "you@example.com"
 # commit.gpgsign = false
-# [git.profiles.agent]
+# [machine.git.profiles.agent]
 # user.name = "Agent Name"
 # user.email = "agent@example.com"
 # core.sshCommand = "ssh -i ~/.ssh/agent_key -o IdentitiesOnly=yes"
+
+# Bitbucket Cloud credentials: a command that prints an access token, or an
+# Atlassian API token with its account email. Without them only public
+# repositories are readable. See docs/reference.md#forges.
+# [machine.bitbucket]
+# token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
+# email = "you@example.com"
+
+# The API a forge host serves, set instead of letting the daemon ask the host
+# once: "github", "gitlab", "forgejo" (also Gitea) or "bitbucket".
+# See docs/reference.md#forges.
+# [machine.forges."git.example.com"]
+# type = "gitlab"
+
+# Additional AI tools: command runs one as `shoal droid`, and
+# shoal skill install adds <skill>/SKILL.md beneath skill_dir.
+# [machine.ai.droid]
+# command = ["droid", "{args}"]
+# skill_dir = "~/.factory/skills"
+
+[machine.overload]
+# Machine-wide agent protection; allow stop requests to free memory before retrying.
+# Commented CPU and memory percentages are the balanced defaults of `load`.
+poll_seconds = 2
+cooldown_seconds = 5
+
+[machine.overload.memory]
+enabled = true
+# Linux usage excludes reclaimable cache; macOS uses native critical pressure.
+# used_percent = 95
+sustained_seconds = 0
+
+[machine.overload.cpu]
+# Optional aggregate CPU protection, sustained for five minutes.
+enabled = false
+# used_percent = 90
+sustained_seconds = 300
+
+[machine.overload.disk]
+# Available space on filesystems holding workspaces or daemon state, in GiB.
+enabled = true
+# Remove workspaces idle cleanup would remove, without waiting for the delay.
+cleanup_free_gib = 5
+# Stop tracked executions when cleanup cannot free enough space.
+stop_free_gib = 2
+
+[machine.overload.recovery]
+# Automatically restore agents with a configured [agent_resume] command.
+enabled = true
+# Require headroom for a full minute; restart agents one at a time.
+# memory_used_percent = 80
+# cpu_used_percent = 75
+sustained_seconds = 60
+
+[machine.overload.warning]
+# Message running agents to reduce load before an enabled protection stops them.
+enabled = true
+# Linux usage; macOS warns at native warning pressure.
+# memory_used_percent = 85
+# cpu_used_percent = 80
+cpu_sustained_seconds = 60
+disk_free_gib = 10
+# Least time between repeated warnings about one signal to one workspace.
+repeat_minutes = 30
+
+[machine.simulators]
+# Xcode simulator leases (macOS).
+max_booted = 2
+max_devices = 4
+idle_seconds = 120
+allow_any = false
+# Example profile; `default` must name a profile defined below it.
+# default = "phone"
+# [machine.simulators.profiles.phone]
+# device = "iPhone 17"
+# runtime = "iOS 26"
 
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
 [commands]
@@ -90,31 +171,12 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # my-agent = ["my-agent", "resume", "{path}"]
 
 # A separate account for tracked agents: user-owned forge executable wrappers
-# and a Git profile from [git.profiles] for the agent's Git commands.
+# and a Git profile from [machine.git.profiles] for the agent's Git commands.
 # See docs/reference.md#agent-accounts for setup.
 # [agent_auth]
 # fj = "~/bin/fj-agent"
 # gh = "~/bin/gh-agent"
 # git_profile = "agent"
-
-# Bitbucket Cloud credentials: a command that prints an access token, or an
-# Atlassian API token with its account email. Without them only public
-# repositories are readable. See docs/reference.md#forges.
-# [bitbucket]
-# token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
-# email = "you@example.com"
-
-# The API a forge host serves, set instead of letting the daemon ask the host
-# once: "github", "gitlab", "forgejo" (also Gitea) or "bitbucket".
-# See docs/reference.md#forges.
-# [forges."git.example.com"]
-# type = "gitlab"
-
-# Additional AI tools: command runs one as `shoal droid`, and
-# shoal skill install adds <skill>/SKILL.md beneath skill_dir.
-# [ai.droid]
-# command = ["droid", "{args}"]
-# skill_dir = "~/.factory/skills"
 
 [herdr]
 # Use Herdr tabs and panes; false runs as in a plain terminal.
@@ -152,51 +214,6 @@ default_mode = "cli"
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
-
-[overload]
-# Machine-wide agent protection; allow stop requests to free memory before retrying.
-# Commented CPU and memory percentages are the balanced defaults of `load`.
-poll_seconds = 2
-cooldown_seconds = 5
-
-[overload.memory]
-enabled = true
-# Linux usage excludes reclaimable cache; macOS uses native critical pressure.
-# used_percent = 95
-sustained_seconds = 0
-
-[overload.cpu]
-# Optional aggregate CPU protection, sustained for five minutes.
-enabled = false
-# used_percent = 90
-sustained_seconds = 300
-
-[overload.disk]
-# Available space on filesystems holding workspaces or daemon state, in GiB.
-enabled = true
-# Remove workspaces idle cleanup would remove, without waiting for the delay.
-cleanup_free_gib = 5
-# Stop tracked executions when cleanup cannot free enough space.
-stop_free_gib = 2
-
-[overload.recovery]
-# Automatically restore agents with a configured [agent_resume] command.
-enabled = true
-# Require headroom for a full minute; restart agents one at a time.
-# memory_used_percent = 80
-# cpu_used_percent = 75
-sustained_seconds = 60
-
-[overload.warning]
-# Message running agents to reduce load before an enabled protection stops them.
-enabled = true
-# Linux usage; macOS warns at native warning pressure.
-# memory_used_percent = 85
-# cpu_used_percent = 80
-cpu_sustained_seconds = 60
-disk_free_gib = 10
-# Least time between repeated warnings about one signal to one workspace.
-repeat_minutes = 30
 
 [cleanup.auto]
 # Remove idle, clean, pushed or landed workspaces automatically.
@@ -241,18 +258,6 @@ end = 65535
 # [demos.web]
 # preset = "web"
 # cmd = ["npm", "run", "dev"]
-
-[simulators]
-# Xcode simulator leases (macOS).
-max_booted = 2
-max_devices = 4
-idle_seconds = 120
-allow_any = false
-# Example profile; `default` must name a profile defined below it.
-# default = "phone"
-# [simulators.profiles.phone]
-# device = "iPhone 17"
-# runtime = "iOS 26"
 
 # Example permits shared across repositories; see the command reference.
 # [resources.signing]

@@ -432,6 +432,7 @@ impl Manager {
     /// Whether the AI tool `agent` names has `retry` on.
     fn retries(&self, agent: &str) -> bool {
         self.config()
+            .machine
             .ai
             .tools
             .get(agent)

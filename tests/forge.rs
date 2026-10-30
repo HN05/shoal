@@ -498,8 +498,8 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[forges.\"GHE.invalid\"]\ntype = \"github\"\n\
-         [forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
+        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\n\
+         [machine.forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
         &fixture.repo,
@@ -550,7 +550,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let message = refused["data"]["message"].as_str().unwrap();
     assert!(
         message.contains("unknown.invalid answers as none of")
-            && message.contains("[forges.\"unknown.invalid\"]"),
+            && message.contains("[machine.forges.\"unknown.invalid\"]"),
         "{message}"
     );
 }

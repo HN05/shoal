@@ -1,5 +1,5 @@
 //! Shoal's retrying proxy between agents and their API upstream, from the
-//! global `[proxy.<name>]` tables an `[ai.<name>]` tool names. The
+//! global `[machine.proxy.<name>]` tables an `[machine.ai.<name>]` tool names. The
 //! `shoal-proxy` crate forwards and retries; Shoal configures and runs one
 //! per agent launch.
 mod config;

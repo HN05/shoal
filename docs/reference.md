@@ -105,7 +105,11 @@ without changing either file; installation needs no daemon. `shoal config` edits
 installs and resets apply to a running daemon at once; after editing the file by
 hand, run `shoal daemon reload`. Reloading keeps running agents and leases, and an
 invalid file leaves the daemon's previous settings in place. The CLI reads agent
-settings on each command. Setup preserves compatible
+settings on each command. The global file's `[machine]` table holds the settings
+that describe this machine; everything outside it follows the repository config
+schema, so a setting copies between the two files. Only a repository config may
+set `setup_cmd` and `[seed]`, and only the global file `[machine]`; an unknown or
+misplaced key fails with its line and column. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Changing the service state directory requires stopping it with its existing
 `--state-dir` first.
@@ -184,7 +188,7 @@ once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
 stops nothing, and no agent restores until every reading succeeds.
 
 Before stopping anything, Shoal warns the agents. While memory, CPU or free
-disk space is past its `[overload.warning]` threshold and that protection is
+disk space is past its `[machine.overload.warning]` threshold and that protection is
 enabled, the daemon queues an [agent message](#agent-messages) for each
 workspace with a running agent, naming the threshold and asking it to reduce
 load. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
@@ -199,28 +203,29 @@ against stop thresholds; a warning at or above one arrives with the stop.
 Configure machine-wide settings in global TOML and reload the daemon:
 
 ```toml
+[machine]
 load = "balanced"              # "light", "balanced" or "full"
 
-[overload]
+[machine.overload]
 poll_seconds = 2
 cooldown_seconds = 5
 
-[overload.memory]
+[machine.overload.memory]
 enabled = true                 # Opt out with false
 used_percent = 95              # Linux only; 50–99
 sustained_seconds = 0           # Stop on the first critical sample
 
-[overload.cpu]
+[machine.overload.cpu]
 enabled = false                # Opt in with true
 used_percent = 90              # Aggregate busy time across all cores; 1–100
 sustained_seconds = 300         # Five minutes
 
-[overload.disk]
+[machine.overload.disk]
 enabled = true                 # Opt out with false
 cleanup_free_gib = 5           # Remove idle cleanup candidates below this
 stop_free_gib = 2              # Stop executions below this; 1 to cleanup_free_gib
 
-[overload.warning]
+[machine.overload.warning]
 enabled = true                 # Message running agents before a stop
 memory_used_percent = 85       # Linux; macOS warns at native warning pressure
 cpu_used_percent = 80
@@ -228,7 +233,7 @@ cpu_sustained_seconds = 60
 disk_free_gib = 10
 repeat_minutes = 30            # Least time between repeats per signal and workspace
 
-[overload.recovery]
+[machine.overload.recovery]
 enabled = true                 # Applies only with a configured resume command
 memory_used_percent = 80       # Linux; macOS requires normal pressure
 cpu_used_percent = 75
@@ -259,7 +264,7 @@ Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
 agent name. They use the same workspace substitutions and repository layering as
 `[commands]`; they must restore a session without repeating the initial prompt.
 Without one, an AI tool with resume arguments (`resume` and `resume_latest`
-under `[ai.<name>]`, built in for Claude and Codex) continues the session its
+under `[machine.ai.<name>]`, built in for Claude and Codex) continues the session its
 hooks last reported, otherwise the latest session in the workspace, without a
 session picker, with a prompt to continue its unfinished assignment on manual or
 automatic resume. Configured commands receive that prompt through `{prompt}`;
@@ -281,7 +286,7 @@ Recovery from load requires
 headroom below each enabled signal’s recovery threshold, whose thresholds must be
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
-a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
+a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
 or a done assignment prevent recovery, except from an [idle stop](#idle-agents). Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` notification names them, and the wrapper keeps
@@ -439,7 +444,8 @@ task prompt is never replayed.
 ### Keeping the machine awake
 
 ```toml
-keep_awake = true              # Opt in; global config only
+[machine]
+keep_awake = true              # Opt in
 ```
 
 With `keep_awake` set, the daemon keeps the machine from sleeping while an
@@ -477,7 +483,7 @@ started, counts as expired; one that ended a turn has the
 [cache lifetime](#agents) of its AI tool. The stop saves the agent as
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
-assignment is done and whatever `[overload.recovery]` says. Timers the agent
+assignment is done and whatever `[machine.overload.recovery]` says. Timers the agent
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
@@ -980,7 +986,7 @@ executable is on PATH. Add another AI tool in global config to run it as an agen
 ```toml
 default_agent = "droid"
 
-[ai.droid]
+[machine.ai.droid]
 command = ["droid", "{args}"]
 skill_dir = "~/.factory/skills" # Optional; see agent skills below
 instructions = ["--system-prompt", "{instructions}"] # Optional
@@ -1001,7 +1007,7 @@ A `base` makes a tool a launch profile of another, here Claude on its own
 claude.ai login while `claude` keeps going through a proxy:
 
 ```toml
-[ai.claude-direct]
+[machine.ai.claude-direct]
 base = "claude"
 env = { CLAUDE_CONFIG_DIR = "~/.claude-direct" }
 env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
@@ -1019,7 +1025,7 @@ Unsetting a variable does not undo one the agent's own settings file sets, such 
 the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
 `retry` defaults to `true` for Claude Code and its launch profiles, and `false`
-for other tools. Set `retry = false` under `[ai.claude]` to opt out; a tool's
+for other tools. Set `retry = false` under `[machine.ai.claude]` to opt out; a tool's
 launch profiles inherit its setting unless they override it. Retries apply to a
 turn an API error ended, for agents whose failed turns Shoal learns of: Claude
 Code, through its `StopFailure` hook, and any agent whose turn its
@@ -1055,14 +1061,14 @@ moment its turn ends.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
-`[proxy.<name>]`, the base URL the agent would otherwise use:
+`[machine.proxy.<name>]`, the base URL the agent would otherwise use:
 
 ```toml
-[proxy.cliproxy]
+[machine.proxy.cliproxy]
 upstream = "http://127.0.0.1:8317"   # CLIProxyAPI
 key = { env = "CLIPROXY_API_KEY" }   # or "<the key itself>", or { cmd = ["bw", "get", "password", "cliproxy"] }
 
-[ai.claude]
+[machine.ai.claude]
 proxy = "cliproxy"
 ```
 
@@ -1071,7 +1077,7 @@ so a profile such as `claude-direct` above would go through the proxy too. To
 keep a direct one, name the proxy on a profile and leave the base without it:
 
 ```toml
-[ai.claude-cliproxy]
+[machine.ai.claude-cliproxy]
 base = "claude"
 proxy = "cliproxy"
 ```
@@ -1356,8 +1362,8 @@ planned_label = "planned" # Default: unset
 ### Agent queue
 
 ```sh
-shoal config set max_agents dynamic           # Start agents while measured load allows
-shoal config set max_agents 3                 # Fixed machine-wide limit
+shoal config set machine.max_agents dynamic   # Start agents while measured load allows
+shoal config set machine.max_agents 3         # Fixed machine-wide limit
 shoal config set max_agents 2 --repo shoal    # And at most two of them in this repository
 shoal config set max_agents none --repo docs  # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
@@ -1371,25 +1377,26 @@ shoal queue move api last                     # Stops api's running agent and qu
 shoal queue cancel api                        # Removes a waiting entry; a restore's agent stays stopped
 ```
 
-`max_agents` limits the agents that run at once. It defaults to `dynamic`,
+`machine.max_agents` limits the agents that run at once. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured load
-leaves room below the [`[overload.warning]`](#overload-protection) CPU, memory
+leaves room below the [`[machine.overload.warning]`](#overload-protection) CPU, memory
 and disk thresholds, which [`load`](#overload-protection) sets. A new agent
 mostly reads files at first and compiles later, so for its first three minutes
 it counts at the load a settled agent shows: average CPU use over the last five
 minutes divided by the agents that have run longer, at least half a core each,
 or two cores each before any has. A start must fit the last minute's CPU use
 plus every such warming agent. With no agent running, one starts whatever the
-load. Critical memory, disk below `overload.disk.stop_free_gib`, or a failed
+load. Critical memory, disk below `machine.overload.disk.stop_free_gib`, or a failed
 memory or disk reading starts none; a missing CPU reading starts only that first
 agent. Disabled memory or disk protection ignores that signal. Set a positive
 number for a fixed limit or `none` for unlimited admission. While a fixed
-limit applies, so does the disk rule: below `[overload.warning] disk_free_gib`
+limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
 an agent starts only when none uses a slot, and below
-`overload.disk.stop_free_gib` or without a reading none starts. The global value
-counts every agent on the machine; a repository's fixed value (saved config or
-`.shoal.toml` in its registered checkout) counts only that repository's agents,
-within the global limit, while `dynamic` there adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
+`machine.overload.disk.stop_free_gib` or without a reading none starts. That
+value counts every agent on the machine; a fixed top-level `max_agents` counts
+only one repository's agents, within the machine limit: set globally, it applies
+to each repository that sets none of its own (saved config or `.shoal.toml` in
+its registered checkout). Its default, `dynamic`, adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done or its restore waits in the queue; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
@@ -1825,7 +1832,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths; its workspaces
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
-"~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
+"~/Projects"` under `[machine]` (absolute or `~/` path outside Shoal's state
 directory, every checkout and every repository directory; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
@@ -1890,7 +1897,7 @@ refused.
 Define named Git settings in the global config, then reload the daemon:
 
 ```toml
-[git.profiles.work]
+[machine.git.profiles.work]
 user.name = "Your Name"
 user.email = "you@company.example"
 user.signingKey = "your-key"
@@ -1936,8 +1943,8 @@ Edits preserve unrelated settings and comments and keep the previous file as
 so settings that depend on each other change together:
 
 ```sh
-shoal config set simulators.profiles.phone.device '"iPhone 17"' \
-  simulators.profiles.phone.runtime '"iOS 27"' simulators.default phone
+shoal config set machine.simulators.profiles.phone.device '"iPhone 17"' \
+  machine.simulators.profiles.phone.runtime '"iOS 27"' machine.simulators.default phone
 ```
 
 An invalid result leaves both files unchanged.
@@ -2249,7 +2256,7 @@ replaces the presets' commands and `paths` their outputs.
 The daemon keeps a locked, detached worktree at the local default branch's tip in
 the repository directory's `.seed`, and runs the build there when that branch or
 the seed's settings change. It checks every minute, one repository at a time, and
-waits while memory or free disk space is past its `[overload.warning]` threshold;
+waits while memory or free disk space is past its `[machine.overload.warning]` threshold;
 a build that failed is retried only after such a change or a daemon restart. The
 settings come from the repository's saved config and its registered checkout's
 file. `seed.cmd` is an executable inside the seed worktree, given as a relative
@@ -2579,14 +2586,14 @@ answers as another forge. A host that answers as none of them fails until you
 set its type, which also stops Shoal asking it:
 
 ```toml
-[forges."git.example.com"]
+[machine.forges."git.example.com"]
 type = "gitlab"   # or "github", "forgejo" (also Gitea) or "bitbucket"
 ```
 
 Lookups use
 your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
 saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
-token `[bitbucket]` configures. Without a login, only public repositories are
+token `[machine.bitbucket]` configures. Without a login, only public repositories are
 readable. Shoal stores no forge credentials. An issue or PR number may be
 written `#42`.
 
@@ -2598,13 +2605,13 @@ it, with what to do instead when it does not; `--json` returns `forge` and
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
 
-Bitbucket has no official CLI, so the global `[bitbucket]` table names a
+Bitbucket has no official CLI, so the global `[machine.bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
 each lookup or change and keeps nothing. The token is an access token, or an
 Atlassian API token when `email` names its account:
 
 ```toml
-[bitbucket]
+[machine.bitbucket]
 token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
 email = "you@example.com"
 ```
@@ -3390,7 +3397,7 @@ exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, automatic cleanup that starts failing, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
-a checkout with `core.bare` set, or retired settings in the global config. `shoal alerts send` adds a one-line message (at most 512 bytes, without
+a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
@@ -3673,8 +3680,8 @@ Each problem shows where you look and names the command that resolves it. When
 the daemon starts and when `daemon reload` rereads its config, it checks that
 `git`, `wt`, `lsof` and `zmx` are executable on its PATH, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
-a working tree, which retired settings the global config has, and which forge each
-recorded host serves, asking it again unless `[forges]` sets its type. Each
+a working tree, whether the global worker template repeats Shoal's guidance, and which forge each
+recorded host serves, asking it again unless `[machine.forges]` sets its type. Each
 problem becomes an `environment_problem` alert; a missing optional tool such as
 `fzf` raises none, and a host that cannot be asked keeps its answer. The inbox lists
 Git worktrees under registered repository roots that Shoal does not track. A
@@ -3769,14 +3776,14 @@ Shoal creates, boots, shares, and deletes its own Xcode simulators. Configure
 profiles in the global config and reload the daemon:
 
 ```toml
-[simulators]
+[machine.simulators]
 max_booted = 2
 max_devices = 4
 idle_seconds = 120
 allow_any = false
 default = "phone"
 
-[simulators.profiles.phone]
+[machine.simulators.profiles.phone]
 device = "iPhone 17"
 # runtime = "iOS 26.5"  # Optional pin
 ```
@@ -3786,7 +3793,7 @@ installed, available iOS runtime compatible with the device. `shoal catalog sim`
 lists the profiles, limits and the repository's preferences with the installed
 device types and runtimes; nothing is downloaded. Where simctl cannot run, it
 lists the configuration with the reason the inventory is missing.
-Repository config may set `[simulators] preferred = ["phone"]`;
+`[simulators] preferred = ["phone"]`, globally or per repository, orders them;
 flags override it, and `allow_any = true` permits unconfigured `--device`
 requests with a `--reason`.
 
@@ -4007,7 +4014,7 @@ tool without `skill_dir`; create a directory, or name the tool, to install for
 it. Set or override a tool's directory in global Shoal config:
 
 ```toml
-[ai.droid]
+[machine.ai.droid]
 skill_dir = "~/.factory/skills"
 ```
 

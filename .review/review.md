@@ -212,9 +212,9 @@ instead of the PR delivery guidance below.
   requests use fj's saved token for the repository's own host, validated, passed
   to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
   through `tea api`; GitLab requests go through `glab api`. Bitbucket requests
-  send the token `[bitbucket] token_command` prints, validated, only to
+  send the token `[machine.bitbucket] token_command` prints, validated, only to
   api.bitbucket.org on curl's stdin, never stored or logged. The forge is chosen
-  by a pinned `[forges."<host>"] type`, a well-known host name, or else the
+  by a pinned `[machine.forges."<host>"] type`, a well-known host name, or else the
   host's own answer to each forge's version or metadata endpoint, asked with
   only the logins saved for that host and never gh's or glab's environment
   tokens, which the daemon records so the host is asked once and asks again
@@ -342,7 +342,7 @@ instead of the PR delivery guidance below.
   not on PATH is refused before any work and left out of pickers, the workspace
   menu and completion.
 - Commands never name an agent or terminal host. What configuration can say about
-  an agent lives in its `[ai.<name>]` description; tool-specific code lives in an
+  an agent lives in its `[machine.ai.<name>]` description; tool-specific code lives in an
   `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
   in a `Host` under `cli/terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
@@ -373,7 +373,7 @@ instead of the PR delivery guidance below.
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
-  Below each enabled protection's stop threshold, `[overload.warning]` queues an
+  Below each enabled protection's stop threshold, `[machine.overload.warning]` queues an
   agent message for every workspace with a running agent, at most once per signal
   and workspace per repeat interval; warnings never stop, clean up or notify.
   A memory or CPU warning wakes an idle agent only while something besides the
@@ -437,7 +437,7 @@ configured command for another agent, plus proven child
   Repository-only commands require a current or explicit workspace; unknown names
   report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
-  AI tools (built-in providers and global `[ai.<name>]` entries) are agents:
+  AI tools (built-in providers and global `[machine.ai.<name>]` entries) are agents:
   an `[ai]` `command` joins the global command layer, and `shoal <name>` and
   `run` launch it as `shoal claude` does; pickers and completion offer AI tools
   only. Custom agent names select named commands and run as tracked agents. Their

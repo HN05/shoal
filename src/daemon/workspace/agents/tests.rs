@@ -120,7 +120,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         ),
     ] {
         let mut config = crate::config::Config::default();
-        config.overload.recovery.enabled = enabled;
+        config.machine.overload.recovery.enabled = enabled;
         manager.publish_config(config);
         let execution = manager
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)

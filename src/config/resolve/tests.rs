@@ -24,7 +24,7 @@ fn json<T: Serialize>(value: &T) -> Value {
 }
 
 fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
-    let global: Config = toml::from_str(global).unwrap();
+    let global = Config::from_toml(global).unwrap();
     let layers = ConfigLayers {
         worktree_file: parse(worktree).unwrap(),
         saved_repository_config: parse(saved).unwrap(),
@@ -204,9 +204,9 @@ fn rex_defaults_and_options_resolve_independently() {
     assert_eq!(settings.rex.close_when_done, Some(false));
     let herdr = stack("default_host = 'herdr'\n", "", "").resolve().unwrap();
     assert_eq!(herdr.default_host, crate::sessions::HostName::Herdr);
-    assert!(toml::from_str::<Config>("default_host = 'tmux'\n").is_err());
-    assert!(toml::from_str::<Config>("default_host = 'terminal'\n").is_err());
-    assert!(toml::from_str::<Config>("[rex]\nplacement = 'tab'\n").is_err());
+    assert!(Config::from_toml("default_host = 'tmux'\n").is_err());
+    assert!(Config::from_toml("default_host = 'terminal'\n").is_err());
+    assert!(Config::from_toml("[rex]\nplacement = 'tab'\n").is_err());
 }
 
 #[test]

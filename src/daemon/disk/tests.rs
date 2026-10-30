@@ -39,7 +39,7 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
         .set_modified(unused)
         .unwrap();
     let readings = AtomicUsize::new(0);
-    let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+    let low = manager.config().machine.overload.disk.cleanup_free_bytes() - 1;
     let available = |_: &Path| {
         // Deleting the Xcode data frees enough space.
         Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
@@ -79,7 +79,7 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
         .await
         .unwrap();
     let readings = AtomicUsize::new(0);
-    let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+    let low = manager.config().machine.overload.disk.cleanup_free_bytes() - 1;
     let available = |_: &Path| {
         // The first removal frees enough space.
         Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
@@ -103,7 +103,7 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     );
     // That pass freed enough space, so the next low reading starts another.
     // Space above the stop threshold stops nothing.
-    let above_stop = |_: &Path| Ok(manager.config().overload.disk.stop_free_bytes());
+    let above_stop = |_: &Path| Ok(manager.config().machine.overload.disk.stop_free_bytes());
     monitor.check(&manager, start, above_stop).await.unwrap();
     assert_eq!(names(manager.list_workspaces().await.unwrap()), ["first"]);
     // A pass that could not free enough space waits for the interval.
@@ -117,7 +117,7 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     assert!(manager.list_workspaces().await.unwrap().is_empty());
 
     // Agents recover only once every filesystem has the cleanup threshold.
-    let cleanup = manager.config().overload.disk.cleanup_free_bytes();
+    let cleanup = manager.config().machine.overload.disk.cleanup_free_bytes();
     let recovered = |manager: &Manager| manager.config_state.disk_space_recovered();
     monitor
         .check(&manager, start, |_: &Path| Ok(cleanup - 1))
@@ -168,7 +168,7 @@ async fn cleanup_removes_candidates_until_enough_space_is_free() {
     manager
         .config_state
         .publish_disk_reading(Some(manager.config_state.generation()));
-    crate::test_support::configure(&manager, "[overload.disk]\nenabled = false\n").await;
+    crate::test_support::configure(&manager, "[machine.overload.disk]\nenabled = false\n").await;
     Monitor::default()
         .check(&manager, start, |_: &Path| -> io::Result<u64> {
             panic!("disabled disk protection sampled free space")
@@ -204,7 +204,7 @@ async fn cleanup_empties_unused_caches_after_removing_workspaces() {
     let go = crate::caches::directories(&repo, &caches).unwrap()["go"].clone();
     std::fs::write(go.join("entry"), "cached").unwrap();
     // Above the stop threshold, so only cleanup runs.
-    let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+    let low = manager.config().machine.overload.disk.cleanup_free_bytes() - 1;
     Monitor::default()
         .check(&manager, Instant::now(), |_: &Path| Ok(low))
         .await
@@ -256,7 +256,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .unwrap();
     assert!(result.exists(), "removal keeps results");
     // Above the stop threshold, so only cleanup runs.
-    let low = manager.config().overload.disk.cleanup_free_bytes() - 1;
+    let low = manager.config().machine.overload.disk.cleanup_free_bytes() - 1;
     Monitor::default()
         .check(&manager, Instant::now(), |_: &Path| Ok(low))
         .await
@@ -304,7 +304,7 @@ async fn cleanup_reads_space_again_after_purging_leftover_caches() {
     let layout = Layout::of(&repo).unwrap();
     layout.move_aside().unwrap();
     let readings = AtomicUsize::new(0);
-    let critical = manager.config().overload.disk.stop_free_bytes() - 1;
+    let critical = manager.config().machine.overload.disk.stop_free_bytes() - 1;
     let available = |_: &Path| {
         // Purging the leftovers frees enough space.
         Ok(if readings.fetch_add(1, Ordering::Relaxed) == 0 {
@@ -349,7 +349,7 @@ async fn failed_cleanup_still_stops_executions_on_critical_space() {
         )
         .await
         .unwrap();
-    let settings = &manager.config().overload.disk;
+    let settings = &manager.config().machine.overload.disk;
     let (critical, low) = (
         settings.stop_free_bytes() - 1,
         settings.cleanup_free_bytes() - 1,
@@ -434,7 +434,7 @@ async fn low_space_warns_running_agents_before_cleanup_starts() {
         )
         .await;
     let config = manager.config();
-    let above_warning = config.overload.warning.disk_free_bytes();
+    let above_warning = config.machine.overload.warning.disk_free_bytes();
     let mut monitor = Monitor::default();
     monitor
         .check(&manager, Instant::now(), |_: &Path| Ok(above_warning))

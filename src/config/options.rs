@@ -29,6 +29,9 @@ pub trait Options: Default + Clone {
     /// Every option with its value and the layer that supplied it, from
     /// `sources` highest first.
     fn entries(prefix: &str, sources: &[(&Self, Layer)], entries: &mut Vec<Entry>) -> Result<()>;
+
+    /// The keys only a repository config may set.
+    fn repository_only(prefix: &str, keys: &mut Vec<String>);
 }
 
 /// Which layers a merge combines; only templates tell them apart.

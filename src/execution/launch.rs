@@ -544,7 +544,7 @@ async fn prepare_agent_launch(
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
     Ok(Some(AgentLaunch {
-        account: settings.agent_auth.prepare(paths, &config.git)?,
+        account: settings.agent_auth.prepare(paths, &config.machine.git)?,
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
         integration: agent.map(|agent| settings.integration(agent)),

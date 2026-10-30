@@ -56,7 +56,7 @@ struct Fixture {
 const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
-const FORGEJO_HOST: &str = "forges.\"forge.example\".type = \"forgejo\"\n";
+const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -2557,7 +2557,7 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
             vec![&outer],
         ),
     ] {
-        fs::write(&config, format!("root_dir = {root:?}\n")).unwrap();
+        fs::write(&config, format!("machine.root_dir = {root:?}\n")).unwrap();
         fixture.restart();
         for source in sources {
             let output = fixture.run(&["repo", "add", source]);
@@ -2588,7 +2588,7 @@ fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
     )));
     let config = fixture.root.path().join(".config/shoal/config.toml");
     fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(&config, "root_dir = \"~/file\"\n").unwrap();
+    fs::write(&config, "machine.root_dir = \"~/file\"\n").unwrap();
     fixture.restart();
     let output = fixture.run(&["repo", "add", &url]);
     assert!(!output.status.success());
@@ -2602,7 +2602,7 @@ fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
 
 #[test]
 fn root_directory_normalizes_missing_components_before_creation() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/missing/../clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/missing/../clones\"\n"));
     let workspace = fixture.add("normalized-root");
     let root = fs::canonicalize(fixture.root.path()).unwrap();
     assert!(Path::new(workspace["path"].as_str().unwrap()).starts_with(root.join("clones")));
@@ -2643,7 +2643,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
     assert!(
         config.contains(&format!(
-            "root_dir = {:?}",
+            "machine.root_dir = {:?}",
             fixture.root.path().join("moved")
         )),
         "{config}"
@@ -2679,7 +2679,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
 #[test]
 fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let fixture = Fixture::with_config(Some(
-        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agent_resume]\nclaude = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "[machine.overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agent_resume]\nclaude = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let claude_config = fixture.root.path().join(".claude.json");
@@ -2765,7 +2765,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
 
 #[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");
     fs::write(directory.join("project"), "keep this file").unwrap();
     std::os::unix::fs::symlink("missing-target", directory.join("project-2")).unwrap();
@@ -2826,7 +2826,7 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
 #[test]
 fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
     let shared = tempfile::tempdir_in("/tmp").unwrap();
-    let config = format!("root_dir = {:?}", shared.path().to_str().unwrap());
+    let config = format!("machine.root_dir = {:?}", shared.path().to_str().unwrap());
     let first = Fixture::with_config(Some(&config));
     let second = Fixture::with_config(Some(&config));
     let clone = |fixture: &Fixture| {
@@ -2858,8 +2858,9 @@ fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
 
 #[test]
 fn configured_root_directory_affects_new_repositories_and_preserves_existing_paths() {
-    let mut fixture =
-        Fixture::with_config(Some("root_dir = \"~/clones with ' quotes & $literal\"\n"));
+    let mut fixture = Fixture::with_config(Some(
+        "machine.root_dir = \"~/clones with ' quotes & $literal\"\n",
+    ));
     let url = format!("file://{}", fixture.repo.display());
     let repo = fixture.ok(&["repo", "add", &url]);
     let path = Path::new(repo["path"].as_str().unwrap());
@@ -2871,7 +2872,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
     let new_root = fixture.root.path().join("new clones");
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        format!("root_dir = {:?}\n", new_root.to_str().unwrap()),
+        format!("machine.root_dir = {:?}\n", new_root.to_str().unwrap()),
     )
     .unwrap();
     fixture.restart();
@@ -2902,7 +2903,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
 
 #[test]
 fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/default-clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/default-clones\"\n"));
     let url = format!("file://{}", fixture.repo.display());
     let relative = "projects/a repo with ' quotes & $literal";
     let output = fixture
@@ -4230,7 +4231,9 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 
 #[test]
 fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
-    let fixture = Fixture::with_config(Some("[ai.droid]\ncommand = ['fake-droid', '{args}']\n"));
+    let fixture = Fixture::with_config(Some(
+        "[machine.ai.droid]\ncommand = ['fake-droid', '{args}']\n",
+    ));
     let bin = fixture.root.path().join("bin");
     install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
     fixture.add("parent");
@@ -4294,7 +4297,7 @@ fn split_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
 #[test]
 fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
     let fixture = Fixture::with_config(Some(
-        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+        "[machine.overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
     ));
     // The daemon's worker starts the child's agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -4709,7 +4712,7 @@ fn configured_environment_renders_for_tracked_commands() {
 
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
-    let fixture = Fixture::with_config(Some("max_agents = 'none'"));
+    let fixture = Fixture::with_config(Some("machine.max_agents = 'none'"));
     let bin = fixture.root.path().join("add-agent-bin");
     fs::create_dir(&bin).unwrap();
     let inspection = fixture.root.path().join("agent-inspection.json");
@@ -5498,7 +5501,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -5565,7 +5568,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -6659,7 +6662,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
 #[test]
 fn catalog_lists_configuration_where_simulators_are_unavailable() {
     let fixture = Fixture::with_config(Some(
-        "[simulators.profiles.phone]\ndevice = 'Phone'\n[resources.signing]\ncapacity = 1\n",
+        "[machine.simulators.profiles.phone]\ndevice = 'Phone'\n[resources.signing]\ncapacity = 1\n",
     ));
     // A host without Xcode: Linux refuses before running it, macOS runs this.
     install_test_script(
@@ -7004,15 +7007,15 @@ fn setup_commands_cannot_recursively_run_setup() {
 
 #[cfg(target_os = "macos")]
 const SIM_CONFIG: &str = r#"
-[simulators]
+[machine.simulators]
 max_booted = 1
 max_devices = 2
 idle_seconds = 120
 default = "phone"
-[simulators.profiles.phone]
+[machine.simulators.profiles.phone]
 device = "Phone"
 runtime = "iOS Test"
-[simulators.profiles.tablet]
+[machine.simulators.profiles.tablet]
 device = "Tablet"
 runtime = "iOS Test"
 "#;
@@ -7137,7 +7140,7 @@ fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
         format!(
-            "root_dir = {:?}\n",
+            "machine.root_dir = {:?}\n",
             root_file.path().join("repos").to_str().unwrap()
         ),
     )
@@ -7159,11 +7162,11 @@ fn global_config_changes_reload_a_running_daemon() {
     let result = fixture.ok(&[
         "config",
         "set",
-        "simulators.profiles.phone.device",
+        "machine.simulators.profiles.phone.device",
         "iPhone 17",
-        "simulators.profiles.phone.runtime",
+        "machine.simulators.profiles.phone.runtime",
         "iOS 27",
-        "simulators.default",
+        "machine.simulators.default",
         "phone",
     ]);
     assert_eq!(result["daemon_reloaded"], true);
@@ -7176,7 +7179,11 @@ fn global_config_changes_reload_a_running_daemon() {
     // Hand edits apply on an explicit reload; an invalid file keeps the running config.
     let config = fixture.root.path().join(".config/shoal/config.toml");
     let edited = fs::read_to_string(&config).unwrap();
-    fs::write(&config, format!("{edited}\n[simulators]\nmax_booted = 0\n")).unwrap();
+    fs::write(
+        &config,
+        format!("{edited}\n[machine.simulators]\nmax_booted = 0\n"),
+    )
+    .unwrap();
     assert!(!fixture.run(&["daemon", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
     fs::write(&config, format!("{NO_GRACE}{FORGEJO_HOST}")).unwrap();
@@ -13358,9 +13365,9 @@ fn proxied_claude() -> Fixture {
     let config = home.join(".config/shoal/config.toml");
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(
-        "[proxy.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
+        "[machine.proxy.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
          key = { env = 'CLIPROXY_TEST_KEY' }\n\
-         [ai.claude]\nproxy = 'cliproxy'\n",
+         [machine.ai.claude]\nproxy = 'cliproxy'\n",
     );
     fs::write(&config, text).unwrap();
     let reload = fixture.run(&["daemon", "reload"]);
@@ -13465,12 +13472,11 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(
         "[env]\nPROXY_URL = 'http://proxy'\nKEPT = 'kept'\n\
-         [ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
+         [machine.ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
          env_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n\
-         [ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
+         [machine.ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
     );
-    let chat_profile =
-        "[ai.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
+    let chat_profile = "[machine.ai.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
     fs::write(&config, format!("{text}{chat_profile}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
@@ -14055,7 +14061,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
 
 #[test]
 fn agent_picker_can_skip_launch_select_agents_or_cancel() {
-    let fixture = Fixture::with_config(Some("[ai.none]\ncommand = ['agent-probe']\n"));
+    let fixture = Fixture::with_config(Some("[machine.ai.none]\ncommand = ['agent-probe']\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -17003,8 +17009,8 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 #[test]
 fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     let fixture = Fixture::with_config(Some(
-        "git_profile = 'personal'\n[git.profiles.personal]\nuser.email = 'personal@example.invalid'\n\
-         [git.profiles.work]\nuser.name = 'Work Name'\nuser.email = 'work@example.invalid'\ncommit.gpgsign = false\n",
+        "git_profile = 'personal'\n[machine.git.profiles.personal]\nuser.email = 'personal@example.invalid'\n\
+         [machine.git.profiles.work]\nuser.name = 'Work Name'\nuser.email = 'work@example.invalid'\ncommit.gpgsign = false\n",
     ));
     git(
         &fixture.repo,
@@ -17123,7 +17129,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
 #[test]
 fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     let fixture = Fixture::with_config(Some(
-        "[git.profiles.manual]\nuser.email = 'manual@example.invalid'\n",
+        "[machine.git.profiles.manual]\nuser.email = 'manual@example.invalid'\n",
     ));
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     git(&fixture.repo, &["branch", "existing-profile"]);
@@ -17973,7 +17979,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
 #[test]
 fn agent_git_profile_applies_only_to_agent_processes() {
     let fixture = Fixture::with_config(Some(
-        "[git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
+        "[machine.git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
     ));
     git(
         &fixture.repo,
@@ -18699,8 +18705,8 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "worker_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n\
-         [ai.notes]\nskill_dir = '~/notes'\n",
+        "worker_template = 'Follow {branch}'\n[machine.ai.droid]\ncommand = ['fake-droid', '{args}']\n\
+         [machine.ai.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
     for name in ["fake-droid", "repo-droid"] {
@@ -21093,8 +21099,8 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
 #[cfg(target_os = "macos")]
 fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args() {
     let config = SIM_CONFIG.replace(
-        "[simulators.profiles.phone]",
-        "[simulators.profiles.phone]\nrequires_approval=true\napproval_lifetime='workspace'",
+        "[machine.simulators.profiles.phone]",
+        "[machine.simulators.profiles.phone]\nrequires_approval=true\napproval_lifetime='workspace'",
     );
     let mut fixture = Fixture::with_tools(Some(&config), true);
     commit_resource_config(&fixture.repo, "[simulators]\nrequires_approval=false\n");
@@ -21229,8 +21235,8 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
 #[cfg(target_os = "macos")]
 fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants() {
     let config = SIM_CONFIG.replace(
-        "[simulators]",
-        "[simulators]\nrequires_approval=true\napproval_lifetime='workspace'",
+        "[machine.simulators]",
+        "[simulators]\nrequires_approval=true\napproval_lifetime='workspace'\n[machine.simulators]",
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     commit_resource_config(&fixture.repo, "[simulators]\napproval_lifetime='lease'\n");
@@ -21266,8 +21272,8 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
 #[cfg(target_os = "macos")]
 fn exported_scopes_request_simulator_approval_before_mutations() {
     let config = SIM_CONFIG.replace(
-        "[simulators.profiles.phone]",
-        "[simulators.profiles.phone]\nrequires_approval=true",
+        "[machine.simulators.profiles.phone]",
+        "[machine.simulators.profiles.phone]\nrequires_approval=true",
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("external");
@@ -24901,7 +24907,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "machine.max_agents = 1\n[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();
@@ -26008,7 +26014,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
 #[test]
 fn add_queues_agents_past_max_agents_until_removed() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
@@ -26121,7 +26127,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 #[test]
 fn a_queued_agent_keeps_its_callers_output_setting() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nrecorder = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nrecorder = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     // The daemon's worker starts the queued agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -26170,7 +26176,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'exit 0']\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'exit 0']\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();

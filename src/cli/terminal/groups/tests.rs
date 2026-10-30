@@ -2,7 +2,7 @@ use super::*;
 use crate::sessions::HostName;
 
 fn settings(global: &str) -> Effective {
-    let config: crate::config::Config = toml::from_str(global).unwrap();
+    let config = crate::config::Config::from_toml(global).unwrap();
     config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap()
@@ -10,7 +10,7 @@ fn settings(global: &str) -> Effective {
 
 /// Settings with `repository` as the repository's own config file.
 fn repository_settings(global: &str, repository: &str) -> Effective {
-    let config: crate::config::Config = toml::from_str(global).unwrap();
+    let config = crate::config::Config::from_toml(global).unwrap();
     config
         .resolve(&crate::config::repo::ConfigLayers {
             worktree_file: crate::config::repo::parse(repository).unwrap(),

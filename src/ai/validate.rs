@@ -1,4 +1,4 @@
-//! Validation of the `[ai.<name>]` entries a config file sets.
+//! Validation of the `[machine.ai.<name>]` entries a config file sets.
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -20,27 +20,28 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
             "AI tool name 'all' is reserved for skill installation"
         );
         if let Some(directory) = &agent.skill_dir {
-            skill_dir(directory, home).with_context(|| format!("ai.{name}.skill_dir"))?;
+            skill_dir(directory, home).with_context(|| format!("machine.ai.{name}.skill_dir"))?;
         }
         if let Some(argv) = &agent.command {
-            validate_command(name, argv, commands).with_context(|| format!("ai.{name}.command"))?;
+            validate_command(name, argv, commands)
+                .with_context(|| format!("machine.ai.{name}.command"))?;
         }
         if let Some(base) = &agent.base {
-            validate_launcher_name(name, commands).with_context(|| format!("ai.{name}"))?;
-            validate_base(agents, name, base).with_context(|| format!("ai.{name}.base"))?;
+            validate_launcher_name(name, commands).with_context(|| format!("machine.ai.{name}"))?;
+            validate_base(agents, name, base).with_context(|| format!("machine.ai.{name}.base"))?;
         }
-        validate_environment(agents, name, agent).with_context(|| format!("ai.{name}"))?;
+        validate_environment(agents, name, agent).with_context(|| format!("machine.ai.{name}"))?;
         ensure!(
             agent.retry.is_none() || runs_as_agent(agents, name),
-            "ai.{name}.retry needs a command or base, or a built-in AI tool"
+            "machine.ai.{name}.retry needs a command or base, or a built-in AI tool"
         );
         ensure!(
             agent.prompt_cache_minutes.is_none() || runs_as_agent(agents, name),
-            "ai.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
+            "machine.ai.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
         );
         ensure!(
             agent.prompt_cache_minutes != Some(0),
-            "ai.{name}.prompt_cache_minutes must be at least 1"
+            "machine.ai.{name}.prompt_cache_minutes must be at least 1"
         );
         for (key, argv, placeholders) in [
             (
@@ -54,13 +55,13 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
         ] {
             if let Some(argv) = argv {
                 validate_arguments(argv, placeholders)
-                    .with_context(|| format!("ai.{name}.{key}"))?;
+                    .with_context(|| format!("machine.ai.{name}.{key}"))?;
             }
         }
         // An empty `add_dir` turns the built-in one off.
         if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
             validate_arguments(argv, &["{directory}"])
-                .with_context(|| format!("ai.{name}.add_dir"))?;
+                .with_context(|| format!("machine.ai.{name}.add_dir"))?;
         }
     }
     Ok(())

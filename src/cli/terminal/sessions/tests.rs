@@ -19,7 +19,7 @@ fn a_place_repeats_only_in_the_same_host_and_server() {
 #[test]
 fn attachment_is_read_only_through_enabled_hosts() {
     let resolved = |global: &str| {
-        let config: crate::config::Config = toml::from_str(global).unwrap();
+        let config = crate::config::Config::from_toml(global).unwrap();
         config
             .resolve(&crate::config::repo::ConfigLayers::default())
             .unwrap()

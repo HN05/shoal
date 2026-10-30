@@ -1,4 +1,4 @@
-//! AI tools: the providers Shoal ships and the user's `[ai.<name>]` additions,
+//! AI tools: the providers Shoal ships and the user's `[machine.ai.<name>]` additions,
 //! each resolved once into a [`Tool`].
 use std::{
     collections::BTreeMap,
@@ -58,7 +58,7 @@ pub struct Agent {
     /// How many minutes the tool's prompt cache lives after its last
     /// request, over what its own settings give.
     pub prompt_cache_minutes: Option<u64>,
-    /// The `[proxy.<name>]` the tool's tracked agents reach their API through.
+    /// The `[machine.proxy.<name>]` the tool's tracked agents reach their API through.
     pub proxy: Option<String>,
 }
 
@@ -119,10 +119,14 @@ pub fn load(home: &Path) -> Result<Tools> {
     else {
         return Ok(Table::default().tools);
     };
-    let config: crate::config::Config =
-        toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
-    validate(&config.ai.entries, &config.commands, home)?;
-    Ok(config.ai.tools)
+    let config = crate::config::Config::from_toml(&text)
+        .with_context(|| format!("parse {}", path.display()))?;
+    validate(
+        &config.machine.ai.entries,
+        &config.repository.commands,
+        home,
+    )?;
+    Ok(config.machine.ai.tools)
 }
 
 #[cfg(test)]

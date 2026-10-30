@@ -291,7 +291,7 @@ impl Manager {
     /// thresholds, so a seed build adds no load to a strained host. A failed
     /// reading defers the build.
     fn seed_headroom(&self, layout: &Layout) -> bool {
-        let overload = &self.config().overload;
+        let overload = &self.config().machine.overload;
         let sample = capacity::sample(&[self.paths.state.as_path(), layout.root()], overload, None);
         let disk_floor = if overload.warning.enabled {
             overload.warning.disk_free_bytes()

@@ -6,22 +6,26 @@ async fn reload_replaces_the_global_config_only_when_valid() {
     let path = Config::path(&manager.paths);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     let before = manager.config();
-    fs::write(&path, "[simulators.profiles.phone]\nruntime = 'iOS 27'\n").unwrap();
+    fs::write(
+        &path,
+        "[machine.simulators.profiles.phone]\nruntime = 'iOS 27'\n",
+    )
+    .unwrap();
     assert!(manager.reload_config().await.is_err());
     assert!(Arc::ptr_eq(&manager.config(), &before));
     fs::write(
         &path,
-        "[simulators]\ndefault = 'phone'\n\
-             [simulators.profiles.phone]\ndevice = 'iPhone 17'\n",
+        "[machine.simulators]\ndefault = 'phone'\n\
+             [machine.simulators.profiles.phone]\ndevice = 'iPhone 17'\n",
     )
     .unwrap();
     manager.reload_config().await.unwrap();
     assert_eq!(
-        manager.config().simulators.default.as_deref(),
+        manager.config().machine.simulators.default.as_deref(),
         Some("phone")
     );
     // A snapshot taken before the reload keeps the settings it started with.
-    assert_eq!(before.simulators.default, None);
+    assert_eq!(before.machine.simulators.default, None);
 }
 
 #[tokio::test]

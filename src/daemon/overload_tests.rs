@@ -1481,7 +1481,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
 async fn set_recovery(manager: &Manager, enabled: bool) {
     crate::test_support::configure(
         manager,
-        &format!("[overload.recovery]\nenabled = {enabled}\n"),
+        &format!("[machine.overload.recovery]\nenabled = {enabled}\n"),
     )
     .await;
 }

@@ -89,7 +89,7 @@ pub async fn configure(manager: &Manager, text: &str) {
 
 /// Global config `text` as a published config, read like [`configure`]'s.
 pub fn global_config(text: &str) -> crate::config::Config {
-    toml::from_str(&format!("{BASE_CONFIG}{text}")).unwrap()
+    crate::config::Config::from_toml(&format!("{BASE_CONFIG}{text}")).unwrap()
 }
 
 /// Global config always turns off `copy_ignored`: only the CLI runs the

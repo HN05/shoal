@@ -102,6 +102,7 @@ pub struct RepoConfig {
     /// Directories every agent and chat gets as other working directories.
     #[option(default = vec!["/tmp".into()])]
     pub agent_dirs: Option<Vec<String>>,
+    #[option(repository_only)]
     pub setup_cmd: Option<String>,
     pub pre_setup_cmd: Option<String>,
     pub post_remove_cmd: Option<String>,
@@ -160,7 +161,7 @@ pub struct RepoConfig {
     pub approvals: ApprovalsConfig,
     #[option(section)]
     pub api: ApiConfig,
-    #[option(section)]
+    #[option(section, repository_only)]
     pub seed: Seed,
 }
 
@@ -269,6 +270,12 @@ pub struct PortDefinition {
     pub on_conflict: Option<ConflictPolicy>,
 }
 
+pub fn parse(text: &str) -> Result<RepoConfig> {
+    let config = crate::config::parse::repository(text)?;
+    config.validate()?;
+    Ok(config)
+}
+
 pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
     let paths = [
         workspace_dir.join(".shoal.toml"),
@@ -320,38 +327,39 @@ impl RepoConfig {
         }
         warnings
     }
-}
 
-pub fn parse(text: &str) -> Result<RepoConfig> {
-    let config: RepoConfig = toml::from_str(text)?;
-    crate::config::named_commands::validate(&config.commands)?;
-    crate::config::named_commands::validate(&config.agent_resume)?;
-    config.agent_auth.validate()?;
-    if let Some(name) = &config.git_profile {
-        crate::validate::name("git profile", name)?;
+    /// Each option's value on its own; layers combine into settings that
+    /// [`Stack::resolve`](crate::config::resolve::Stack::resolve) checks again.
+    pub fn validate(&self) -> Result<()> {
+        crate::config::named_commands::validate(&self.commands)?;
+        crate::config::named_commands::validate(&self.agent_resume)?;
+        self.agent_auth.validate()?;
+        if let Some(name) = &self.git_profile {
+            crate::validate::name("git profile", name)?;
+        }
+        for &kind in crate::hooks::HookKind::ALL {
+            kind.validate(kind.repository_command(self))?;
+        }
+        self.cleanup.validate()?;
+        crate::config::validate_port_range(self.ports.start, self.ports.end)?;
+        for (name, definition) in &self.ports.definitions {
+            crate::validate::lowercase_name("port", name)
+                .with_context(|| format!("invalid configured port name: {name}"))?;
+            ensure!(
+                definition.port != Some(0),
+                "configured port {name} cannot use port zero"
+            );
+        }
+        crate::daemon::resources::definitions(&self.resources, &self.resource_pools)?;
+        crate::env::validate_configured_environment(&self.env)?;
+        crate::config::validate_agent_dirs(self.agent_dirs.as_deref().unwrap_or_default())?;
+        crate::caches::validate(&self.caches)?;
+        crate::demos::validate(&self.demos)?;
+        crate::presets::validate(self.presets.as_deref().unwrap_or_default())?;
+        crate::secrets::validate(&self.secrets)?;
+        self.seed.validate()?;
+        Ok(())
     }
-    for &kind in crate::hooks::HookKind::ALL {
-        kind.validate(kind.repository_command(&config))?;
-    }
-    config.cleanup.validate()?;
-    crate::config::validate_port_range(config.ports.start, config.ports.end)?;
-    for (name, definition) in &config.ports.definitions {
-        crate::validate::lowercase_name("port", name)
-            .with_context(|| format!("invalid configured port name: {name}"))?;
-        ensure!(
-            definition.port != Some(0),
-            "configured port {name} cannot use port zero"
-        );
-    }
-    crate::daemon::resources::definitions(&config.resources, &config.resource_pools)?;
-    crate::env::validate_configured_environment(&config.env)?;
-    crate::config::validate_agent_dirs(config.agent_dirs.as_deref().unwrap_or_default())?;
-    crate::caches::validate(&config.caches)?;
-    crate::demos::validate(&config.demos)?;
-    crate::presets::validate(config.presets.as_deref().unwrap_or_default())?;
-    crate::secrets::validate(&config.secrets)?;
-    config.seed.validate()?;
-    Ok(config)
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]

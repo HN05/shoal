@@ -403,7 +403,7 @@ pub(super) async fn launch_agent(
 
 /// Whether `shoal <name>` launches an agent rather than a configured command.
 pub(super) fn is_agent(ctx: &Context, name: &str) -> Result<bool> {
-    let tools = Config::load(&ctx.paths)?.ai.tools;
+    let tools = Config::load(&ctx.paths)?.machine.ai.tools;
     Ok(crate::ai::agents(&tools).any(|agent| agent == name) || added(name).is_some())
 }
 
@@ -541,7 +541,7 @@ pub(in crate::cli) fn ensure_forks(settings: &Effective, name: &str) -> Result<(
     }
     ensure!(
         settings.launch(name).arguments.fork.is_some(),
-        "cannot fork a session of {name}: configure [ai.{name}] fork"
+        "cannot fork a session of {name}: configure [machine.ai.{name}] fork"
     );
     Ok(())
 }
@@ -578,7 +578,7 @@ pub(crate) fn launch_proxy<'a>(
     ensure!(
         integration(settings.integration(name)).routes_through_proxy(),
         "cannot start {name}: Shoal cannot send its API requests through a proxy; \
-         remove proxy from its [ai.{name}]"
+         remove proxy from its [machine.ai.{name}]"
     );
     Ok(Some(proxy))
 }
@@ -586,7 +586,7 @@ pub(crate) fn launch_proxy<'a>(
 /// Refuse an agent whose executables are missing.
 fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
     let programs = programs(name, commands).with_context(|| {
-        format!("unknown agent {name:?}; set [ai.{name}] command in Shoal config")
+        format!("unknown agent {name:?}; set [machine.ai.{name}] command in Shoal config")
     })?;
     for program in programs {
         ensure_program(name, program)?;

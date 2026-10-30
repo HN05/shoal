@@ -385,8 +385,8 @@ impl Typed {
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
             .collect();
-        crate::ai::inherit_launchers(&global.ai.tools, &mut commands);
-        let providers: BTreeSet<_> = crate::ai::agents(&global.ai.tools)
+        crate::ai::inherit_launchers(&global.machine.ai.tools, &mut commands);
+        let providers: BTreeSet<_> = crate::ai::agents(&global.machine.ai.tools)
             .map(str::to_owned)
             .collect();
         let agents = global.resolve(&layers).map_or_else(

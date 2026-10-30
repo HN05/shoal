@@ -5,7 +5,7 @@ use serde::Deserialize;
 crate::state::states! {
     /// How hard Shoal may load this machine: a computer someone works on, or
     /// one that only runs agents. It sets the CPU and memory thresholds that
-    /// `[overload]` leaves out.
+    /// `[machine.overload]` leaves out.
     #[derive(Default)]
     Load {
         Light => "light",
@@ -205,7 +205,7 @@ impl Warning {
 }
 
 impl Overload {
-    /// Set the CPU and memory thresholds `written`, the `[overload]` table as
+    /// Set the CPU and memory thresholds `written`, the `[machine.overload]` table as
     /// the file spells it, leaves out from `load`.
     pub(crate) fn follow_load(&mut self, load: Load, swap: bool, written: &toml::Table) {
         let unset = |table: &str, key: &str| {
@@ -257,63 +257,66 @@ impl Overload {
     pub fn validate(&self) -> Result<()> {
         ensure!(
             (50..=99).contains(&self.memory.used_percent),
-            "overload.memory.used_percent must be between 50 and 99"
+            "machine.overload.memory.used_percent must be between 50 and 99"
         );
         ensure!(
             self.memory.sustained_seconds <= 86400,
-            "overload.memory.sustained_seconds must be between 0 and 86400"
+            "machine.overload.memory.sustained_seconds must be between 0 and 86400"
         );
         ensure!(
             (1..=100).contains(&self.cpu.used_percent),
-            "overload.cpu.used_percent must be between 1 and 100"
+            "machine.overload.cpu.used_percent must be between 1 and 100"
         );
-        validate_seconds(self.cpu.sustained_seconds, "overload.cpu.sustained_seconds")?;
+        validate_seconds(
+            self.cpu.sustained_seconds,
+            "machine.overload.cpu.sustained_seconds",
+        )?;
         ensure!(
             self.recovery.memory_used_percent > 0
                 && self.recovery.memory_used_percent < self.memory.used_percent,
-            "overload.recovery.memory_used_percent must be positive and below overload.memory.used_percent"
+            "machine.overload.recovery.memory_used_percent must be positive and below machine.overload.memory.used_percent"
         );
         ensure!(
             self.recovery.cpu_used_percent > 0
                 && self.recovery.cpu_used_percent < self.cpu.used_percent,
-            "overload.recovery.cpu_used_percent must be positive and below overload.cpu.used_percent"
+            "machine.overload.recovery.cpu_used_percent must be positive and below machine.overload.cpu.used_percent"
         );
         ensure!(
             (1..=MAX_FREE_GIB).contains(&self.disk.stop_free_gib),
-            "overload.disk.stop_free_gib must be between 1 and {MAX_FREE_GIB}"
+            "machine.overload.disk.stop_free_gib must be between 1 and {MAX_FREE_GIB}"
         );
         ensure!(
             (self.disk.stop_free_gib..=MAX_FREE_GIB).contains(&self.disk.cleanup_free_gib),
-            "overload.disk.cleanup_free_gib must be between overload.disk.stop_free_gib and {MAX_FREE_GIB}"
+            "machine.overload.disk.cleanup_free_gib must be between overload.disk.stop_free_gib and {MAX_FREE_GIB}"
         );
         validate_seconds(
             self.recovery.sustained_seconds,
-            "overload.recovery.sustained_seconds",
+            "machine.overload.recovery.sustained_seconds",
         )?;
         // Warnings are not checked against stop thresholds, so existing
         // configurations stay valid; a warning at or above one comes with the stop.
         ensure!(
             (1..=99).contains(&self.warning.memory_used_percent),
-            "overload.warning.memory_used_percent must be between 1 and 99"
+            "machine.overload.warning.memory_used_percent must be between 1 and 99"
         );
         ensure!(
             (1..=100).contains(&self.warning.cpu_used_percent),
-            "overload.warning.cpu_used_percent must be between 1 and 100"
+            "machine.overload.warning.cpu_used_percent must be between 1 and 100"
         );
         validate_seconds(
             self.warning.cpu_sustained_seconds,
-            "overload.warning.cpu_sustained_seconds",
+            "machine.overload.warning.cpu_sustained_seconds",
         )?;
         ensure!(
             (1..=MAX_FREE_GIB).contains(&self.warning.disk_free_gib),
-            "overload.warning.disk_free_gib must be between 1 and {MAX_FREE_GIB}"
+            "machine.overload.warning.disk_free_gib must be between 1 and {MAX_FREE_GIB}"
         );
         ensure!(
             (1..=1440).contains(&self.warning.repeat_minutes),
-            "overload.warning.repeat_minutes must be between 1 and 1440"
+            "machine.overload.warning.repeat_minutes must be between 1 and 1440"
         );
-        validate_seconds(self.poll_seconds, "overload.poll_seconds")?;
-        validate_seconds(self.cooldown_seconds, "overload.cooldown_seconds")
+        validate_seconds(self.poll_seconds, "machine.overload.poll_seconds")?;
+        validate_seconds(self.cooldown_seconds, "machine.overload.cooldown_seconds")
     }
 }
 

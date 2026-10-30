@@ -47,7 +47,7 @@ impl Environment {
     }
 }
 
-/// What a provider's launcher takes after its command, from `[ai.<name>]`,
+/// What a provider's launcher takes after its command, from `[machine.ai.<name>]`,
 /// else the built-in provider.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Arguments {
