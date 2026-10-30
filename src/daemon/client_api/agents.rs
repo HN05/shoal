@@ -6,7 +6,7 @@ use anyhow::Result;
 use shoal_client::records as api;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{store, workspace::Manager},
     execution::recovery,
     model::{QueueEntry, Workspace},
     state::{AgentState, QueueState},
@@ -14,9 +14,8 @@ use crate::{
 
 /// What the daemon knows of the agents of every workspace.
 pub(super) struct Agents {
-    /// The agent each workspace runs, by workspace ID; `None` for an
-    /// execution whose agent is not recorded.
-    running: HashMap<String, Option<String>>,
+    /// The agent each workspace runs, by workspace ID.
+    running: HashMap<String, String>,
     /// Queued launches and restores, by the workspace they start in.
     queued: HashMap<String, QueueEntry>,
     /// The first stopped agent with a session to restore, by workspace ID.
@@ -33,7 +32,7 @@ impl Agents {
             };
             return Some(api::AgentStatus {
                 state,
-                agent: agent.clone(),
+                agent: Some(agent.clone()),
                 since,
             });
         }
@@ -67,30 +66,31 @@ fn agent_state(state: AgentState) -> api::AgentState {
 
 /// The running, queued and stopped agents of `workspaces`.
 pub(super) async fn load(manager: &Manager, workspaces: &[Workspace]) -> Result<Agents> {
-    let running = manager
-        .store
-        .run(|db| {
-            Ok(db
-                .prepare("SELECT workspace_id,agent FROM executions WHERE agent IS NOT NULL")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<HashMap<String, Option<String>>>>()?)
-        })
-        .await?;
+    Ok(Agents {
+        running: manager.store.run(store::running_agents).await?,
+        queued: queued(manager).await?,
+        stopped: stopped(manager, workspaces)?,
+    })
+}
+
+/// The first queued launch or restore of each workspace.
+async fn queued(manager: &Manager) -> Result<HashMap<String, QueueEntry>> {
     let mut queued = HashMap::new();
     for entry in manager.queue_entries().await? {
         if let Some(workspace) = entry.workspace() {
             queued.entry(workspace.to_owned()).or_insert(entry);
         }
     }
+    Ok(queued)
+}
+
+/// The agent of the first stopped agent record of each of `workspaces`.
+fn stopped(manager: &Manager, workspaces: &[Workspace]) -> Result<HashMap<String, String>> {
     let mut stopped = HashMap::new();
     for workspace in workspaces {
         if let Some(agent) = recovery::stopped_agents(&manager.paths, &workspace.id)?.first() {
             stopped.insert(workspace.id.clone(), agent.record.agent.clone());
         }
     }
-    Ok(Agents {
-        running,
-        queued,
-        stopped,
-    })
+    Ok(stopped)
 }

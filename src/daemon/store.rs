@@ -4,7 +4,7 @@ use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
-use std::{path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
     model::{
@@ -1085,6 +1085,14 @@ pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
         })
         .optional()?
         .flatten())
+}
+
+/// The agent each workspace runs, by workspace ID.
+pub fn running_agents(db: &mut Connection) -> Result<HashMap<String, String>> {
+    Ok(db
+        .prepare("SELECT workspace_id,agent FROM executions WHERE agent IS NOT NULL")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// The executions running in the workspaces of repository `repository_id`.
