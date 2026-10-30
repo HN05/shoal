@@ -140,7 +140,7 @@ async fn command(
         ..
     } = launch;
     let instructions = templates::instructions(
-        settings.worker_template.as_deref(),
+        settings.agent.templates.worker.as_deref(),
         workspace,
         delivery(integration, settings),
     );

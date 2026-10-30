@@ -67,8 +67,8 @@ supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. When no command covers a
 read, `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
-`glab api`. It refuses other methods unless the repository sets `[api]
-agent_writes`. File
+`glab api`. It refuses other methods unless the repository sets `[permissions]
+api_writes`. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
 workspace, and only `--link` assigns it to you. A problem that belongs to another
 repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`
@@ -80,7 +80,7 @@ opening a duplicate. Merging is
 the user's: `shoal pr merge` refuses workspace processes.
 
 A repository can require the user's approval for issues and PRs you open
-(`[approvals]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
+(`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
 approval request, instead of the item; `pr open` still pushes. Only the user decides
 proposals, never a coordinating agent. Continue your work and do not open the
 item another way. The user may edit the title and
@@ -154,7 +154,7 @@ your questions is open, so ask with `shoal questions ask` when you need the user
 workspace goes. `shoal done` closes your open questions, and `shoal done --undo` does
 not reopen them. Holds belong to the user and host apps; you can list them with
 `shoal leases hold` but not acquire or release them. `--cleanup` overrides a
-`[done] cleanup = false` default. Dirty or newer work is retained;
+`[cleanup.done] enabled = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed, on the local
 default branch, or with its changes on the branch the workspace builds on. After
 taking another workspace's commits into your branch under new SHAs, as with a
@@ -168,7 +168,7 @@ When a linked PR is ready to merge (checks pass, review findings handled, no
 conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
-unless `[ready] undraft = false`. When something new needs fixing, run
+unless `[pr] undraft_on_ready = false`. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
 finishing, run `shoal alerts send "<one-line message>"`; if it stops applying before

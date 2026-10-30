@@ -8,7 +8,7 @@ fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
             .resolve(&crate::config::repo::ConfigLayers::default())
             .unwrap()
     };
-    let splits = resolved("[rex]\nplacement = 'split'\n");
+    let splits = resolved("[terminal.rex]\nplacement = 'split'\n");
     let windows = resolved("");
     let block = Origin {
         group: Some("session:1".into()),
@@ -30,7 +30,7 @@ fn only_a_start_from_the_callers_place_splits_it_where_config_asks() {
 #[test]
 fn every_host_but_the_plain_terminal_can_be_the_default() {
     for &name in HostName::ALL {
-        let parsed = crate::config::Config::from_toml(&format!("default_host = '{name}'"));
+        let parsed = crate::config::Config::from_toml(&format!("terminal.default_host = '{name}'"));
         let Some(registered) = registration(name) else {
             assert!(parsed.is_err(), "{name}");
             continue;
@@ -47,9 +47,10 @@ fn every_host_but_the_plain_terminal_can_be_the_default() {
 
 #[test]
 fn a_default_host_config_turns_off_is_none() {
-    let config =
-        crate::config::Config::from_toml("default_host = 'herdr'\n[herdr]\nenabled = false")
-            .unwrap();
+    let config = crate::config::Config::from_toml(
+        "terminal.default_host = 'herdr'\n[terminal.herdr]\nenabled = false",
+    )
+    .unwrap();
     let settings = config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap();

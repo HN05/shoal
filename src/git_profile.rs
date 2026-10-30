@@ -7,10 +7,10 @@ use serde::Deserialize;
 
 use crate::{git, validate};
 
-/// `[machine.git]`: the profiles a repository config or `add --git-profile`
-/// may select by name.
+/// `[machine.git_profiles]`: the profiles a repository config or
+/// `add --git-profile` may select by name.
 #[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(transparent)]
 pub struct Git {
     pub profiles: BTreeMap<String, Profile>,
 }
@@ -30,7 +30,7 @@ impl Git {
         self.profiles.get(name).with_context(|| {
             if self.profiles.is_empty() {
                 format!(
-                    "git profile {name} is not defined; add [machine.git.profiles.{name}] to the global config"
+                    "git profile {name} is not defined; add [machine.git_profiles.{name}] to the global config"
                 )
             } else {
                 let defined: Vec<_> = self.profiles.keys().map(String::as_str).collect();

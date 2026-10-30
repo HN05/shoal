@@ -9,44 +9,8 @@
 # `shoal repo config`), which may set any of it for that repository and adds the
 # repository's setup command and seed.
 
-# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
-# A built-in launcher or a name defined in [commands].
-# default_agent = "codex"
-
-# Directories every agent and chat may read without a permission prompt, as
-# other working directories. Entries are absolute or start with ~/.
-agent_dirs = ["/tmp"]
-
-# Agents of one repository that run at once, as a positive number; by default
-# only [machine] max_agents limits them.
-# max_agents = 3
-
-# `shoal add` focuses workspace shells and agents waiting for a prompt, and
-# starts agents with input in the background: a background Herdr tab, or a
-# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
-# focus = true
-
-# Close the Herdr tab or zmx session Shoal opened for a workspace once the
-# workspace is removed, or once `done` keeps it and the agent finishes its turn.
-close_when_done = true
-
-# Where launches from a terminal outside Herdr and Rex run: detached zmx
-# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
-# local Rex server ("rex").
-default_host = "zmx"
-
-# Prompt templates normally live beside this file as worker-template.md and
-# chat-template.md. Inline text takes precedence over the corresponding file.
-# worker_template = "Follow repository instructions in {workspace} at {path}."
-# chat_template = "Discuss the {repo} repository at {path} without changing it."
-
 # Git identity for new worktrees (no default); may also be set per repository.
 # git_profile = "work"
-
-# Optional untracked lifecycle hooks; repository values replace these commands.
-# Each value is one executable path, relative to the worktree or absolute.
-# post_setup_cmd = "/path/to/attach" # After readiness, in the CLI with a terminal.
-# pre_remove_cmd = "/path/to/detach" # Before removal, in the daemon without a terminal.
 
 [machine]
 # Parent of every repository's workspaces and URL clones.
@@ -69,11 +33,11 @@ root_dir = "~/shoal"
 # keep_awake = false
 
 # Named Git settings; omitted keys keep their normal Git values.
-# [machine.git.profiles.work]
+# [machine.git_profiles.work]
 # user.name = "Your Name"
 # user.email = "you@example.com"
 # commit.gpgsign = false
-# [machine.git.profiles.agent]
+# [machine.git_profiles.agent]
 # user.name = "Agent Name"
 # user.email = "agent@example.com"
 # core.sshCommand = "ssh -i ~/.ssh/agent_key -o IdentitiesOnly=yes"
@@ -154,6 +118,31 @@ allow_any = false
 # device = "iPhone 17"
 # runtime = "iOS 26"
 
+[agent]
+# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
+# A built-in launcher or a name defined in [commands].
+# default = "codex"
+# Directories every agent and chat may read without a permission prompt, as
+# other working directories. Entries are absolute or start with ~/.
+dirs = ["/tmp"]
+# Agents of one repository that run at once, as a positive number; by default
+# only [machine] max_agents limits them.
+# max_running = 3
+# The Git profile from [machine.git_profiles] for tracked agents' Git commands.
+# git_profile = "agent"
+
+# A separate account for tracked agents: user-owned forge executable wrappers.
+# See docs/reference.md#agent-accounts for setup.
+# [agent.forge_clis]
+# fj = "~/bin/fj-agent"
+# gh = "~/bin/gh-agent"
+
+# Prompt templates normally live beside this file as worker-template.md and
+# chat-template.md. Inline text takes precedence over the corresponding file.
+# [agent.templates]
+# worker = "Follow repository instructions in {workspace} at {path}."
+# chat = "Discuss the {repo} repository at {path} without changing it."
+
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
 [commands]
 claude = ["claude"]
@@ -170,26 +159,31 @@ codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approv
 # [agent_resume]
 # my-agent = ["my-agent", "resume", "{path}"]
 
-# A separate account for tracked agents: user-owned forge executable wrappers
-# and a Git profile from [machine.git.profiles] for the agent's Git commands.
-# See docs/reference.md#agent-accounts for setup.
-# [agent_auth]
-# fj = "~/bin/fj-agent"
-# gh = "~/bin/gh-agent"
-# git_profile = "agent"
+[terminal]
+# `shoal add` focuses workspace shells and agents waiting for a prompt, and
+# starts agents with input in the background: a background Herdr tab, or a
+# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
+# focus = true
+# Close the Herdr tab or zmx session Shoal opened for a workspace once the
+# workspace is removed, or once `done` keeps it and the agent finishes its turn.
+close_when_done = true
+# Where launches from a terminal outside Herdr and Rex run: detached zmx
+# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
+# local Rex server ("rex").
+default_host = "zmx"
 
-[herdr]
+[terminal.herdr]
 # Use Herdr tabs and panes; false runs as in a plain terminal.
 enabled = true
 # Run issue/add in a new tab inside Herdr, after interactive choices.
 new_tab = true
 # The workspace for tabs Shoal opens outside a Herdr pane.
 workspace_name = "{repo}"
-# Override the top-level close_when_done for Herdr tabs.
+# Override [terminal] close_when_done for Herdr tabs.
 # close_when_done = true
 # tab_name = "{repo}: {branch}"
 
-[rex]
+[terminal.rex]
 # Use Rex windows and blocks; false runs as in a plain terminal.
 enabled = true
 # Run issue/add in a new window inside Rex, after interactive choices.
@@ -199,11 +193,11 @@ new_window = true
 placement = "window"
 # The session for windows Shoal opens outside a Rex session.
 session_name = "{repo}"
-# Override the top-level close_when_done for Rex windows.
+# Override [terminal] close_when_done for Rex windows.
 # close_when_done = true
 # window_name = "{repo}: {branch}"
 
-[happy]
+[terminal.happy]
 # Offer happy-claude and happy-codex, which start detached Happy sessions.
 enabled = false
 
@@ -214,6 +208,16 @@ default_mode = "cli"
 [codex]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
+
+[setup]
+# Copy the main checkout's ignored files into the worktree before setup.
+copy_ignored = true
+
+# Optional untracked lifecycle hooks; repository values replace these commands.
+# Each value is one executable path, relative to the worktree or absolute.
+# [hooks]
+# post_setup = "/path/to/attach" # After readiness, in the CLI with a terminal.
+# pre_remove = "/path/to/detach" # Before removal, in the daemon without a terminal.
 
 [cleanup.auto]
 # Remove idle, clean, pushed or landed workspaces automatically.
@@ -269,8 +273,8 @@ end = 65535
 # capacity = 1
 
 # Clean up when an agent marks its workspace done; false keeps it for review.
-[done]
-cleanup = true
+[cleanup.done]
+enabled = true
 
 # Agent reviews of PRs and issues post their findings; --post and --no-post override it.
 [review]
@@ -280,16 +284,15 @@ post = true
 [land]
 push = false
 
-# Whether agents may open issues in repositories other than their workspace's:
-# "deny", "propose" (wait for your approval) or "direct".
-[issue]
-other_repositories = "propose"
-
-# Whether issues and PRs agents open wait for your approval: "direct" or "propose".
-[approvals]
+# What agents may do: "direct" at once, "propose" after your approval, or
+# "deny" where it applies. Issues and PRs in the workspace's repository:
+[permissions]
 issue_open = "direct"
 pr_open = "direct"
-
-# Whether shoal forge api sends agents' requests that are not reads; you may always send them.
-[api]
-agent_writes = false
+# Issues in other repositories than the workspace's: "deny", "propose" or "direct".
+issue_other_repositories = "propose"
+# shoal land: "propose" or "direct".
+land = "propose"
+# Requests through shoal forge api that are not reads, which you may always
+# send: "deny" or "direct".
+api_writes = "deny"

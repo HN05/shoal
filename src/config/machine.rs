@@ -21,10 +21,11 @@ pub struct Machine {
     pub overload: overload::Overload,
     pub ai: crate::ai::Table,
     /// Retrying proxies an AI tool's agents reach their API through.
-    pub proxy: crate::proxy::Proxies,
+    pub proxies: crate::proxy::Proxies,
     /// Forge hosts whose type is set instead of asked.
     pub forges: forges::Forges,
     pub bitbucket: crate::forge::backends::bitbucket::Credentials,
-    pub git: crate::git_profile::Git,
+    /// Named Git settings a repository or agent selects.
+    pub git_profiles: crate::git_profile::Git,
     pub simulators: crate::sim::SimConfig,
 }

@@ -10,7 +10,7 @@ async fn cleanup_skips_a_busy_repository_and_recorded_worktrees() {
     let (root, manager) = manager().await;
     configure(
         &manager,
-        "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
     )
     .await;
     let checkout = repository(root.path(), "repo");
@@ -72,7 +72,7 @@ async fn removal_prunes_package_checkouts_nothing_pins() {
     let (root, manager) = manager().await;
     configure(
         &manager,
-        "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
     )
     .await;
     let checkout = repository(root.path(), "repo");
@@ -126,7 +126,7 @@ async fn removal_deletes_the_workspaces_derived_data_under_the_xcode_preset() {
     let (root, manager) = manager().await;
     configure(
         &manager,
-        "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
     )
     .await;
     let checkout = repository(root.path(), "repo");

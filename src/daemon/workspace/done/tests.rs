@@ -12,7 +12,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -27,7 +27,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some("post_done_cmd = '/usr/bin/true'\n[done]\ncleanup = false\n".into()),
+            Some("hooks.post_done = '/usr/bin/true'\n[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -70,7 +70,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
             .cleanup
     );
     manager
-        .set_repository_config(&repo.id, Some("[done]\ncleanup=false\n".into()))
+        .set_repository_config(&repo.id, Some("[cleanup.done]\nenabled=false\n".into()))
         .await
         .unwrap();
     assert!(
@@ -118,7 +118,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -193,7 +193,7 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
         .set_repository_config(
             &workspace.repository_id,
             Some(format!(
-                "post_done_cmd = '{}'\n[done]\ncleanup = false\n",
+                "hooks.post_done = '{}'\n[cleanup.done]\nenabled = false\n",
                 hook.display()
             )),
         )
@@ -231,7 +231,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -336,7 +336,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
         .unwrap();
@@ -375,7 +375,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     manager
         .set_repository_config(
             &workspace.repository_id,
-            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
         .unwrap();

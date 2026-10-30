@@ -29,7 +29,7 @@ async fn new_workspaces_start_from_the_default_branch_build() {
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
             checkout.join(".shoal.toml"),
-            "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n[env]\nGOCACHE = '{cache.go}'\n[caches.go]\nscope = 'shared'\n",
+            "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n[env]\nGOCACHE = '{cache.go}'\n[caches.go]\nscope = 'shared'\n",
         )
         .unwrap();
     fs::write(checkout.join("other"), "first\n").unwrap();
@@ -115,7 +115,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         checkout.join(".shoal.toml"),
-        "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n",
+        "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",
     )
     .unwrap();
     for file in ["seed.sh", ".shoal.toml"] {
@@ -138,7 +138,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     manager.refresh_seeds().await;
     assert_eq!(
         fs::read_to_string(layout.log()).unwrap(),
-        "$ seed.cmd\nbroken\n"
+        "$ setup.seed.command\nbroken\n"
     );
     fs::remove_file(layout.log()).unwrap();
     manager.refresh_seeds().await;
@@ -146,7 +146,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     // Other settings at the same commit are a new build.
     fs::write(
         checkout.join(".shoal.toml"),
-        "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n[env]\nMODE = 'seed'\n",
+        "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n[env]\nMODE = 'seed'\n",
     )
     .unwrap();
     manager.refresh_seeds().await;
@@ -155,7 +155,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     fs::remove_file(layout.log()).unwrap();
     fs::write(
         checkout.join(".shoal.toml"),
-        "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n",
+        "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",
     )
     .unwrap();
     manager.refresh_seeds().await;
@@ -184,7 +184,7 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
     // The runner's own target directory must not take the build.
     fs::write(
         checkout.join(".shoal.toml"),
-        "presets = ['cargo']\n[env]\nCARGO_TARGET_DIR = '{workspace_path}/target'\n",
+        "setup.presets = ['cargo']\n[env]\nCARGO_TARGET_DIR = '{workspace_path}/target'\n",
     )
     .unwrap();
     for file in ["Cargo.toml", "src/lib.rs", ".shoal.toml"] {
@@ -225,7 +225,7 @@ async fn seeded(manager: &Manager, root: &Path, script: &str) -> (PathBuf, Repos
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         checkout.join(".shoal.toml"),
-        "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n",
+        "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",
     )
     .unwrap();
     for file in ["seed.sh", ".shoal.toml"] {
@@ -288,7 +288,7 @@ async fn a_removed_seed_is_neither_applied_nor_kept() {
     // Outputs built under other settings are not applied.
     fs::write(
         checkout.join(".shoal.toml"),
-        "[seed]\ncmd = 'seed.sh'\npaths = ['out']\n[env]\nMODE = 'other'\n",
+        "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n[env]\nMODE = 'other'\n",
     )
     .unwrap();
     commit(&checkout, ".shoal.toml");

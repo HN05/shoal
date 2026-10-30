@@ -321,7 +321,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// `draft` overrides `[unready] draft` when given.
+/// `draft` overrides `[pr] draft_on_unready` when given.
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(

@@ -40,8 +40,8 @@ fn agent_modes_default_to_cli_and_reject_invalid_settings() {
 #[test]
 fn global_git_profile_selections_must_name_defined_profiles() {
     let paths = Paths::for_test("/home/test");
-    let profiles = "[machine.git.profiles.agent]\nuser.email = 'agent@example.invalid'\n";
-    for key in ["git_profile", "agent_auth.git_profile"] {
+    let profiles = "[machine.git_profiles.agent]\nuser.email = 'agent@example.invalid'\n";
+    for key in ["git_profile", "agent.git_profile"] {
         assert!(Config::parse(&format!("{key} = 'agent'\n{profiles}"), &paths).is_ok());
         let error = Config::parse(&format!("{key} = 'missing'\n{profiles}"), &paths)
             .unwrap_err()
@@ -51,7 +51,7 @@ fn global_git_profile_selections_must_name_defined_profiles() {
             "{error}"
         );
     }
-    assert!(crate::config::repo::parse("[agent_auth]\ngit_profile = 'bad name'").is_err());
+    assert!(crate::config::repo::parse("[agent]\ngit_profile = 'bad name'").is_err());
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         written.root_dir(&paths).unwrap(),
         defaults.root_dir(&paths).unwrap()
     );
-    assert_eq!(written.repository.default_agent, None);
+    assert_eq!(written.repository.agent.default, None);
     // The template writes the built-in defaults out explicitly.
     let written_effective = written.effective(&RepoConfig::default()).unwrap();
     let default_effective = defaults.effective(&RepoConfig::default()).unwrap();
@@ -163,7 +163,7 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
         .collect();
     let config = Config::parse(&enabled, &paths).unwrap();
     assert_eq!(
-        config.repository.default_agent,
+        config.repository.agent.default,
         "codex".parse::<crate::agent::Agent>().ok()
     );
     assert!(config.machine.simulators.profiles.contains_key("phone"));
@@ -178,7 +178,7 @@ fn install_writes_the_template_once_and_keeps_edits() {
     let (path, created) = Config::install_at(expected.clone()).unwrap();
     assert!(created && path == expected);
     assert_eq!(fs::read_to_string(&path).unwrap(), TEMPLATE);
-    fs::write(&path, "default_agent = 'claude'\n").unwrap();
+    fs::write(&path, "agent.default = 'claude'\n").unwrap();
     let (same, created) = Config::install_at(expected.clone()).unwrap();
     assert!(!created && same == expected);
     let text = fs::read_to_string(&path).unwrap();
@@ -186,7 +186,8 @@ fn install_writes_the_template_once_and_keeps_edits() {
         Config::parse(&text, &paths)
             .unwrap()
             .repository
-            .default_agent,
+            .agent
+            .default,
         "claude".parse::<crate::agent::Agent>().ok()
     );
     // Reset keeps the edited file as a backup and restores the template.
@@ -208,31 +209,31 @@ fn install_writes_the_template_once_and_keeps_edits() {
 #[test]
 fn default_agent_accepts_agent_spellings_only() {
     assert_eq!(
-        Config::from_toml("").unwrap().repository.default_agent,
+        Config::from_toml("").unwrap().repository.agent.default,
         None
     );
     for (text, agent) in [
         (
-            "default_agent = 'codex'",
+            "agent.default = 'codex'",
             "codex".parse::<crate::agent::Agent>().unwrap(),
         ),
         (
-            "default_agent = 'claude'",
+            "agent.default = 'claude'",
             "claude".parse::<crate::agent::Agent>().unwrap(),
         ),
         (
-            "default_agent = 'pi'",
+            "agent.default = 'pi'",
             "pi".parse::<crate::agent::Agent>().unwrap(),
         ),
         (
-            "default_agent = 'happy-codex'",
+            "agent.default = 'happy-codex'",
             "happy-codex".parse::<crate::agent::Agent>().unwrap(),
         ),
     ] {
         let config = Config::from_toml(text).unwrap();
-        assert_eq!(config.repository.default_agent, Some(agent));
+        assert_eq!(config.repository.agent.default, Some(agent));
     }
-    let error = Config::from_toml("default_agent = 'two words'")
+    let error = Config::from_toml("agent.default = 'two words'")
         .unwrap_err()
         .to_string();
     assert!(error.contains("lowercase"), "{error}");
@@ -240,28 +241,30 @@ fn default_agent_accepts_agent_spellings_only() {
 
 #[test]
 fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
-    for (text, expected) in [
-        ("max_agents = 'dynamic'", AgentLimit::Dynamic),
-        ("max_agents = 'none'", AgentLimit::Unlimited),
-        ("max_agents = 'unlimited'", AgentLimit::Unlimited),
+    for (value, expected) in [
+        ("'dynamic'", AgentLimit::Dynamic),
+        ("'none'", AgentLimit::Unlimited),
+        ("'unlimited'", AgentLimit::Unlimited),
         (
-            "max_agents = 3",
+            "3",
             AgentLimit::Fixed(std::num::NonZeroU32::new(3).unwrap()),
         ),
     ] {
-        let config = Config::from_toml(&format!("{text}\n[machine]\n{text}")).unwrap();
+        let text = format!("agent.max_running = {value}\n[machine]\nmax_agents = {value}");
+        let config = Config::from_toml(&text).unwrap();
         assert_eq!(config.machine.max_agents, expected);
-        assert_eq!(config.repository.max_agents, Some(expected));
+        assert_eq!(config.repository.agent.max_running, Some(expected));
     }
-    for text in ["max_agents = 0", "max_agents = 'automatic'"] {
-        assert!(Config::from_toml(text).is_err());
-        assert!(Config::from_toml(&format!("[machine]\n{text}")).is_err());
+    for value in ["0", "'automatic'"] {
+        assert!(Config::from_toml(&format!("agent.max_running = {value}")).is_err());
+        assert!(Config::from_toml(&format!("[machine]\nmax_agents = {value}")).is_err());
     }
     assert_eq!(
         Config::default()
             .effective(&RepoConfig::default())
             .unwrap()
-            .max_agents,
+            .agent
+            .max_running,
         AgentLimit::Dynamic
     );
 }
@@ -351,23 +354,23 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
     use crate::agent::AgentMode;
 
     let global =
-        Config::from_toml("default_agent = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
-    let repo = repo::parse("default_agent = 'codex'\n").unwrap();
+        Config::from_toml("agent.default = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
+    let repo = repo::parse("agent.default = 'codex'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
-        effective.default_agent,
+        effective.agent.default,
         "codex".parse::<crate::agent::Agent>().ok()
     );
     assert_eq!(effective.codex.default_mode, AgentMode::App);
     let repo = repo::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
-        effective.default_agent,
+        effective.agent.default,
         "claude".parse::<crate::agent::Agent>().ok()
     );
     assert_eq!(effective.codex.default_mode, AgentMode::Cli);
     let effective = Config::default().effective(&repo).unwrap();
-    assert_eq!(effective.default_agent, None);
+    assert_eq!(effective.agent.default, None);
 }
 
 #[test]
@@ -517,18 +520,15 @@ fn root_directory_defaults_and_validates_explicit_paths() {
 
 #[test]
 fn done_cleanup_defaults_on_and_can_be_overridden_per_repository() {
-    let global = Config::from_toml("[done]\ncleanup = false\n").unwrap();
-    assert!(
-        Config::default()
-            .effective(&Default::default())
-            .unwrap()
-            .done
-            .cleanup
-    );
-    assert!(!global.effective(&Default::default()).unwrap().done.cleanup);
-    let repo = repo::parse("[done]\ncleanup = true\n").unwrap();
-    assert!(global.effective(&repo).unwrap().done.cleanup);
-    assert!(Config::from_toml("[done]\ncleanup = 'yes'").is_err());
+    let enabled =
+        |global: &Config, repo: &RepoConfig| global.effective(repo).unwrap().cleanup.done.enabled;
+    let global = Config::from_toml("[cleanup.done]\nenabled = false\n").unwrap();
+    assert!(enabled(&Config::default(), &RepoConfig::default()));
+    assert!(!enabled(&global, &RepoConfig::default()));
+    let repo = repo::parse("[cleanup.done]\nenabled = true\n").unwrap();
+    assert!(enabled(&global, &repo));
+    assert!(Config::from_toml("[cleanup.done]\nenabled = 'yes'").is_err());
+    assert!(Config::from_toml("[done]\ncleanup = false").is_err());
 }
 
 #[test]
@@ -560,11 +560,11 @@ BAD = "a\u0000b""#,
 
 #[test]
 fn agent_directories_are_absolute_or_under_home() {
-    for valid in ["agent_dirs = ['/tmp', '~/cache']", "agent_dirs = []"] {
+    for valid in ["agent.dirs = ['/tmp', '~/cache']", "agent.dirs = []"] {
         repo::parse(valid).unwrap();
     }
     for invalid in ["relative", "~someone/cache", ""] {
-        let error = repo::parse(&format!("agent_dirs = [{invalid:?}]")).unwrap_err();
-        assert!(format!("{error:#}").contains("agent_dirs"), "{error:#}");
+        let error = repo::parse(&format!("agent.dirs = [{invalid:?}]")).unwrap_err();
+        assert!(format!("{error:#}").contains("agent.dirs"), "{error:#}");
     }
 }

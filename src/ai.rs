@@ -58,7 +58,7 @@ pub struct Agent {
     /// How many minutes the tool's prompt cache lives after its last
     /// request, over what its own settings give.
     pub prompt_cache_minutes: Option<u64>,
-    /// The `[machine.proxy.<name>]` the tool's tracked agents reach their API through.
+    /// The `[machine.proxies.<name>]` the tool's tracked agents reach their API through.
     pub proxy: Option<String>,
 }
 

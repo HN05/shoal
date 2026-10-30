@@ -91,11 +91,11 @@ impl Manager {
     }
 
     /// A scoped landing needs the user's approval for the branch at the commit
-    /// `plan` lands, unless `[land] requires_approval` is off. The caller holds
+    /// `plan` lands, unless `[permissions] land` is "direct". The caller holds
     /// the repository Git gate, so the approved commit is the one that lands.
     pub(super) async fn authorize_scoped_land(&self, plan: &LandPlan) -> Result<()> {
         let settings = self.workspace_settings(&plan.workspace).await?;
-        if !settings.land.requires_approval {
+        if settings.permissions.land == crate::config::repo::Opening::Direct {
             return Ok(());
         }
         match self.request_land_approval(land_request(plan)).await? {

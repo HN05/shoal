@@ -350,7 +350,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
 #[test]
 fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow::Result<()> {
     let fixture = Fixture::with_config(Some(&format!(
-        "[commands]\npi = ['sh', '-c', 'exit 0']\n[agent_resume]\npi = ['{}', 'done']\n[done]\ncleanup = false\n",
+        "[commands]\npi = ['sh', '-c', 'exit 0']\n[agent_resume]\npi = ['{}', 'done']\n[cleanup.done]\nenabled = false\n",
         env!("CARGO_BIN_EXE_shoal")
     )));
     let home = fixture.root.path();

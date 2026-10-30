@@ -172,7 +172,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
         })) = &request.method
         {
             let mut layers = ConfigLayers::default();
-            layers.saved_repository_config.herdr.enabled = Some(workspace != "w5");
+            layers.saved_repository_config.terminal.herdr.enabled = Some(workspace != "w5");
             Body::LayeredConfig(Box::new(layers))
         } else if matches!(
             request.method,

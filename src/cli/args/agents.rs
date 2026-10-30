@@ -55,7 +55,7 @@ pub enum AgentsCommand {
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Name of the chat; defaults to <repo>-chat, asked for on a terminal.
@@ -85,7 +85,7 @@ pub enum AgentsCommand {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]
         here: bool,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Name of the chat; defaults to <repo>-plan-<issue number>.

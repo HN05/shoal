@@ -38,19 +38,19 @@ when behavior changes, distinguishing decisions from proposals.
   and workspace records stay in the daemon. What one forge does its own way
   belongs in its `Backend` implementation, never in a match on the forge kind.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
-  together. `setup_cmd` is tracked and gates
+  together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no
-  scope token. `pre_setup_cmd` runs in the daemon before tracked setup and gates
-  readiness, excluding lifecycle and permit changes; `post_setup_cmd` runs in
-  the CLI after ready, and `pre_remove_cmd` inside the shared daemon removal path.
-  `post_remove_cmd` runs from the repository checkout after successful removal;
+  scope token. `hooks.pre_setup` runs in the daemon before tracked setup and gates
+  readiness, excluding lifecycle and permit changes; `hooks.post_setup` runs in
+  the CLI after ready, and `hooks.pre_remove` inside the shared daemon removal path.
+  `hooks.post_remove` runs from the repository checkout after successful removal;
   failure reports a warning and notification without restoring ownership.
-  `post_done_cmd` runs in the daemon after completion persists and before cleanup,
+  `hooks.post_done` runs in the daemon after completion persists and before cleanup,
   excluding lifecycle and permit changes; failure notifies without undoing completion
   or blocking cleanup. Explicit completion reruns it; restart does not replay it.
-  `post_agent_exit_cmd` exposes tracked-agent exits while ready under the same
+  `hooks.post_agent_exit` exposes tracked-agent exits while ready under the same
   daemon hook rules without marking completion; removal uses its own hooks.
-  `post_ready_cmd` follows the same rules after ready-for-review marks persist;
+  `hooks.post_ready` follows the same rules after ready-for-review marks persist;
   failure notifies without removing them, and each explicit mark reruns it.
   Missing-worktree cleanup skips hooks. Optional local repository config lives
   in daemon state, layers per option over the worktree config, and is deleted
@@ -72,9 +72,9 @@ when behavior changes, distinguishing decisions from proposals.
   instead of the user. Own-workspace setup, rename, base workspace, issue, PR and own-repository CI run links and watches, merge
   acknowledgements, their demos, messages to the user, asking the user questions and waiting for answers, reading their own agent messages, ready-for-review marks, checkpoints and restoring them, assignment completion and withdrawal, own-repository
   sync, listing, opening and changing issues and PRs of the own repository, opening issues
-  in other repositories as `[issue] other_repositories` allows, rerunning
+  in other repositories as `[permissions] issue_other_repositories` allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to the own repository's forge API, or
-  others where `[api] agent_writes` allows them, are allowed, except merging a PR or approving or requesting changes on one.
+  others where `[permissions] api_writes` allows them, are allowed, except merging a PR or approving or requesting changes on one.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
@@ -137,13 +137,13 @@ when behavior changes, distinguishing decisions from proposals.
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.
   A scoped land
-  is a request bound to the branch HEAD unless `[land] requires_approval` is
+  is a request bound to the branch HEAD unless `[permissions] land` is
   false; approval lets the retried land proceed under every landing check.
-  `[approvals] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
+  `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded
   commit. Issue proposals belong to the repository and outlive the workspace.
-  `[issue] other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
+  `[permissions] issue_other_repositories` (`"propose"` by default, `"direct"` or `"deny"`)
   does the same for a scoped issue in another repository, which is never linked.
 - Lifecycle states, resource scopes, approval targets and approval
   specifications are typed; preserve their existing SQLite/JSON representation

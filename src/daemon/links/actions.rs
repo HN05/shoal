@@ -293,7 +293,7 @@ impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
     /// unlinked. A workspace process's new PR is recorded for the user's
-    /// approval instead when `[approvals] pr_open` says so.
+    /// approval instead when `[permissions] pr_open` says so.
     pub async fn open_pull(
         &self,
         selector: &str,
@@ -330,7 +330,7 @@ impl Manager {
                     ..new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?
                 };
                 if let Some(proposer) =
-                    proposer.filter(|_| settings.approvals.pr_open == Opening::Propose)
+                    proposer.filter(|_| settings.permissions.pr_open == Opening::Propose)
                 {
                     forge.check_uploads(&account, &pull.attachments).await?;
                     let proposed = self.propose_pull(&workspace, pull, head, proposer).await?;

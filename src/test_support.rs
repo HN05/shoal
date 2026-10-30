@@ -94,7 +94,7 @@ pub fn global_config(text: &str) -> crate::config::Config {
 
 /// Global config always turns off `copy_ignored`: only the CLI runs the
 /// tracked setup it needs, so workspaces created here are ready at once.
-const BASE_CONFIG: &str = "copy_ignored = false\n";
+const BASE_CONFIG: &str = "setup.copy_ignored = false\n";
 
 fn write_global_config(paths: &Paths, text: &str) {
     let config = crate::config::Config::path(paths);

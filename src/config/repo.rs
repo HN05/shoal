@@ -65,56 +65,20 @@ pub struct RepoConfig {
     pub commands: crate::config::named_commands::Commands,
     #[option(named)]
     pub agent_resume: crate::config::named_commands::Commands,
-    #[option(template)]
-    pub worker_template: Option<String>,
-    #[option(template, default = crate::config::templates::CHAT_DEFAULT.into())]
-    pub chat_template: Option<String>,
-    #[option(section)]
-    pub agent_auth: crate::agent_auth::Config,
+    /// The Git profile new worktrees use.
     pub git_profile: Option<String>,
-    /// Agent an issue workspace starts when `--agent` is omitted.
-    pub default_agent: Option<Agent>,
-    /// Agents of this repository running at once; defaults to the host
-    /// capacity and `shoal add` queues past it. Use `none` for unlimited.
-    #[option(default = crate::config::AgentLimit::Dynamic)]
-    pub max_agents: Option<crate::config::AgentLimit>,
-    /// Whether new tabs and sessions take the terminal; unset follows the launch.
-    pub focus: Option<bool>,
-    /// Whether a place Shoal opened for a workspace closes once it is done.
-    #[option(default = true)]
-    pub close_when_done: Option<bool>,
-    /// The terminal host for launches from a terminal no host serves.
-    #[option(default = DefaultHost::default(), resolve = DefaultHost::resolve -> HostName)]
-    pub default_host: Option<DefaultHost>,
+    #[option(section)]
+    pub agent: AgentConfig,
     #[option(section)]
     pub claude: ShortcutConfig,
     #[option(section)]
     pub codex: ShortcutConfig,
     #[option(section)]
-    pub herdr: HerdrConfig,
+    pub terminal: TerminalConfig,
     #[option(section)]
-    pub rex: RexConfig,
+    pub setup: SetupConfig,
     #[option(section)]
-    pub happy: HappyConfig,
-    /// Copy the main checkout's ignored files into the worktree before setup.
-    #[option(default = true)]
-    pub copy_ignored: Option<bool>,
-    /// Directories every agent and chat gets as other working directories.
-    #[option(default = vec!["/tmp".into()])]
-    pub agent_dirs: Option<Vec<String>>,
-    #[option(repository_only)]
-    pub setup_cmd: Option<String>,
-    pub pre_setup_cmd: Option<String>,
-    pub post_remove_cmd: Option<String>,
-    pub post_done_cmd: Option<String>,
-    pub post_ready_cmd: Option<String>,
-    pub post_agent_exit_cmd: Option<String>,
-    pub post_resource_acquire_cmd: Option<String>,
-    pub pre_resource_release_cmd: Option<String>,
-    /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
-    pub post_setup_cmd: Option<String>,
-    /// Runs untracked before the worktree is removed, e.g. to close that session.
-    pub pre_remove_cmd: Option<String>,
+    pub hooks: HooksConfig,
     #[option(section)]
     pub ports: PortsConfig,
     /// Environment variables rendered for a workspace, with the presets'.
@@ -125,10 +89,6 @@ pub struct RepoConfig {
     /// Commands kept running for the user to try, by name.
     #[option(named)]
     pub demos: BTreeMap<String, crate::demos::Demo>,
-    /// Build tools whose usual setup the repository's workspaces share; an
-    /// empty list turns off presets a lower layer names. Unset when no layer
-    /// names presets.
-    pub presets: Option<Vec<crate::presets::Preset>>,
     /// Machine-specific, so the global config or saved repository config sets
     /// it, never the worktree file.
     #[option(named)]
@@ -142,34 +102,115 @@ pub struct RepoConfig {
     #[option(section)]
     pub cleanup: CleanupConfig,
     #[option(section)]
-    pub done: DoneConfig,
-    #[option(section)]
     pub idle_stop: IdleStopConfig,
-    #[option(section)]
-    pub review: ReviewConfig,
-    #[option(section)]
-    pub ready: ReadyConfig,
-    #[option(section)]
-    pub unready: UnreadyConfig,
     #[option(section)]
     pub pr: PrConfig,
     #[option(section)]
     pub issue: IssueConfig,
     #[option(section)]
+    pub review: ReviewConfig,
+    #[option(section)]
     pub land: LandConfig,
     #[option(section)]
-    pub approvals: ApprovalsConfig,
+    pub permissions: PermissionsConfig,
+}
+
+/// What every agent of a repository starts with.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = AgentSettings)]
+pub struct AgentConfig {
+    /// Agent an issue workspace starts when `--agent` is omitted.
+    pub default: Option<Agent>,
+    /// Agents of this repository running at once; by default only the
+    /// machine limit applies. Use `none` for unlimited.
+    #[option(default = crate::config::AgentLimit::Dynamic)]
+    pub max_running: Option<crate::config::AgentLimit>,
+    /// Directories every agent and chat gets as other working directories.
+    #[option(default = vec!["/tmp".into()])]
+    pub dirs: Option<Vec<String>>,
+    /// The Git profile of tracked agents' Git commands.
+    pub git_profile: Option<String>,
     #[option(section)]
-    pub api: ApiConfig,
+    pub forge_clis: crate::agent_auth::ForgeClis,
+    #[option(section)]
+    pub templates: TemplatesConfig,
+}
+
+/// Instructions agents and chats receive after Shoal's own.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Templates)]
+pub struct TemplatesConfig {
+    #[option(template)]
+    pub worker: Option<String>,
+    #[option(template, default = crate::config::templates::CHAT_DEFAULT.into())]
+    pub chat: Option<String>,
+}
+
+/// Where and how Shoal opens places for a workspace.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Terminal)]
+pub struct TerminalConfig {
+    /// The terminal host for launches from a terminal no host serves.
+    #[option(default = DefaultHost::default(), resolve = DefaultHost::resolve -> HostName)]
+    pub default_host: Option<DefaultHost>,
+    /// Whether new tabs and sessions take the terminal; unset follows the launch.
+    pub focus: Option<bool>,
+    /// Whether a place Shoal opened for a workspace closes once it is done.
+    #[option(default = true)]
+    pub close_when_done: Option<bool>,
+    #[option(section)]
+    pub herdr: HerdrConfig,
+    #[option(section)]
+    pub rex: RexConfig,
+    #[option(section)]
+    pub happy: HappyConfig,
+}
+
+/// How a new worktree is prepared.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Setup)]
+pub struct SetupConfig {
+    /// The tracked setup executable, which gates readiness.
+    #[option(repository_only)]
+    pub command: Option<String>,
+    /// Copy the main checkout's ignored files into the worktree before setup.
+    #[option(default = true)]
+    pub copy_ignored: Option<bool>,
+    /// Build tools whose usual setup the repository's workspaces share; an
+    /// empty list turns off presets a lower layer names. Unset when no layer
+    /// names presets.
+    pub presets: Option<Vec<crate::presets::Preset>>,
     #[option(section, repository_only)]
     pub seed: Seed,
+}
+
+/// Untracked lifecycle executables, by the event they follow or precede.
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Hooks)]
+pub struct HooksConfig {
+    pub pre_setup: Option<String>,
+    /// Runs untracked after the workspace is ready, e.g. to open a tmux session.
+    pub post_setup: Option<String>,
+    /// Runs untracked before the worktree is removed, e.g. to close that session.
+    pub pre_remove: Option<String>,
+    pub post_remove: Option<String>,
+    pub post_done: Option<String>,
+    pub post_ready: Option<String>,
+    pub post_agent_exit: Option<String>,
+    pub post_resource_acquire: Option<String>,
+    pub pre_resource_release: Option<String>,
 }
 
 fn preset_environment(
     env: BTreeMap<String, String>,
     config: &RepoConfig,
 ) -> Result<BTreeMap<String, String>> {
-    let presets = config.presets.as_deref().unwrap_or_default();
+    let presets = config.setup.presets.as_deref().unwrap_or_default();
     Ok(crate::presets::environment(presets, env))
 }
 
@@ -177,7 +218,7 @@ fn preset_caches(
     caches: BTreeMap<String, Cache>,
     config: &RepoConfig,
 ) -> Result<BTreeMap<String, Cache>> {
-    let presets = config.presets.as_deref().unwrap_or_default();
+    let presets = config.setup.presets.as_deref().unwrap_or_default();
     Ok(crate::presets::caches(presets, caches))
 }
 
@@ -202,7 +243,7 @@ pub struct Cache {
 #[options(resolved = Self)]
 pub struct Seed {
     /// Executable in the seed worktree that builds the default branch.
-    pub cmd: Option<String>,
+    pub command: Option<String>,
     /// Worktree-relative build outputs cloned into each new workspace.
     #[option(list)]
     pub paths: Vec<String>,
@@ -212,22 +253,22 @@ impl Seed {
     fn validate(&self) -> Result<()> {
         // The seed runs unattended from the default branch, so its command
         // is the repository's own file, like its outputs.
-        if let Some(command) = &self.cmd {
+        if let Some(command) = &self.command {
             ensure!(
                 inside_worktree(command),
-                "seed.cmd must be a relative path inside the worktree: {command}"
+                "setup.seed.command must be a relative path inside the worktree: {command}"
             );
         }
         for (index, path) in self.paths.iter().enumerate() {
             ensure!(
                 inside_worktree(path),
-                "seed.paths entries must be relative paths inside the worktree: {path}"
+                "setup.seed.paths entries must be relative paths inside the worktree: {path}"
             );
             // Each output is cloned whole, so one cannot contain another.
             for other in &self.paths[..index] {
                 ensure!(
                     !Path::new(path).starts_with(other) && !Path::new(other).starts_with(path),
-                    "seed.paths entries overlap: {other} and {path}"
+                    "setup.seed.paths entries overlap: {other} and {path}"
                 );
             }
         }
@@ -300,12 +341,12 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         }
         None => RepoConfig::default(),
     };
-    if config.worker_template.is_none() {
-        config.worker_template =
+    if config.agent.templates.worker.is_none() {
+        config.agent.templates.worker =
             crate::config::templates::read(workspace_dir, crate::config::templates::WORKER_FILE)?;
     }
-    if config.chat_template.is_none() {
-        config.chat_template =
+    if config.agent.templates.chat.is_none() {
+        config.agent.templates.chat =
             crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
     }
     Ok(config)
@@ -316,12 +357,14 @@ impl RepoConfig {
     pub fn normalize(&self) -> Vec<&'static str> {
         let mut warnings = Vec::new();
         if self
-            .worker_template
+            .agent
+            .templates
+            .worker
             .as_deref()
             .is_some_and(crate::config::templates::repeats_guidance)
         {
             warnings.push(
-                "worker_template repeats Shoal's built-in guidance, which every launch \
+                "agent.templates.worker repeats Shoal's built-in guidance, which every launch \
                  already receives; keep only your additions",
             );
         }
@@ -333,8 +376,11 @@ impl RepoConfig {
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
         crate::config::named_commands::validate(&self.agent_resume)?;
-        self.agent_auth.validate()?;
-        if let Some(name) = &self.git_profile {
+        self.agent.forge_clis.validate()?;
+        for name in [&self.git_profile, &self.agent.git_profile]
+            .into_iter()
+            .flatten()
+        {
             crate::validate::name("git profile", name)?;
         }
         for &kind in crate::hooks::HookKind::ALL {
@@ -352,12 +398,12 @@ impl RepoConfig {
         }
         crate::daemon::resources::definitions(&self.resources, &self.resource_pools)?;
         crate::env::validate_configured_environment(&self.env)?;
-        crate::config::validate_agent_dirs(self.agent_dirs.as_deref().unwrap_or_default())?;
+        crate::config::validate_agent_dirs(self.agent.dirs.as_deref().unwrap_or_default())?;
         crate::caches::validate(&self.caches)?;
         crate::demos::validate(&self.demos)?;
-        crate::presets::validate(self.presets.as_deref().unwrap_or_default())?;
+        crate::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;
         crate::secrets::validate(&self.secrets)?;
-        self.seed.validate()?;
+        self.setup.seed.validate()?;
         Ok(())
     }
 }
@@ -398,6 +444,8 @@ pub struct CleanupConfig {
     pub merged: MergedCleanupConfig,
     #[option(section)]
     pub restore: RestoreConfig,
+    #[option(section)]
+    pub done: CleanupDoneConfig,
 }
 
 impl CleanupConfig {
@@ -474,15 +522,6 @@ pub struct IdleStopConfig {
     pub enabled: Option<bool>,
 }
 
-/// Default cleanup choice when an agent marks its workspace done.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Done)]
-pub struct DoneConfig {
-    #[option(default = true)]
-    pub cleanup: Option<bool>,
-}
-
 /// Whether agent reviews of PRs and issues post their findings to the forge.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
@@ -492,40 +531,28 @@ pub struct ReviewConfig {
     pub post: Option<bool>,
 }
 
-/// Whether `shoal ready` takes marked PRs out of draft.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Ready)]
-pub struct ReadyConfig {
-    #[option(default = true)]
-    pub undraft: Option<bool>,
-}
-
-/// Whether `shoal ready --undo` returns PRs whose marks it withdraws to draft.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Unready)]
-pub struct UnreadyConfig {
-    #[option(default = false)]
-    pub draft: Option<bool>,
-}
-
-/// Whether `shoal pr open` opens new PRs as drafts, and the labels a new PR
-/// needs.
+/// Whether new PRs open as drafts and `shoal ready` moves them, and the labels
+/// a new PR needs.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Pr)]
 pub struct PrConfig {
     #[option(default = false)]
     pub draft: Option<bool>,
+    /// Whether `shoal ready` takes marked PRs out of draft.
+    #[option(default = true)]
+    pub undraft_on_ready: Option<bool>,
+    /// Whether `shoal ready --undo` returns PRs whose marks it withdraws to draft.
+    #[option(default = false)]
+    pub draft_on_unready: Option<bool>,
     /// Entries a new PR's labels must each start with; an empty list turns
     /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
 }
 
-/// The labels a new issue needs, whether agents may open issues in other
-/// repositories, and the labels that say whether an issue's plan is settled.
+/// The labels a new issue needs and the labels that say whether an issue's
+/// plan is settled.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Issue)]
@@ -534,39 +561,24 @@ pub struct IssueConfig {
     /// inherited entries off.
     #[option(default = Vec::new())]
     pub required_labels: Option<Vec<String>>,
-    /// Whether scoped callers may open issues in other repositories.
-    #[option(default = OtherRepositories::default())]
-    pub other_repositories: Option<OtherRepositories>,
     /// Marks an issue that needs a plan before anyone implements it.
     pub plan_label: Option<String>,
     /// Marks an issue whose body holds a settled plan.
     pub planned_label: Option<String>,
 }
 
-/// Whether `shoal forge api` sends an agent's requests that are not reads.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Api)]
-pub struct ApiConfig {
-    #[option(default = false)]
-    pub agent_writes: Option<bool>,
-}
-
-/// Whether `shoal land` pushes the default branch to its upstream afterwards,
-/// and whether a scoped landing waits for the user's approval.
+/// Whether `shoal land` pushes the default branch to its upstream afterwards.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Land)]
 pub struct LandConfig {
     #[option(default = false)]
     pub push: Option<bool>,
-    #[option(default = true)]
-    pub requires_approval: Option<bool>,
 }
 
 states!(
     #[derive(Default)]
-    /// Whether a scoped caller's forge write happens at once or waits for the
+    /// Whether a scoped caller's action happens at once or waits for the
     /// user's approval.
     Opening {
         #[default]
@@ -587,15 +599,43 @@ states!(
     }
 );
 
-/// Which agent forge writes wait for the user's approval.
+states!(
+    #[derive(Default)]
+    /// Whether a scoped caller may send forge API requests that are not reads.
+    ApiWrites {
+        #[default]
+        Deny => "deny",
+        Direct => "direct",
+    }
+);
+
+/// What a scoped agent may do at once, after the user's approval, or not at all.
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
-#[options(resolved = Approvals)]
-pub struct ApprovalsConfig {
-    #[option(default = Opening::default())]
+#[options(resolved = Permissions)]
+pub struct PermissionsConfig {
+    #[option(default = Opening::Direct)]
     pub issue_open: Option<Opening>,
-    #[option(default = Opening::default())]
+    #[option(default = Opening::Direct)]
     pub pr_open: Option<Opening>,
+    /// Opening an issue in another repository than the workspace's.
+    #[option(default = OtherRepositories::Propose)]
+    pub issue_other_repositories: Option<OtherRepositories>,
+    /// Landing a branch with `shoal land`.
+    #[option(default = Opening::Propose)]
+    pub land: Option<Opening>,
+    /// Forge API requests through `shoal forge api` that are not reads.
+    #[option(default = ApiWrites::Deny)]
+    pub api_writes: Option<ApiWrites>,
+}
+
+/// Whether `shoal done` cleans up by default; false keeps the workspace for review.
+#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = CleanupDone)]
+pub struct CleanupDoneConfig {
+    #[option(default = true)]
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]

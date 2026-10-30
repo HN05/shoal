@@ -26,11 +26,11 @@ fn registration(name: HostName) -> Option<Registered> {
     Some(match name {
         HostName::Herdr => Registered {
             host: &herdr::Herdr,
-            options: |settings| herdr::options(&settings.herdr),
+            options: |settings| herdr::options(&settings.terminal.herdr),
         },
         HostName::Rex => Registered {
             host: &rex::Rex,
-            options: |settings| rex::options(&settings.rex),
+            options: |settings| rex::options(&settings.terminal.rex),
         },
         HostName::Zmx => Registered {
             host: &zmx::Zmx,
@@ -93,7 +93,9 @@ pub(super) struct Configured {
 
 impl Configured {
     fn new(host: &'static dyn Host, options: Options, settings: &Effective) -> Self {
-        let closes_when_done = options.close_when_done.unwrap_or(settings.close_when_done);
+        let closes_when_done = options
+            .close_when_done
+            .unwrap_or(settings.terminal.close_when_done);
         Self {
             host,
             options,
@@ -118,7 +120,7 @@ impl Configured {
     /// config turns it off.
     pub(super) fn default_host(settings: &Effective) -> Option<Self> {
         Self::all(settings)
-            .find(|host| host.host.name() == settings.default_host && host.options.enabled)
+            .find(|host| host.host.name() == settings.terminal.default_host && host.options.enabled)
     }
 
     /// The plain terminal, which every terminal falls back to.

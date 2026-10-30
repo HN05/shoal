@@ -29,7 +29,7 @@ pub(in crate::cli::commands) async fn undone(
 /// How `shoal done` records the completion, and what it leaves running.
 #[derive(Default)]
 pub(in crate::cli::commands) struct Done {
-    /// Request cleanup even when `[done] cleanup` is false.
+    /// Request cleanup even when `[cleanup.done] enabled` is false.
     pub cleanup: bool,
     /// Another branch has HEAD's work under other commits.
     pub integrated: bool,

@@ -337,7 +337,8 @@ async fn run(
         Reviewer::Ask if !settings.commands.contains_key(MANUAL) => Reviewer::Agent(None),
         Reviewer::Ask if ctx.interactive() => {
             let agent = settings
-                .default_agent
+                .agent
+                .default
                 .clone()
                 .map_or_else(|| "pick an agent".into(), String::from);
             ui::pick_choice(

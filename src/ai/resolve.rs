@@ -39,7 +39,7 @@ pub struct Tool {
     /// Whether Shoal retries a turn an API failure ended; on by default for
     /// the Claude integration.
     pub retry: bool,
-    /// The `[machine.proxy.<name>]` its tracked agents reach their API through: the
+    /// The `[machine.proxies.<name>]` its tracked agents reach their API through: the
     /// one named nearest in its lineage.
     pub proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.

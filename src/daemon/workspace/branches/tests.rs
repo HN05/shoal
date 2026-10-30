@@ -1260,7 +1260,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
         if kind == ExecutionKind::Setup {
             fs::write(
                 workspace.path.join(".shoal.toml"),
-                "setup_cmd = 'setup.sh'\n",
+                "setup.command = 'setup.sh'\n",
             )
             .unwrap();
         }
@@ -1362,7 +1362,7 @@ async fn setup_releases_git_gate_after_registration_and_on_preparation_failure()
     assert!(gate.try_lock().is_ok());
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "setup_cmd = 'setup.sh'\n",
+        "setup.command = 'setup.sh'\n",
     )
     .unwrap();
     let started = f
@@ -1648,7 +1648,7 @@ async fn scoped_land_skips_approval_when_configured() {
     let workspace = f.add("worker").await;
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[land]\nrequires_approval = false\n",
+        "[permissions]\nland = 'direct'\n",
     )
     .unwrap();
     commit(&workspace.path, ".shoal.toml");
@@ -1850,7 +1850,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
     fs::write(path.join("tracked"), "unfinished work\n").unwrap();
     fs::write(
         path.join(".shoal.toml"),
-        "setup_cmd = 'missing'\npost_setup_cmd = 'missing'\ngit_profile = 'missing'\n",
+        "setup.command = 'missing'\nhooks.post_setup = 'missing'\ngit_profile = 'missing'\n",
     )
     .unwrap();
     let before = git(&path, &["status", "--porcelain"]);

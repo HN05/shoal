@@ -116,7 +116,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     manager.store.quarantine_interrupted_operations().await?;
     test_support::configure(
         &manager,
-        &format!("pre_setup_cmd = \"true\"\n[machine]\nroot_dir = {root:?}\n"),
+        &format!("hooks.pre_setup = \"true\"\n[machine]\nroot_dir = {root:?}\n"),
     )
     .await;
     let error = manager

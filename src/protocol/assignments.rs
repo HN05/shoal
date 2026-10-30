@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentMethod {
-    /// `cleanup` requests cleanup even when `[done] cleanup` is false;
+    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
     /// `integrated` records that another branch has HEAD's work under other
     /// commits; `results` are absolute paths of files to hand back, which the
     /// daemon copies.
@@ -23,7 +23,7 @@ pub enum AssignmentMethod {
         workspace: String,
         selection: crate::forge::items::link::Selection,
     },
-    /// `draft` overrides `[unready] draft` when set.
+    /// `draft` overrides `[pr] draft_on_unready` when set.
     ClearReady {
         workspace: String,
         selection: crate::forge::items::link::Selection,

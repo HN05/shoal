@@ -22,7 +22,7 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
     fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" >> exits\n").unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(&repo.id, Some("post_agent_exit_cmd = 'exited'\n".into()))
+        .set_repository_config(&repo.id, Some("hooks.post_agent_exit = 'exited'\n".into()))
         .await
         .unwrap();
     let cleanup_woken = manager.signals.cleanup_woken();

@@ -98,7 +98,7 @@ pub(in crate::cli::commands) async fn skip_setup(
     Ok(0)
 }
 
-/// Run the configured `post_setup_cmd`, if any, once the workspace is ready.
+/// Run the configured `hooks.post_setup`, if any, once the workspace is ready.
 /// A failure keeps the ready workspace and stops what would follow.
 pub(in crate::cli::commands) async fn run_post_setup(
     ctx: &Context,

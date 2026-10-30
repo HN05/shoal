@@ -15,7 +15,7 @@ async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
         .unwrap();
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "pre_setup_cmd = 'before.sh'\n",
+        "hooks.pre_setup = 'before.sh'\n",
     )
     .unwrap();
     let script = workspace.path.join("before.sh");
@@ -184,7 +184,7 @@ async fn registration_publishes_atomically_and_preserves_stop_during_pre_setup()
 #[tokio::test]
 async fn pre_setup_failure_and_identity_change_close_registration() {
     for (hook, diagnostic) in [
-        ("exit 7", "pre_setup_cmd exited with 7"),
+        ("exit 7", "hooks.pre_setup exited with 7"),
         ("mv .git .git.saved", "not a git repository"),
     ] {
         let (_root, manager, workspace) = fixture(hook).await;

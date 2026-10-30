@@ -105,7 +105,7 @@ pub fn validate_agent_dirs(directories: &[String]) -> Result<()> {
     for directory in directories {
         ensure!(
             Path::new(directory).is_absolute() || directory.starts_with("~/"),
-            "agent_dirs entry {directory} must be an absolute path or start with ~/"
+            "agent.dirs entry {directory} must be an absolute path or start with ~/"
         );
     }
     Ok(())
@@ -327,11 +327,11 @@ impl Config {
         let directory = Self::path(paths);
         let directory = directory.parent().context("config has no directory")?;
         let templates = &mut config.repository;
-        if templates.worker_template.is_none() {
-            templates.worker_template = templates::read(directory, templates::WORKER_FILE)?;
+        if templates.agent.templates.worker.is_none() {
+            templates.agent.templates.worker = templates::read(directory, templates::WORKER_FILE)?;
         }
-        if templates.chat_template.is_none() {
-            templates.chat_template = templates::read(directory, templates::CHAT_FILE)?;
+        if templates.agent.templates.chat.is_none() {
+            templates.agent.templates.chat = templates::read(directory, templates::CHAT_FILE)?;
         }
         Ok(config)
     }
@@ -381,19 +381,19 @@ impl Config {
         let (machine, repository) = (&self.machine, &self.repository);
         repository.validate()?;
         crate::ai::validate(&machine.ai.entries, &repository.commands, &paths.home)?;
-        crate::proxy::validate(&machine.proxy)?;
-        crate::proxy::validate_references(&machine.ai.entries, &machine.proxy)?;
+        crate::proxy::validate(&machine.proxies)?;
+        crate::proxy::validate_references(&machine.ai.entries, &machine.proxies)?;
         self.root_dir(paths)?;
         machine.overload.validate()?;
         machine.simulators.validate()?;
-        machine.git.validate()?;
+        machine.git_profiles.validate()?;
         machine.bitbucket.validate()?;
         machine.forges.validate()?;
-        for name in [&repository.git_profile, &repository.agent_auth.git_profile]
+        for name in [&repository.git_profile, &repository.agent.git_profile]
             .into_iter()
             .flatten()
         {
-            machine.git.profile(name)?;
+            machine.git_profiles.profile(name)?;
         }
         Ok(())
     }
@@ -407,7 +407,7 @@ impl Config {
         Ok(Effective::new(
             settings,
             ai.tools.clone(),
-            crate::proxy::routes(&ai.tools, &self.machine.proxy),
+            crate::proxy::routes(&ai.tools, &self.machine.proxies),
         ))
     }
 }

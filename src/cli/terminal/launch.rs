@@ -48,7 +48,7 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let focus = focus.then_some(true).or(settings.focus);
+    let focus = focus.then_some(true).or(settings.terminal.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
     let Some(places) = host.places() else {

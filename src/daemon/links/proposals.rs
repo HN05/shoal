@@ -1,4 +1,4 @@
-//! Issues and PRs a repository's `[approvals]` makes scoped callers propose
+//! Issues and PRs a repository's `[permissions]` makes scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
 use anyhow::{Context, Result, bail, ensure};
@@ -50,7 +50,7 @@ pub struct Proposed {
     pub proposed: Box<ApprovalRequest>,
 }
 
-/// A scoped caller, which proposes what `[approvals]` keeps it from opening
+/// A scoped caller, which proposes what `[permissions]` keeps it from opening
 /// directly.
 #[derive(Debug, Clone, Default)]
 pub struct Proposer {

@@ -1,4 +1,4 @@
-//! What a seed build runs and keeps: the repository's own `seed.cmd` and
+//! What a seed build runs and keeps: the repository's own `setup.seed.command` and
 //! `seed.paths`, or the usual build and outputs of each preset tool.
 use std::{
     ffi::OsString,
@@ -34,7 +34,7 @@ impl Build {
             .copied()
             .filter(|preset| preset.seed_command().is_some())
             .collect();
-        match &seed.cmd {
+        match &seed.command {
             Some(command) => Some(Self::Script(worktree.join(command))),
             None if building.is_empty() => None,
             None => Some(Self::Presets(building)),
@@ -45,7 +45,7 @@ impl Build {
     pub fn steps(&self) -> Vec<Step> {
         match self {
             Self::Script(command) => vec![Step {
-                label: "seed.cmd".into(),
+                label: "setup.seed.command".into(),
                 argv: vec![command.into()],
             }],
             Self::Presets(presets) => presets.iter().filter_map(|preset| step(*preset)).collect(),

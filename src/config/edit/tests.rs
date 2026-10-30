@@ -23,7 +23,7 @@ fn handles_inline_tables_and_refuses_to_traverse_scalars() {
     .unwrap();
     let parsed: toml::Value = toml::from_str(&result).unwrap();
     assert_eq!(parsed["codex"]["default_mode"].as_str(), Some("cli"));
-    assert!(edit("default_agent = 'codex'", "default_agent.mode", Some("app")).is_err());
+    assert!(edit("agent.default = 'codex'", "agent.default.mode", Some("app")).is_err());
     assert!(edit("", "missing", None).is_err());
     assert!(edit("", "x..y", Some("1")).is_err());
 }

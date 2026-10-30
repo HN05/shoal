@@ -56,7 +56,7 @@ pub enum ForgeCommand {
     /// Send a request to the repository's forge API and print its JSON response.
     ///
     /// Workspace processes send it as the agent account, and only GET unless
-    /// `[api] agent_writes` lets agents send others; anyone else sends any
+    /// `[permissions] api_writes` lets agents send others; anyone else sends any
     /// request with your own logins.
     Api(ApiArgs),
 }
@@ -104,7 +104,7 @@ pub enum RepoCommand {
     Setup {
         /// Registered repository; omit to choose one.
         repository: Option<String>,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.

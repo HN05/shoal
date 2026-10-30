@@ -35,7 +35,7 @@ impl Manager {
     }
 
     /// The agent account that may send a `method` request, which is only a
-    /// read unless `[api] agent_writes` allows more.
+    /// read unless `[permissions] api_writes` allows more.
     async fn api_agent_account(
         &self,
         workspace: &Workspace,
@@ -45,8 +45,9 @@ impl Manager {
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
         ensure!(
-            method == HttpMethod::Get || settings.api.agent_writes,
-            "workspace processes can only send GET requests; [api] agent_writes = true lets agents send {method}"
+            method == HttpMethod::Get
+                || settings.permissions.api_writes == crate::config::repo::ApiWrites::Direct,
+            "workspace processes can only send GET requests; [permissions] api_writes = \"direct\" lets agents send {method}"
         );
         self.agent_account_from(&config, &settings)
     }

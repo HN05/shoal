@@ -127,7 +127,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::write(
         home.path().join(".config/shoal/config.toml"),
         "[commands]\nreview = ['tuicr']\n[machine.ai.pi]\nskill_dir = '~/pi-skills'\n\
-         [machine.ai.droid]\ncommand = ['droid']\n[happy]\nenabled = true\n",
+         [machine.ai.droid]\ncommand = ['droid']\n[terminal.happy]\nenabled = true\n",
     )
     .unwrap();
     install_programs(
@@ -283,7 +283,7 @@ fn happy_completes_only_with_an_installed_agent_to_run() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[happy]\nenabled = true\n",
+        "[terminal.happy]\nenabled = true\n",
     )
     .unwrap();
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());

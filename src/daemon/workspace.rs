@@ -405,7 +405,7 @@ impl Manager {
             (None, None) => (None, None),
         };
         if let Some(profile) = options.git_profile {
-            self.config().machine.git.profile(profile)?;
+            self.config().machine.git_profiles.profile(profile)?;
         }
         if let Some(base) = options.base {
             let source = match (&name, &opened) {
@@ -437,7 +437,7 @@ impl Manager {
         path: Option<std::path::PathBuf>,
     ) -> Result<Workspace> {
         if let Some(name) = git_profile {
-            self.config().machine.git.profile(name)?;
+            self.config().machine.git_profiles.profile(name)?;
         }
         let base_branch = match &source {
             WorkspaceSource::New { base, .. } | WorkspaceSource::Existing { base, .. } => {
@@ -599,9 +599,9 @@ impl Manager {
         self.apply_workspace_git_profile(workspace, &config, &settings, git_profile)
             .await?;
         self.apply_seed(repo, workspace, &settings).await;
-        Ok(settings.setup_cmd.is_some()
-            || settings.pre_setup_cmd.is_some()
-            || settings.copy_ignored)
+        Ok(settings.setup.command.is_some()
+            || settings.hooks.pre_setup.is_some()
+            || settings.setup.copy_ignored)
     }
 
     /// Select the effective base for the source branch.
@@ -705,7 +705,7 @@ impl Manager {
         git_profile: Option<&str>,
     ) -> Result<()> {
         if let Some(name) = git_profile.or(settings.git_profile.as_deref()) {
-            crate::git_profile::apply(&workspace.path, config.machine.git.profile(name)?)
+            crate::git_profile::apply(&workspace.path, config.machine.git_profiles.profile(name)?)
                 .await
                 .with_context(|| format!("apply git profile {name}"))?;
         }

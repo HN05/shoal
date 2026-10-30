@@ -13,7 +13,7 @@ states!(
     }
 );
 
-/// What `add --agent` and `default_agent` start: an AI tool, a configured
+/// What `add --agent` and `agent.default` start: an AI tool, a configured
 /// command, or a name an integration serves.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Deserialize, serde::Serialize)]
 #[serde(try_from = "String", into = "String")]

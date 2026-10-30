@@ -40,9 +40,13 @@ impl Manager {
         config: &Config,
         settings: &Effective,
     ) -> Result<Account> {
-        let auth = &settings.agent_auth;
+        let auth = &settings.agent.forge_clis;
         let logins = AgentLogins {
-            launch: Box::new(auth.prepare(&self.paths, &config.machine.git)?),
+            launch: Box::new(auth.prepare(
+                settings.agent.git_profile.as_deref(),
+                &self.paths,
+                &config.machine.git_profiles,
+            )?),
             fj_home: (auth.fj_home.as_ref()).map(|home| expand_home(home, &self.paths.home)),
             fj: auth.fj.is_some(),
             tea: auth.tea.is_some(),

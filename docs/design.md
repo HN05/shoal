@@ -578,7 +578,7 @@ blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
 `work setup` reruns setup explicitly; nothing retries automatically.
 Tracked setup starts by copying the repository checkout's ignored files through
-Worktrunk unless `copy_ignored = false`, so local files like `.env` arrive without a
+Worktrunk unless `setup.copy_ignored = false`, so local files like `.env` arrive without a
 setup script and failures gate readiness; `.worktreeinclude` selects what to copy.
 
 Hooks are deliberately untracked user processes with the workspace identity
@@ -638,7 +638,7 @@ Refresh fetches use private temporary refs; landing merges run in the tracked wr
 A fetch of a whole remote also deletes the tracking refs of branches the remote no
 longer has, since cleanup counts commits on a stale ref as pushed.
 
-A repository's `[seed]` keeps one build of its local default branch that new
+A repository's `[setup.seed]` keeps one build of its local default branch that new
 worktrees start from, instead of sharing build directories between live
 workspaces: a shared directory serialises or corrupts concurrent builds, while a
 copy-on-write clone costs no space until a branch rewrites a file and needs no
@@ -656,7 +656,7 @@ no script. Tools whose build outputs survive a move into another path get a
 seed: Cargo, whose seed covers it better than a shared compiler cache such as
 sccache, which needs another tool and gives up incremental builds, and the Node
 package managers. Preset seeds run the default branch's own build code, as
-`seed.cmd` would. Tools whose caches already serve every checkout get only what
+`setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its
 base directory, Zig shares its local cache, and Xcode, whose DerivedData records absolute paths so no seed survives the move,
@@ -694,7 +694,7 @@ status, inspect, execute, setup, and resources.
 Creation other than splitting a child, removal other than of a descendant without holds,
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `land` is an
-approval request bound to the branch and its HEAD unless `[land] requires_approval`
+approval request bound to the branch and its HEAD unless `[permissions] land`
 is off; approval lets the agent's retry land that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
@@ -778,8 +778,8 @@ its agent is doing and whether closing it ends another place, as closing a Herdr
 pane's tab ends its other panes, where a batch removal or a streaming export
 then refuses to start; generic code tells the Shoal it starts in a new place
 whether to watch it, while a resume in the pane its agent stopped in leaves that
-tab's watcher as it was. Top-level `close_when_done` applies to every host, and
-`herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.
+tab's watcher as it was. Top-level `terminal.close_when_done` applies to every host, and
+`terminal.herdr.close_when_done` overrides it for tabs, as `terminal.focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,
 whatever the daemon reports. It asks the daemon whose its place is until the
@@ -801,7 +801,7 @@ label goes with the session, and a close from the record checks it. A record
 names its session's process and creation time, so `attach` passes over a later
 session under the name, whose own record replaces it. Creation
 sets `shoal.created=1`, which relabelling never adds. The daemon closes a
-workspace's sessions when it removes the workspace, whatever `close_when_done`
+workspace's sessions when it removes the workspace, whatever `terminal.close_when_done`
 says, and startup and cleanup sweeps close those whose workspace record is gone,
 retrying failures without restoring ownership. Sessions from before the label
 have no known origin and are left alone. Relabelling replaces obsolete ownership
@@ -819,7 +819,7 @@ from the caller's own place passes it to the host, so queued starts and starts
 without one open windows. A block beside others carries its own label, and
 Shoal renames a window only while the block it opened is alone there, so a
 split never renames the user's window. A terminal no host
-serves goes to `default_host`, zmx unless set to Herdr or Rex, whose places
+serves goes to `terminal.default_host`, zmx unless set to Herdr or Rex, whose places
 then join the group the host's config names, `herdr.workspace_name` or
 `rex.session_name`; generic code reads the setting and renders the name, and a
 host only finds or creates a group by label. A host opens a place for a
@@ -844,7 +844,7 @@ the host never calls the daemon. A host
 declares the variables naming its places, and a zmx session drops the
 other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
-server, then to `default_host`; with that host turned off, a terminal no host
+server, then to `terminal.default_host`; with that host turned off, a terminal no host
 serves runs work in place, a queued start without another fallback fails, and
 a demo runs as a background process. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its
@@ -883,7 +883,7 @@ the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
 starts labels itself once its workspace exists. A start queued from a zmx
-session joins no group, so it goes to `default_host`. Launches without a terminal, inside a zmx session, or in
+session joins no group, so it goes to `terminal.default_host`. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
@@ -916,7 +916,7 @@ dispatcher share one count. Slots derive from state the daemon already tracks:
 connected agents, executions awaiting reattachment, resume records and starting
 queue entries, excluding completed workspaces. Agents therefore count however
 they started, and no separate counter can leak a slot. `machine.max_agents`
-limits the machine; the repository option `max_agents` limits each repository,
+limits the machine; the repository option `agent.max_running` limits each repository,
 with a global default like any other option, so one name never means both caps.
 The machine setting defaults to `dynamic`, which
 admits from measured load instead of a slot count, so the machine runs as many
@@ -1113,7 +1113,7 @@ AI tools are providers: built-in ones plus global `[machine.ai.<name>]` entries.
 `command` there is the tool's launcher at the global `[commands]` layer, so
 repositories can still replace it, and gives it a `shoal <name>` agent shortcut
 that `run` shares; names that built-in commands shadow are rejected. Pickers
-and completion offer providers only, while custom `--agent` and `default_agent`
+and completion offer providers only, while custom `--agent` and `agent.default`
 names select any named command through the same configuration layers. Agents run
 as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
@@ -1157,7 +1157,7 @@ Agent shortcuts use the execution wrapper: by default Codex CLI gets full access
 approvals and Claude runs with its own settings, plus permission for a workspace's
 agent to run the Shoal commands that finish its assignment, so completion never
 depends on Claude Code's auto-mode check. Every agent, chats included, gets the
-configured `agent_dirs`, `/tmp` by default, as working directories, so it reads what the
+configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
 splits there without leaving its sandbox or permission rules; chats split nothing
@@ -1190,7 +1190,7 @@ enough to read in full in tabs, session names and branch lists.
 
 `add <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.
-Issue links and numbers invoke issue opening with `default_agent` standing in
+Issue links and numbers invoke issue opening with `agent.default` standing in
 for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
 PR links open their head against the refreshed remote base and link the PR once
 the workspace is ready, as issue links associate their issue; branch links open
@@ -1259,7 +1259,7 @@ repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. The
 sending workspace may withdraw its message while it is unread; once shown, it
-stays, because deleting it would not unsay it, and a correction does. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
+stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes tracked-agent exit notifications to user
 integrations while the workspace is ready, using normal configuration precedence
 and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
@@ -1398,7 +1398,7 @@ reads pages only until the limit is met. `shoal forge api` passes any request un
 the repository's forge API root through the daemon the same way, for reads no
 command models, since fj has no API passthrough to fall back to. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
-unless `[api] agent_writes` accepts that its writes may merge, approve or skip
+unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
 required labels; the path stays under the API root, so the login reaches only
 its own forge's API. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
@@ -1451,11 +1451,11 @@ binds to HEAD; new commits make it outdated rather than removing it, so marking
 again is an explicit statement about the new revision. Marking linked items
 replaces a workspace mark. Unlinking an item
 withdraws its mark and removal deletes all marks. Marks and withdrawals are
-journal events, and `post_ready_cmd` runs after each explicit mark under the
+journal events, and `hooks.post_ready` runs after each explicit mark under the
 completion hook rules; failure notifies and keeps the marks. Marking a linked
-draft PR also takes it out of draft unless `[ready] undraft = false`, since
+draft PR also takes it out of draft unless `[pr] undraft_on_ready = false`, since
 forges and review bots often skip drafts. Withdrawing a mark leaves the PR
-ready unless `--draft` or `[unready] draft` asks to return it to draft, because
+ready unless `--draft` or `[pr] draft_on_unready` asks to return it to draft, because
 an agent usually withdraws to push more work that still needs CI and review.
 A failed forge change fails the command with the marks kept, so the agent can
 retry it.
@@ -1681,7 +1681,7 @@ authorized record through mutation, including when a coordinating agent decides.
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
 In a shared repository everything an agent opens is seen by other people, so
-`[approvals] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
+`[permissions] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
 propose instead of open (`"direct"` is the default; unscoped callers always open).
 A proposal is an approval request whose record carries the command's options with
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
@@ -1711,7 +1711,7 @@ Item commands that need only a repository also run from a registered checkout,
 where a chat runs with the user's authority: they act as the repository's agent
 account under its settings, open without a proposal, and link or record nothing,
 since only a workspace holds links; workspace processes act from their workspace.
-People outside the project see such an issue, so `[issue] other_repositories`
+People outside the project see such an issue, so `[permissions] issue_other_repositories`
 governs scoped callers separately from `issue_open`: `"propose"` by default,
 `"direct"`, or `"deny"`. The workspace's required labels and templates describe
 its own repository and do not apply there, and the issue cannot be linked, since
@@ -1761,7 +1761,7 @@ workspace from every unattended removal, completion and PR cleanup included. So
 does a child workspace, until the child is removed, and an agent launch waiting
 in the agent queue to start in the workspace.
 
-Workspace completion uses `[done] cleanup` (default true), resolved through the
+Workspace completion uses `[cleanup.done] enabled` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
 explicit done signal completes an assignment; issue closure and merges do not,
 and merged cleanup removes unused merged workspaces from their state instead.
@@ -1778,7 +1778,7 @@ files go with it. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: only holds, open questions, a pending PR proposal, child workspaces
 and queued agent launches keep a workspace.
-The daemon runs `post_done_cmd`
+The daemon runs `hooks.post_done`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through

@@ -26,7 +26,7 @@ fn attachment_is_read_only_through_enabled_hosts() {
     };
     let (enabled, disabled) = (
         resolved(""),
-        resolved("[herdr]\nenabled = false\n[rex]\nenabled = false\n"),
+        resolved("[terminal.herdr]\nenabled = false\n[terminal.rex]\nenabled = false\n"),
     );
     for host in [HostName::Herdr, HostName::Rex, HostName::Zmx] {
         let place = Origin::created(host, "p1".to_owned());

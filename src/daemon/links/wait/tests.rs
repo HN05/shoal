@@ -1736,7 +1736,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         .await
         .unwrap();
     manager
-        .set_repository_config(&repo.id, Some("[done]\ncleanup = false\n".into()))
+        .set_repository_config(&repo.id, Some("[cleanup.done]\nenabled = false\n".into()))
         .await
         .unwrap();
     for (repo, content) in [(&workspace.path, "workspace\n"), (&repo_path, "main\n")] {

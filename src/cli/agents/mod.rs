@@ -230,12 +230,12 @@ const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
         integration: &happy::CLAUDE,
-        options: |settings| happy::options(&settings.happy),
+        options: |settings| happy::options(&settings.terminal.happy),
     },
     Added {
         name: "happy-codex",
         integration: &happy::CODEX,
-        options: |settings| happy::options(&settings.happy),
+        options: |settings| happy::options(&settings.terminal.happy),
     },
 ];
 #[cfg(not(feature = "happy"))]
@@ -429,14 +429,14 @@ pub(super) async fn run_named(
     .await
 }
 
-/// The requested agent, else the configured `default_agent`, else a picker.
+/// The requested agent, else the configured `agent.default`, else a picker.
 pub(super) async fn default_agent(
     ctx: &Context,
     target: ConfigTarget,
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
     let settings = client::settings(&ctx.paths, target).await?;
-    match agent.or(settings.default_agent.clone()) {
+    match agent.or(settings.agent.default.clone()) {
         Some(agent) => {
             ensure_available(agent.name(), &settings)?;
             Ok(Some(agent))
@@ -445,11 +445,11 @@ pub(super) async fn default_agent(
     }
 }
 
-/// The picker standing in for a missing `default_agent`.
+/// The picker standing in for a missing `agent.default`.
 pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     ensure!(
         ctx.interactive(),
-        "no agent selected; pass --agent or set default_agent in the repository or global config"
+        "no agent selected; pass --agent or set agent.default in the repository or global config"
     );
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let mut choices: Vec<_> = names(settings)
@@ -759,7 +759,8 @@ pub(crate) fn agent_dir_args(settings: &Effective, name: &str, home: &Path) -> V
 /// resolved as agents compare paths, each once.
 fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
     settings
-        .agent_dirs
+        .agent
+        .dirs
         .iter()
         .map(|directory| fsutil::expand_home(Path::new(directory), home))
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))

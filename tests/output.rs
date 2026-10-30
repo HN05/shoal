@@ -195,7 +195,7 @@ fn a_closed_stdout_ends_unterminated_output_quietly() {
         support::fake_daemon::answer(stream, |_| {
             serde_json::json!({
                 "type": "repository_config",
-                "data": {"repository_id": "test", "toml": "focus=true"}
+                "data": {"repository_id": "test", "toml": "terminal.focus=true"}
             })
         });
     });

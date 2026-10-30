@@ -7,7 +7,7 @@ async fn cleanup_deletes_xcode_data_of_removed_workspaces_first() {
     let (root, manager) = manager().await;
     crate::test_support::configure(
         &manager,
-        "presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
+        "setup.presets = ['xcode']\n[cleanup]\ngrace_minutes = 0\n",
     )
     .await;
     let checkout = repository(root.path(), "repo");

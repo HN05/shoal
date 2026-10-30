@@ -112,7 +112,7 @@ instead of the PR delivery guidance below.
   assignment completion and its withdrawal, listing, opening and changing issues and PRs
   of the own repository except merging, approving or requesting changes, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
-  GET requests to the own repository's forge API, or others where `[api] agent_writes`
+  GET requests to the own repository's forge API, or others where `[permissions] api_writes`
   allows them, own-repository sync and
   effective-configuration reads are allowed;
   only unscoped callers export or revoke environment tokens. Export requires a
@@ -133,7 +133,7 @@ instead of the PR delivery guidance below.
   writes to a terminal. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state. Ready-for-review
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
-  journal events, and never notify, complete, or change cleanup; `post_ready_cmd`
+  journal events, and never notify, complete, or change cleanup; `hooks.post_ready`
   failure keeps them. Only explicit
   done completes an assignment. PR cleanup
   defaults on and removes a completed workspace only after every watched PR merges
@@ -158,13 +158,13 @@ instead of the PR delivery guidance below.
   launches block every unattended removal, rechecked after the removal reserves the workspace; a split needs a ready
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
-  is an approval request bound to the branch HEAD unless `[land] requires_approval`
+  is an approval request bound to the branch HEAD unless `[permissions] land`
   is false; approval never skips a landing check and lands only the approved commit.
-  Under `[approvals] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
+  Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives its workspace.
-  `[issue] other_repositories` governs a scoped issue in another repository the same
+  `[permissions] issue_other_repositories` governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks

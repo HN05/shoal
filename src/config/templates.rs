@@ -8,7 +8,7 @@ use crate::{config::Config, paths::Paths};
 pub use super::placeholders::render;
 
 pub const WORKER_FILE: &str = "worker-template.md";
-/// Sent to every agent launch ahead of the user's `worker_template` additions.
+/// Sent to every agent launch ahead of the user's `agent.templates.worker` additions.
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");

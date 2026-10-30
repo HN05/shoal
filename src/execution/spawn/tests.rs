@@ -11,8 +11,8 @@ fn proxy(upstream: &str, key: Option<&str>) -> crate::proxy::Proxy {
 fn launch(home: &std::path::Path) -> AgentLaunch {
     let paths = Paths::for_test(home);
     AgentLaunch {
-        account: crate::agent_auth::Config::default()
-            .prepare(&paths, &Default::default())
+        account: crate::agent_auth::ForgeClis::default()
+            .prepare(None, &paths, &Default::default())
             .unwrap(),
         secrets: Default::default(),
         output: None,

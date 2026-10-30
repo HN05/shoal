@@ -4,49 +4,49 @@ use super::*;
 
 fn parse(text: &str) -> Result<crate::config::Config> {
     let config = crate::config::Config::from_toml(text)?;
-    validate(&config.machine.proxy)?;
-    validate_references(&config.machine.ai.entries, &config.machine.proxy)?;
+    validate(&config.machine.proxies)?;
+    validate_references(&config.machine.ai.entries, &config.machine.proxies)?;
     Ok(config)
 }
 
 #[test]
 fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     let config = parse(
-        "[machine.proxy.cliproxy]\nupstream = 'http://127.0.0.1:8317'\n\
+        "[machine.proxies.cliproxy]\nupstream = 'http://127.0.0.1:8317'\n\
          [machine.ai.claude]\nproxy = 'cliproxy'\n[machine.ai.claude-fast]\nbase = 'claude'\n",
     )
     .unwrap();
-    let routes = routes(&config.machine.ai.tools, &config.machine.proxy);
+    let routes = routes(&config.machine.ai.tools, &config.machine.proxies);
     assert_eq!(routes["claude"].upstream, "http://127.0.0.1:8317");
     assert_eq!(routes["claude-fast"].upstream, "http://127.0.0.1:8317");
     assert!(!routes.contains_key("codex"));
     for (text, message) in [
         (
             "[machine.ai.claude]\nproxy = 'missing'\n",
-            "no [machine.proxy.missing] defines",
+            "no [machine.proxies.missing] defines",
         ),
         (
-            "[machine.proxy.local]\nupstream = 'ftp://host'\n",
-            "proxy.local.upstream",
+            "[machine.proxies.local]\nupstream = 'ftp://host'\n",
+            "proxies.local.upstream",
         ),
         (
-            "[machine.proxy.local]\nurl = 'http://host'\n",
+            "[machine.proxies.local]\nurl = 'http://host'\n",
             "unknown field",
         ),
         (
-            "[machine.proxy.local]\nupstream = 'http://host'\nkey = 'two words'\n",
-            "proxy.local.key must be visible ASCII",
+            "[machine.proxies.local]\nupstream = 'http://host'\nkey = 'two words'\n",
+            "proxies.local.key must be visible ASCII",
         ),
         (
-            "[machine.proxy.local]\nupstream = 'http://host'\nkey = { env = 'A-B' }\n",
-            "proxy.local.key",
+            "[machine.proxies.local]\nupstream = 'http://host'\nkey = { env = 'A-B' }\n",
+            "proxies.local.key",
         ),
         (
-            "[machine.proxy.local]\nupstream = 'http://host'\nkey = { cmd = [] }\n",
-            "proxy.local.key.cmd must name a program",
+            "[machine.proxies.local]\nupstream = 'http://host'\nkey = { cmd = [] }\n",
+            "proxies.local.key.cmd must name a program",
         ),
         (
-            "[machine.proxy.local]\nupstream = 'http://host'\nkey = { file = 'key' }\n",
+            "[machine.proxies.local]\nupstream = 'http://host'\nkey = { file = 'key' }\n",
             "naming the variable that holds it",
         ),
     ] {
@@ -58,18 +58,18 @@ fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
 #[tokio::test]
 async fn a_proxy_key_is_written_out_read_from_the_agents_environment_or_fetched() {
     let config = parse(
-        "[machine.proxy.raw]\nupstream = 'http://host'\nkey = 'sk-raw'\n\
-         [machine.proxy.env]\nupstream = 'http://host'\nkey = { env = 'CLIPROXY_KEY' }\n\
-         [machine.proxy.cmd]\nupstream = 'http://host'\nkey = { cmd = ['echo', 'sk-cmd'] }\n",
+        "[machine.proxies.raw]\nupstream = 'http://host'\nkey = 'sk-raw'\n\
+         [machine.proxies.env]\nupstream = 'http://host'\nkey = { env = 'CLIPROXY_KEY' }\n\
+         [machine.proxies.cmd]\nupstream = 'http://host'\nkey = { cmd = ['echo', 'sk-cmd'] }\n",
     )
     .unwrap();
-    let key = |name: &str| config.machine.proxy[name].key.clone().unwrap();
+    let key = |name: &str| config.machine.proxies[name].key.clone().unwrap();
     let set = |name: &str| (name == "CLIPROXY_KEY").then(|| "sk-env".into());
     assert_eq!(key("raw").resolve(set).await.unwrap(), "sk-raw");
     assert_eq!(key("env").resolve(set).await.unwrap(), "sk-env");
     assert_eq!(key("cmd").resolve(set).await.unwrap(), "sk-cmd");
     // A key as written never shows in what Shoal prints.
-    let printed = format!("{:?}", config.machine.proxy["raw"]);
+    let printed = format!("{:?}", config.machine.proxies["raw"]);
     assert!(!printed.contains("sk-raw"), "{printed}");
 }
 

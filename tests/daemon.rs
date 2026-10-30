@@ -765,7 +765,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert!(
         fs::read_to_string(&config)
             .unwrap()
-            .contains("# default_agent = \"codex\"")
+            .contains("# default = \"codex\"")
     );
     let template = config.with_file_name("chat-template.md");
     assert_eq!(
@@ -775,7 +775,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
     assert!(!config.with_file_name("worker-template.md").exists());
-    fs::write(&config, "default_agent = 'claude'\n").unwrap();
+    fs::write(&config, "agent.default = 'claude'\n").unwrap();
     let output: Value =
         serde_json::from_slice(&run(&["--json", "daemon", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
@@ -785,7 +785,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     );
     assert_eq!(
         fs::read_to_string(&config).unwrap(),
-        "default_agent = 'claude'\n"
+        "agent.default = 'claude'\n"
     );
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
     // `config reset` needs no confirmation: the edited file becomes the backup.
@@ -795,12 +795,12 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(output["backup"], backup.to_str().unwrap());
     assert_eq!(
         fs::read_to_string(&backup).unwrap(),
-        "default_agent = 'claude'\n"
+        "agent.default = 'claude'\n"
     );
     assert!(
         fs::read_to_string(&config)
             .unwrap()
-            .contains("# default_agent = \"codex\"")
+            .contains("# default = \"codex\"")
     );
 
     // A changed executable path must update the definition without breaking an

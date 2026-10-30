@@ -52,7 +52,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     std::fs::create_dir(&forge_dir).unwrap();
     let gh = fake_gh(&forge_dir);
     let config = format!(
-        "[ready]\nundraft = false\n[agent_auth]\ngh = '{}'\n",
+        "[pr]\nundraft_on_ready = false\n[agent.forge_clis]\ngh = '{}'\n",
         gh.display()
     );
     manager
@@ -308,7 +308,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     manager
         .set_repository_config(
             &repo.id,
-            Some(format!("post_ready_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.post_ready = '{}'\n", hook.display())),
         )
         .await
         .unwrap();
@@ -332,7 +332,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
         notification.kind == NotificationKind::HookFailed
             && notification
                 .message
-                .contains("post_ready_cmd exited with 3")
+                .contains("hooks.post_ready exited with 3")
     }));
 }
 
@@ -393,7 +393,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     let forge_dir = temp.path().join("forge");
     std::fs::create_dir(&forge_dir).unwrap();
     let gh = fake_gh(&forge_dir);
-    let config = |extra: &str| format!("[agent_auth]\ngh = '{}'\n{extra}", gh.display());
+    let config = |extra: &str| format!("[agent.forge_clis]\ngh = '{}'\n{extra}", gh.display());
     manager
         .set_repository_config(&repo.id, Some(config("")))
         .await
@@ -472,7 +472,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .set_repository_config(
             &repo.id,
             Some(config(
-                "[ready]\nundraft = false\n[unready]\ndraft = true\n",
+                "[pr]\nundraft_on_ready = false\ndraft_on_unready = true\n",
             )),
         )
         .await
@@ -483,7 +483,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
     manager
-        .set_repository_config(&repo.id, Some(config("[unready]\ndraft = true\n")))
+        .set_repository_config(&repo.id, Some(config("[pr]\ndraft_on_unready = true\n")))
         .await
         .unwrap();
     manager

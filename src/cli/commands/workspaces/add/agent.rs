@@ -96,7 +96,7 @@ pub(super) async fn choose_add_agent(
             agent
         }
         AgentLaunch::IssueDefault(agent) => {
-            match agent.or(settings.get().await?.default_agent.clone()) {
+            match agent.or(settings.get().await?.agent.default.clone()) {
                 Some(agent) => Some(agent),
                 None => return Ok(AgentChoice::Picker),
             }
