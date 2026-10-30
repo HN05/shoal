@@ -188,7 +188,7 @@ async fn pr_updates(
     timeout_secs: Option<u64>,
 ) -> Result<Body> {
     let selection = crate::forge::items::link::Selection {
-        kind: Some(crate::forge::items::link::ItemKind::Pr),
+        kind: Some(crate::forge::items::link::LinkKind::Pr),
         input: None,
     };
     item_updates(manager, workspace, selection, timeout_secs).await

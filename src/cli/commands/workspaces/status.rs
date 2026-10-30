@@ -11,7 +11,10 @@ use crate::{
         terminal::{self, Recorded},
         ui::{self, Fallback},
     },
-    forge::{IssueInput, items::link::Selection},
+    forge::{
+        IssueInput,
+        items::link::{LinkKind, Selection},
+    },
     model::{Chat, Workspace, WorkspaceStatus, WorkspaceTarget},
     protocol::{ConfigTarget, WorkspaceMethod},
 };
@@ -115,7 +118,10 @@ fn status_target(first: Option<&str>, item: Option<String>) -> Result<Option<Wor
         {
             let selection = Selection::parse(Some(first.to_owned()), item)?;
             Ok(Some(WorkspaceTarget::Item {
-                kind: selection.kind.context("expected an issue or PR")?,
+                kind: selection
+                    .kind
+                    .and_then(LinkKind::item)
+                    .context("expected an issue or PR")?,
                 input: selection
                     .input
                     .with_context(|| format!("{first} needs a number or URL"))?,

@@ -57,7 +57,7 @@ impl Target {
                 let kind = match Link::parse(&input)?.target {
                     LinkTarget::Pr => ItemKind::Pr,
                     LinkTarget::Issue => ItemKind::Issue,
-                    LinkTarget::Branch(_) => bail!("expected a PR or issue URL"),
+                    LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR or issue URL"),
                 };
                 Some((kind, input))
             }

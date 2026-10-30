@@ -6,7 +6,7 @@ use crate::{
     forge::{
         capability::Capability,
         ci::checks::{CheckLog, NoJobLog, validate_check_name},
-        items::link::{ItemKind, Selection},
+        items::link::{LinkKind, Selection},
         updates::Update,
     },
 };
@@ -27,7 +27,7 @@ impl Manager {
                 continue;
             }
             let selection = Selection {
-                kind: Some(ItemKind::Pr),
+                kind: Some(LinkKind::Pr),
                 input: Some(update.url.clone()),
             };
             let log = self.check_log(workspace, &selection, &check.name).await;
@@ -67,11 +67,11 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let selection = Selection {
-            kind: selection.kind.or(Some(ItemKind::Pr)),
+            kind: selection.kind.or(Some(LinkKind::Pr)),
             input: selection.input.clone(),
         };
         let items = self.selected_items(&workspace, &selection).await?;
-        let [(url, ItemKind::Pr)] = items.as_slice() else {
+        let [(url, LinkKind::Pr)] = items.as_slice() else {
             anyhow::bail!(
                 "select one PR to read a check log; use shoal view pr <number> --check <name>"
             );

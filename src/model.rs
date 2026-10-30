@@ -155,14 +155,14 @@ impl WorkspaceLinks {
     /// Every linked item once: the assigned issue and PRs, then those opened
     /// and related.
     pub fn items(&self) -> Vec<LinkedItem> {
-        use crate::forge::items::link::ItemKind;
+        use crate::forge::items::link::LinkKind;
         let issue = self.issue.iter().map(|url| LinkedItem {
-            kind: ItemKind::Issue,
+            kind: LinkKind::Issue,
             url: url.clone(),
             title: self.issue_title.clone(),
         });
         let prs = self.prs.iter().map(|url| LinkedItem {
-            kind: ItemKind::Pr,
+            kind: LinkKind::Pr,
             url: url.clone(),
             title: None,
         });
@@ -197,10 +197,10 @@ impl Default for Relation {
     }
 }
 
-/// An issue or PR a workspace records without lifecycle effect.
+/// An issue, PR or CI run a workspace records without lifecycle effect.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkedItem {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     /// The item's title when the recording caller knew it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -955,7 +955,7 @@ pub struct Selected {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SelectedItem {
     pub url: String,
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
 }
 
 impl Selected {
@@ -966,10 +966,12 @@ impl Selected {
         &self,
         remote: &str,
         number: u64,
-    ) -> anyhow::Result<Option<crate::forge::items::link::ItemKind>> {
+    ) -> anyhow::Result<Option<crate::forge::items::link::LinkKind>> {
+        // A number alone never names a run.
         let mut kinds = self
             .items
             .iter()
+            .filter(|item| item.kind.item().is_some())
             .filter(|item| {
                 crate::forge::items::link::item(item.kind, &item.url)
                     .is_ok_and(|(repository, item)| item == number && repository.is_remote(remote))

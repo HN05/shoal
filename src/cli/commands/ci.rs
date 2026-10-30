@@ -5,7 +5,7 @@ mod read;
 
 use anyhow::Result;
 
-pub(super) use self::read::view;
+pub(super) use self::read::{read_view, render_run, view};
 use crate::{
     cli::{args::ci::CiCommand, context::Context},
     forge::ci::{CiAction, run_view::RunFilter},

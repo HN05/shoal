@@ -3,7 +3,7 @@
 //! the user nor affect completion or cleanup.
 use std::path::Path;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
 
 use super::{GuardMode, Manager};
@@ -13,7 +13,7 @@ use crate::{
         notifications::NotificationKind,
         store,
     },
-    forge::items::link::{ItemKind, Selection},
+    forge::items::link::{ItemKind, LinkKind, Selection},
     hooks::{self, Hook, HookKind},
     model::{ReviewMark, Workspace},
 };
@@ -74,9 +74,10 @@ impl Manager {
         };
         self.verify_worktree(&workspace).await?;
         let head = current_head(&workspace).await?;
-        let explicit = self.explicit_item(&workspace, &selection).await?;
+        let kind = marked_kind(&selection)?;
+        let explicit = marked_item(self.explicit_item(&workspace, &selection).await?);
         let mut marks = self
-            .record_marks(&workspace.id, selection, explicit, head)
+            .record_marks(&workspace.id, kind, explicit, head)
             .await?;
         let undrafted = match settings.ready.undraft {
             true => self.set_draft(&workspace, &pr_urls(&marks), false).await,
@@ -126,7 +127,7 @@ impl Manager {
     async fn record_marks(
         &self,
         id: &str,
-        selection: Selection,
+        kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
         head: String,
     ) -> Result<Vec<ReviewMark>> {
@@ -136,7 +137,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
-                let linked = linked_items(&tx, &id, selection.kind)?;
+                let linked = linked_items(&tx, &id, kind)?;
                 let items: Vec<(Option<String>, Option<ItemKind>)> = match explicit {
                     Some((url, kind)) => {
                         ensure!(
@@ -151,7 +152,7 @@ impl Manager {
                         .collect(),
                     None => {
                         ensure!(
-                            selection.kind.is_none(),
+                            kind.is_none(),
                             "no linked items of the selected kind; register one with shoal link"
                         );
                         vec![(None, None)]
@@ -198,10 +199,9 @@ impl Manager {
         draft: Option<bool>,
     ) -> Result<Vec<ReviewMark>> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        let explicit = self.explicit_item(&workspace, &selection).await?;
-        let selected = self
-            .selected_marks(&workspace.id, selection, explicit)
-            .await?;
+        let kind = marked_kind(&selection)?;
+        let explicit = marked_item(self.explicit_item(&workspace, &selection).await?);
+        let selected = self.selected_marks(&workspace.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,
             None => self.workspace_settings(&workspace).await?.unready.draft,
@@ -222,19 +222,19 @@ impl Manager {
     async fn selected_marks(
         &self,
         id: &str,
-        selection: Selection,
+        kind: Option<ItemKind>,
         explicit: Option<(String, ItemKind)>,
     ) -> Result<Vec<ReviewMark>> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let mut selected = list(db, &id)?;
-                selected.retain(|mark| match (&explicit, selection.kind) {
+                selected.retain(|mark| match (&explicit, kind) {
                     (Some((url, _)), _) => mark.url.as_ref() == Some(url),
                     (None, Some(kind)) => mark.kind == Some(kind),
                     (None, None) => true,
                 });
-                match (&explicit, selection.kind) {
+                match (&explicit, kind) {
                     (Some((url, kind)), _) => {
                         ensure!(!selected.is_empty(), "{kind} is not marked ready: {url}")
                     }
@@ -299,6 +299,20 @@ fn ready_notice(marks: &[ReviewMark]) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!("marked ready for review: {items}")
+}
+
+/// The kind of item `selection` marks or unmarks; CI runs take no marks.
+fn marked_kind(selection: &Selection) -> Result<Option<ItemKind>> {
+    match selection.kind {
+        Some(LinkKind::Ci) => bail!("CI runs are not marked ready for review"),
+        kind => Ok(kind.and_then(LinkKind::item)),
+    }
+}
+
+/// The explicitly selected issue or PR, which `marked_kind` has kept from
+/// being a run.
+fn marked_item(explicit: Option<(String, LinkKind)>) -> Option<(String, ItemKind)> {
+    explicit.and_then(|(url, kind)| Some((url, kind.item()?)))
 }
 
 #[cfg(test)]

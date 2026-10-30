@@ -222,6 +222,7 @@ shoal view ci 2765                  # A run's jobs and failed jobs' logs
 shoal link 42 assigned        # Assign an issue or PR by number (or paste its URL)
 shoal link pr 43 assigned     # Assign another PR; all must merge before cleanup after done
 shoal link 50 related         # Record an issue or PR the work relates to
+shoal link ci 2765 related    # Follow a CI run; watch reports when it finishes
 shoal watch                   # Wake on all linked item comments, checks, or closure
 shoal view                    # Linked items with state, failed CI logs, comments, and reviews
 shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion

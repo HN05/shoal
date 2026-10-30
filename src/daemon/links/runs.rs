@@ -139,7 +139,10 @@ impl Manager {
 
     /// The verified workspace `selector` names, its forge and its agent
     /// account.
-    async fn run_forge(&self, selector: &str) -> Result<(Workspace, ForgeRepo, Account)> {
+    pub(super) async fn run_forge(
+        &self,
+        selector: &str,
+    ) -> Result<(Workspace, ForgeRepo, Account)> {
         let workspace = self.workspace(selector).await?;
         self.verify_worktree(&workspace).await?;
         let (forge, account) = self.workspace_forge_account(&workspace).await?;

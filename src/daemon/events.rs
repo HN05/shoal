@@ -301,9 +301,10 @@ pub(crate) fn record_link(
     id: &str,
     event_kind: EventKind,
     relation: crate::model::Relation,
-    kind: crate::forge::items::link::ItemKind,
+    kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
 ) -> Result<()> {
+    let kind = kind.into();
     ensure!(matches!(
         event_kind,
         EventKind::Linked | EventKind::Unlinked
@@ -342,7 +343,7 @@ pub(crate) fn record_item(
 pub(crate) fn record_item_activity(
     db: &Connection,
     id: &str,
-    kind: crate::forge::items::link::ItemKind,
+    kind: crate::forge::items::link::LinkKind,
     url: &str,
     update: &crate::forge::updates::Update,
 ) -> Result<()> {

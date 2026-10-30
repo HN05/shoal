@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 89;
+const SCHEMA_VERSION: i64 = 90;
 
 #[cfg(test)]
 mod benchmark;
@@ -432,6 +432,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (87, WORKSPACE_TITLES, None),
     (88, include_str!("store/workspace_files.sql"), None),
     (89, EARLIER_ATTACHED_FILES, None),
+    (90, include_str!("store/workspace_item_runs.sql"), None),
 ];
 
 /// The repositories whose copies of files attached to messages before Shoal

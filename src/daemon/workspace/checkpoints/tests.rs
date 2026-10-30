@@ -211,7 +211,7 @@ async fn agents_leave_no_checkpoint_while_another_lifecycle_operation_runs() {
 
 #[tokio::test]
 async fn links_cannot_change_while_a_checkpoint_is_restored() {
-    use crate::{forge::items::link::ItemKind, model::Relation};
+    use crate::{forge::items::link::LinkKind, model::Relation};
     let f = Fixture::new().await;
     git(
         &f.checkout,
@@ -223,7 +223,7 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
         .unwrap();
     let error = f
         .manager
-        .link_item(&f.workspace.id, ItemKind::Pr, "5", Relation::Related, None)
+        .link_item(&f.workspace.id, LinkKind::Pr, "5", Relation::Related, None)
         .await
         .unwrap_err();
     assert!(

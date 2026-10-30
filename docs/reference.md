@@ -2995,7 +2995,9 @@ agent_writes = true # Default: false
 `shoal link <number-or-url> <relation>` associates an issue or PR with the
 workspace; `shoal link issue <number-or-url> <relation>` and `shoal link pr
 <number-or-url> <relation>` select the kind explicitly, and omitting the item picks
-an open one. The relation is required:
+an open one. `shoal link ci <number-or-url> <relation>`, or a run's URL alone,
+links a CI run; a number alone never names one, since run numbers overlap issue
+and PR numbers. The relation is required:
 
 | Relation | Effect |
 |---|---|
@@ -3003,8 +3005,14 @@ an open one. The relation is required:
 | `opened` | Records that the workspace created the item; `issue open` and `pr open` record it themselves |
 | `related` | Records an item the work relates to |
 
-Opened and related items have no watch, completion or cleanup effect; `status pr
-<number>` finds the workspaces that link an item under any relation. Commands that select items this way give a number without a
+Opened and related issues and PRs have no watch, completion or cleanup effect;
+`status pr <number>` finds the workspaces that link an item under any relation.
+A run is linked only as opened or related, since an assigned item drives
+completion and cleanup, and records its workflow as its title. Linked runs
+have no completion or cleanup effect; `shoal watch` follows each until it
+finishes, and it stays linked until it is unlinked or the workspace is removed.
+A PR's runs are not linked; the PR's checks cover them, so link one only to
+follow it past the PR's merge. Commands that select items this way give a number without a
 kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
 number must be linked. Use `--workspace` to select a workspace instead of the current
@@ -3032,6 +3040,7 @@ account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
 report an error, as does a check that links no CI job in the repository, such as
 an outside service's; log downloads are limited to 8 MiB.
+Linked runs show as `shoal view ci` shows a run (see [CI runs](#ci-runs)).
 Kinds and explicit items select as they do for `watch`, and
 `--no-comments` leaves out comments and reviews. Outside a workspace, such as in
 a chat, it shows the item a number or URL names in the repository of the
@@ -3040,7 +3049,8 @@ refuses. Each comment shows its ID; an
 inline comment also shows the ID of the comment that starts its thread when it is
 a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a
 review whose inline comments could not be read keeps its body; the command exits 1 when an item could not be read. `--json` returns an array
-of items with failed logs in `check_logs`, or a check log object with `--check`;
+of items with failed logs in `check_logs`, and runs with `kind` `ci`, or a check
+log object with `--check`;
 `reactions` on an item or comment lists each reaction's `content`, `count`, and
 whether your login `reacted`. Reactions use GitHub's names (`+1`, `-1`,
 `laugh`, `hooray`, `confused`, `heart`, `rocket`, `eyes`); a GitLab emoji
@@ -3049,9 +3059,12 @@ without one keeps its GitLab name.
 and `xdg-open` elsewhere, without waiting for the browser, and prints each URL,
 also when the opener fails; workspace processes cannot.
 
-`shoal watch` polls all linked items every ~30 seconds, and the daemon queues
-what its own polling of a ready workspace's linked items observes for the next
-watch, which returns at once; `watch pr` or `watch issue` filters by kind. `watch <number-or-url>`, `watch pr <number-or-url>` and
+`shoal watch` polls the assigned issue and PRs and the linked runs every ~30
+seconds, and the daemon queues what its own polling of a ready workspace's linked
+items observes for the next watch, which returns at once; `watch pr`, `watch
+issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update
+when it finishes, with its final state, each failed job's failing step where its
+log names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,
@@ -3115,8 +3128,8 @@ confirmed set survives restart without querying again. Cleanup uses normal branc
 or newer work. `inspect` shows lookup and removal
 errors in `pr_cleanup`. Invalid registrations retain the workspace.
 
-`shoal unlink <relation>` removes the relation's items; `unlink pr <relation>` or
-`unlink issue <relation>` removes one kind, and an explicit number or URL removes
+`shoal unlink <relation>` removes the relation's items; `unlink pr <relation>`,
+`unlink issue <relation>` or `unlink ci <relation>` removes one kind, and an explicit number or URL removes
 just that item; unlinking fails when it selects nothing linked. Removing the last
 link does not mark done or undo recorded completion. `[cleanup.pr] enabled = false` pauses PR completion independently of idle
 cleanup, globally on reload or per repository immediately; linking and unlinking

@@ -33,12 +33,22 @@ pub(in crate::cli::commands) async fn view(
         ctx.show(&log, items_view::render_log)?;
         return Ok(0);
     }
-    let mut view = ctx
-        .progress("Reading run", read_run(ctx, &workspace, &run))
+    let view = ctx
+        .progress("Reading run", read_view(ctx, &workspace, &run))
         .await?;
-    read_failed_logs(ctx, &workspace, &run, &mut view).await;
     ctx.show(&view, render_run)?;
     Ok(0)
+}
+
+/// The run `run` names with its jobs and the log tails of its failed jobs.
+pub(in crate::cli::commands) async fn read_view(
+    ctx: &Context,
+    workspace: &str,
+    run: &str,
+) -> Result<RunView> {
+    let mut view = read_run(ctx, workspace, run).await?;
+    read_failed_logs(ctx, workspace, run, &mut view).await;
+    Ok(view)
 }
 
 /// Open the run in the browser, by its URL the forge reports.
@@ -125,7 +135,7 @@ pub(super) async fn list(
     Ok(0)
 }
 
-fn render_run(view: &RunView) {
+pub(in crate::cli::commands) fn render_run(view: &RunView) {
     outln!("Run:      {}", view.run.url);
     outln!("State:    {}", view.run.state);
     if let Some(branch) = &view.run.branch {

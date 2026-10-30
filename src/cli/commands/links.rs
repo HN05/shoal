@@ -1,7 +1,7 @@
 //! Pasted links and item selectors share repository and workspace workflows.
 use std::ffi::OsString;
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 
 use super::workspaces::{self, AgentLaunch, Creation};
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
     },
     forge::{
         IssueInput, PullRequest,
-        items::link::{ItemKind, Link, LinkTarget, Selection},
+        items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
     },
     git,
     model::{Relation, Repository, ReviewMark, Selected, SelectedItem, Workspace},
@@ -86,15 +86,15 @@ async fn checkout_selected(
     let forge = super::issues::origin_forge(ctx, &repo).await?;
     let kind = match selection.kind {
         Some(kind) => kind,
-        None => {
-            forge
-                .item_kind(&ctx.forge_account()?, input.parse()?)
-                .await?
-        }
+        None => forge
+            .item_kind(&ctx.forge_account()?, input.parse()?)
+            .await?
+            .into(),
     };
     let (_, url) = match kind {
-        ItemKind::Issue => forge.issue(&input)?,
-        ItemKind::Pr => forge.pull(&input)?,
+        LinkKind::Issue => forge.issue(&input)?,
+        LinkKind::Pr => forge.pull(&input)?,
+        LinkKind::Ci => forge.run(&input)?,
     };
     Ok(Selected {
         path: repo.path,
@@ -117,6 +117,7 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
                 .await?
                 .item_kind(&ctx.forge_account()?, number)
                 .await?
+                .into()
         }
     };
     Ok(Selection {
@@ -126,7 +127,7 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
 }
 
 /// The kind of the workspace's item numbered `number` under any relation.
-async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<ItemKind>> {
+async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<LinkKind>> {
     let mut linked: Selected = client::request(
         &ctx.paths,
         ItemMethod::SelectItems {
@@ -154,7 +155,7 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let selected = Selection::parse(items.kind_or_url, items.item)?;
     ensure!(
         selected.input.is_some() || ctx.interactive(),
-        "link needs an issue or PR number or URL"
+        "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
@@ -167,8 +168,8 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         Selection { kind, .. } => pick_open_item(ctx, &workspace, kind).await?,
     };
     let title = match kind {
-        ItemKind::Issue => issue_title(ctx, &workspace, &input).await,
-        ItemKind::Pr => None,
+        LinkKind::Issue => issue_title(ctx, &workspace, &input).await,
+        LinkKind::Pr | LinkKind::Ci => None,
     };
     client::request::<()>(
         &ctx.paths,
@@ -182,24 +183,27 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
     )
     .await?;
     ctx.emit(
-        link_outcome(kind, relation),
+        &link_outcome(kind, relation),
         serde_json::json!({"registered": true, "relation": relation}),
     )?;
     Ok(0)
 }
 
-fn link_outcome(kind: ItemKind, relation: Relation) -> &'static str {
+fn link_outcome(kind: LinkKind, relation: Relation) -> String {
     match (relation, kind) {
-        (Relation::Assigned, ItemKind::Pr) => {
-            "PR linked as assigned; run shoal watch pr for updates and shoal done once the assignment is finished."
+        (_, LinkKind::Ci) => {
+            format!("CI run linked as {relation}; shoal watch reports when it finishes.")
         }
-        (Relation::Assigned, ItemKind::Issue) => {
-            "Issue linked as assigned; closure can complete the assignment."
+        (Relation::Assigned, LinkKind::Pr) => {
+            "PR linked as assigned; run shoal watch pr for updates and shoal done once the assignment is finished.".into()
         }
-        (Relation::Opened, ItemKind::Pr) => "PR linked as opened.",
-        (Relation::Opened, ItemKind::Issue) => "Issue linked as opened.",
-        (Relation::Related, ItemKind::Pr) => "PR linked as related.",
-        (Relation::Related, ItemKind::Issue) => "Issue linked as related.",
+        (Relation::Assigned, LinkKind::Issue) => {
+            "Issue linked as assigned; closure can complete the assignment.".into()
+        }
+        (Relation::Opened, LinkKind::Pr) => "PR linked as opened.".into(),
+        (Relation::Opened, LinkKind::Issue) => "Issue linked as opened.".into(),
+        (Relation::Related, LinkKind::Pr) => "PR linked as related.".into(),
+        (Relation::Related, LinkKind::Issue) => "Issue linked as related.".into(),
     }
 }
 
@@ -237,12 +241,16 @@ async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Reposito
 }
 
 /// Choose an open issue or PR of the workspace's repository, asking for the
-/// kind when it is not given.
+/// kind when it is not given; runs have no list to choose from.
 async fn pick_open_item(
     ctx: &Context,
     workspace: &str,
-    kind: Option<ItemKind>,
-) -> Result<(ItemKind, String)> {
+    kind: Option<LinkKind>,
+) -> Result<(LinkKind, String)> {
+    let kind = match kind {
+        Some(LinkKind::Ci) => bail!("link ci needs a run's number or URL"),
+        kind => kind.and_then(LinkKind::item),
+    };
     let kind = match kind {
         Some(kind) => kind,
         None => ui::pick_choice(
@@ -263,7 +271,7 @@ async fn pick_open_item(
             ui::pick_item(ctx, "Pull request> ", "pull requests", pulls)?
         }
     };
-    Ok((kind, number))
+    Ok((kind.into(), number))
 }
 
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
@@ -482,6 +490,7 @@ pub(super) async fn add(
             git::check_branch_name(None, branch).await?;
             creation.existing = Some(git::remote_ref("origin", branch));
         }
+        LinkTarget::Run => bail!("a CI run names no work; use an issue, PR or branch link"),
         LinkTarget::Issue => unreachable!(),
     }
     workspaces::add(

@@ -61,6 +61,11 @@ impl Manager {
         ForgeRepo::resolve_pull_url(url, &self.forge_hosts()).await
     }
 
+    /// The forge a CI run URL's repository is on.
+    pub(crate) async fn run_url_forge(&self, url: &str) -> Result<ForgeRepo> {
+        ForgeRepo::resolve_run_url(url, &self.forge_hosts()).await
+    }
+
     /// The forge an issue URL's repository is on.
     pub(crate) async fn issue_url_forge(&self, url: &str) -> Result<ForgeRepo> {
         ForgeRepo::resolve_issue_url(url, &self.forge_hosts()).await

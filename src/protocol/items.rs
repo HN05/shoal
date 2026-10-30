@@ -15,7 +15,7 @@ pub enum ItemMethod {
     /// Link an issue or PR by number or URL with a relation.
     LinkItem {
         workspace: String,
-        kind: crate::forge::items::link::ItemKind,
+        kind: crate::forge::items::link::LinkKind,
         url: String,
         relation: crate::model::Relation,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -25,7 +25,7 @@ pub enum ItemMethod {
     UnlinkItems {
         workspace: String,
         relation: crate::model::Relation,
-        kind: Option<crate::forge::items::link::ItemKind>,
+        kind: Option<crate::forge::items::link::LinkKind>,
         url: Option<String>,
     },
     SetPr {

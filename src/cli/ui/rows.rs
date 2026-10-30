@@ -357,7 +357,7 @@ pub fn mark_label(mark: &ReviewMark) -> String {
         return "workspace".into();
     };
     let name = kind.noun();
-    match link::item(kind, url) {
+    match link::item(kind.into(), url) {
         Ok((_, number)) => format!("{name} #{number}"),
         Err(_) => name.into(),
     }

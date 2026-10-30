@@ -1952,7 +1952,11 @@ URLs bound to that repository. Top-level `link` and `unlink` manage associations
 and always name a relation, so no link becomes the assignment by default. `assigned`
 items are the work the workspace exists for and drive completion and cleanup;
 `opened` and `related` items are records for integrations without lifecycle effect,
-and Shoal records `opened` itself for the issues and PRs it creates. Unlinking
+and Shoal records `opened` itself for the issues, PRs and CI runs it creates.
+A CI run is a linked item of its own kind, never `assigned`, because a run
+cannot complete an assignment: watches follow it until they deliver its finish,
+since a dispatched Forgejo run belongs to no PR and a run can outlive its PR's
+watch. A PR's runs are not linked for it, as its checks already cover them. Unlinking
 selects a relation's items, one kind of them, or one item. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one or merged into the freshly

@@ -152,7 +152,7 @@ impl Manager {
     ) -> Result<Vec<String>> {
         let label = kind.noun();
         let wanted = match IssueInput::parse(input) {
-            IssueInput::Url => Some(link::item(kind, input)?),
+            IssueInput::Url => Some(link::item(kind.into(), input)?),
             IssueInput::Number => None,
             IssueInput::Invalid => bail!("{label} must be a number or URL"),
         };
@@ -178,7 +178,7 @@ impl Manager {
                     }
                     for relation in [Relation::Opened, Relation::Related] {
                         for item in store::recorded_items(db, &id, relation)? {
-                            if item.kind == kind {
+                            if item.kind == kind.into() {
                                 links.push((id.clone(), item.url));
                             }
                         }
@@ -189,7 +189,7 @@ impl Manager {
             .await?;
         let mut matches: Vec<(String, ForgeRepo)> = Vec::new();
         for (id, url) in links {
-            let Ok((repository, linked)) = link::item(kind, &url) else {
+            let Ok((repository, linked)) = link::item(kind.into(), &url) else {
                 continue;
             };
             let found = linked == number

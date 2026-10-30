@@ -132,7 +132,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
     crate::daemon::events::record_item_activity(
         &db,
         "w",
-        crate::forge::items::link::ItemKind::Pr,
+        crate::forge::items::link::LinkKind::Pr,
         &update.url,
         &update,
     )?;

@@ -426,7 +426,7 @@ async fn child_activity_reaches_the_parents_agent_until_the_child_has_its_own() 
     }
     // The parent links no PR, but its children do.
     let prs = Selection {
-        kind: Some(ItemKind::Pr),
+        kind: Some(LinkKind::Pr),
         input: None,
     };
     // A poll records the parent's own observations without refusing the kind.
@@ -1186,7 +1186,7 @@ async fn messages_queued_during_a_wait_come_with_its_updates() {
         .unwrap();
     register_watch(&manager, &child.id, "child-pr").await;
     let prs = Selection {
-        kind: Some(ItemKind::Pr),
+        kind: Some(LinkKind::Pr),
         input: None,
     };
     // Holding the child's gate stops the wait's poll, which takes the
@@ -1343,7 +1343,7 @@ async fn linked_filters_preserve_other_cursors_and_unlink_drops_inflight_activit
             .is_empty()
     );
     let explicit = Selection {
-        kind: Some(ItemKind::Issue),
+        kind: Some(LinkKind::Issue),
         input: Some("2".into()),
     };
     let updates = manager
@@ -1640,7 +1640,7 @@ async fn unfiltered_waits_without_a_pr_report_new_branch_conflicts() {
         "a persisting conflict is not new"
     );
     let issues = Selection {
-        kind: Some(ItemKind::Issue),
+        kind: Some(LinkKind::Issue),
         input: None,
     };
     let error = manager.poll_item_activity(&workspace.id, &issues).await;

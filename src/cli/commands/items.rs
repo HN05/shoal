@@ -13,7 +13,7 @@ use crate::{
         action::{Action, MergeMethod},
         create::NewIssue,
         item::{Item, ItemState},
-        link::{ItemKind, Selection},
+        link::{ItemKind, LinkKind, Selection},
     },
     model::Selected,
     protocol::ItemMethod,
@@ -187,7 +187,7 @@ async fn act(
 async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
     let context = select_context(ctx, selector.workspace.clone()).await?;
     let selection = Selection {
-        kind: Some(ItemKind::Pr),
+        kind: Some(LinkKind::Pr),
         input: selector.item.clone(),
     };
     super::links::select_items(ctx, &context, selection).await

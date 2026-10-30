@@ -11,7 +11,7 @@ use crate::{
 
 const REMOTE: &str = "https://github.com/acme/widgets.git";
 
-fn select(kind: Option<ItemKind>, input: Option<&str>) -> Selection {
+fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
     Selection {
         kind,
         input: input.map(str::to_owned),
@@ -73,7 +73,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     assert_eq!((marks[0].kind, marks[0].url.as_deref()), (None, None));
     assert!(
         manager
-            .mark_ready(&workspace.id, select(Some(ItemKind::Pr), None))
+            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), None))
             .await
             .is_err()
     );
@@ -124,7 +124,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     );
     assert!(
         manager
-            .mark_ready(&workspace.id, select(Some(ItemKind::Pr), Some("13")))
+            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("13")))
             .await
             .is_err(),
         "an unlinked PR cannot be marked"
@@ -144,7 +144,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     );
     let later = current_head(&workspace).await.unwrap();
     manager
-        .mark_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")))
+        .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")))
         .await
         .unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
@@ -162,18 +162,18 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     // Unlinking withdraws a mark; explicit clearing needs an existing mark.
     manager.clear_issue(&workspace.id, None).await.unwrap();
     let cleared = manager
-        .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")), None)
+        .clear_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")), None)
         .await
         .unwrap();
     assert_eq!(cleared.len(), 1);
     assert!(
         manager
-            .clear_ready(&workspace.id, select(Some(ItemKind::Pr), Some("12")), None)
+            .clear_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")), None)
             .await
             .is_err()
     );
     // So does withdrawing every mark, or every mark of a kind.
-    for selection in [Selection::default(), select(Some(ItemKind::Pr), None)] {
+    for selection in [Selection::default(), select(Some(LinkKind::Pr), None)] {
         let error = manager
             .clear_ready(&workspace.id, selection, None)
             .await
@@ -513,7 +513,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(!draft());
     std::fs::write(forge_dir.join("fail"), "").unwrap();
-    let pr_only = || select(Some(ItemKind::Pr), Some("12"));
+    let pr_only = || select(Some(LinkKind::Pr), Some("12"));
     let error = manager
         .clear_ready(&workspace.id, pr_only(), Some(true))
         .await

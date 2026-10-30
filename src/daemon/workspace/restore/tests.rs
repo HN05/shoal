@@ -435,7 +435,7 @@ async fn restore_refuses_a_branch_that_moved_away_or_is_in_use() {
 
 #[tokio::test]
 async fn a_removal_record_keeps_links_made_until_removal_starts() {
-    use crate::{forge::items::link::ItemKind, model::Relation};
+    use crate::{forge::items::link::LinkKind, model::Relation};
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
@@ -452,18 +452,18 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         &["remote", "add", "origin", "https://github.com/acme/repo"],
     );
     manager
-        .link_item(&workspace.id, ItemKind::Pr, "3", Relation::Related, None)
+        .link_item(&workspace.id, LinkKind::Pr, "3", Relation::Related, None)
         .await
         .unwrap();
     manager
-        .link_item(&workspace.id, ItemKind::Pr, "4", Relation::Related, None)
+        .link_item(&workspace.id, LinkKind::Pr, "4", Relation::Related, None)
         .await
         .unwrap();
     manager
         .unlink_items(
             &workspace.id,
             Relation::Related,
-            Some(ItemKind::Pr),
+            Some(LinkKind::Pr),
             Some("4"),
         )
         .await
@@ -471,7 +471,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
     manager
         .link_item(
             &workspace.id,
-            ItemKind::Issue,
+            LinkKind::Issue,
             "7",
             Relation::Assigned,
             None,
@@ -487,14 +487,14 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             .unlink_items(
                 &workspace.id,
                 Relation::Assigned,
-                Some(ItemKind::Issue),
+                Some(LinkKind::Issue),
                 None
             )
             .await
             .is_err()
     );
     let error = manager
-        .link_item(&workspace.id, ItemKind::Pr, "5", Relation::Related, None)
+        .link_item(&workspace.id, LinkKind::Pr, "5", Relation::Related, None)
         .await
         .unwrap_err();
     assert!(

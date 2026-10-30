@@ -19,7 +19,7 @@ use crate::{
     forge::{
         items::{
             item::ItemState,
-            link::{ItemKind, Selection},
+            link::{ItemKind, LinkKind, Selection},
         },
         transport::limits::rate_limited,
         updates::{MergeCheck, Snapshot, Update},
@@ -160,7 +160,7 @@ impl Manager {
         self.wait_items(
             selector,
             &Selection {
-                kind: Some(ItemKind::Pr),
+                kind: Some(LinkKind::Pr),
                 input: None,
             },
             seconds,
@@ -309,14 +309,14 @@ impl Manager {
     async fn delegated_pending(
         &self,
         children: &[WorkspaceRef],
-        kind: Option<ItemKind>,
+        kind: Option<LinkKind>,
     ) -> Result<Batch> {
         let mut updates = Vec::new();
         for child in children {
             let child_id = child.id.clone();
             let keys = self
                 .store
-                .run(move |db| linked_items(db, &child_id, kind))
+                .run(move |db| followed_items(db, &child_id, kind))
                 .await?
                 .into_iter()
                 .map(|(url, _)| url)
@@ -335,7 +335,7 @@ impl Manager {
         let id = workspace.id.clone();
         let items = self
             .store
-            .run(move |db| linked_items(db, &id, None))
+            .run(move |db| followed_items(db, &id, None))
             .await?;
         let branch = watches_branch(&Selection::default(), &items).then_some(workspace.branch);
         let keys = items
@@ -523,8 +523,8 @@ impl Manager {
     async fn items_to_look_up(
         &self,
         workspace: &Workspace,
-        items: Vec<(String, ItemKind)>,
-    ) -> Result<Vec<(String, ItemKind)>> {
+        items: Vec<(String, LinkKind)>,
+    ) -> Result<Vec<(String, LinkKind)>> {
         let (id, done) = (workspace.id.clone(), workspace.done);
         self.store
             .run(move |db| {
@@ -544,19 +544,19 @@ impl Manager {
     async fn item_activity(
         &self,
         workspace: &Workspace,
-        items: Vec<(String, ItemKind)>,
+        items: Vec<(String, LinkKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
         let account = self.user_account();
         let mut observations = Vec::new();
         for (url, kind) in items {
             let snapshot = match kind {
-                ItemKind::Issue => {
+                LinkKind::Issue => {
                     let forge = self.issue_url_forge(&url).await?;
                     let (number, _) = forge.issue(&url)?;
                     forge.issue_activity(&account, number).await?
                 }
-                ItemKind::Pr => {
+                LinkKind::Pr => {
                     let forge = self.pull_forge(&url).await?;
                     let (number, _) = forge.pull(&url)?;
                     let branch = selection
@@ -564,6 +564,10 @@ impl Manager {
                         .is_none()
                         .then_some(workspace.branch.as_str());
                     forge.activity(&account, number, branch).await?
+                }
+                LinkKind::Ci => {
+                    let forge = self.run_url_forge(&url).await?;
+                    forge.run_activity(&account, &url).await?
                 }
             };
             observations.push((url, snapshot));
@@ -582,7 +586,7 @@ impl Manager {
             let id = workspace.id.clone();
             let items = self
                 .store
-                .run(move |db| linked_items(db, &id, None))
+                .run(move |db| followed_items(db, &id, None))
                 .await?;
             if items.is_empty() {
                 continue;
@@ -627,7 +631,7 @@ impl Manager {
     async fn poll_workspace_item_activity(
         &self,
         workspace: &Workspace,
-        items: Vec<(String, ItemKind)>,
+        items: Vec<(String, LinkKind)>,
     ) -> Result<()> {
         let observed_at = crate::time::unix_seconds();
         let items = self.items_to_look_up(workspace, items).await?;
@@ -667,7 +671,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
-                let linked = linked_items(&tx, &id, None)?;
+                let linked = followed_items(&tx, &id, None)?;
                 for (url, kind, mut snapshot) in observations.into_iter().filter_map(
                     |(url, snapshot)| {
                         linked
@@ -715,7 +719,7 @@ impl Manager {
         &self,
         workspace: &Workspace,
         selection: &Selection,
-    ) -> Result<Option<(String, ItemKind)>> {
+    ) -> Result<Option<(String, LinkKind)>> {
         let Some(input) = &selection.input else {
             return Ok(None);
         };
@@ -725,18 +729,23 @@ impl Manager {
         let forge = self.forge(&remote).await?;
         let kind = selection.kind.context("explicit items need a kind")?;
         let (_, url) = match kind {
-            ItemKind::Pr => forge.pull(input)?,
-            ItemKind::Issue => forge.issue(input)?,
+            LinkKind::Pr => forge.pull(input)?,
+            LinkKind::Issue => forge.issue(input)?,
+            LinkKind::Ci => forge.run(input)?,
         };
         Ok(Some((url, kind)))
     }
 
+    /// The explicitly selected item, or the workspace's linked items of the
+    /// selected kind, with every linked run.
     pub(crate) async fn selected_items(
         &self,
         workspace: &Workspace,
         selection: &Selection,
-    ) -> Result<Vec<(String, ItemKind)>> {
-        let items = self.selection_items(workspace, selection).await?;
+    ) -> Result<Vec<(String, LinkKind)>> {
+        let items = self
+            .selection_items(workspace, selection, shown_items)
+            .await?;
         ensure!(
             !items.is_empty() || selection.kind.is_none(),
             "{NO_LINKED_ITEMS}"
@@ -751,8 +760,10 @@ impl Manager {
         &self,
         workspace: &Workspace,
         selection: &Selection,
-    ) -> Result<Vec<(String, ItemKind)>> {
-        let items = self.selection_items(workspace, selection).await?;
+    ) -> Result<Vec<(String, LinkKind)>> {
+        let items = self
+            .selection_items(workspace, selection, followed_items)
+            .await?;
         if items.is_empty() && selection.input.is_none() {
             let (id, kind) = (workspace.id.clone(), selection.kind);
             let agents = self.tracked_agents().await;
@@ -767,18 +778,19 @@ impl Manager {
     }
 
     /// The explicitly selected item, or the workspace's linked items of the
-    /// selected kind.
+    /// selected kind that `linked` lists.
     async fn selection_items(
         &self,
         workspace: &Workspace,
         selection: &Selection,
-    ) -> Result<Vec<(String, ItemKind)>> {
+        linked: LinkedItems,
+    ) -> Result<Vec<(String, LinkKind)>> {
         if let Some(item) = self.explicit_item(workspace, selection).await? {
             return Ok(vec![item]);
         }
         let id = workspace.id.clone();
         let kind = selection.kind;
-        self.store.run(move |db| linked_items(db, &id, kind)).await
+        self.store.run(move |db| linked(db, &id, kind)).await
     }
 
     #[cfg(test)]
@@ -791,7 +803,7 @@ impl Manager {
             id,
             observations,
             &Selection {
-                kind: Some(ItemKind::Pr),
+                kind: Some(LinkKind::Pr),
                 input: None,
             },
         )
@@ -824,7 +836,7 @@ impl Manager {
         self.store.run(move |db| {
             let tx = db.transaction()?;
             store::require_ready(&tx, &id)?;
-            let items = linked_items(&tx, &id, selection.kind)?;
+            let items = followed_items(&tx, &id, selection.kind)?;
             if selection.input.is_none() && items.is_empty() {
                 ensure!(links_kind(&tx, &id, selection.kind, &agents)?, "{NO_LINKED_ITEMS}");
             }
@@ -1163,14 +1175,14 @@ fn conflict_message(check: &ConflictCheck) -> String {
 fn links_kind(
     db: &rusqlite::Connection,
     id: &str,
-    kind: Option<ItemKind>,
+    kind: Option<LinkKind>,
     agents: &crate::daemon::workspace::TrackedAgents,
 ) -> Result<bool> {
-    if kind.is_none() || !linked_items(db, id, kind)?.is_empty() {
+    if kind.is_none() || !followed_items(db, id, kind)?.is_empty() {
         return Ok(true);
     }
     for child in crate::daemon::workspace::delegated(db, id, agents)? {
-        if !linked_items(db, &child.id, kind)?.is_empty() {
+        if !followed_items(db, &child.id, kind)?.is_empty() {
             return Ok(true);
         }
     }
@@ -1196,6 +1208,99 @@ fn activity_records(
     Ok(records)
 }
 
+/// The workspace's items of a kind, or of every kind, that one use of its
+/// links covers.
+type LinkedItems =
+    fn(&rusqlite::Connection, &str, Option<LinkKind>) -> Result<Vec<(String, LinkKind)>>;
+
+/// The items a watch of `kind`, or of every kind, follows: the assigned
+/// issue and PRs, and the linked runs whose finish it has yet to deliver.
+pub(crate) fn followed_items(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: Option<LinkKind>,
+) -> Result<Vec<(String, LinkKind)>> {
+    with_runs(db, id, kind, unfinished_runs)
+}
+
+/// The items `shoal view` shows for `kind`, or every kind: the assigned
+/// issue and PRs, and every linked run.
+fn shown_items(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: Option<LinkKind>,
+) -> Result<Vec<(String, LinkKind)>> {
+    with_runs(db, id, kind, linked_runs)
+}
+
+/// The assigned issue and PRs of `kind`, or of every kind, and the runs
+/// `runs` lists when the kind takes runs.
+fn with_runs(
+    db: &rusqlite::Connection,
+    id: &str,
+    kind: Option<LinkKind>,
+    runs: fn(&rusqlite::Connection, &str) -> Result<Vec<String>>,
+) -> Result<Vec<(String, LinkKind)>> {
+    let assigned = match kind {
+        None => linked_items(db, id, None)?,
+        Some(kind) => match kind.item() {
+            Some(kind) => linked_items(db, id, Some(kind))?,
+            None => Vec::new(),
+        },
+    };
+    let mut items = assigned
+        .into_iter()
+        .map(|(url, kind)| (url, kind.into()))
+        .collect::<Vec<_>>();
+    if matches!(kind, None | Some(LinkKind::Ci)) {
+        items.extend(runs(db, id)?.into_iter().map(|url| (url, LinkKind::Ci)));
+    }
+    Ok(items)
+}
+
+/// Every run the workspace links, oldest first, once.
+fn linked_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    let urls = db
+        .prepare(
+            "SELECT url FROM workspace_items WHERE workspace_id=?1 AND kind=?2
+             ORDER BY created_at, rowid",
+        )?
+        .query_map(params![id, LinkKind::Ci], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut runs = Vec::new();
+    for url in urls {
+        if !runs.contains(&url) {
+            runs.push(url);
+        }
+    }
+    Ok(runs)
+}
+
+/// The workspace's linked runs, except those whose finish the workspace's
+/// cursor holds as delivered, which ends their watch.
+fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    let mut runs = linked_runs(db, id)?;
+    let mut delivered = Vec::new();
+    for url in &runs {
+        let record: Option<String> = db
+            .query_row(
+                "SELECT record FROM pr_activity WHERE workspace_id=?1 AND url=?2",
+                params![id, url],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let record: Option<ActivityRecord> =
+            record.map(|text| serde_json::from_str(&text)).transpose()?;
+        if record.is_some_and(|record| record.pending.is_empty() && record.snapshot.run_finished())
+        {
+            delivered.push(url.clone());
+        }
+    }
+    runs.retain(|url| !delivered.contains(url));
+    Ok(runs)
+}
+
+/// The workspace's assigned issue and PRs, of `kind` or every kind.
 pub(crate) fn linked_items(
     db: &rusqlite::Connection,
     id: &str,
@@ -1320,10 +1425,10 @@ fn with_unread_messages(mut updates: Updates, messages: Vec<AgentMessage>) -> Re
 /// Whether a wait also reports the workspace branch's local conflicts with
 /// its base: only an unfiltered wait without a linked PR, whose forge would
 /// report them otherwise.
-fn watches_branch(selection: &Selection, items: &[(String, ItemKind)]) -> bool {
+fn watches_branch(selection: &Selection, items: &[(String, LinkKind)]) -> bool {
     selection.input.is_none()
         && selection.kind.is_none()
-        && !items.iter().any(|(_, kind)| *kind == ItemKind::Pr)
+        && !items.iter().any(|(_, kind)| *kind == LinkKind::Pr)
 }
 
 /// Poll every [`POLL_INTERVAL`], or once a forge's rate limit ends, and at

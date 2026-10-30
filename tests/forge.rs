@@ -3168,6 +3168,76 @@ fn forgejo_ci_runs_link_the_run_they_start() {
 }
 
 #[test]
+fn linked_runs_are_viewed_and_watched_until_they_finish() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let respond = |status: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
+                {"id": 9331, "index_in_repo": 2765, "prettyref": "main",
+                    "workflow_id": "flaky.yml", "status": status}
+            ]}},
+            "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+                {"id": 18345, "name": "test", "run_id": 9331, "status": status}
+            ]},
+            "GET repos/team/project/actions/jobs/18345/logs":
+                {"body": "⭐ Run Tests\nboom\n⚙️ [runner]: exitcode '1': failure\n"},
+        }))
+    };
+    respond("running");
+    let url = format!("{}/actions/runs/2765", fixture.web);
+    // Assigned items drive completion, so a run is only opened or related.
+    let output = fixture.run(&["link", "ci", "2765", "assigned", "--workspace", "topic"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("cannot be assigned"),
+        "{output:?}"
+    );
+    let job = format!("{url}/jobs/0");
+    fixture.ok(&["link", &job, "related", "--workspace", "topic"]);
+    let viewed = fixture.ok(&["view", "--workspace", "topic"]);
+    assert_eq!(
+        (&viewed[0]["kind"], &viewed[0]["url"], &viewed[0]["state"]),
+        (&json!("ci"), &json!(url), &json!("running")),
+        "{viewed}"
+    );
+
+    // A running run has nothing to report, so this wait can only time out.
+    let running = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "1"]);
+    assert_eq!(running["updates"], json!([]), "{running}");
+    respond("failure");
+    let finished = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
+    let update = &finished["updates"][0];
+    assert_eq!(
+        (&update["url"], &update["kind"], &update["message"]),
+        (
+            &json!(url),
+            &json!("ci_completed"),
+            &json!(format!(
+                "Run failed: test (failed step: Tests); read it with shoal view ci {url}"
+            ))
+        ),
+        "{finished}"
+    );
+    // The run's watch has ended, but it stays linked.
+    let output = fixture.run(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("no linked items"),
+        "{output:?}"
+    );
+    let viewed = fixture.ok(&["view", "ci", "--workspace", "topic"]);
+    assert_eq!(viewed[0]["state"], "failed", "{viewed}");
+    let output = fixture.run(&["ready", "ci", "--workspace", "topic"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("not marked ready"),
+        "{output:?}"
+    );
+    fixture.ok(&["unlink", "ci", "2765", "related", "--workspace", "topic"]);
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    assert_eq!(links["related"], json!([]), "{links}");
+}
+
+#[test]
 fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let run = |id: u64, branch: &str| {

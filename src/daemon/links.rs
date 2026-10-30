@@ -1,5 +1,6 @@
-//! Link issues and PRs to workspaces by relation. Assigned items keep the
-//! issue and PR watch rules; opened and related items are only recorded.
+//! Link issues, PRs and CI runs to workspaces by relation. Assigned items
+//! keep the issue and PR watch rules; opened and related items are only
+//! recorded, and watches follow linked runs until they finish.
 mod actions;
 mod checks;
 mod ci;
@@ -15,7 +16,7 @@ pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::{
@@ -24,7 +25,7 @@ use crate::{
         links::pr::Action,
         workspace::{Manager, review},
     },
-    forge::items::link::ItemKind,
+    forge::items::link::{ItemKind, LinkKind},
     model::{LinkedItem, Relation},
     state::WorkspaceState,
 };
@@ -33,17 +34,22 @@ impl Manager {
     pub async fn link_item(
         &self,
         selector: &str,
-        kind: ItemKind,
+        kind: LinkKind,
         input: &str,
         relation: Relation,
         title: Option<String>,
     ) -> Result<()> {
         match (relation, kind) {
-            (Relation::Assigned, ItemKind::Issue) => self.set_issue(selector, input, title).await,
-            (Relation::Assigned, ItemKind::Pr) => {
+            (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
+            (Relation::Assigned, LinkKind::Pr) => {
                 let url = input.to_owned();
                 self.set_pr(selector, Action::Watch { url }).await
             }
+            (Relation::Assigned, LinkKind::Ci) => bail!(
+                "a CI run cannot be assigned, because assigned items drive completion \
+                 and cleanup; link it as opened or related"
+            ),
+            (relation, LinkKind::Ci) => self.record_run(selector, relation, input).await,
             (relation, kind) => {
                 self.record_item(selector, relation, kind, input, title)
                     .await
@@ -57,7 +63,7 @@ impl Manager {
         &self,
         selector: &str,
         relation: Relation,
-        kind: Option<ItemKind>,
+        kind: Option<LinkKind>,
         input: Option<&str>,
     ) -> Result<()> {
         ensure!(
@@ -65,9 +71,32 @@ impl Manager {
             "an item to unlink needs its kind"
         );
         if relation == Relation::Assigned {
+            let kind = match kind.map(LinkKind::item) {
+                None => None,
+                Some(Some(kind)) => Some(kind),
+                Some(None) => bail!("{} linked as {relation}", nothing(kind)),
+            };
             return self.unassign(selector, kind, input).await;
         }
         self.forget_items(selector, relation, kind, input).await
+    }
+
+    /// Record an opened or related run named by number or URL, once the
+    /// forge shows it, with its workflow as its title.
+    async fn record_run(&self, selector: &str, relation: Relation, input: &str) -> Result<()> {
+        let (workspace, forge, account) = self.run_forge(selector).await?;
+        let (_, url) = forge.run(input)?;
+        let run = forge
+            .view_run(&account, &url)
+            .await
+            .with_context(|| format!("could not read CI run {url}"))?;
+        let item = LinkedItem {
+            kind: LinkKind::Ci,
+            url,
+            title: run.workflow,
+        };
+        self.record_items(&workspace.id, vec![(relation, item)])
+            .await
     }
 
     /// Record an opened or related item named by number or URL.
@@ -75,7 +104,7 @@ impl Manager {
         &self,
         selector: &str,
         relation: Relation,
-        kind: ItemKind,
+        kind: LinkKind,
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
@@ -93,7 +122,7 @@ impl Manager {
         &self,
         selector: &str,
         relation: Relation,
-        kind: Option<ItemKind>,
+        kind: Option<LinkKind>,
         input: Option<&str>,
     ) -> Result<()> {
         let workspace = self.workspace(selector).await?;
@@ -138,7 +167,7 @@ impl Manager {
         &self,
         id: &str,
         relation: Relation,
-        kind: Option<ItemKind>,
+        kind: Option<LinkKind>,
         url: Option<String>,
     ) -> Result<usize> {
         let id = id.to_owned();
@@ -183,28 +212,30 @@ impl Manager {
         ensure!(
             issue || pr,
             "{} linked as {}",
-            nothing(kind),
+            nothing(kind.map(Into::into)),
             Relation::Assigned
         );
         Ok(())
     }
 
-    /// The canonical URL of an issue or PR of the workspace's repository.
+    /// The canonical URL of an issue, PR or CI run of the workspace's
+    /// repository.
     async fn item_url(
         &self,
         workspace: &crate::model::Workspace,
-        kind: ItemKind,
+        kind: LinkKind,
         input: &str,
     ) -> Result<String> {
         Ok(match kind {
-            ItemKind::Issue => self.issue_forge(workspace, input).await?.2,
-            ItemKind::Pr => self.pr_forge(workspace, input).await?.2,
+            LinkKind::Issue => self.issue_forge(workspace, input).await?.2,
+            LinkKind::Pr => self.pr_forge(workspace, input).await?.2,
+            LinkKind::Ci => self.workspace_forge(workspace).await?.run(input)?.1,
         })
     }
 }
 
 /// The subject of an error that no item of `kind` is linked.
-fn nothing(kind: Option<ItemKind>) -> String {
+fn nothing(kind: Option<LinkKind>) -> String {
     match kind {
         Some(kind) => format!("no {kind} is"),
         None => "nothing is".into(),
@@ -217,10 +248,11 @@ pub(crate) fn record(
     db: &Connection,
     id: &str,
     relation: Relation,
-    kind: ItemKind,
+    kind: impl Into<LinkKind>,
     url: &str,
     title: Option<&str>,
 ) -> Result<()> {
+    let kind = kind.into();
     if relation == Relation::Assigned {
         bail!("assigned items are linked through their issue or PR watch");
     }
@@ -247,7 +279,7 @@ fn remove(
     db: &Connection,
     id: &str,
     relation: Relation,
-    kind: Option<ItemKind>,
+    kind: Option<LinkKind>,
     url: Option<&str>,
 ) -> Result<usize> {
     ensure_accepts_links(db, id)?;
@@ -257,7 +289,7 @@ fn remove(
              AND (?3 IS NULL OR kind=?3) AND (?4 IS NULL OR url=?4) RETURNING kind,url",
         )?
         .query_map(rusqlite::params![id, relation, kind, url], |row| {
-            Ok((row.get::<_, ItemKind>(0)?, row.get::<_, String>(1)?))
+            Ok((row.get::<_, LinkKind>(0)?, row.get::<_, String>(1)?))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (kind, url) in &removed {

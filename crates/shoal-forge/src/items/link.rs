@@ -28,10 +28,49 @@ impl ItemKind {
     }
 }
 
+crate::state::states!(
+    /// What a workspace links and a selection names: an issue, a PR or a CI
+    /// run. Only issues and PRs are items of the forge's item API.
+    LinkKind {
+        Issue => "issue",
+        Pr => "pr",
+        /// A CI workflow run.
+        Ci => "ci",
+    }
+);
+
+impl From<ItemKind> for LinkKind {
+    fn from(kind: ItemKind) -> Self {
+        match kind {
+            ItemKind::Issue => Self::Issue,
+            ItemKind::Pr => Self::Pr,
+        }
+    }
+}
+
+impl LinkKind {
+    /// The issue or PR kind, or `None` for a run.
+    pub fn item(self) -> Option<ItemKind> {
+        match self {
+            Self::Issue => Some(ItemKind::Issue),
+            Self::Pr => Some(ItemKind::Pr),
+            Self::Ci => None,
+        }
+    }
+
+    /// The kind's name as a heading or a label of its own.
+    pub fn title(self) -> &'static str {
+        match self.item() {
+            Some(kind) => kind.title(),
+            None => "CI run",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Selection {
     /// Missing for every kind, or for a number the CLI has yet to classify.
-    pub kind: Option<ItemKind>,
+    pub kind: Option<LinkKind>,
     pub input: Option<String>,
 }
 
@@ -39,24 +78,33 @@ impl Selection {
     pub fn parse(first: Option<String>, second: Option<String>) -> Result<Self> {
         let selection = match first.as_deref() {
             Some("pr") => Self {
-                kind: Some(ItemKind::Pr),
+                kind: Some(LinkKind::Pr),
                 input: second,
             },
             Some("issue") => Self {
-                kind: Some(ItemKind::Issue),
+                kind: Some(LinkKind::Issue),
+                input: second,
+            },
+            Some("ci") => Self {
+                kind: Some(LinkKind::Ci),
                 input: second,
             },
             Some(input) => {
                 ensure!(
                     second.is_none(),
-                    "use a number or URL, or pr/issue followed by one"
+                    "use a number or URL, or pr/issue/ci followed by one"
                 );
+                // A bare number never names a run, whose numbers overlap
+                // issue and PR numbers.
                 let kind = match IssueInput::parse(input) {
                     IssueInput::Number => None,
                     _ => Some(match Link::parse(input)?.target {
-                        LinkTarget::Issue => ItemKind::Issue,
-                        LinkTarget::Pr => ItemKind::Pr,
-                        LinkTarget::Branch(_) => anyhow::bail!("expected an issue or PR link"),
+                        LinkTarget::Issue => LinkKind::Issue,
+                        LinkTarget::Pr => LinkKind::Pr,
+                        LinkTarget::Run => LinkKind::Ci,
+                        LinkTarget::Branch(_) => {
+                            anyhow::bail!("expected an issue, PR or CI run link")
+                        }
                     }),
                 };
                 Self { kind, input: first }
@@ -72,8 +120,9 @@ impl Selection {
                 ensure!(
                     matches!(
                         (&link.target, selection.kind),
-                        (LinkTarget::Issue, Some(ItemKind::Issue))
-                            | (LinkTarget::Pr, Some(ItemKind::Pr))
+                        (LinkTarget::Issue, Some(LinkKind::Issue))
+                            | (LinkTarget::Pr, Some(LinkKind::Pr))
+                            | (LinkTarget::Run, Some(LinkKind::Ci))
                     ),
                     "link does not match the selected item kind"
                 );
@@ -88,17 +137,22 @@ impl Selection {
     }
 }
 
-/// The repository and number of an issue or PR URL.
-pub fn item(kind: ItemKind, url: &str) -> Result<(ForgeRepo, u64)> {
+/// The repository and number of an issue, PR or CI run URL.
+pub fn item(kind: LinkKind, url: &str) -> Result<(ForgeRepo, u64)> {
     let (repository, (number, _)) = match kind {
-        ItemKind::Pr => {
+        LinkKind::Pr => {
             let repository = ForgeRepo::from_pull_url(url)?;
             let item = repository.pull(url)?;
             (repository, item)
         }
-        ItemKind::Issue => {
+        LinkKind::Issue => {
             let repository = ForgeRepo::from_issue_url(url)?;
             let item = repository.issue(url)?;
+            (repository, item)
+        }
+        LinkKind::Ci => {
+            let repository = ForgeRepo::from_run_url(url)?;
+            let item = repository.run(url)?;
             (repository, item)
         }
     };
@@ -113,6 +167,8 @@ pub struct Link {
 pub enum LinkTarget {
     Issue,
     Pr,
+    /// A CI workflow run.
+    Run,
     Branch(String),
 }
 
@@ -120,7 +176,7 @@ impl Link {
     pub fn parse(input: &str) -> Result<Self> {
         ensure!(
             IssueInput::parse(input) == IssueInput::Url,
-            "expected an issue, PR or branch URL"
+            "expected an issue, PR, CI run or branch URL"
         );
         let url = input
             .split(['?', '#'])
@@ -141,6 +197,13 @@ impl Link {
                 target: LinkTarget::Pr,
             });
         }
+        if let Ok(repository) = ForgeRepo::from_run_url(url) {
+            repository.run(url)?;
+            return Ok(Self {
+                repository,
+                target: LinkTarget::Run,
+            });
+        }
         let ((repository, branch), forge) = [
             ("/src/branch/", ForgeKind::Forgejo),
             ("/-/tree/", ForgeKind::GitLab),
@@ -149,7 +212,7 @@ impl Link {
         ]
         .iter()
         .find_map(|&(marker, forge)| Some((url.split_once(marker)?, forge)))
-        .context("expected an issue, PR or branch URL")?;
+        .context("expected an issue, PR, CI run or branch URL")?;
         let repository = ForgeRepo::parse_linked(repository, Some(forge))?;
         let branch = decode_branch(branch)?;
         ensure!(!branch.is_empty(), "branch URL has no branch");

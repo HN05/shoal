@@ -1,4 +1,5 @@
-//! Arguments of commands for the issues and PRs linked to a workspace.
+//! Arguments of commands for the issues, PRs and CI runs linked to a
+//! workspace.
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::{cli::args::item_reference, model::Relation};
@@ -6,15 +7,16 @@ use crate::{cli::args::item_reference, model::Relation};
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ItemsCommand {
-    /// Link an issue or PR with a relation: `link 42 assigned`, `link pr 43 related`.
+    /// Link an issue, PR or CI run with a relation: `link 42 assigned`, `link ci 2765 related`.
     ///
     /// Assigned items drive completion and cleanup; opened and related items
-    /// are recorded only.
+    /// are recorded only. A CI run is opened or related, and watches follow
+    /// it until it finishes.
     Link {
         #[command(flatten)]
         items: RelationArgs,
     },
-    /// Unlink a relation's items, one kind, or a selected issue or PR:
+    /// Unlink a relation's items, one kind, or a selected item:
     /// `unlink assigned`, `unlink pr 43 related`.
     Unlink {
         #[command(flatten)]
@@ -77,7 +79,7 @@ pub struct ViewArgs {
 // An optional item selection followed by its relation.
 #[derive(Debug, Args)]
 pub struct RelationArgs {
-    /// pr/issue, a number or URL, then assigned, opened or related.
+    /// pr/issue/ci, a number or URL, then assigned, opened or related.
     #[arg(required = true, num_args = 1..=3, value_name = "[ITEM] RELATION")]
     pub args: Vec<String>,
     /// Workspace to use; defaults to the current workspace or picker.
@@ -107,7 +109,8 @@ impl RelationArgs {
 
 #[derive(Debug, Args)]
 pub struct ItemArgs {
-    /// pr/issue to select a kind, or an issue or PR number or URL.
+    /// pr/issue/ci to select a kind, an issue or PR number, or an issue, PR or
+    /// CI run URL.
     #[arg(value_parser = item_reference)]
     pub kind_or_url: Option<String>,
     /// Number or URL when a kind is supplied.

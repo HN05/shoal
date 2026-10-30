@@ -51,13 +51,13 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     let issue = "https://github.com/team/repo/issues/40";
     let pr = "https://github.com/team/repo/pull/41";
     manager
-        .link_item(&id, ItemKind::Issue, "40", Relation::Opened, None)
+        .link_item(&id, LinkKind::Issue, "40", Relation::Opened, None)
         .await
         .unwrap();
     manager
         .link_item(
             &id,
-            ItemKind::Issue,
+            LinkKind::Issue,
             issue,
             Relation::Opened,
             Some("Follow-up".into()),
@@ -65,11 +65,11 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         .await
         .unwrap();
     manager
-        .link_item(&id, ItemKind::Pr, "41", Relation::Related, None)
+        .link_item(&id, LinkKind::Pr, "41", Relation::Related, None)
         .await
         .unwrap();
     manager
-        .link_item(&id, ItemKind::Issue, "40", Relation::Related, None)
+        .link_item(&id, LinkKind::Issue, "40", Relation::Related, None)
         .await
         .unwrap();
 
@@ -79,7 +79,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     assert_eq!(
         links.opened,
         [LinkedItem {
-            kind: ItemKind::Issue,
+            kind: LinkKind::Issue,
             url: issue.into(),
             title: Some("Follow-up".into()),
         }]
@@ -94,7 +94,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
         manager
             .link_item(
                 &id,
-                ItemKind::Issue,
+                LinkKind::Issue,
                 "https://github.com/other/repo/issues/1",
                 Relation::Related,
                 None
@@ -104,12 +104,12 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     );
 
     manager
-        .unlink_items(&id, Relation::Related, Some(ItemKind::Pr), Some("41"))
+        .unlink_items(&id, Relation::Related, Some(LinkKind::Pr), Some("41"))
         .await
         .unwrap();
     assert!(
         manager
-            .unlink_items(&id, Relation::Related, Some(ItemKind::Pr), Some("41"))
+            .unlink_items(&id, Relation::Related, Some(LinkKind::Pr), Some("41"))
             .await
             .is_err()
     );
@@ -144,7 +144,7 @@ async fn assigned_relation_uses_the_issue_link() {
     manager
         .link_item(
             &id,
-            ItemKind::Issue,
+            LinkKind::Issue,
             "7",
             Relation::Assigned,
             Some("Fix".into()),
@@ -159,11 +159,11 @@ async fn assigned_relation_uses_the_issue_link() {
         Relation::Assigned
     );
     manager
-        .unlink_items(&id, Relation::Assigned, Some(ItemKind::Issue), None)
+        .unlink_items(&id, Relation::Assigned, Some(LinkKind::Issue), None)
         .await
         .unwrap();
     assert_eq!(manager.workspace(&id).await.unwrap().links.issue, None);
-    for kind in [Some(ItemKind::Issue), None] {
+    for kind in [Some(LinkKind::Issue), None] {
         let error = manager
             .unlink_items(&id, Relation::Assigned, kind, None)
             .await
@@ -182,7 +182,7 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager
-            .link_item(&id, ItemKind::Issue, "40", Relation::Related, None)
+            .link_item(&id, LinkKind::Issue, "40", Relation::Related, None)
             .await
             .is_err()
     );

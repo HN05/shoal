@@ -1,7 +1,10 @@
-//! Show issues and PRs as the forge reports them, without gh or fj.
+//! Show issues, PRs and linked CI runs as the forge reports them, without gh
+//! or fj.
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::links;
+use serde::Serialize;
+
+use super::{ci, links};
 use crate::{
     cli::{
         args::items::{ItemArgs, ViewArgs},
@@ -16,9 +19,12 @@ use crate::{
         ForgeRepo,
         account::Account,
         capability::Capability,
-        ci::{checks::CheckLog, run_view::JobRef},
+        ci::{
+            checks::CheckLog,
+            run_view::{JobRef, RunView},
+        },
         items::{
-            link::{ItemKind, Selection},
+            link::{LinkKind, Selection},
             reaction::Reaction,
         },
         review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
@@ -28,11 +34,11 @@ use crate::{
     repository,
 };
 
-/// Show or open what `args` selects: a CI run as `ci` reads it, otherwise
-/// issues and PRs.
+/// Show or open what `args` selects: one CI run as `ci` reads it, otherwise
+/// issues, PRs and linked runs.
 pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
     let job = args.job.map(JobRef::Name).or(args.job_id.map(JobRef::Id));
-    if args.items.selects_ci() {
+    if args.items.selects_ci() && (args.items.item.is_some() || job.is_some()) {
         ensure!(
             args.check.is_none(),
             "--check reads a PR's check; use --job for a run's"
@@ -67,37 +73,121 @@ async fn view(
     let selected = links::select_items(ctx, &context, selection).await?;
     let views = read_views(ctx, &context, &selected, !no_comments).await?;
     ctx.show(&views, |views| render_views(views, ctx.json))?;
-    Ok(i32::from(views.iter().any(|view| view.details.is_none())))
+    Ok(i32::from(views.iter().any(Shown::failed)))
 }
 
-/// Each selected item as the forge reports it now, with its failed job
-/// logs where a workspace reads them.
+/// What `shoal view` shows of one selected item.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum Shown {
+    Item(Box<ItemView>),
+    Run(ShownRun),
+}
+
+/// A linked CI run, as `view ci` shows it, or why it could not be read.
+#[derive(Serialize)]
+struct ShownRun {
+    kind: LinkKind,
+    #[serde(flatten)]
+    read: RunRead,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum RunRead {
+    Read(RunView),
+    Failed { url: String, errors: Vec<String> },
+}
+
+impl Shown {
+    fn failed(&self) -> bool {
+        match self {
+            Self::Item(view) => view.details.is_none(),
+            Self::Run(run) => matches!(run.read, RunRead::Failed { .. }),
+        }
+    }
+}
+
+/// Each selected item as the forge reports it now, in selection order, with
+/// failed job logs where a workspace reads them.
 async fn read_views(
     ctx: &Context,
     context: &ItemContext,
     selected: &Selected,
     comments: bool,
-) -> Result<Vec<ItemView>> {
+) -> Result<Vec<Shown>> {
     ctx.progress("Reading items", async {
         let hosts = ctx.forge_hosts()?;
-        let mut views = read(selected, &hosts, &ctx.forge_account()?, comments).await?;
+        let mut items = read(selected, &hosts, &ctx.forge_account()?, comments).await?;
         if let ItemContext::Workspace(workspace) = context {
-            read_failed_logs(ctx, &hosts, workspace, &mut views).await;
+            read_failed_logs(ctx, &hosts, workspace, &mut items).await;
         }
-        Ok(views)
+        let runs = read_runs(ctx, context, selected).await;
+        let (mut items, mut runs) = (items.into_iter(), runs.into_iter());
+        Ok(selected
+            .items
+            .iter()
+            .filter_map(|item| match item.kind.item() {
+                Some(_) => items.next().map(|item| Shown::Item(Box::new(item))),
+                None => runs.next().map(Shown::Run),
+            })
+            .collect())
     })
     .await
 }
 
+/// Each selected run with its jobs and failed jobs' logs, read through the
+/// workspace.
+async fn read_runs(ctx: &Context, context: &ItemContext, selected: &Selected) -> Vec<ShownRun> {
+    let mut runs = Vec::new();
+    for item in &selected.items {
+        if item.kind != LinkKind::Ci {
+            continue;
+        }
+        let read = match context {
+            ItemContext::Workspace(workspace) => ci::read_view(ctx, workspace, &item.url)
+                .await
+                .map(RunRead::Read),
+            ItemContext::Checkout(_) => Err(anyhow::anyhow!(
+                "a CI run is read through a workspace; run this in one or pass --workspace"
+            )),
+        };
+        let read = read.unwrap_or_else(|error| RunRead::Failed {
+            url: item.url.clone(),
+            errors: vec![format!("{error:#}")],
+        });
+        runs.push(ShownRun {
+            kind: LinkKind::Ci,
+            read,
+        });
+    }
+    runs
+}
+
 /// The items one after another, separated by a blank line.
-fn render_views(views: &[ItemView], json: bool) {
+fn render_views(views: &[Shown], json: bool) {
     let palette = Palette::stdout(json);
     let emoji = output::stdout_shows_emoji(json);
     for (index, view) in views.iter().enumerate() {
         if index > 0 {
             outln!();
         }
-        render(view, palette, emoji);
+        match view {
+            Shown::Item(view) => render(view, palette, emoji),
+            Shown::Run(ShownRun {
+                read: RunRead::Read(view),
+                ..
+            }) => ci::render_run(view),
+            Shown::Run(ShownRun {
+                read: RunRead::Failed { url, errors },
+                ..
+            }) => {
+                outln!("Run:      {url}");
+                for error in errors {
+                    outln!("{}", palette.paint(Style::Warning, error));
+                }
+            }
+        }
     }
 }
 
@@ -168,13 +258,13 @@ async fn read(
         .await?
         .context("item lookup needs an origin remote")?;
     let forge = ForgeRepo::resolve(&remote, hosts).await?;
-    Ok(futures_util::future::join_all(
-        selected
-            .items
-            .iter()
-            .map(|item| forge.view(account, item.kind, &item.url, comments)),
+    Ok(
+        futures_util::future::join_all(selected.items.iter().filter_map(|item| {
+            let kind = item.kind.item()?;
+            Some(forge.view(account, kind, &item.url, comments))
+        }))
+        .await,
     )
-    .await)
 }
 
 async fn read_failed_logs(
@@ -206,7 +296,7 @@ async fn read_failed_logs(
                 CiMethod::CheckLog {
                     workspace: workspace.into(),
                     selection: Selection {
-                        kind: Some(ItemKind::Pr),
+                        kind: Some(LinkKind::Pr),
                         input: Some(view.url.clone()),
                     },
                     check: check.name.clone(),
