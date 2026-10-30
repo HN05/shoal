@@ -3,9 +3,12 @@
 //! records.
 use anyhow::{Context, Result};
 use rusqlite::{OptionalExtension, TransactionBehavior};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::collections::BTreeMap;
 
-use super::super::{Manager, places::ExecutionPlace};
+use super::{
+    super::{Manager, places::ExecutionPlace},
+    ProcessDirectories,
+};
 use crate::{
     config::repo::Cache,
     daemon::store,
@@ -16,7 +19,7 @@ use crate::{
 struct Registration {
     scope_token: String,
     ports: Vec<PortReservation>,
-    caches: BTreeMap<String, PathBuf>,
+    directories: ProcessDirectories,
 }
 
 impl Manager {
@@ -49,7 +52,8 @@ impl Manager {
             &workspace,
             crate::repository::name(&repository),
             &registration.ports,
-            &registration.caches,
+            &registration.directories.caches,
+            registration.directories.tmp_dir.as_deref(),
         );
         Ok(ExecutionPlan {
             id: id.to_owned(),
@@ -89,11 +93,11 @@ fn register_again(
         super::super::places::record_execution_place(&tx, id, workspace_id, place)?;
     }
     let ports = store::ports(&tx, Some(workspace_id))?;
-    let caches = crate::caches::directories(repository, caches)?;
+    let directories = ProcessDirectories::prepare(repository, caches, workspace_id)?;
     tx.commit()?;
     Ok(Registration {
         scope_token,
         ports,
-        caches,
+        directories,
     })
 }

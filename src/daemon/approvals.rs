@@ -1,4 +1,5 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -43,7 +44,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `land`, `issue_open` or `pr_open`.
+/// `secret/<name>`, `hold/<name>`, `land`, `issue_open` or `pr_open`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -61,6 +62,9 @@ pub enum Target {
     IssueOpen,
     /// Opening a PR for the workspace branch at one commit.
     PrOpen,
+    /// A hold an agent asks to place on its own workspace, which approval
+    /// places.
+    Hold(String),
 }
 
 /// The name of a workspace's single land request.
@@ -76,6 +80,7 @@ impl fmt::Display for Target {
             Self::Land => f.write_str("land"),
             Self::IssueOpen => f.write_str("issue_open"),
             Self::PrOpen => f.write_str("pr_open"),
+            Self::Hold(name) => write!(f, "hold/{name}"),
         }
     }
 }
@@ -101,6 +106,11 @@ impl FromStr for Target {
         {
             return Ok(Self::Secret(name.into()));
         }
+        if let Some(name) = text.strip_prefix("hold/")
+            && !name.is_empty()
+        {
+            return Ok(Self::Hold(name.into()));
+        }
         // The scope may itself contain a slash; pool names cannot.
         if let Some((scope, pool)) = text
             .strip_prefix("resource/")
@@ -123,6 +133,13 @@ impl Target {
     pub fn is_proposal(&self) -> bool {
         matches!(self, Self::IssueOpen | Self::PrOpen)
     }
+
+    /// Whether a coordinator decides the request only while it holds a grant
+    /// for the same thing. A hold grants nothing a coordinator could hold, so
+    /// the nearest one decides it.
+    fn needs_grant(&self) -> bool {
+        !matches!(self, Self::Hold(_))
+    }
 }
 
 /// The effective allocation settings a decision binds; a later request with
@@ -138,6 +155,7 @@ pub enum Specification {
     Land(LandSpecification),
     Issue(IssueSpecification),
     Pull(PullSpecification),
+    Hold(HoldSpecification),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,6 +201,13 @@ pub struct LandSpecification {
 pub struct SecretSpecification {
     pub command: Vec<String>,
     pub tools: Vec<String>,
+}
+
+/// A hold covers its name on the requesting workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HoldSpecification {
+    pub hold: String,
 }
 
 impl fmt::Display for Specification {
@@ -406,7 +431,8 @@ impl ApprovalRequest {
     }
 
     /// What the user is asked to decide: the access and how long it lasts,
-    /// the branch and commit to land, or the issue or PR to open.
+    /// the branch and commit to land, the issue or PR to open, or the hold
+    /// to place.
     pub fn subject(&self) -> String {
         match (&self.target, &self.specification) {
             (Target::Land, Specification::Land(land)) => {
@@ -419,6 +445,7 @@ impl ApprovalRequest {
                     None => format!("open issue \"{title}\""),
                 }
             }
+            (Target::Hold(name), _) => format!("hold the workspace as {name}"),
             (Target::PrOpen, Specification::Pull(pull)) => format!(
                 "open PR \"{}\" from {} at {}",
                 pull.pull.title, pull.pull.head, pull.commit
@@ -501,6 +528,12 @@ fn holds_grant(db: &Connection, workspace: &str, request: &ApprovalRequest) -> R
     }))
 }
 
+/// Whether the coordinating agent of `workspace` may decide `request`: one
+/// that needs no grant, or one it holds a grant for.
+fn may_decide(db: &Connection, workspace: &str, request: &ApprovalRequest) -> Result<bool> {
+    Ok(!request.target.needs_grant() || holds_grant(db, workspace, request)?)
+}
+
 /// A pending request and the coordinators routing passed over, which hold no
 /// grant for it.
 pub struct Routed {
@@ -548,7 +581,7 @@ fn route(
     let mut passed = Vec::new();
     request.decider = None;
     for candidate in candidates {
-        if holds_grant(tx, candidate, &request)? {
+        if may_decide(tx, candidate, &request)? {
             request.decider = Some(candidate.clone());
             break;
         }
@@ -710,6 +743,16 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
         )?;
     }
     Ok(Decision { request, new })
+}
+
+/// [`decide`], placing the hold an approved hold request asks for in the
+/// same transaction.
+fn decide_and_place(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
+    let decision = decide(tx, key, approve)?;
+    if decision.new && decision.request.status == DecisionStatus::Approved {
+        crate::daemon::workspace::place_approved_hold(tx, &decision.request)?;
+    }
+    Ok(decision)
 }
 
 impl Manager {
@@ -921,10 +964,9 @@ impl Manager {
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
@@ -954,10 +996,9 @@ impl Manager {
         approve: bool,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
@@ -991,6 +1032,7 @@ impl Manager {
     ) -> Result<Option<Decision>> {
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
+        let _hold = self.hold_decision_guard(&request, approve).await?;
         let _guard = self.gates.lock_simulators().await;
         self.store
             .run(move |db| {
@@ -1004,10 +1046,10 @@ impl Manager {
                     stored.is_same(&request),
                     "approval request {id} changed since it was shown; choose again"
                 );
-                if !holds_grant(&tx, &coordinator, &stored)? {
+                if !may_decide(&tx, &coordinator, &stored)? {
                     return Ok(None);
                 }
-                let decision = decide(&tx, &key, approve)?;
+                let decision = decide_and_place(&tx, &key, approve)?;
                 tx.commit()?;
                 Ok(Some(decision))
             })
@@ -1020,6 +1062,7 @@ impl Manager {
         if request.target == Target::Land && approve && request.status == DecisionStatus::Pending {
             self.ensure_land_current(&request).await?;
         }
+        let _hold = self.hold_decision_guard(&request, approve).await?;
         let key = request.key;
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
@@ -1027,7 +1070,7 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let decision = decide(&tx, &key, approve)?;
+                let decision = decide_and_place(&tx, &key, approve)?;
                 tx.commit()?;
                 Ok(decision)
             })
@@ -1049,9 +1092,9 @@ impl Manager {
     }
 
     pub async fn show_approval(&self, id: i64) -> Result<ApprovalRequest> {
-        self.approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))
+        self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}")).into()
+        })
     }
 
     /// A request's target never changes, so it can be read before taking the
@@ -1109,10 +1152,9 @@ impl Manager {
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
         let workspace = self.workspace(workspace).await?;
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"

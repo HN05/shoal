@@ -86,7 +86,7 @@ pub(super) async fn acquire(
         } => {
             let pool = match pool {
                 Some(pool) => pool,
-                None => resources::pick_pool(ctx, &workspace, Members::Locks).await?,
+                None => resources::pick_pool(ctx, &workspace, Members::Locks, "pool").await?,
             };
             let request = resource_request(pool, member, mode, None, &lease);
             resources::acquire(ctx, workspace, request).await
@@ -94,7 +94,9 @@ pub(super) async fn acquire(
         AcquireKind::Repo { resource, lease } => {
             let resource = match resource {
                 Some(resource) => resource,
-                None => resources::pick_pool(ctx, &workspace, Members::Repositories).await?,
+                None => {
+                    resources::pick_pool(ctx, &workspace, Members::Repositories, "resource").await?
+                }
             };
             let request = resource_request(
                 resource,
@@ -263,7 +265,8 @@ async fn select_held(
 }
 
 /// Release cancels a pending or denied request even without a lease. Land
-/// requests and proposals belong to landing and opening, not to a lease.
+/// requests, proposals and hold requests belong to landing, opening and
+/// holding, not to a lease.
 fn requested(request: ApprovalRequest) -> Option<Held> {
     let name = request.name;
     Some(match (request.target, request.specification) {
@@ -276,7 +279,7 @@ fn requested(request: ApprovalRequest) -> Option<Held> {
         }
         (Target::Resource { pool, .. }, _) => Held::Resource { pool, name },
         (Target::Secret(_), _) => Held::Secret { name },
-        (Target::Land | Target::IssueOpen | Target::PrOpen, _) => return None,
+        (Target::Land | Target::IssueOpen | Target::PrOpen | Target::Hold(_), _) => return None,
     })
 }
 

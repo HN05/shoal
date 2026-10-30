@@ -81,8 +81,12 @@ impl Manager {
             return Ok(None);
         };
         let repository = self.repository(&workspace.repository_id).await?;
-        // The caller renders the hook's [env], whose caches only the daemon creates.
+        // The caller renders the hook's [env], whose caches only the daemon
+        // creates, with the temporary directory, which is gone after removal.
         crate::caches::directories(&repository, &settings.caches)?;
+        if !matches!(kind, HookKind::PostRemove) {
+            crate::tmp_dirs::directory(&repository, &workspace.id)?;
+        }
         let checkout = match kind.directory() {
             HookDirectory::Worktree => workspace.path.clone(),
             HookDirectory::Checkout => repository.path,
@@ -200,20 +204,46 @@ impl Manager {
         config.resolve(&layers)
     }
 
+    /// What `[env]` and the workspace's temporary directory, created when
+    /// missing, add to the environment of its hooks.
     pub(crate) async fn configured_workspace_environment(
         &self,
         workspace: &Workspace,
+    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
+        self.rendered_workspace_environment(workspace, true).await
+    }
+
+    /// What `[env]` adds to the environment of the post-remove hook, which
+    /// runs once the temporary directory is gone and so keeps the inherited
+    /// `TMPDIR`.
+    pub(crate) async fn removed_workspace_environment(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
+        self.rendered_workspace_environment(workspace, false).await
+    }
+
+    async fn rendered_workspace_environment(
+        &self,
+        workspace: &Workspace,
+        with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let settings = self.workspace_settings(workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         let ports = self.list_ports(Some(&workspace.id)).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
+        let tmp_dir = if with_tmp_dir {
+            crate::tmp_dirs::directory(&repository, &workspace.id)?
+        } else {
+            None
+        };
         Ok(crate::env::render_configured_environment(
             &settings.env,
             workspace,
             crate::repository::name(&repository),
             &ports,
             &caches,
+            tmp_dir.as_deref(),
         ))
     }
 }

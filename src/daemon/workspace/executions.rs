@@ -249,6 +249,27 @@ struct ExecutionRecord {
     place: Option<ExecutionPlace>,
 }
 
+/// The directories a workspace's processes use: the repository's caches and
+/// the workspace's temporary directory.
+struct ProcessDirectories {
+    caches: BTreeMap<String, PathBuf>,
+    tmp_dir: Option<PathBuf>,
+}
+
+impl ProcessDirectories {
+    /// The directories of `workspace_id`'s processes, created when missing.
+    fn prepare(
+        repository: &Repository,
+        caches: &BTreeMap<String, Cache>,
+        workspace_id: &str,
+    ) -> Result<Self> {
+        Ok(Self {
+            caches: crate::caches::directories(repository, caches)?,
+            tmp_dir: crate::tmp_dirs::directory(repository, workspace_id)?,
+        })
+    }
+}
+
 struct RegisteredExecution {
     id: String,
     workspace: Workspace,
@@ -410,7 +431,7 @@ impl Manager {
         let repository = self.repository(&workspace.repository_id).await?;
         let id = Uuid::new_v4().to_string();
         let scope_token = Uuid::new_v4().to_string();
-        let (ports, caches) = self
+        let (ports, directories) = self
             .persist_execution(
                 ExecutionRecord {
                     id: id.clone(),
@@ -431,7 +452,8 @@ impl Manager {
             &workspace,
             crate::repository::name(&repository),
             &ports,
-            &caches,
+            &directories.caches,
+            directories.tmp_dir.as_deref(),
         );
         let receiver = connections
             .connect(&id, kind, &workspace.id, scope_token.clone(), false)
@@ -447,14 +469,15 @@ impl Manager {
     }
 
     /// Reserve the execution's lifecycle, insert its running record and
-    /// prepare the repository's caches in one transaction, returning the
-    /// workspace's ports and the cache directories.
+    /// prepare the repository's caches and the workspace's temporary
+    /// directory in one transaction, returning the workspace's ports and the
+    /// directories.
     async fn persist_execution(
         &self,
         record: ExecutionRecord,
         repository: Repository,
         caches: BTreeMap<String, Cache>,
-    ) -> Result<(Vec<PortReservation>, BTreeMap<String, PathBuf>)> {
+    ) -> Result<(Vec<PortReservation>, ProcessDirectories)> {
         let ExecutionRecord {
             id,
             workspace_id,
@@ -496,9 +519,9 @@ impl Manager {
                 let ports = store::ports(&tx, Some(&workspace_id))?;
                 // Under the write lock emptying caches takes, and undone with
                 // the execution's row when the directories cannot be prepared.
-                let caches = crate::caches::directories(&repository, &caches)?;
+                let directories = ProcessDirectories::prepare(&repository, &caches, &workspace_id)?;
                 tx.commit()?;
-                Ok((ports, caches))
+                Ok((ports, directories))
             })
             .await
     }
@@ -551,6 +574,9 @@ impl Manager {
             );
         }
         let workspace = self.workspace(selector).await?;
+        // Its temporary directory goes in the repository's directory.
+        self.reserve_repository_directory(&workspace.repository_id)
+            .await?;
         let preparation = self
             .prepare_execution_kind(&workspace, kind, scoped)
             .await?;

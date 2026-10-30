@@ -19,6 +19,7 @@ states!(Capability: Variants {
     StartRuns => "start_runs",
     ReadRuns => "read_runs",
     ReadJobLogs => "read_job_logs",
+    ApproveRuns => "approve_runs",
     ReopenPrs => "reopen_prs",
     Labels => "labels",
     DraftPrs => "draft_prs",
@@ -35,6 +36,7 @@ states!(Capability: Variants {
     ApprovePrs => "approve_prs",
     RequestChanges => "request_changes",
     Reactions => "reactions",
+    RevertPrs => "revert_prs",
 });
 
 impl Capability {
@@ -47,6 +49,7 @@ impl Capability {
             Self::StartRuns => "start CI workflow runs",
             Self::ReadRuns => "read CI workflow runs",
             Self::ReadJobLogs => "read CI job logs",
+            Self::ApproveRuns => "approve CI runs",
             Self::ReopenPrs => "reopen PRs",
             Self::Labels => "label issues and PRs",
             Self::DraftPrs => "mark PRs as drafts",
@@ -63,6 +66,7 @@ impl Capability {
             Self::ApprovePrs => "approve PRs",
             Self::RequestChanges => "request changes on PRs",
             Self::Reactions => "react to issues, PRs and comments",
+            Self::RevertPrs => "have the forge revert merged PRs",
         }
     }
 
@@ -88,6 +92,10 @@ impl Capability {
         }
     }
 }
+
+/// What `shoal pr revert` does on a forge that cannot revert PRs itself.
+pub(crate) const GIT_REVERT: &str =
+    "shoal pr revert opens the revert from a new workspace with git revert";
 
 /// Whether a forge has a capability.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

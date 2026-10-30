@@ -77,7 +77,10 @@ repository may refuse it. Before opening one, search for an
 existing issue with `shoal issue list <words>` (`--state all`, `--label`,
 `--author`, `--limit`; `pr list` takes the same), and comment there instead of
 opening a duplicate. Merging is
-the user's: `shoal pr merge` refuses workspace processes.
+the user's: `shoal pr merge` refuses workspace processes. `shoal pr revert
+[<number>]` opens a PR that undoes a merged one; where the forge cannot, it
+opens it from a child workspace already marked done, which goes once the
+revert merges.
 
 A repository can require the user's approval for issues and PRs you open
 (`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
@@ -146,14 +149,19 @@ outlives its PR. `shoal ci rerun <run-url>` (`--failed` for failed jobs
 only) and `shoal ci cancel <run-url>` act on one run of your branch.
 `shoal view ci <run-url>` shows a run's jobs and the log tails of failed ones,
 and `shoal ci list` the newest runs on your branch, or on a PR's head with `--pr N`.
+A PR from a fork or first-time contributor can show runs that wait for approval
+instead of checks; approving them is the user's, so ask with `shoal alerts send`.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user
 can reopen a removed workspace with `shoal work restore`. Cleanup waits while one of
 your questions is open, so ask with `shoal questions ask` when you need the user before the
 workspace goes. `shoal done` closes your open questions, and `shoal done --undo` does
-not reopen them. Holds belong to the user and host apps; you can list them with
-`shoal leases hold` but not acquire or release them. `--cleanup` overrides a
+not reopen them. To keep your own workspace past cleanup, `shoal acquire hold
+--name <name> --reason <why>` asks your coordinator, or the user when you have
+none, and approval places the hold. `shoal leases hold` lists holds; release
+the ones agents placed with `shoal release hold --name <name>`, while the user's
+and host apps' stay theirs. `--cleanup` overrides a
 `[cleanup.done] enabled = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed, on the local
 default branch, or with its changes on the branch the workspace builds on. After
@@ -301,11 +309,15 @@ directory act on the child, so `shoal pr open`, `shoal ready` and `shoal done`
 there open, mark and complete the child's work. Your hooks keep reporting for
 your own workspace, and the child's issue and PR activity reaches you like your
 own, each update naming the child workspace. Run `shoal done` in each child once
-its work is finished; Shoal cleans up your workspace only after its children are
-removed. To discard a child, or one a split left `preparing` when it was
-interrupted, run `shoal rm <child>`, then split again; a child with holds is
-the user's to remove. You can split children from children; each workspace
-process reaches its own workspace and those below it.
+its work is finished. A child never outlives your workspace: removing yours
+removes the children first, and your `done` with cleanup removes them after the
+grace period whatever their work, with a checkpoint and kept branch each. To keep
+one, hold it with `shoal acquire hold --workspace <child> --name <name>` and
+release the hold when it may go. To discard a child, or one a split left
+`preparing` when it was interrupted, run `shoal rm <child>`, then split again;
+one the user holds, or with such a workspace below it, is the user's to remove.
+You can split children from children; each workspace process reaches its own
+workspace and those below it.
 
 To have work done in parallel, give it to a subagent where your instructions
 allow delegation. A subagent you run in its own worktree gets a child split from
@@ -340,7 +352,8 @@ When a stopped child agent should not come back, such as one whose work is
 done, forget its saved session with `shoal resume <child> --discard`.
 
 A child agent's approval request comes to you when you hold an approved grant
-for the same thing; otherwise it passes you by, with a message saying so. Decide
+for the same thing, or when it asks to hold its own workspace; otherwise it
+passes you by, with a message saying so. Decide
 it with `shoal approvals --approve <number>` or `shoal approvals --deny <number>`, or pass it up with
 `shoal approvals --escalate <number>` when the user should decide.
 

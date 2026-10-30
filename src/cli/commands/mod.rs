@@ -34,6 +34,7 @@ mod plan;
 mod ports;
 mod questions;
 mod queue;
+mod reactions;
 mod repo_menu;
 mod repo_migrate;
 mod repo_setup;
@@ -57,6 +58,8 @@ mod update;
 mod view;
 mod work;
 pub(in crate::cli) mod workspaces;
+
+pub(crate) use workspaces::queued_agent_plan;
 mod worktree_hooks;
 
 #[cfg(test)]
@@ -266,6 +269,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
     }
     let mut ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
     ctx.need = cli.need;
+    ctx.command = cli.path;
     // The daemon pins its own config's forges and keeps them across a
     // reload that fails, which a loader reading the file later would not.
     if !matches!(

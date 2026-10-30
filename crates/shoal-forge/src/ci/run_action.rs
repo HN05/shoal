@@ -35,6 +35,9 @@ pub struct Run {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
     pub state: JobState,
+    /// The forge holds the run until a maintainer approves it.
+    #[serde(skip)]
+    pub(crate) waiting: bool,
 }
 
 /// A run an action reached.

@@ -86,6 +86,7 @@ fn decode_removal(output: &str, workspace_dir: &Path) -> Result<RemovalResult> {
         branch: result.branch,
         branch_outcome: result.branch_outcome,
         hook_error: None,
+        children: Vec::new(),
     })
 }
 

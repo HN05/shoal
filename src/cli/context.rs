@@ -23,6 +23,9 @@ pub struct Context {
     /// The name under which the command remembers the workspaces it acts on,
     /// for `-`; `None` for commands without that history.
     pub(in crate::cli) recent: Option<String>,
+    /// The subcommand path, such as `["repo", "rm"]`, whose arguments
+    /// refusals name.
+    pub(in crate::cli) command: Vec<String>,
 }
 
 impl Context {
@@ -72,6 +75,7 @@ impl Context {
             place: None,
             need: Need::Any,
             recent: None,
+            command: Vec::new(),
         }
     }
 

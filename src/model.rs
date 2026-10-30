@@ -372,7 +372,21 @@ pub struct WorkspaceHold {
     pub name: String,
     pub reason: Option<String>,
     pub created_at: i64,
+    #[serde(default)]
+    pub placed_by: HoldPlacer,
 }
+
+crate::state::states!(
+    /// Who placed a hold, which decides who may release it.
+    #[derive(Default)]
+    HoldPlacer {
+        /// The user or a host app; only they release it.
+        #[default]
+        User => "user",
+        /// An agent, whose workspace or one above it may release it.
+        Agent => "agent",
+    }
+);
 
 impl Workspace {
     pub fn new_record(
@@ -531,11 +545,14 @@ pub enum CleanupReason {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
-    /// Workspaces split from this one remain.
-    Children,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
     PrWatch,
+    /// An ancestor finished its assignment with cleanup, which takes this
+    /// workspace too.
+    AncestorCompleted {
+        workspace: String,
+    },
     Completed {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
@@ -570,9 +587,11 @@ impl std::fmt::Display for CleanupReason {
             Self::Held => f.write_str("Kept by holds"),
             Self::Question => f.write_str("Open question"),
             Self::PrProposal => f.write_str("PR proposal waiting for approval"),
-            Self::Children => f.write_str("Child workspaces"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
+            Self::AncestorCompleted { workspace } => {
+                write!(f, "{workspace} done; completion cleanup pending")
+            }
             Self::Completed { integrated: false } => {
                 f.write_str("Done; completion cleanup pending")
             }
@@ -780,6 +799,10 @@ pub struct Chat {
     /// Where it runs in a terminal host, when it runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
+    /// Its own directory for temporary files, which goes with it; none in a
+    /// repository without a directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tmp_dir: Option<std::path::PathBuf>,
 }
 
 /// A place Shoal created for a workspace, which closes with it.

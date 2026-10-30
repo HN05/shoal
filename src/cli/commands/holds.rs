@@ -2,6 +2,7 @@
 use anyhow::{Result, ensure};
 use serde_json::json;
 
+use super::acquisition::Acquisition;
 use crate::{
     cli::{
         args::WorkspaceScope,
@@ -10,34 +11,38 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::WorkspaceHold,
+    model::{HoldPlacer, WorkspaceHold},
     protocol::HoldMethod,
 };
 
+/// Exit 2 means a pending or denied approval: a workspace process holding
+/// its own workspace asks its coordinator or the user first.
 pub(super) async fn acquire(
     ctx: &Context,
     workspace: String,
     name: String,
     reason: Option<String>,
 ) -> Result<i32> {
-    let hold = client::request::<WorkspaceHold>(
-        &ctx.paths,
-        HoldMethod::HoldAcquire {
-            workspace,
-            name,
-            reason,
+    let method = HoldMethod::HoldAcquire {
+        workspace,
+        name,
+        reason,
+    };
+    let outcome = client::request::<Acquisition<WorkspaceHold>>(&ctx.paths, method).await?;
+    outcome.finish(
+        ctx,
+        |hold| {
+            ctx.emit(
+                &format!(
+                    "Hold acquired: {}{}",
+                    hold.name,
+                    optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+                ),
+                &hold,
+            )
         },
+        |message| json!({"acquired": false, "message": message}),
     )
-    .await?;
-    ctx.emit(
-        &format!(
-            "Hold acquired: {}{}",
-            hold.name,
-            optional(hold.reason.as_deref(), |r| format!(" ({r})"))
-        ),
-        &hold,
-    )?;
-    Ok(0)
 }
 
 pub(super) async fn release(ctx: &Context, workspace: String, name: Option<String>) -> Result<i32> {
@@ -91,6 +96,7 @@ async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
             (hold.name, label)
         })
         .collect();
+    ui::require_argument(ctx, "hold", "name")?;
     ui::pick(ctx, "Hold> ", entries)
 }
 
@@ -100,9 +106,13 @@ fn render(holds: &[WorkspaceHold]) {
     }
     for hold in holds {
         outln!(
-            "  {}{}",
+            "  {}{}{}",
             hold.name,
-            optional(hold.reason.as_deref(), |r| format!(" ({r})"))
+            optional(hold.reason.as_deref(), |r| format!(" ({r})")),
+            match hold.placed_by {
+                HoldPlacer::Agent => " [placed by an agent]",
+                HoldPlacer::User => "",
+            }
         );
     }
 }

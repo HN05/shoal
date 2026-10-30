@@ -208,12 +208,14 @@ shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comment
 shoal pr update --method rebase # Update the linked PR's branch from its base on the forge
 shoal pr merge 42 --method rebase # Merge a PR yourself; agents cannot
 shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-auto withdraws it
+shoal pr revert 42            # Open a PR that reverts merged PR 42
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal issue open --repo team/tool --title Bug # Open it in another repository
 shoal repo labels                  # The repository's labels and what each one means
 shoal forge capabilities            # What the repository's forge supports, such as resolving threads
+shoal forge reactions               # The reactions the repository's forge allows
 shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
 shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
 shoal ci list --pr 44               # The runs on a PR's head; --branch and --workflow filter too
@@ -228,6 +230,7 @@ shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
 shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal ci rerun --check rust   # Rerun a failed check on the linked PR; cancel stops running ones
 shoal ci rerun 2765 --failed  # Rerun one run's failed jobs
+shoal ci approve --pr 44      # Approve a fork PR's runs waiting for approval; agents cannot
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs

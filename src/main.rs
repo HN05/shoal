@@ -38,6 +38,7 @@ mod state;
 #[cfg(test)]
 mod test_support;
 mod time;
+mod tmp_dirs;
 mod tools;
 mod transfer;
 mod validate;

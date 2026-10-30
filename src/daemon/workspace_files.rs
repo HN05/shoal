@@ -314,11 +314,9 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<(Layout, OwnedMutexGuard<()>)> {
-        let repo = self.repository(&workspace.repository_id).await?;
-        if repo.workspaces_dir.is_none() {
-            let (repo, _git) = self.lock_repository(&repo.id).await?;
-            self.workspaces_dir(&repo).await?;
-        }
+        let repo = self
+            .reserve_repository_directory(&workspace.repository_id)
+            .await?;
         let guard = self.gates.lock_message_files(&repo.id).await;
         // A move or removal may have finished while this waited.
         let current = self.workspace(&workspace.id).await?;

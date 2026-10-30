@@ -336,7 +336,12 @@ async fn unattended_removal_refuses_retention_its_sweep_missed() {
         .unwrap()
         .unwrap();
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let removal = Removal::Automatic {
@@ -504,6 +509,7 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         files: true,
         detached_head: None,
         files_restorable,
+        children: None,
     };
     // The files grew past the archive limit after the user confirmed.
     crate::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n").await;
@@ -1153,4 +1159,25 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .await
         .unwrap();
     assert_eq!(parent.as_deref(), Some(top.id.as_str()));
+}
+
+#[tokio::test]
+async fn a_clean_confirmation_naming_children_removes_clean_only() {
+    let (_root, manager, workspace) = fixture().await;
+    let child = manager
+        .split_workspace(&workspace.id, "child".into(), None)
+        .await
+        .unwrap();
+    let check = manager
+        .check_manual_removal(&workspace.id, false)
+        .await
+        .unwrap();
+    let confirmed = UnsavedWork::confirming(&check);
+    assert_eq!(confirmed.children(), Some(&[child.id][..]));
+    // Files appearing after the final inspection are not the caller's to
+    // delete, so only unsaved work it confirmed forces removal.
+    let (files, _) = worktrunk_removal_options(&check, &confirmed);
+    assert!(matches!(files, FileRemoval::CleanOnly));
+    let (files, _) = worktrunk_removal_options(&check, &UnsavedWork::All);
+    assert!(matches!(files, FileRemoval::Force));
 }

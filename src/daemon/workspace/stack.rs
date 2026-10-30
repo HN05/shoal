@@ -1,7 +1,8 @@
 //! Base workspaces: the workspace whose branch a stacked workspace builds on.
 use std::path::Path;
 
-use anyhow::{Context, Result, ensure};
+use crate::daemon::refusal::{Reason, Refusal};
+use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::Manager;
@@ -117,7 +118,8 @@ fn base_workspace(db: &Connection, repository_id: &str, selector: &str) -> Resul
         );
         return Ok(id);
     }
-    owner(db, repository_id, selector)?.with_context(|| format!("unknown workspace: {selector}"))
+    Ok(owner(db, repository_id, selector)?
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")))?)
 }
 
 /// Fill in the workspace's base and the workspaces stacked on it.

@@ -61,7 +61,12 @@ async fn agent(
         .unwrap();
     if setup.held {
         manager
-            .acquire_hold(&workspace.id, "app".into(), None)
+            .acquire_hold(
+                &workspace.id,
+                "app".into(),
+                None,
+                crate::model::HoldPlacer::User,
+            )
             .await
             .unwrap();
     }

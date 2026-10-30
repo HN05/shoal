@@ -49,7 +49,8 @@ pub(in crate::cli::commands) async fn environment(
     Ok(0)
 }
 
-/// The variables `[env]` adds to the workspace's tracked executions and hooks.
+/// The variables `[env]` and the workspace's temporary directory add to its
+/// tracked executions and hooks.
 pub(in crate::cli) async fn configured_environment(
     ctx: &Context,
     workspace: &Workspace,
@@ -68,8 +69,10 @@ pub(in crate::cli) async fn configured_environment(
         &client::inspect(&ctx.paths, workspace.id.clone())
             .await?
             .ports,
-        // Only the daemon creates them; tools create a missing one.
+        // Only the daemon creates them; tools create a missing cache, and
+        // the daemon gives out hooks with the temporary directory created.
         &crate::caches::locate(&repo, &settings.caches),
+        crate::tmp_dirs::locate(&repo, &workspace.id).as_deref(),
     ))
 }
 

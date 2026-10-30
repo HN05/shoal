@@ -54,6 +54,9 @@ struct Fixture {
 /// Global config without a cleanup grace period, at the root so the rest of a
 /// test's config follows unchanged.
 const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
+/// Global config delivering each agent message at once, so a test reads it
+/// without waiting for a run of them to settle.
+const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
@@ -86,7 +89,10 @@ impl Fixture {
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
         fs::write(
             root.path().join(".config/shoal/config.toml"),
-            format!("{NO_GRACE}{FORGEJO_HOST}{}", config.unwrap_or_default()),
+            format!(
+                "{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}{}",
+                config.unwrap_or_default()
+            ),
         )
         .unwrap();
         if fake_sim {
@@ -2213,7 +2219,10 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("missing argument"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass <workspace>"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -2377,10 +2386,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     }
     let missing = fixture.run(&["status"]);
     assert!(!missing.status.success());
-    assert!(
-        String::from_utf8_lossy(&missing.stderr)
-            .contains("missing argument; pass an explicit target/name")
-    );
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing workspace; pass <target>"));
 
     for target in [
         vec!["pr", "7"],
@@ -3800,6 +3806,46 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
         .unwrap()["name"],
         name
     );
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
+    let fixture = Fixture::with_config(Some(
+        "[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+    ));
+    forge_origin(&fixture);
+    let bin = fixture.root.path().join("issue-bin");
+    install_forgejo_curl(&bin);
+    forgejo_api(
+        fixture.root.path(),
+        "repos/team/project/issues/12",
+        &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
+            "body": "", "labels": [], "pull_request": null}),
+    );
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    // No terminal, as in a planning chat's tool call: no picker may run.
+    let add = |cwd: &Path| {
+        let output = fixture
+            .command()
+            .args(["--json", "add", "--issue", "12", "--agent", "reviewer"])
+            .current_dir(cwd)
+            .env("PATH", &path)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_str::<Value>(
+            String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap(),
+        )
+        .unwrap()
+    };
+    let created = add(&fixture.repo);
+    assert_eq!(created["name"], "12-clarify-retries");
+    let workspace = PathBuf::from(created["path"].as_str().unwrap());
+    assert_eq!(add(&workspace)["id"], created["id"]);
     assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
@@ -6433,16 +6479,25 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
 
 #[test]
 fn noninteractive_missing_targets_do_not_open_pickers() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some("[commands]\ncheck = ['true']\n"));
     fixture.add("available");
-    for args in [
-        &["add"][..],
-        &["run", "--", "true"],
-        &["rm"],
-        &["status"],
-        &["stop"],
-        &["diff"],
-        &["done"],
+    let workspace = "missing workspace; pass <workspace>";
+    let workspaces = "missing workspaces; pass <workspace>";
+    for (args, refusal) in [
+        (
+            &["add"][..],
+            "no current registered repository; pass <repository>",
+        ),
+        (
+            &["run", "--", "true"],
+            "missing workspace; pass --workspace <workspace>",
+        ),
+        (&["rm"], workspaces),
+        (&["status"], "missing workspace; pass <target>"),
+        (&["stop"], workspaces),
+        (&["diff"], workspace),
+        (&["done"], workspace),
+        (&["check"], workspace),
     ] {
         for json in [false, true] {
             let mut command = fixture.command();
@@ -6451,7 +6506,10 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
             }
             let output = command.args(args).output().unwrap();
             assert!(!output.status.success(), "{args:?}: {output:?}");
-            assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+            assert!(
+                String::from_utf8_lossy(&output.stderr).contains(refusal),
+                "{args:?}: {output:?}"
+            );
         }
     }
 }
@@ -7187,7 +7245,7 @@ fn global_config_changes_reload_a_running_daemon() {
     .unwrap();
     assert!(!fixture.run(&["daemon", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
-    fs::write(&config, format!("{NO_GRACE}{FORGEJO_HOST}")).unwrap();
+    fs::write(&config, format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     assert!(policy()["default"].is_null());
     let scoped = fixture
@@ -10224,7 +10282,11 @@ fn repository_commands_pick_an_omitted_repository() {
         .to_owned();
     let missing = fixture.run(&["repo", "rm", "--yes"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing argument"));
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains("no current registered repository; pass <repository>"),
+        "{missing:?}"
+    );
 
     let (output, rows) = fixture.pick(&["repo", "config"], &id, "");
     assert!(output.status.success(), "{output:?}");
@@ -10235,6 +10297,47 @@ fn repository_commands_pick_an_omitted_repository() {
     let (output, _) = fixture.pick(&["repo", "rm", "--yes"], &id, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["repo", "ls"]), serde_json::json!([]));
+}
+
+#[test]
+fn omitted_repositories_come_from_the_current_checkout() {
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["branch", "topic"]);
+    // No terminal: only the checkout can supply the repository.
+    let run = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .current_dir(&fixture.repo)
+            .output()
+            .unwrap()
+    };
+    let output = run(&["repo", "config"]);
+    assert!(output.status.success(), "{output:?}");
+    let output = run(&["--json", "add", "--existing", "topic"]);
+    assert!(output.status.success(), "{output:?}");
+    for (args, refusal) in [
+        (&["add"][..], "missing branch; pass <repository> <branch>"),
+        (
+            &["repo", "rename"],
+            "missing new name; pass <repository> <name>",
+        ),
+    ] {
+        let output = run(args);
+        assert!(!output.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(refusal),
+            "{args:?}: {output:?}"
+        );
+    }
+    // Following the hints passes the branch and the name, not a repository.
+    let repo = fixture.repo.to_str().unwrap();
+    let output = run(&["--json", "add", repo, "fresh"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    let output = run(&["repo", "rename", repo, "renamed"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
 }
 
 #[test]
@@ -10582,7 +10685,10 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass <workspace>"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -14200,7 +14306,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
             vec!["add", "--issue", "https://github.com/team/other/issues/4"],
             "shoal repo add",
         ),
-        (vec!["add", "--issue", "4"], "missing argument"),
+        (vec!["add", "--issue", "4"], "pass --repo"),
         (
             vec!["add", "https://github.com/team/project/issues/4"],
             "no agent selected",
@@ -15824,14 +15930,16 @@ fn view_shows_linked_items_with_status_and_discussion() {
             &serde_json::json!(false)
         )
     );
-    // This gh answers no log or comparison lookup; tests/forge.rs covers
-    // failed logs and how far a PR is behind.
+    // This gh answers no log, comparison or run lookup; tests/forge.rs
+    // covers failed logs, how far a PR is behind and runs waiting for
+    // approval.
     let errors = pr["errors"].as_array().unwrap();
     assert!(
         errors.iter().all(|error| {
             let error = error.as_str().unwrap();
             error.starts_with("rust: log unavailable: ")
                 || error.starts_with("behind lookup failed: ")
+                || error.starts_with("waiting CI runs lookup failed: ")
         }),
         "{pr}"
     );
@@ -23757,7 +23865,8 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         String::from_utf8_lossy(&fixture.run(&["status", "held"]).stdout)
             .contains("app-thread (Open thread)")
     );
-    // Workspace processes list their holds but cannot change them.
+    // Workspace processes list their holds, ask to hold their own workspace
+    // and release only the holds agents placed.
     let scoped = |args: &[&str]| {
         let mut command = vec![
             "run",
@@ -23776,14 +23885,31 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
         serde_json::from_slice::<Value>(&listed.stdout).unwrap(),
         expected
     );
-    for action in ["acquire", "release"] {
-        let output = scoped(&[action, "hold", "--name", "scoped"]);
-        assert!(!output.status.success());
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains("shoal questions ask"),
-            "{output:?}"
-        );
-    }
+    let unexplained = scoped(&["acquire", "hold", "--name", "scoped"]);
+    assert!(!unexplained.status.success());
+    assert!(
+        String::from_utf8_lossy(&unexplained.stderr).contains("--reason <why>"),
+        "{unexplained:?}"
+    );
+    let requested = scoped(&[
+        "acquire",
+        "hold",
+        "--name",
+        "scoped",
+        "--reason",
+        "Keep my notes",
+    ]);
+    assert_eq!(requested.status.code(), Some(2), "{requested:?}");
+    assert!(
+        format!("{requested:?}").contains("approval_pending"),
+        "{requested:?}"
+    );
+    let release = scoped(&["release", "hold", "--name", "app-thread"]);
+    assert!(!release.status.success());
+    assert!(
+        String::from_utf8_lossy(&release.stderr).contains("is the user's"),
+        "{release:?}"
+    );
     fixture.restart();
     assert_eq!(
         fixture.ok(&["leases", "hold", "--workspace", "held"]),
@@ -24145,7 +24271,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" --text status chat-worker > \"$HOME/chat-status\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" --text status chat-worker > \"$HOME/chat-status\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -24184,6 +24310,13 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     let mut listed = started["chat"].clone();
     listed["origin"] = serde_json::json!({"host": "zmx", "place": "outer"});
+    // The agent ran with its own temporary directory, which the listing names.
+    let tmp_dir = fs::read_to_string(home.join("chat-tmpdir")).unwrap();
+    assert!(
+        tmp_dir.ends_with(&format!("/.tmp/{}", chat.as_str().unwrap())),
+        "{tmp_dir}"
+    );
+    listed["tmp_dir"] = tmp_dir.into();
     assert_eq!(chats, serde_json::json!([listed]));
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
@@ -26819,4 +26952,72 @@ assert terminal_settings() == before, (before, terminal_settings())
     // A stop only asks the wrapper, which ends after reporting to the daemon.
     demo(&fixture, &["stop", "--workspace", "tried"]);
     processes.await_end();
+}
+
+#[test]
+fn removing_a_parent_lists_and_removes_its_children() {
+    let fixture = Fixture::new();
+    fixture.add("parent");
+    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let child_path = Path::new(child["path"].as_str().unwrap()).to_owned();
+    // A clean parent still asks, naming the children it takes.
+    let piped = fixture.run(&["rm", "parent"]);
+    assert!(!piped.status.success());
+    assert!(String::from_utf8_lossy(&piped.stderr).contains("pass --yes"));
+    let (no, prompt) = fixture.interactive(&["rm", "parent"], "n\n");
+    assert!(!no.status.success());
+    assert!(
+        prompt.contains("Removes the workspaces split from it first") && prompt.contains("child"),
+        "{prompt}"
+    );
+    assert!(child_path.exists());
+    let (yes, prompt) = fixture.interactive(&["rm", "parent"], "y\n");
+    assert!(yes.status.success(), "{prompt}");
+    let stdout = String::from_utf8_lossy(&yes.stdout);
+    assert!(stdout.contains("also removed child"), "{stdout}");
+    assert!(!child_path.exists());
+    assert!(!fixture.run(&["status", "child"]).status.success());
+
+    fixture.add("parent");
+    fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let removed = fixture.ok(&["rm", "parent", "--yes"]);
+    assert_eq!(
+        removed["children"],
+        serde_json::json!(["child"]),
+        "{removed}"
+    );
+}
+
+#[test]
+fn exporting_a_parent_needs_its_children_exported_with_it() {
+    let fixture = Fixture::new();
+    let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
+    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let child = PathBuf::from(child["path"].as_str().unwrap());
+    let directory = fixture.root.path().join("exports");
+    fs::create_dir(&directory).unwrap();
+    let output = directory.to_str().unwrap();
+    let file = directory.join("parent.shoal");
+    // Every path refuses before removing anything.
+    for args in [
+        &["export", "parent", "-o", file.to_str().unwrap(), "--yes"][..],
+        &["export", "parent", "-o", output, "--yes"],
+    ] {
+        let refused = fixture.run(args);
+        assert!(!refused.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&refused.stderr)
+                .contains("workspaces were split from it (child)"),
+            "{refused:?}"
+        );
+        assert!(parent.exists() && child.exists());
+    }
+    // Exported together, the child comes from the checkpoint its parent's
+    // removal kept, whichever goes first.
+    let exported = fixture.ok(&["export", "parent", "child", "-o", output, "--yes"]);
+    assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
+    for name in ["parent", "child"] {
+        assert!(directory.join(format!("{name}.shoal")).exists(), "{name}");
+    }
+    assert!(!parent.exists() && !child.exists());
 }

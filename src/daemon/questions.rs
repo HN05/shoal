@@ -5,6 +5,7 @@
 //! Marking the assignment done, or the asking agent withdrawing a question,
 //! closes it unanswered; a closed question keeps its number until the
 //! workspace goes so that a late answer is refused.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -291,7 +292,8 @@ fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
 }
 
 fn open_question(tx: &Transaction<'_>, id: i64) -> Result<Question> {
-    let question = by_id(tx, id)?.with_context(|| format!("unknown question {id}"))?;
+    let question = by_id(tx, id)?
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown question {id}")))?;
     question.ensure_open()?;
     Ok(question)
 }
@@ -377,7 +379,12 @@ fn withdraw(
 ) -> Result<Question> {
     let mut question = by_id(tx, id)?
         .filter(|question| question.workspace_id == workspace.id)
-        .with_context(|| format!("workspace {} has no question {id}", workspace.name))?;
+        .ok_or_else(|| {
+            Refusal::new(
+                Reason::NotFound,
+                format!("workspace {} has no question {id}", workspace.name),
+            )
+        })?;
     question.ensure_open()?;
     ensure!(
         shown.is_none_or(|shown| question.id == shown.id && question.is_same(shown)),
@@ -490,11 +497,18 @@ impl Manager {
         newest_that_fit(questions)
     }
 
+    /// Every open question, oldest first, which client API snapshots page.
+    pub(crate) async fn open_questions(&self) -> Result<Vec<Question>> {
+        self.store
+            .run(|db| query(db, "WHERE q.answer IS NULL AND q.closed_at IS NULL", []))
+            .await
+    }
+
     pub async fn question(&self, id: i64) -> Result<Question> {
         self.store
             .run(move |db| by_id(db, id))
             .await?
-            .with_context(|| format!("unknown question {id}"))
+            .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown question {id}")).into())
     }
 
     pub async fn has_open_questions(&self, workspace_id: &str) -> Result<bool> {

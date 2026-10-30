@@ -1,16 +1,17 @@
-//! `shoal ci run`, `rerun` and `cancel`: start a run, or act on one run or on
-//! the checks on a PR's head.
+//! `shoal ci run`, `rerun`, `cancel` and `approve`: start a run, or act on
+//! one run or on the checks or runs on a PR's head.
 use anyhow::Result;
 
 use crate::{
     cli::{
-        args::ci::{RunArgs, Target},
+        args::ci::{RunArgs, Subject, Target},
         client,
         context::Context,
         ui,
     },
     forge::ci::{
         CiActed, CiAction,
+        approval::RunsApproved,
         run::{StartedRun, validate_run},
         run_action::{RunActed, validate_run_reference},
     },
@@ -47,15 +48,47 @@ pub(super) async fn act(
     action: CiAction,
     failed: bool,
 ) -> Result<i32> {
-    if let Some(run) = &target.run {
+    let subject = target.subject;
+    if let Some(run) = &subject.run {
         validate_run_reference(run)?;
     }
     let workspace =
-        ui::select_workspace(ctx, target.workspace, ui::Fallback::CurrentDirectory).await?;
-    match target.run {
+        ui::select_workspace(ctx, subject.workspace, ui::Fallback::CurrentDirectory).await?;
+    match subject.run {
         Some(run) => act_on_run(ctx, workspace, run, action, failed).await,
-        None => act_on_checks(ctx, workspace, target.pr, action, target.checks).await,
+        None => act_on_checks(ctx, workspace, subject.pr, action, target.checks).await,
     }
+}
+
+/// Approve the run `subject` names, otherwise every waiting run on its PR's
+/// head.
+pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
+    if let Some(run) = &subject.run {
+        validate_run_reference(run)?;
+    }
+    let workspace =
+        ui::select_workspace(ctx, subject.workspace, ui::Fallback::CurrentDirectory).await?;
+    let approved: RunsApproved = client::request(
+        &ctx.paths,
+        CiMethod::ApproveCiRuns {
+            workspace,
+            run: subject.run,
+            pr: subject.pr,
+        },
+    )
+    .await?;
+    ctx.emit(&approved_text(&approved), &approved)?;
+    Ok(0)
+}
+
+/// One line per approved run.
+fn approved_text(approved: &RunsApproved) -> String {
+    approved
+        .approved
+        .iter()
+        .map(|url| format!("Approved: {url}"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 async fn act_on_run(

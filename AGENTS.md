@@ -37,6 +37,10 @@ when behavior changes, distinguishing decisions from proposals.
   code; it takes the account to act as, while scope, approvals, identity choice
   and workspace records stay in the daemon. What one forge does its own way
   belongs in its `Backend` implementation, never in a match on the forge kind.
+- The client API lives in `crates/shoal-client`, which depends on no other Shoal
+  code; its checked-in schema keeps every name within a major version. Its
+  daemon side runs the daemon's existing operations under their scope checks
+  and gives refusals typed reasons; the CLI stays on the internal protocol.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup.command` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no
@@ -64,8 +68,8 @@ when behavior changes, distinguishing decisions from proposals.
   ancestry for the same state directory, so a cleared token does not unscope. A scope covers its
   workspace and the child workspaces split from it, recursively; targets name one of them, and
   the agent's hooks report for its own. Enforce own-worktree resource access
-  in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one without holds, and shared
-  repository/service administration. For the workspaces below their own, scoped callers may queue
+  in the daemon and deny workspace allocation/removal/recovery other than splitting a child and removing one the user holds nothing below, and shared
+  repository/service administration. For the workspaces below their own, scoped callers may hold them, queue
   agents and the restores of agents they or the workspaces below them stopped, which the daemon starts detached, cancel their queue
   entries or move them back, send agent messages, answer questions, stop their executions, and discard stopped work; the agent
   of the nearest ancestor with one receives a child's agent-caused and agent-lifecycle events
@@ -74,7 +78,7 @@ when behavior changes, distinguishing decisions from proposals.
   sync, listing, opening and changing issues and PRs of the own repository, opening issues
   in other repositories as `[permissions] issue_other_repositories` allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to the own repository's forge API, or
-  others where `[permissions] api_writes` allows them, are allowed, except merging a PR or approving or requesting changes on one.
+  others where `[permissions] api_writes` allows them, are allowed, except merging a PR, approving or requesting changes on one, or approving CI runs.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own
@@ -102,13 +106,18 @@ when behavior changes, distinguishing decisions from proposals.
   contain HEAD, or the default branch have its changes, before a completed workspace is removed. Cleanup stops tracked
   agents, verifies clean merged HEAD, and uses that path. Withdrawing completion
   preserves associations and watches but never defers cleanup; only holds,
-  open questions, child workspaces and queued agent launches keep a workspace.
+  open questions and queued agent launches keep a workspace. Children never keep
+  their parent: every removal of a workspace first removes the workspaces below it
+  through the same path, whatever keeps them, and a child that cannot go retains
+  the parent. A standing completion with cleanup also removes the workspaces below
+  that nothing of their own keeps, whatever their work.
   Completion cleanup without a PR registration requires every commit kept that way,
   retaining dirty or newer work through the same
   removal path; completion without cleanup suppresses idle and PR cleanup.
   Associated issues suppress idle cleanup, not merged cleanup; holds, open
-  questions, child workspaces and queued agent launches suppress every unattended removal. Holds belong to the user and
-  host apps; scoped callers only list them.
+  questions and queued agent launches suppress every unattended removal. Holds
+  record who placed them; scoped callers release only agents' holds, and holding
+  their own workspace is an approval request.
 - TCP port reservations are cooperative and owned by the worktree. Keep them
   across command exits and failed removal; successful removal releases them with
   the workspace record. `[ports]` `start`/`end` set the automatic range.
@@ -132,7 +141,7 @@ when behavior changes, distinguishing decisions from proposals.
 - Approvals are daemon-owned: scoped callers request and inspect their own;
   only unscoped callers approve or deny, except that a request from a child workspace
   with an agent goes to the nearest coordinating agent above it holding an approved
-  grant for the same target and settings, which decides it or passes it up to the
+  grant for the same target and settings, or to the nearest one for a hold, which decides it or passes it up to the
   next such coordinator or the user; coordinators without a grant are told it passed. Resource grants bind effective
   allocation settings, consume no capacity, and last until release or workspace
   removal according to configuration. Never bypass existing allocation rules.

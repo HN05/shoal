@@ -124,6 +124,7 @@ pub(super) async fn pick_pending(ctx: &Context) -> Result<ApprovalRequest> {
         .filter(|request| request.status == DecisionStatus::Pending)
         .collect();
     ensure!(!pending.is_empty(), "no pending approval requests");
+    ui::require_argument(ctx, "approval request", "id")?;
     let row = ui::pick(ctx, "Approval> ", picker_rows(&pending)?)?;
     pending
         .into_iter()

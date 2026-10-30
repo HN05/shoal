@@ -26,7 +26,8 @@ states!(EventKind {
     ReviewCleared => "review_cleared",
     /// The workspace's base workspace was set, cleared, or removed.
     BaseChanged => "base_changed",
-    /// The workspace's parent workspace was removed and its own parent took its place.
+    /// Recorded only by earlier versions, which moved the children of a
+    /// removed workspace up to its own parent.
     ParentChanged => "parent_changed",
     /// A workspace link was added.
     Linked => "linked",
@@ -71,8 +72,13 @@ states!(EventCause {
     DiskSpace => "disk_space",
     /// The branch merged into the default branch and the workspace stayed idle.
     Merged => "merged",
-    /// The base or parent workspace was removed and its own took its place.
+    /// The base workspace was removed and its own took its place, or, in
+    /// earlier versions, the parent workspace.
     Removed => "removed",
+    /// The workspace's parent was removed, which takes its children first.
+    Parent => "parent",
+    /// An ancestor of the workspace finished its assignment with cleanup.
+    ParentCompletion => "parent_completion",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,7 +198,7 @@ pub struct LinkEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemEvent {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     /// The action's name, such as `edit` or `merge`.
     pub action: String,
@@ -324,10 +330,11 @@ pub(crate) fn record_link(
 pub(crate) fn record_item(
     db: &Connection,
     id: &str,
-    kind: crate::forge::items::link::ItemKind,
+    kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
     action: &str,
 ) -> Result<()> {
+    let kind = kind.into();
     db.execute(
         "INSERT INTO workspace_events(record)
          SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,

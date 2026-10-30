@@ -27,6 +27,7 @@ use crate::{
     capability::{self, Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
+        approval::RUNS_PAGE,
         checks::{CheckLog, plain},
         run::NewRun,
         run_action::Run,
@@ -40,7 +41,7 @@ use crate::{
         item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
     },
     repo::locator::ItemRoute,
     review::{
@@ -85,10 +86,13 @@ impl Backend for Forgejo {
     /// and reruns jobs.
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
             Capability::RerunJobs => Support::Unsupported(Some(
                 "rerun them from the web UI, push a fix, or start a new run with shoal ci run",
             )),
+            // Forgejo approves runs only through a web UI route.
+            Capability::ApproveRuns => Support::Unsupported(Some("approve them in the web UI")),
             Capability::CancelJobs
             | Capability::StartRuns
             | Capability::ReadRuns
@@ -138,6 +142,10 @@ impl Backend for Forgejo {
 
     fn commit_field(&self) -> &'static str {
         "sha"
+    }
+
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/pull/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {
@@ -582,6 +590,19 @@ impl Backend for Forgejo {
         ))
     }
 
+    /// The instance's admin chooses them, under GitHub's names.
+    async fn allowed_reactions(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+    ) -> Result<AllowedReactions> {
+        let settings = repo
+            .send(account, &Request::get("settings/ui".to_owned()))
+            .await
+            .context("read the forge's UI settings")?;
+        AllowedReactions::only(&settings["allowed_reactions"])
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -687,6 +708,7 @@ impl Backend for Forgejo {
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
             state: actions::state(&value["status"])?,
+            waiting: value["need_approval"] == true,
         })
     }
 
@@ -704,6 +726,14 @@ impl Backend for Forgejo {
             path.push_str(&format!("&head_sha={}", encode(commit, false)));
         }
         Ok(path)
+    }
+
+    /// Forgejo marks the runs that wait for approval among the commit's.
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
+        Some(format!(
+            "actions/runs?limit={RUNS_PAGE}&page={page}&head_sha={}",
+            encode(head, false)
+        ))
     }
 
     /// Forgejo lists every job of a run at once.

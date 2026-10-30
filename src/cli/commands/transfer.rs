@@ -383,6 +383,7 @@ async fn export_workspace(
     output: &Output,
 ) -> Result<ExportedWorkspace> {
     let check = check_export(ctx, workspace, output).await?;
+    ensure_children_exported(&check, &[])?;
     let action = format!(
         "Export workspace: {}\nRemoves it here and releases its holds:",
         check.workspace.name
@@ -452,6 +453,24 @@ async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result
         ),
     }
     Ok(check)
+}
+
+/// Refuse to export the workspace `check` describes without the workspaces
+/// below it, which removing it here would take unexported, unless they are
+/// among the `exported` too.
+fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<()> {
+    let missing: Vec<&str> = check
+        .children
+        .iter()
+        .map(|child| child.name.as_str())
+        .filter(|child| !exported.contains(child))
+        .collect();
+    ensure!(
+        missing.is_empty(),
+        "workspaces were split from it ({}); export them with it, as shoal export --all does, or remove them first",
+        missing.join(", ")
+    );
+    Ok(())
 }
 
 /// Ask with `action`, unless `yes` confirms it, before releasing the holds
@@ -552,8 +571,14 @@ async fn check_exports(
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
+    let exported: Vec<&str> = workspaces.iter().map(|w| w.name.as_str()).collect();
     for workspace in workspaces {
-        match plan_export(ctx, workspace, directory).await {
+        let export = async {
+            let export = plan_export(ctx, workspace, directory).await?;
+            ensure_children_exported(&export.check, &exported)?;
+            Ok::<_, anyhow::Error>(export)
+        };
+        match export.await {
             Ok(export) => planned.push(export),
             Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
         }

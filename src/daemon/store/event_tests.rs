@@ -193,7 +193,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_completed_again",
         "workspace_undone",
         "workspace_base_removed",
-        "workspace_parent_removed",
         "demo_started",
         "demo_stopped",
         "simulator_acquired",
@@ -206,6 +205,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // Later migrations add these columns and tables again when the emulated
     // database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
+    db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN placed_by;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN workspace_id;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN subject;")?;
     db.execute_batch("ALTER TABLE chat_messages DROP COLUMN workspace_id;")?;
@@ -261,7 +261,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
 }
 
 #[test]
-fn run_link_and_activity_events_read_back() -> Result<()> {
+fn run_link_activity_and_approval_events_read_back() -> Result<()> {
     use crate::{daemon::events::EventDetails, forge::items::link::LinkKind};
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
@@ -292,6 +292,7 @@ fn run_link_and_activity_events_read_back() -> Result<()> {
         workspace: None,
     };
     crate::daemon::events::record_item_activity(&db, "w", LinkKind::Ci, url, &update)?;
+    crate::daemon::events::record_item(&db, "w", LinkKind::Ci, url, "approve")?;
     let records = db
         .prepare("SELECT record FROM workspace_events ORDER BY id")?
         .query_map([], |row| row.get::<_, String>(0))?
@@ -304,9 +305,11 @@ fn run_link_and_activity_events_read_back() -> Result<()> {
         .iter()
         .filter_map(|event| {
             let link = event.link.as_ref().map(|link| link.kind);
-            link.or(event.item_activity.as_ref().map(|activity| activity.kind))
+            let item = event.item.as_ref().map(|item| item.kind);
+            let activity = event.item_activity.as_ref().map(|activity| activity.kind);
+            link.or(item).or(activity)
         })
         .collect::<Vec<_>>();
-    assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci]);
+    assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci, LinkKind::Ci]);
     Ok(())
 }

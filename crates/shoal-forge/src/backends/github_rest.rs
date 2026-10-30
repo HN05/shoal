@@ -94,6 +94,8 @@ pub(crate) fn current(
         author: text(&value["user"]["login"]),
         head_sha: text(&value["head"]["sha"]),
         base_sha: text(&value["base"]["sha"]),
+        // GitHub also reports the test merge of an open PR here.
+        merge_commit: merged.then(|| text(&value["merge_commit_sha"])).flatten(),
         conflict,
         merges_now: matches!(
             value["mergeable_state"].as_str(),

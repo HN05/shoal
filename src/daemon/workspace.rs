@@ -58,6 +58,7 @@ pub(crate) use daemon_exit::Ending;
 pub(crate) use executions::{Completing, ReattachedExecution, StartedExecution};
 pub use executions::{ExecutionKind, StopRequest, UnprovenStop};
 pub(crate) use gates::{GuardMode, PrGuard, ResourceGuard};
+pub(crate) use holds::place_approved as place_approved_hold;
 pub(crate) use ownership::VerifiedWorktree;
 pub(crate) use restore::removal_notice;
 pub(crate) use stack::record_base_changed;
@@ -66,6 +67,7 @@ pub(crate) use tree::{
     Source, TrackedAgents, ancestors_with_agents, coordinators, delegated, receiving_paths,
 };
 
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
     daemon::store::{self, Store},
@@ -301,7 +303,9 @@ impl Manager {
                         store::workspace,
                     )
                     .optional()?
-                    .with_context(|| format!("unknown workspace: {selector}"))?;
+                    .ok_or_else(|| {
+                        Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}"))
+                    })?;
                 load_details(db, &mut workspace)?;
                 Ok(workspace)
             })
@@ -821,8 +825,8 @@ impl Manager {
                     !rules.refuse_holds
                         || !store::exists(
                             &tx,
-                            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1",
-                            [&id],
+                            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1 AND placed_by=?2",
+                            params![id, crate::model::HoldPlacer::User],
                         )?,
                     "workspace has holds, which are the user's; ask the user to remove it"
                 );
@@ -994,7 +998,8 @@ struct RemovalRules {
     /// A preparing workspace whose setup never started; the caller excludes
     /// its creation by holding the repository's Git gate.
     awaiting_setup: bool,
-    /// A workspace with holds, whose removal would release them.
+    /// A workspace with holds the user placed, whose removal would release
+    /// them.
     refuse_holds: bool,
 }
 

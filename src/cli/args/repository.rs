@@ -23,7 +23,8 @@ pub enum RepositoryCommand {
     },
 }
 
-// Arguments of `shoal repo labels` and `shoal forge capabilities`.
+// Arguments of `shoal repo labels`, `shoal forge capabilities` and
+// `shoal forge reactions`.
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
     /// Workspace to use; defaults to the current workspace or picker.
@@ -53,6 +54,8 @@ pub struct ApiArgs {
 pub enum ForgeCommand {
     /// List what the repository's forge supports.
     Capabilities(RepositoryArgs),
+    /// List the reactions the repository's forge allows.
+    Reactions(RepositoryArgs),
     /// Send a request to the repository's forge API and print its JSON response.
     ///
     /// Workspace processes send it as the agent account, and only GET unless
@@ -76,7 +79,7 @@ pub enum RepoCommand {
     },
     /// Show the path and contents of the repository's local config.
     Config {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
     },
     /// Register a local checkout (no remote required), or clone a repository URL.
@@ -89,14 +92,14 @@ pub enum RepoCommand {
         path: Option<PathBuf>,
     },
     Rename {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// New name; omit to enter one.
         name: Option<String>,
     },
     /// Have an agent write the repository's Shoal config in a shoal-setup workspace.
     Setup {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
@@ -121,7 +124,7 @@ pub enum RepoCommand {
     /// Uncommitted and unpushed work is permanently lost.
     #[command(alias = "remove")]
     Rm {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,

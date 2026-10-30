@@ -1,5 +1,6 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
@@ -18,7 +19,7 @@ use crate::{
     },
     state::WorkspaceState,
 };
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::{BTreeMap, HashMap},
     ffi::OsString,
@@ -36,8 +37,6 @@ pub(crate) enum Retention {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
-    /// Workspaces split from this one remain.
-    Children,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
 }
@@ -48,7 +47,6 @@ impl From<Retention> for CleanupReason {
             Retention::Held => Self::Held,
             Retention::Question => Self::Question,
             Retention::PrProposal => Self::PrProposal,
-            Retention::Children => Self::Children,
             Retention::QueuedAgent => Self::QueuedAgent,
         }
     }
@@ -61,7 +59,6 @@ impl std::fmt::Display for Retention {
             Self::Held => "workspace is held",
             Self::Question => "a question waits for the user",
             Self::PrProposal => "a PR proposal waits for approval",
-            Self::Children => "workspaces split from it remain",
             Self::QueuedAgent => "an agent launch in it waits in the agent queue",
         })
     }
@@ -94,6 +91,19 @@ enum Removal<'a> {
     /// The directory was deleted outside Shoal; forget the workspace and
     /// release what it owned, retaining its branch.
     Deleted,
+    /// An ancestor finished its assignment with cleanup, which takes the
+    /// workspace whatever its own work: it goes with its unsaved files once
+    /// a checkpoint keeps them, while the ancestor's completion stands.
+    UnderCompleted { ancestor: &'a Workspace },
+    /// The workspace's parent is being removed, which nothing about the
+    /// workspace keeps: it goes with its unsaved files once a checkpoint
+    /// keeps them. `cause`, `refuse_holds` and the `confirmed` IDs of the
+    /// workspaces it may take below it are the parent removal's.
+    Parent {
+        cause: EventCause,
+        refuse_holds: bool,
+        confirmed: Option<&'a [String]>,
+    },
 }
 
 impl<'a> Removal<'a> {
@@ -104,6 +114,8 @@ impl<'a> Removal<'a> {
             Self::Merged { .. } => EventCause::Pr,
             Self::Completed { cause, .. } => cause,
             Self::Deleted => EventCause::MissingDirectory,
+            Self::Parent { .. } => EventCause::Parent,
+            Self::UnderCompleted { .. } => EventCause::ParentCompletion,
         }
     }
 
@@ -112,6 +124,8 @@ impl<'a> Removal<'a> {
             Removal::Manual { unsaved, .. } => unsaved,
             Removal::Automatic { .. }
             | Removal::Deleted
+            | Removal::Parent { .. }
+            | Removal::UnderCompleted { .. }
             | Removal::Merged { .. }
             | Removal::Completed { .. } => &NOTHING,
         }
@@ -120,6 +134,7 @@ impl<'a> Removal<'a> {
     fn inspection(self) -> InspectionPolicy {
         match self {
             Removal::Manual { inspection, .. } => inspection,
+            Removal::Parent { .. } | Removal::UnderCompleted { .. } => InspectionPolicy::GitOnly,
             Removal::Automatic { .. }
             | Removal::Deleted
             | Removal::Merged { .. }
@@ -129,9 +144,11 @@ impl<'a> Removal<'a> {
 
     fn stop_policy(self) -> StopPolicy {
         match self {
-            Removal::Manual { .. } | Removal::Merged { .. } | Removal::Completed { .. } => {
-                StopPolicy::ForRemoval
-            }
+            Removal::Manual { .. }
+            | Removal::Merged { .. }
+            | Removal::Completed { .. }
+            | Removal::UnderCompleted { .. }
+            | Removal::Parent { .. } => StopPolicy::ForRemoval,
             Removal::Automatic { .. } | Removal::Deleted => StopPolicy::RequireCompleteProof,
         }
     }
@@ -142,7 +159,8 @@ impl<'a> Removal<'a> {
         !matches!(self, Removal::Automatic { .. })
     }
 
-    /// Merged cleanup removes unsaved files once a checkpoint keeps them.
+    /// Merged cleanup, an ancestor's completion and a parent's removal
+    /// remove unsaved files once a checkpoint keeps them.
     fn discards_archived_files(self) -> bool {
         matches!(
             self,
@@ -152,7 +170,8 @@ impl<'a> Removal<'a> {
                     ..
                 },
                 ..
-            }
+            } | Removal::Parent { .. }
+                | Removal::UnderCompleted { .. }
         )
     }
 
@@ -160,22 +179,69 @@ impl<'a> Removal<'a> {
     /// space; a user's request does not.
     fn waits_for_grace(self) -> bool {
         match self {
-            Removal::Merged { .. } | Removal::Completed { .. } => true,
+            Removal::Merged { .. } | Removal::Completed { .. } | Removal::UnderCompleted { .. } => {
+                true
+            }
             Removal::Automatic { cause, .. } => {
                 !matches!(cause, EventCause::DiskSpace | EventCause::Manual)
             }
-            Removal::Manual { .. } | Removal::Deleted => false,
+            Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. } => false,
         }
     }
 
-    /// Unattended removals retain a workspace that is held, has an open
-    /// question or has child workspaces, whenever it was recorded; a user's
-    /// request overrides them.
+    /// Unattended removals retain a workspace that is held or has an open
+    /// question, whenever it was recorded; a user's request and its parent's
+    /// removal override them.
     fn unattended(self) -> bool {
         matches!(
             self,
-            Removal::Automatic { .. } | Removal::Merged { .. } | Removal::Completed { .. }
+            Removal::Automatic { .. }
+                | Removal::Merged { .. }
+                | Removal::Completed { .. }
+                | Removal::UnderCompleted { .. }
         )
+    }
+
+    /// A workspace process's manual removal leaves the user's holds in
+    /// place, below the workspace too.
+    fn refuses_holds(self) -> bool {
+        match self {
+            Removal::Manual { release_holds, .. } => !release_holds,
+            Removal::Parent { refuse_holds, .. } => refuse_holds,
+            _ => false,
+        }
+    }
+
+    /// The removal of a child of the workspace this removes. A removal the
+    /// user asked for is theirs, not the parent's, whatever its children.
+    fn of_child(self) -> Removal<'a> {
+        Removal::Parent {
+            cause: match self {
+                Removal::Parent { cause, .. } => cause,
+                removal => removal.cause(),
+            },
+            refuse_holds: self.refuses_holds(),
+            confirmed: self.confirmed_children(),
+        }
+    }
+
+    /// The IDs of the workspaces below the workspace that a manual removal
+    /// confirmed, the only ones it takes; `None` takes whatever is below.
+    fn confirmed_children(self) -> Option<&'a [String]> {
+        match self {
+            Removal::Manual { unsaved, .. } => unsaved.children(),
+            Removal::Parent { confirmed, .. } => confirmed,
+            _ => None,
+        }
+    }
+
+    /// Whether the user hears of the children it removes: those of any
+    /// removal they did not ask for.
+    fn announces_children(self) -> bool {
+        match self {
+            Removal::Parent { cause, .. } => cause != EventCause::Manual,
+            removal => removal.cause() != EventCause::Manual,
+        }
     }
 
     /// Automatic removal needs a safe workspace; manual removal needs consent
@@ -208,16 +274,26 @@ impl<'a> Removal<'a> {
             ),
             (Removal::Manual { unsaved, .. }, Stage::Initial) => ensure!(
                 unsaved.uncovered(check).is_empty(),
-                "removal would delete {}; confirm it or pass --yes",
-                unsaved.uncovered(check).join(" and ")
+                Refusal::new(
+                    Reason::UnsavedWork,
+                    format!(
+                        "removal would delete {}; confirm it or pass --yes",
+                        unsaved.uncovered(check).join(" and ")
+                    )
+                )
             ),
             (Removal::Manual { unsaved, .. }, _) => ensure!(
                 unsaved.uncovered(check).is_empty(),
-                "workspace changed {}; removal would delete {} as well",
-                stage.change(),
-                unsaved.uncovered(check).join(" and ")
+                Refusal::new(
+                    Reason::UnsavedWork,
+                    format!(
+                        "workspace changed {}; removal would delete {} as well",
+                        stage.change(),
+                        unsaved.uncovered(check).join(" and ")
+                    )
+                )
             ),
-            (Removal::Deleted, _) => {}
+            (Removal::Deleted | Removal::Parent { .. } | Removal::UnderCompleted { .. }, _) => {}
         }
         Ok(())
     }
@@ -298,9 +374,9 @@ struct PostRemoveHook {
 }
 
 impl Manager {
-    /// What removing the workspace at the user's request would do, with its
-    /// changed files and whether removal archives them when
-    /// `include_changes` is set and it has any.
+    /// What removing the workspace at the user's request would do, with the
+    /// workspaces below it it takes, and its changed files and whether
+    /// removal archives them when `include_changes` is set and it has any.
     pub async fn check_manual_removal(
         &self,
         selector: &str,
@@ -309,6 +385,20 @@ impl Manager {
         let mut check = self
             .check_removal(selector, InspectionPolicy::GitOnly)
             .await?;
+        for id in self
+            .subtree(&check.workspace.id)
+            .await?
+            .into_iter()
+            .skip(1)
+            .rev()
+        {
+            let child = self.workspace(&id).await?;
+            check.children.push(crate::model::WorkspaceRef {
+                id: child.id,
+                name: child.name,
+                branch: child.branch,
+            });
+        }
         if include_changes && check.dirty {
             check.load_changed_files().await?;
             check.unsaved_files_archived = self.archives_unsaved_files(&check.workspace).await?;
@@ -534,8 +624,8 @@ impl Manager {
 
     /// The path and signals of a merged cleanup candidate, or `None` when
     /// it is not one: merged into the default branch and unused, with no Git
-    /// operation under way, no workspace stacked on it or split from it, no
-    /// hold or keep choice, and any unsaved files left over from merged work. Assignment
+    /// operation under way, no workspace stacked on it, no hold or keep
+    /// choice, and any unsaved files left over from merged work. Assignment
     /// state does not keep it. `cancelled` are the restores a removal stopped.
     async fn merged_candidate(
         &self,
@@ -665,9 +755,6 @@ impl Manager {
         if self.has_pending_pull_proposal(id).await? {
             return Ok(Some(Retention::PrProposal));
         }
-        if !self.workspace(id).await?.child_workspaces.is_empty() {
-            return Ok(Some(Retention::Children));
-        }
         Ok(self
             .has_queued_launch(id)
             .await?
@@ -676,6 +763,12 @@ impl Manager {
 
     /// Assignment state whose own cleanup path decides removal.
     async fn assignment_reason(&self, id: &str) -> Result<Option<CleanupReason>> {
+        let workspace = self.workspace(id).await?;
+        if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
+            return Ok(Some(CleanupReason::AncestorCompleted {
+                workspace: ancestor.name,
+            }));
+        }
         if self.pr_registration(id).await?.is_some() {
             return Ok(Some(CleanupReason::PrWatch));
         }
@@ -768,6 +861,17 @@ impl Manager {
             cause,
         };
         self.remove_after_grace(selector, removal).await
+    }
+
+    /// Remove the workspace below `ancestor`, whose completion with cleanup
+    /// stands, after the grace period.
+    pub(super) async fn remove_under_completed(
+        &self,
+        selector: &str,
+        ancestor: &Workspace,
+    ) -> Result<bool> {
+        self.remove_after_grace(selector, Removal::UnderCompleted { ancestor })
+            .await
     }
 
     /// Remove the workspace unless its grace period is still running.
@@ -874,13 +978,7 @@ impl Manager {
         let rules = RemovalRules {
             allow_pending_rename: !present,
             awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,
-            refuse_holds: matches!(
-                removal,
-                Removal::Manual {
-                    release_holds: false,
-                    ..
-                }
-            ),
+            refuse_holds: removal.refuses_holds(),
         };
         let replaced = self
             .reserve_lifecycle_for_removal(&workspace.id, rules)
@@ -900,7 +998,7 @@ impl Manager {
             Some(command) => Ok(Some(PostRemoveHook {
                 command,
                 checkout: self.repository(&workspace.repository_id).await?.path,
-                env: self.configured_workspace_environment(workspace).await?,
+                env: self.removed_workspace_environment(workspace).await?,
             })),
             None => Ok(None),
         }
@@ -912,6 +1010,15 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
+                // Children go first; none may outlive its parent.
+                ensure!(
+                    !crate::daemon::store::exists(
+                        &tx,
+                        "SELECT 1 FROM workspaces WHERE parent_workspace_id=?1",
+                        [&id],
+                    )?,
+                    "workspaces were split from it during removal; retaining it"
+                );
                 events::record(&tx, &id, EventKind::Removed, cause, None)?;
                 tx.execute("DELETE FROM executions WHERE workspace_id=?1", [&id])?;
                 crate::daemon::workspace_files::forget_removed(&tx, &id)?;
@@ -938,6 +1045,15 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
+        if let Err(error) = self
+            .delete_tmp_dir(&workspace.repository_id, &workspace.id)
+            .await
+        {
+            crate::daemon::log!(
+                "temporary directory of {} not deleted: {error:#}",
+                workspace.name
+            );
+        }
         if let Err(error) = self.delete_workspace_files(workspace).await {
             crate::daemon::log!(
                 "files attached to messages of {} not deleted: {error:#}",
@@ -1010,6 +1126,7 @@ impl Manager {
         .await?;
         self.recheck_removal(workspace, removal, Stage::AfterStop, &cancelled)
             .await?;
+        let children = self.remove_children(workspace, removal).await?;
         // The hook sees the worktree intact; a failing hook retains it.
         if let Some(command) = self.workspace_hook(workspace, HookKind::PreRemove).await? {
             let configured_env = self.configured_workspace_environment(workspace).await?;
@@ -1062,7 +1179,10 @@ impl Manager {
         .await;
         // A failed removal may have deleted some files, so its checkpoint
         // stays; the next attempt takes another, and both expire as usual.
-        removed
+        Ok(RemovalResult {
+            children,
+            ..removed?
+        })
     }
 
     /// Inspect the workspace again and apply every check `removal` needs at
@@ -1116,7 +1236,20 @@ impl Manager {
                 "workspace changed {}",
                 stage.change()
             ),
-            (Removal::Manual { .. } | Removal::Deleted, _) => {}
+            // The workspaces below go first, under the same completion, so
+            // none that something keeps goes with this one.
+            (Removal::UnderCompleted { ancestor }, _) => {
+                ensure!(
+                    check.workspace.child_workspaces.is_empty(),
+                    "workspaces split from it remain; retaining it until they go"
+                );
+                ensure!(
+                    self.completion_stands(ancestor).await?,
+                    "{} withdrew its completion or changed since; retaining workspace",
+                    ancestor.name
+                );
+            }
+            (Removal::Manual { .. } | Removal::Deleted | Removal::Parent { .. }, _) => {}
         }
         Ok(check)
     }
@@ -1150,17 +1283,69 @@ impl Manager {
         )
         .await?;
         self.stop_workspace_processes(&workspace.id).await?;
+        let children = self.remove_children(workspace, removal).await?;
         // Prune only this owned registration, through Worktrunk, and retain
         // its branch because the contents cannot be inspected.
         let registered = self.is_registered_worktree(workspace).await?;
-        self.remove_worktree(
-            &repo.path,
-            workspace,
-            FileRemoval::Force,
-            BranchRemoval::Keep,
-            registered,
-        )
-        .await
+        let removed = self
+            .remove_worktree(
+                &repo.path,
+                workspace,
+                FileRemoval::Force,
+                BranchRemoval::Keep,
+                registered,
+            )
+            .await?;
+        Ok(RemovalResult {
+            children,
+            ..removed
+        })
+    }
+
+    /// Remove the workspaces below `workspace` for `removal` of it, each
+    /// after those below it, returning their names in that order. The first
+    /// that fails stops the rest and retains `workspace`, so no workspace
+    /// outlives its parent. Each reservation refuses splits from its
+    /// workspace, so none appears below one whose children were listed.
+    async fn remove_children(
+        &self,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+    ) -> Result<Vec<String>> {
+        let mut removed = Vec::new();
+        for child in self.workspace(&workspace.id).await?.child_workspaces {
+            // Listed once `workspace` was reserved, so no split can follow.
+            ensure!(
+                removal
+                    .confirmed_children()
+                    .is_none_or(|confirmed| confirmed.contains(&child.id)),
+                "{} was split from {} after the removal was confirmed; retaining both",
+                child.name,
+                workspace.name
+            );
+            let result = Box::pin(self.remove(&child.id, removal.of_child()))
+                .await
+                .with_context(|| {
+                    format!(
+                        "child workspace {} retained, so {} is too",
+                        child.name, workspace.name
+                    )
+                })?;
+            removed.extend(result.children);
+            if removal.announces_children() {
+                self.notify(
+                    Some(&child.name),
+                    crate::daemon::notifications::NotificationKind::WorkspaceRemoved,
+                    super::removal_notice(
+                        &child.name,
+                        &format!("removed with its parent {}", workspace.name),
+                    ),
+                )
+                .await;
+            }
+            removed.push(child.name);
+        }
+        Ok(removed)
     }
 
     /// Release live resources immediately before removing the worktree. Failed
@@ -1189,6 +1374,7 @@ impl Manager {
                 branch: Some(workspace.branch.clone()),
                 branch_outcome: BranchOutcome::Retained,
                 hook_error: None,
+                children: Vec::new(),
             })
         }
     }
@@ -1212,10 +1398,10 @@ fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    let files = if *unsaved == NOTHING {
-        FileRemoval::CleanOnly
-    } else {
+    let files = if unsaved.deletes_unsaved() {
         FileRemoval::Force
+    } else {
+        FileRemoval::CleanOnly
     };
     (files, branch)
 }

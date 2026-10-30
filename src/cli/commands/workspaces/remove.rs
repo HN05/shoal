@@ -77,16 +77,22 @@ async fn remove_one(ctx: &Context, check: RemovalCheck) -> Result<i32> {
     Ok(0)
 }
 
-/// Remove each checked workspace, going on after one fails.
+/// Remove each checked workspace, going on after one fails. One that a
+/// removal before it took as its child is not removed again.
 async fn remove_each(ctx: &Context, checks: Vec<RemovalCheck>) -> Result<i32> {
     let mut report = ui::Report::new("removed", "remove");
+    let mut taken = Vec::new();
     for check in checks {
         let name = &check.workspace.name;
+        if taken.contains(name) {
+            continue;
+        }
         match remove_checked(ctx, &check).await {
             Ok(result) => {
                 let mut output = removal_output(&result, &check)?;
                 output["workspace"] = json!(name);
                 let message = removal_message(&format!("Removed {name}"), &result);
+                taken.extend(result.children);
                 report.done(ctx, &message, output);
             }
             Err(error) => report.failed(ctx, name, &error),
@@ -150,13 +156,25 @@ fn confirm_removals(ctx: &Context, checks: &[RemovalCheck]) -> Result<()> {
     Ok(())
 }
 
-/// What removing the workspace `check` inspected loses: its unsaved work,
-/// with the changed files on a terminal, and its holds.
+/// What removing the workspace `check` inspected loses: the workspaces
+/// below it, its unsaved work, with the changed files on a terminal, and its
+/// holds.
 fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     let mut lines = Vec::new();
     let unsaved = check.unsaved_work();
-    if unsaved.is_empty() && check.workspace.holds.is_empty() {
+    if unsaved.is_empty() && check.workspace.holds.is_empty() && check.children.is_empty() {
         return lines;
+    }
+    if !check.children.is_empty() {
+        lines.push(format!(
+            "Removes the workspaces split from it first, whatever their work or holds; shoal work restore brings each back: {}",
+            check
+                .children
+                .iter()
+                .map(|child| child.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
     for work in &unsaved {
         lines.push(format!("Deletes: {work}"));
@@ -192,12 +210,17 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     lines
 }
 
-/// `removed`, such as `Workspace removed`, with the Git branch the removal kept.
+/// `removed`, such as `Workspace removed`, with the Git branch the removal
+/// kept and the workspaces below it it took.
 fn removal_message(removed: &str, result: &RemovalResult) -> String {
-    match &result.branch {
+    let mut message = match &result.branch {
         Some(branch) if !result.branch_outcome.is_deleted() => {
             format!("{removed}; kept Git branch {branch}")
         }
         _ => removed.into(),
+    };
+    if !result.children.is_empty() {
+        message.push_str(&format!("; also removed {}", result.children.join(", ")));
     }
+    message
 }

@@ -19,3 +19,11 @@ fn a_queued_start_keeps_every_server_variable_set_or_not() {
     assert_eq!(selection["HERDR_SOCKET_PATH"], "");
     assert_eq!(selection["REX_SERVER"], "");
 }
+
+#[test]
+fn a_start_from_no_terminal_records_no_origin_and_no_server() {
+    let env = detached_start_environment();
+    assert_eq!(recorded_origin(&env[env::ORIGIN]).unwrap(), None);
+    assert_eq!(env["HERDR_SESSION"], "");
+    assert_eq!(env["REX_SERVER"], "");
+}

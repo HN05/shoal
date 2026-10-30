@@ -10,6 +10,7 @@ mod target;
 pub(in crate::cli::commands) use agent::AgentLaunch;
 pub(in crate::cli) use finish::execute_add;
 pub(in crate::cli) use handoff::start_queued;
+pub(crate) use plan::queued_agent_plan;
 pub(in crate::cli) use plan::{AddPlan, Creation};
 use std::ffi::OsString;
 
@@ -64,7 +65,7 @@ pub(in crate::cli::commands) async fn add(
     options: AddOptions,
 ) -> Result<i32> {
     let mut creation = creation.absolute(ctx)?;
-    let target = resolve_add_target(ctx, repository, issue.as_deref(), &agent).await?;
+    let target = resolve_add_target(ctx, repository, issue.as_deref()).await?;
     check_add_creation(ctx, &target, &creation).await?;
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);

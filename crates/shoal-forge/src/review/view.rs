@@ -9,6 +9,7 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
+    ci::approval::WaitingRun,
     items::{action::MergeMethod, link::ItemKind, reaction::Reaction},
     review::status::{CheckResult, PrStatus, ReviewState},
 };
@@ -61,6 +62,9 @@ pub struct PrDetails {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub behind: Option<u64>,
     pub checks: Vec<CheckResult>,
+    /// The runs on the open PR's head that wait for approval.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_runs: Vec<WaitingRun>,
     pub review: Option<ReviewState>,
     /// Set while the forge is to merge the open PR once it can.
     #[serde(default)]
@@ -200,6 +204,7 @@ impl PrDetails {
     fn record(&mut self, status: PrStatus, errors: &mut Vec<String>) {
         self.merge_conflicts = status.merge_conflicts;
         self.checks = status.checks;
+        self.waiting_runs = status.waiting_runs;
         self.review = status.review;
         errors.extend(status.errors);
     }
@@ -212,6 +217,7 @@ impl PrDetails {
             merge_conflicts: None,
             behind: None,
             checks: Vec::new(),
+            waiting_runs: Vec::new(),
             review: None,
             auto_merge: None,
         }

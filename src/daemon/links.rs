@@ -10,12 +10,15 @@ mod memories;
 pub mod pr;
 pub mod proposals;
 mod raw;
+mod revert;
+mod run_approval;
 mod runs;
 mod stack;
 pub mod wait;
 
 pub(crate) use memories::ForgeMemories;
 
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
@@ -135,8 +138,20 @@ impl Manager {
             .remove_items(&workspace.id, relation, kind, url.clone())
             .await?;
         match url {
-            Some(url) => ensure!(removed > 0, "{url} is not linked as {relation}"),
-            None => ensure!(removed > 0, "{} linked as {relation}", nothing(kind)),
+            Some(url) => ensure!(
+                removed > 0,
+                Refusal::new(
+                    Reason::NotFound,
+                    format!("{url} is not linked as {relation}")
+                )
+            ),
+            None => ensure!(
+                removed > 0,
+                Refusal::new(
+                    Reason::NotFound,
+                    format!("{} linked as {relation}", nothing(kind))
+                )
+            ),
         }
         Ok(())
     }
@@ -211,9 +226,14 @@ impl Manager {
             kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(&id).await, Ok(None));
         ensure!(
             issue || pr,
-            "{} linked as {}",
-            nothing(kind.map(Into::into)),
-            Relation::Assigned
+            Refusal::new(
+                Reason::NotFound,
+                format!(
+                    "{} linked as {}",
+                    nothing(kind.map(Into::into)),
+                    Relation::Assigned
+                )
+            )
         );
         Ok(())
     }

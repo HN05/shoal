@@ -319,11 +319,14 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     let manager = &f.manager;
 
     manager
-        .acquire_hold(id, "review".into(), None)
+        .acquire_hold(id, "review".into(), None, crate::model::HoldPlacer::User)
         .await
         .unwrap();
     assert!(f.kept_after(5).await);
-    manager.release_hold(id, "review".into()).await.unwrap();
+    manager
+        .release_hold(id, "review".into(), crate::model::HoldPlacer::User)
+        .await
+        .unwrap();
 
     let ask = crate::daemon::questions::Ask {
         question: "Anything else?".into(),
@@ -344,7 +347,12 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
         .await
         .unwrap();
     manager
-        .acquire_hold(&stacked.id, "busy".into(), None)
+        .acquire_hold(
+            &stacked.id,
+            "busy".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager

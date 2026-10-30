@@ -1,5 +1,6 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 
 use super::Caller;
@@ -100,8 +101,9 @@ impl Manager {
         Ok(workspace)
     }
 
-    /// `workspace`, which must be one below the caller's that nothing holds:
-    /// removing it releases its holds, which are the user's and host apps'.
+    /// `workspace`, which must be one below the caller's that the user
+    /// holds nothing of, nor of any workspace below it: removing it releases
+    /// their holds, and only the holds agents placed are agents' to release.
     pub(in crate::daemon) async fn unheld_workspace_below<'a>(
         &self,
         caller: &Caller,
@@ -109,12 +111,17 @@ impl Manager {
         refusal: &str,
     ) -> Result<&'a mut String> {
         let workspace = self.workspace_below(caller, workspace, refusal).await?;
-        let held = self.workspace(workspace).await?;
-        ensure!(
-            held.holds.is_empty(),
-            "{} has holds, which are the user's; ask the user to remove it",
-            held.name
-        );
+        let id = self.workspace(workspace).await?.id;
+        for id in self.subtree(&id).await? {
+            let held = self.workspace(&id).await?;
+            ensure!(
+                held.holds
+                    .iter()
+                    .all(|hold| hold.placed_by == crate::model::HoldPlacer::Agent),
+                "{} has holds, which are the user's; ask the user to remove it",
+                held.name
+            );
+        }
         Ok(workspace)
     }
 
@@ -125,10 +132,9 @@ impl Manager {
         caller: &Caller,
         id: i64,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             request.decider.as_deref() == Some(caller.workspace_id.as_str()),
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"

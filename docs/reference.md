@@ -487,6 +487,15 @@ assignment is done and whatever `[machine.overload.recovery]` says. Timers the a
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
+### Client API
+
+Apps other than the CLI, such as Quay, use the client API on the daemon's
+socket: typed requests for a subset of the CLI's operations, error codes, and
+subscriptions to repositories, workspaces and the rest as they change.
+[`crates/shoal-client`](../crates/shoal-client/README.md) is its Rust client and
+describes the protocol. Without a scope token the caller is the user; with one,
+it is that workspace's agent, under the rules of its `shoal` commands.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
@@ -537,8 +546,9 @@ GitHub's `/tree/<branch>`, GitLab's `/-/tree/<branch>`, Bitbucket's
 `/branch/<branch>` or Forgejo's `/src/branch/<branch>` route and open the
 origin branch, preserving slashes and decoding URL escapes. Setup, hooks and
 existing-branch ownership checks apply. These forms launch an agent with `--agent`.
-`add <repository> --issue <number-or-url>` remains available with an optional
-branch name and launches an agent only with `--agent`.
+`add [<repository>] --issue <number-or-url>` remains available with an optional
+branch name, finds the repository of an omitted `<repository>` as numbers and
+links do, and launches an agent only with `--agent`.
 
 ```sh
 shoal repo add /path/to/repo             # Or a Git clone URL; register once
@@ -630,7 +640,9 @@ token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows the local config, Ctrl-D deletes.
-`repo rename` asks for an omitted name.
+`repo rename` asks for an omitted name. Commands that take a registered
+repository and omit it use the one of the current registered checkout or
+workspace, then a repository picker.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an
@@ -651,7 +663,8 @@ split from it: without a target, a scoped command acts on the child whose
 directory it runs in, otherwise on the caller's own workspace, and agent hooks
 always report for the caller's own. Another omitted required argument that
 names an existing record opens a picker of those records, under the same
-noninteractive rule. Leaving a picker without a choice exits with status 130
+noninteractive rule; the refusal names the missing argument and how the command
+line passes it. Leaving a picker without a choice exits with status 130
 and no message, and a command whose output reader closes early, such as `head`,
 exits with status 141 and no message. Bare `shoal cd` always opens a picker;
 all-workspace listings and `--all` retain their scope. A command that accepts
@@ -667,13 +680,14 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one workspace's current state, changes
 since its fork point, what it holds, its agent sessions, whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
-conflicts, each CI check's result, and a review state from each reviewer's latest
-approval or change request. A failed lookup reports its error on that item
-without failing the command. When the
+conflicts, each CI check's result, the CI runs on an open PR's head that
+[wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
+reviewer's latest approval or change request. A failed lookup reports its error
+on that item without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
-open questions, a pending PR proposal, child workspaces, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
+open questions, a pending PR proposal, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
 returns the same data, with PRs in `prs`, the issue in `issue_status` and sessions
 in `sessions`, or a failed `zmx list` in `sessions_error`. Workspace records from `work --json` and `status --json` include
@@ -1153,8 +1167,9 @@ otherwise keeps the forked session's directory.
 `add_dir` gives an agent, fresh or restored, another working directory
 `{directory}`, so a sandbox or a setting such as Claude Code's
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
-entry for every agent and chat, and for a workspace's agent the repository's
-workspaces directory, where `shoal split` puts children. An empty list gives none.
+entry for every agent and chat, for a workspace's agent the repository's
+workspaces directory, where `shoal split` puts children and its [temporary
+directory](#temporary-directories) lies, and for a chat its temporary directory. An empty list gives none.
 `agent.dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an
@@ -1771,8 +1786,8 @@ own branch and worktree. The parent must be ready. `--base` works as for
 `shoal add`; naming the parent's branch also [stacks](#stacked-workspaces) the
 child on it. Children can be split from children. Workspace processes may split
 from their own workspace, act on every workspace below it and `shoal rm` one
-without holds, which is the only workspace creation and removal scope allows;
-the rest stays with the user.
+unless the user holds it or a workspace below it, which is the only workspace
+creation and removal scope allows; the rest stays with the user.
 
 The parent's agent receives the issue and PR activity of its children that have
 no agent of their own, and of their children in turn, through its hooks and an
@@ -1780,11 +1795,27 @@ unfiltered or kind-filtered `watch`; each such update names its workspace in
 `workspace`. A child with an agent of its own, one that reports its turn state,
 any agent Shoal tracks there or one whose restore waits in the
 [agent queue](#agent-queue), receives its own activity
-and its subtree's instead. A child keeps its parent from every unattended removal,
-completion and PR cleanup included, with `cleanup_reason` `children`, until the
-child is removed; each child completes on its own with `shoal done`. Removing a
-parent moves its children to its own parent, or to none, and records a
-`parent_changed` event. `work` lists children indented below their parent;
+and its subtree's instead.
+
+A child never keeps its parent: the parent's idle, merged, completion and PR
+cleanup follow its own state. Every removal of a parent, `shoal rm`, cleanup or
+the cleanup of its deleted directory, first removes the workspaces below it,
+deepest first, whatever their work, holds or questions: each stops its agents,
+keeps a checkpoint of its HEAD and unsaved files, and keeps its branch unless a
+remote or the default branch has its commits, so `shoal work restore` brings it
+back. A child that cannot go retains the parent. `shoal rm` names the children
+before asking, and its result names them in `children`; each child's journal
+records a `removed` event with the cause `parent`, and the user is notified of
+those an unattended removal took. Exporting one workspace with children is
+refused; `export --all` exports each.
+
+While a parent's `done` with cleanup stands at its HEAD, each workspace below it
+has `cleanup_reason` `ancestor_completed` and goes after the grace period,
+whatever its own work, with the cause `parent_completion`; a hold, open
+question, pending PR proposal or queued agent launch of its own keeps it, as do
+workspaces still below it until they go. `undone`, a commit after `done`, or a
+`done` without cleanup leaves the children. A child's own `done` follows the
+usual rules. `work` lists children indented below their parent;
 `status` shows both directions, and `work --json` and `status --json` give
 `parent_workspace` (`id`, `name`, `branch`, or null) and `child_workspaces`.
 
@@ -2339,6 +2370,22 @@ no seed build of it is running; disk space cleanup records a `caches_emptied`
 notification. Processes started with an exported environment are not tracked.
 Removing the repository deletes `.caches`.
 
+### Temporary directories
+
+Every workspace and chat has its own directory for temporary files, `.tmp/<id>`
+in the repository directory, named by the workspace's or chat's ID. Every process
+Shoal starts in a workspace, its hooks other than `hooks.post_remove`, `shoal work
+env` and a chat's agent get it as `TMPDIR`, so their scratch files stay out of the
+shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
+directory, readable only by you, when it starts a process in the workspace,
+exports its environment or records the chat, reserving the repository directory
+for a registration without one. It marks `.tmp` with the repository and refuses
+to start the process or chat while an unmarked `.tmp` is in the way.
+
+Nothing in it is kept: removing the workspace or ending the chat deletes the
+directory without a checkpoint, and cleanup deletes those that belong to no
+workspace or chat of the repository. Removing the repository deletes `.tmp`.
+
 ### Remove a workspace
 
 Removal deletes the workspace's branch when a remote-tracking branch or the
@@ -2582,18 +2629,25 @@ When cleanup removes the worktree, shell integration returns to the repository's
 
 Holds are caller-named claims of workspace use, independent of assignment completion.
 They persist across command exits and daemon restarts and block automatic removal
-while the worktree exists, as open questions, pending PR proposals, child workspaces and queued agent launches do; releasing the last hold lets cleanup recheck its usual
+while the worktree exists, as open questions, pending PR proposals and queued agent launches do; releasing the last hold lets cleanup recheck its usual
 conditions. Idle cleanup restarts its
-timer after release. Explicit removal and deleted-directory cleanup release holds.
+timer after release. Removal releases holds, a parent's removal those below it too;
+a hold never keeps the workspace's parent.
 Upgrading turns a `shoal continue` from earlier versions into a hold named
 `continue` with the reason “Converted from an earlier Shoal version”, which the
 next explicit `done` releases.
 
 Reacquiring a name returns the original hold, including its reason. Acquisition
 requires a ready, verified worktree and is excluded while a resource hook runs.
-Release remains available while the workspace record exists. Holds belong to the
-user and to apps hosting external sessions: scoped callers can list their own
-workspace's holds but not acquire or release them. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
+Release remains available while the workspace record exists. Each hold records
+in `placed_by` whether the user or an app hosting an external session placed it
+(`user`), or an agent (`agent`). Workspace processes hold and release the
+workspaces below their own directly. Holding their own workspace is an approval
+request with the target `hold/<name>`, which needs `--reason` and goes to the
+workspace's coordinating agent, which needs no grant to decide it, or to the
+user without one; approval places the hold, and acquiring again returns it.
+Workspace processes release only the holds agents placed, on their own workspace
+or below it; the user's stay theirs to release. `status` and `work --json` show holds on the workspace record. `rm` lists holders before
 confirmation and includes them in its JSON result; `--yes` skips confirmation.
 
 ### Forges
@@ -2629,6 +2683,12 @@ it, with what to do instead when it does not; `--json` returns `forge` and
 `capabilities`, each with `capability`, `supported` and an optional `hint`. A
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
+
+`shoal forge reactions` lists the reactions the forge allows, under the names
+`shoal view` reports: on Forgejo and Gitea those the instance's settings allow,
+on GitHub its eight, and on GitLab the same eight as suggestions, since any emoji
+it knows works. `--json` returns `names` and `accepts_other_names`. Bitbucket
+has no reactions.
 
 Bitbucket has no official CLI, so the global `[machine.bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
@@ -2670,6 +2730,7 @@ shoal pr reviewers 12               # users and teams who can review PR 12
 shoal pr update --method rebase    # take in the base's commits on the forge
 shoal pr merge --method rebase --delete-branch
 shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
+shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
 shoal issue edit --add-label bug    # comment, close and reopen work too
@@ -2677,6 +2738,7 @@ shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
 shoal forge capabilities                  # what the repository's forge supports
+shoal forge reactions                     # the reactions the repository's forge allows
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
@@ -2768,6 +2830,30 @@ GitLab's merge when the pipeline succeeds, or Forgejo's merge when checks
 succeed. GitHub deletes the branch of an automatic merge only as the
 repository's settings say, so it refuses `--delete-branch` with `--auto`, and
 Bitbucket cannot merge later. `--cancel-auto` withdraws the automatic merge.
+`revert` opens a PR that undoes a merged PR into its base branch and refuses
+one that has not merged. It takes `pr open`'s options except `--base`; its
+title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,
+and its labels to the reverted PR's. Where the forge reverts PRs (the
+`revert_prs` capability, GitHub only), the forge opens it from a branch it
+creates, and the workspace records it as opened without linking it; a
+workspace process cannot have it opened where `[permissions] pr_open` asks for
+the user's approval, since the forge's revert cannot wait for it. Elsewhere
+Shoal creates a workspace on branch `revert-<number>` from the base branch as
+`origin` has it, set up as any new workspace and a child of the workspace a
+workspace process runs in. As that workspace's tracked commands, it reverts
+the merge in one commit, after establishing which commits it added: a merge
+commit whose later parent has the PR head's tree, against its first parent;
+the base's latest first-parent commits when they carry the patches of the
+PR's commits, as after a rebase or fast-forward; or one squashed commit whose
+tree is the PR's head merged onto its parent. It fetches the PR's commits
+from its head ref on `origin` once its branch is gone. A merge it cannot
+establish, and changes setup left to tracked files, refuse the revert. It
+then pushes and opens the PR as `pr open` does, linked
+to the new workspace, and marks that workspace done with cleanup, so it goes
+once the revert merges. A revert that conflicts, or that changes nothing,
+removes the new workspace and fails, listing the conflicting files; when only
+opening the PR fails, the workspace stays for `shoal pr open --workspace`.
+Its JSON is `pr open`'s, with the new `workspace` when Shoal made one.
 `review` submits one review with exactly one of `--comment`, `--approve` or
 `--request-changes`, a body from `--body` or `--body-file`, and comments on
 single lines of the PR's diff: repeated `--line PATH:LINE BODY` on a line of the
@@ -2944,6 +3030,7 @@ shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
+shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
@@ -2996,6 +3083,19 @@ repository as the agent account, on every forge but Bitbucket. `--json` returns
 each run's `url`, `state`, `branch` and `workflow`, and for `view` its `jobs`
 with their `id`, `name`, `state` and `url`, the `logs` it read and the `errors`
 of those it could not.
+
+Forges hold the runs of PRs from forks and first-time contributors until a
+maintainer approves them, and until then those runs report no checks. `shoal
+view` and `shoal status` list an open PR's waiting runs in `waiting_runs`, each
+with its `url` and `workflow`, and the text names how to approve them. GitHub
+reports the runs it holds; Forgejo and Gitea mark them among the head commit's
+runs; GitLab and Bitbucket hold none. `shoal ci approve` approves one run, which
+must be waiting, or with `--pr`, or neither for the linked PR, every waiting run
+on the PR's head, failing when none waits. It uses your login, as merging does,
+and records an `item_changed` event; workspace processes cannot approve. Only
+GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
+there the command fails before any request. `--json` returns the `approved`
+runs' URLs.
 
 #### Forge API requests
 
@@ -3066,7 +3166,8 @@ otherwise; a
 PR adds its branches, how many commits its base has that its head lacks (`behind`,
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
-Gitea do not), the merge conflicts, CI checks and review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
+Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
+review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
@@ -3506,6 +3607,16 @@ call or prompt.
 An identical message that is still unread is not queued again, and a workspace
 or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.
+The hooks, `shoal watch` and the prompt that wakes Codex hold a workspace's
+unread messages until none has arrived for `[messages] settle_seconds`, and at
+most six times as long after the first, so a run of them, such as several
+approval decisions, reaches the agent in one delivery; `shoal messages` shows
+them at once, and 0 delivers each message as it arrives.
+
+```toml
+[messages]
+settle_seconds = 5 # Default: 5; at most 60
+```
 
 ### Attached files
 
@@ -3998,7 +4109,9 @@ pass the request up with `shoal approvals --escalate <number>`, to the next coor
 agent with such a grant, or to the user. Each coordinating agent passed over
 without a grant receives a message saying so. Without a deciding coordinator,
 the user is notified as above. A land request names its own branch and commit,
-which no other workspace holds a grant for, so it always reaches the user. The
+which no other workspace holds a grant for, so it always reaches the user. A
+request to hold the workspace goes to the nearest coordinating agent, which
+needs no grant for it. The
 request records its `decider`, the coordinator's workspace, while one decides
 it; the user may still decide it.
 

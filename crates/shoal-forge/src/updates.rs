@@ -76,6 +76,10 @@ pub struct Snapshot {
     /// The PR's head commit, which its checks run on; empty for an issue.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub(crate) head: String,
+    /// The PR's base commit, which its mergeability compares against; empty
+    /// for an issue or when the forge does not say.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) base: String,
     pub(crate) conflict: Option<bool>,
     /// The head and base commits the conflict observation covers.
     #[serde(default)]
@@ -331,6 +335,31 @@ impl Snapshot {
         &self.head
     }
 
+    /// Each check that ran on the head commit: its name, state and whether
+    /// it finished. Failures kept from an earlier head are left out.
+    pub fn head_checks(&self) -> impl Iterator<Item = (&str, &str, bool)> {
+        self.checks
+            .values()
+            .filter(|check| self.head.is_empty() || check.revision == self.head)
+            .map(|check| (check.name.as_str(), check.state.as_str(), check.complete))
+    }
+
+    /// Each source the observation could not read, such as CI checks, and why.
+    pub fn errors(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.errors
+            .iter()
+            .map(|(source, error)| (source.as_str(), error.as_str()))
+    }
+
+    /// Whether the PR's head conflicts with its base; `None` when unknown,
+    /// as it is while an observation kept from an earlier head or base stands.
+    pub fn head_conflict(&self) -> Option<bool> {
+        let covers = |observed: &str, current: &str| current.is_empty() || observed == current;
+        self.conflict.filter(|_| {
+            covers(&self.conflict_at.head, &self.head) && covers(&self.conflict_at.base, &self.base)
+        })
+    }
+
     /// Whether a check on the head commit has not finished.
     pub fn checks_pending(&self) -> bool {
         self.checks.values().any(|check| !check.complete)
@@ -519,6 +548,7 @@ impl Snapshot {
         checks: Result<Vec<(String, Check)>>,
     ) {
         self.head = pull.head_sha.clone().unwrap_or_default();
+        self.base = pull.base_sha.clone().unwrap_or_default();
         self.conflict = pull.conflict;
         self.conflict_at = MergeRevision {
             head: pull.head_sha.clone().unwrap_or_default(),

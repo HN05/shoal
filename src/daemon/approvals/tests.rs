@@ -656,6 +656,7 @@ fn targets_keep_their_stored_spelling() -> Result<()> {
         (Target::Port("web".into()), "port/web"),
         (Target::Simulator, "simulator"),
         (Target::Secret("TOKEN".into()), "secret/TOKEN"),
+        (Target::Hold("review".into()), "hold/review"),
         (Target::Land, "land"),
     ] {
         assert_eq!(target.to_string(), text);
@@ -674,6 +675,7 @@ fn targets_keep_their_stored_spelling() -> Result<()> {
         "resource//lock",
         "simulators",
         "secret/",
+        "hold/",
         "keep",
     ] {
         assert!(text.parse::<Target>().is_err(), "{text}");
@@ -694,6 +696,7 @@ fn specifications_round_trip_recorded_json_and_reject_mixed_shapes() -> Result<(
                 "device": "iPhone", "runtime": "iOS"}, "clean": false}),
         serde_json::json!({"command": ["op", "read", "op://Agents/key"], "tools": ["agent-browser"]}),
         serde_json::json!({"branch": "feature", "head": "abc"}),
+        serde_json::json!({"hold": "review"}),
     ];
     for json in recorded {
         let specification: Specification = serde_json::from_value(json.clone())?;

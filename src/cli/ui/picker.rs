@@ -231,7 +231,7 @@ pub(super) fn fzf_output(
     entries: &Entries,
     extra: &[String],
 ) -> Result<String> {
-    require_interactive(ctx)?;
+    require_interactive(ctx, prompt)?;
     let mut command = Command::new(Tool::Fzf.program());
     if current_directory()?.is_none() {
         command.current_dir("/");

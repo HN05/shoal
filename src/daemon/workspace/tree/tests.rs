@@ -21,7 +21,7 @@ fn reference(workspace: &Workspace) -> WorkspaceRef {
 }
 
 #[tokio::test]
-async fn splitting_records_the_parent_and_removal_moves_children_up() {
+async fn splitting_records_the_parent_and_removal_takes_the_subtree_first() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -55,57 +55,100 @@ async fn splitting_records_the_parent_and_removal_moves_children_up() {
     assert!(manager.within_subtree(&root.id, &leaf.id).await.unwrap());
     assert!(!manager.within_subtree(&leaf.id, &root.id).await.unwrap());
 
-    for (removed, parent) in [(&middle, Some(reference(&root))), (&root, None)] {
-        manager
-            .remove_workspace(
-                &removed.id,
-                UnsavedWork::default(),
-                InspectionPolicy::GitOnly,
-            )
-            .await
-            .unwrap();
-        assert_eq!(
-            manager.workspace("leaf").await.unwrap().parent_workspace,
-            parent
+    // Neither the leaf's hold nor its unsaved file keeps it; a checkpoint
+    // keeps the file.
+    manager
+        .acquire_hold(
+            &leaf.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
+    std::fs::write(leaf.path.join("draft.txt"), "draft").unwrap();
+    let removed = manager
+        .remove_workspace(&root.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+    assert_eq!(removed.children, ["leaf", "middle"]);
+    for workspace in [&root, &middle, &leaf] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
         );
+        assert!(!workspace.path.exists());
+    }
+    let restorable: Vec<_> = manager
+        .removed_workspaces()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|removed| removed.name)
+        .collect();
+    for name in ["root", "middle", "leaf"] {
+        assert!(restorable.iter().any(|removed| removed == name), "{name}");
     }
 
     let events = manager.workspace_events(None, 100).await.unwrap();
-    let parents: Vec<_> = events
+    let removals: Vec<_> = events
         .iter()
         .filter_map(|item| match item {
-            EventItem::Event(event)
-                if event.details.workspace_id == leaf.id
-                    && matches!(
-                        event.details.kind,
-                        EventKind::Created | EventKind::ParentChanged
-                    ) =>
-            {
-                Some((
-                    event.details.kind,
-                    event.details.cause,
-                    event.details.parent_workspace.clone(),
-                ))
+            EventItem::Event(event) if event.details.kind == EventKind::Removed => {
+                Some((event.details.name.clone(), event.details.cause))
             }
             _ => None,
         })
         .collect();
     assert_eq!(
-        parents,
+        removals,
         [
-            (EventKind::Created, None, Some(Some(reference(&middle)))),
-            (
-                EventKind::ParentChanged,
-                Some(EventCause::Removed),
-                Some(Some(reference(&root)))
-            ),
-            (
-                EventKind::ParentChanged,
-                Some(EventCause::Removed),
-                Some(None)
-            ),
+            ("leaf".to_owned(), Some(EventCause::Parent)),
+            ("middle".to_owned(), Some(EventCause::Parent)),
+            ("root".to_owned(), Some(EventCause::Manual)),
         ]
     );
+}
+
+#[tokio::test]
+async fn a_child_that_cannot_go_retains_its_parent() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    manager
+        .reserve_lifecycle(&child.id, crate::state::WorkspaceState::Removing)
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace(
+            &parent.id,
+            UnsavedWork::default(),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("child workspace child retained, so parent is too"),
+        "{error:#}"
+    );
+    let kept = manager.workspace(&parent.id).await.unwrap();
+    assert_eq!(kept.state, crate::state::WorkspaceState::Ready);
+    assert!(kept.path.exists());
+    assert_eq!(kept.child_workspaces, [reference(&child)]);
 }
 
 #[tokio::test]
@@ -221,7 +264,12 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
 
     // Removal would release the user's holds.
     manager
-        .acquire_hold(&child.id, "editor".into(), None)
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     // The check refuses too, so a batch refuses before removing any.
@@ -231,6 +279,41 @@ async fn workspace_processes_remove_the_workspaces_below_theirs_that_nothing_hol
             .unwrap_err();
         assert!(error.to_string().contains("has holds"), "{error:#}");
     }
+    // Removing it would release the holds of the workspaces below it too.
+    manager
+        .release_hold(&child.id, "editor".into(), crate::model::HoldPlacer::User)
+        .await
+        .unwrap();
+    let grandchild = manager
+        .split_workspace(&child.id, "grandchild".into(), None)
+        .await
+        .unwrap();
+    manager
+        .acquire_hold(
+            &grandchild.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
+    let mut method = remove(&child.name);
+    let error = crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("grandchild has holds"),
+        "{error:#}"
+    );
+    manager
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
     // So does the removal itself, for a hold acquired after authorization.
     let error = manager
         .remove_unheld_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
@@ -377,7 +460,7 @@ async fn workspace_processes_list_their_subtree_with_their_own_workspace_first()
 }
 
 #[tokio::test]
-async fn children_keep_their_parent_from_cleanup() {
+async fn children_never_keep_their_parent_and_go_with_it() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -392,21 +475,47 @@ async fn children_keep_their_parent_from_cleanup() {
         .split_workspace(&parent.id, "child".into(), None)
         .await
         .unwrap();
-    assert_eq!(
-        manager.cleanup_reason(&parent).await,
-        CleanupReason::Children
-    );
-    assert_eq!(
-        manager.cleanup_reason(&child).await,
-        CleanupReason::Idle { minutes: 10 }
-    );
     manager
-        .remove_workspace(&child.id, UnsavedWork::default(), InspectionPolicy::GitOnly)
+        .acquire_hold(
+            &child.id,
+            "editor".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
+    std::fs::write(child.path.join("draft.txt"), "draft").unwrap();
     assert_eq!(
         manager.cleanup_reason(&parent).await,
         CleanupReason::Idle { minutes: 10 }
+    );
+    assert_eq!(manager.cleanup_reason(&child).await, CleanupReason::Held);
+
+    let snapshot = manager.cleanup_snapshot(&parent.id).await.unwrap().unwrap();
+    manager
+        .remove_for_disk_space(&parent.id, snapshot)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(!workspace.path.exists());
+    }
+    // The user hears of the child an unattended removal took.
+    let notifications = manager.notifications(true, 50).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.workspace.as_deref() == Some("child")
+                && notification
+                    .message
+                    .contains("removed with its parent parent")
+        }),
+        "{notifications:?}"
     );
 }
 
@@ -1475,4 +1584,213 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 .unwrap();
         }
     }
+}
+
+#[tokio::test]
+async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_grant() {
+    use crate::{
+        daemon::{allocation::Allocation, approvals::DecisionStatus},
+        model::HoldPlacer,
+        protocol::HoldMethod,
+        state::AgentState,
+    };
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent, &child] {
+        manager
+            .set_agent_state(&workspace.id, AgentState::Working, None, None)
+            .await
+            .unwrap();
+        manager
+            .executions
+            .issue_scope(
+                workspace.name.clone(),
+                Caller {
+                    workspace_id: workspace.id.clone(),
+                    execution: None,
+                },
+            )
+            .await;
+    }
+    let mut acquire = Operation::Hold(HoldMethod::HoldAcquire {
+        workspace: child.name.clone(),
+        name: "review".into(),
+        reason: None,
+    });
+    crate::daemon::scope::authorize(&manager, Some("child"), &mut acquire)
+        .await
+        .unwrap();
+    let Err(error) = manager.request_hold(&child.id, "review".into(), None).await else {
+        panic!("a request needs a reason");
+    };
+    assert!(error.to_string().contains("--reason"), "{error:#}");
+    let Allocation::Approval(requested) = manager
+        .request_hold(&child.id, "review".into(), Some("Keep my notes".into()))
+        .await
+        .unwrap()
+    else {
+        panic!("holding its own workspace needs approval");
+    };
+    // The parent's agent decides it without a grant of its own.
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
+    assert!(manager.workspace(&child.id).await.unwrap().holds.is_empty());
+    // A decision stands only with its hold, so a running resource hook,
+    // which excludes placing it, refuses the decision.
+    let hook = manager
+        .gates
+        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .unwrap();
+    manager
+        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .await
+        .unwrap_err();
+    let pending = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pending.status, DecisionStatus::Pending);
+    drop(hook);
+    let decided = manager
+        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .await
+        .unwrap();
+    assert_eq!(decided.status, DecisionStatus::Approved);
+    // Approval placed the hold, which asking again returns.
+    let holds = manager.workspace(&child.id).await.unwrap().holds;
+    assert_eq!(holds.len(), 1);
+    assert_eq!(holds[0].placed_by, HoldPlacer::Agent);
+    assert_eq!(holds[0].reason.as_deref(), Some("Keep my notes"));
+    let Allocation::Granted(hold) = manager
+        .request_hold(&child.id, "review".into(), None)
+        .await
+        .unwrap()
+    else {
+        panic!("the approved hold is placed");
+    };
+    assert_eq!(hold, holds[0]);
+    // Asking again makes every acquisition check, such as for a running
+    // resource hook.
+    let hook = manager
+        .gates
+        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .unwrap();
+    assert!(
+        manager
+            .request_hold(&child.id, "review".into(), None)
+            .await
+            .is_err()
+    );
+    drop(hook);
+    // Releasing it ends the approval, so holding it again asks again.
+    manager
+        .release_hold(&child.id, "review".into(), HoldPlacer::Agent)
+        .await
+        .unwrap();
+    assert!(matches!(
+        manager
+            .request_hold(&child.id, "review".into(), Some("Again".into()))
+            .await
+            .unwrap(),
+        Allocation::Approval(_)
+    ));
+
+    // Without a coordinator the user decides.
+    let Allocation::Approval(requested) = manager
+        .request_hold(&parent.id, "review".into(), Some("Keep it".into()))
+        .await
+        .unwrap()
+    else {
+        panic!("holding its own workspace needs approval");
+    };
+    let routed = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(routed.decider, None);
+    manager
+        .decide_approval(requested.id, true, None, Default::default())
+        .await
+        .unwrap();
+    assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);
+}
+
+#[tokio::test]
+async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let check = manager
+        .check_manual_removal(&parent.id, false)
+        .await
+        .unwrap();
+    assert_eq!(check.children, [reference(&child)]);
+    let confirmed = UnsavedWork::confirming(&check);
+    // Splits after the confirmation, directly or below a confirmed child,
+    // keep the whole tree.
+    let late = manager
+        .split_workspace(&child.id, "late".into(), None)
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace(&parent.id, confirmed.clone(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("late was split from child after the removal was confirmed"),
+        "{error:#}"
+    );
+    for workspace in [&parent, &child, &late] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(workspace.path.exists());
+    }
+    // Confirmed again, the removal takes them all.
+    let check = manager
+        .check_manual_removal(&parent.id, false)
+        .await
+        .unwrap();
+    let removed = manager
+        .remove_workspace(
+            &parent.id,
+            UnsavedWork::confirming(&check),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert_eq!(removed.children, ["late", "child"]);
 }

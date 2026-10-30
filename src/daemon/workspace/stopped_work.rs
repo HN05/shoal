@@ -89,9 +89,12 @@ impl Manager {
         );
         let executions = self.workspace_executions(&workspace.id).await?;
         let active = |id: &str| executions.iter().any(|e| e.id == id);
+        let executions = recovery::discard_saved(&saved, active)?;
+        // The saved sessions are files, so no stored change announces it.
+        self.signals.agent_changed();
         Ok(Discarded {
             workspace: workspace.name,
-            executions: recovery::discard_saved(&saved, active)?,
+            executions,
         })
     }
 }

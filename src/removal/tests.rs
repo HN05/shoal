@@ -52,6 +52,7 @@ fn branch_outcome_spellings_and_deletion_are_preserved() {
             branch: Some("topic".into()),
             branch_outcome: outcome,
             hook_error: Some("post hook failed".into()),
+            children: vec!["child".into()],
         };
         let wire = json!({
             "removed": true,
@@ -59,6 +60,7 @@ fn branch_outcome_spellings_and_deletion_are_preserved() {
             "branch_deleted": deleted,
             "branch_outcome": spelling,
             "hook_error": "post hook failed",
+            "children": ["child"],
         });
         assert_eq!(serde_json::to_value(&result).unwrap(), wire);
         let decoded: RemovalResult = serde_json::from_value(wire.clone()).unwrap();

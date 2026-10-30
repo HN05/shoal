@@ -88,6 +88,7 @@ fn removal_normalizes_single_results_and_preserves_every_outcome() {
                 json!({
                     "removed": true, "branch": "topic", "branch_outcome": outcome,
                     "branch_deleted": outcome == "deleted", "hook_error": null,
+                    "children": [],
                 })
             );
         }

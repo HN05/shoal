@@ -16,6 +16,7 @@ mod progress;
 pub mod recent;
 pub(crate) mod terminal;
 pub mod ui;
+pub mod usage;
 pub mod workspace_context;
 
 use std::{ffi::OsString, path::PathBuf};
@@ -54,6 +55,9 @@ pub struct Cli {
     /// What the command needs of its workspace, from its subcommand path.
     #[arg(skip)]
     pub(crate) need: availability::Need,
+    /// The subcommand path, such as `["repo", "rm"]`.
+    #[arg(skip)]
+    pub(crate) path: Vec<String>,
     /// Override Shoal's state directory (also isolates the daemon).
     #[arg(long, global = true, env = crate::env::STATE_DIR)]
     pub state_dir: Option<PathBuf>,
@@ -150,8 +154,9 @@ impl Cli {
             path.push(name.to_owned());
             leaf = child;
         }
-        let path: Vec<_> = path.iter().map(String::as_str).collect();
-        let need = availability::Need::of_matches(&path, leaf).unwrap_or(availability::Need::Ready);
+        let names: Vec<_> = path.iter().map(String::as_str).collect();
+        let need =
+            availability::Need::of_matches(&names, leaf).unwrap_or(availability::Need::Ready);
         let mut cli = <Self as clap::FromArgMatches>::from_arg_matches_mut(&mut matches)
             .unwrap_or_else(|error| {
                 error
@@ -159,6 +164,7 @@ impl Cli {
                     .exit()
             });
         cli.need = need;
+        cli.path = path;
         cli.resolve_output(std::env::var_os(crate::env::OUTPUT).as_deref())
             .unwrap_or_else(|error| {
                 eprintln!(

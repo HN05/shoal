@@ -32,7 +32,8 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
+        revert::NewRevert,
     },
     repo::locator::ItemRoute,
     review::{
@@ -126,6 +127,10 @@ pub(crate) trait Backend {
 
     /// The field that holds a commit's full ID in a list of PR commits.
     fn commit_field(&self) -> &'static str;
+
+    /// The ref a remote of the repository keeps PR `number`'s head
+    /// commit under, where the forge keeps one after its branch goes.
+    fn pull_head_ref(&self, number: u64) -> Option<String>;
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
@@ -301,6 +306,18 @@ pub(crate) trait Backend {
         current: &Current,
         method: UpdateMethod,
     ) -> Result<Vec<Request>>;
+
+    /// Have the forge open `revert` for the merged PR `current` as
+    /// `account`, returning the new PR's number and head branch.
+    async fn revert(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _current: &Current,
+        _revert: &NewRevert,
+    ) -> Result<(u64, String)> {
+        Err(crate::capability::unsupported(self, Capability::RevertPrs))
+    }
 
     /// Where activity records a posted comment: its source, and the
     /// response field that holds its ID.
@@ -495,6 +512,15 @@ pub(crate) trait Backend {
     /// reactions at `endpoint`.
     fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
 
+    /// The reactions the forge allows; by default GitHub's, and only those.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(false))
+    }
+
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
         &self,
@@ -575,6 +601,14 @@ pub(crate) trait Backend {
     /// newest first.
     fn runs_path(&self, filter: &RunFilter) -> Result<String>;
 
+    /// The path under the repository that lists page `page` of the runs on
+    /// the commit `head` that may wait for approval,
+    /// [`crate::ci::approval::RUNS_PAGE`] to a page, or `None` where the forge
+    /// holds no runs for it.
+    fn waiting_runs_path(&self, _head: &str, _page: u32) -> Option<String> {
+        None
+    }
+
     /// The runs a read of the list path returned.
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
         value["workflow_runs"].as_array().map(Vec::as_slice)
@@ -602,6 +636,15 @@ pub(crate) trait Backend {
     /// The endpoint under the repository that applies `action` to `run`;
     /// `failed` reruns only its failed jobs.
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String>;
+
+    /// The endpoint under the repository that approves `run`, where the
+    /// forge approves runs.
+    fn approve_endpoint(&self, _run: &Run) -> Result<String> {
+        Err(crate::capability::unsupported(
+            self,
+            Capability::ApproveRuns,
+        ))
+    }
 
     /// `log`, a job log as the forge serves it, as plain text.
     fn plain_log(&self, log: &str) -> String {
@@ -788,6 +831,10 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.commit_field())
     }
 
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        dispatch!(self, backend => backend.pull_head_ref(number))
+    }
+
     fn login_hint(&self) -> &'static str {
         dispatch!(self, backend => backend.login_hint())
     }
@@ -949,6 +996,16 @@ impl Backend for ForgeKind {
         method: UpdateMethod,
     ) -> Result<Vec<Request>> {
         dispatch!(self, backend => backend.update_branch(repo, current, method))
+    }
+
+    async fn revert(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+        revert: &NewRevert,
+    ) -> Result<(u64, String)> {
+        dispatch!(self, backend => backend.revert(repo, account, current, revert).await)
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {
@@ -1142,6 +1199,14 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.remove_reaction(endpoint, own))
     }
 
+    async fn allowed_reactions(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+    ) -> Result<AllowedReactions> {
+        dispatch!(self, backend => backend.allowed_reactions(repo, account).await)
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -1217,6 +1282,10 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.runs_path(filter))
     }
 
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
+        dispatch!(self, backend => backend.waiting_runs_path(head, page))
+    }
+
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
         dispatch!(self, backend => backend.listed_runs(value))
     }
@@ -1241,6 +1310,10 @@ impl Backend for ForgeKind {
 
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
         dispatch!(self, backend => backend.run_endpoint(run, action, failed))
+    }
+
+    fn approve_endpoint(&self, run: &Run) -> Result<String> {
+        dispatch!(self, backend => backend.approve_endpoint(run))
     }
 
     fn plain_log(&self, log: &str) -> String {
