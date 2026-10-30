@@ -1,0 +1,130 @@
+//! The client API that `crates/shoal-client` defines: a stable protocol for
+//! apps other than the CLI, served on the daemon's socket beside the
+//! internal protocol. A connection handshakes once, then sends requests one
+//! at a time. Its requests run the daemon's own operations
+//! under the internal protocol's scope rules and connection limits.
+mod agents;
+mod calls;
+mod errors;
+mod handshake;
+mod records;
+
+use anyhow::Result;
+use shoal_client::{
+    ApiError, Call, ErrorCode,
+    wire::{self, HandshakeReply, Reply, Request, Response},
+};
+use tokio::{
+    io::BufReader,
+    net::{UnixStream, unix::OwnedWriteHalf},
+};
+
+use super::{Server, scope::Caller};
+
+/// A connection past its handshake.
+pub(super) struct Session {
+    server: Server,
+    /// The caller's scope token, which authorizes each request as the
+    /// internal protocol's do.
+    scope: Option<String>,
+    caller: Option<Caller>,
+}
+
+/// Serve a client API connection, whose first frame held `hello`: its
+/// handshake, then its requests until it hangs up or subscribes.
+pub(super) async fn serve(
+    stream: UnixStream,
+    server: Server,
+    hello: serde_json::Value,
+) -> Result<()> {
+    let (reader, mut writer) = stream.into_split();
+    let mut reader = BufReader::new(reader);
+    let (_slot, session) = match open(&server, hello).await {
+        Ok(opened) => opened,
+        Err(error) => {
+            return wire::write(&mut writer, &HandshakeReply::Error(error))
+                .await
+                .map_err(Into::into);
+        }
+    };
+    wire::write(&mut writer, &handshake::welcome()).await?;
+    while let Some(frame) = wire::read::<serde_json::Value>(&mut reader).await? {
+        let (id, call) = match request(frame) {
+            Ok(request) => (request.id, request.call),
+            Err((id, error)) => {
+                respond(&mut writer, id, Err(error)).await?;
+                continue;
+            }
+        };
+        let result = session.answer(call).await;
+        respond(&mut writer, id, result).await?;
+    }
+    Ok(())
+}
+
+/// The session `hello` opens, holding long-lived capacity while it lasts.
+async fn open(
+    server: &Server,
+    hello: serde_json::Value,
+) -> Result<(super::connections::Slot, Session), ApiError> {
+    let slot = server
+        .capacity
+        .long_lived()
+        .map_err(|error| ApiError::new(ErrorCode::Busy, format!("{error:#}")))?;
+    Ok((slot, handshake::accept(server, hello).await?))
+}
+
+/// The request `frame` holds, or its ID with why it cannot be read.
+fn request(frame: serde_json::Value) -> Result<Request, (u64, ApiError)> {
+    let id = frame["id"].as_u64().unwrap_or_default();
+    let method = frame["method"].as_str().unwrap_or_default().to_owned();
+    serde_json::from_value(frame).map_err(|error| {
+        let error = match Call::NAMES.contains(&method.as_str()) {
+            true => errors::invalid(format!("invalid {method} request: {error}")),
+            false => errors::invalid(format!("this daemon does not serve the method {method:?}")),
+        };
+        (id, error)
+    })
+}
+
+impl Session {
+    /// Answer `call` within a request slot, under an operation guard so a
+    /// daemon update waits for it.
+    async fn answer(&self, call: Call) -> Result<serde_json::Value, ApiError> {
+        let _slot = self
+            .server
+            .capacity
+            .request(format!("client API {}", call.name()))
+            .map_err(|error| ApiError::new(ErrorCode::Busy, format!("{error:#}")))?;
+        let _operation = self.server.manager.gates.owned_operation().await;
+        calls::answer(self, call).await
+    }
+}
+
+/// Send `result` to request `id`: a long list in pages, then the rest.
+async fn respond(
+    writer: &mut OwnedWriteHalf,
+    id: u64,
+    result: Result<serde_json::Value, ApiError>,
+) -> Result<()> {
+    let replies: Vec<Reply> = match result {
+        Ok(serde_json::Value::Array(items)) => {
+            let mut pages = wire::pages(items)?;
+            let last = pages.pop().unwrap_or_default();
+            pages
+                .into_iter()
+                .map(Reply::Page)
+                .chain([Reply::Result(last.into())])
+                .collect()
+        }
+        Ok(value) => vec![Reply::Result(value)],
+        Err(error) => vec![Reply::Error(error)],
+    };
+    for reply in replies {
+        wire::write(writer, &Response { id, reply }).await?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

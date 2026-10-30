@@ -124,3 +124,6 @@ impl Paths {
         self.state.join("workspaces").join(workspace_id)
     }
 }
+
+#[cfg(test)]
+mod tests;

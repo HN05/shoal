@@ -11,6 +11,7 @@ pub(crate) mod caches;
 pub mod chat_messages;
 mod chats;
 pub mod cleanup;
+mod client_api;
 mod connections;
 pub(crate) mod cpu_usage;
 mod disk;
@@ -32,8 +33,8 @@ pub(crate) mod ownership;
 pub mod ports;
 pub mod questions;
 pub(crate) mod queue;
-pub(crate) mod refusal;
 pub mod recovery;
+pub(crate) mod refusal;
 mod requests;
 pub mod resources;
 mod restart_recovery;
@@ -300,16 +301,31 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     }
 }
 
-/// Answer one connection's request.
+/// The protocol a connection's first frame chooses.
+enum Opening {
+    /// Shoal's internal protocol: one request on the connection.
+    Internal(Box<Request>),
+    /// The client API, with the handshake its `client_api` field holds.
+    ClientApi(serde_json::Value),
+}
+
+/// Answer one connection, in the protocol its first frame speaks.
 async fn serve(
     mut stream: UnixStream,
     server: Server,
     operation_guard: OperationGuard,
 ) -> Result<()> {
-    let Some(request) = read_request(&mut stream).await? else {
-        return Ok(());
-    };
-    serve_request(stream, server, request, operation_guard).await
+    match read_opening(&mut stream).await? {
+        Some(Opening::Internal(request)) => {
+            serve_request(stream, server, *request, operation_guard).await
+        }
+        // Each API request takes its own operation guard.
+        Some(Opening::ClientApi(hello)) => {
+            drop(operation_guard);
+            client_api::serve(stream, server, hello).await
+        }
+        None => Ok(()),
+    }
 }
 
 /// Admit a connection's request, resume an execution or accept it, then
@@ -397,10 +413,15 @@ async fn unless_abandoned(
     }
 }
 
-/// The client's request, or `None` once an unreadable one was refused.
-async fn read_request(stream: &mut UnixStream) -> Result<Option<Request>> {
-    match timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(stream)).await? {
-        Ok(request) => Ok(Some(request)),
+/// The client's first frame, or `None` once an unreadable one was refused.
+async fn read_opening(stream: &mut UnixStream) -> Result<Option<Opening>> {
+    let frame = timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(stream)).await?;
+    let opening = frame.and_then(|frame: serde_json::Value| match frame.get("client_api") {
+        Some(hello) => Ok(Opening::ClientApi(hello.clone())),
+        None => Ok(Opening::Internal(Box::new(serde_json::from_value(frame)?))),
+    });
+    match opening {
+        Ok(opening) => Ok(Some(opening)),
         Err(error) => {
             let response = Response::new(0, Body::error(ErrorCode::InvalidRequest, error));
             protocol::write(stream, &response).await?;

@@ -16,6 +16,7 @@ libc = "0.2"
 rusqlite = "0.40.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+shoal-client = { path = "crates/shoal-client" }
 shoal-forge = { path = "crates/shoal-forge" }
 shoal-proxy = { path = "crates/shoal-proxy" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
@@ -55,6 +56,7 @@ rusqlite = { workspace = true, features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
+shoal-client.workspace = true
 shoal-forge = { workspace = true, features = ["clap", "rusqlite"] }
 shoal-proxy = { workspace = true, optional = true }
 shoal-subprocess.workspace = true

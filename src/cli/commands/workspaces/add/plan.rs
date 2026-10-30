@@ -103,6 +103,18 @@ pub(super) async fn planned_workspace_name(
     Ok(crate::daemon::workspace::derive_workspace_name(&branch))
 }
 
+/// The serialized plan of `agent`'s launch in `workspace` with `prompt` as its
+/// first message, which the agent queue starts detached.
+pub(crate) fn queued_agent_plan(
+    workspace: &Workspace,
+    agent: Agent,
+    prompt: Option<String>,
+) -> Result<String> {
+    let args = prompt.into_iter().map(OsString::from).collect();
+    let plan = AddPlan::agent_in(workspace, agent, None, args, None);
+    Ok(serde_json::to_string(&plan)?)
+}
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(in crate::cli) struct AddPlan {
     pub repository: crate::repository::Selector,

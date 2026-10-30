@@ -19,7 +19,6 @@ pub(crate) enum Reason {
 
 #[derive(Debug)]
 pub(crate) struct Refusal {
-    #[cfg_attr(not(test), allow(dead_code, reason = "the client API reads it"))]
     pub reason: Reason,
     message: String,
 }
@@ -48,7 +47,6 @@ impl std::error::Error for Refusal {}
 
 impl Reason {
     /// The reason of the first refusal in `error`'s chain.
-    #[cfg_attr(not(test), allow(dead_code, reason = "the client API reads it"))]
     pub(crate) fn of(error: &anyhow::Error) -> Option<Self> {
         error.chain().find_map(|cause| {
             if let Some(refusal) = cause.downcast_ref::<Refusal>() {

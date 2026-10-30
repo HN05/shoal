@@ -12,7 +12,7 @@ use tokio::{
     time::Instant,
 };
 
-use super::{Server, connections, log, read_request, serve_request};
+use super::{Opening, Server, client_api, connections, log, read_opening, serve_request};
 use crate::protocol::{self, Body, DaemonMethod, ErrorCode, Method, Operation, Response, timing};
 
 /// The startup in progress and the task accepting its connections.
@@ -103,8 +103,12 @@ async fn connection(
     step: Arc<Mutex<Step>>,
     server: watch::Receiver<Option<Server>>,
 ) {
-    let Ok(Some(request)) = read_request(&mut stream).await else {
-        return;
+    let request = match read_opening(&mut stream).await {
+        Ok(Some(Opening::Internal(request))) => *request,
+        Ok(Some(Opening::ClientApi(hello))) => {
+            return client_api_once_ready(stream, server, hello).await;
+        }
+        Ok(None) | Err(_) => return,
     };
     if request.method.retries_when_closed() {
         return;
@@ -128,6 +132,20 @@ async fn connection(
     let operation = server.manager.gates.owned_operation().await;
     if let Err(error) = serve_request(stream, server, request, operation).await {
         log!("client connection: {error:#}");
+    }
+}
+
+/// Serve a client API connection once startup has finished.
+async fn client_api_once_ready(
+    stream: UnixStream,
+    server: watch::Receiver<Option<Server>>,
+    hello: serde_json::Value,
+) {
+    let Some(server) = ready(server).await else {
+        return;
+    };
+    if let Err(error) = client_api::serve(stream, server, hello).await {
+        log!("client API connection: {error:#}");
     }
 }
 
