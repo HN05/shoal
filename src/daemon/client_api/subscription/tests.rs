@@ -305,12 +305,12 @@ mod streams {
         let (mut reader, mut writer) = daemon.raw().await;
         let hello = serde_json::json!({"client_api": {"version": shoal_client::VERSION}});
         wire::write(&mut writer, &hello).await.unwrap();
-        let _: HandshakeReply = wire::read(&mut reader).await.unwrap().unwrap();
+        let _: HandshakeReply = reader.read().await.unwrap().unwrap();
         let subscribe = serde_json::json!({"id": 1, "method": "subscribe", "params": {"topics": ["notifications"]}});
         wire::write(&mut writer, &subscribe).await.unwrap();
         let (mut pages, mut records) = (0, 0);
         loop {
-            let response: Response = wire::read(&mut reader).await.unwrap().unwrap();
+            let response: Response = reader.read().await.unwrap().unwrap();
             let Reply::Event(Event::Snapshot {
                 records: page,
                 complete,
@@ -336,17 +336,17 @@ mod streams {
         let (mut reader, mut writer) = daemon.raw().await;
         let hello = serde_json::json!({"client_api": {"version": shoal_client::VERSION}});
         wire::write(&mut writer, &hello).await.unwrap();
-        let _: HandshakeReply = wire::read(&mut reader).await.unwrap().unwrap();
+        let _: HandshakeReply = reader.read().await.unwrap().unwrap();
         let subscribe = serde_json::json!({"id": 1, "method": "subscribe", "params": {"topics": ["workspaces"]}});
         wire::write(&mut writer, &subscribe).await.unwrap();
-        let _snapshot: Response = wire::read(&mut reader).await.unwrap().unwrap();
+        let _snapshot: Response = reader.read().await.unwrap().unwrap();
         let _quiesced = daemon.manager.gates.quiesce().await;
         daemon
             .manager
             .acquire_hold(&workspace.id, "quay".into(), None)
             .await
             .unwrap();
-        let next = tokio::time::timeout(HANG, wire::read::<Response>(&mut reader))
+        let next = tokio::time::timeout(HANG, reader.read::<Response>())
             .await
             .unwrap();
         assert!(matches!(next, Ok(None)), "{next:?}");

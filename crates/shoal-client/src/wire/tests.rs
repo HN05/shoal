@@ -58,7 +58,7 @@ fn pages_stay_within_their_size_and_keep_order() {
 #[tokio::test]
 async fn a_frame_round_trips_and_a_hangup_reads_as_none() {
     let (client, server) = tokio::io::duplex(MAX_FRAME * 2);
-    let (mut reader, mut writer) = (tokio::io::BufReader::new(server), client);
+    let (mut reader, mut writer) = (FrameReader::new(server), client);
     let opening = Opening {
         client_api: Hello {
             version: "1.0.0".into(),
@@ -68,9 +68,23 @@ async fn a_frame_round_trips_and_a_hangup_reads_as_none() {
     };
     write(&mut writer, &opening).await.unwrap();
     drop(writer);
-    let opened: Opening = read(&mut reader).await.unwrap().unwrap();
+    let opened: Opening = reader.read().await.unwrap().unwrap();
     assert_eq!(opened.client_api.client.as_deref(), Some("test"));
-    assert!(read::<Opening>(&mut reader).await.unwrap().is_none());
+    assert!(reader.read::<Opening>().await.unwrap().is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_read_cancelled_partway_through_a_frame_keeps_its_start() {
+    use tokio::io::AsyncWriteExt as _;
+    let (mut writer, server) = tokio::io::duplex(1024);
+    let mut reader = FrameReader::new(server);
+    writer.write_all(br#"{"version": "1."#).await.unwrap();
+    let cancelled =
+        tokio::time::timeout(std::time::Duration::from_secs(1), reader.read::<Hello>()).await;
+    assert!(cancelled.is_err(), "the frame is unfinished: {cancelled:?}");
+    writer.write_all(b"0.0\"}\n").await.unwrap();
+    let hello: Hello = reader.read().await.unwrap().unwrap();
+    assert_eq!(hello.version, "1.0.0");
 }
 
 #[test]

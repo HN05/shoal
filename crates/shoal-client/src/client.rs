@@ -2,7 +2,6 @@
 use std::{path::PathBuf, time::Duration};
 
 use tokio::{
-    io::BufReader,
     net::{
         UnixStream,
         unix::{OwnedReadHalf, OwnedWriteHalf},
@@ -14,7 +13,7 @@ use crate::{
     errors::{ApiError, Error, ErrorCode},
     methods::{Call, Method, Subscribe, Topic},
     subscription::Subscription,
-    wire::{self, HandshakeReply, Hello, Opening, Reply, Request, Response, Welcome},
+    wire::{self, FrameReader, HandshakeReply, Hello, Opening, Reply, Request, Response, Welcome},
 };
 
 /// How long a call may take by default, as long as the daemon's slowest
@@ -85,7 +84,7 @@ impl Connector {
         let stream = UnixStream::connect(&self.socket).await.map_err(Error::Io)?;
         let (reader, writer) = stream.into_split();
         let mut connection = Connection {
-            reader: BufReader::new(reader),
+            reader: FrameReader::new(reader),
             writer,
             welcome: Welcome {
                 version: String::new(),
@@ -124,7 +123,7 @@ impl Connector {
 
 /// One connection to the daemon, past its handshake.
 pub(crate) struct Connection {
-    reader: BufReader<OwnedReadHalf>,
+    reader: FrameReader<OwnedReadHalf>,
     writer: OwnedWriteHalf,
     pub(crate) welcome: Welcome,
     next_id: u64,
@@ -141,7 +140,7 @@ impl Connection {
 
     /// The next frame; the daemon hanging up is [`Error::Closed`].
     pub(crate) async fn read<T: serde::de::DeserializeOwned>(&mut self) -> Result<T, Error> {
-        wire::read(&mut self.reader).await?.ok_or(Error::Closed)
+        self.reader.read().await?.ok_or(Error::Closed)
     }
 
     /// The next reply to request `id`.

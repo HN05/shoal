@@ -14,14 +14,11 @@ mod subscription;
 use anyhow::Result;
 use shoal_client::{
     ApiError, Call, ErrorCode,
-    wire::{self, HandshakeReply, Reply, Request, Response},
+    wire::{self, FrameReader, HandshakeReply, Reply, Request, Response},
 };
-use tokio::{
-    io::BufReader,
-    net::{
-        UnixStream,
-        unix::{OwnedReadHalf, OwnedWriteHalf},
-    },
+use tokio::net::{
+    UnixStream,
+    unix::{OwnedReadHalf, OwnedWriteHalf},
 };
 
 use super::{Server, scope::Caller};
@@ -35,7 +32,7 @@ pub(super) struct Session {
     caller: Option<Caller>,
 }
 
-type Reader = BufReader<OwnedReadHalf>;
+type Reader = FrameReader<OwnedReadHalf>;
 
 /// Serve a client API connection, whose first frame held `hello`: its
 /// handshake, then its requests until it hangs up or subscribes.
@@ -45,7 +42,7 @@ pub(super) async fn serve(
     hello: serde_json::Value,
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
-    let mut reader = BufReader::new(reader);
+    let mut reader = FrameReader::new(reader);
     let (_slot, session) = match open(&server, hello).await {
         Ok(opened) => opened,
         Err(error) => {
@@ -55,7 +52,7 @@ pub(super) async fn serve(
         }
     };
     wire::write(&mut writer, &handshake::welcome()).await?;
-    while let Some(frame) = wire::read::<serde_json::Value>(&mut reader).await? {
+    while let Some(frame) = reader.read::<serde_json::Value>().await? {
         let (id, call) = match request(frame) {
             Ok(request) => (request.id, request.call),
             Err((id, error)) => {

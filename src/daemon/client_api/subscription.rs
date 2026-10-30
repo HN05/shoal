@@ -114,7 +114,7 @@ async fn send(writer: &mut OwnedWriteHalf, id: u64, event: Event) -> Result<()> 
 /// anything readable means it closed the connection.
 async fn hangup(reader: &mut Reader) {
     let mut closed = [0u8; 1];
-    let _ = reader.read(&mut closed).await;
+    let _ = reader.get_mut().read(&mut closed).await;
 }
 
 #[cfg(test)]

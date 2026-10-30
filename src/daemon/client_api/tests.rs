@@ -2,10 +2,9 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use shoal_client::{
     Client, Connector, ErrorCode, GetWorkspace,
-    wire::{self, HandshakeReply, Response},
+    wire::{self, FrameReader, HandshakeReply, Response},
 };
 use tokio::{
-    io::BufReader,
     net::{UnixListener, UnixStream},
     task::{JoinHandle, JoinSet},
 };
@@ -113,14 +112,14 @@ impl TestDaemon {
     pub async fn raw(
         &self,
     ) -> (
-        BufReader<tokio::net::unix::OwnedReadHalf>,
+        FrameReader<tokio::net::unix::OwnedReadHalf>,
         tokio::net::unix::OwnedWriteHalf,
     ) {
         let (reader, writer) = UnixStream::connect(&self.socket)
             .await
             .unwrap()
             .into_split();
-        (BufReader::new(reader), writer)
+        (FrameReader::new(reader), writer)
     }
 }
 
@@ -171,7 +170,7 @@ async fn an_unsupported_major_version_is_refused() {
     let (mut reader, mut writer) = daemon.raw().await;
     let hello = serde_json::json!({"client_api": {"version": "2.0.0", "client": "future"}});
     wire::write(&mut writer, &hello).await.unwrap();
-    let reply: HandshakeReply = wire::read(&mut reader).await.unwrap().unwrap();
+    let reply: HandshakeReply = reader.read().await.unwrap().unwrap();
     let HandshakeReply::Error(error) = reply else {
         panic!("expected a refusal: {reply:?}");
     };
@@ -193,10 +192,10 @@ async fn an_unknown_method_is_refused_and_the_connection_serves_the_next() {
     let (mut reader, mut writer) = daemon.raw().await;
     let hello = serde_json::json!({"client_api": {"version": shoal_client::VERSION}});
     wire::write(&mut writer, &hello).await.unwrap();
-    let _: HandshakeReply = wire::read(&mut reader).await.unwrap().unwrap();
+    let _: HandshakeReply = reader.read().await.unwrap().unwrap();
     let unknown = serde_json::json!({"id": 1, "method": "workspace.teleport", "params": {}});
     wire::write(&mut writer, &unknown).await.unwrap();
-    let response: Response = wire::read(&mut reader).await.unwrap().unwrap();
+    let response: Response = reader.read().await.unwrap().unwrap();
     assert_eq!(response.id, 1);
     let shoal_client::wire::Reply::Error(error) = response.reply else {
         panic!("expected a refusal: {response:?}");
@@ -204,7 +203,7 @@ async fn an_unknown_method_is_refused_and_the_connection_serves_the_next() {
     assert_eq!(error.code, ErrorCode::InvalidRequest);
     let get = serde_json::json!({"id": 2, "method": "workspace.get", "params": {"workspace": "api", "later": true}});
     wire::write(&mut writer, &get).await.unwrap();
-    let response: Response = wire::read(&mut reader).await.unwrap().unwrap();
+    let response: Response = reader.read().await.unwrap().unwrap();
     let shoal_client::wire::Reply::Result(found) = response.reply else {
         panic!("expected the workspace: {response:?}");
     };
@@ -223,7 +222,7 @@ async fn internal_requests_on_the_socket_are_answered_as_before() {
         scope: None,
     };
     protocol::write(&mut writer, &request).await.unwrap();
-    let response: protocol::Response = protocol::read_buffered(&mut reader).await.unwrap();
+    let response: protocol::Response = protocol::read(reader.get_mut()).await.unwrap();
     assert_eq!(response.id, 7);
     assert!(matches!(response.body, Body::Status(_)), "{response:?}");
 }

@@ -4,7 +4,7 @@
 //! [`Response`]s with its ID until its result or error.
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{
     errors::{ApiError, Error},
@@ -113,29 +113,51 @@ pub enum Event {
     Unknown,
 }
 
-/// Read one frame, or `None` once the peer closed the connection between frames.
-pub async fn read<T: DeserializeOwned>(
-    stream: &mut (impl AsyncBufRead + Unpin),
-) -> Result<Option<T>, Error> {
-    let mut bytes = Vec::new();
-    stream
-        .take(MAX_FRAME as u64 + 1)
-        .read_until(b'\n', &mut bytes)
-        .await?;
-    if bytes.is_empty() {
-        return Ok(None);
+/// Reads frames, keeping the bytes of an unfinished frame between reads,
+/// so a read cancelled partway, as in `tokio::select!`, loses nothing.
+pub struct FrameReader<R> {
+    reader: R,
+    buffer: Vec<u8>,
+}
+
+impl<R: AsyncRead + Unpin> FrameReader<R> {
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buffer: Vec::new(),
+        }
     }
-    if bytes.len() > MAX_FRAME {
-        return Err(Error::Protocol(format!(
-            "a frame exceeds {MAX_FRAME} bytes"
-        )));
+
+    /// The next frame, or `None` once the peer closed the connection between frames.
+    pub async fn read<T: DeserializeOwned>(&mut self) -> Result<Option<T>, Error> {
+        loop {
+            if let Some(end) = self.buffer.iter().position(|byte| *byte == b'\n') {
+                let frame: Vec<u8> = self.buffer.drain(..=end).collect();
+                return serde_json::from_slice(&frame)
+                    .map(Some)
+                    .map_err(|error| Error::Protocol(error.to_string()));
+            }
+            if self.buffer.len() >= MAX_FRAME {
+                return Err(Error::Protocol(format!(
+                    "a frame exceeds {MAX_FRAME} bytes"
+                )));
+            }
+            let mut chunk = [0u8; 8192];
+            let read = self.reader.read(&mut chunk).await?;
+            if read == 0 {
+                return match self.buffer.is_empty() {
+                    true => Ok(None),
+                    false => Err(Error::Closed),
+                };
+            }
+            self.buffer.extend_from_slice(&chunk[..read]);
+        }
     }
-    if bytes.last() != Some(&b'\n') {
-        return Err(Error::Closed);
+
+    /// The underlying reader, for waiting until the peer hangs up.
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.reader
     }
-    serde_json::from_slice(&bytes)
-        .map(Some)
-        .map_err(|error| Error::Protocol(error.to_string()))
 }
 
 /// Write one frame, refusing one larger than [`MAX_FRAME`] before writing any of it.
