@@ -611,3 +611,20 @@ fn agent_directories_are_absolute_or_under_home() {
         assert!(format!("{error:#}").contains("agent.dirs"), "{error:#}");
     }
 }
+
+#[test]
+fn an_empty_repository_env_remove_keeps_every_variable() {
+    let global =
+        Config::from_toml("[agents.claude]\nenv_remove = ['ANTHROPIC_API_KEY']\n").unwrap();
+    let removed = |repo: &str| {
+        global
+            .effective(&repo::parse(repo).unwrap())
+            .unwrap()
+            .launch("claude")
+            .environment
+            .remove
+            .contains("ANTHROPIC_API_KEY")
+    };
+    assert!(removed(""));
+    assert!(!removed("[agents.claude]\nenv_remove = []\n"));
+}

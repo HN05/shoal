@@ -41,9 +41,9 @@ pub struct AgentToolConfig {
     #[option(named)]
     pub env: BTreeMap<String, String>,
     /// Variables removed from the tool's tracked launches, whether inherited
-    /// or set by `[env]`.
-    #[option(list)]
-    pub env_remove: Vec<String>,
+    /// or set by `[env]`; an empty list removes none of those a lower layer
+    /// names.
+    pub env_remove: Option<Vec<String>>,
     /// Whether Shoal retries a turn an API failure ended, for an agent whose
     /// integration reports failed turns.
     pub retry: Option<bool>,
@@ -159,7 +159,7 @@ pub fn describe(
                 base: settings.and_then(|agent| agent.base.clone()),
                 env: settings.map(|agent| agent.env.clone()).unwrap_or_default(),
                 env_remove: settings
-                    .map(|agent| agent.env_remove.clone())
+                    .and_then(|agent| agent.env_remove.clone())
                     .unwrap_or_default(),
                 retry: settings.and_then(|agent| agent.retry),
                 prompt_cache_minutes: settings.and_then(|agent| agent.prompt_cache_minutes),
