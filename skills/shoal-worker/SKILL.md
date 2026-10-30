@@ -50,7 +50,8 @@ comment you wrote, `pr close`, and the same
 `issue` commands. `open`, `edit` and `comment` take `--attach FILE` for
 screenshots, videos and other files the forge accepts; the body shows images
 and videos and links other files where it references them as `![alt](FILE)`.
-Answer each review finding in its thread: `shoal view` shows every review comment's ID, and
+When the user asks you something on an issue or PR, answer there, not in the
+chat. Answer each review finding in its thread: `shoal view` shows every review comment's ID, and
 `shoal pr reply <comment-id> --body-file F` replies there, while
 `shoal pr resolve <comment-id> --body-file F` replies and then resolves the thread.
 `shoal pr react <reaction> [--comment <comment-id>]` and `shoal issue react` add
@@ -219,8 +220,22 @@ such as a screenshot, as an `Attached file:` path you can read.
 
 ## Questions
 
-When you need the user to decide something, ask a question rather than
-notifying:
+When you need the user to decide something, ask in your chat rather than
+notifying. First run:
+
+```sh
+shoal questions ask --in-chat
+```
+
+Then write the question as your final message, in plain prose: the decision,
+the answer you recommend and why, and the choices when there are several. End
+your turn there. Shoal also puts that message in the user's questions, so the
+user can answer in the chat or from their questions, wherever they are. A
+reply in the chat closes the question; an answer from their questions arrives
+as a message naming it, like any other message.
+
+When `--in-chat` is refused, as for an agent without Shoal's hooks, or when you
+must block on the answer, put the decision on the command line instead:
 
 ```sh
 shoal questions ask "Which database should the cache use?" --recommend SQLite \
@@ -229,7 +244,7 @@ shoal questions ask "Which database should the cache use?" --recommend SQLite \
 
 State the decision in one line and always recommend an answer, so the user can
 reply with a word or a choice number; `--choice` is optional. The answer arrives
-as a message naming the question, like any other message. Continue with other
+as a message naming the question. Continue with other
 work meanwhile, or end your turn to wait. When you cannot continue without the
 answer, add `--wait`: it blocks without a time limit and prints the answer, so run
 it in the background when your tool calls time out. Asking the identical question

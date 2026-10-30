@@ -20,15 +20,20 @@ pub(in crate::cli::commands) async fn run(
             let QuestionAskArgs {
                 question,
                 recommend,
+                in_chat,
                 reason,
                 choices,
                 wait,
                 workspace,
                 resume,
             } = args;
+            if in_chat {
+                return questions::ask_in_chat(&ctx, workspace).await;
+            }
+            // Clap requires the question and recommendation without --in-chat.
             let ask = crate::daemon::questions::Ask {
-                question,
-                recommendation: recommend,
+                question: question.unwrap_or_default(),
+                recommendation: recommend.unwrap_or_default(),
                 reason,
                 choices,
             };

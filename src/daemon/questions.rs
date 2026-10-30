@@ -129,6 +129,18 @@ fn validate_answer(answer: &str) -> Result<()> {
 }
 
 impl Question {
+    /// The question on one line, as listings and notifications show it: a
+    /// question asked in the chat may span lines.
+    pub fn one_line(&self) -> String {
+        self.ask.question.replace(['\n', '\t'], " ")
+    }
+
+    /// The answer the agent recommends; a question asked in the chat has
+    /// none.
+    pub fn recommendation(&self) -> Option<&str> {
+        (!self.in_chat).then_some(self.ask.recommendation.as_str())
+    }
+
     pub fn is_open(&self) -> bool {
         self.answer.is_none() && self.closed_at.is_none()
     }
@@ -169,10 +181,10 @@ impl Question {
             "question {} (answer with shoal questions {}): {}",
             self.id,
             self.id,
-            one_line(&self.ask.question)
+            self.one_line()
         );
-        if !self.in_chat {
-            text.push_str(&format!(" Recommended: {}", self.ask.recommendation));
+        if let Some(recommendation) = self.recommendation() {
+            text.push_str(&format!(" Recommended: {recommendation}"));
         }
         shorten(text, crate::validate::MAX_MESSAGE_LEN)
     }
@@ -184,7 +196,7 @@ impl Question {
             format!(
                 "withdrew question {} (no answer needed): {}",
                 self.id,
-                one_line(&self.ask.question)
+                self.one_line()
             ),
             crate::validate::MAX_MESSAGE_LEN,
         )
@@ -203,12 +215,6 @@ impl Question {
             self.id, self.ask.question
         )
     }
-}
-
-/// `text` on one line, as notifications show it: a question asked in the
-/// chat may span lines.
-fn one_line(text: &str) -> String {
-    text.replace(['\n', '\t'], " ")
 }
 
 impl Ask {

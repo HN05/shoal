@@ -297,7 +297,7 @@ impl Item {
     fn text(&self) -> String {
         let title = |w: &Workspace| w.links.issue_title.clone().unwrap_or_default();
         match self {
-            Self::Question { question } => question.ask.question.clone(),
+            Self::Question { question } => question.one_line(),
             Self::Approval { request } => super::approvals::about(request),
             Self::NeedsInput { workspace } => title(workspace),
             Self::Failed { workspace } => workspace
@@ -321,7 +321,10 @@ impl Item {
 
     fn note(&self) -> String {
         match self {
-            Self::Question { question } => format!("recommends {}", question.ask.recommendation),
+            Self::Question { question } => question
+                .recommendation()
+                .map(|recommendation| format!("recommends {recommendation}"))
+                .unwrap_or_default(),
             Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
             _ => String::new(),
         }

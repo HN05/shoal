@@ -8,14 +8,15 @@ use std::time::Duration;
 use anyhow::Result;
 
 use crate::{
-    cli::{agents::PromptWake, client, terminal::PromptSession},
+    cli::{
+        agents::PromptWake,
+        client,
+        terminal::{PromptSession, WAKE_PROMPT},
+    },
     model::ExecutionPlan,
     paths::Paths,
     protocol::AgentMethod,
 };
-
-/// The prompt that starts the turn; the hook supplies the updates.
-const PROMPT: &str = "Shoal: new messages or activity on this workspace's issues and PRs.";
 
 /// Prompts the agent until dropped, when the agent's process ends.
 pub(super) struct Waker(tokio::task::JoinHandle<()>);
@@ -58,7 +59,7 @@ pub(super) fn start(paths: &Paths, plan: &ExecutionPlan, wake: Wake) -> Waker {
     Waker(tokio::spawn(async move {
         prompt_when_due(
             |due| await_wake(&paths, &workspace, due, interrupted.clone()),
-            || wake.session.submit(PROMPT),
+            || wake.session.submit(WAKE_PROMPT),
         )
         .await
     }))

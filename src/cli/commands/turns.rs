@@ -22,9 +22,6 @@ use crate::{
     state::AgentState,
 };
 
-/// What `shoal resume` submits to an agent whose turn an interrupt ended.
-const CONTINUE_PROMPT: &str = "Continue where you left off.";
-
 /// `shoal stop --interrupt`: cancel the running turns of the agents in the
 /// `selected` workspaces, leaving agents without one alone.
 pub(super) async fn interrupt(ctx: &Context, selected: Vec<String>) -> Result<i32> {
@@ -124,7 +121,7 @@ impl Continuation {
     pub(super) async fn submit(self, ctx: &Context) -> Result<i32> {
         let mut report = ui::Report::new("continued", "continue");
         for target in &self.0 {
-            match terminal::submit_prompt(&target.place, CONTINUE_PROMPT).await {
+            match terminal::submit_prompt(&target.place, terminal::CONTINUE_PROMPT).await {
                 Ok(()) => report.done(
                     ctx,
                     &format!("Continued the turn of {}", target.described()),

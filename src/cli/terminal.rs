@@ -40,8 +40,10 @@ pub(in crate::cli) use launch::{
     restore_queued, run_agent, run_in_background, start_add, start_chat, start_queued,
 };
 pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_chat, relabel_places};
-pub(crate) use prompts::PromptSession;
-pub(in crate::cli) use prompts::{agents_can_be_prompted, send_keys, submit_prompt};
+pub(in crate::cli) use prompts::{
+    CONTINUE_PROMPT, agents_can_be_prompted, send_keys, submit_prompt, submitted_by_shoal,
+};
+pub(crate) use prompts::{PromptSession, WAKE_PROMPT};
 pub(crate) use sessions::Attachment;
 pub(in crate::cli) use sessions::{
     Owner, OwnerKind, Recorded, Session, attach, open_session_owners, session_owners, sessions,

@@ -141,10 +141,15 @@ pub enum MessagesCommand {
 #[derive(Debug, Args)]
 pub struct QuestionAskArgs {
     /// The decision, in one line, such as "Which database should the cache use?"
-    pub question: String,
+    #[arg(required_unless_present = "in_chat")]
+    pub question: Option<String>,
     /// The answer you recommend.
-    #[arg(long)]
-    pub recommend: String,
+    #[arg(long, required_unless_present = "in_chat")]
+    pub recommend: Option<String>,
+    /// Ask in your chat instead: your turn's final message becomes the
+    /// question, and a reply in the chat closes it.
+    #[arg(long, conflicts_with_all = ["question", "recommend", "reason", "choices", "wait", "resume"])]
+    pub in_chat: bool,
     /// Why you recommend it.
     #[arg(long)]
     pub reason: Option<String>,

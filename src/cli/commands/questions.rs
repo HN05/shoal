@@ -7,6 +7,7 @@ use crate::{
     cli::{
         args::coordination::QuestionsArgs,
         client::{self, request},
+        commands::messages::hanging_indent,
         context::Context,
         installed::{Executable, arguments, replace_option},
         output::{Palette, Style},
@@ -74,6 +75,17 @@ pub(super) async fn ask(
         question
     };
     print_answer(ctx, workspace, &question).await?;
+    Ok(0)
+}
+
+/// Mark the caller's agent's turn as asking the user in its chat.
+pub(super) async fn ask_in_chat(ctx: &Context, workspace: Option<String>) -> Result<i32> {
+    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
+    request::<()>(&ctx.paths, QuestionMethod::AskInChat { workspace }).await?;
+    ctx.emit(
+        "Ask your question as your final message and end your turn; it also reaches the user's questions.",
+        serde_json::json!({ "in_chat": true }),
+    )?;
     Ok(0)
 }
 
@@ -184,9 +196,12 @@ fn picker_rows(questions: &[Question]) -> Entries {
             [
                 (question.id.to_string(), Some(Style::Muted)),
                 (question.workspace.clone(), None),
-                (question.ask.question.clone(), None),
+                (question.one_line(), None),
                 (
-                    format!("recommends {}", question.ask.recommendation),
+                    question
+                        .recommendation()
+                        .map(|recommendation| format!("recommends {recommendation}"))
+                        .unwrap_or_default(),
                     Some(Style::Muted),
                 ),
             ]
@@ -277,14 +292,18 @@ enum QuestionAction {
     Answer(String),
 }
 
-/// Enter alone accepts the recommendation the prompt shows; Ctrl-C or end
-/// of input cancels.
+/// Enter alone accepts the recommendation the prompt shows, and cancels
+/// without one; Ctrl-C or end of input cancels.
 fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAction> {
     eprintln!("{}", details(question, Palette::stderr(ctx.json)));
-    let prompt = format!("Answer [{}]", question.ask.recommendation);
+    let prompt = match question.recommendation() {
+        Some(recommendation) => format!("Answer [{recommendation}]"),
+        None => "Answer".to_owned(),
+    };
     let response = ui::read_input(ctx, &prompt)?.ok_or(ui::SelectionCanceled)?;
     Ok(match response.as_str() {
-        "" => QuestionAction::Recommend,
+        "" if question.recommendation().is_some() => QuestionAction::Recommend,
+        "" => return Err(ui::SelectionCanceled.into()),
         _ => QuestionAction::Answer(response),
     })
 }
@@ -293,9 +312,14 @@ fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAc
 /// the decision, the recommendation and the choices.
 pub(in crate::cli) fn summary(question: &Question) -> String {
     let mut line = format!(
-        "{}  {}: {}  Recommended: {}",
-        question.id, question.workspace, question.ask.question, question.ask.recommendation
+        "{}  {}: {}",
+        question.id,
+        question.workspace,
+        question.one_line()
     );
+    if let Some(recommendation) = question.recommendation() {
+        line.push_str(&format!("  Recommended: {recommendation}"));
+    }
     if !question.ask.choices.is_empty() {
         let choices: Vec<_> = (1..)
             .zip(&question.ask.choices)
@@ -309,7 +333,19 @@ pub(in crate::cli) fn summary(question: &Question) -> String {
 /// The question's number and text, then labeled rows with its status once
 /// settled, workspace, recommendation, reason, numbered choices and answer.
 fn details(question: &Question, palette: Palette) -> String {
-    let heading = format!("Question {}: {}", question.id, question.ask.question);
+    // A question asked in the chat is the agent's whole message, which
+    // follows the heading.
+    let (heading, message) = if question.in_chat {
+        (
+            format!("Question {}, asked in the chat", question.id),
+            Some(&question.ask.question),
+        )
+    } else {
+        (
+            format!("Question {}: {}", question.id, question.ask.question),
+            None,
+        )
+    };
     let mut rows: Vec<[Cell; 2]> = Vec::new();
     let mut row = |label: &str, value: &str| {
         rows.push([
@@ -321,7 +357,9 @@ fn details(question: &Question, palette: Palette) -> String {
         row("Status", status(question));
     }
     row("Workspace", &question.workspace);
-    row("Recommended", &question.ask.recommendation);
+    if let Some(recommendation) = question.recommendation() {
+        row("Recommended", recommendation);
+    }
     if let Some(reason) = &question.ask.reason {
         row("Reason", reason);
     }
@@ -333,6 +371,12 @@ fn details(question: &Question, palette: Palette) -> String {
         row("Answer", answer);
     }
     let mut lines = vec![palette.paint(Style::Heading, heading)];
+    lines.extend(
+        message
+            .into_iter()
+            .flat_map(|message| message.lines())
+            .map(|line| format!("  {line}").trim_end().to_owned()),
+    );
     lines.extend(
         ui::aligned(rows, palette)
             .into_iter()
@@ -359,9 +403,11 @@ fn render(question: &Question, palette: Palette) -> String {
         palette.paint(Style::Heading, question.id),
         palette.paint(Style::Muted, format_args!("[{}]", status(question))),
         question.workspace,
-        question.ask.question
+        hanging_indent(&question.ask.question, "  ")
     )];
-    lines.push(format!("  Recommended: {}", question.ask.recommendation));
+    if let Some(recommendation) = question.recommendation() {
+        lines.push(format!("  Recommended: {recommendation}"));
+    }
     if let Some(reason) = &question.ask.reason {
         lines.push(format!("  Reason: {reason}"));
     }
@@ -373,3 +419,6 @@ fn render(question: &Question, palette: Palette) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests;

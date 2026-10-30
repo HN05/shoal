@@ -14,12 +14,13 @@ use crate::{
         context::Context,
         installed::{Executable, arguments, replace_option, with_flag},
         output::{Palette, Style},
+        terminal,
         ui::{self, Fallback},
     },
     daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
     forge::items::attach::Attachment,
     model::Workspace,
-    protocol::{AgentMethod, ChatMethod, Method},
+    protocol::{AgentMethod, ChatMethod, Method, QuestionMethod},
     repository::Selector,
 };
 
@@ -201,23 +202,58 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
 /// subagent's tool calls run the same hooks, but its context goes back to the
 /// agent only as its report, so the agent's own next call delivers them.
 pub(super) async fn hook(ctx: &Context) -> Result<i32> {
-    let mut input = String::new();
-    // Hook input is optional context; a terminal, closed or unreadable stdin
-    // still delivers.
-    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
-        let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
-    }
+    let input = hook_input();
     if from_subagent(&input) {
         return Ok(0);
     }
-    if let Err(error) = deliver_to_hook(ctx, &input).await {
+    let deadline = tokio::time::Instant::now() + crate::agent::hooks::MESSAGE_DAEMON_LIMIT;
+    if user_prompt(&input)
+        && let Err(error) = report_reply(ctx, deadline).await
+    {
+        eprintln!("shoal: the reply in the chat was not reported: {error:#}");
+    }
+    if let Err(error) = deliver_to_hook(ctx, &input, deadline).await {
         eprintln!("shoal: agent messages unavailable: {error:#}");
     }
     Ok(0)
 }
 
-async fn deliver_to_hook(ctx: &Context, input: &str) -> Result<()> {
-    let deadline = tokio::time::Instant::now() + crate::agent::hooks::MESSAGE_DAEMON_LIMIT;
+/// The event the agent passes its hook on stdin. It is optional context:
+/// a terminal, closed or unreadable stdin gives none and still delivers.
+fn hook_input() -> String {
+    let mut input = String::new();
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut input);
+    }
+    input
+}
+
+/// Whether hook `input` is a prompt the user submitted, rather than one
+/// Shoal submitted for them.
+fn user_prompt(input: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(input).is_ok_and(|input| {
+        input["hook_event_name"] == "UserPromptSubmit"
+            && input["prompt"]
+                .as_str()
+                .is_some_and(|prompt| !terminal::submitted_by_shoal(prompt))
+    })
+}
+
+/// Tell the daemon that the user replied in the agent's chat, which
+/// answers the questions the workspace's agents asked there.
+async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<()> {
+    let reply = async {
+        let Inbox::Workspace(workspace) = Inbox::current(ctx, Fallback::OwnWorkspace).await? else {
+            return Ok(());
+        };
+        request::<()>(&ctx.paths, QuestionMethod::RepliedInChat { workspace }).await
+    };
+    tokio::time::timeout_at(deadline, reply)
+        .await
+        .context("the daemon did not answer in time")?
+}
+
+async fn deliver_to_hook(ctx: &Context, input: &str, deadline: tokio::time::Instant) -> Result<()> {
     let (inbox, updates) = tokio::time::timeout_at(deadline, hook_updates(ctx))
         .await
         .context("the daemon did not answer in time")??;

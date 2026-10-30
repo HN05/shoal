@@ -1378,6 +1378,18 @@ what no longer matters. Withdrawing completion does not reopen them, and a close
 question keeps its number until the workspace goes, so a late answer is refused
 instead of reaching a later question.
 
+An agent asks in its chat with `questions ask --in-chat`, and the question
+reaches the user's questions too. A user talking with the agent reads the question
+as the agent wrote it, while a `questions ask` command line in the chat is hard to
+read; a user who is away gets it where they look. Shoal cannot tell from a host
+whether the user is there: zmx counts its own short-lived probes as clients, and
+an attach from a connection left open counts while the user is away, so routing
+questions by attachment left them unanswered for hours. Agents are therefore not
+told about attachment, which only orders overload stops. The question is the
+turn's final message, which the `Stop` hook passes, so the agent writes it once.
+A prompt the user submits in the chat closes it, since the user answered there,
+while one Shoal submits does not.
+
 Questions and approval requests are named by the smallest number no stored one
 holds, because the user types them; their records keep a separate internal key
 that is never shown. A wait follows its question's number and text, so a later

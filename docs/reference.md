@@ -3721,6 +3721,7 @@ removed workspace that was split from one of those, but not use `--all`.
 
 ```sh
 shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
+shoal questions ask --in-chat        # The turn's final message in the chat is the question
 shoal questions [--workspace W]      # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
 shoal questions <number>             # Inspect and choose an answer
@@ -3743,6 +3744,15 @@ prompt. Enter accepts the recommendation shown in brackets; type a choice number
 answer text for another answer, or press Ctrl-C to leave. The answer is refused if another question
 took the number meanwhile. With JSON or redirected input or output, listing and inspection
 print records without prompting.
+`--in-chat` lets a tracked agent with Shoal's hooks, Claude Code or Codex, ask in its
+chat, where the question reads as the agent wrote it; other agents are refused. It
+marks the agent's current turn, which a daemon restart keeps, and when the turn ends the
+`Stop` hook passes the turn's final message, which becomes an open question of up to
+8 KiB without a recommendation. Answering it in your questions reaches the agent as
+a message like any answer; a prompt you submit in the agent's chat, rather than one
+Shoal submits to wake or continue it, closes the workspace's open chat questions as
+withdrawn and takes back their unread notifications. A turn without a final message,
+as from a hook that does not pass one, asks you to read the question in the chat.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
 also delivers its message; it survives daemon restarts, waiting up to two minutes
 for a daemon that went away to return and know the caller's scope again, or 10

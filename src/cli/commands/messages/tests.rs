@@ -152,3 +152,24 @@ fn only_a_subagent_call_is_left_undelivered() {
     assert!(!from_subagent(r#"{"hook_event_name":"PostToolUse"}"#));
     assert!(!from_subagent(""));
 }
+
+#[test]
+fn only_prompts_the_user_submits_reply_in_the_chat() {
+    let prompt = |text: &str| {
+        user_prompt(
+            &serde_json::json!({"hook_event_name": "UserPromptSubmit", "prompt": text}).to_string(),
+        )
+    };
+    assert!(prompt("Use SQLite."));
+    assert!(!prompt(crate::cli::terminal::WAKE_PROMPT));
+    assert!(!prompt(crate::cli::terminal::CONTINUE_PROMPT));
+    // A wake typed after a draft the user left in the input.
+    assert!(!prompt(&format!(
+        "half a thought{}\n",
+        crate::cli::terminal::WAKE_PROMPT
+    )));
+    assert!(!user_prompt(
+        r#"{"hook_event_name":"PostToolUse","tool_name":"Bash"}"#
+    ));
+    assert!(!user_prompt(""));
+}
