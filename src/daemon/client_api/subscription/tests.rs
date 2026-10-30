@@ -329,6 +329,30 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_daemon_quiescing_for_an_update_closes_a_subscription_instead_of_writing() {
+        use shoal_client::wire::{self, HandshakeReply, Response};
+        let daemon = TestDaemon::start().await;
+        let workspace = daemon.workspace("kept").await;
+        let (mut reader, mut writer) = daemon.raw().await;
+        let hello = serde_json::json!({"client_api": {"version": shoal_client::VERSION}});
+        wire::write(&mut writer, &hello).await.unwrap();
+        let _: HandshakeReply = wire::read(&mut reader).await.unwrap().unwrap();
+        let subscribe = serde_json::json!({"id": 1, "method": "subscribe", "params": {"topics": ["workspaces"]}});
+        wire::write(&mut writer, &subscribe).await.unwrap();
+        let _snapshot: Response = wire::read(&mut reader).await.unwrap().unwrap();
+        let _quiesced = daemon.manager.gates.quiesce().await;
+        daemon
+            .manager
+            .acquire_hold(&workspace.id, "quay".into(), None)
+            .await
+            .unwrap();
+        let next = tokio::time::timeout(HANG, wire::read::<Response>(&mut reader))
+            .await
+            .unwrap();
+        assert!(matches!(next, Ok(None)), "{next:?}");
+    }
+
+    #[tokio::test]
     async fn after_a_restart_the_subscription_resyncs() {
         let mut daemon = TestDaemon::start().await;
         let workspace = daemon.workspace("kept").await;

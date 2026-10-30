@@ -66,8 +66,7 @@ pub(super) async fn serve(
         if let Call::Subscribe(subscribe) = call {
             return subscription::run(session, id, subscribe, reader, writer).await;
         }
-        let result = session.answer(call).await;
-        respond(&mut writer, id, result).await?;
+        session.answer(&mut writer, id, call).await?;
     }
     Ok(())
 }
@@ -98,16 +97,22 @@ fn request(frame: serde_json::Value) -> Result<Request, (u64, ApiError)> {
 }
 
 impl Session {
-    /// Answer `call` within a request slot, under an operation guard so a
-    /// daemon update waits for it.
-    async fn answer(&self, call: Call) -> Result<serde_json::Value, ApiError> {
-        let _slot = self
+    /// Answer request `id`, `call`, within a request slot, holding an
+    /// operation guard until its reply is written, so a daemon update
+    /// cannot cut the reply off after the operation took effect.
+    async fn answer(&self, writer: &mut OwnedWriteHalf, id: u64, call: Call) -> Result<()> {
+        let slot = self
             .server
             .capacity
             .request(format!("client API {}", call.name()))
-            .map_err(|error| ApiError::new(ErrorCode::Busy, format!("{error:#}")))?;
+            .map_err(|error| ApiError::new(ErrorCode::Busy, format!("{error:#}")));
+        let _slot = match slot {
+            Ok(slot) => slot,
+            Err(error) => return respond(writer, id, Err(error)).await,
+        };
         let _operation = self.server.manager.gates.owned_operation().await;
-        calls::answer(self, call).await
+        let result = calls::answer(self, call).await;
+        respond(writer, id, result).await
     }
 }
 

@@ -1,6 +1,7 @@
 //! A subscription: its snapshot in pages, then each record that changed or
-//! was removed, until the client hangs up. It holds no operation guard, so
-//! a daemon restart closes it and the client subscribes again.
+//! was removed, until the client hangs up. It holds an operation guard only
+//! while it writes, so a daemon restart closes it between writes and the
+//! client subscribes again.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -39,7 +40,12 @@ pub(super) async fn run(
             return Ok(wire::write(&mut writer, &Response { id, reply }).await?);
         }
     };
-    send_snapshot(&mut writer, id, &sent).await?;
+    {
+        let Some(_operation) = manager.gates.try_operation() else {
+            return Ok(());
+        };
+        send_snapshot(&mut writer, id, &sent).await?;
+    }
     loop {
         tokio::select! {
             result = stored.changed() => result?,
@@ -56,6 +62,11 @@ pub(super) async fn run(
                 log!("client API subscription: {error:#}");
                 continue;
             }
+        };
+        // A restarting daemon closes the subscription instead, and the
+        // client takes a new snapshot from its replacement.
+        let Some(_operation) = manager.gates.try_operation() else {
+            return Ok(());
         };
         for event in changes(&sent, &current) {
             send(&mut writer, id, event).await?;
