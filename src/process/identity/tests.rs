@@ -762,6 +762,29 @@ async fn refusal_after_an_empty_read_waits_for_the_published_environment() {
     child.kill().await.unwrap();
 }
 
+#[test]
+fn a_second_read_after_the_process_exited_is_not_its_environment() -> Result<()> {
+    let mut child = std::process::Command::new("sleep").arg("30").spawn()?;
+    let identity = capture(child.id())?.context("child")?;
+    let mut reads = 0;
+    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    let visibility = visibility_with(&identity, deadline, |_| {
+        reads += 1;
+        if reads == 1 {
+            return Ok(Vec::new());
+        }
+        // The process exits before the second read, which then reads
+        // whatever process took over its PID.
+        child.kill()?;
+        child.wait()?;
+        Ok(vec![b"SHOAL_EXECUTION_ID=replacement".to_vec()])
+    });
+    let _ = child.kill();
+    let _ = child.wait();
+    ensure!(matches!(visibility?, Visibility::Gone));
+    Ok(())
+}
+
 #[tokio::test]
 async fn settled_empty_environment_is_readable_and_has_no_execution_marker() {
     let mut child = tokio::process::Command::new("cat")

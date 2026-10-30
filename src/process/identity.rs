@@ -821,14 +821,20 @@ fn visibility_with(
             }
             Image::Loading => return Ok(Visibility::Unreadable),
             // The image may have settled after the empty read.
-            Image::Settled => match environment(identity.pid) {
-                Ok(environment) => return Ok(Visibility::Environment(environment)),
-                Err(_) if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(1));
+            Image::Settled => {
+                let read = environment(identity.pid);
+                // The PID may have gone to another process since the read.
+                if !alive(identity)? {
+                    return Ok(Visibility::Gone);
                 }
-                _ if alive(identity)? => return Ok(Visibility::Unreadable),
-                _ => return Ok(Visibility::Gone),
-            },
+                match read {
+                    Ok(environment) => return Ok(Visibility::Environment(environment)),
+                    Err(_) if REFUSED_WHILE_LOADING && std::time::Instant::now() < deadline => {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    Err(_) => return Ok(Visibility::Unreadable),
+                }
+            }
         }
     }
 }
