@@ -1,6 +1,6 @@
 //! The comments of an issue or PR: finding one among its discussion and
 //! inline comments, and replacing the body of one the acting login wrote.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -83,7 +83,8 @@ impl ForgeRepo {
         let found = self
             .find_comment(account, kind, number, edit.comment)
             .await?;
-        self.ensure_own(account, &found, edit.comment).await?;
+        self.ensure_own(account, kind, number, &found, edit.comment)
+            .await?;
         let request = self
             .kind
             .edit_comment(self, kind, number, found.subject, &edit.body)?
@@ -103,12 +104,17 @@ impl ForgeRepo {
 
     /// Refuse a comment that the login of `account` did not write, which
     /// an account with the forge's admin rights could otherwise change.
-    async fn ensure_own(&self, account: &Account, found: &Found, comment: u64) -> Result<()> {
-        let login = (self.kind.own_login(self, account).await?)
-            .context("editing a comment needs a login on the forge")?;
+    async fn ensure_own(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        found: &Found,
+        comment: u64,
+    ) -> Result<()> {
         ensure!(
-            found.author.eq_ignore_ascii_case(&login),
-            "comment {comment} was written by {}, not by {login}, the login Shoal acts as",
+            self.kind.wrote(self, account, kind, number, found).await?,
+            "comment {comment} was written by {}, not by the login Shoal acts as",
             found.author
         );
         Ok(())

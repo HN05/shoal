@@ -338,3 +338,14 @@ fn comment_edits_replace_the_raw_content_of_inline_and_issue_comments() {
         "repositories/workspace/repo/issues/3/comments/41"
     );
 }
+
+#[test]
+fn comment_authors_are_the_login_by_uuid_not_nickname() {
+    let user = json!({"uuid": "{1}", "nickname": "sam"});
+    let namesake = json!({"uuid": "{2}", "nickname": "sam"});
+    assert!(same_account(&user, &json!({"uuid": "{1}", "nickname": "sam"})).unwrap());
+    assert!(!same_account(&user, &namesake).unwrap());
+    // A deleted account's comment names no user.
+    assert!(!same_account(&user, &Value::Null).unwrap());
+    assert!(same_account(&json!({"nickname": "sam"}), &namesake).is_err());
+}

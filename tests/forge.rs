@@ -1287,7 +1287,8 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
     // anything is sent.
     let others = edit("1");
     assert!(
-        String::from_utf8_lossy(&others.stderr).contains("comment 1 was written by ann, not by me"),
+        String::from_utf8_lossy(&others.stderr)
+            .contains("comment 1 was written by ann, not by the login Shoal acts as"),
         "{others:?}"
     );
     let missing = edit("99");

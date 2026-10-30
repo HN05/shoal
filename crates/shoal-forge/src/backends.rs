@@ -28,6 +28,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
+        comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -497,6 +498,20 @@ pub(crate) trait Backend {
     /// The login `account` signs in to the forge as; none when it reads
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
+
+    /// Whether the login of `account` wrote `comment` of item `number`.
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _kind: ItemKind,
+        _number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        let login = (self.own_login(repo, account).await?)
+            .context("editing a comment needs a login on the forge")?;
+        Ok(comment.author.eq_ignore_ascii_case(&login))
+    }
 
     /// The content [`Self::listed_reaction`] reports for a reaction the
     /// forge names `name`; by default the name itself.
@@ -1190,6 +1205,17 @@ impl Backend for ForgeKind {
 
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
         dispatch!(self, backend => backend.own_login(repo, account).await)
+    }
+
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        dispatch!(self, backend => backend.wrote(repo, account, kind, number, comment).await)
     }
 
     fn reaction_content(&self, name: &str) -> String {

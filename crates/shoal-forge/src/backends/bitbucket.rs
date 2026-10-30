@@ -23,6 +23,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder},
+        comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
@@ -571,13 +572,24 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 
-    /// The nickname comments name their authors by.
-    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+    async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<String>> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
+    /// Nicknames are not unique, so the comment's account is compared with
+    /// the login's by UUID.
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        let endpoint = comment_endpoint(repo, kind, number, comment.subject)?;
+        let comment = repo.send(account, &Request::get(endpoint)).await?;
         let user = repo.send(account, &Request::get("user".into())).await?;
-        text(&user["nickname"])
-            .or_else(|| text(&user["display_name"]))
-            .context("Bitbucket did not report your nickname")
-            .map(Some)
+        same_account(&user, &comment["user"])
     }
 
     fn add_reaction(&self, _endpoint: String, _content: &str) -> Result<Request> {
@@ -722,13 +734,9 @@ impl Backend for Bitbucket {
         subject: Subject,
         body: &str,
     ) -> Result<Request> {
-        let (Subject::Comment(id) | Subject::ReviewComment(id)) = subject else {
-            bail!("only a comment can be edited");
-        };
-        let endpoint = format!("{}/comments/{id}", repo.item_endpoint(kind, number));
         Ok(Request::new(
             HttpMethod::Put,
-            endpoint,
+            comment_endpoint(repo, kind, number, subject)?,
             Some(json!({ "content": { "raw": body } })),
         ))
     }
@@ -1085,6 +1093,29 @@ fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment
         resolved: Some(resolved),
         reactions: Vec::new(),
     }
+}
+
+/// The endpoint of the comment `subject` of item `number`, inline or not.
+fn comment_endpoint(
+    repo: &ForgeRepo,
+    kind: ItemKind,
+    number: u64,
+    subject: Subject,
+) -> Result<String> {
+    let (Subject::Comment(id) | Subject::ReviewComment(id)) = subject else {
+        bail!("not a comment");
+    };
+    Ok(format!(
+        "{}/comments/{id}",
+        repo.item_endpoint(kind, number)
+    ))
+}
+
+/// Whether `author`, as a comment names its user, is the account `user`
+/// describes; a deleted account's comment has no user.
+fn same_account(user: &Value, author: &Value) -> Result<bool> {
+    let own = text(&user["uuid"]).context("Bitbucket did not report your account's UUID")?;
+    Ok(text(&author["uuid"]).is_some_and(|uuid| uuid == own))
 }
 
 /// A deleted account has no user.
