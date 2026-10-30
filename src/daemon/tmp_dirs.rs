@@ -19,8 +19,7 @@ impl Manager {
         let Some(layout) = Layout::of(&repo) else {
             return Ok(());
         };
-        let id = id.to_owned();
-        tokio::task::spawn_blocking(move || layout.remove_one(&id)).await?
+        remove(layout, vec![id.to_owned()]).await
     }
 
     /// Delete every temporary directory that belongs to no workspace or chat
@@ -43,28 +42,41 @@ impl Manager {
         };
         // Listed before the records are read, since a directory is only
         // created once its record exists.
-        let listed = {
-            let layout = layout.clone();
-            tokio::task::spawn_blocking(move || layout.list()).await??
-        };
+        let listed = list(layout.clone()).await?;
         if listed.is_empty() {
             return Ok(());
         }
-        let repository_id = repo.id.clone();
-        let owners = self
-            .store
-            .run(move |db| recorded_ids(db, &repository_id))
-            .await?;
+        let recorded = self.recorded_ids(&repo.id).await?;
         let orphans: Vec<_> = listed
             .into_iter()
-            .filter(|id| !owners.contains(id))
+            .filter(|id| !recorded.contains(id))
             .collect();
-        for id in &orphans {
-            log!("deleting the orphaned temporary directory {id}");
+        if !orphans.is_empty() {
+            log!(
+                "deleting orphaned temporary directories {}",
+                orphans.join(", ")
+            );
         }
-        tokio::task::spawn_blocking(move || orphans.iter().try_for_each(|id| layout.remove_one(id)))
-            .await?
+        remove(layout, orphans).await
     }
+
+    /// The IDs of the repository's workspaces and chats.
+    async fn recorded_ids(&self, repository_id: &str) -> Result<BTreeSet<String>> {
+        let repository_id = repository_id.to_owned();
+        self.store
+            .run(move |db| recorded_ids(db, &repository_id))
+            .await
+    }
+}
+
+/// The IDs whose temporary directories `layout` holds.
+async fn list(layout: Layout) -> Result<Vec<String>> {
+    tokio::task::spawn_blocking(move || layout.list()).await?
+}
+
+/// Delete the temporary directories of `ids` in `layout`.
+async fn remove(layout: Layout, ids: Vec<String>) -> Result<()> {
+    tokio::task::spawn_blocking(move || ids.iter().try_for_each(|id| layout.remove_one(id))).await?
 }
 
 /// The IDs of the repository's workspaces and chats.
