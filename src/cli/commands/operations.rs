@@ -29,6 +29,7 @@ impl std::fmt::Display for Failed {
         match &self.0 {
             Failure::SetupFailed { message }
             | Failure::HookFailed { message }
+            | Failure::PushFailed { message }
             | Failure::Refused { message, .. }
             | Failure::Failed { message } => f.write_str(message),
             Failure::SetupUnverified { exit_code } => SetupVerificationFailure {

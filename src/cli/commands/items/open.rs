@@ -1,10 +1,16 @@
 //! `shoal pr open` and `shoal issue open`: push and open or find a PR, or open
 //! an issue, and report what the repository's approval rules made of it.
-use anyhow::{Result, ensure};
+use anyhow::Result;
 
 use super::{content::read_content, context::select_repo_context};
 use crate::{
-    cli::{args::changes::OpenPullArgs, client, context::Context, ui},
+    cli::{
+        args::changes::OpenPullArgs,
+        client,
+        commands::operations::{self, Failed, Reporter},
+        context::Context,
+        ui,
+    },
     daemon::links::proposals::{OpenOutcome, Proposed},
     forge::items::{
         create::{NewIssue, PullOptions},
@@ -12,7 +18,10 @@ use crate::{
     },
     git,
     model::Workspace,
-    protocol::{ItemMethod, WorkspaceMethod},
+    protocol::{
+        ItemMethod, WorkspaceMethod,
+        operations::{Failure, OperationSpec, Step},
+    },
 };
 
 pub(super) async fn open_pr(
@@ -43,12 +52,23 @@ pub(super) async fn open_pr(
     Ok(0)
 }
 
-/// Verify the worktree before anything leaves it, push without forcing, then
-/// let the daemon find or open the PR and link it.
+/// Push the workspace's branch and open or find its PR, in an operation
+/// the daemon starts.
 pub(super) async fn publish(
     ctx: &Context,
     workspace: String,
     options: PullOptions,
+) -> Result<OpenOutcome> {
+    operations::run(ctx, OperationSpec::OpenPull { workspace, options }).await
+}
+
+/// In an operation's worker: verify the worktree before anything leaves it,
+/// push without forcing, then let the daemon find or open the PR and link it.
+pub(in crate::cli::commands) async fn push_and_open(
+    ctx: &Context,
+    workspace: String,
+    options: PullOptions,
+    reporter: &Reporter<'_>,
 ) -> Result<OpenOutcome> {
     let workspace: Workspace = client::request(
         &ctx.paths,
@@ -58,7 +78,9 @@ pub(super) async fn publish(
         },
     )
     .await?;
+    reporter.step(Step::PushStarted).await?;
     push(ctx, &workspace).await?;
+    reporter.step(Step::Pushed).await?;
     client::request(
         &ctx.paths,
         ItemMethod::OpenPull {
@@ -79,11 +101,13 @@ async fn push(ctx: &Context, workspace: &Workspace) -> Result<()> {
         git::push_command(&remote, &workspace.branch),
     )
     .await?;
-    ensure!(
-        code == 0,
-        "git push of {} to {remote} failed (exit {code})",
-        workspace.branch
-    );
+    if code != 0 {
+        let message = format!(
+            "git push of {} to {remote} failed (exit {code})",
+            workspace.branch
+        );
+        return Err(Failed(Failure::PushFailed { message }).into());
+    }
     Ok(())
 }
 

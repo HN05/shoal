@@ -2238,8 +2238,8 @@ ignored file is copied, build caches included; its gitignore-style patterns limi
 the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it further.
 
 `setup.command` runs through the tracked execution wrapper with workspace scope and
-your CLI environment. Setup and the post-setup hook run in a process the daemon
-starts: the command shows their output, and interrupting the command interrupts
+your CLI environment. Setup and the post-setup hook, like the push of `shoal pr open`,
+run in a process the daemon starts: the command shows their output, and interrupting the command interrupts
 them, while they go on when the command ends otherwise, such as when its terminal
 closes. `shoal add` waits for setup before entering the worktree or launching an
 agent; the workspace stays `preparing` until it exits 0 with no

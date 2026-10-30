@@ -3,7 +3,11 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{ErrorCode, Lifetime};
-use crate::model::{QueueEntry, Workspace};
+use crate::{
+    daemon::links::proposals::OpenOutcome,
+    forge::items::create::PullOptions,
+    model::{QueueEntry, Workspace},
+};
 
 /// Requests about operations: work the daemon starts in a worker process of
 /// its own, so it continues when its caller goes, and whose progress callers
@@ -61,6 +65,11 @@ pub enum OperationSpec {
         #[serde(flatten)]
         steps: Preparation,
     },
+    /// Push the workspace's branch, then open its PR or link the open one.
+    OpenPull {
+        workspace: String,
+        options: PullOptions,
+    },
 }
 
 /// What preparing a workspace runs: its setup when `setup`, then its
@@ -86,7 +95,7 @@ impl OperationSpec {
     /// The workspace the operation works in.
     pub fn workspace_mut(&mut self) -> &mut String {
         match self {
-            Self::Prepare { workspace, .. } => workspace,
+            Self::Prepare { workspace, .. } | Self::OpenPull { workspace, .. } => workspace,
         }
     }
 }
@@ -97,6 +106,8 @@ crate::state::states!(Step {
     Ready => "ready",
     PrLinked => "pr_linked",
     AgentQueued => "agent_queued",
+    PushStarted => "push_started",
+    Pushed => "pushed",
 });
 
 crate::state::states!(Stream {
@@ -147,6 +158,7 @@ pub enum Ended {
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
     Prepared(Prepared),
+    Opened(OpenOutcome),
 }
 
 /// A prepared workspace, ready, and the agent queued in it.
@@ -156,14 +168,23 @@ pub struct Prepared {
     pub agent: Option<QueueEntry>,
 }
 
-impl TryFrom<Outcome> for Prepared {
-    type Error = anyhow::Error;
+// What each kind of operation returns, read from its outcome.
+macro_rules! outcomes {
+    ($($variant:ident($payload:ty)),+ $(,)?) => {$(
+        impl TryFrom<Outcome> for $payload {
+            type Error = anyhow::Error;
 
-    fn try_from(outcome: Outcome) -> anyhow::Result<Self> {
-        let Outcome::Prepared(prepared) = outcome;
-        Ok(prepared)
-    }
+            fn try_from(outcome: Outcome) -> anyhow::Result<Self> {
+                match outcome {
+                    Outcome::$variant(value) => Ok(value),
+                    _ => anyhow::bail!("the operation ended with an unexpected outcome"),
+                }
+            }
+        }
+    )+};
 }
+
+outcomes!(Prepared(Prepared), Opened(OpenOutcome));
 
 /// Why an operation failed, as typed as its caller acts on it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -180,6 +201,9 @@ pub enum Failure {
     },
     /// The post-setup hook failed; the ready workspace is kept.
     HookFailed {
+        message: String,
+    },
+    PushFailed {
         message: String,
     },
     /// The daemon refused a request of the operation.

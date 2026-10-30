@@ -6,7 +6,11 @@ use anyhow::{Context as _, Result};
 
 use super::failure;
 use crate::{
-    cli::{client, commands::workspaces, context::Context},
+    cli::{
+        client,
+        commands::{items, workspaces},
+        context::Context,
+    },
     protocol::{
         OperationMethod,
         operations::{Ended, OperationSpec, Order, Outcome, Report, Step},
@@ -51,6 +55,11 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
             workspaces::prepare(ctx, workspace, steps, reporter)
                 .await
                 .map(Outcome::Prepared)
+        }
+        OperationSpec::OpenPull { workspace, options } => {
+            items::push_and_open(ctx, workspace, options, reporter)
+                .await
+                .map(Outcome::Opened)
         }
     }
 }

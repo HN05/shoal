@@ -38,6 +38,7 @@ use self::{
 };
 pub(crate) use content::read_body;
 pub(super) use context::{checkout_repository, select_item_context, select_repo_context};
+pub(super) use open::push_and_open;
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {

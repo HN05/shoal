@@ -99,8 +99,8 @@ expose. Linking the same issue again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count. Their `done` flag says whether a
 completion is recorded.
-Workspace setup with the post-setup hook is an operation: the daemon starts its
-work in a worker process of its own, detached as it starts queued agents, so the
+Workspace setup with the post-setup hook and `pr open`'s push are operations:
+the daemon starts their work in a worker process of its own, detached as it starts queued agents, so the
 work goes on when the CLI or app that asked for it goes. The worker acts with the
 caller's scope and, from the CLI, its environment, and runs the same tracked
 executions and hooks the CLI ran, under the same checks; what it and its

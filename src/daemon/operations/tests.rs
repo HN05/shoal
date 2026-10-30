@@ -77,7 +77,10 @@ async fn the_reported_end_takes_effect_once_the_worker_exits_after_its_output() 
     let OperationSpec::Prepare {
         workspace: id_in_order,
         ..
-    } = &worker.order.spec;
+    } = &worker.order.spec
+    else {
+        panic!("expected the setup order: {:?}", worker.order);
+    };
     assert_eq!(id_in_order, &workspace.id);
     assert_eq!(worker.token, None);
     let entry = manager.operation(&id, None).await.unwrap();
