@@ -1,4 +1,5 @@
 //! Human decisions authorize cooperative allocations; they never reserve capacity.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use serde::{Deserialize, Serialize};
@@ -963,10 +964,9 @@ impl Manager {
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
@@ -996,10 +996,9 @@ impl Manager {
         approve: bool,
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
@@ -1093,9 +1092,9 @@ impl Manager {
     }
 
     pub async fn show_approval(&self, id: i64) -> Result<ApprovalRequest> {
-        self.approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))
+        self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}")).into()
+        })
     }
 
     /// A request's target never changes, so it can be read before taking the
@@ -1153,10 +1152,9 @@ impl Manager {
         shown: Option<ApprovalRequest>,
     ) -> Result<ApprovalRequest> {
         let workspace = self.workspace(workspace).await?;
-        let request = self
-            .approval_request(id)
-            .await?
-            .with_context(|| format!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             shown.is_none_or(|shown| request.is_same(&shown)),
             "approval request {id} changed since it was shown; choose again"
