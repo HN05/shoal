@@ -212,12 +212,8 @@ async fn a_report_the_upgraded_daemon_refuses_goes_through_the_installed_release
     let paths = crate::paths::Paths::for_test(root.path());
     let binary = root.path().join("shoal");
     let received = root.path().join("received");
-    let install = |script: &str| {
-        // A new file, as an upgrade puts one there.
-        let staged = root.path().join("staged");
-        crate::test_support::executable(&staged, script);
-        std::fs::rename(&staged, &binary).unwrap();
-    };
+    // A new file each time, as an upgrade puts one there.
+    let install = |script: &str| crate::test_support::install_test_script(&binary, script);
     install("#!/bin/sh\nexit 1\n");
     // The binary the wrapper started from, read before the upgrade.
     let origin = launch::Origin::at(crate::cli::installed::Executable::at(binary.clone()));
