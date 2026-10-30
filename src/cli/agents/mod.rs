@@ -398,11 +398,30 @@ pub(super) async fn launch_agent(
     Ok(code)
 }
 
-/// Whether `shoal <name>` launches an agent rather than a configured command:
-/// one the targeted workspace's settings resolve, else this machine's config.
+/// How `shoal <name>` runs.
+enum NamedRun {
+    /// A configured command.
+    Command,
+    /// An agent of the targeted workspace, or of this machine's config.
+    Agent,
+    /// An agent only these workspaces define, outside every workspace.
+    Elsewhere(Vec<crate::model::Workspace>),
+}
+
+/// Whether `shoal <name>` launches an agent rather than a configured command.
 pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<bool> {
+    Ok(!matches!(
+        classify(ctx, name, workspace).await?,
+        NamedRun::Command
+    ))
+}
+
+/// Agents are those the targeted workspace's settings resolve, else this
+/// machine's config; outside every workspace, also a repository's own,
+/// which runs in a workspace defining it, as a repository's command does.
+async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<NamedRun> {
     if added(name).is_some() {
-        return Ok(true);
+        return Ok(NamedRun::Agent);
     }
     let target = agent_target(ctx, workspace).await?;
     let in_workspace = target.is_some();
@@ -416,28 +435,35 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
         None => Config::load(&ctx.paths)?.tools()?,
     };
     if crate::ai::agents(&tools).any(|agent| agent == name) {
-        return Ok(true);
+        return Ok(NamedRun::Agent);
     }
-    // Outside every workspace, a repository's own agent runs in one picked
-    // for it, as a repository's command does.
-    Ok(!in_workspace && agent_elsewhere(ctx, name).await)
+    if in_workspace {
+        return Ok(NamedRun::Command);
+    }
+    let defining = defining_workspaces(ctx, name).await;
+    Ok(if defining.is_empty() {
+        NamedRun::Command
+    } else {
+        NamedRun::Elsewhere(defining)
+    })
 }
 
-/// Whether a workspace's settings resolve `name` as an agent.
-async fn agent_elsewhere(ctx: &Context, name: &str) -> bool {
+/// The workspaces whose settings resolve `name` as an agent.
+async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Workspace> {
     let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
-        return false;
+        return Vec::new();
     };
+    let mut defining = Vec::new();
     for workspace in workspaces {
-        let target = ConfigTarget::Workspace(workspace.id);
+        let target = ConfigTarget::Workspace(workspace.id.clone());
         // A workspace whose configuration cannot load has no agents.
         if let Ok(settings) = client::settings(&ctx.paths, target).await
             && crate::ai::agents(&settings.tools).any(|agent| agent == name)
         {
-            return true;
+            defining.push(workspace);
         }
     }
-    false
+    defining
 }
 
 /// The workspace `workspace` names, else the one running a command would
@@ -464,9 +490,18 @@ pub(super) async fn run_named(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    if !is_agent(ctx, name, workspace.as_deref()).await? {
-        return configured::run(ctx, name, workspace, args).await;
-    }
+    let workspace = match classify(ctx, name, workspace.as_deref()).await? {
+        NamedRun::Command => return configured::run(ctx, name, workspace, args).await,
+        NamedRun::Agent => workspace,
+        NamedRun::Elsewhere(defining) => {
+            ensure!(
+                ctx.interactive(),
+                "{name} is an agent only some repositories define; run it in one of their \
+                 workspaces or name one with --workspace"
+            );
+            Some(ui::pick_workspace(ctx, defining).await?)
+        }
+    };
     launch::shortcut(
         ctx,
         name.parse()?,

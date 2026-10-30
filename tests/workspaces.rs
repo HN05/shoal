@@ -8552,6 +8552,8 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("cleanup.auto.enabled", "maybe"),
         ("root_dir", "/tmp/no"),
         ("default_agnet", "codex"),
+        ("agents.claude.prompt_cache_minutes", "0"),
+        ("agents.claude.resume", "['--resume']"),
     ] {
         assert!(
             !fixture
@@ -18801,7 +18803,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         .unwrap();
     assert!(!outside.status.success());
     let stderr = String::from_utf8_lossy(&outside.stderr);
-    assert!(!stderr.contains("unknown command"), "{stderr}");
+    assert!(stderr.contains("only some repositories define"), "{stderr}");
 
     // Built-in providers without specialized launchers place the prompt the
     // same way.
