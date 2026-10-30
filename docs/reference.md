@@ -481,6 +481,15 @@ assignment is done and whatever `[overload.recovery]` says. Timers the agent
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
+### Client API
+
+Apps other than the CLI, such as Quay, use the client API on the daemon's
+socket: typed requests for a subset of the CLI's operations, error codes, and
+subscriptions to repositories, workspaces and the rest as they change.
+[`crates/shoal-client`](../crates/shoal-client/README.md) is its Rust client and
+describes the protocol. Without a scope token the caller is the user; with one,
+it is that workspace's agent, under the rules of its `shoal` commands.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git

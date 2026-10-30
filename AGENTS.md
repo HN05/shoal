@@ -37,6 +37,10 @@ when behavior changes, distinguishing decisions from proposals.
   code; it takes the account to act as, while scope, approvals, identity choice
   and workspace records stay in the daemon. What one forge does its own way
   belongs in its `Backend` implementation, never in a match on the forge kind.
+- The client API lives in `crates/shoal-client`, which depends on no other Shoal
+  code; its checked-in schema keeps every name within a major version. Its
+  daemon side runs the daemon's existing operations under their scope checks
+  and gives refusals typed reasons; the CLI stays on the internal protocol.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup_cmd` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no

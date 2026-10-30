@@ -53,6 +53,19 @@ socket and a versioned JSON protocol; the ordinary installation is per user.
 Each protocol message is one frame of at most 64 KiB. Listings that can outgrow
 one are sent in as many frames as they need, then `ok`; the daemon answers any
 other reply that would not fit with an error saying so.
+Apps other than the CLI use a separate, stable protocol on the same socket, the
+client API that `crates/shoal-client` defines; a first frame holding `client_api`
+selects it, and the internal protocol's version and exact-match rule stay as
+they are. The client API has its own version, the crate's. Adding fields,
+methods, record kinds, events or error codes keeps its major version, since both
+sides ignore unknown fields and read unknown enum values as unknown; removing or
+renaming anything raises it, and the daemon serves every major version it still
+supports, named in the handshake. Its requests run the daemon's own operations
+with their scope checks, approvals and connection limits, so an app and the CLI
+behave the same, and the CLI stays on the internal protocol. Its refusals carry
+codes the daemon derives from typed reasons. A subscription sends a snapshot,
+then each record that changed or was removed, comparing again after each stored
+change; a daemon restart closes it and the client takes a new snapshot.
 The minimum Rust version follows current stable so the code can use its newest
 features; the manifest and CI toolchain advance together, with locked dependencies.
 The daemon raises its open file limit at startup and accepts every connection,
@@ -1218,7 +1231,11 @@ additions launch only when an agent is named. `add --agent` launches only after
 creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
-tracking or scope; external hosts can hold a workspace while their session is open.
+tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
+them, as zmx, Herdr and Rex do; an external app, such as Quay, is a UI that is
+not a host and reads and acts on Shoal's state through the client API. It holds
+a workspace while it shows it and queues agents, which the daemon starts
+detached in `default_host`, which never names an external app.
 Happy sessions are an optional integration behind a default Cargo feature and
 the `happy.enabled` setting, off by default, so its encrypted client stays out of
 core. They are the phone-driven flow: a console session that
