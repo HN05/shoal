@@ -183,7 +183,10 @@ impl Manager {
         };
         let interrupt = worker.interrupt.take();
         entry.update(|state| state.interrupt = interrupt);
-        tokio::spawn(worker::supervise(entry, worker));
+        // An update waits for the operation, which its worker cannot report
+        // to the replacement.
+        let operation = self.gates.owned_operation().await;
+        tokio::spawn(worker::supervise(entry, worker, operation));
         Ok(id)
     }
 

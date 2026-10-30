@@ -5,7 +5,10 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use futures_util::future::BoxFuture;
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, BufReader},
+    sync::OwnedRwLockReadGuard,
+};
 
 use super::Entry;
 use crate::{
@@ -118,7 +121,11 @@ pub(super) fn spawn(
 
 /// Relay the worker's output to `entry` until it exits and its streams
 /// close, or [`DRAIN`] after it exits, then end the operation.
-pub(super) async fn supervise(entry: Arc<Entry>, worker: Worker) {
+pub(super) async fn supervise(
+    entry: Arc<Entry>,
+    worker: Worker,
+    _operation: OwnedRwLockReadGuard<()>,
+) {
     let stdout = tokio::spawn(relay(entry.clone(), worker.stdout, Stream::Stdout));
     let stderr = tokio::spawn(relay(entry.clone(), worker.stderr, Stream::Stderr));
     let code = worker.exit.await;

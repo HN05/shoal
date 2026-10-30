@@ -23,8 +23,9 @@ pub(super) async fn handle(
         }),
         OperationMethod::FollowOperation { id, after } => {
             let entry = manager.operation(&id, caller).await?;
+            let manager = manager.clone();
             return Ok(Answer::connection(move |stream, request_id, guard| {
-                follow(stream, request_id, entry, after, guard)
+                follow(stream, request_id, manager, entry, after, guard)
             }));
         }
         OperationMethod::CancelOperation { id } => {
@@ -52,10 +53,12 @@ impl Scoped for OperationMethod {
 }
 
 /// Send the operation's events from the `after`th on as they come, then its
-/// end, unless the client hangs up first.
+/// end, unless the client hangs up first. It writes only under an operation
+/// guard, so an update closes it between writes.
 async fn follow(
     mut stream: UnixStream,
     request_id: u64,
+    manager: Arc<Manager>,
     entry: Arc<Entry>,
     after: u64,
     startup: OperationGuard,
@@ -68,6 +71,9 @@ async fn follow(
     loop {
         changed.borrow_and_update();
         let (events, ended) = entry.since(next);
+        let Some(operation) = manager.gates.try_operation() else {
+            return Ok(());
+        };
         for event in events {
             next = event.index + 1;
             let response = Response::new(request_id, Body::OperationEvent(event));
@@ -77,6 +83,7 @@ async fn follow(
             let response = Response::new(request_id, Body::OperationEnded(ended));
             return crate::protocol::write(&mut writer, &response).await;
         }
+        drop(operation);
         let mut closed = [0u8; 1];
         tokio::select! {
             changed = changed.changed() => changed?,
