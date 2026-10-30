@@ -6,8 +6,8 @@ Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A string body is sent as text, anything else as JSON. A list answers successive requests in turn, repeating
 its last entry. Each entry is {"status": 200, "body": ...}, and may add
-"headers" to send. The server tags
-each successful body, and answers a request that names its tag in
+"headers" to send. The server and `gh api` tag
+each successful body, and answer a request that names its tag in
 If-None-Match with 304. Every request is appended to
 $HOME/forge/requests.jsonl with its body, credentials (the agent's, or an
 Enterprise token gh would send) and status; an uploaded
@@ -65,7 +65,9 @@ def gh(args):
             # A read such as `gh api --hostname HOST ENDPOINT --paginate`.
             method, endpoint = "GET", args[args.index("--hostname") + 2]
         source = args[args.index("--input") + 1] if "--input" in args else None
-        header = args[args.index("-H") + 1] if "-H" in args else ""
+        headers = [args[i + 1] for i, arg in enumerate(args) if arg == "-H"]
+        header = next((h for h in headers if h.startswith("Content-Type: ")), "")
+        tag = next((h.removeprefix("If-None-Match: ") for h in headers if h.startswith("If-None-Match: ")), None)
         if source == "-" and "multipart/form-data" in header:
             body = form_file(sys.stdin.buffer.read())
         elif source in (None, "-"):
@@ -79,9 +81,12 @@ def gh(args):
                 "bytes": len(data),
             }
         auth = os.environ.get("AGENT") or os.environ.get("GH_ENTERPRISE_TOKEN")
-        status, answer, _ = respond(f"{method} {endpoint}", body, auth)
+        status, answer, sent = respond(f"{method} {endpoint}", body, auth, tag=tag)
         if "--include" in args:
-            print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n\r")
+            if status == 200:
+                sent = {"ETag": etag(answer), **sent}
+            head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
+            print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n{head}\r")
         if isinstance(answer, str):
             sys.stdout.write(answer)
         elif answer is not None:
