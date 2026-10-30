@@ -44,7 +44,7 @@ pub fn lock(path: &Path) -> Result<fs::File> {
 pub fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {
     let parent = path.parent().context("config path has no parent")?;
     fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-    // Prepare the complete replacement before moving the user's current file.
+    // Prepare the complete replacement before touching the user's current file.
     let temporary = fsutil::prepare_atomic_write(
         &path,
         text.as_bytes(),
@@ -60,17 +60,25 @@ pub fn replace(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> 
             path.display()
         );
     }
+    // A file stays in place until the replacement takes its name at once,
+    // so a reader never finds it missing; a symlink is kept as it is.
     let backup = path.with_extension("toml.backup");
-    let moved = match fs::rename(&path, &backup) {
-        Ok(()) => true,
+    let linked = fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_symlink());
+    let saved = if linked {
+        fs::rename(&path, &backup)
+    } else {
+        fs::copy(&path, &backup).map(drop)
+    };
+    let kept = match saved {
+        Ok(_) => true,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
         Err(error) => {
             return Err(error)
-                .with_context(|| format!("move {} to {}", path.display(), backup.display()));
+                .with_context(|| format!("copy {} to {}", path.display(), backup.display()));
         }
     };
     temporary
-        .persist_noclobber(&path)
+        .persist(&path)
         .with_context(|| format!("install config at {}", path.display()))?;
-    Ok((path, moved.then_some(backup)))
+    Ok((path, kept.then_some(backup)))
 }
