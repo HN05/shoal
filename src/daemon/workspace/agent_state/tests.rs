@@ -314,7 +314,12 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
             .unwrap();
         assert_eq!(status.prompt_cache_expires_at, None, "{state:?}");
     }
-    // A turn whose agent knows no lifetime gets the default one.
+    // A turn whose agent knows no lifetime gets the default one. Working
+    // first makes the turn's end start a new `since`.
+    manager
+        .set_agent_state(&workspace.name, AgentState::Working, None, None)
+        .await
+        .unwrap();
     let unknown = manager
         .end_agent_turn(&workspace.name, None, None, TurnEnd::default())
         .await
