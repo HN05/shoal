@@ -1,5 +1,5 @@
 //! Moving a removed workspace to another Shoal: a file with the removal
-//! record and a Git bundle of its checkpoint, which `shoal import` restores.
+//! record and a Git bundle of its checkpoint, which `shoal move import` restores.
 use std::{
     io::{BufRead, Write},
     path::{Path, PathBuf},

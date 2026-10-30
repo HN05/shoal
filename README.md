@@ -65,7 +65,7 @@ without one, [run the daemon in the foreground](docs/reference.md#daemon).
 
 Register a local repository or Git clone URL once, then create a task. Each
 repository's workspaces (and its clone, for URLs) live under `~/shoal/<name>/`;
-`shoal repo migrate <dir>` moves them all to a new root:
+`shoal move root <dir>` moves them all to a new root:
 
 ```sh
 shoal repo add /path/to/project --name my-project
@@ -195,9 +195,9 @@ shoal cleanup                 # Pick leftover workspaces, kept branches and cach
 shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal work restore fix-login 3     # Return the workspace to checkpoint 3
-shoal export fix-login -o - | ssh other shoal import - # Move the workspace to another machine
-shoal export --repo app --all -o moving # Export every workspace of app, a file each
-shoal import moving           # Import every workspace exported to a directory
+shoal move export fix-login -o - | ssh other shoal move import - # Move the workspace to another machine
+shoal move export --repo app --all -o moving # Export every workspace of app, a file each
+shoal move import moving           # Import every workspace exported to a directory
 shoal pr open                 # Push, then link the branch's open PR or open one
 shoal pr edit --draft         # Change the linked PR's text, labels, reviewers or draft
 shoal pr reviewers            # Users and teams who can review the linked PR
@@ -419,9 +419,9 @@ and `shoal work restore <workspace>` opens one again with its uncommitted files 
 `shoal resume` then continues the agents the removal stopped. Removal keeps the
 workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` does and
 Shoal does when an agent exits or is stopped; `shoal work restore <workspace> <number>`
-returns an existing workspace to one of them. `shoal export <workspace> -o <file>`
+returns an existing workspace to one of them. `shoal move export <workspace> -o <file>`
 removes a workspace and writes that checkpoint and record to a file, and `shoal
-import <file>` opens it on another machine, where its agents start new sessions, or
+move import <file>` opens it on another machine, where its agents start new sessions, or
 on the same one, where `shoal resume` continues their sessions; `--keep-sessions`
 and `--new-sessions` choose either.
 An app hosting an external session can hold its workspace while the session is open:

@@ -413,7 +413,7 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
             .args(args)
             .output()
     };
-    let export = in_session("sessioned", &["export", "sessioned", "-o", "-"])?;
+    let export = in_session("sessioned", &["move", "export", "sessioned", "-o", "-"])?;
     assert!(!export.status.success());
     assert!(
         String::from_utf8_lossy(&export.stderr).contains("closes when the export removes"),
@@ -446,7 +446,7 @@ fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> 
     let export = |pane: &str| {
         fixture
             .command()
-            .args(["export", "tabbed", "-o", "-"])
+            .args(["move", "export", "tabbed", "-o", "-"])
             .env("HERDR_ENV", "1")
             .env("HERDR_TAB_ID", "w1:t9")
             .env("HERDR_PANE_ID", pane)

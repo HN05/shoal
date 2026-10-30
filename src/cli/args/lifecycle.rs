@@ -1,9 +1,7 @@
-//! Arguments of commands that stop, remove, export and import workspaces.
-use std::path::PathBuf;
-
+//! Arguments of commands that stop, remove and move workspaces.
 use clap::{Args, Subcommand};
 
-use crate::cli::args::{ConfirmationArgs, WorkspaceTargets};
+use crate::cli::args::{ConfirmationArgs, WorkspaceTargets, transfer::MoveCommand};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -46,59 +44,11 @@ pub enum LifecycleCommand {
         #[command(flatten)]
         args: CleanupArgs,
     },
-    /// Remove a workspace and write it to a file that shoal import opens on another machine.
-    ///
-    /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
-    /// default branch, and the workspace's base, links and stopped agents. A removed workspace
-    /// is exported without another removal. `-` writes to standard output. When -o names a
-    /// directory, several workspaces, or with --all every workspace of the repository, go to a
-    /// file each in it, once each one can be exported.
-    Export(ExportArgs),
-    /// Open workspaces shoal export wrote, in the repository with the same origin.
-    ///
-    /// Fetches the default branch when a file builds on commits the repository lacks. On the
-    /// machine that exported it, shoal resume continues the stopped agents' sessions; elsewhere,
-    /// it starts new sessions, since the sessions stayed on the other machine. --keep-sessions
-    /// and --new-sessions override that. `-` reads from standard input. A directory imports each
-    /// .shoal file in it.
-    Import(ImportArgs),
-}
-
-// Arguments of `shoal export`.
-#[derive(Debug, Args)]
-pub struct ExportArgs {
-    #[arg(conflicts_with = "all", value_name = "WORKSPACE")]
-    pub workspace: Vec<String>,
-    /// Export every workspace of the repository --repo names.
-    #[arg(long, requires = "repository")]
-    pub all: bool,
-    /// Repository whose workspaces --all exports.
-    #[arg(long = "repo", requires = "all")]
-    pub repository: Option<String>,
-    /// File to write, or a directory to write a file per workspace in, which several
-    /// workspaces and --all need.
-    #[arg(short, long)]
-    pub output: PathBuf,
-    #[command(flatten)]
-    pub confirmation: ConfirmationArgs,
-}
-
-// Arguments of `shoal import`.
-#[derive(Debug, Args)]
-pub struct ImportArgs {
-    /// Export files or directories of them.
-    #[arg(required = true)]
-    pub files: Vec<PathBuf>,
-    /// Repository to import into, when it does not share the exported repository's origin.
-    #[arg(long = "repo")]
-    pub repository: Option<String>,
-    /// Continue the stopped agents' sessions on any machine, such as one the agents'
-    /// sessions were copied to.
-    #[arg(long, conflicts_with = "new_sessions")]
-    pub keep_sessions: bool,
-    /// Start new sessions even on the machine that exported the workspace.
-    #[arg(long, conflicts_with = "keep_sessions")]
-    pub new_sessions: bool,
+    /// Move workspaces to another machine, or repositories to another root directory.
+    Move {
+        #[command(subcommand)]
+        command: MoveCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]

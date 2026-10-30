@@ -28,14 +28,6 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
             agent,
             args,
         } => super::repo_setup::start(ctx, repository, agent, args).await,
-        RepoCommand::Migrate {
-            root,
-            regular_dir,
-            confirmation,
-        } => {
-            super::repo_migrate::run(ctx, root, regular_dir, confirmation.yes).await?;
-            Ok(0)
-        }
         RepoCommand::Rm {
             repository,
             confirmation,

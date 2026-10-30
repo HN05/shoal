@@ -22,11 +22,11 @@ use crate::{
 
 use super::STANDARD_STREAM;
 
-/// `shoal export`: remove the workspace, or take an already removed one, and
+/// `shoal move export`: remove the workspace, or take an already removed one, and
 /// write it to `file`. Several workspaces, or any written to a directory,
 /// go to a file each in it. The destination is checked before a picker
 /// opens.
-pub(in crate::cli::commands) async fn export(
+pub(super) async fn export(
     ctx: &Context,
     names: Vec<String>,
     file: PathBuf,
@@ -58,9 +58,9 @@ pub(in crate::cli::commands) async fn export(
     output.report(ctx, &exported)
 }
 
-/// `shoal export --all`: export every workspace of `repository` to a file of
+/// `shoal move export --all`: export every workspace of `repository` to a file of
 /// its own in `directory`.
-pub(in crate::cli::commands) async fn export_all(
+pub(super) async fn export_all(
     ctx: &Context,
     repository: String,
     directory: PathBuf,
@@ -87,7 +87,7 @@ async fn export_into(
 fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot export workspaces; ask the user to run shoal export"
+        "workspace processes cannot export workspaces; ask the user to run shoal move export"
     );
     Ok(())
 }
@@ -157,7 +157,7 @@ impl Output {
         };
         ctx.emit(
             &format!(
-                "Exported {name} to {}; shoal import opens it on another machine",
+                "Exported {name} to {}; shoal move import opens it on another machine",
                 path.display()
             ),
             json!({"file": path, "manifest": exported.manifest, "removal": exported.removal}),
@@ -274,7 +274,7 @@ fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<(
         .collect();
     ensure!(
         missing.is_empty(),
-        "workspaces were split from it ({}); export them with it, as shoal export --all does, or remove them first",
+        "workspaces were split from it ({}); export them with it, as shoal move export --all does, or remove them first",
         missing.join(", ")
     );
     Ok(())
@@ -451,7 +451,7 @@ async fn export_each(
     let shown = directory.shown.display();
     let summary = if failed == 0 {
         format!(
-            "Exported {exported} workspaces to {shown}; shoal import {shown} opens them on another machine"
+            "Exported {exported} workspaces to {shown}; shoal move import {shown} opens them on another machine"
         )
     } else {
         format!(

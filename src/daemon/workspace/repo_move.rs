@@ -474,7 +474,7 @@ impl Manager {
         ensure!(
             is_directory(&intent.destination, &intent.source_id)?
                 || is_directory(&intent.destination, &intent.destination_id)?,
-            "repository directory {} is unavailable; restore it, then run shoal repo migrate again",
+            "repository directory {} is unavailable; restore it, then run shoal move root again",
             intent.destination.display()
         );
         // A copy's original goes first: copied worktrees' Git links still

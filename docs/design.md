@@ -407,7 +407,7 @@ On macOS a root Shoal creates links to `<parent>/.<name>.noindex`, which holds
 its contents: Spotlight ignores `.metadata_never_index` below a volume root and
 its privacy list needs root, so only a skipped name keeps build output out of
 the index, and the link keeps `root_dir` the same on every system. An existing
-root is used as found; only `repo migrate` changes it, by default to the link,
+root is used as found; only `move root` changes it, by default to the link,
 or back to a regular directory with `--regular-dir`.
 Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
@@ -425,7 +425,7 @@ in-place checkout placed as `~/shoal/<name>/<x>` adopts that directory, and
 move is recorded before anything moves, then the records switch and Git's
 worktree links are repaired, so a stopped daemon finishes a completed move and
 rolls back an incomplete one, deleting only directories with their recorded identity. Checkouts and workspaces outside it stay.
-`repo migrate` stops the commands and agents running there as `shoal stop`
+`move root` stops the commands and agents running there as `shoal stop`
 does and queues the agents' restores after the move, trusting the new paths
 for them: a stop keeps sessions, which resume by ID from any directory. Registration is idempotent by normalized origin URL,
 then canonical path, never fetches, and keeps a stable UUID separate from the
@@ -742,7 +742,8 @@ Exported tokens persist across restarts until explicitly revoked or the workspac
 is removed; they register no execution and do not prevent cleanup.
 
 Root help groups built-in commands by task; workspace maintenance lives under
-`work`, repository administration under `repo`, forge inspection and API access under
+`work`, repository administration under `repo`, moving workspaces to another
+machine and repositories to another root under `move`, forge inspection and API access under
 `forge`, CI runs and the checks on a PR's head under `ci`, and
 shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the

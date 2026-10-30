@@ -1887,7 +1887,7 @@ already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
 directory, every checkout and every repository directory; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
-[`repo migrate`](#move-repositories-to-a-new-root) moves them, as do workspaces
+[`move root`](#move-repositories-to-a-new-root) moves them, as do workspaces
 created before this layout. `repo add <url> --path <dir>` clones one repository to an exact new
 directory (relative to the current directory; `~/` allowed). Re-registering a URL
 with its existing path is fine; a different path is rejected. Registering, and
@@ -1897,7 +1897,7 @@ it would write within 30 seconds, as on a volume macOS has not given it access t
 On macOS, Spotlight does not index a `root_dir` Shoal creates: it is a symlink
 to `<parent>/.<name>.noindex`, a directory Spotlight skips by name, so `~/shoal`
 still leads to every workspace while Shoal and Git show the real paths. An
-existing `root_dir` is used as it is; [`repo migrate`](#move-repositories-to-a-new-root)
+existing `root_dir` is used as it is; [`move root`](#move-repositories-to-a-new-root)
 moves it out of Spotlight, or back with `--regular-dir`.
 
 Registration is idempotent by normalized `origin` URL (HTTPS/SSH forms and
@@ -2027,7 +2027,7 @@ repository: a value in the local config wins, one it omits comes from the
 worktree's `.shoal.toml` or `.shoal/config.toml` (both together is an error),
 and a named `[ports.<name>]`, `[resources.<name>]` or `[resource_pools.<name>]`
 table replaces the one below it as a unit, so a local `[ports.web]` supplies
-every field of `web`. `repo migrate` moves the file with the repository's
+every field of `web`. `move root` moves the file with the repository's
 directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
 while the file does not exist. Scoped workspace commands cannot administer it.
 
@@ -2055,9 +2055,9 @@ workspace creation is blocked until the same command is retried.
 ### Move repositories to a new root
 
 ```sh
-shoal repo migrate /Volumes/Work/shoal -y  # Save root_dir, then move
-shoal repo migrate -y                      # Move into the configured root_dir
-shoal repo migrate --regular-dir -y        # Keep root_dir a regular directory
+shoal move root /Volumes/Work/shoal -y  # Save root_dir, then move
+shoal move root -y                      # Move into the configured root_dir
+shoal move root --regular-dir -y        # Keep root_dir a regular directory
 ```
 
 Moves each repository directory outside `root_dir` into it whole, with its URL
@@ -2085,7 +2085,7 @@ checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so
 leave those directories first. The move is recorded before anything moves; a failed or
 interrupted move rolls back, or finishes once the directory has arrived, and the
-repository refuses other changes until the next `repo migrate` or daemon start
+repository refuses other changes until the next `move root` or daemon start
 completes it. Agent trust for the old paths is removed, and the new paths are
 trusted for the agents their workspaces keep for `shoal resume`.
 
@@ -2499,15 +2499,15 @@ archive_max_mb = 50
 ### Move a workspace to another machine
 
 ```sh
-shoal export topic -o topic.shoal         # remove topic and write it to a file
-shoal import topic.shoal                  # open it in the repository with the same origin
-shoal export topic -o - | ssh other shoal import -
-shoal export --repo app --all -o moving   # remove every workspace of app, a file each
-shoal export topic spike -o moving        # remove both, a file each
-shoal import moving                       # open every workspace exported to moving
+shoal move export topic -o topic.shoal         # remove topic and write it to a file
+shoal move import topic.shoal                  # open it in the repository with the same origin
+shoal move export topic -o - | ssh other shoal move import -
+shoal move export --repo app --all -o moving   # remove every workspace of app, a file each
+shoal move export topic spike -o moving        # remove both, a file each
+shoal move import moving                       # open every workspace exported to moving
 ```
 
-`shoal export [workspace] -o <file>` removes the workspace as `shoal rm` does and
+`shoal move export [workspace] -o <file>` removes the workspace as `shoal rm` does and
 writes its removal record and checkpoint to a new file, or to standard output for
 `-`. The daemon writes the file, so it is complete even when the terminal closes
 with the workspace, as its Herdr tab does. It refuses before removing anything
@@ -2521,9 +2521,9 @@ the default remote's default branch; a checkpoint that branch already has
 travels without one. Ignored files, leases, permits, approvals, grants and holds
 stay behind; setup rebuilds what the workspace needs.
 
-`shoal export <workspace>... -o <directory>`, for several workspaces or those
+`shoal move export <workspace>... -o <directory>`, for several workspaces or those
 the picker selects when `-o` names an existing directory, and
-`shoal export --repo <repository> --all -o <directory>`, for every workspace of
+`shoal move export --repo <repository> --all -o <directory>`, for every workspace of
 the repository, export each to `<workspace>.shoal` in the directory, creating it when
 missing. It checks every workspace as a single export does, that none is in the
 middle of another lifecycle operation, and that the terminal does not close with
@@ -2533,7 +2533,7 @@ releasing all of their holds, then exports each workspace and lists the files it
 wrote; a failure there leaves the remaining ones to export, and the command
 exits 1 naming each failed workspace.
 
-`shoal import <file>` reads an export, or standard input for `-`, and opens it in
+`shoal move import <file>` reads an export, or standard input for `-`, and opens it in
 the registered repository with the exported repository's origin, or the one
 `--repo` names. Given several files, or a directory, whose `.shoal` files it
 reads in name order, it imports each one, going on after a failure, lists every

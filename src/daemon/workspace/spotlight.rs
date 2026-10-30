@@ -25,7 +25,7 @@ pub(crate) enum Layout {
 }
 
 impl Layout {
-    /// What a new root gets and `repo migrate` applies unless told otherwise:
+    /// What a new root gets and `move root` applies unless told otherwise:
     /// excluded on macOS, where development builds leave the user's root to
     /// the installed Shoal.
     pub(crate) fn default_layout() -> Self {
@@ -36,7 +36,7 @@ impl Layout {
         }
     }
 
-    /// What `repo migrate` applies: a regular directory when `regular_dir`
+    /// What `move root` applies: a regular directory when `regular_dir`
     /// asks for one, otherwise the default.
     pub(crate) fn migration(regular_dir: bool) -> Self {
         if regular_dir {
@@ -110,7 +110,7 @@ impl Plan {
     }
 
     /// Make the changes, linking the root only once it is empty: what it holds
-    /// moves with `shoal repo migrate`, which links it afterwards.
+    /// moves with `shoal move root`, which links it afterwards.
     pub(super) fn apply(&self) -> Result<()> {
         if self.unlink {
             fs::remove_file(&self.directory)

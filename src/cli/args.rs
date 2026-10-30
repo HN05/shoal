@@ -15,6 +15,7 @@ pub mod repository;
 pub mod resources;
 pub mod service;
 pub mod sessions;
+pub mod transfer;
 pub mod workspace;
 
 use std::path::PathBuf;

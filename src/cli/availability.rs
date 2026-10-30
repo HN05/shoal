@@ -54,7 +54,7 @@ impl Need {
                 Self::Any
             }
             ["work", "setup"] => Self::Setup,
-            ["work", "restore" | "rename"] => Self::Any,
+            ["work", "restore" | "rename"] | ["move", "export"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,
@@ -71,7 +71,7 @@ impl Need {
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
-                "status" | "diff" | "conflicts" | "rm" | "export" | "leases" | "messages" | "files"
+                "status" | "diff" | "conflicts" | "rm" | "leases" | "messages" | "files"
                 | "questions" | "approvals" | "view" | "resume" | "catalog" | "history" | "config"
                 | "pr" | "issue" | "alerts" | "demo" | "queue",
                 ..,

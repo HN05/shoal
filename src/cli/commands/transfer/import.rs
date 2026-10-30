@@ -22,8 +22,8 @@ use crate::{
 
 use super::{super::restore::Reopened, STANDARD_STREAM};
 
-/// How `shoal import` opens each workspace.
-pub(in crate::cli::commands) struct ImportOptions {
+/// How `shoal move import` opens each workspace.
+pub(super) struct ImportOptions {
     /// The repository to import into instead of the one with the export's
     /// origin.
     pub repository: Option<String>,
@@ -32,17 +32,17 @@ pub(in crate::cli::commands) struct ImportOptions {
     pub sessions: Option<bool>,
 }
 
-/// `shoal import`: open the workspaces exported to `files`, or to the
+/// `shoal move import`: open the workspaces exported to `files`, or to the
 /// `.shoal` files in the directories among them, as `options` says. A
 /// directory or several files import each workspace and report every result.
-pub(in crate::cli::commands) async fn import(
+pub(super) async fn import(
     ctx: &Context,
     files: Vec<PathBuf>,
     options: ImportOptions,
 ) -> Result<i32> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot import workspaces; ask the user to run shoal import"
+        "workspace processes cannot import workspaces; ask the user to run shoal move import"
     );
     if let [file] = files.as_slice()
         && !file.is_dir()

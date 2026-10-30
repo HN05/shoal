@@ -1,5 +1,5 @@
-//! Move every repository directory into a new `root_dir`.
-use super::resume::{Queued, Stopped};
+//! `shoal move root`: move every repository directory into a new `root_dir`.
+use super::super::resume::{Queued, Stopped};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -34,7 +34,7 @@ pub(super) async fn run(
     confirmed: bool,
 ) -> Result<()> {
     let root = root
-        .map(|root| super::repositories::absolute(ctx, root))
+        .map(|root| super::super::repositories::absolute(ctx, root))
         .transpose()?;
     let before = Registrations::load(ctx).await?;
     let moves = plan_moves(ctx, root.clone(), regular_dir).await?;
@@ -91,7 +91,7 @@ async fn stop_running(
         let result = ctx
             .progress(
                 "Stopping commands and agents",
-                super::stop::stop(ctx, workspace, confirmed),
+                super::super::stop::stop(ctx, workspace, confirmed),
             )
             .await;
         let saved = saved_executions(ctx, workspace)?;
@@ -180,7 +180,7 @@ async fn resume_stopped(ctx: &Context, stopped: &Stopped) -> Option<Queued> {
     if stopped.is_empty() {
         return None;
     }
-    match super::resume::queue_stopped(ctx, stopped).await {
+    match super::super::resume::queue_stopped(ctx, stopped).await {
         Ok(queued) => Some(queued),
         Err(error) => {
             eprintln!("warning: cannot resume the stopped agents; run shoal resume: {error:#}");

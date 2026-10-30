@@ -36,7 +36,6 @@ mod questions;
 mod queue;
 mod reactions;
 mod repo_menu;
-mod repo_migrate;
 mod repo_setup;
 mod repositories;
 mod resources;
