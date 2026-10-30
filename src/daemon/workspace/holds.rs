@@ -26,6 +26,20 @@ impl Manager {
         reason: Option<String>,
         placed_by: HoldPlacer,
     ) -> Result<WorkspaceHold> {
+        self.place_hold(selector, name, reason, placed_by, Authority::Caller)
+            .await
+    }
+
+    /// Hold the workspace as `placed_by` once `authority` allows it in the
+    /// transaction that places the hold.
+    async fn place_hold(
+        &self,
+        selector: &str,
+        name: String,
+        reason: Option<String>,
+        placed_by: HoldPlacer,
+        authority: Authority,
+    ) -> Result<WorkspaceHold> {
         validate::name("hold", &name)?;
         validate::reason("hold", reason.as_deref())?;
         let workspace = self.workspace(selector).await?;
@@ -39,6 +53,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
+                authority.ensure(&tx, &id, &name)?;
                 insert(&tx, &id, &name, reason.as_deref(), placed_by)?;
                 let hold = tx.query_row(
                     &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
@@ -67,8 +82,14 @@ impl Manager {
         // Acquiring returns the held one, with every check acquisition makes.
         if workspace.holds.iter().any(|hold| hold.name == name) {
             return Ok(Allocation::Granted(
-                self.acquire_hold(&workspace.id, name, reason, HoldPlacer::Agent)
-                    .await?,
+                self.place_hold(
+                    &workspace.id,
+                    name,
+                    reason,
+                    HoldPlacer::Agent,
+                    Authority::Approval,
+                )
+                .await?,
             ));
         }
         let request = ApprovalRequest::new(
@@ -91,8 +112,14 @@ impl Manager {
         let outcome = match pending {
             Some(pending) => Allocation::Approval(Box::new(pending)),
             None => Allocation::Granted(
-                self.acquire_hold(&workspace.id, name, reason, HoldPlacer::Agent)
-                    .await?,
+                self.place_hold(
+                    &workspace.id,
+                    name,
+                    reason,
+                    HoldPlacer::Agent,
+                    Authority::Approval,
+                )
+                .await?,
             ),
         };
         self.notify_allocation(&workspace.name, &outcome, "").await;
@@ -174,6 +201,37 @@ impl Manager {
                 )
             })
             .await
+    }
+}
+
+/// What lets a hold be placed.
+#[derive(Clone, Copy)]
+enum Authority {
+    /// The caller may hold the workspace, as the user or an agent above it.
+    Caller,
+    /// The workspace's own agent holds it only with its approval: the hold
+    /// already placed, or an approved request, either of which a release
+    /// meanwhile ends.
+    Approval,
+}
+
+impl Authority {
+    fn ensure(self, tx: &rusqlite::Transaction<'_>, id: &str, name: &str) -> Result<()> {
+        if let Authority::Caller = self {
+            return Ok(());
+        }
+        let held = store::exists(
+            tx,
+            "SELECT 1 FROM workspace_holds WHERE workspace_id=?1 AND name=?2",
+            params![id, name],
+        )?;
+        let approved = approvals::current(tx, id, &Target::Hold(name.to_owned()), name)?
+            .is_some_and(|request| request.status == approvals::DecisionStatus::Approved);
+        ensure!(
+            held || approved,
+            "the approval for hold {name} ended; request it again with shoal acquire hold --name {name} --reason <why>"
+        );
+        Ok(())
     }
 }
 

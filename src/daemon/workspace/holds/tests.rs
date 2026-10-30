@@ -296,3 +296,57 @@ async fn agents_hold_the_workspaces_below_theirs_and_release_what_agents_placed(
         .unwrap_err();
     assert!(error.to_string().contains("has holds"), "{error:#}");
 }
+
+#[tokio::test]
+async fn an_agent_places_its_own_hold_only_while_approved() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let place = || {
+        manager.place_hold(
+            &workspace.id,
+            "review".into(),
+            None,
+            HoldPlacer::Agent,
+            Authority::Approval,
+        )
+    };
+    let Ok(crate::daemon::allocation::Allocation::Approval(requested)) = manager
+        .request_hold(&workspace.id, "review".into(), Some("Keep it".into()))
+        .await
+    else {
+        panic!("holding its own workspace needs approval");
+    };
+    // Without an approval, as when a release lands between a request's
+    // check and its hold, nothing is placed.
+    let error = place().await.unwrap_err();
+    assert!(
+        error.to_string().contains("approval for hold review ended"),
+        "{error:#}"
+    );
+    manager
+        .decide_approval(requested.id, true, None, Default::default())
+        .await
+        .unwrap();
+    place().await.unwrap();
+    manager
+        .release_hold(&workspace.id, "review".into(), HoldPlacer::Agent)
+        .await
+        .unwrap();
+    assert!(place().await.is_err());
+    assert!(
+        manager
+            .workspace(&workspace.id)
+            .await
+            .unwrap()
+            .holds
+            .is_empty()
+    );
+}
