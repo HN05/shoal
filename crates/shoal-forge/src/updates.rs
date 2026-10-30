@@ -331,11 +331,20 @@ impl Snapshot {
         &self.head
     }
 
-    /// Each recorded check: its name, state and whether it finished.
-    pub fn checks(&self) -> impl Iterator<Item = (&str, &str, bool)> {
+    /// Each check that ran on the head commit: its name, state and whether
+    /// it finished. Failures kept from an earlier head are left out.
+    pub fn head_checks(&self) -> impl Iterator<Item = (&str, &str, bool)> {
         self.checks
             .values()
+            .filter(|check| self.head.is_empty() || check.revision == self.head)
             .map(|check| (check.name.as_str(), check.state.as_str(), check.complete))
+    }
+
+    /// Each source the observation could not read, such as CI checks, and why.
+    pub fn errors(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.errors
+            .iter()
+            .map(|(source, error)| (source.as_str(), error.as_str()))
     }
 
     /// Whether the PR conflicts with its base, when known.

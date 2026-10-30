@@ -578,6 +578,13 @@
         "kind": {
           "$ref": "#/$defs/ItemKind"
         },
+        "lookup_errors": {
+          "description": "What the daemon could not read when it last looked, such as CI\nchecks; what it covers may be older than the rest.",
+          "items": {
+            "$ref": "#/$defs/LookupError"
+          },
+          "type": "array"
+        },
         "relation": {
           "$ref": "#/$defs/Relation"
         },
@@ -607,11 +614,29 @@
         "kind",
         "url",
         "relation",
-        "checks"
+        "checks",
+        "lookup_errors"
       ],
       "type": "object"
     },
     "ListRepositories": {
+      "type": "object"
+    },
+    "LookupError": {
+      "description": "A part of an item the daemon could not read from its forge.",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "description": "What it could not read, such as `CI`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "message"
+      ],
       "type": "object"
     },
     "MarkDone": {

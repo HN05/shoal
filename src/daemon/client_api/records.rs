@@ -131,7 +131,7 @@ pub(super) fn links(
                     .map(str::to_owned),
                 checks: observed.map_or_else(Vec::new, |observed| {
                     observed
-                        .checks()
+                        .head_checks()
                         .map(|(name, state, complete)| api::Check {
                             name: name.into(),
                             state: state.into(),
@@ -140,6 +140,15 @@ pub(super) fn links(
                         .collect()
                 }),
                 conflict: observed.and_then(Snapshot::conflict),
+                lookup_errors: observed.map_or_else(Vec::new, |observed| {
+                    observed
+                        .errors()
+                        .map(|(source, message)| api::LookupError {
+                            source: source.into(),
+                            message: message.into(),
+                        })
+                        .collect()
+                }),
             }
         })
         .collect()

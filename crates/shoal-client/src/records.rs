@@ -224,6 +224,17 @@ pub struct Link {
     pub checks: Vec<Check>,
     /// Whether a PR conflicts with its base; absent when unknown.
     pub conflict: Option<bool>,
+    /// What the daemon could not read when it last looked, such as CI
+    /// checks; what it covers may be older than the rest.
+    pub lookup_errors: Vec<LookupError>,
+}
+
+/// A part of an item the daemon could not read from its forge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LookupError {
+    /// What it could not read, such as `CI`.
+    pub source: String,
+    pub message: String,
 }
 
 /// One CI check of a PR.

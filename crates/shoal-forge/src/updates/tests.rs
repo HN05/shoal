@@ -562,3 +562,24 @@ fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
     assert!(message.len() < 4096, "{} bytes", message.len());
     assert!(message.contains("and 4990 more"), "{message}");
 }
+
+#[test]
+fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
+    let mut snapshot = Snapshot {
+        head: "2".into(),
+        ..Snapshot::default()
+    };
+    for (key, revision) in [("old", "1"), ("new", "2")] {
+        let check = Check {
+            name: key.into(),
+            state: "failure".into(),
+            revision: revision.into(),
+            complete: true,
+        };
+        snapshot.checks.insert(key.into(), check);
+    }
+    snapshot.errors.insert("CI".into(), "timed out".into());
+    let checks: Vec<_> = snapshot.head_checks().collect();
+    assert_eq!(checks, [("new", "failure", true)]);
+    assert_eq!(snapshot.errors().collect::<Vec<_>>(), [("CI", "timed out")]);
+}
