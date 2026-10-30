@@ -1,5 +1,6 @@
 //! Connected agent metadata is deliberately transient: a daemon restart must
 //! not turn an unknown execution into an automatic signal target.
+use rusqlite::OptionalExtension;
 use std::{
     collections::{HashMap, HashSet},
     time::{Duration, Instant},
@@ -628,31 +629,59 @@ impl Manager {
         Some(crate::daemon::links::proposals::Proposer { agent })
     }
 
-    /// The connected agent a request from `caller` comes from: the one its
-    /// execution runs, else the one whose process tree registered it.
+    /// The agent a request from `caller` comes from: the one its execution
+    /// runs, else the one whose process tree registered it.
     pub(crate) async fn caller_agent(
         &self,
         caller: &crate::daemon::scope::Caller,
     ) -> Option<CallerAgent> {
         let execution = caller.execution.as_ref()?;
-        let identity = |id: &str| {
-            let id = id.to_owned();
-            move |agent: &mut Agent| CallerAgent {
-                execution: id,
-                // Named as `--agent` and recovery records name it.
-                name: agent.name.replace(' ', "-"),
-                workspace_id: agent.workspace_id.clone(),
-            }
-        };
-        if let Some(own) = self
-            .executions
-            .with_agent(&execution.id, identity(&execution.id))
-            .await
-        {
+        if let Some(own) = self.execution_agent(&execution.id).await {
             return Some(own);
         }
-        let parent = execution.agent.as_deref()?;
-        self.executions.with_agent(parent, identity(parent)).await
+        self.execution_agent(execution.agent.as_deref()?).await
+    }
+
+    /// The agent execution `id` runs: tracked while connected, else as its
+    /// record names it, as when a command it ran reattaches first after a
+    /// restart.
+    async fn execution_agent(&self, id: &str) -> Option<CallerAgent> {
+        let tracked = self
+            .executions
+            .with_agent(id, |agent| (agent.name.clone(), agent.workspace_id.clone()))
+            .await;
+        let (name, workspace_id) = match tracked {
+            Some(tracked) => tracked,
+            None => self.recorded_agent(id).await?,
+        };
+        Some(CallerAgent {
+            execution: id.to_owned(),
+            // Named as `--agent` and recovery records name it.
+            name: name.replace(' ', "-"),
+            workspace_id,
+        })
+    }
+
+    /// The agent and workspace the record of execution `id` names, if it
+    /// ran one.
+    async fn recorded_agent(&self, id: &str) -> Option<(String, String)> {
+        let execution = id.to_owned();
+        let recorded = self
+            .store
+            .run(move |db| {
+                Ok(db
+                    .query_row(
+                        "SELECT agent,workspace_id FROM executions WHERE id=?1 AND agent IS NOT NULL",
+                        [execution],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?)
+            })
+            .await;
+        recorded.unwrap_or_else(|error| {
+            log!("agent of execution {id} unreadable: {error:#}");
+            None
+        })
     }
 
     /// The name of the connected agent that `execution` runs.

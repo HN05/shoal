@@ -148,7 +148,17 @@ async fn an_agents_files_name_its_kind_and_session() {
         })
         .await
         .unwrap();
-    assert_eq!(recorded, Some(execution));
+    assert_eq!(recorded, Some(execution.clone()));
+    // A command reattaching after a restart before its agent, and one it
+    // runs then.
+    manager
+        .executions
+        .with_agents(|agents| agents.remove(&execution))
+        .await
+        .unwrap();
+    assert_eq!(manager.attacher(Some(&nested)).await, attacher);
+    let later = command_caller(&manager, &workspace, Some(&nested)).await;
+    assert_eq!(manager.attacher(Some(&later)).await, attacher);
     let files = manager.workspace_files(&workspace.name).await.unwrap();
     assert_eq!(files.len(), 2, "{files:?}");
     assert!(
