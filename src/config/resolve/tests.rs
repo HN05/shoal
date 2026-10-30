@@ -26,7 +26,7 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[cleanup.done]\nenabled = false\n[idle_stop]\nenabled = true\n\
 [pr]\ndraft = true\nrequired_labels = ['area/']\nundraft_on_ready = false\ndraft_on_unready = true\n\
 [issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\n[land]\npush = true\n\
-[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n[agents.review]\ncommand = ['review', '{prompt}']\nresume_command = ['review', '--resume']\ndefault_mode = 'app'\n\
+[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
 base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
 fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
 prompt_cache_minutes = 5\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";

@@ -68,6 +68,9 @@ pub struct MachineAgent {
 /// [`crate::ai::validate`] checks once they combine.
 pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
     for (name, agent) in agents {
+        if agent.command.is_some() || agent.base.is_some() {
+            crate::ai::validate::reachable_name(name).with_context(|| format!("agents.{name}"))?;
+        }
         for argv in [&agent.command, &agent.resume_command]
             .into_iter()
             .flatten()

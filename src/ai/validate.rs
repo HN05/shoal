@@ -82,6 +82,17 @@ fn validate_command(name: &str, argv: &[String], commands: &Commands) -> Result<
 
 /// A tool that runs as `shoal <name>` needs a name that reaches it.
 fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
+    reachable_name(name)?;
+    ensure!(
+        !commands.contains_key(name),
+        "{name:?} is an agent; [commands] holds only workspace shortcuts"
+    );
+    Ok(())
+}
+
+/// A name `shoal <name>` reaches: a portable one no built-in command takes,
+/// unless a built-in AI tool has it.
+pub fn reachable_name(name: &str) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),
         "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_'"
@@ -90,10 +101,6 @@ fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
     ensure!(
         built_in_provider || !built_in_commands().iter().any(|command| command == name),
         "{name:?} is a built-in Shoal command; choose another name"
-    );
-    ensure!(
-        !commands.contains_key(name),
-        "{name:?} is an agent; [commands] holds only workspace shortcuts"
     );
     Ok(())
 }
