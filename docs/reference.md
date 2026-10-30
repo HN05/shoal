@@ -2502,6 +2502,7 @@ archive_max_mb = 50
 shoal move export topic -o topic.shoal         # remove topic and write it to a file
 shoal move import topic.shoal                  # open it in the repository with the same origin
 shoal move export topic | ssh other shoal move import --resume  # agents continue there
+shoal move ssh other topic                # the same, once ssh reaches Shoal there
 shoal move export --repo app --all -o moving   # remove every workspace of app, a file each
 shoal move export topic spike -o moving        # remove both, a file each
 shoal move import moving                       # open every workspace exported to moving
@@ -2555,6 +2556,15 @@ resume` does, under the importing machine's agent limits. Every reopen, by impor
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
 its `resume_command`. Workspace processes can neither export nor import.
+
+`shoal move ssh <host> [workspace]...`, or `--repo <repository> --all`, runs that
+pipe for each workspace with `ssh <host> shoal --json move import --resume`, after
+`ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing is
+removed. `--shoal <path>` names the program there when the remote shell's `PATH`
+lacks it, and `--no-resume` leaves the agents stopped. It checks the workspaces
+as a batch export does and asks once before releasing their holds. A workspace
+whose import fails stays removed here with the other machine's error, and `shoal
+work restore` opens it again, unless that machine recorded it.
 
 ### Assignment completion
 

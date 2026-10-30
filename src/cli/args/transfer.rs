@@ -26,6 +26,13 @@ pub enum MoveCommand {
     /// --keep-sessions and --new-sessions override that. Without a file, or with `-`, it reads from standard
     /// input, which must not be a terminal. A directory imports each .shoal file in it.
     Import(ImportArgs),
+    /// Move workspaces to another machine's Shoal over SSH, where their agents continue.
+    ///
+    /// Runs shoal move export | ssh HOST shoal move import --resume for each workspace, once
+    /// ssh reaches Shoal there; nothing is removed when it does not. The other machine needs a
+    /// repository with the same origin. A workspace whose import fails stays removed here, and
+    /// shoal work restore opens it again.
+    Ssh(SshArgs),
     /// Move every repository directory, with its workspaces and clone, into root_dir.
     Root {
         /// New root directory, saved as root_dir first; omit to use the configured one.
@@ -75,4 +82,27 @@ pub struct ImportArgs {
     /// Queue the restores of the agents the export stopped, as shoal resume does.
     #[arg(long)]
     pub resume: bool,
+}
+
+// Arguments of `shoal move ssh`.
+#[derive(Debug, Args)]
+pub struct SshArgs {
+    /// SSH destination: a host, user@host or a ~/.ssh/config alias.
+    pub host: String,
+    #[arg(conflicts_with = "all", value_name = "WORKSPACE")]
+    pub workspace: Vec<String>,
+    /// Move every workspace of the repository --repo names.
+    #[arg(long, requires = "repository")]
+    pub all: bool,
+    /// Repository whose workspaces --all moves.
+    #[arg(long = "repo", requires = "all")]
+    pub repository: Option<String>,
+    /// Leave the agents stopped on the other machine instead of queueing their restores.
+    #[arg(long)]
+    pub no_resume: bool,
+    /// The shoal program on the other machine, when SSH's PATH does not find it.
+    #[arg(long, value_name = "PATH", default_value = "shoal")]
+    pub shoal: String,
+    #[command(flatten)]
+    pub confirmation: ConfirmationArgs,
 }

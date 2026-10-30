@@ -118,9 +118,10 @@ held ones included, and its `done` with cleanup removes the unheld ones after
 the grace period. `shoal work restore <workspace>` reopens a removed one, or lists an
 existing one's checkpoints, and `shoal work restore <workspace> <number>` returns it
 to a checkpoint. To move a workspace to another machine, run
-`shoal move export <workspace> --yes | ssh <host> shoal --json move import --resume`,
-which queues its stopped agents there; they continue their sessions as that host's
-agent limits allow. `shoal cleanup workspaces` removes every workspace automatic
+`shoal move ssh <host> <workspace> --yes`, which queues its stopped agents there;
+they continue their sessions as that host's agent limits allow. Over another
+medium, pipe `shoal move export <workspace> --yes` into `shoal move import --resume`
+on the other machine. `shoal cleanup workspaces` removes every workspace automatic
 cleanup would remove without waiting for its idle delay; `shoal cleanup --dry-run`
 lists those, kept branches and shared caches, and why it keeps each other workspace,
 as `status` gives in `cleanup_reason`; `shoal cleanup caches` empties shared tool

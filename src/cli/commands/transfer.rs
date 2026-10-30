@@ -1,9 +1,11 @@
 //! `shoal move`: moving workspaces to another Shoal, where `export` removes a
-//! workspace and writes it to a file and `import` opens it again from one,
-//! and moving repositories to another root directory.
+//! workspace and writes it to a file, `import` opens it again from one and
+//! `ssh` pipes one into the other, and moving repositories to another root
+//! directory.
 mod export;
 mod import;
 mod root;
+mod ssh;
 
 use std::{io::IsTerminal, path::PathBuf};
 
@@ -63,6 +65,7 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             };
             import::import(ctx, files, options).await
         }
+        MoveCommand::Ssh(args) => ssh::run(ctx, args).await,
         MoveCommand::Root {
             root,
             regular_dir,

@@ -1979,9 +1979,10 @@ machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust
 setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal resume` starts them through the fresh-agent launch, with its trust
-setup and guidance, told the workspace moved. Shoal provides only these
-operations; deciding when and where to move work
-belongs to a caller outside the core.
+setup and guidance, told the workspace moved. Export and import move work
+through any byte stream, and `move ssh` runs that pipe over SSH as a shorthand
+after checking Shoal answers there; Shoal keeps no registry of machines, and
+deciding when and where to move work belongs to a caller outside the core.
 A branch is merged when the local default branch or its remote-tracking branch
 records HEAD's tree, contains HEAD, takes HEAD's merge without changing its tree
 (squash merges), or has an equivalent patch for every commit since the fork point

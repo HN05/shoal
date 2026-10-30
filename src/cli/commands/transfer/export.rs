@@ -80,11 +80,21 @@ async fn export_into(
     yes: bool,
 ) -> Result<i32> {
     let directory = ExportDirectory::create(directory)?;
-    let planned = check_exports(ctx, workspaces, &directory, yes).await?;
+    let heading = format!(
+        "Export {} workspaces to {}",
+        workspaces.len(),
+        directory.shown.display()
+    );
+    let planned = check_exports(ctx, workspaces, &directory, yes, &heading, EXPORT).await?;
     export_each(ctx, planned, &directory).await
 }
 
-fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
+/// What a batch export is called in its refusals: its noun and verb.
+pub(super) type Operation = (&'static str, &'static str);
+
+const EXPORT: Operation = ("export", "export");
+
+pub(super) fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
         "workspace processes cannot export workspaces; ask the user to run shoal move export"
@@ -322,7 +332,10 @@ fn confirm_holds(
 }
 
 /// The workspaces of `repository`, by name.
-async fn repository_workspaces(ctx: &Context, repository: String) -> Result<Vec<Workspace>> {
+pub(super) async fn repository_workspaces(
+    ctx: &Context,
+    repository: String,
+) -> Result<Vec<Workspace>> {
     let repositories = client::repositories(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
@@ -342,14 +355,14 @@ async fn repository_workspaces(ctx: &Context, repository: String) -> Result<Vec<
 
 /// The directory an export of every workspace goes to, shown as the user
 /// named it.
-struct ExportDirectory {
+pub(super) struct ExportDirectory {
     path: PathBuf,
     shown: PathBuf,
 }
 
 impl ExportDirectory {
     /// Create the directory when it is missing.
-    fn create(shown: PathBuf) -> Result<Self> {
+    pub(super) fn create(shown: PathBuf) -> Result<Self> {
         std::fs::create_dir_all(&shown)
             .with_context(|| format!("create the directory {}", shown.display()))?;
         let path = std::fs::canonicalize(&shown)
@@ -373,25 +386,40 @@ impl ExportDirectory {
 }
 
 /// A workspace that passed its export check, with the file it goes to.
-struct PlannedExport {
+pub(super) struct PlannedExport {
     check: RemovalCheck,
     output: Output,
 }
 
+impl PlannedExport {
+    pub(super) fn name(&self) -> &str {
+        &self.check.workspace.name
+    }
+
+    /// Remove the workspace and export it, returning the file it went to.
+    pub(super) async fn export(self, ctx: &Context) -> Result<PathBuf> {
+        export_checked(ctx, &self.check, &self.output).await?;
+        Ok(self.output.file())
+    }
+}
+
 /// Check every workspace before exporting any, refusing with each one that
-/// cannot be exported, then let the user release all of their holds at once.
-async fn check_exports(
+/// cannot be exported, then let the user release all of their holds at once,
+/// asking under `heading`; `operation` names the batch in refusals.
+pub(super) async fn check_exports(
     ctx: &Context,
     workspaces: &[Workspace],
     directory: &ExportDirectory,
     yes: bool,
+    heading: &str,
+    operation: Operation,
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
     let exported: Vec<&str> = workspaces.iter().map(|w| w.name.as_str()).collect();
     for workspace in workspaces {
         let export = async {
-            let export = plan_export(ctx, workspace, directory).await?;
+            let export = plan_export(ctx, workspace, directory, operation).await?;
             ensure_children_exported(&export.check, &exported)?;
             Ok::<_, anyhow::Error>(export)
         };
@@ -402,14 +430,11 @@ async fn check_exports(
     }
     ensure!(
         refusals.is_empty(),
-        "cannot export these workspaces, so none was removed:\n  {}",
+        "cannot {} these workspaces, so none was removed:\n  {}",
+        operation.1,
         refusals.join("\n  ")
     );
-    let action = format!(
-        "Export {} workspaces to {}\nRemoves them here and releases these holds:",
-        planned.len(),
-        directory.shown.display()
-    );
+    let action = format!("{heading}\nRemoves them here and releases these holds:");
     let held: Vec<&RemovalCheck> = planned
         .iter()
         .map(|export| &export.check)
@@ -425,10 +450,11 @@ async fn plan_export(
     ctx: &Context,
     workspace: &Workspace,
     directory: &ExportDirectory,
+    operation: Operation,
 ) -> Result<PlannedExport> {
     let output = Output::reserve(&directory.file(&workspace.name))?;
     let check = check_export(ctx, &workspace.id, &output).await?;
-    super::super::workspaces::ensure_batch_removable(ctx, &check, ("export", "export")).await?;
+    super::super::workspaces::ensure_batch_removable(ctx, &check, operation).await?;
     Ok(PlannedExport { check, output })
 }
 

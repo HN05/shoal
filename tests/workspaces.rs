@@ -1090,6 +1090,102 @@ fn import_resume_queues_the_agents_the_export_stopped() {
     fs::write(path.join("release"), "").unwrap();
 }
 
+/// Install an `ssh` in `fixture`'s PATH that runs the remote command in
+/// `other`'s home and state, as on another machine, and refuses the host
+/// `down`.
+fn install_ssh_to(fixture: &Fixture, other: &Fixture) {
+    let other = other.root.path().display();
+    install_test_script(
+        fixture.root.path().join("bin/ssh"),
+        format!(
+            "#!/bin/sh\n\
+             [ \"$1\" = -- ] && shift\n\
+             if [ \"$1\" = down ]; then echo 'ssh: connect to host down: refused' >&2; exit 255; fi\n\
+             shift\n\
+             cd '{other}' || exit 255\n\
+             export HOME='{other}' ZDOTDIR='{other}' SHOAL_STATE_DIR='{other}/state' ZMX_DIR='{other}/zmx'\n\
+             export PATH='{other}/bin':\"$PATH\"\n\
+             exec sh -c \"$*\"\n"
+        ),
+    );
+}
+
+#[test]
+fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
+    let config = "[agents.claude]\ncommand = ['sh', './agent.sh']\n";
+    let here = Fixture::with_config(Some(config));
+    let there = Fixture::with_config(Some(config));
+    // Both machines have clones of one origin, named by a URL as remotes
+    // usually are, which import matches.
+    git(
+        here.root.path(),
+        &["init", "-q", "--bare", "-b", "main", "origin.git"],
+    );
+    let origin = fs::canonicalize(here.root.path().join("origin.git")).unwrap();
+    let origin = format!("file://{}", origin.display());
+    git(&here.repo, &["remote", "add", "origin", &origin]);
+    git(&here.repo, &["push", "-q", "-u", "origin", "HEAD:main"]);
+    git(&here.repo, &["remote", "set-head", "origin", "main"]);
+    git(there.root.path(), &["clone", "-q", &origin, "clone"]);
+    there.ok(&[
+        "repo",
+        "add",
+        there.root.path().join("clone").to_str().unwrap(),
+    ]);
+    install_ssh_to(&here, &there);
+
+    let workspace = here.add("handed");
+    let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
+    // The agent runs until it is stopped; started again, it records that and
+    // runs until the test releases it, or for at most two minutes.
+    fs::write(
+        path.join("agent.sh"),
+        "if [ -e agent-started ]; then touch agent-restarted; \
+         i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
+         exit 0; fi\n\
+         touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+    )
+    .unwrap();
+    let agent = here
+        .command()
+        .args(["claude", "handed"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("agent started", || path.join("agent-started").exists());
+
+    // A machine ssh cannot reach removes nothing.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let refused = here.run(&["move", "ssh", "down", "handed", "--shoal", shoal]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("nothing was removed"), "{stderr}");
+    assert!(stderr.contains("refused"), "{stderr}");
+    assert!(path.join("agent.sh").exists());
+    // Neither does a Shoal ssh's PATH cannot find there.
+    let missing = here.run(&["move", "ssh", "mini", "handed", "--shoal", "missing-shoal"]);
+    assert!(!missing.status.success());
+    let stderr = String::from_utf8_lossy(&missing.stderr);
+    assert!(stderr.contains("--shoal names"), "{stderr}");
+    assert!(path.join("agent.sh").exists());
+
+    let moved = here.ok(&["move", "ssh", "mini", "handed", "--shoal", shoal]);
+    assert!(agent.wait_with_output().unwrap().status.success());
+    assert_eq!(moved["failed"], serde_json::json!([]), "{moved}");
+    let imported = &moved["moved"][0];
+    assert_eq!(imported["workspace"]["name"], "handed", "{moved}");
+    assert_eq!(imported["queued"]["queued"].as_array().unwrap().len(), 1);
+    assert!(!path.exists());
+    let moved_path = Path::new(imported["workspace"]["path"].as_str().unwrap()).to_owned();
+    assert!(moved_path.starts_with(fs::canonicalize(there.root.path()).unwrap()));
+    wait_until("agent restarted there", || {
+        moved_path.join("agent-restarted").exists()
+    });
+    fs::write(moved_path.join("release"), "").unwrap();
+}
+
 #[test]
 fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     let fixture = Fixture::new();

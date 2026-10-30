@@ -54,7 +54,7 @@ impl Need {
                 Self::Any
             }
             ["work", "setup"] => Self::Setup,
-            ["work", "restore" | "rename"] | ["move", "export"] => Self::Any,
+            ["work", "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
             ["branch", "rename"] => Self::Settled,
             ["branch", "base", "clear"] => Self::Base,
