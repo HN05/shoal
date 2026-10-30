@@ -77,13 +77,18 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
         },
     )
     .await?;
-    let lines = approved
+    ctx.emit(&approved_text(&approved), &approved)?;
+    Ok(0)
+}
+
+/// One line per approved run.
+fn approved_text(approved: &RunsApproved) -> String {
+    approved
         .approved
         .iter()
         .map(|url| format!("Approved: {url}"))
-        .collect::<Vec<_>>();
-    ctx.emit(&lines.join("\n"), &approved)?;
-    Ok(0)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 async fn act_on_run(
