@@ -174,7 +174,7 @@ pub(super) fn resolve_request(
         };
         ensure!(
             !names.is_empty(),
-            "select --profile or configure simulators.default and simulators.profiles in global config"
+            "select --profile or configure machine.simulators.default and machine.simulators.profiles in global config"
         );
         let mut candidates = Vec::new();
         for name in names {
