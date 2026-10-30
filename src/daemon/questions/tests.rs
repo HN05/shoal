@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    daemon::scope::{self, Caller},
+    daemon::{
+        scope::{self, Caller},
+        workspace_files::Attacher,
+    },
     model::{CleanupReason, Workspace},
     protocol::QuestionMethod,
     removal::{InspectionPolicy, UnsavedWork},
@@ -523,7 +526,7 @@ async fn done_closes_open_questions_for_good() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
 

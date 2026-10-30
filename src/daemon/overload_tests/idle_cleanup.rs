@@ -2,7 +2,7 @@
 //! its workspace from no cleanup; removal cancels it and keeps the agent for
 //! `shoal work restore`.
 use super::*;
-use crate::{model::CleanupReason, state::AgentState};
+use crate::{daemon::workspace_files::Attacher, model::CleanupReason, state::AgentState};
 
 #[tokio::test]
 async fn cleanup_removes_a_workspace_whose_idle_agent_waits_for_an_update() {
@@ -90,7 +90,12 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     })
     .await;
     let refused = manager
-        .send_agent_message(&workspace.name, "Review requested".into(), Vec::new())
+        .send_agent_message(
+            &workspace.name,
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert!(

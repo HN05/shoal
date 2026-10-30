@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    daemon::workspace_files::Attacher,
     forge::updates::UpdateKind,
     test_support::{manager, repository},
 };
@@ -177,7 +178,12 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         .unwrap();
     // Waiting would fail without a linked PR; a queued message answers first.
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let updates = manager.wait_prs(&workspace.id, Some(60)).await.unwrap();
@@ -196,7 +202,12 @@ async fn agent_messages_end_a_watch_before_item_activity() {
         tokio::spawn(async move { manager.next_agent_messages(&id, &mut queued).await })
     };
     manager
-        .send_agent_message(&workspace.id, "Stop the dev server".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Stop the dev server".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let messages = waiting.await.unwrap().unwrap();
@@ -297,7 +308,12 @@ async fn background_activity_queues_for_the_agents_hooks() {
         .unwrap();
     assert!(queued.has_changed().unwrap());
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // Handing them to the agent's hook replaces the running watch.
@@ -341,7 +357,12 @@ async fn hook_delivery_does_not_wait_for_the_pr_gate() {
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let queued = manager.agent_updates(&workspace.id).await.unwrap();
@@ -685,7 +706,12 @@ async fn hook_responses_fit_messages_and_updates_together() {
     // As many unread messages as a workspace holds.
     for n in 0..50 {
         manager
-            .send_agent_message(&parent.id, format!("{n:02}{}", "m".repeat(498)), Vec::new())
+            .send_agent_message(
+                &parent.id,
+                format!("{n:02}{}", "m".repeat(498)),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -835,7 +861,12 @@ async fn agent_wakes_are_due_while_an_idle_agent_has_updates() {
     let state = |state| manager.set_agent_state(&workspace.id, state, None, None);
     state(crate::state::AgentState::Working).await.unwrap();
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let due = wait(true);
@@ -1750,7 +1781,7 @@ async fn branch_conflicts_of_work_integrated_elsewhere_are_not_reported() {
         crate::test_support::commit(repo, "tracked");
     }
     manager
-        .mark_done(&workspace.id, false, true, vec![])
+        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
         .await
         .unwrap();
     let all = Selection::default();
@@ -1938,7 +1969,12 @@ async fn a_watch_times_out_while_its_messages_settle() {
     let (root, manager) = manager().await;
     let workspace = settling_workspace(&root, &manager).await;
     manager
-        .send_agent_message(&workspace.id, "Request 1 approved".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Request 1 approved".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let updates = manager

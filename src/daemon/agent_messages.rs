@@ -10,7 +10,10 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::{workspace::Manager, workspace_files},
+    daemon::{
+        workspace::Manager,
+        workspace_files::{self, Attacher},
+    },
     state::WorkspaceState,
 };
 
@@ -167,13 +170,14 @@ pub(crate) struct Unread {
 
 impl Manager {
     /// Queue a message for the workspace's agents with copies of the files
-    /// `attachments`; without text, the files are the message. An identical
-    /// unread message is not repeated.
+    /// `attachments`, attached by `attacher`; without text, the files are the
+    /// message. An identical unread message is not repeated.
     pub async fn send_agent_message(
         &self,
         selector: &str,
         message: String,
         attachments: Vec<PathBuf>,
+        attacher: &Attacher,
     ) -> Result<()> {
         if !message.is_empty() || attachments.is_empty() {
             crate::validate::agent_message(&message)?;
@@ -190,6 +194,7 @@ impl Manager {
                 message,
                 kept.paths.clone(),
                 kept.bytes.clone(),
+                Some(attacher.clone()),
                 Delivery::Wake,
             )
             .await;
@@ -214,18 +219,27 @@ impl Manager {
         message: String,
         delivery: Delivery,
     ) -> Result<()> {
-        self.queue_attached_message(workspace_id, message, Vec::new(), Vec::new(), delivery)
-            .await
+        self.queue_attached_message(
+            workspace_id,
+            message,
+            Vec::new(),
+            Vec::new(),
+            None,
+            delivery,
+        )
+        .await
     }
 
     /// Queue `message` with Shoal's copies `attachments`, of `bytes` each,
-    /// which the workspace's attached files list from then on.
+    /// which the workspace's attached files list from then on as attached by
+    /// `attacher`.
     async fn queue_attached_message(
         &self,
         workspace_id: &str,
         message: String,
         attachments: Vec<PathBuf>,
         bytes: Vec<u64>,
+        attacher: Option<Attacher>,
         delivery: Delivery,
     ) -> Result<()> {
         let workspace_id = workspace_id.to_owned();
@@ -239,6 +253,7 @@ impl Manager {
                     &tx,
                     &workspace_id,
                     workspace_files::FileSource::Message,
+                    attacher.as_ref(),
                     &attachments,
                     &bytes,
                 )?;

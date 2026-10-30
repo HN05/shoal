@@ -1,6 +1,8 @@
 use super::*;
 use crate::{
-    daemon::{notifications::NotificationKind, workspace::ExecutionKind},
+    daemon::{
+        notifications::NotificationKind, workspace::ExecutionKind, workspace_files::Attacher,
+    },
     protocol::{self, Body, Response, WorkspaceMethod},
     test_support::{git, manager, repository},
 };
@@ -247,7 +249,7 @@ async fn removal_causes_and_retained_errors_survive_ownership_and_notification_r
         .unwrap();
     std::fs::write(workspace.path.join("dirty"), "keep this work").unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();

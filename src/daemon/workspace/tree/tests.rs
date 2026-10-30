@@ -2,6 +2,7 @@ use crate::{
     daemon::{
         events::{EventCause, EventItem, EventKind},
         scope::{Caller, ScopedExecution},
+        workspace_files::Attacher,
     },
     model::{CleanupReason, Workspace, WorkspaceRef},
     protocol::{
@@ -1317,7 +1318,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
     // A coordinator whose messages are full cannot be told; the user decides.
     let mut n = 0;
     while manager
-        .send_agent_message(&parent.id, format!("note {n}"), Vec::new())
+        .send_agent_message(&parent.id, format!("note {n}"), Vec::new(), &Attacher::User)
         .await
         .is_ok()
     {

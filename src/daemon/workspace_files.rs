@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{scope::Caller, workspace::Manager},
     model::{HandedBack, Repository, Workspace},
     state::{WorkspaceState, states},
 };
@@ -35,6 +35,25 @@ states!(FileSource {
     /// as long as its removal record.
     Result => "result",
 });
+
+/// Who attached a file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Attacher {
+    /// A request from outside any agent.
+    User,
+    /// A request from an agent's process tree.
+    Agent {
+        /// The agent, named as `--agent` names it.
+        agent: String,
+        /// The execution that ran the agent, which a restart replaces.
+        execution: String,
+        /// The session the agent reported, which outlives a resume; none
+        /// before its first report.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        session: Option<String>,
+    },
+}
 
 /// The most files one completion hands back, which keeps the completion that
 /// lists their copies to one protocol frame.
@@ -78,6 +97,9 @@ pub struct AttachedFile {
     pub bytes: u64,
     /// Unix seconds.
     pub created_at: i64,
+    /// None for a file attached before Shoal recorded who attached it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attached_by: Option<Attacher>,
     /// When a removed workspace's file is deleted, in Unix seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,
@@ -136,6 +158,29 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
+    /// Who a request from `caller` attaches files as: the agent whose
+    /// execution it runs in, else the user.
+    pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
+        let Some((caller, execution)) =
+            caller.and_then(|caller| Some((caller, caller.execution_id()?)))
+        else {
+            return Attacher::User;
+        };
+        let Some(agent) = self.agent_name(execution).await else {
+            return Attacher::User;
+        };
+        Attacher::Agent {
+            // Named as `--agent` and recovery records name it.
+            agent: agent.replace(' ', "-"),
+            execution: execution.to_owned(),
+            session: crate::execution::recovery::reported_session(
+                &self.paths,
+                &caller.workspace_id,
+                execution,
+            ),
+        }
+    }
+
     /// The files attached to the workspace `selector` names, or that a
     /// removed workspace of that name handed back, oldest first.
     pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
@@ -159,11 +204,13 @@ impl Manager {
     }
 
     /// Copies of the files `results` that `workspace` hands back with its
-    /// completion, recorded as its results, which outlive its removal.
+    /// completion, recorded as its results attached by `attacher`, which
+    /// outlive its removal.
     pub(crate) async fn keep_results(
         &self,
         workspace: &Workspace,
         results: Vec<PathBuf>,
+        attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
         if results.is_empty() {
             return Ok(Vec::new());
@@ -173,7 +220,7 @@ impl Manager {
         let kept =
             tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
         let records = self
-            .record_or_discard(&workspace.id, FileSource::Result, kept)
+            .record_or_discard(&workspace.id, FileSource::Result, attacher, kept)
             .await?;
         Ok(records
             .into_iter()
@@ -247,31 +294,35 @@ impl Manager {
     }
 
     /// Attach copies of `files` to the workspace `selector` names, without a
-    /// message, and return their records. Adding the same files again keeps
-    /// the copies they have.
+    /// message, as `attacher`, and return their records. Adding the same
+    /// files again keeps the copies they have.
     pub async fn add_workspace_files(
         &self,
         selector: &str,
         files: Vec<PathBuf>,
+        attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
         let workspace = self.workspace(selector).await?;
         let (layout, _files) = self.lock_files(&workspace).await?;
         let kept = keep(layout, &workspace.id, ADDED, files).await?;
-        self.record_or_discard(&workspace.id, FileSource::Added, kept)
+        self.record_or_discard(&workspace.id, FileSource::Added, attacher, kept)
             .await
     }
 
     /// Record the copies `kept` as attached to the workspace `workspace_id`
-    /// from `source` and return their records, or delete the copies made for
-    /// them when that fails.
+    /// from `source` by `attacher` and return their records, or delete the
+    /// copies made for them when that fails.
     async fn record_or_discard(
         &self,
         workspace_id: &str,
         source: FileSource,
+        attacher: &Attacher,
         kept: Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let recorded = self.record_kept(workspace_id, source, &kept).await;
+        let recorded = self
+            .record_kept(workspace_id, source, attacher, &kept)
+            .await;
         if recorded.is_err() {
             discard(kept).await;
         }
@@ -279,17 +330,18 @@ impl Manager {
     }
 
     /// Record the copies `kept` as attached to the workspace `workspace_id`
-    /// from `source`, and return their records.
+    /// from `source` by `attacher`, and return their records.
     async fn record_kept(
         &self,
         workspace_id: &str,
         source: FileSource,
+        attacher: &Attacher,
         kept: &Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let id = workspace_id.to_owned();
+        let (id, attacher) = (workspace_id.to_owned(), attacher.clone());
         let (paths, bytes) = (kept.paths.clone(), kept.bytes.clone());
         self.store
-            .run(move |db| records::record_all(db, &id, source, &paths, &bytes))
+            .run(move |db| records::record_all(db, &id, source, &attacher, &paths, &bytes))
             .await
     }
 

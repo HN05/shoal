@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    daemon::links::pr::Action,
+    daemon::{links::pr::Action, workspace_files::Attacher},
     model::CleanupReason,
     test_support::{commit, git, manager, repository},
 };
@@ -21,7 +21,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .resource_guard(&workspace.id, GuardMode::Exclusive)
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager
@@ -32,7 +32,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .await
         .unwrap();
     let error = manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap_err();
     assert!(
@@ -51,7 +51,7 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     drop(resources);
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![])
+            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
             .await
             .unwrap()
             .cleanup
@@ -64,7 +64,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
     let repo = manager.repository(&workspace.repository_id).await.unwrap();
     assert!(
         manager
-            .mark_done(&workspace.id, false, false, vec![])
+            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
             .await
             .unwrap()
             .cleanup
@@ -75,20 +75,20 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
         .unwrap();
     assert!(
         !manager
-            .mark_done(&workspace.id, false, false, vec![])
+            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
             .await
             .unwrap()
             .cleanup
     );
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![])
+            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
             .await
             .unwrap()
             .cleanup
     );
     let kept = manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(!kept.cleanup);
@@ -123,11 +123,11 @@ async fn repeating_an_unchanged_completion_is_refused() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     let error = manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap_err();
     assert!(
@@ -148,14 +148,14 @@ async fn repeating_an_unchanged_completion_is_refused() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(!manager.has_open_questions(&workspace.id).await.unwrap());
     // Another cleanup choice or HEAD replaces the recorded completion.
     assert!(
         manager
-            .mark_done(&workspace.id, true, false, vec![])
+            .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
             .await
             .unwrap()
             .cleanup
@@ -163,7 +163,7 @@ async fn repeating_an_unchanged_completion_is_refused() {
     fs::write(workspace.path.join("more-work"), "more").unwrap();
     commit(&workspace.path, "more-work");
     let newer = manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(
@@ -200,12 +200,12 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     // After the hook failed, the same completion runs it again.
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(fs::read_to_string(&runs).unwrap(), "xx");
@@ -240,7 +240,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     let reopened = Manager::open(manager.paths.clone()).await.unwrap();
@@ -255,7 +255,7 @@ async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested()
     reopened.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     reopened
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     reopened.sweep_prs().await.unwrap();
@@ -270,14 +270,14 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     let file = workspace.path.join("new-work");
     fs::write(&file, "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_error(&manager, &workspace, "uncommitted").await;
     commit(&workspace.path, "new-work");
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -306,7 +306,7 @@ async fn completion_retains_dirty_unpushed_and_newer_work() {
     );
     assert_eq!(fs::read_to_string(&file).unwrap(), "newer");
     reopened
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     reopened.sweep_completed().await.unwrap();
@@ -341,7 +341,7 @@ async fn completion_rechecks_work_after_removal_hooks() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -380,7 +380,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     let sweep = tokio::spawn({
@@ -395,7 +395,7 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     .await;
     assert!(manager.gates.try_lock_prs([&workspace.id]).is_none());
     // Another workspace's commands do not wait for the removal.
-    bounded(manager.mark_done(&other.id, false, false, vec![]))
+    bounded(manager.mark_done(&other.id, false, false, vec![], &Attacher::User))
         .await
         .unwrap();
     bounded(manager.undo_done(&other.id)).await.unwrap();
@@ -416,7 +416,7 @@ async fn bounded<T>(future: impl std::future::Future<Output = T>) -> T {
 async fn undone_withdraws_completion_without_blocking_cleanup() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     let withdrawn = manager.undo_done(&workspace.id).await.unwrap();
@@ -484,7 +484,7 @@ async fn explicit_done_releases_only_the_hold_migrated_from_continuation() {
     };
     assert_eq!(names().await, ["continue", "thread"]);
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(names().await, ["thread"]);
@@ -542,7 +542,7 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
     assert!(inspection.pr_cleanup.unwrap().error.is_none());
     // Explicit completion applies the watch's merge checks.
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -571,7 +571,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
         .await
         .unwrap();
     let completed = manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -603,7 +603,7 @@ async fn questions_asked_after_done_retain_completion_and_pr_cleanup() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     let question = manager
@@ -658,7 +658,7 @@ async fn completion_cleans_up_commits_the_start_branch_took_unchanged() {
             .is_some()
     );
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -678,14 +678,14 @@ async fn completion_retains_commits_the_start_branch_took_adapted() {
         Err(CleanupReason::Unpushed { commits: 1 })
     );
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert_error(&manager, &workspace, "neither pushed").await;
     // Marking the same HEAD integrated updates the completion.
     let completion = manager
-        .mark_done(&workspace.id, false, true, vec![])
+        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(completion.integrated && completion.error.is_none());
@@ -706,7 +706,7 @@ async fn an_integrated_completion_retains_dirty_and_newer_work() {
     commit(&workspace.path, "new-work");
     fs::write(workspace.path.join("unsaved"), "keep").unwrap();
     manager
-        .mark_done(&workspace.id, false, true, vec![])
+        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -732,11 +732,11 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, false, true, vec![])
+        .mark_done(&workspace.id, false, true, vec![], &Attacher::User)
         .await
         .unwrap();
     let completion = manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(!completion.integrated);
@@ -829,7 +829,7 @@ async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
     let leaf = split("leaf", nested.id.clone()).await;
 
     manager
-        .mark_done(&parent.id, false, false, Vec::new())
+        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     assert_eq!(
@@ -876,14 +876,14 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         .await
         .unwrap();
     manager
-        .mark_done(&parent.id, false, false, Vec::new())
+        .mark_done(&parent.id, false, false, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
     assert!(child.path.exists());
     // Nor once it is withdrawn.
     manager
-        .mark_done(&parent.id, true, false, Vec::new())
+        .mark_done(&parent.id, true, false, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     manager.undo_done(&parent.id).await.unwrap();
@@ -891,7 +891,7 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
     assert!(child.path.exists());
     // Nor once the parent committed after it.
     manager
-        .mark_done(&parent.id, true, false, Vec::new())
+        .mark_done(&parent.id, true, false, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     commit_file(&parent.path, "parent-work");
@@ -923,7 +923,7 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
         .await
         .unwrap();
     manager
-        .mark_done(&other.id, false, false, Vec::new())
+        .mark_done(&other.id, false, false, Vec::new(), &Attacher::User)
         .await
         .unwrap();
     let id = parent.id.clone();

@@ -133,8 +133,9 @@ pub(super) async fn handle(
             message,
             attachments,
         } => {
+            let attacher = manager.attacher(caller).await;
             manager
-                .send_agent_message(&workspace, message, attachments)
+                .send_agent_message(&workspace, message, attachments, &attacher)
                 .await?;
             Body::Ok
         }

@@ -3,6 +3,7 @@ use crate::{
     daemon::workspace::agent_queue::tests::{
         connected_agent, create, limit_globally, queue, register, started,
     },
+    daemon::workspace_files::Attacher,
     execution::recovery::record_path,
     model::Workspace,
     state::QueueKind::Restore,
@@ -126,7 +127,7 @@ async fn signal_stops_queue_their_restore_once_the_execution_has_ended() {
     signal_stop(&manager, &open, "ended");
     stop(&manager, &open, "manual", STOPPED);
     manager
-        .mark_done(&done.id, false, false, vec![])
+        .mark_done(&done.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     signal_stop(&manager, &done, "finished");
@@ -210,7 +211,12 @@ async fn a_signal_stopped_idle_agent_waits_for_an_update_unless_resumed() {
     ))
     .unwrap();
     manager
-        .send_agent_message("idle", "Review requested".into(), Vec::new())
+        .send_agent_message(
+            "idle",
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -238,7 +244,12 @@ async fn a_queued_restore_of_an_idle_agent_keeps_its_workspace_from_no_cleanup()
     // space for the new configuration, which holds its restore back.
     manager.publish_config(global_config(""));
     manager
-        .send_agent_message("idle", "Review requested".into(), Vec::new())
+        .send_agent_message(
+            "idle",
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -343,7 +354,7 @@ async fn a_stop_or_completion_keeps_stopped_agents_down() {
         .await
         .unwrap();
     manager
-        .mark_done(&finished.id, false, false, vec![])
+        .mark_done(&finished.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(queue(&manager).await.is_empty());

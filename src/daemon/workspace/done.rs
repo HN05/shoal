@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     config::Effective,
-    daemon::{events::EventCause, notifications::NotificationKind, questions, store},
+    daemon::{
+        events::EventCause, notifications::NotificationKind, questions, store,
+        workspace_files::Attacher,
+    },
     hooks::{self, Hook, HookKind},
     model::{Completion, HandedBack, Workspace},
     state::WorkspaceState,
@@ -61,21 +64,23 @@ impl Manager {
 
     /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
     /// `integrated` records that another branch has HEAD's work under other
-    /// commits; copies of the files `results` are handed back, which the
-    /// workspace's attached files keep after its removal.
+    /// commits; copies of the files `results` are handed back, attached by
+    /// `attacher`, which the workspace's attached files keep after its
+    /// removal.
     pub async fn mark_done(
         &self,
         selector: &str,
         cleanup: bool,
         integrated: bool,
         results: Vec<PathBuf>,
+        attacher: &Attacher,
     ) -> Result<Completion> {
         crate::daemon::workspace_files::check_results(&results)?;
         // Serialize cleanup choices with the PR and completion sweeps.
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        let results = self.keep_results(&workspace, results).await?;
+        let results = self.keep_results(&workspace, results, attacher).await?;
         self.record_done(&workspace, head, cleanup, integrated, results)
             .await
     }

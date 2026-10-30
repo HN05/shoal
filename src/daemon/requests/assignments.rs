@@ -10,7 +10,11 @@ use super::super::{
 };
 use crate::protocol::{AssignmentMethod, Body};
 
-pub(super) async fn handle(manager: &Arc<Manager>, method: AssignmentMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: AssignmentMethod,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
     Ok(Answer::Body(match method {
         AssignmentMethod::WorkspaceUndone { workspace } => {
             Body::Completion(manager.undo_done(&workspace).await?)
@@ -33,11 +37,14 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: AssignmentMethod) -> 
             cleanup,
             integrated,
             results,
-        } => Body::Completion(
-            manager
-                .mark_done(&workspace, cleanup, integrated, results)
-                .await?,
-        ),
+        } => {
+            let attacher = manager.attacher(caller).await;
+            Body::Completion(
+                manager
+                    .mark_done(&workspace, cleanup, integrated, results, &attacher)
+                    .await?,
+            )
+        }
     }))
 }
 

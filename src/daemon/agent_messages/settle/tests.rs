@@ -1,4 +1,5 @@
 use super::*;
+use crate::daemon::workspace_files::Attacher;
 use crate::forge::items::link::Selection;
 use crate::test_support::{manager, repository};
 
@@ -87,7 +88,7 @@ async fn idle_agent(manager: &Manager, workspace: &Workspace) {
 async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
-            .send_agent_message(&workspace.id, message.into(), Vec::new())
+            .send_agent_message(&workspace.id, message.into(), Vec::new(), &Attacher::User)
             .await
             .unwrap();
     }

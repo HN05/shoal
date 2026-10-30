@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    daemon::agent_queue::tests::STARTED,
+    daemon::{agent_queue::tests::STARTED, workspace_files::Attacher},
     model::Repository,
     test_support::{global_config, manager, repository},
 };
@@ -316,7 +316,7 @@ async fn completed_workspaces_and_registered_agents_release_starting_slots() {
     assert!(!started(&second.id));
 
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -1139,7 +1139,12 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
 
     // An update makes it due; it waits for the launch's slot like a launch.
     manager
-        .send_agent_message(&idle.name, "Review requested".into(), Vec::new())
+        .send_agent_message(
+            &idle.name,
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -1185,7 +1190,12 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     manager.queue_agent_restore(&execution).await.unwrap();
     let restoring = await_restore(&manager, &execution).await;
     manager
-        .send_agent_message(&idle.name, "Review requested".into(), Vec::new())
+        .send_agent_message(
+            &idle.name,
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // No reading has found the cleanup threshold free yet.

@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    daemon::{ports::PortRequest, workspace::ExecutionKind},
+    daemon::{ports::PortRequest, workspace::ExecutionKind, workspace_files::Attacher},
     test_support::{manager, repository},
 };
 use futures_util::FutureExt;
@@ -81,7 +81,7 @@ async fn agent_exit_wakes_cleanup_for_completed_workspace() {
         .await
         .unwrap();
     manager
-        .mark_done(&workspace.id, true, false, vec![])
+        .mark_done(&workspace.id, true, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(manager.signals.cleanup_woken().now_or_never().is_some());

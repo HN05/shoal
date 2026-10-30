@@ -1,5 +1,8 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::{
+    daemon::workspace_files::Attacher,
+    test_support::{manager, repository},
+};
 
 #[tokio::test]
 async fn long_file_listings_go_in_pages() {
@@ -35,6 +38,7 @@ async fn long_file_listings_go_in_pages() {
         FileMethod::ListFiles {
             workspace: workspace.name.clone(),
         },
+        None,
     )
     .await
     .unwrap();
@@ -68,7 +72,7 @@ async fn deleting_by_name_needs_a_workspace() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     manager
-        .add_workspace_files(&workspace.name, vec![file])
+        .add_workspace_files(&workspace.name, vec![file], &Attacher::User)
         .await
         .unwrap();
     let refused = handle(
@@ -78,6 +82,7 @@ async fn deleting_by_name_needs_a_workspace() {
             names: vec!["notes.md".into()],
             ids: vec![],
         },
+        None,
     )
     .await;
     let Err(error) = refused else {

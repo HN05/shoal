@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    daemon::workspace::{ExecutionKind, identity},
+    daemon::{
+        workspace::{ExecutionKind, identity},
+        workspace_files::Attacher,
+    },
     test_support,
 };
 use std::sync::Arc;
@@ -513,10 +516,15 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
     let file = temp.path().join("crash.log");
     fs::write(&file, "panic")?;
     manager
-        .send_agent_message(&workspace.id, "See the log".into(), vec![file.clone()])
+        .send_agent_message(
+            &workspace.id,
+            "See the log".into(),
+            vec![file.clone()],
+            &Attacher::User,
+        )
         .await?;
     manager
-        .mark_done(&workspace.id, false, false, vec![file])
+        .mark_done(&workspace.id, false, false, vec![file], &Attacher::User)
         .await?;
 
     manager.move_repositories(Layout::Regular).await?;
@@ -568,7 +576,12 @@ async fn a_move_waits_for_a_send_keeping_attached_files() -> Result<()> {
     moving.await??;
     // A send after the move copies to the new place.
     manager
-        .send_agent_message(&workspace.id, "See the log".into(), vec![file])
+        .send_agent_message(
+            &workspace.id,
+            "See the log".into(),
+            vec![file],
+            &Attacher::User,
+        )
         .await?;
     let messages = manager.agent_messages(&workspace.id).await?;
     let copy = &messages[0].attachments[0];
@@ -633,7 +646,7 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     let file = temp.path().join("notes.md");
     fs::write(&file, "plan")?;
     manager
-        .add_workspace_files(&workspace.id, vec![file])
+        .add_workspace_files(&workspace.id, vec![file], &Attacher::User)
         .await?;
     // A move, then a deletion, wait for the files gate this test holds.
     let held = manager.gates.lock_message_files(&repo.id).await;
@@ -679,7 +692,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks")?;
     manager
-        .mark_done(&workspace.id, false, false, vec![report])
+        .mark_done(&workspace.id, false, false, vec![report], &Attacher::User)
         .await?;
     manager
         .remove_workspace(

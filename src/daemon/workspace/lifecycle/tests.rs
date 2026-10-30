@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    daemon::workspace_files::Attacher,
     model::Workspace,
     process::identity,
     test_support::{git, manager, repository},
@@ -1130,7 +1131,7 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&bottom.id, false, false, vec![report])
+        .mark_done(&bottom.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     manager

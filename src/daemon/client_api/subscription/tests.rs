@@ -53,7 +53,7 @@ mod streams {
 
     use super::super::super::tests::{HANG, TestDaemon};
     use crate::{
-        daemon::{notifications::NotificationKind, questions::Ask},
+        daemon::{notifications::NotificationKind, questions::Ask, workspace_files::Attacher},
         forge::items::link::LinkKind,
         model::{HoldPlacer, Relation},
         removal::{InspectionPolicy, UnsavedWork},
@@ -161,7 +161,12 @@ mod streams {
         .await;
 
         manager
-            .send_agent_message(&workspace.id, "Rebase on main".into(), Vec::new())
+            .send_agent_message(
+                &workspace.id,
+                "Rebase on main".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
         until(&mut subscription, |update| {

@@ -1,6 +1,9 @@
 use super::*;
 use crate::{
-    daemon::workspace::agent_queue::tests::{create, register, request, started},
+    daemon::{
+        workspace::agent_queue::tests::{create, register, request, started},
+        workspace_files::Attacher,
+    },
     model::{QueueEntry, QueueRequest, Repository},
     removal::{InspectionPolicy, UnsavedWork},
     test_support::{commit, global_config, manager},
@@ -60,7 +63,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     assert_eq!(ui.waiting_for, ["api"]);
 
     manager
-        .mark_done(&api.id, false, false, vec![])
+        .mark_done(&api.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     std::fs::write(api.path.join("more"), "more\n").unwrap();
@@ -71,7 +74,7 @@ async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     assert_eq!(entry(&manager, &ui.id).await.waiting_for, ["api"]);
 
     manager
-        .mark_done(&api.id, false, false, vec![])
+        .mark_done(&api.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -147,7 +150,7 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
         ["fix or pending"]
     );
     manager
-        .mark_done(&fix.id, false, false, vec![])
+        .mark_done(&fix.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     manager.dispatch_queue().await.unwrap();
@@ -192,7 +195,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     .await;
     for workspace in [&lower, &separate, &upper] {
         manager
-            .mark_done(&workspace.id, false, false, vec![])
+            .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
             .await
             .unwrap();
     }

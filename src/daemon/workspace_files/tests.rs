@@ -1,6 +1,13 @@
-use super::FileSource;
+use std::time::Duration;
+
+use super::{Attacher, FileSource};
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{
+        scope::{Caller, ScopedExecution},
+        workspace::{ExecutionKind, Manager},
+    },
+    execution::recovery,
+    model::Workspace,
     test_support::{manager, repository},
 };
 
@@ -11,7 +18,7 @@ fn permissions_bind() -> bool {
     (unsafe { libc::geteuid() }) != 0
 }
 
-async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> crate::model::Workspace {
+async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> Workspace {
     let checkout = repository(temp.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
@@ -21,6 +28,151 @@ async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> crate::model:
         .create_workspace(&repo.id, "receiver".into(), None, None, None)
         .await
         .unwrap()
+}
+
+/// The caller that the processes of a tracked agent `name` in `workspace`
+/// send requests as.
+async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> Caller {
+    let id = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap()
+        .plan
+        .id;
+    manager
+        .track_agent(
+            &id,
+            name,
+            &workspace.id,
+            &workspace.name,
+            true,
+            Duration::ZERO,
+        )
+        .await;
+    Caller {
+        workspace_id: workspace.id.clone(),
+        execution: Some(ScopedExecution {
+            id,
+            kind: ExecutionKind::Command,
+        }),
+    }
+}
+
+#[tokio::test]
+async fn files_from_outside_any_agent_are_the_users() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    assert_eq!(manager.attacher(None).await, Attacher::User);
+    // A workspace terminal or a command, scoped without an agent.
+    let terminal = Caller {
+        workspace_id: workspace.id.clone(),
+        execution: None,
+    };
+    assert_eq!(manager.attacher(Some(&terminal)).await, Attacher::User);
+    let command = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap()
+        .plan
+        .id;
+    let command = Caller {
+        workspace_id: workspace.id.clone(),
+        execution: Some(ScopedExecution {
+            id: command,
+            kind: ExecutionKind::Command,
+        }),
+    };
+    assert_eq!(manager.attacher(Some(&command)).await, Attacher::User);
+
+    let file = temp.path().join("notes.md");
+    std::fs::write(&file, "plan").unwrap();
+    let attacher = manager.attacher(None).await;
+    let [added] = manager
+        .add_workspace_files(&workspace.name, vec![file], &attacher)
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(added.attached_by, Some(Attacher::User));
+    assert_eq!(
+        serde_json::to_value(&added).unwrap()["attached_by"],
+        serde_json::json!({"kind": "user"})
+    );
+}
+
+#[tokio::test]
+async fn an_agents_files_name_its_kind_and_session() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let caller = agent_caller(&manager, &workspace, "happy claude").await;
+    let execution = caller.execution_id().unwrap().to_owned();
+    // An agent that has not reported its session yet.
+    assert_eq!(
+        manager.attacher(Some(&caller)).await,
+        Attacher::Agent {
+            agent: "happy-claude".into(),
+            execution: execution.clone(),
+            session: None,
+        }
+    );
+    recovery::save_session(&manager.paths, &workspace.id, &execution, "s1").unwrap();
+    let attacher = manager.attacher(Some(&caller)).await;
+    assert_eq!(
+        serde_json::to_value(&attacher).unwrap(),
+        serde_json::json!({
+            "kind": "agent",
+            "agent": "happy-claude",
+            "execution": execution,
+            "session": "s1",
+        })
+    );
+
+    let (notes, log) = (temp.path().join("notes.md"), temp.path().join("crash.log"));
+    std::fs::write(&notes, "plan").unwrap();
+    std::fs::write(&log, "panic").unwrap();
+    manager
+        .add_workspace_files(&workspace.name, vec![notes], &attacher)
+        .await
+        .unwrap();
+    manager
+        .send_agent_message(&workspace.name, "See the log".into(), vec![log], &attacher)
+        .await
+        .unwrap();
+    let files = manager.workspace_files(&workspace.name).await.unwrap();
+    assert_eq!(files.len(), 2, "{files:?}");
+    assert!(
+        files
+            .iter()
+            .all(|file| file.attached_by.as_ref() == Some(&attacher)),
+        "{files:?}"
+    );
+}
+
+#[tokio::test]
+async fn results_name_the_agent_that_handed_them_back() {
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let caller = agent_caller(&manager, &workspace, "codex").await;
+    let attacher = manager.attacher(Some(&caller)).await;
+    let report = temp.path().join("report.md");
+    std::fs::write(&report, "done").unwrap();
+    manager
+        .mark_done(&workspace.id, false, false, vec![report], &attacher)
+        .await
+        .unwrap();
+    let files = manager.workspace_files(&workspace.name).await.unwrap();
+    let [result] = files.as_slice() else {
+        panic!("{files:?}");
+    };
+    assert_eq!(result.source, FileSource::Result);
+    assert_eq!(
+        result.attached_by,
+        Some(Attacher::Agent {
+            agent: "codex".into(),
+            execution: caller.execution_id().unwrap().into(),
+            session: None,
+        })
+    );
 }
 
 #[tokio::test]
@@ -39,7 +191,12 @@ async fn files_sent_with_messages_are_listed_until_removal() {
     // Sending the same file again keeps one record of its copy.
     for _ in 0..2 {
         manager
-            .send_agent_message(&workspace.name, "See the log".into(), vec![file.clone()])
+            .send_agent_message(
+                &workspace.name,
+                "See the log".into(),
+                vec![file.clone()],
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -83,7 +240,7 @@ async fn added_files_need_no_message() {
     let file = temp.path().join("config.toml");
     std::fs::write(&file, "port = 1").unwrap();
     let added = manager
-        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .add_workspace_files(&workspace.name, vec![file.clone()], &Attacher::User)
         .await
         .unwrap();
     let [copy] = added.as_slice() else {
@@ -93,11 +250,11 @@ async fn added_files_need_no_message() {
     assert_eq!(std::fs::read_to_string(&copy.path).unwrap(), "port = 1");
     // Adding it again keeps the copy; sending it is a separate copy.
     manager
-        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .add_workspace_files(&workspace.name, vec![file.clone()], &Attacher::User)
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.name, String::new(), vec![file])
+        .send_agent_message(&workspace.name, String::new(), vec![file], &Attacher::User)
         .await
         .unwrap();
     let files = manager.workspace_files(&workspace.name).await.unwrap();
@@ -122,7 +279,12 @@ async fn deleting_by_name_keeps_the_other_files() {
     std::fs::write(&log, "panic").unwrap();
     std::fs::write(&shot, "image").unwrap();
     manager
-        .send_agent_message(&workspace.name, "See".into(), vec![log.clone(), shot])
+        .send_agent_message(
+            &workspace.name,
+            "See".into(),
+            vec![log.clone(), shot],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let error = manager
@@ -151,6 +313,7 @@ async fn deleting_by_name_keeps_the_other_files() {
             &workspace.name,
             "See".into(),
             vec![log, temp.path().join("shot.png")],
+            &Attacher::User,
         )
         .await
         .unwrap();
@@ -178,7 +341,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     std::fs::write(&file, "plan").unwrap();
     for workspace in [&idle, &active, &unresolved] {
         manager
-            .add_workspace_files(&workspace.name, vec![file.clone()])
+            .add_workspace_files(&workspace.name, vec![file.clone()], &Attacher::User)
             .await
             .unwrap();
     }
@@ -225,7 +388,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     let completion = manager
-        .mark_done(&child.id, false, false, vec![report])
+        .mark_done(&child.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(completion.results[0].name, "report.md");
@@ -315,7 +478,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&bottom.id, false, false, vec![report])
+        .mark_done(&bottom.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     for removed in [&bottom, &middle] {
@@ -353,7 +516,7 @@ async fn deleting_refuses_a_copy_whose_directory_was_replaced() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     let added = manager
-        .add_workspace_files(&workspace.name, vec![file])
+        .add_workspace_files(&workspace.name, vec![file], &Attacher::User)
         .await
         .unwrap();
     // The copy's directory now leads elsewhere, to a file of the same name.
@@ -386,7 +549,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&audit.id, false, false, vec![report])
+        .mark_done(&audit.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     let result = manager.workspace_files(&audit.id).await.unwrap()[0]
@@ -439,7 +602,7 @@ async fn a_completion_hands_back_a_bounded_number_of_files() {
         .map(|n| temp.path().join(format!("{n}.md")))
         .collect();
     let error = manager
-        .mark_done(&audit.id, false, false, results)
+        .mark_done(&audit.id, false, false, results, &Attacher::User)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("at most"), "{error:#}");
@@ -453,7 +616,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&audit.id, false, false, vec![report])
+        .mark_done(&audit.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     let renamed = manager
@@ -481,7 +644,7 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     std::fs::write(&shot, "image").unwrap();
     let files = vec![notes, shot];
     let added = manager
-        .add_workspace_files(&workspace.name, files.clone())
+        .add_workspace_files(&workspace.name, files.clone(), &Attacher::User)
         .await
         .unwrap();
     // The workspace's directory now leads elsewhere, where a copy is gone.
@@ -492,7 +655,7 @@ async fn copying_again_refuses_a_workspace_directory_that_was_replaced() {
     let inside = added[1].path.strip_prefix(&directory).unwrap();
     std::fs::remove_file(elsewhere.join(added[0].path.strip_prefix(&directory).unwrap())).unwrap();
     let error = manager
-        .add_workspace_files(&workspace.name, files)
+        .add_workspace_files(&workspace.name, files, &Attacher::User)
         .await
         .unwrap_err();
     assert!(
@@ -511,11 +674,11 @@ async fn deleting_a_record_keeps_other_copies_of_the_same_name() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     let added = manager
-        .add_workspace_files(&workspace.name, vec![file.clone()])
+        .add_workspace_files(&workspace.name, vec![file.clone()], &Attacher::User)
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.name, String::new(), vec![file])
+        .send_agent_message(&workspace.name, String::new(), vec![file], &Attacher::User)
         .await
         .unwrap();
     let deleted = manager
@@ -538,12 +701,24 @@ async fn handing_back_a_changed_file_completes_again() {
     let report = temp.path().join("report.md");
     std::fs::write(&report, "First draft").unwrap();
     let first = manager
-        .mark_done(&audit.id, false, false, vec![report.clone()])
+        .mark_done(
+            &audit.id,
+            false,
+            false,
+            vec![report.clone()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // The same file again changes nothing.
     let error = manager
-        .mark_done(&audit.id, false, false, vec![report.clone()])
+        .mark_done(
+            &audit.id,
+            false,
+            false,
+            vec![report.clone()],
+            &Attacher::User,
+        )
         .await
         .unwrap_err();
     assert!(
@@ -552,7 +727,7 @@ async fn handing_back_a_changed_file_completes_again() {
     );
     std::fs::write(&report, "Revised").unwrap();
     let revised = manager
-        .mark_done(&audit.id, false, false, vec![report])
+        .mark_done(&audit.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(revised.results[0].name, first.results[0].name);
@@ -567,7 +742,12 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     std::fs::write(&log, "panic").unwrap();
     std::fs::write(&env, "PORT=1").unwrap();
     manager
-        .send_agent_message(&workspace.name, "See".into(), vec![log, env])
+        .send_agent_message(
+            &workspace.name,
+            "See".into(),
+            vec![log, env],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let copies: Vec<_> = manager
@@ -625,7 +805,12 @@ async fn upgrading_records_the_copies_messages_attached_before() {
     let mut expected = copies;
     expected.sort();
     assert_eq!(recorded, expected, "a hidden file name is a copy too");
-    assert!(files.iter().all(|file| file.source == FileSource::Message));
+    assert!(
+        files
+            .iter()
+            .all(|file| file.source == FileSource::Message && file.attached_by.is_none()),
+        "{files:?}"
+    );
     reopened.store.shutdown().await;
 }
 
@@ -640,7 +825,7 @@ async fn files_that_fail_to_go_with_their_repository_stay_recorded() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     let added = manager
-        .add_workspace_files(&workspace.name, vec![file])
+        .add_workspace_files(&workspace.name, vec![file], &Attacher::User)
         .await
         .unwrap();
     // The copy's directory refuses to give it up.
@@ -672,7 +857,7 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     let file = temp.path().join("crash.log");
     std::fs::write(&file, "panic").unwrap();
     manager
-        .send_agent_message(&workspace.name, "See".into(), vec![file])
+        .send_agent_message(&workspace.name, "See".into(), vec![file], &Attacher::User)
         .await
         .unwrap();
     let copy = manager.workspace_files(&workspace.name).await.unwrap()[0]
@@ -711,7 +896,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
     let file = temp.path().join("crash.log");
     std::fs::write(&file, "panic").unwrap();
     manager
-        .send_agent_message(&workspace.name, "See".into(), vec![file])
+        .send_agent_message(&workspace.name, "See".into(), vec![file], &Attacher::User)
         .await
         .unwrap();
     manager

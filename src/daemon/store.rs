@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 93;
+const SCHEMA_VERSION: i64 = 94;
 
 #[cfg(test)]
 mod benchmark;
@@ -438,7 +438,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (92, HOLD_PLACERS, None),
     // The local repository config moved to a file in the repository's directory.
     (93, "DROP TABLE IF EXISTS repository_configs;", None),
+    (94, FILE_ATTACHERS, None),
 ];
+
+/// Who attached each file, as JSON; files attached before Shoal recorded it
+/// have none.
+const FILE_ATTACHERS: &str = "ALTER TABLE workspace_files ADD COLUMN attached_by TEXT;";
 
 /// The repositories whose copies of files attached to messages before Shoal
 /// recorded them the cleanup sweep has yet to record, once no move of their

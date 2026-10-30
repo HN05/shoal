@@ -61,7 +61,14 @@ impl Manager {
             .await??;
             self.store
                 .run(move |db| {
-                    records::record(db, &workspace_id, FileSource::Message, &copies, &bytes)
+                    records::record(
+                        db,
+                        &workspace_id,
+                        FileSource::Message,
+                        None,
+                        &copies,
+                        &bytes,
+                    )
                 })
                 .await?;
         }

@@ -12,11 +12,18 @@ use crate::protocol::{Body, FileMethod};
 
 /// Every answer lists files, which no limit keeps to one frame, so each is
 /// sent in pages.
-pub(super) async fn handle(manager: &Arc<Manager>, method: FileMethod) -> Result<Answer> {
+pub(super) async fn handle(
+    manager: &Arc<Manager>,
+    method: FileMethod,
+    caller: Option<&Caller>,
+) -> Result<Answer> {
     let files = match method {
         FileMethod::ListFiles { workspace } => manager.workspace_files(&workspace).await,
         FileMethod::AddFiles { workspace, files } => {
-            manager.add_workspace_files(&workspace, files).await
+            let attacher = manager.attacher(caller).await;
+            manager
+                .add_workspace_files(&workspace, files, &attacher)
+                .await
         }
         FileMethod::RemoveFiles {
             workspace: Some(workspace),

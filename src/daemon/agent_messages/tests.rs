@@ -3,6 +3,7 @@ use crate::{
     daemon::{
         scope::{self, Caller},
         workspace::{ExecutionKind, Manager},
+        workspace_files::Attacher,
     },
     protocol::AgentMethod,
     test_support::{manager, repository},
@@ -31,17 +32,32 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     let changed = manager.signals.watch_agent_messages();
     for _ in 0..2 {
         manager
-            .send_agent_message(&workspace.name, "Stop the dev server".into(), Vec::new())
+            .send_agent_message(
+                &workspace.name,
+                "Stop the dev server".into(),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
     assert!(changed.has_changed().unwrap());
     manager
-        .send_agent_message(&workspace.name, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.name,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.name, "Move:\n\tabc123 to api".into(), Vec::new())
+        .send_agent_message(
+            &workspace.name,
+            "Move:\n\tabc123 to api".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     for rejected in [
@@ -50,7 +66,7 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     ] {
         assert!(
             manager
-                .send_agent_message(&workspace.name, rejected, Vec::new())
+                .send_agent_message(&workspace.name, rejected, Vec::new(), &Attacher::User)
                 .await
                 .is_err()
         );
@@ -73,7 +89,12 @@ async fn messages_wait_until_delivered_and_repeats_collapse() {
     assert_eq!(remaining, messages[1..]);
     // A delivered message may be sent again.
     manager
-        .send_agent_message(&workspace.name, "Stop the dev server".into(), Vec::new())
+        .send_agent_message(
+            &workspace.name,
+            "Stop the dev server".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -136,13 +157,23 @@ async fn unread_messages_are_bounded() {
     let workspace = workspace(&temp, &manager, "receiver").await;
     for n in 0..super::MAX_UNREAD {
         manager
-            .send_agent_message(&workspace.name, format!("message {n}"), Vec::new())
+            .send_agent_message(
+                &workspace.name,
+                format!("message {n}"),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
     assert!(
         manager
-            .send_agent_message(&workspace.name, "one more".into(), Vec::new())
+            .send_agent_message(
+                &workspace.name,
+                "one more".into(),
+                Vec::new(),
+                &Attacher::User
+            )
             .await
             .is_err()
     );
@@ -204,12 +235,22 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     std::fs::write(&file, "panic").unwrap();
     for _ in 0..2 {
         manager
-            .send_agent_message(&workspace.name, "See the log".into(), vec![file.clone()])
+            .send_agent_message(
+                &workspace.name,
+                "See the log".into(),
+                vec![file.clone()],
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
     manager
-        .send_agent_message(&workspace.name, String::new(), vec![file.clone()])
+        .send_agent_message(
+            &workspace.name,
+            String::new(),
+            vec![file.clone()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     std::fs::write(&file, "changed").unwrap();
@@ -249,7 +290,12 @@ async fn a_refused_message_leaves_no_copies() {
     let workspace = workspace(&temp, &manager, "receiver").await;
     for n in 0..super::MAX_UNREAD {
         manager
-            .send_agent_message(&workspace.name, format!("message {n}"), Vec::new())
+            .send_agent_message(
+                &workspace.name,
+                format!("message {n}"),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }
@@ -257,7 +303,12 @@ async fn a_refused_message_leaves_no_copies() {
     std::fs::write(&file, "panic").unwrap();
     assert!(
         manager
-            .send_agent_message(&workspace.name, "See the log".into(), vec![file])
+            .send_agent_message(
+                &workspace.name,
+                "See the log".into(),
+                vec![file],
+                &Attacher::User
+            )
             .await
             .is_err()
     );
@@ -282,7 +333,7 @@ async fn an_attached_send_waits_for_the_files_gate() {
         let (manager, name) = (manager.clone(), workspace.name.clone());
         async move {
             manager
-                .send_agent_message(&name, "See the log".into(), vec![file])
+                .send_agent_message(&name, "See the log".into(), vec![file], &Attacher::User)
                 .await
         }
     });
@@ -325,7 +376,7 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .send_agent_message(&id, "See the log".into(), vec![file])
+                .send_agent_message(&id, "See the log".into(), vec![file], &Attacher::User)
                 .await
         }
     });
@@ -367,7 +418,12 @@ async fn attachments_must_be_files() {
         "relative.png".into(),
     ] {
         let error = manager
-            .send_agent_message(&workspace.name, "See".into(), vec![refused.clone()])
+            .send_agent_message(
+                &workspace.name,
+                "See".into(),
+                vec![refused.clone()],
+                &Attacher::User,
+            )
             .await
             .unwrap_err();
         assert!(
@@ -377,7 +433,7 @@ async fn attachments_must_be_files() {
     }
     assert!(
         manager
-            .send_agent_message(&workspace.name, String::new(), Vec::new())
+            .send_agent_message(&workspace.name, String::new(), Vec::new(), &Attacher::User)
             .await
             .is_err()
     );

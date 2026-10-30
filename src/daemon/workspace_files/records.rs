@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, FileSource, Owner};
+use super::{AttachedFile, Attacher, FileSource, Owner};
 
-const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at,
+const COLUMNS: &str = "id,workspace,source,name,path,bytes,created_at,attached_by,
     (SELECT expires_at FROM removed_workspaces r WHERE r.workspace_id=workspace_files.workspace_id
         AND workspace_files.workspace_id NOT IN (SELECT id FROM workspaces))";
 
@@ -20,7 +20,18 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
         path: PathBuf::from(row.get::<_, String>(4)?),
         bytes: row.get::<_, i64>(5)?.try_into().unwrap_or_default(),
         created_at: row.get(6)?,
-        expires_at: row.get(7)?,
+        attached_by: row
+            .get::<_, Option<String>>(7)?
+            .map(|json| serde_json::from_str(&json))
+            .transpose()
+            .map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    7,
+                    rusqlite::types::Type::Text,
+                    error.into(),
+                )
+            })?,
+        expires_at: row.get(8)?,
     })
 }
 
@@ -34,15 +45,18 @@ fn owner(row: &rusqlite::Row<'_>) -> rusqlite::Result<Owner> {
 }
 
 /// Record the copies `paths`, of `bytes` each, as attached to the workspace
-/// `workspace_id` from `source`, in the caller's transaction. A copy already
-/// recorded, as when the same files are sent again, keeps its record.
+/// `workspace_id` from `source` by `attacher`, unknown when none, in the
+/// caller's transaction. A copy already recorded, as when the same files are
+/// sent again, keeps its record.
 pub(crate) fn record(
     tx: &Connection,
     workspace_id: &str,
     source: FileSource,
+    attacher: Option<&Attacher>,
     paths: &[PathBuf],
     bytes: &[u64],
 ) -> Result<()> {
+    let attacher = attacher.map(serde_json::to_string).transpose()?;
     for (path, bytes) in paths.iter().zip(bytes) {
         let name = path
             .file_name()
@@ -50,15 +64,17 @@ pub(crate) fn record(
             .unwrap_or_default();
         tx.execute(
             "INSERT OR IGNORE INTO workspace_files
-                (workspace_id,workspace,parent_id,repository_id,source,name,path,bytes,created_at)
-                SELECT id,name,parent_workspace_id,repository_id,?2,?3,?4,?5,unixepoch()
+                (workspace_id,workspace,parent_id,repository_id,source,name,path,bytes,created_at,
+                    attached_by)
+                SELECT id,name,parent_workspace_id,repository_id,?2,?3,?4,?5,unixepoch(),?6
                 FROM workspaces WHERE id=?1",
             params![
                 workspace_id,
                 source,
                 name,
                 path.to_string_lossy(),
-                i64::try_from(*bytes)?
+                i64::try_from(*bytes)?,
+                attacher
             ],
         )?;
     }
@@ -71,11 +87,12 @@ pub(super) fn record_all(
     db: &mut Connection,
     workspace_id: &str,
     source: FileSource,
+    attacher: &Attacher,
     paths: &[PathBuf],
     bytes: &[u64],
 ) -> Result<Vec<AttachedFile>> {
     let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    record(&tx, workspace_id, source, paths, bytes)?;
+    record(&tx, workspace_id, source, Some(attacher), paths, bytes)?;
     let records = {
         let mut statement = tx.prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"

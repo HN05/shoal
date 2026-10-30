@@ -4,7 +4,7 @@ use anyhow::Context;
 
 use super::*;
 use crate::{
-    daemon::notifications::NotificationKind,
+    daemon::{notifications::NotificationKind, workspace_files::Attacher},
     model::Workspace,
     test_support::{global_config, manager, repository},
 };
@@ -202,7 +202,7 @@ async fn a_finished_assignment_cancels_its_retry() {
     let (_temp, manager, workspace, execution, _connection) = agent(RETRY_ON).await;
     fail(&manager, &workspace, &execution, TurnFailure::Overloaded).await;
     manager
-        .mark_done(&workspace.name, false, false, vec![])
+        .mark_done(&workspace.name, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(retry(&manager, &workspace).await, None);
@@ -218,7 +218,12 @@ async fn a_full_message_queue_defers_only_its_own_retry() {
     let (open, open_execution, _open) = another_agent(&manager, "open").await;
     for n in 0..crate::daemon::agent_messages::MAX_UNREAD {
         manager
-            .send_agent_message(&full.name, format!("unread {n}"), Vec::new())
+            .send_agent_message(
+                &full.name,
+                format!("unread {n}"),
+                Vec::new(),
+                &Attacher::User,
+            )
             .await
             .unwrap();
     }

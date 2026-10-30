@@ -3,6 +3,7 @@ use crate::{
     daemon::{
         notifications::NotificationKind,
         workspace::{ExecutionKind, StartedExecution},
+        workspace_files::Attacher,
     },
     execution::recovery::Record,
     model::Workspace,
@@ -72,7 +73,7 @@ async fn agent(
     }
     if setup.done {
         manager
-            .mark_done(&workspace.id, true, false, Vec::new())
+            .mark_done(&workspace.id, true, false, Vec::new(), &Attacher::User)
             .await
             .unwrap();
     }

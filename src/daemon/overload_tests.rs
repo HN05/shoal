@@ -1,7 +1,10 @@
 use super::notifications::NotificationKind;
 use super::*;
 use crate::{
-    daemon::workspace::{ExecutionKind, StopRequest},
+    daemon::{
+        workspace::{ExecutionKind, StopRequest},
+        workspace_files::Attacher,
+    },
     protocol::RemovalMethod,
     test_support::{manager, repository},
 };
@@ -843,7 +846,7 @@ async fn resume_continues_an_agent_that_exited_on_its_own_body() {
     // forgets it.
     assert!(!last().is_empty());
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert_eq!(last(), []);
@@ -1039,7 +1042,12 @@ async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let generation = manager.config_state.generation();
     manager.config_state.publish_disk_reading(Some(generation));
     manager
-        .send_agent_message(&workspace.name, "Review requested".into(), Vec::new())
+        .send_agent_message(
+            &workspace.name,
+            "Review requested".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     assert_eq!(bounded(launched).await.unwrap().unwrap(), 0);
@@ -1439,7 +1447,7 @@ async fn a_done_workspace_does_not_restore_its_stopped_agent() {
     let launched = launch(&manager, &workspace);
     wait_started(&manager, &workspace).await;
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     assert!(
@@ -1467,7 +1475,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
     wait_paused(&manager, &workspace).await;
     wait_restore_queued(&manager).await;
     manager
-        .mark_done(&workspace.id, false, false, vec![])
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
         .await
         .unwrap();
     publish_recovery(&manager);

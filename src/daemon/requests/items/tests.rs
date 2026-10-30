@@ -2,7 +2,7 @@ use tokio::net::UnixStream;
 
 use super::super::super::answer;
 use super::*;
-use crate::protocol::Response;
+use crate::{daemon::workspace_files::Attacher, protocol::Response};
 
 #[tokio::test]
 async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
@@ -18,7 +18,12 @@ async fn item_waits_close_unanswered_while_an_update_restarts_the_daemon() {
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     let wait = |manager: Arc<Manager>| {

@@ -1,5 +1,8 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::{
+    daemon::workspace_files::Attacher,
+    test_support::{manager, repository},
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[tokio::test]
@@ -253,7 +256,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
     let report = root.path().join("report.md");
     std::fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&audit.id, false, false, vec![report])
+        .mark_done(&audit.id, false, false, vec![report], &Attacher::User)
         .await
         .unwrap();
     let result = manager.workspace_files(&audit.id).await.unwrap()[0]

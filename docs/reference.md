@@ -3661,7 +3661,10 @@ long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
 them, with when they go, and deletes them with `rm`. Disk space cleanup
 deletes them sooner when nothing else frees enough space. `--json` gives each as a record with
-`source`, `path` and `bytes`. `shoal files add` copies files of at most 100 MiB
+`source`, `path`, `bytes` and `attached_by`: `{"kind": "user"}` for a file
+attached from outside any agent, or `{"kind": "agent"}` with the agent's name
+as `agent`, its `execution` and, once the agent has reported it, its
+`session`. Files attached before Shoal recorded this have no `attached_by`. `shoal files add` copies files of at most 100 MiB
 there without telling the workspace's agents; adding the same file again keeps
 its copy. The other copies stay until the workspace is removed, or until
 `shoal files rm` deletes them sooner: all of a workspace's, or with file names

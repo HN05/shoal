@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use crate::{
-    daemon::workspace::{ExecutionKind, Manager},
+    daemon::{
+        workspace::{ExecutionKind, Manager},
+        workspace_files::Attacher,
+    },
     model::Workspace,
     protocol::TurnEnd,
     state::AgentState,
@@ -123,7 +126,12 @@ async fn an_interrupted_agent_alone_is_due_a_wake_for_its_interruption() {
         .await
         .unwrap();
     manager
-        .send_agent_message(&workspace.id, "Rebase onto main".into(), Vec::new())
+        .send_agent_message(
+            &workspace.id,
+            "Rebase onto main".into(),
+            Vec::new(),
+            &Attacher::User,
+        )
         .await
         .unwrap();
     // A hang guard only: each wait answers the state it is given.
