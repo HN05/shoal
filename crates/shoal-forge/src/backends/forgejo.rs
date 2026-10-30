@@ -85,6 +85,7 @@ impl Backend for Forgejo {
     /// and reruns jobs.
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
             Capability::RerunJobs => Support::Unsupported(Some(
                 "rerun them from the web UI, push a fix, or start a new run with shoal ci run",

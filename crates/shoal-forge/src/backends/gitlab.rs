@@ -78,6 +78,7 @@ impl Backend for GitLab {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ForkPrs => Support::Unsupported(Some(
                 "GitLab opens a fork's merge request in the fork project, so open it on GitLab",
             )),

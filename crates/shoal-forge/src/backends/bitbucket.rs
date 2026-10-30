@@ -77,6 +77,7 @@ impl Backend for Bitbucket {
             Capability::ReopenPrs => Support::Unsupported(Some(
                 "Bitbucket cannot reopen a declined pull request; open a new one",
             )),
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::Labels => Support::Unsupported(Some("Bitbucket has no labels")),
             Capability::Attachments => {
                 Support::Unsupported(Some("Bitbucket has no API for attaching files"))
