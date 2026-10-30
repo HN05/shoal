@@ -118,7 +118,7 @@ pub(super) async fn queue_agent(
         agent: agent.into(),
         issue_title: None,
         plan,
-        env: Default::default(),
+        env: crate::cli::terminal::detached_start_environment(),
         now: false,
         workspace: Some(workspace.id),
         after: Vec::new(),
