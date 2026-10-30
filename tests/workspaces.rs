@@ -1053,9 +1053,15 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert_eq!(fs::read_to_string(path.join("notes")).unwrap(), "draft\n");
 }
 
+/// Agent limits under which a queued restore starts at once, whatever the
+/// load on the machine running the tests.
+const UNLIMITED_AGENTS: &str = "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n";
+
 #[test]
 fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds() {
-    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let fixture = Fixture::with_config(Some(&format!(
+        "{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n"
+    )));
     // Once the test arms it, the post-setup hook fails; otherwise it marks
     // the workspace set up.
     let armed = fixture.root.path().join("fail-post-setup");
@@ -1067,6 +1073,8 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
         ),
     );
     commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
+    // Queued restores start in detached zmx sessions.
+    install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let workspace = fixture.add("handed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::remove_file(path.join("post-setup-done")).unwrap();
@@ -1156,9 +1164,11 @@ fn install_ssh_to(fixture: &Fixture, other: &Fixture) {
 
 #[test]
 fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
-    let config = "[agents.claude]\ncommand = ['sh', './agent.sh']\n";
-    let here = Fixture::with_config(Some(config));
-    let there = Fixture::with_config(Some(config));
+    let config = format!("{UNLIMITED_AGENTS}[agents.claude]\ncommand = ['sh', './agent.sh']\n");
+    let here = Fixture::with_config(Some(&config));
+    let there = Fixture::with_config(Some(&config));
+    // Queued restores start in detached zmx sessions.
+    install_test_script(there.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     // Both machines have clones of one origin, named by a URL as remotes
     // usually are, which import matches.
     git(
