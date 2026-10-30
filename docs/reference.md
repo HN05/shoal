@@ -822,7 +822,7 @@ emulator input modes on the caller's terminal. zmx reports no exit status: these
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled` or in a
 Rex block with `terminal.rex.enabled` runs in place. On a terminal outside zmx, a missing
-zmx refuses the agent as a missing agent executable does. The top-level
+zmx refuses the agent as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
 [Rex](#rex) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
@@ -830,8 +830,8 @@ start that no other host takes fails, and a demo runs as a background process.
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
 agent in a detached zmx session and returns with a `shoal attach` hint, and any
-other launch runs here and attaches its agent's session. The top-level `focus`
-option overrides the choice, as it does for tabs, and `--here` keeps the launch
+other launch runs here and attaches its agent's session. `terminal.focus`
+overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
@@ -880,12 +880,12 @@ calls run in place.
 The `[terminal.herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
-shell or an agent waiting for its first prompt is ready to type into; the
-top-level `focus` option overrides this for tabs and zmx sessions alike, and
+shell or an agent waiting for its first prompt is ready to type into;
+`terminal.focus` overrides this for tabs and zmx sessions alike, and
 `shoal add --focus` focuses one launch and starts it at once, as `--now` does.
-`enabled` and `new_tab` default to true, and `terminal.close_when_done` overrides the
-top-level option of that name for tabs; with `enabled = false` Shoal treats a
-Herdr pane as a plain terminal:
+`enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
+overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
+a Herdr pane as a plain terminal:
 
 ```toml
 [terminal.herdr]
