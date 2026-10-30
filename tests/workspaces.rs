@@ -7488,13 +7488,13 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
 }
 
 #[test]
-fn interrupting_the_cli_stops_the_post_setup_hook() {
+fn interrupting_the_cli_stops_the_post_setup_hook_even_one_ignoring_sigterm() {
     let fixture = Fixture::new();
     let pid_file = fixture.root.path().join("hook.pid");
     install_test_script(
         fixture.repo.join("post-setup.sh"),
         format!(
-            "#!/bin/sh\necho $$ > '{}'\nexec python3 -c 'import time; time.sleep(60)'\n",
+            "#!/bin/sh\ntrap '' TERM\necho $$ > '{}'\nexec python3 -c 'import time; time.sleep(60)'\n",
             pid_file.display()
         ),
     );

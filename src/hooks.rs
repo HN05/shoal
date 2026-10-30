@@ -10,6 +10,7 @@ use crate::{
     env,
     model::Workspace,
     paths::Paths,
+    protocol::timing,
 };
 
 /// Longest a daemon-side hook may run before the operation fails.
@@ -213,12 +214,7 @@ pub async fn run_until(
     let status = tokio::select! {
         status = child.wait() => status,
         () = stop => {
-            // SAFETY: signalling the hook's own process group, which
-            // `command` started it in.
-            unsafe {
-                libc::kill(-group, libc::SIGTERM);
-            }
-            child.wait().await?;
+            stop_group(&mut child, group).await?;
             anyhow::bail!("{} was stopped; the workspace is kept", hook.kind().key());
         }
     }
@@ -229,6 +225,26 @@ pub async fn run_until(
         hook.kind().key(),
         crate::execution::exit_code(status)
     );
+    Ok(())
+}
+
+/// Stop the hook's process `group`, which `command` started it in: SIGTERM,
+/// then SIGKILL once the stop grace passes, as a tracked command is stopped.
+async fn stop_group(child: &mut tokio::process::Child, group: i32) -> Result<()> {
+    // SAFETY: signalling the hook's own process group.
+    unsafe {
+        libc::kill(-group, libc::SIGTERM);
+    }
+    if tokio::time::timeout(timing::EXECUTION_STOP_GRACE, child.wait())
+        .await
+        .is_err()
+    {
+        // SAFETY: as above.
+        unsafe {
+            libc::kill(-group, libc::SIGKILL);
+        }
+        child.wait().await?;
+    }
     Ok(())
 }
 
