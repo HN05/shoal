@@ -259,23 +259,8 @@ impl Manager {
 
     /// The updates queued for the workspace's agent that fit one response
     /// beside `reserved` bytes of its other content: those on its own cursor
-    /// for an unfiltered watch, then those of the child workspaces it works on.
-    async fn agent_queued_updates(
-        &self,
-        workspace: Workspace,
-        reserved: usize,
-    ) -> Result<Vec<Update>> {
-        let children = self.delegated_workspaces(&workspace.id).await?;
-        let _gate = self
-            .gates
-            .lock_prs(receiving(&workspace.id, &children))
-            .await;
-        self.gated_agent_updates(workspace, &children, reserved)
-            .await
-    }
-
-    /// [`Self::agent_queued_updates`] for a caller already holding the PR
-    /// gates of the workspace and its `children`.
+    /// for an unfiltered watch, then those of the child workspaces it works
+    /// on. The caller holds the PR gates of the workspace and its `children`.
     async fn gated_agent_updates(
         &self,
         workspace: Workspace,
@@ -370,13 +355,20 @@ impl Manager {
         let mut messages = self.signals.watch_agent_messages();
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
-        while self.agent_wake_due(&workspace, interrupted).await? != due {
-            // Held messages settle without a signal.
-            let unread = self.agent_messages(&workspace.id).await?;
-            let recheck = self
-                .message_hold(&workspace, &unread)
+        loop {
+            // One reading decides both whether messages are due and when
+            // held ones settle, which no signal announces.
+            let unread = self.unread_agent_messages(&workspace.id).await?;
+            let hold = self.message_hold(&workspace, &unread.messages).await?;
+            let messages_due = unread.wakes && hold.is_none();
+            if self
+                .agent_wake_due(&workspace, interrupted, messages_due)
                 .await?
-                .map_or(POLL_INTERVAL, |hold| hold.min(POLL_INTERVAL));
+                == due
+            {
+                return Ok(());
+            }
+            let recheck = hold.map_or(POLL_INTERVAL, |hold| hold.min(POLL_INTERVAL));
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
             tokio::select! {
@@ -386,7 +378,6 @@ impl Manager {
                 () = tokio::time::sleep(recheck) => {}
             }
         }
-        Ok(())
     }
 
     /// Whether messages that wake an idle agent or queued updates wait for
@@ -398,6 +389,14 @@ impl Manager {
         if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
+        self.updates_deliverable(workspace).await
+    }
+
+    /// Whether updates a hook would deliver are queued for the workspace's
+    /// agent. None count while cleanup or an item change holds the PR gates
+    /// of the workspaces whose activity it receives, rather than waiting for
+    /// them for minutes.
+    async fn updates_deliverable(&self, workspace: Workspace) -> Result<bool> {
         let children = self.delegated_workspaces(&workspace.id).await?;
         let Some(_gate) = self.gates.try_lock_prs(receiving(&workspace.id, &children)) else {
             return Ok(false);
@@ -422,10 +421,13 @@ impl Manager {
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 
-    pub(crate) async fn agent_wake_due(
+    /// Whether the workspace's idle agent is due a wake: `messages_due`, or
+    /// updates a hook would deliver.
+    async fn agent_wake_due(
         &self,
         workspace: &Workspace,
         interrupted: Option<&str>,
+        messages_due: bool,
     ) -> Result<bool> {
         if let Some(execution) = interrupted
             && !self.turn_interrupted(execution).await
@@ -440,16 +442,7 @@ impl Manager {
         if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
             return Ok(false);
         }
-        let unread = self.unread_agent_messages(&workspace.id).await?;
-        let settled = self
-            .message_hold(workspace, &unread.messages)
-            .await?
-            .is_none();
-        Ok(unread.wakes && settled
-            || !self
-                .agent_queued_updates(workspace.clone(), 0)
-                .await?
-                .is_empty())
+        Ok(messages_due || self.updates_deliverable(workspace.clone()).await?)
     }
 
     /// The unread messages once one that wakes an idle agent is queued.

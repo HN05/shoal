@@ -67,6 +67,24 @@ async fn age_messages(manager: &Manager, workspace: &Workspace, seconds: i64) {
         .unwrap();
 }
 
+/// Return once whether a wake prompt is due for the workspace's agent
+/// matches `due`.
+async fn wake_due(manager: &Manager, workspace: &Workspace, due: bool) {
+    // A hang guard only: the wake settles within two seconds.
+    let wait = manager.wait_agent_wake(&workspace.id, due, None);
+    tokio::time::timeout(std::time::Duration::from_secs(60), wait)
+        .await
+        .expect("the wake check ended")
+        .unwrap();
+}
+
+async fn idle_agent(manager: &Manager, workspace: &Workspace) {
+    manager
+        .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
+        .await
+        .unwrap();
+}
+
 async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
     for &message in messages {
         manager
@@ -80,10 +98,7 @@ async fn send(manager: &Manager, workspace: &Workspace, messages: &[&str]) {
 async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     let (temp, manager) = manager().await;
     let workspace = settling_workspace(&temp, &manager, 60).await;
-    manager
-        .set_agent_state(&workspace.id, crate::state::AgentState::Idle, None, None)
-        .await
-        .unwrap();
+    idle_agent(&manager, &workspace).await;
     send(
         &manager,
         &workspace,
@@ -92,7 +107,7 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     .await;
     let delivered = manager.agent_updates(&workspace.id).await.unwrap();
     assert!(delivered.messages.is_empty(), "{delivered:?}");
-    assert!(!manager.agent_wake_due(&workspace, None).await.unwrap());
+    wake_due(&manager, &workspace, false).await;
     // `shoal messages` reads a run before it settles.
     assert_eq!(
         manager.agent_messages(&workspace.id).await.unwrap().len(),
@@ -100,7 +115,7 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     );
 
     age_messages(&manager, &workspace, 60).await;
-    assert!(manager.agent_wake_due(&workspace, None).await.unwrap());
+    wake_due(&manager, &workspace, true).await;
     let delivered = manager.agent_updates(&workspace.id).await.unwrap();
     let messages = delivered.messages.iter().map(|message| &message.message);
     assert_eq!(
@@ -129,4 +144,27 @@ async fn a_wait_returns_a_run_once_it_settles() {
         .expect("the run settled")
         .unwrap();
     assert_eq!(updates.messages.len(), 2, "{updates:?}");
+}
+
+#[tokio::test]
+async fn a_wake_prompt_follows_a_run_that_settles_while_it_waits() {
+    let (temp, manager) = manager().await;
+    let workspace = settling_workspace(&temp, &manager, 60).await;
+    idle_agent(&manager, &workspace).await;
+    send(&manager, &workspace, &["Request 1 approved"]).await;
+    // The run settles within two seconds, announced by no signal.
+    age_messages(&manager, &workspace, 59).await;
+    wake_due(&manager, &workspace, true).await;
+}
+
+#[tokio::test]
+async fn a_wake_prompt_does_not_wait_for_the_pr_gate() {
+    let (temp, manager) = manager().await;
+    let workspace = settling_workspace(&temp, &manager, 60).await;
+    idle_agent(&manager, &workspace).await;
+    send(&manager, &workspace, &["Request 1 approved"]).await;
+    age_messages(&manager, &workspace, 60).await;
+    // Cleanup or an item change holds the gate for minutes.
+    let _held = manager.gates.lock_prs([&workspace.id]).await;
+    wake_due(&manager, &workspace, true).await;
 }
