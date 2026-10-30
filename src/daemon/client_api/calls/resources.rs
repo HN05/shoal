@@ -14,14 +14,17 @@ use crate::{
 /// The lease name simulator requests use unless they name one.
 const DEFAULT_LEASE: &str = "default";
 
+/// Hold a workspace, refusing with `approval_pending` while a workspace
+/// process's request to hold its own waits for approval.
 pub(super) async fn acquire_hold(session: &Session, params: AcquireHold) -> Result<Hold, ApiError> {
-    let hold: WorkspaceHold = session
-        .ask(HoldMethod::HoldAcquire {
+    let body = session
+        .run(HoldMethod::HoldAcquire {
             workspace: params.workspace,
             name: params.name,
             reason: params.reason,
         })
         .await?;
+    let hold = WorkspaceHold::try_from(errors::granted(body)?).map_err(errors::unexpected)?;
     Ok(records::hold(hold))
 }
 
