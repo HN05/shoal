@@ -25,12 +25,14 @@ pub enum CoordinationCommand {
         #[command(flatten)]
         args: QuestionsArgs,
     },
-    /// List, add or delete the files attached to a workspace: sent to its
-    /// agents with a message, added, or handed back with done.
+    /// List, add or delete the files attached to a workspace or chat: sent
+    /// to its agents with a message, added, or handed back with done.
     #[command(args_conflicts_with_subcommands = true)]
     Files {
         #[command(subcommand)]
         command: Option<FilesCommand>,
+        /// Workspace or chat; defaults to the current chat or workspace, or a
+        /// picker.
         workspace: Option<String>,
         /// Print only the paths of Shoal's copies, one per line.
         #[arg(long)]
@@ -66,23 +68,25 @@ pub enum CoordinationCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum FilesCommand {
-    /// Attach copies of files to a workspace without a message; its agents
-    /// can read them.
+    /// Attach copies of files to a workspace or chat without a message; its
+    /// agents can read them.
     Add {
         /// Files to attach, as PATH or PATH#TITLE.
         #[arg(required = true, value_name = "FILE")]
         files: Vec<String>,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Workspace or chat to use; defaults to the current chat or
+        /// workspace, or a picker.
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Delete a workspace's attached files; asks first when an agent or
-    /// command runs there.
+    /// Delete the attached files of a workspace or chat; asks first when an
+    /// agent or command runs there.
     Rm {
         /// Delete only the files with these names; omit to delete them all.
         #[arg(value_name = "FILE")]
         files: Vec<String>,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Workspace or chat to use; defaults to the current chat or
+        /// workspace, or a picker.
         #[arg(long)]
         workspace: Option<String>,
         /// Delete the files of every workspace without a running agent or command.

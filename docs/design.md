@@ -1901,7 +1901,12 @@ rather than something to merge hands back files with its completion. They are
 the workspace's results among its attached files, which stay when cleanup
 removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
-files go with it. Each attached file records who attached it: the user, or the
+files go with it. A chat owns attached files as a workspace does, since its
+agent hands the user reports and pages too; they stay for the same retention
+after the chat ends, as a chat has no worktree to clean up and its files are
+what remain of it. Files are keyed by their owner's ID, which a workspace and a
+chat never share, so no kind tells them apart: an owner is gone when neither
+has the ID, and its removal or end record says how long its files stay. Each attached file records who attached it: the user, or the
 agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
 names the conversation a client shows the file in. A file's optional title

@@ -20236,6 +20236,58 @@ fn files_add_attaches_copies_without_a_message() {
 }
 
 #[test]
+fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
+    let fixture = Fixture::new();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "planning", "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    fs::write(fixture.repo.join("report.md"), "Plan").unwrap();
+    let in_chat = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", &chat)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+
+    // The chat's agent attaches, lists and deletes its chat's files.
+    let added = in_chat(&["files", "add", "report.md#Plan"]);
+    assert_eq!(added[0]["workspace"], "planning", "{added}");
+    assert_eq!(added[0]["title"], "Plan", "{added}");
+    let copy = PathBuf::from(added[0]["path"].as_str().unwrap());
+    assert!(copy.to_str().unwrap().contains(&chat), "{added}");
+    assert_eq!(in_chat(&["files"]), added);
+    fs::write(fixture.repo.join("draft.md"), "Draft").unwrap();
+    in_chat(&["files", "add", "draft.md"]);
+    let deleted = in_chat(&["files", "rm", "draft.md", "--yes"]);
+    assert_eq!(deleted[0]["name"], "draft.md", "{deleted}");
+    // The user reaches them by the chat's name.
+    assert_eq!(fixture.ok(&["files", "planning"]), added);
+
+    // Once the chat ends, its files stay listed with when they go.
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+    let kept = fixture.ok(&["files", "planning"]);
+    assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
+    assert!(kept[0]["expires_at"].is_i64(), "{kept}");
+    assert_eq!(fs::read_to_string(&copy).unwrap(), "Plan");
+    let deleted = fixture.ok(&["files", "rm", "--workspace", "planning"]);
+    assert_eq!(deleted[0]["path"], added[0]["path"], "{deleted}");
+    assert!(!copy.exists());
+}
+
+#[test]
 fn done_hands_back_files_that_shoal_files_lists() {
     // Kept, so the workspace stays to show its completion.
     let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
