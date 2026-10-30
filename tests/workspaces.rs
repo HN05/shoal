@@ -27102,3 +27102,37 @@ fn removing_a_parent_lists_and_removes_its_children() {
         "{removed}"
     );
 }
+
+#[test]
+fn exporting_a_parent_needs_its_children_exported_with_it() {
+    let fixture = Fixture::new();
+    let parent = PathBuf::from(fixture.add("parent")["path"].as_str().unwrap());
+    let child = fixture.ok(&["split", "child", "--workspace", "parent"]);
+    let child = PathBuf::from(child["path"].as_str().unwrap());
+    let directory = fixture.root.path().join("exports");
+    fs::create_dir(&directory).unwrap();
+    let output = directory.to_str().unwrap();
+    let file = directory.join("parent.shoal");
+    // Every path refuses before removing anything.
+    for args in [
+        &["export", "parent", "-o", file.to_str().unwrap(), "--yes"][..],
+        &["export", "parent", "-o", output, "--yes"],
+    ] {
+        let refused = fixture.run(args);
+        assert!(!refused.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&refused.stderr)
+                .contains("workspaces were split from it (child)"),
+            "{refused:?}"
+        );
+        assert!(parent.exists() && child.exists());
+    }
+    // Exported together, the child comes from the checkpoint its parent's
+    // removal kept, whichever goes first.
+    let exported = fixture.ok(&["export", "parent", "child", "-o", output, "--yes"]);
+    assert_eq!(exported["failed"], serde_json::json!([]), "{exported}");
+    for name in ["parent", "child"] {
+        assert!(directory.join(format!("{name}.shoal")).exists(), "{name}");
+    }
+    assert!(!parent.exists() && !child.exists());
+}
