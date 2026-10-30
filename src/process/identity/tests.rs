@@ -785,6 +785,26 @@ fn a_second_read_after_the_process_exited_is_not_its_environment() -> Result<()>
     Ok(())
 }
 
+#[test]
+fn a_process_that_exits_before_its_signature_is_checked_is_not_hidden() -> Result<()> {
+    let mut child = std::process::Command::new("cat")
+        .env_clear()
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .spawn()?;
+    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    let observed = observe_with(child.id(), deadline, |_| {
+        // It exits before the check, which then fails as for a hidden one.
+        drop(child.stdin.take());
+        let _ = child.wait();
+        true
+    });
+    drop(child.stdin.take());
+    let _ = child.wait();
+    ensure!(observed?.is_none());
+    Ok(())
+}
+
 #[tokio::test]
 async fn settled_empty_environment_is_readable_and_has_no_execution_marker() {
     let mut child = tokio::process::Command::new("cat")

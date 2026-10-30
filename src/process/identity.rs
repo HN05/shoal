@@ -531,13 +531,25 @@ pub fn started_with(identity: &Identity, variable: &str) -> bool {
 
 /// Read `pid`'s environment for Shoal's markers, unless it has exited.
 fn observe(pid: u32, deadline: std::time::Instant) -> Result<Option<Observed>> {
+    observe_with(pid, deadline, hides_environment)
+}
+
+/// `observe`, telling hidden environments with `hides`.
+fn observe_with(
+    pid: u32,
+    deadline: std::time::Instant,
+    hides: impl FnOnce(u32) -> bool,
+) -> Result<Option<Observed>> {
     let Some(lineage) = lineage(pid)? else {
         return Ok(None);
     };
     let evidence = match visibility(&lineage.identity, deadline)? {
-        Visibility::Environment(environment)
-            if environment.is_empty() && hides_environment(pid) =>
-        {
+        Visibility::Environment(environment) if environment.is_empty() && hides(pid) => {
+            // A process that exited fails the check as if it hid its
+            // environment.
+            if !alive(&lineage.identity)? {
+                return Ok(None);
+            }
             Evidence::Hidden
         }
         Visibility::Environment(environment) => {
