@@ -27,6 +27,18 @@ pub(super) async fn handle(
         QuestionMethod::AskQuestion { workspace, ask } => {
             Body::Question(manager.ask_question(&workspace, ask).await?)
         }
+        QuestionMethod::AskInChat { workspace } => {
+            manager
+                .mark_chat_question(&workspace, caller.and_then(Caller::execution_id))
+                .await?;
+            Body::Ok
+        }
+        QuestionMethod::RepliedInChat { workspace } => {
+            manager
+                .reply_in_chat(&workspace, caller.and_then(Caller::execution_id))
+                .await?;
+            Body::Ok
+        }
         QuestionMethod::ListQuestions { workspace } => {
             Body::Questions(manager.questions(workspace.as_deref()).await?)
         }
@@ -51,6 +63,8 @@ impl Scoped for QuestionMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             QuestionMethod::AskQuestion { workspace, .. }
+            | QuestionMethod::AskInChat { workspace }
+            | QuestionMethod::RepliedInChat { workspace }
             | QuestionMethod::WithdrawQuestion { workspace, .. }
             | QuestionMethod::AwaitAnswer { workspace, .. } => Some(workspace),
             QuestionMethod::ListQuestions { workspace } => Some(caller.own_by_default(workspace)),

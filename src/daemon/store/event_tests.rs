@@ -212,6 +212,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN agent_execution;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN agent;")?;
+    db.execute_batch("ALTER TABLE executions DROP COLUMN asks_in_chat;")?;
     db.execute_batch(
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",
     )?;
@@ -230,6 +231,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "DROP INDEX questions_number; ALTER TABLE questions DROP COLUMN number;
          ALTER TABLE questions DROP COLUMN closed_at;
          ALTER TABLE questions DROP COLUMN withdrawn;
+         ALTER TABLE questions DROP COLUMN in_chat;
          DROP TABLE access_requests;
          CREATE TABLE access_requests (
             id TEXT PRIMARY KEY,

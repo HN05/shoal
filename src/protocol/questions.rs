@@ -38,6 +38,12 @@ pub enum QuestionMethod {
         id: i64,
         shown: Option<crate::daemon::questions::Question>,
     },
+    /// The caller's agent asks the user in its chat this turn: the turn's
+    /// final message becomes a question.
+    AskInChat { workspace: String },
+    /// The user replied in the chat of the caller's agent, which closes the
+    /// questions the workspace's agents asked there.
+    RepliedInChat { workspace: String },
     /// Long-lived: the question once it is answered. What it asks tells it
     /// from a later question reusing its number.
     AwaitAnswer {

@@ -4,7 +4,8 @@
 //! workspace, deletes the question, which frees its number for the next one.
 //! Marking the assignment done, or the asking agent withdrawing a question,
 //! closes it unanswered; a closed question keeps its number until the
-//! workspace goes so that a late answer is refused.
+//! workspace goes so that a late answer is refused. A question an agent
+//! asked in its chat closes the same way when the user replies there.
 use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
@@ -65,6 +66,10 @@ pub struct Question {
     /// Whether the asking agent closed it, needing no answer after all.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub withdrawn: bool,
+    /// Whether the agent asked it in its chat, whose message is the
+    /// question; it recommends nothing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub in_chat: bool,
 }
 
 /// Questions that fit one response, and how many older ones were left out.
@@ -160,13 +165,16 @@ impl Question {
     /// It is cut to the length of other messages, so a batch of notifications
     /// still fits one response.
     fn notification(&self) -> String {
-        shorten(
-            format!(
-                "question {} (answer with shoal questions {}): {} Recommended: {}",
-                self.id, self.id, self.ask.question, self.ask.recommendation
-            ),
-            crate::validate::MAX_MESSAGE_LEN,
-        )
+        let mut text = format!(
+            "question {} (answer with shoal questions {}): {}",
+            self.id,
+            self.id,
+            one_line(&self.ask.question)
+        );
+        if !self.in_chat {
+            text.push_str(&format!(" Recommended: {}", self.ask.recommendation));
+        }
+        shorten(text, crate::validate::MAX_MESSAGE_LEN)
     }
 
     /// What the user, or the coordinating agent, is told about a withdrawn
@@ -175,7 +183,8 @@ impl Question {
         shorten(
             format!(
                 "withdrew question {} (no answer needed): {}",
-                self.id, self.ask.question
+                self.id,
+                one_line(&self.ask.question)
             ),
             crate::validate::MAX_MESSAGE_LEN,
         )
@@ -183,10 +192,47 @@ impl Question {
 
     /// The agent message carrying `answer`; it names the question it answers.
     fn answer_message(&self, answer: &str) -> String {
+        if self.in_chat {
+            return format!(
+                "Answer to question {}, which you asked in the chat: {answer}",
+                self.id
+            );
+        }
         format!(
             "Answer to question {} ({}): {answer}",
             self.id, self.ask.question
         )
+    }
+}
+
+/// `text` on one line, as notifications show it: a question asked in the
+/// chat may span lines.
+fn one_line(text: &str) -> String {
+    text.replace(['\n', '\t'], " ")
+}
+
+impl Ask {
+    /// What an agent asks in its chat: its turn's final `message`, kept to
+    /// the length and characters of agent messages. Without one, as from an
+    /// agent whose hook does not pass it, the question points to the chat.
+    fn in_chat(message: Option<&str>) -> Self {
+        let text: String = message
+            .unwrap_or_default()
+            .chars()
+            .map(|c| if c.is_control() && c != '\n' { ' ' } else { c })
+            .collect();
+        let text = text.trim();
+        let question = if text.is_empty() {
+            "The agent asked a question in its chat; attach to its session to read it.".to_owned()
+        } else {
+            shorten(text.to_owned(), crate::validate::MAX_AGENT_MESSAGE_LEN)
+        };
+        Self {
+            question,
+            recommendation: String::new(),
+            reason: None,
+            choices: Vec::new(),
+        }
     }
 }
 
@@ -207,7 +253,8 @@ fn shorten(mut text: String, max: usize) -> String {
 const SELECT: &str =
     "SELECT q.number,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
     q.reason,q.choices,q.answer,q.answered_at,
-    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at,q.withdrawn
+    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at,q.withdrawn,
+    q.in_chat
     FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
@@ -228,6 +275,7 @@ fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
             message_id: row.get(10)?,
             closed_at: row.get(11)?,
             withdrawn: row.get(12)?,
+            in_chat: row.get(13)?,
         },
         row.get(7)?,
     ))
@@ -272,12 +320,13 @@ fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Optio
     Ok(Some(question))
 }
 
-/// Record `ask` under the smallest free number and return that number.
-fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
+/// Record `ask`, asked in the chat when `in_chat`, under the smallest free
+/// number and return that number.
+fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask, in_chat: bool) -> Result<i64> {
     let number = crate::daemon::store::free_number(tx, "questions")?;
     tx.execute(
-        "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,reason,choices)
-            VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,reason,choices,in_chat)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
         params![
             number,
             workspace_id,
@@ -285,7 +334,8 @@ fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<i64> {
             ask.question,
             ask.recommendation,
             ask.reason,
-            serde_json::to_string(&ask.choices)?
+            serde_json::to_string(&ask.choices)?,
+            in_chat
         ],
     )?;
     Ok(number)
@@ -400,6 +450,51 @@ fn withdraw(
     Ok(question)
 }
 
+/// Who asks a question.
+enum Asker {
+    /// A `questions ask` command, which states it.
+    Command,
+    /// The agent an execution runs, in its chat.
+    Chat(String),
+}
+
+/// Mark or unmark the current turn of the agent execution `id` runs as
+/// asking in its chat; whether that changed the mark.
+pub(crate) fn set_chat_mark(db: &Connection, id: &str, marked: bool) -> Result<bool> {
+    let changed = db.execute(
+        "UPDATE executions SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2",
+        params![id, marked],
+    )?;
+    Ok(changed > 0)
+}
+
+/// Close the open questions the workspace's agents asked in their chats,
+/// which the user replied to there, as withdrawn, retracting their unread
+/// notifications; each with whether there was one to retract.
+fn close_in_chat(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<(Question, bool)>> {
+    let open = query(
+        tx,
+        "WHERE q.workspace_id=?1 AND q.in_chat AND q.answer IS NULL AND q.closed_at IS NULL",
+        [workspace_id],
+    )?;
+    let closed_at = i64::try_from(crate::time::unix_seconds())?;
+    open.into_iter()
+        .map(|question| {
+            tx.execute(
+                "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",
+                params![question.id, closed_at],
+            )?;
+            let retracted = notifications::retract(
+                tx,
+                workspace_id,
+                NotificationKind::QuestionAsked,
+                &question.notification(),
+            )?;
+            Ok((question, retracted))
+        })
+        .collect()
+}
+
 /// Delete the question whose answer `message_id` carried, once the message
 /// is delivered.
 pub(crate) fn delete_delivered(
@@ -437,27 +532,65 @@ impl Manager {
     /// user about a new one.
     pub async fn ask_question(&self, selector: &str, ask: Ask) -> Result<Question> {
         ask.validate()?;
+        self.record_question(selector, ask, Asker::Command)
+            .await?
+            .context("a question asked on the command line is always recorded")
+    }
+
+    /// Record the question in its turn's final `message` when the agent
+    /// `execution` runs marked the turn as asking in its chat, consuming
+    /// the mark, and tell the user about it.
+    pub(crate) async fn ask_in_chat(
+        &self,
+        selector: &str,
+        execution: &str,
+        message: Option<&str>,
+    ) -> Result<Option<Question>> {
+        let asker = Asker::Chat(execution.to_owned());
+        self.record_question(selector, Ask::in_chat(message), asker)
+            .await
+    }
+
+    /// Record `ask` from `asker`, or return the same question asked again,
+    /// and tell the user about a new one; `None` for a chat asker whose
+    /// turn has no mark.
+    async fn record_question(
+        &self,
+        selector: &str,
+        ask: Ask,
+        asker: Asker,
+    ) -> Result<Option<Question>> {
         let workspace = self.workspace(selector).await?;
-        let (question, new) = self
+        let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 // A workspace reserved for removal takes no question its
                 // cleanup checks have not seen.
                 crate::daemon::store::require_ready(&tx, &workspace.id)?;
-                if let Some(question) = repeated(&tx, &workspace.id, &ask)? {
-                    return Ok((question, false));
+                if let Asker::Chat(execution) = &asker
+                    && !set_chat_mark(&tx, execution, false)?
+                {
+                    return Ok(None);
                 }
-                let id = insert(&tx, &workspace.id, &ask)?;
+                if let Some(question) = repeated(&tx, &workspace.id, &ask)? {
+                    tx.commit()?;
+                    return Ok(Some((question, false)));
+                }
+                let in_chat = matches!(asker, Asker::Chat(_));
+                let id = insert(&tx, &workspace.id, &ask, in_chat)?;
                 let question = by_id(&tx, id)?.context("recorded question is missing")?;
                 tx.commit()?;
-                Ok((question, true))
+                Ok(Some((question, true)))
             })
             .await?;
+        let Some((question, new)) = recorded else {
+            return Ok(None);
+        };
         if new {
             self.announce_question(&question).await;
         }
-        Ok(question)
+        Ok(Some(question))
     }
 
     /// Tell the user about `question` unless it was withdrawn or answered
@@ -602,6 +735,44 @@ impl Manager {
             .await;
         }
         Ok(question)
+    }
+
+    /// Close the open questions the agents of the workspace `selector` names
+    /// asked in their chats, which the user replied to there, with the mark
+    /// of the turn the agent `execution` runs, and return their numbers.
+    pub(crate) async fn close_chat_questions(
+        &self,
+        selector: &str,
+        execution: Option<String>,
+    ) -> Result<Vec<i64>> {
+        let workspace = self.workspace(selector).await?;
+        let _gate = self.gates.lock_announcements().await;
+        let closed = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+                if let Some(execution) = &execution {
+                    set_chat_mark(&tx, execution, false)?;
+                }
+                let closed = close_in_chat(&tx, &workspace.id)?;
+                tx.commit()?;
+                Ok(closed)
+            })
+            .await?;
+        if !closed.is_empty() {
+            self.signals.question_changed();
+        }
+        // As for a withdrawal, whoever saw the question, the user or the
+        // coordinating agent it went to instead, is told it closed.
+        for (question, _) in closed.iter().filter(|(_, retracted)| !retracted) {
+            self.notify(
+                Some(&question.workspace),
+                NotificationKind::QuestionWithdrawn,
+                question.withdrawal_notification(),
+            )
+            .await;
+        }
+        Ok(closed.iter().map(|(question, _)| question.id).collect())
     }
 
     /// Return the workspace's question `id` asking `ask` once it is answered.

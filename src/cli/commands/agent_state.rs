@@ -30,14 +30,18 @@ pub(super) async fn run(
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
-    let session = hook_event().as_ref().and_then(session_of);
+    let event = hook_event();
+    let turn_end = ends_turn.map(|integration| TurnEnd {
+        final_message: event.as_ref().and_then(final_message),
+        ..turn_end(ctx, integration)
+    });
     let status: AgentStatus = request(
         &ctx.paths,
         AgentMethod::SetAgentState {
             workspace,
             state,
-            session,
-            turn_end: ends_turn.map(|integration| turn_end(ctx, integration)),
+            session: event.as_ref().and_then(session_of),
+            turn_end,
         },
     )
     .await?;
@@ -86,6 +90,7 @@ fn turn_end(ctx: &Context, integration: IntegrationKind) -> TurnEnd {
     let lifetime = crate::cli::agents::prompt_cache(integration, &variable, &ctx.paths.home);
     TurnEnd {
         prompt_cache_secs: lifetime.map(|lifetime| lifetime.as_secs()),
+        final_message: None,
     }
 }
 
@@ -136,6 +141,20 @@ fn first_value(input: impl Read) -> Option<serde_json::Value> {
         .into_iter()
         .next()?
         .ok()
+}
+
+/// The final message of the turn a `Stop` hook event ends, as Claude Code
+/// and Codex pass it, cut past the longest question the daemon keeps so the
+/// report stays small and the daemon still sees that it was cut.
+fn final_message(event: &serde_json::Value) -> Option<String> {
+    let message = event["last_assistant_message"].as_str()?;
+    let mut end = message
+        .len()
+        .min(crate::validate::MAX_AGENT_MESSAGE_LEN + 1);
+    while !message.is_char_boundary(end) {
+        end += 1;
+    }
+    Some(message[..end].to_owned())
 }
 
 /// The agent session a hook event names.

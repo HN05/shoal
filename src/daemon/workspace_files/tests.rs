@@ -1117,4 +1117,6 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     ALTER TABLE workspace_holds DROP COLUMN placed_by;
     ALTER TABLE executions DROP COLUMN agent_execution;
+    ALTER TABLE executions DROP COLUMN asks_in_chat;
+    ALTER TABLE questions DROP COLUMN in_chat;
     PRAGMA user_version=87;";

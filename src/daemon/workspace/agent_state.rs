@@ -137,7 +137,8 @@ impl Manager {
     }
 
     /// Record that the agent reporting from `execution` ended a turn and is
-    /// idle, its prompt cache expiring the lifetime of its AI tool from now.
+    /// idle, its prompt cache expiring the lifetime of its AI tool from now,
+    /// and ask the user the question the turn asked in its chat.
     pub async fn end_agent_turn(
         &self,
         selector: &str,
@@ -147,11 +148,13 @@ impl Manager {
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             prompt_cache: Some(
-                self.prompt_cache(selector, execution.as_deref(), turn_end)
+                self.prompt_cache(selector, execution.as_deref(), &turn_end)
                     .await,
             ),
             ..TurnEnding::ended()
         };
+        self.ask_marked_chat_question(selector, execution.as_deref(), turn_end.final_message)
+            .await;
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
             .await
     }
@@ -191,7 +194,7 @@ impl Manager {
         let ending = TurnEnding {
             interrupted: true,
             prompt_cache: Some(
-                self.prompt_cache(selector, Some(&execution), TurnEnd::default())
+                self.prompt_cache(selector, Some(&execution), &TurnEnd::default())
                     .await,
             ),
             ..TurnEnding::ended()
@@ -208,7 +211,7 @@ impl Manager {
         &self,
         selector: &str,
         execution: Option<&str>,
-        turn_end: TurnEnd,
+        turn_end: &TurnEnd,
     ) -> Duration {
         let reported = turn_end.prompt_cache_secs.map(Duration::from_secs);
         let agent = match execution {
@@ -281,7 +284,7 @@ impl Manager {
         let ending = TurnEnding {
             failed: true,
             prompt_cache: Some(
-                self.prompt_cache(selector, execution.as_deref(), turn_end)
+                self.prompt_cache(selector, execution.as_deref(), &turn_end)
                     .await,
             ),
             ..TurnEnding::ended()

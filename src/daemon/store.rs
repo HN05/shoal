@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 96;
+const SCHEMA_VERSION: i64 = 97;
 
 #[cfg(test)]
 mod benchmark;
@@ -441,7 +441,15 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (94, FILE_ATTACHERS, None),
     (95, EXECUTION_AGENT_PARENTS, None),
     (96, FILE_TITLES, None),
+    (97, CHAT_QUESTIONS, None),
 ];
+
+/// Whether an agent asked the question in its chat, where the user may
+/// reply instead of answering it, and whether the agent an execution runs
+/// marked its current turn as asking there, which a daemon restart keeps.
+const CHAT_QUESTIONS: &str =
+    "ALTER TABLE questions ADD COLUMN in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1));
+    ALTER TABLE executions ADD COLUMN asks_in_chat INTEGER NOT NULL DEFAULT 0 CHECK(asks_in_chat IN (0,1));";
 
 /// The agent execution whose process tree registered each execution, which
 /// a file it attaches names.

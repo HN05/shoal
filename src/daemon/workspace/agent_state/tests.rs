@@ -293,6 +293,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
     let workspace = workspace(&manager, &temp).await;
     let hour = TurnEnd {
         prompt_cache_secs: Some(3600),
+        ..TurnEnd::default()
     };
     let ended = manager
         .end_agent_turn(&workspace.name, None, None, hour)
@@ -355,6 +356,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
         .await;
     let reported = TurnEnd {
         prompt_cache_secs: Some(3600),
+        ..TurnEnd::default()
     };
     let ended = manager
         .end_agent_turn(&workspace.name, Some(started.plan.id), None, reported)

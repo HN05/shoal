@@ -134,12 +134,16 @@ pub struct WokenTurn {
 }
 
 /// What an agent reports when a turn ends.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnEnd {
     /// How long its prompt cache lives after the turn, as its own settings
     /// give it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prompt_cache_secs: Option<u64>,
+    /// The turn's final message, which is the question when the agent
+    /// marked the turn as asking the user in its chat.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_message: Option<String>,
 }
 
 impl TurnEnd {

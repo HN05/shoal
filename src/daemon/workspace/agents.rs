@@ -19,6 +19,7 @@ use crate::{
 };
 
 mod attachment;
+mod chat_questions;
 mod forks;
 mod idle_stop;
 mod interrupts;

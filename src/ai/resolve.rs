@@ -71,6 +71,14 @@ crate::state::states!(
     }
 );
 
+impl IntegrationKind {
+    /// Whether Shoal's hooks report the end of each turn of its agents,
+    /// with the turn's final message.
+    pub fn reports_turn_ends(self) -> bool {
+        self != Self::None
+    }
+}
+
 #[derive(Debug, Clone)]
 enum SkillDir {
     /// A `skill_dir` as written.
