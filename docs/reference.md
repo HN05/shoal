@@ -3577,12 +3577,13 @@ is removed, and [`shoal files`](#attached-files) lists them. Agents read message
 printed it.
 
 `--all` queues the message for every workspace of the current repository, or
-the one `--repo` names, whose agent runs, and lists the workspaces it reached,
-in `workspaces` with `--json`; a workspace process reaches only the workspaces
-below its own. Workspaces without a running agent get nothing, since a message
+the one `--repo` names, with a running agent: one Shoal tracks, working or
+idle, that is connected and not being stopped; stopped and queued agents do not
+count. It lists the workspaces it reached, in `workspaces` with `--json`; a
+workspace process reaches only the workspaces below its own. Workspaces without a running agent get nothing, since a message
 waits there until an agent reads it. Sending the same message again after a
-failure reaches only the workspaces that missed it, because identical unread
-messages collapse.
+failure does not repeat it to agents that have not read it yet, because
+identical unread messages collapse.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`

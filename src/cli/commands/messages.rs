@@ -91,6 +91,12 @@ async fn send_to_repository(
         },
     )
     .await?;
+    show_reached(ctx, reached)?;
+    Ok(0)
+}
+
+/// The workspaces a repository-wide message reached, by name.
+fn show_reached(ctx: &Context, reached: Vec<Workspace>) -> Result<()> {
     let reached = Reached {
         workspaces: reached
             .into_iter()
@@ -106,8 +112,7 @@ async fn send_to_repository(
         for workspace in &reached.workspaces {
             outln!("  {workspace}");
         }
-    })?;
-    Ok(0)
+    })
 }
 
 /// The repository `--repo` names, else the current checkout's or

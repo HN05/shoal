@@ -208,7 +208,8 @@ impl Manager {
     /// [`Self::send_agent_message`] to every workspace of `repository` with
     /// a running agent, or only to those below `below`, the sender's own
     /// workspace; the workspaces it reached. Identical unread messages
-    /// collapse, so sending again after a failure reaches only the rest.
+    /// collapse, so sending again after a failure does not repeat it to
+    /// recipients that have not read it yet.
     pub async fn send_repository_agent_message(
         &self,
         repository: &Selector,
