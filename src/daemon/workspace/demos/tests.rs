@@ -178,6 +178,7 @@ async fn workspace_processes_list_and_stop_only_their_own_demos() {
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: ExecutionKind::Command,
+                    agent: None,
                 }),
             },
         )

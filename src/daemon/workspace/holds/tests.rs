@@ -53,6 +53,7 @@ async fn holds_are_idempotent_persistent_and_scoped() {
                 execution: Some(crate::daemon::scope::ScopedExecution {
                     id: "execution".into(),
                     kind: super::super::ExecutionKind::Command,
+                    agent: None,
                 }),
             },
         )

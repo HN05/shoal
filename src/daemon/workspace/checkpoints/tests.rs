@@ -335,6 +335,7 @@ async fn restore_refuses_what_it_would_lose_or_disturb() {
         execution: Some(crate::daemon::scope::ScopedExecution {
             id: "agent".into(),
             kind: crate::daemon::workspace::ExecutionKind::Command,
+            agent: None,
         }),
     };
     manager

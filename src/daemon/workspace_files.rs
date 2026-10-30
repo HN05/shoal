@@ -158,26 +158,23 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
-    /// Who a request from `caller` attaches files as: the agent whose
-    /// execution it runs in, else the user.
+    /// Who a request from `caller` attaches files as: the agent it comes
+    /// from, else the user.
     pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
-        let Some((caller, execution)) =
-            caller.and_then(|caller| Some((caller, caller.execution_id()?)))
-        else {
-            return Attacher::User;
-        };
-        let Some(agent) = self.agent_name(execution).await else {
+        let Some(agent) = (match caller {
+            Some(caller) => self.caller_agent(caller).await,
+            None => None,
+        }) else {
             return Attacher::User;
         };
         Attacher::Agent {
-            // Named as `--agent` and recovery records name it.
-            agent: agent.replace(' ', "-"),
-            execution: execution.to_owned(),
             session: crate::execution::recovery::reported_session(
                 &self.paths,
-                &caller.workspace_id,
-                execution,
+                &agent.workspace_id,
+                &agent.execution,
             ),
+            agent: agent.name,
+            execution: agent.execution,
         }
     }
 

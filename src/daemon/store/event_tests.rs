@@ -210,6 +210,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("ALTER TABLE notifications DROP COLUMN subject;")?;
     db.execute_batch("ALTER TABLE chat_messages DROP COLUMN workspace_id;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN scope_token;")?;
+    db.execute_batch("ALTER TABLE executions DROP COLUMN agent_execution;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN agent;")?;
     db.execute_batch(
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",

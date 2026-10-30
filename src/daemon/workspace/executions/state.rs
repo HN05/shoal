@@ -272,6 +272,7 @@ impl Connections<'_> {
         kind: ExecutionKind,
         workspace_id: &str,
         scope_token: String,
+        agent: Option<String>,
         stopped: bool,
     ) -> watch::Receiver<bool> {
         let (sender, stop) = watch::channel(stopped);
@@ -283,6 +284,7 @@ impl Connections<'_> {
                     execution: Some(ScopedExecution {
                         id: id.to_owned(),
                         kind,
+                        agent,
                     }),
                     workspace_id: workspace_id.to_owned(),
                 },

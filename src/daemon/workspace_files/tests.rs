@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::{Attacher, FileSource};
 use crate::{
     daemon::{
-        scope::{Caller, ScopedExecution},
+        scope::Caller,
         workspace::{ExecutionKind, Manager},
     },
     execution::recovery,
@@ -30,18 +30,29 @@ async fn workspace(temp: &tempfile::TempDir, manager: &Manager) -> Workspace {
         .unwrap()
 }
 
-/// The caller that the processes of a tracked agent `name` in `workspace`
-/// send requests as.
-async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> Caller {
-    let id = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+/// The caller that the processes of a command registered by `caller` in
+/// `workspace` send requests as, with the command's execution.
+async fn command_caller(
+    manager: &Manager,
+    workspace: &Workspace,
+    caller: Option<&Caller>,
+) -> Caller {
+    let token = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, caller)
         .await
         .unwrap()
         .plan
-        .id;
+        .scope_token;
+    manager.caller(&token).await.unwrap().unwrap()
+}
+
+/// The caller that the processes of a tracked agent `name` in `workspace`
+/// send requests as.
+async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> Caller {
+    let caller = command_caller(manager, workspace, None).await;
     manager
         .track_agent(
-            &id,
+            caller.execution_id().unwrap(),
             name,
             &workspace.id,
             &workspace.name,
@@ -49,13 +60,7 @@ async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> C
             Duration::ZERO,
         )
         .await;
-    Caller {
-        workspace_id: workspace.id.clone(),
-        execution: Some(ScopedExecution {
-            id,
-            kind: ExecutionKind::Command,
-        }),
-    }
+    caller
 }
 
 #[tokio::test]
@@ -69,19 +74,7 @@ async fn files_from_outside_any_agent_are_the_users() {
         execution: None,
     };
     assert_eq!(manager.attacher(Some(&terminal)).await, Attacher::User);
-    let command = manager
-        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
-        .await
-        .unwrap()
-        .plan
-        .id;
-    let command = Caller {
-        workspace_id: workspace.id.clone(),
-        execution: Some(ScopedExecution {
-            id: command,
-            kind: ExecutionKind::Command,
-        }),
-    };
+    let command = command_caller(&manager, &workspace, None).await;
     assert_eq!(manager.attacher(Some(&command)).await, Attacher::User);
 
     let file = temp.path().join("notes.md");
@@ -138,6 +131,24 @@ async fn an_agents_files_name_its_kind_and_session() {
         .send_agent_message(&workspace.name, "See the log".into(), vec![log], &attacher)
         .await
         .unwrap();
+    // A command the agent runs with `shoal run`, and one that runs.
+    let command = command_caller(&manager, &workspace, Some(&caller)).await;
+    let nested = command_caller(&manager, &workspace, Some(&command)).await;
+    assert_eq!(manager.attacher(Some(&nested)).await, attacher);
+    // A reattaching command keeps the agent it runs under.
+    let id = nested.execution_id().unwrap().to_owned();
+    let recorded: Option<String> = manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT agent_execution FROM executions WHERE id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(recorded, Some(execution));
     let files = manager.workspace_files(&workspace.name).await.unwrap();
     assert_eq!(files.len(), 2, "{files:?}");
     assert!(
@@ -934,4 +945,5 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 /// attached files, undoing the later migrations that cannot run twice.
 const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     ALTER TABLE workspace_holds DROP COLUMN placed_by;
+    ALTER TABLE executions DROP COLUMN agent_execution;
     PRAGMA user_version=87;";

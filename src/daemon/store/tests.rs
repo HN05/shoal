@@ -317,6 +317,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 94 {
         db.execute_batch(FILE_ATTACHERS)?;
     }
+    if version >= 95 {
+        db.execute_batch(EXECUTION_AGENT_PARENTS)?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);

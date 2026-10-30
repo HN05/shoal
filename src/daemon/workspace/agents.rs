@@ -25,6 +25,13 @@ mod queue_move;
 mod restart;
 pub use restart::RestartWaits;
 
+/// The agent a request comes from.
+pub(crate) struct CallerAgent {
+    pub(crate) execution: String,
+    pub(crate) name: String,
+    pub(crate) workspace_id: String,
+}
+
 pub(crate) struct Agent {
     name: String,
     workspace: String,
@@ -619,6 +626,33 @@ impl Manager {
             None => None,
         };
         Some(crate::daemon::links::proposals::Proposer { agent })
+    }
+
+    /// The connected agent a request from `caller` comes from: the one its
+    /// execution runs, else the one whose process tree registered it.
+    pub(crate) async fn caller_agent(
+        &self,
+        caller: &crate::daemon::scope::Caller,
+    ) -> Option<CallerAgent> {
+        let execution = caller.execution.as_ref()?;
+        let identity = |id: &str| {
+            let id = id.to_owned();
+            move |agent: &mut Agent| CallerAgent {
+                execution: id,
+                // Named as `--agent` and recovery records name it.
+                name: agent.name.replace(' ', "-"),
+                workspace_id: agent.workspace_id.clone(),
+            }
+        };
+        if let Some(own) = self
+            .executions
+            .with_agent(&execution.id, identity(&execution.id))
+            .await
+        {
+            return Some(own);
+        }
+        let parent = execution.agent.as_deref()?;
+        self.executions.with_agent(parent, identity(parent)).await
     }
 
     /// The name of the connected agent that `execution` runs.

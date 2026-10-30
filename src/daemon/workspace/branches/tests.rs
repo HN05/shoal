@@ -1898,6 +1898,7 @@ async fn adoption_preserves_dirty_worktree_and_persists_identity_and_readiness()
                 execution: Some(scope::ScopedExecution {
                     id: "test".into(),
                     kind: ExecutionKind::Command,
+                    agent: None,
                 }),
             },
         )

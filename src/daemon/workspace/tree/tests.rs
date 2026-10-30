@@ -176,6 +176,7 @@ async fn workspace_processes_reach_their_subtree_and_split_within_it() {
                 execution: Some(ScopedExecution {
                     id: "execution".into(),
                     kind: super::super::ExecutionKind::Command,
+                    agent: None,
                 }),
             },
         )

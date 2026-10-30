@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 94;
+const SCHEMA_VERSION: i64 = 95;
 
 #[cfg(test)]
 mod benchmark;
@@ -439,7 +439,12 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     // The local repository config moved to a file in the repository's directory.
     (93, "DROP TABLE IF EXISTS repository_configs;", None),
     (94, FILE_ATTACHERS, None),
+    (95, EXECUTION_AGENT_PARENTS, None),
 ];
+
+/// The agent execution whose process tree registered each execution, which
+/// a file it attaches names.
+const EXECUTION_AGENT_PARENTS: &str = "ALTER TABLE executions ADD COLUMN agent_execution TEXT;";
 
 /// Who attached each file, as JSON; files attached before Shoal recorded it
 /// have none.
