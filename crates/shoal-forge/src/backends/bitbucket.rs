@@ -27,7 +27,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
     },
     repo::locator::ItemRoute,
     review::{
@@ -580,6 +580,14 @@ impl Backend for Bitbucket {
     }
 
     fn remove_reaction(&self, _endpoint: String, _own: &Listed) -> Result<Request> {
+        Err(capability::unsupported(self, Capability::Reactions))
+    }
+
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 

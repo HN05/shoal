@@ -41,7 +41,7 @@ use crate::{
         item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
     },
     repo::locator::ItemRoute,
     review::{
@@ -588,6 +588,19 @@ impl Backend for Forgejo {
             endpoint,
             Some(json!({ "content": own.content })),
         ))
+    }
+
+    /// The instance's admin chooses them, under GitHub's names.
+    async fn allowed_reactions(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+    ) -> Result<AllowedReactions> {
+        let settings = repo
+            .send(account, &Request::get("settings/ui".to_owned()))
+            .await
+            .context("read the forge's UI settings")?;
+        AllowedReactions::only(&settings["allowed_reactions"])
     }
 
     async fn ci_checks(

@@ -32,7 +32,7 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
         revert::NewRevert,
     },
     repo::locator::ItemRoute,
@@ -511,6 +511,15 @@ pub(crate) trait Backend {
     /// The request that removes `own`, the account's reaction, from the
     /// reactions at `endpoint`.
     fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
+
+    /// The reactions the forge allows; by default GitHub's, and only those.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(false))
+    }
 
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
@@ -1188,6 +1197,14 @@ impl Backend for ForgeKind {
 
     fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request> {
         dispatch!(self, backend => backend.remove_reaction(endpoint, own))
+    }
+
+    async fn allowed_reactions(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+    ) -> Result<AllowedReactions> {
+        dispatch!(self, backend => backend.allowed_reactions(repo, account).await)
     }
 
     async fn ci_checks(
