@@ -3160,6 +3160,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         [json!([dispatch, {"ref": "topic", "inputs": {}, "return_run_info": true}])]
     );
     // The run is linked as opened, so watches follow it.
+    assert_eq!(started["linked"], true, "{started}");
     let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(
         links["opened"],

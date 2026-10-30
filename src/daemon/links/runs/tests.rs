@@ -5,6 +5,7 @@ fn started(url: &str) -> StartedRun {
         workflow: Some("deploy".into()),
         branch: "topic".into(),
         url: Some(url.into()),
+        linked: false,
     }
 }
 

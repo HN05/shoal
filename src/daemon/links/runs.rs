@@ -38,13 +38,14 @@ impl Manager {
             branch: branch.unwrap_or_else(|| workspace.branch.clone()),
             inputs,
         };
-        let started = forge
+        let mut started = forge
             .start_run(&account, &run)
             .await
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
         if let Some(item) = started_link(&forge, &started) {
             self.record_items(&workspace.id, vec![(Relation::Opened, item)])
                 .await?;
+            started.linked = true;
         }
         Ok(started)
     }

@@ -114,17 +114,18 @@ fn outcome(action: CiAction) -> &'static str {
     }
 }
 
-/// The run that started and, where the forge reports its URL, that the
-/// workspace links and watches it.
+/// The run that started, its URL where the forge reports one, and whether
+/// the workspace links and watches it.
 fn started_text(started: &StartedRun) -> String {
     let run = match &started.workflow {
         Some(workflow) => format!("{workflow} on {}", started.branch),
         None => started.branch.clone(),
     };
     match &started.url {
-        Some(url) => format!(
+        Some(url) if started.linked => format!(
             "Run started for {run}: {url}\nLinked as opened; shoal watch reports when it finishes."
         ),
+        Some(url) => format!("Run started for {run}: {url}"),
         None => format!(
             "Run started for {run}; find it with shoal ci list and follow it with \
              shoal link ci <URL> opened"

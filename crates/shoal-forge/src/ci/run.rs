@@ -26,6 +26,9 @@ pub struct StartedRun {
     pub branch: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// The workspace linked the run, so watches follow it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub linked: bool,
 }
 
 /// Refuse a workflow or branch no forge runs, before any lookup.
@@ -86,6 +89,7 @@ impl ForgeRepo {
             workflow: run.workflow.clone(),
             branch: run.branch.clone(),
             url: self.kind.started_run_url(self, &response),
+            linked: false,
         })
     }
 }

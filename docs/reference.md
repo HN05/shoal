@@ -2928,8 +2928,9 @@ variables. The daemon starts it as the [agent account](#agent-accounts), and
 processes inside a workspace may start runs only on that workspace's branch.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
 reports it, which GitHub and Gitea do not. A run with a URL is
-[linked](#linked-items-and-cleanup) as opened, so `shoal watch` reports when it
-finishes.
+[linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
+Bitbucket's it does not, so `shoal watch` reports when it finishes; `linked` says
+whether it was.
 
 `shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
 `ci run` or a check links it, or the number in that URL. `rerun` reruns every

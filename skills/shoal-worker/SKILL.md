@@ -139,8 +139,8 @@ current head (`--pr N` for another), after you have read its log and fixed or
 reported the cause, and `shoal ci cancel` cancels running ones; omit `--check`
 for all of them. `shoal ci run <workflow> --input NAME=VALUE` starts a workflow
 run on your branch. It is a new run, not a rerun: on Forgejo a failed check on
-the PR stays failed. Where the forge reports the run's URL, Shoal links it as
-opened, and a watch reports when it finishes instead of you polling it;
+the PR stays failed. When `ci run` says it linked the run as opened, a watch
+reports when it finishes instead of you polling it;
 `shoal link ci <run-url> related` follows another run, such as one that
 outlives its PR. `shoal ci rerun <run-url>` (`--failed` for failed jobs
 only) and `shoal ci cancel <run-url>` act on one run of your branch.
