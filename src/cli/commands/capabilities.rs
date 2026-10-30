@@ -28,6 +28,11 @@ pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> R
 /// The repository `--repo` names, or the one of the selected workspace or
 /// registered checkout.
 pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Result<ForgeRepo> {
+    // Refuse a bad repository before the workspace picker asks for anything.
+    args.repo
+        .as_deref()
+        .map(ForgeRepo::check_named)
+        .transpose()?;
     let own = match select_context(ctx, args.workspace).await? {
         ItemContext::Workspace(workspace) => workspace_forge(ctx, workspace).await?,
         ItemContext::Checkout(repository) => {

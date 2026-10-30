@@ -2640,6 +2640,25 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("cannot be empty"), "{filter:?}: {stderr}");
     }
+    // So does a repository that names none, for every command taking --repo.
+    for args in [
+        &["issue", "list"][..],
+        &["pr", "list"],
+        &["forge", "api", "repos/{owner}/{repo}"],
+        &["repo", "labels"],
+        &["forge", "capabilities"],
+        &["issue", "open", "--title", "Bug"],
+    ] {
+        let output = fixture
+            .command()
+            .current_dir(fixture.root.path())
+            .args(args)
+            .args(["--repo", "team/../tool"])
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("names no repository"), "{args:?}: {stderr}");
+    }
     // A listing longer than one protocol frame arrives in several.
     let long: Vec<Value> = (1..=400)
         .map(|number| {

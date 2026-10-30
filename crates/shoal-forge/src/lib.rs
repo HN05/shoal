@@ -124,14 +124,8 @@ impl ForgeRepo {
 
     /// The repository at `path` on `host`, which serves `kind`.
     fn on(kind: ForgeKind, host: String, path: &str, web_scheme: &'static str) -> Result<Self> {
-        let segments = path.split('/').count();
         ensure!(
-            (segments == 2 || kind.nests_groups() && segments > 2)
-                && path.split('/').all(|part| !part.is_empty()
-                    && !matches!(part, "." | ".." | "-")
-                    && part
-                        .chars()
-                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))),
+            repository_path_valid(path, kind.nests_groups()),
             "issue lookup needs a remote with host/owner/repository"
         );
         Ok(Self {
@@ -146,6 +140,24 @@ impl ForgeRepo {
     /// forge, so a nested GitLab project matches before its host resolves.
     pub fn is_remote(&self, remote: &str) -> bool {
         Self::parse_linked(remote, Some(self.kind)).is_ok_and(|remote| remote == *self)
+    }
+
+    /// Refuse `input` when it names no repository on any forge, before
+    /// [`resolve_named`](Self::resolve_named) asks a host which forge it is.
+    pub fn check_named(input: &str) -> Result<()> {
+        let path = if input.contains(':') {
+            let remote =
+                RemoteUrl::parse(input).with_context(|| format!("{input} names no repository"))?;
+            Self::location(&remote)?.1
+        } else {
+            repo::remote_url::repository_path(input)
+        };
+        // A forge that nests groups takes the longest paths.
+        ensure!(
+            repository_path_valid(path, true),
+            "{input} names no repository"
+        );
+        Ok(())
     }
 
     /// The repository `input` names: a remote or web URL, on any forge, or
@@ -277,6 +289,20 @@ const PULL_ROUTES: &[ItemRoute] = &[
     ItemRoute::MergeRequest,
     ItemRoute::PullRequests,
 ];
+
+/// Whether `path` names a repository as `owner/name`, or below nested groups
+/// where the forge `nests` them.
+fn repository_path_valid(path: &str, nests: bool) -> bool {
+    let segments = path.split('/').count();
+    (segments == 2 || nests && segments > 2)
+        && path.split('/').all(|part| {
+            !part.is_empty()
+                && !matches!(part, "." | ".." | "-")
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        })
+}
 
 pub(crate) const MERGED_HINT: &str = "; use `shoal done` to finish without a PR watch";
 

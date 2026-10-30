@@ -156,6 +156,7 @@ async fn a_named_repository_is_a_url_or_a_path_on_the_same_host() {
             "https://elsewhere.example/them/tool",
         ),
     ] {
+        ForgeRepo::check_named(input).unwrap();
         let named = repo.resolve_named(input, &Forgejo).await.unwrap();
         assert_eq!(named.repository_url(), expected, "{input}");
     }
@@ -164,6 +165,18 @@ async fn a_named_repository_is_a_url_or_a_path_on_the_same_host() {
             repo.resolve_named(input, &Forgejo).await.is_err(),
             "{input}"
         );
+    }
+    // Before any host answers, only what names no repository on any forge
+    // is refused; nested groups wait for the forge.
+    ForgeRepo::check_named("group/team/tool").unwrap();
+    for input in [
+        "tool",
+        "team/../tool",
+        "",
+        "https://forge.example/tool",
+        "ftp://x/a/b",
+    ] {
+        assert!(ForgeRepo::check_named(input).is_err(), "{input}");
     }
 }
 

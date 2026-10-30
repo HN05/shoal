@@ -6,10 +6,13 @@ use super::context::select_context;
 
 use crate::{
     cli::{args::changes::ListArgs, client, context::Context},
-    forge::items::{
-        item::{Item, ItemState},
-        link::ItemKind,
-        list::Search,
+    forge::{
+        ForgeRepo,
+        items::{
+            item::{Item, ItemState},
+            link::ItemKind,
+            list::Search,
+        },
     },
     protocol::ItemMethod,
 };
@@ -23,8 +26,13 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
         text: (!query.is_empty()).then_some(query),
         limit: args.limit.into(),
     };
-    // Refuse a bad filter before the workspace picker asks for anything.
+    // Refuse a bad filter or repository before the workspace picker asks for
+    // anything.
     search.check()?;
+    args.repo
+        .as_deref()
+        .map(ForgeRepo::check_named)
+        .transpose()?;
     let method = ItemMethod::ListItems {
         context: select_context(ctx, args.workspace).await?,
         kind,

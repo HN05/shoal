@@ -6,9 +6,12 @@ use super::{content::read_content, context::select_context};
 use crate::{
     cli::{args::changes::OpenPullArgs, client, context::Context, ui},
     daemon::links::proposals::{OpenOutcome, Proposed},
-    forge::items::{
-        create::{NewIssue, PullOptions},
-        item::Opened,
+    forge::{
+        ForgeRepo,
+        items::{
+            create::{NewIssue, PullOptions},
+            item::Opened,
+        },
     },
     git,
     model::Workspace,
@@ -94,6 +97,11 @@ pub(super) async fn open_issue(
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
+    // Refuse a bad repository before the workspace picker asks for anything.
+    repository
+        .as_deref()
+        .map(ForgeRepo::check_named)
+        .transpose()?;
     let context = select_context(ctx, workspace).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
