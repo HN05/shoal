@@ -38,12 +38,15 @@ impl Manager {
         selector: &str,
     ) -> Result<BTreeMap<String, String>> {
         let workspace = self.workspace(selector).await?;
+        self.reserve_repository_directory(&workspace.repository_id)
+            .await?;
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
         let workspace = self.workspace(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings(&workspace).await?;
         let repository = self.repository(&workspace.repository_id).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
+        let tmp_dir = crate::tmp_dirs::directory(&repository, &workspace.id)?;
         let configured = settings.env;
         let repository_name = crate::repository::name(&repository).to_owned();
         let workspace_id = workspace.id.clone();
@@ -60,6 +63,7 @@ impl Manager {
                     &repository_name,
                     &ports,
                     &caches,
+                    tmp_dir.as_deref(),
                 );
                 values.extend(env::workspace_environment(
                     &workspace, &paths, &ports, &token,

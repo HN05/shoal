@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail, ensure};
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tokio::process::Command;
 
@@ -144,14 +144,17 @@ pub fn validate_configured_name(table: &str, name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Render configured values once for one workspace. Inserted values are never
-/// scanned again, matching the prompt template substitution rules.
+/// Render configured values once for one workspace, after `tmp_dir`, its
+/// temporary directory, as [`TMPDIR`], which `[env]` may override. Inserted
+/// values are never scanned again, matching the prompt template substitution
+/// rules.
 pub fn render_configured_environment(
     values: &BTreeMap<String, String>,
     workspace: &Workspace,
     repository_name: &str,
     ports: &[PortReservation],
     caches: &BTreeMap<String, PathBuf>,
+    tmp_dir: Option<&Path>,
 ) -> BTreeMap<String, OsString> {
     let mut fields = vec![
         ("{workspace}", std::ffi::OsStr::new(&workspace.name)),
@@ -178,10 +181,16 @@ pub fn render_configured_environment(
             .iter()
             .map(|(key, directory)| (key.as_str(), directory.as_os_str())),
     );
-    values
-        .iter()
-        .map(|(name, value)| (name.clone(), placeholders::render_os(value, &fields)))
-        .collect()
+    let mut rendered: BTreeMap<_, _> = tmp_dir
+        .map(|directory| (TMPDIR.to_owned(), directory.as_os_str().to_owned()))
+        .into_iter()
+        .collect();
+    rendered.extend(
+        values
+            .iter()
+            .map(|(name, value)| (name.clone(), placeholders::render_os(value, &fields))),
+    );
+    rendered
 }
 
 /// The configured Claude Code directory, if any, of a process whose
@@ -220,8 +229,12 @@ fn absolute_dir(name: &str, value: Option<OsString>) -> Result<Option<PathBuf>> 
     Ok(Some(dir))
 }
 
+/// The directory for temporary files, which Shoal sets to the workspace's
+/// or chat's own.
+pub const TMPDIR: &str = "TMPDIR";
+
 /// Variables a reserved port may never shadow when exported to a command.
-pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", "TMPDIR"];
+pub const PROTECTED: [&str; 4] = ["HOME", "PATH", "SHELL", TMPDIR];
 
 /// Whether an inherited variable named in [`RESERVED_PORT_ENV`] may be dropped
 /// before launching a command: never the protected set or Shoal's own

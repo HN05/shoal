@@ -895,7 +895,7 @@ impl Manager {
             Some(command) => Ok(Some(PostRemoveHook {
                 command,
                 checkout: self.repository(&workspace.repository_id).await?.path,
-                env: self.configured_workspace_environment(workspace).await?,
+                env: self.removed_workspace_environment(workspace).await?,
             })),
             None => Ok(None),
         }
@@ -933,6 +933,12 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
+        if let Err(error) = self.delete_workspace_tmp_dir(workspace).await {
+            crate::daemon::log!(
+                "temporary directory of {} not deleted: {error:#}",
+                workspace.name
+            );
+        }
         if let Err(error) = self.delete_workspace_files(workspace).await {
             crate::daemon::log!(
                 "files attached to messages of {} not deleted: {error:#}",
