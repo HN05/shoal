@@ -85,6 +85,10 @@ pub fn validate(
         if agent.command.is_some() || agent.base.is_some() {
             crate::ai::validate::reachable_name(name).with_context(|| format!("agents.{name}"))?;
         }
+        if let Some(base) = &agent.base {
+            crate::ai::validate::reachable_name(base)
+                .with_context(|| format!("agents.{name}.base"))?;
+        }
         for argv in [&agent.command, &agent.resume_command]
             .into_iter()
             .flatten()
