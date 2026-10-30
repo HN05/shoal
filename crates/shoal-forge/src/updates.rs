@@ -18,6 +18,12 @@ use crate::{
 /// reported again, so a failing source cannot silence a wait indefinitely.
 const FAILURE_REPORT_INTERVAL: u64 = 600;
 
+/// The failed jobs a finished run's update names; `view ci` lists them all.
+pub(crate) const MAX_LISTED_JOBS: usize = 10;
+
+/// The characters of a failed job's name or step its run's update keeps.
+const MAX_JOB_TEXT: usize = 120;
+
 /// The comment source of an item's discussion, where Shoal posts comments.
 pub(crate) const DISCUSSION: &str = "discussion";
 
@@ -392,18 +398,36 @@ impl Snapshot {
 }
 
 /// The failed jobs of a run and the steps that failed, after a colon.
+/// Only the first [`MAX_LISTED_JOBS`] are named, each name and step cut to
+/// [`MAX_JOB_TEXT`] characters, so the update fits a protocol frame however
+/// many jobs failed.
 fn failed_jobs_text(jobs: &[FailedJob]) -> String {
     if jobs.is_empty() {
         return String::new();
     }
-    let jobs = jobs
+    let mut listed = jobs
         .iter()
-        .map(|job| match &job.step {
-            Some(step) => format!("{} (failed step: {step})", job.name),
-            None => job.name.clone(),
+        .take(MAX_LISTED_JOBS)
+        .map(|job| {
+            let name = shortened(&job.name);
+            match &job.step {
+                Some(step) => format!("{name} (failed step: {})", shortened(step)),
+                None => name,
+            }
         })
         .collect::<Vec<_>>();
-    format!(": {}", jobs.join(", "))
+    if jobs.len() > MAX_LISTED_JOBS {
+        listed.push(format!("and {} more", jobs.len() - MAX_LISTED_JOBS));
+    }
+    format!(": {}", listed.join(", "))
+}
+
+/// `text` cut to [`MAX_JOB_TEXT`] characters, marking the cut.
+fn shortened(text: &str) -> String {
+    match text.char_indices().nth(MAX_JOB_TEXT) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_owned(),
+    }
 }
 
 /// A forge ID as text: strings without JSON quotes, numbers as digits.

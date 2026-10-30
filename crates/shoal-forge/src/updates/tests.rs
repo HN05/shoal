@@ -547,3 +547,18 @@ fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
         format!("Run finished; read it with shoal view ci {url}")
     );
 }
+
+#[test]
+fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
+    let url = "https://forge.example/team/repo/actions/runs/2765";
+    let mut failed = Snapshot::new("failed");
+    failed.failed_jobs = (0..5000)
+        .map(|index| FailedJob {
+            name: format!("shard {index} {}", "x".repeat(1000)),
+            step: Some("y".repeat(1000)),
+        })
+        .collect();
+    let message = &Snapshot::new("running").changes(&failed, url)[0].message;
+    assert!(message.len() < 4096, "{} bytes", message.len());
+    assert!(message.contains("and 4990 more"), "{message}");
+}

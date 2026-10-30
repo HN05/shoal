@@ -10,7 +10,7 @@ use crate::{
     capability::Capability,
     ci::{JobState, checks::CheckLog, run_action::Run},
     transport::api::Request,
-    updates::{FailedJob, Snapshot},
+    updates::{FailedJob, MAX_LISTED_JOBS, Snapshot},
 };
 
 /// The most runs one list returns.
@@ -140,8 +140,13 @@ impl ForgeRepo {
         let mut snapshot = Snapshot::new(run.state.as_str());
         if run.state == JobState::Failed {
             let jobs = self.jobs_of(account, &run).await?;
-            for job in jobs.iter().filter(|job| job.state == JobState::Failed) {
-                let step = self.failed_job_step(account, &run, job).await;
+            let failed = jobs.iter().filter(|job| job.state == JobState::Failed);
+            for (index, job) in failed.enumerate() {
+                // Only the jobs the update names have their logs read.
+                let step = match index < MAX_LISTED_JOBS {
+                    true => self.failed_job_step(account, &run, job).await,
+                    false => None,
+                };
                 snapshot.failed_jobs.push(FailedJob {
                     name: job.name.clone(),
                     step,
