@@ -281,7 +281,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let names: Vec<_> = agents::names(settings)
         .into_iter()
-        .filter(|name| agents::installed(name, &settings.commands, &search_path))
+        .filter(|name| agents::installed(name, &settings.launchers, &search_path))
         .collect();
     ensure!(!names.is_empty(), "no agent is installed");
     let choices: Vec<_> = names
@@ -352,7 +352,7 @@ fn command(
         args,
     );
     configured::expand_outside_workspace(
-        &settings.commands,
+        &settings.launchers,
         name,
         &[
             ("{path}", repo.path.as_os_str()),

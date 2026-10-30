@@ -1,5 +1,5 @@
-//! Each AI tool resolved once from the `[machine.ai]` entries along its `base`
-//! lineage, which nothing else walks.
+//! Each AI tool resolved from its description along its `base` lineage,
+//! which nothing else walks.
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -103,7 +103,7 @@ impl Tool {
 }
 
 /// Every built-in tool and every configured one, resolved.
-pub(super) fn tools(entries: &Agents) -> Tools {
+pub fn tools(entries: &Agents) -> Tools {
     builtin::PROVIDERS
         .iter()
         .map(|provider| provider.name)

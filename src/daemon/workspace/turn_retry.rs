@@ -432,11 +432,8 @@ impl Manager {
     /// Whether the AI tool `agent` names has `retry` on.
     fn retries(&self, agent: &str) -> bool {
         self.config()
-            .machine
-            .ai
-            .tools
-            .get(agent)
-            .is_some_and(|tool| tool.retry)
+            .tools()
+            .is_ok_and(|tools| tools.get(agent).is_some_and(|tool| tool.retry))
     }
 
     /// Deliver the retries due now; when the next one is due.

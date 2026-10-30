@@ -301,8 +301,8 @@ resume --all` queues the restores to start as the agent limits allow; `--now`
 starts them at once in the background, and `--focus` restores one agent in this
 terminal. Agents whose terminal closed, or that a logout or reboot
 stopped, come back through the same queue on their own. Codex and Claude automatically continue
-the workspace session after load recovers; `[agent_resume]` overrides their restore
-command or enables recovery for other agents.
+the workspace session after load recovers; an agent's `resume_command` overrides
+its restore command or enables recovery for other agents.
 
 ## Share resources
 

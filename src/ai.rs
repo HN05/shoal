@@ -1,31 +1,32 @@
-//! AI tools: the providers Shoal ships and the user's `[machine.ai.<name>]` additions,
-//! each resolved once into a [`Tool`].
+//! AI tools: the providers Shoal ships and the user's `[agents.<name>]`
+//! additions, each resolved into a [`Tool`].
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
 
 mod builtin;
 mod launch;
 mod resolve;
-mod validate;
+pub mod validate;
 
 pub use builtin::{PROVIDERS, default_commands};
 pub use launch::{Arguments, Environment};
-pub use resolve::{DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers};
+pub use resolve::{
+    DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers, tools,
+};
 pub use validate::validate;
 
 pub type Agents = BTreeMap<String, Agent>;
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// One AI tool as its settings and this machine describe it.
+#[derive(Debug, Default)]
 pub struct Agent {
     /// Parent directory in which Shoal installs `<skill>/SKILL.md`.
     pub skill_dir: Option<PathBuf>,
-    /// Launcher at the global layer; a provider with one runs as `shoal <name>`.
+    /// Its launcher; a tool with one runs as `shoal <name>`.
     pub command: Option<Vec<String>>,
     /// Arguments that give the agent instructions apart from its first
     /// message, with `{instructions}`, or `{instructions_toml}` for a TOML
@@ -46,11 +47,9 @@ pub struct Agent {
     pub base: Option<String>,
     /// Variables set for the tool's tracked launches, after the workspace's
     /// `[env]`; a value starting with `~/` names a path under the home.
-    #[serde(default)]
     pub env: BTreeMap<String, String>,
     /// Variables removed from the tool's tracked launches, whether inherited
     /// or set by `[env]`.
-    #[serde(default)]
     pub env_remove: Vec<String>,
     /// Whether Shoal retries a turn an API failure ended, for an agent whose
     /// integration reports failed turns.
@@ -60,38 +59,6 @@ pub struct Agent {
     pub prompt_cache_minutes: Option<u64>,
     /// The `[machine.proxies.<name>]` the tool's tracked agents reach their API through.
     pub proxy: Option<String>,
-}
-
-/// The `[machine.ai]` table as written and every AI tool resolved from it once,
-/// when the config is read.
-#[derive(Debug, Deserialize)]
-#[serde(from = "Agents")]
-pub struct Table {
-    /// The entries as written, which validation reads.
-    pub entries: Agents,
-    pub tools: Tools,
-}
-
-impl From<Agents> for Table {
-    fn from(entries: Agents) -> Self {
-        Self {
-            tools: resolve::tools(&entries),
-            entries,
-        }
-    }
-}
-
-impl Default for Table {
-    fn default() -> Self {
-        Agents::new().into()
-    }
-}
-
-/// Launchers configured under `[machine.ai]`, which join the global `[commands]`.
-pub fn commands(agents: &Agents) -> impl Iterator<Item = (String, Vec<String>)> + '_ {
-    agents
-        .iter()
-        .filter_map(|(name, agent)| Some((name.clone(), agent.command.clone()?)))
 }
 
 /// The names of the tools that run as agents.
@@ -114,19 +81,13 @@ pub fn skill_dirs(tools: &Tools, home: &Path) -> Result<BTreeMap<String, Option<
 /// Skill delivery reads machine config without constructing daemon paths.
 pub fn load(home: &Path) -> Result<Tools> {
     let path = crate::config::Config::path_for_home(home);
-    let Some(text) =
-        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?
-    else {
-        return Ok(Table::default().tools);
-    };
+    let text = crate::fsutil::read_optional(&path)
+        .with_context(|| format!("read {}", path.display()))?
+        .unwrap_or_default();
     let config = crate::config::Config::from_toml(&text)
         .with_context(|| format!("parse {}", path.display()))?;
-    validate(
-        &config.machine.ai.entries,
-        &config.repository.commands,
-        home,
-    )?;
-    Ok(config.machine.ai.tools)
+    validate::skill_dirs(&config.machine.agents, home)?;
+    config.tools()
 }
 
 #[cfg(test)]

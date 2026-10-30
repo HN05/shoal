@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
     let workspace = fixture.add("upgraded");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();

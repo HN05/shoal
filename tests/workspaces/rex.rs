@@ -165,7 +165,7 @@ fn executions(fixture: &Fixture, workspace: &str) -> usize {
 #[test]
 fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[commands]\npi = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
+        "machine.max_agents = 'none'\n[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
     ));
     let Some(rex) = RexServer::start(&fixture) else {
         return;
@@ -224,7 +224,7 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
 #[test]
 fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[terminal.rex]\nplacement = 'split'\n[commands]\npi = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
+        "machine.max_agents = 'none'\n[terminal.rex]\nplacement = 'split'\n[agents.pi]\ncommand = ['sh', '-c', 'echo agent ran; exec sleep 600']\n",
     ));
     let Some(rex) = RexServer::start(&fixture) else {
         return;
@@ -393,7 +393,7 @@ fn a_workspace_whose_block_is_gone_has_no_session_to_attach() {
 #[test]
 fn a_zmx_session_started_from_a_rex_block_with_rex_off_leaves_the_block_alone() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[terminal.rex]\nenabled = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "machine.max_agents = 'none'\n[terminal.rex]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     let Some(rex) = RexServer::start(&fixture) else {
         return;

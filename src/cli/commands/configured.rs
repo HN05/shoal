@@ -47,8 +47,7 @@ enum BareName {
 pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
     let global = Config::load(&ctx.paths)?;
     let layers = listing_layers(ctx, workspace).await?;
-    let mut definitions = Stack::new(&global, &layers).named(|config| &config.commands);
-    crate::ai::inherit_launchers(&global.machine.ai.tools, &mut definitions);
+    let definitions = Stack::new(&global, &layers).named(|config| &config.commands);
 
     let built_ins: BTreeSet<_> = crate::cli::Cli::command()
         .get_subcommands()

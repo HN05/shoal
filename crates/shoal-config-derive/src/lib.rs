@@ -13,6 +13,8 @@
 //!   resolved
 //! - `section`: a nested struct that derives `Options`
 //! - `named`: a map whose entries replace the same-named entry below them whole
+//! - `named_sections`: a map of structs that derive `Options`, whose entries
+//!   merge field by field with the same-named entry below them
 //! - `list`: a list an empty value leaves to the layer below
 //! - `template`: an `Option<String>` a repository value is appended to
 //! - `repository_only`: rejected in the global file
@@ -185,6 +187,7 @@ enum Kind {
     Scalar,
     Section,
     Named,
+    NamedSections,
     List,
     Template,
 }
@@ -236,6 +239,7 @@ impl Field {
                 let kind = [
                     ("section", Kind::Section),
                     ("named", Kind::Named),
+                    ("named_sections", Kind::NamedSections),
                     ("list", Kind::List),
                     ("template", Kind::Template),
                 ]
@@ -261,8 +265,8 @@ impl Field {
                     parsed.resolve = Some((path, ty));
                 } else {
                     return Err(meta.error(
-                        "expected section, named, list, template, default, \
-                         repository_only or resolve",
+                        "expected section, named, named_sections, list, template, \
+                         default, repository_only or resolve",
                     ));
                 }
                 Ok(())
@@ -297,7 +301,7 @@ impl Field {
 
     /// Whether the resolved value has another type than the written one.
     fn changes_type(&self) -> bool {
-        self.kind == Kind::Section
+        matches!(self.kind, Kind::Section | Kind::NamedSections)
             || self.unwraps_default()
             || matches!(self.resolve, Some((_, Some(_))))
     }
@@ -319,6 +323,8 @@ impl Field {
         let ty = &self.ty;
         if self.kind == Kind::Section {
             quote!(<#ty as crate::config::options::Options>::Resolved)
+        } else if self.kind == Kind::NamedSections {
+            quote!(<#ty as crate::config::options::SectionMap>::Resolved)
         } else if self.unwraps_default() {
             let inner = option_inner(ty).expect("checked while parsing");
             quote!(#inner)
@@ -358,6 +364,9 @@ impl Field {
                 crate::config::options::Options::merge(&mut self.#ident, #ident, merge);
             },
             Kind::Named => quote!(self.#ident.extend(#ident);),
+            Kind::NamedSections => quote! {
+                crate::config::options::named_sections(&mut self.#ident, #ident, merge);
+            },
             Kind::List => quote!(crate::config::options::list(&mut self.#ident, #ident);),
             Kind::Template => {
                 quote!(crate::config::options::template(&mut self.#ident, #ident, merge);)
@@ -370,6 +379,9 @@ impl Field {
         let key = self.key();
         match self.kind {
             Kind::Section => quote!(crate::config::options::Options::resolve(#source, &#key)?),
+            Kind::NamedSections => {
+                quote!(crate::config::options::resolve_sections(#source, &#key)?)
+            }
             _ if self.unwraps_default() => {
                 quote!(crate::config::options::required(#source, &#key)?)
             }
@@ -411,6 +423,9 @@ impl Field {
             },
             Kind::Named => {
                 quote!(crate::config::options::named_entries(&#key, #sources, entries)?;)
+            }
+            Kind::NamedSections => {
+                quote!(crate::config::options::section_entries(&#key, #sources, entries)?;)
             }
             Kind::List => quote!(crate::config::options::list_entry(#key, #sources, entries)?;),
             Kind::Template => {

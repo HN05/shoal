@@ -111,7 +111,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         .await
         .unwrap();
     for (recover, enabled, expected) in [
-        (false, true, "configure [agent_resume]"),
+        (false, true, "resume_command with a session restore command"),
         (true, false, "automatic recovery disabled"),
         (
             true,

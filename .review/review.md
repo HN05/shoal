@@ -342,7 +342,7 @@ instead of the PR delivery guidance below.
   not on PATH is refused before any work and left out of pickers, the workspace
   menu and completion.
 - Commands never name an agent or terminal host. What configuration can say about
-  an agent lives in its `[machine.ai.<name>]` description; tool-specific code lives in an
+  an agent lives in its `[agents.<name>]` description; tool-specific code lives in an
   `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
   in a `Host` under `cli/terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
@@ -437,7 +437,7 @@ configured command for another agent, plus proven child
   Repository-only commands require a current or explicit workspace; unknown names
   report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
-  AI tools (built-in providers and global `[machine.ai.<name>]` entries) are agents:
+  AI tools (built-in providers and `[agents.<name>]` entries) are agents:
   an `[ai]` `command` joins the global command layer, and `shoal <name>` and
   `run` launch it as `shoal claude` does; pickers and completion offer AI tools
   only. Custom agent names select named commands and run as tracked agents. Their

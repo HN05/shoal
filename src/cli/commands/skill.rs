@@ -79,10 +79,10 @@ pub(super) fn run(
             .collect()
     } else {
         let directory = directories.get(agent.as_str()).with_context(|| {
-            format!("unknown AI tool {agent:?}; configure [machine.ai.{agent}] with skill_dir in global Shoal config")
+            format!("unknown AI tool {agent:?}; configure [machine.agents.{agent}] with skill_dir in global Shoal config")
         })?;
         let directory = directory.clone().with_context(|| {
-            format!("AI tool {agent:?} has no skill directory; set [machine.ai.{agent}] skill_dir in global Shoal config")
+            format!("AI tool {agent:?} has no skill directory; set [machine.agents.{agent}] skill_dir in global Shoal config")
         })?;
         vec![(agent.clone(), directory)]
     };

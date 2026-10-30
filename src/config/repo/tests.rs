@@ -1,4 +1,5 @@
 use super::*;
+use crate::agent::AgentMode;
 
 #[test]
 fn setup_cmd_requires_a_nonempty_path() {
@@ -34,9 +35,8 @@ fn layering_keeps_omitted_options_and_replaces_named_entries() {
     )
     .unwrap();
     let local = parse(
-        "setup.command = 'local/setup'\n[codex]\ndefault_mode = 'app'\n\
-             [ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
-             [resources.signing]\ncapacity = 2\n[cleanup.auto]\nenabled = true\n",
+        "setup.command = 'local/setup'\n[ports]\nend = 3050\n[ports.web]\nenv = 'LOCAL_PORT'\n\
+             [resources.signing]\ncapacity = 2\n[cleanup.auto]\nenabled = true\n[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let config = local.over(base);
@@ -44,7 +44,7 @@ fn layering_keeps_omitted_options_and_replaces_named_entries() {
         config.agent.default,
         "claude".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(config.codex.default_mode, Some(AgentMode::App));
+    assert_eq!(config.agents["codex"].default_mode, Some(AgentMode::App));
     assert_eq!(config.setup.command.as_deref(), Some("local/setup"));
     assert_eq!(config.hooks.post_setup.as_deref(), Some("base/attach"));
     assert!(matches!(
@@ -68,7 +68,7 @@ fn layering_keeps_omitted_options_and_replaces_named_entries() {
     assert_eq!(config.cleanup.pr.enabled, None);
     assert!(parse("[cleanup.auto]\nidle_minutes = 0\n").is_err());
     assert!(parse("agent.default = 'Happy'\n").is_err());
-    assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
+    assert!(parse("[agents.codex]\ndefault_mode = 'desktop'\n").is_err());
 }
 
 #[test]
@@ -115,12 +115,12 @@ fn former_option_names_are_unknown_keys() {
 #[test]
 fn config_serializes_in_its_own_spelling() {
     let config = parse(
-        "agent.default = 'happy-codex'\n[codex]\ndefault_mode = 'app'\n[ports.web]\nport = 1\n",
+        "agent.default = 'happy-codex'\n[ports.web]\nport = 1\n[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let json = serde_json::to_value(&config).unwrap();
     assert_eq!(json["agent"]["default"], "happy-codex");
-    assert_eq!(json["codex"]["default_mode"], "app");
+    assert_eq!(json["agents"]["codex"]["default_mode"], "app");
     let back: RepoConfig = serde_json::from_value(json).unwrap();
     assert_eq!(
         back.agent.default,

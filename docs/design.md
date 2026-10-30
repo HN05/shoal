@@ -1109,12 +1109,14 @@ tracked repository config, so it arrives as a reviewable commit that every clone
 shares rather than as saved local config. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
-AI tools are providers: built-in ones plus global `[machine.ai.<name>]` entries. A
-`command` there is the tool's launcher at the global `[commands]` layer, so
-repositories can still replace it, and gives it a `shoal <name>` agent shortcut
-that `run` shares; names that built-in commands shadow are rejected. Pickers
-and completion offer providers only, while custom `--agent` and `agent.default`
-names select any named command through the same configuration layers. Agents run
+AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
+per tool holding its launcher, resume command, launch mode and argument
+templates, merged option by option across layers so a repository can replace
+`command` and keep the global `resume`. A `command` or `base` gives a tool a
+`shoal <name>` agent shortcut that `run` shares; names that built-in commands
+shadow are rejected, and `[commands]` holds only shortcuts that are not agents.
+What a tool needs of the machine, its skill directory and proxy, sits under
+`[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
 as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
@@ -1560,9 +1562,8 @@ state directory, skills included, unless tests in a temporary home set
 `SHOAL_DEV_USER_FILES=1`. A changed or removed skill stays as the user left it until an
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with
-`--force` replaces them. Global `[machine.ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
-the machine and cannot be set per repository; provider launchers join named
-commands without tool-specific integrations. Packaged skills resolve the runtime
+`--force` replaces them. `[machine.agents.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
+the machine and cannot be set per repository. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, then an adjacent `shoal-skills` symlink
 to a directory holding every bundled skill. Explicit paths must be absolute;
 relative link targets resolve lexically against the link's directory. Preserve

@@ -119,7 +119,7 @@ impl Recovery {
 
     /// Ask the restored session to continue, including `handoff` where the
     /// command accepts a prompt: agents with resume arguments and `{prompt}`
-    /// in `[agent_resume]`. Resume arguments restore `session` when known,
+    /// in its `resume_command`. Resume arguments restore `session` when known,
     /// otherwise the workspace's latest session.
     pub(crate) async fn resolve(
         paths: &Paths,
@@ -131,7 +131,7 @@ impl Recovery {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
         let name = agent.replace(' ', "-");
-        let configured = settings.agent_resume.get(&name);
+        let configured = settings.resume_commands.get(&name);
         let resume_args = settings.launch(&name).arguments.resume_args(session);
         let automatic = configured.is_some() || resume_args.is_some();
         let mut message = String::from(
@@ -145,7 +145,7 @@ impl Recovery {
         let (command, handoff_delivered) = if let Some(argv) = configured {
             let mut command = configured::expand_with_fields(
                 paths,
-                &settings.agent_resume,
+                &settings.resume_commands,
                 &name,
                 workspace,
                 vec![],
@@ -160,7 +160,7 @@ impl Recovery {
                 crate::cli::agents::workspace_args(paths, &settings, &name, workspace).await?,
             );
             let takes_field = settings
-                .commands
+                .launchers
                 .get(&name)
                 .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
             if !takes_field {
@@ -168,7 +168,7 @@ impl Recovery {
             }
             let command = configured::expand_with_fields(
                 paths,
-                &settings.commands,
+                &settings.launchers,
                 &name,
                 workspace,
                 args,

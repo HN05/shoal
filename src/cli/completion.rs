@@ -339,7 +339,7 @@ impl Typed {
         let Ok(paths) = Paths::new(state) else {
             return Settings {
                 commands: named_commands::defaults(),
-                providers: crate::ai::agents(&crate::ai::Table::default().tools)
+                providers: crate::ai::agents(&crate::ai::tools(&Default::default()))
                     .map(str::to_owned)
                     .collect(),
                 agents: crate::ai::PROVIDERS
@@ -380,16 +380,19 @@ impl Typed {
                 layers = *found;
             }
         }
-        let mut commands = Stack::new(&global, &layers)
+        // Agents' launchers complete beside the workspace shortcuts.
+        let mut commands: Commands = Stack::new(&global, &layers)
             .named(|config| &config.commands)
             .into_iter()
             .map(|(name, (argv, _))| (name, argv))
             .collect();
-        crate::ai::inherit_launchers(&global.machine.ai.tools, &mut commands);
-        let providers: BTreeSet<_> = crate::ai::agents(&global.machine.ai.tools)
-            .map(str::to_owned)
-            .collect();
-        let agents = global.resolve(&layers).map_or_else(
+        let tools = global.tools().unwrap_or_default();
+        let providers: BTreeSet<_> = crate::ai::agents(&tools).map(str::to_owned).collect();
+        let resolved = global.resolve(&layers);
+        if let Ok(settings) = &resolved {
+            commands.extend(settings.launchers.clone());
+        }
+        let agents = resolved.map_or_else(
             |_| providers.iter().cloned().collect(),
             |settings| agents::names(&settings),
         );

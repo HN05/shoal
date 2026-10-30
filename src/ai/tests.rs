@@ -9,12 +9,13 @@ use crate::config::named_commands::Commands;
 
 fn parse(text: &str) -> Result<Tools> {
     let config = crate::config::Config::from_toml(text)?;
-    validate(
-        &config.machine.ai.entries,
-        &config.repository.commands,
-        Path::new("/home"),
-    )?;
-    Ok(config.machine.ai.tools)
+    validate::skill_dirs(&config.machine.agents, Path::new("/home"))?;
+    Ok(config.resolve(&Default::default())?.tools)
+}
+
+/// The built-in tools without configuration.
+fn built_in() -> Tools {
+    tools(&Default::default())
 }
 
 /// The launch profile of `name`, which runs as an agent.
@@ -33,9 +34,7 @@ fn runs_as_agent(tools: &Tools, name: &str) -> bool {
 #[test]
 fn configured_providers_add_launchers_and_skill_directories() {
     let agents = parse(
-        "[machine.ai.droid]\ncommand = ['droid', '{args}']\n\
-             [machine.ai.claude]\nskill_dir = '~/claude-skills'\n\
-             [machine.ai.notes]\nskill_dir = '/skills'\n",
+        "[agents.droid]\ncommand = ['droid', '{args}']\n[machine.agents.claude]\nskill_dir = '~/claude-skills'\n[machine.agents.notes]\nskill_dir = '/skills'\n",
     )
     .unwrap();
     assert!(runs_as_agent(&agents, "droid"));
@@ -52,7 +51,7 @@ fn configured_providers_add_launchers_and_skill_directories() {
 
 #[test]
 fn instruction_arguments_preserve_empty_and_literal_text() {
-    let agents = Table::default().tools;
+    let agents = built_in();
     for name in ["claude", "codex"] {
         assert_eq!(
             arguments(&agents, name).instruction_args(""),
@@ -75,8 +74,7 @@ fn instruction_arguments_preserve_empty_and_literal_text() {
 #[test]
 fn configured_arguments_replace_built_in_ones_entry_by_entry() {
     let agents = parse(
-        "[machine.ai.claude]\nresume = ['--resume={session}']\n\
-             [machine.ai.droid]\ncommand = ['droid']\ninstructions = ['--system', '{instructions}']\n",
+        "[agents.claude]\nresume = ['--resume={session}']\n[agents.droid]\ncommand = ['droid']\ninstructions = ['--system', '{instructions}']\n",
     )
     .unwrap();
     let claude = arguments(&agents, "claude");
@@ -93,10 +91,10 @@ fn configured_arguments_replace_built_in_ones_entry_by_entry() {
     assert_eq!(droid.resume_args(None), None);
     for (config, message) in [
         (
-            "[machine.ai.droid]\ninstructions = ['--system']\n",
+            "[agents.droid]\ninstructions = ['--system']\n",
             "{instructions}",
         ),
-        ("[machine.ai.droid]\nresume = ['--resume']\n", "{session}"),
+        ("[agents.droid]\nresume = ['--resume']\n", "{session}"),
     ] {
         let error = format!("{:#}", parse(config).unwrap_err());
         assert!(error.contains(message), "{config}: {error}");
@@ -106,8 +104,7 @@ fn configured_arguments_replace_built_in_ones_entry_by_entry() {
 #[test]
 fn fork_arguments_name_the_forked_session() {
     let agents = parse(
-        "[machine.ai.droid]\ncommand = ['droid']\nfork = ['--fork', '{session}']\n\
-             [machine.ai.claude-direct]\nbase = 'claude'\n",
+        "[agents.droid]\ncommand = ['droid']\nfork = ['--fork', '{session}']\n[agents.claude-direct]\nbase = 'claude'\n",
     )
     .unwrap();
     assert_eq!(
@@ -137,18 +134,16 @@ fn fork_arguments_name_the_forked_session() {
     );
     let error = format!(
         "{:#}",
-        parse("[machine.ai.droid]\ncommand = ['droid']\nfork = ['--fork']\n").unwrap_err()
+        parse("[agents.droid]\ncommand = ['droid']\nfork = ['--fork']\n").unwrap_err()
     );
-    assert!(error.contains("ai.droid.fork"), "{error}");
+    assert!(error.contains("agents.droid.fork"), "{error}");
 }
 
 #[test]
 fn arguments_describe_a_launcher_defined_in_commands() {
-    let agents = parse(
-        "[machine.ai.helper]\nresume_latest = ['--continue']\n\
-             [commands]\nhelper = ['helper']\n",
-    )
-    .unwrap();
+    let agents =
+        parse("[commands]\nhelper = ['helper']\n[agents.helper]\nresume_latest = ['--continue']\n")
+            .unwrap();
     // `[commands]` defines the launcher, so `[ai]` alone makes no agent of it.
     assert!(!runs_as_agent(&agents, "helper"));
     assert_eq!(
@@ -161,8 +156,7 @@ fn arguments_describe_a_launcher_defined_in_commands() {
 fn directory_arguments_name_one_directory_each() {
     let directory = Path::new("/shoal/repo");
     let agents = parse(
-        "[machine.ai.codex]\nadd_dir = []\n\
-             [machine.ai.droid]\ncommand = ['droid']\nadd_dir = ['--dir', '{directory}']\n",
+        "[agents.codex]\nadd_dir = []\n[agents.droid]\ncommand = ['droid']\nadd_dir = ['--dir', '{directory}']\n",
     )
     .unwrap();
     assert_eq!(
@@ -170,7 +164,7 @@ fn directory_arguments_name_one_directory_each() {
         [OsString::from("--add-dir=/shoal/repo")]
     );
     assert_eq!(
-        arguments(&Table::default().tools, "codex").add_dir_args(directory),
+        arguments(&built_in(), "codex").add_dir_args(directory),
         [OsString::from("--add-dir"), "/shoal/repo".into()]
     );
     assert!(
@@ -185,10 +179,10 @@ fn directory_arguments_name_one_directory_each() {
     assert!(arguments(&agents, "pi").add_dir_args(directory).is_empty());
     let error = format!(
         "{:#}",
-        parse("[machine.ai.droid]\nadd_dir = ['--dir']\n").unwrap_err()
+        parse("[agents.droid]\nadd_dir = ['--dir']\n").unwrap_err()
     );
     assert!(
-        error.contains("ai.droid.add_dir") && error.contains("{directory}"),
+        error.contains("agents.droid.add_dir") && error.contains("{directory}"),
         "{error}"
     );
 }
@@ -197,35 +191,33 @@ fn directory_arguments_name_one_directory_each() {
 fn provider_launchers_need_reachable_unique_names() {
     for (config, message) in [
         (
-            "[machine.ai.work]\ncommand = ['work']\n",
+            "[agents.work]\ncommand = ['work']\n",
             "built-in Shoal command",
         ),
         (
-            "[machine.ai.Droid]\ncommand = ['droid']\n",
+            "[agents.Droid]\ncommand = ['droid']\n",
             "cannot name an agent",
         ),
-        ("[machine.ai.droid]\ncommand = []\n", "nonempty executable"),
+        ("[agents.droid]\ncommand = []\n", "nonempty executable"),
         (
-            "[machine.ai.droid]\ncommand = ['droid']\n[commands]\ndroid = ['droid']\n",
-            "keep one launcher",
+            "[commands]\ndroid = ['droid']\n[agents.droid]\ncommand = ['droid']\n",
+            "[commands] holds only workspace shortcuts",
         ),
     ] {
         let error = format!("{:#}", parse(config).unwrap_err());
         assert!(error.contains(message), "{config}: {error}");
     }
-    // Built-in providers may replace their launcher here as in [commands].
-    parse("[machine.ai.codex]\ncommand = ['codex']\n").unwrap();
+    // Built-in providers may replace their launcher.
+    parse("[agents.codex]\ncommand = ['codex']\n").unwrap();
 }
 
 #[test]
 fn retry_defaults_to_on_for_claude_and_its_profiles() {
     let agents = parse(
-        "[machine.ai.claude-direct]\nbase = 'claude'\n\
-         [machine.ai.claude-fast]\nbase = 'claude-direct'\n\
-         [machine.ai.droid]\ncommand = ['droid']\n",
+        "[agents.claude-direct]\nbase = 'claude'\n[agents.claude-fast]\nbase = 'claude-direct'\n[agents.droid]\ncommand = ['droid']\n",
     )
     .unwrap();
-    assert!(Table::default().tools["claude"].retry);
+    assert!(built_in()["claude"].retry);
     assert!(agents["claude-direct"].retry);
     assert!(agents["claude-fast"].retry);
     for name in ["codex", "opencode", "pi", "grok", "droid"] {
@@ -236,11 +228,7 @@ fn retry_defaults_to_on_for_claude_and_its_profiles() {
 #[test]
 fn retry_uses_the_nearest_explicit_setting() {
     let agents = parse(
-        "[machine.ai.claude]\nretry = false\n[machine.ai.claude-direct]\nbase = 'claude'\n\
-         [machine.ai.claude-auto]\nbase = 'claude-direct'\nretry = true\n\
-         [machine.ai.claude-manual]\nbase = 'claude-auto'\nretry = false\n\
-         [machine.ai.droid]\ncommand = ['droid']\nretry = true\n\
-         [machine.ai.droid-profile]\nbase = 'droid'\n",
+        "[agents.claude]\nretry = false\n[agents.claude-direct]\nbase = 'claude'\n[agents.claude-auto]\nbase = 'claude-direct'\nretry = true\n[agents.claude-manual]\nbase = 'claude-auto'\nretry = false\n[agents.droid]\ncommand = ['droid']\nretry = true\n[agents.droid-profile]\nbase = 'droid'\n",
     )
     .unwrap();
     assert!(!agents["claude"].retry);
@@ -249,21 +237,14 @@ fn retry_uses_the_nearest_explicit_setting() {
     assert!(!agents["claude-manual"].retry);
     assert!(agents["droid"].retry);
     assert!(agents["droid-profile"].retry);
-    let error = format!(
-        "{:#}",
-        parse("[machine.ai.notes]\nretry = true\n").unwrap_err()
-    );
-    assert!(error.contains("ai.notes.retry needs"), "{error}");
+    let error = format!("{:#}", parse("[agents.notes]\nretry = true\n").unwrap_err());
+    assert!(error.contains("agents.notes.retry needs"), "{error}");
 }
 
 #[test]
 fn launch_profiles_inherit_along_their_bases() {
     let agents = parse(
-        "[machine.ai.claude-direct]\nbase = 'claude'\nresume = ['--resume={session}']\n\
-             env = { CLAUDE_CONFIG_DIR = '~/.claude-direct', MODE = 'direct' }\n\
-             env_remove = ['ANTHROPIC_BASE_URL', 'MODE_OLD']\n\
-             [machine.ai.claude-fast]\nbase = 'claude-direct'\nenv = { MODE_OLD = 'kept' }\n\
-             env_remove = ['MODE']\n",
+        "[agents.claude-direct]\nbase = 'claude'\nresume = ['--resume={session}']\nenv = { CLAUDE_CONFIG_DIR = '~/.claude-direct', MODE = 'direct' }\nenv_remove = ['ANTHROPIC_BASE_URL', 'MODE_OLD']\n[agents.claude-fast]\nbase = 'claude-direct'\nenv = { MODE_OLD = 'kept' }\nenv_remove = ['MODE']\n",
     )
     .unwrap();
     assert!(runs_as_agent(&agents, "claude-fast"));
@@ -308,10 +289,7 @@ fn launch_profiles_inherit_along_their_bases() {
 #[test]
 fn launch_profiles_follow_the_launcher_in_effect() {
     let agents = parse(
-        "[machine.ai.droid]\ncommand = ['droid']\n\
-             [machine.ai.droid-direct]\nbase = 'droid'\n\
-             [machine.ai.claude-direct]\nbase = 'claude'\n\
-             [machine.ai.claude-own]\nbase = 'claude'\ncommand = ['claude-own']\n",
+        "[agents.droid]\ncommand = ['droid']\n[agents.droid-direct]\nbase = 'droid'\n[agents.claude-direct]\nbase = 'claude'\n[agents.claude-own]\nbase = 'claude'\ncommand = ['claude-own']\n",
     )
     .unwrap();
     let mut commands = Commands::from([
@@ -329,40 +307,37 @@ fn launch_profiles_follow_the_launcher_in_effect() {
 fn launch_profiles_need_a_reachable_base_and_valid_variables() {
     for (config, message) in [
         (
-            "[machine.ai.direct]\nbase = 'missing'\n",
+            "[agents.direct]\nbase = 'missing'\n",
             "not a built-in AI tool",
         ),
         (
-            "[machine.ai.notes]\nskill_dir = '/s'\n[machine.ai.direct]\nbase = 'notes'\n",
+            "[agents.direct]\nbase = 'notes'\n[machine.agents.notes]\nskill_dir = '/s'\n",
             "not a built-in AI tool",
         ),
         (
-            "[machine.ai.one]\nbase = 'two'\n[machine.ai.two]\nbase = 'one'\n",
+            "[agents.one]\nbase = 'two'\n[agents.two]\nbase = 'one'\n",
             "form a cycle",
         ),
-        ("[machine.ai.self]\nbase = 'self'\n", "form a cycle"),
+        ("[agents.self]\nbase = 'self'\n", "form a cycle"),
+        ("[agents.work]\nbase = 'claude'\n", "built-in Shoal command"),
         (
-            "[machine.ai.work]\nbase = 'claude'\n",
-            "built-in Shoal command",
+            "[commands]\ndirect = ['claude']\n[agents.direct]\nbase = 'claude'\n",
+            "[commands] holds only workspace shortcuts",
         ),
         (
-            "[machine.ai.direct]\nbase = 'claude'\n[commands]\ndirect = ['claude']\n",
-            "keep one launcher",
-        ),
-        (
-            "[machine.ai.direct]\nbase = 'claude'\nenv = { 'bad-name' = 'x' }\n",
+            "[agents.direct]\nbase = 'claude'\nenv = { 'bad-name' = 'x' }\n",
             "invalid env",
         ),
         (
-            "[machine.ai.direct]\nbase = 'claude'\nenv_remove = ['CLAUDE_CONFIG_DIR']\n",
+            "[agents.direct]\nbase = 'claude'\nenv_remove = ['CLAUDE_CONFIG_DIR']\n",
             "cannot remove CLAUDE_CONFIG_DIR",
         ),
         (
-            "[machine.ai.direct]\nbase = 'claude'\nenv = { CODEX_HOME = 'relative' }\n",
+            "[agents.direct]\nbase = 'claude'\nenv = { CODEX_HOME = 'relative' }\n",
             "absolute path",
         ),
         (
-            "[machine.ai.notes]\nenv = { MODE = 'x' }\n",
+            "[agents.notes]\nenv = { MODE = 'x' }\n",
             "need a command or base",
         ),
     ] {
@@ -370,15 +345,13 @@ fn launch_profiles_need_a_reachable_base_and_valid_variables() {
         assert!(error.contains(message), "{config}: {error}");
     }
     // Built-in tools take an environment of their own.
-    parse("[machine.ai.claude]\nenv_remove = ['ANTHROPIC_BASE_URL']\n").unwrap();
+    parse("[agents.claude]\nenv_remove = ['ANTHROPIC_BASE_URL']\n").unwrap();
 }
 
 #[test]
 fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
     let agents = parse(
-        "[machine.ai.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n\
-         [machine.ai.claude-shorter]\nbase = 'claude-short'\n\
-         [machine.ai.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n",
+        "[agents.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n[agents.claude-shorter]\nbase = 'claude-short'\n[agents.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n",
     )
     .unwrap();
     let minutes = |minutes: u64| Duration::from_secs(minutes * 60);
@@ -400,11 +373,11 @@ fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
     }
     for (config, message) in [
         (
-            "[machine.ai.notes]\nprompt_cache_minutes = 5\n",
+            "[agents.notes]\nprompt_cache_minutes = 5\n",
             "needs a command or base",
         ),
         (
-            "[machine.ai.codex]\nprompt_cache_minutes = 0\n",
+            "[agents.codex]\nprompt_cache_minutes = 0\n",
             "must be at least 1",
         ),
     ] {

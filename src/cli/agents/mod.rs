@@ -199,18 +199,18 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
     }
 }
 
-/// What `settings` set for the integration of AI tools of `kind`, from its
-/// own section: `default_mode = "app"` hands launches to its desktop app.
+/// What `settings` set for the integration of AI tools of `kind`, from the
+/// built-in tool's own `[agents.<name>]`: `default_mode = "app"` hands
+/// launches to its desktop app.
 fn tool_options(kind: IntegrationKind, settings: &Effective) -> Options {
-    let shortcut = match kind {
-        IntegrationKind::Claude => &settings.claude,
-        IntegrationKind::Codex => &settings.codex,
-        IntegrationKind::None => return Options::default(),
-    };
+    let mode = settings
+        .agents
+        .get(kind.as_str())
+        .map(|agent| agent.default_mode);
     Options {
         app: integration(kind)
             .app()
-            .filter(|_| shortcut.default_mode == AgentMode::App),
+            .filter(|_| mode == Some(AgentMode::App)),
         ..Options::default()
     }
 }
@@ -403,7 +403,7 @@ pub(super) async fn launch_agent(
 
 /// Whether `shoal <name>` launches an agent rather than a configured command.
 pub(super) fn is_agent(ctx: &Context, name: &str) -> Result<bool> {
-    let tools = Config::load(&ctx.paths)?.machine.ai.tools;
+    let tools = Config::load(&ctx.paths)?.tools()?;
     Ok(crate::ai::agents(&tools).any(|agent| agent == name) || added(name).is_some())
 }
 
@@ -454,7 +454,7 @@ pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let mut choices: Vec<_> = names(settings)
         .into_iter()
-        .filter(|name| installed(name, &settings.commands, &search_path))
+        .filter(|name| installed(name, &settings.launchers, &search_path))
         .map(|name| (name.parse().ok(), name))
         .collect();
     // A picker cannot run without fzf. Treat that as “No agent” so callers
@@ -527,7 +527,7 @@ pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Resu
         anyhow::bail!("cannot start {name}: {reason}");
     }
     launch_proxy(settings, name)?;
-    ensure_installed(name, &settings.commands)
+    ensure_installed(name, &settings.launchers)
 }
 
 /// Refuse agent `name` when it cannot start from a fork of a session: it
@@ -541,7 +541,7 @@ pub(in crate::cli) fn ensure_forks(settings: &Effective, name: &str) -> Result<(
     }
     ensure!(
         settings.launch(name).arguments.fork.is_some(),
-        "cannot fork a session of {name}: configure [machine.ai.{name}] fork"
+        "cannot fork a session of {name}: configure [agents.{name}] fork"
     );
     Ok(())
 }
@@ -578,7 +578,7 @@ pub(crate) fn launch_proxy<'a>(
     ensure!(
         integration(settings.integration(name)).routes_through_proxy(),
         "cannot start {name}: Shoal cannot send its API requests through a proxy; \
-         remove proxy from its [machine.ai.{name}]"
+         remove proxy from its [machine.agents.{name}]"
     );
     Ok(Some(proxy))
 }
@@ -586,7 +586,7 @@ pub(crate) fn launch_proxy<'a>(
 /// Refuse an agent whose executables are missing.
 fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
     let programs = programs(name, commands).with_context(|| {
-        format!("unknown agent {name:?}; set [machine.ai.{name}] command in Shoal config")
+        format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
     })?;
     for program in programs {
         ensure_program(name, program)?;

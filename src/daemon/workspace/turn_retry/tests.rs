@@ -89,7 +89,7 @@ type Running = (
     tokio::sync::watch::Receiver<bool>,
 );
 
-const RETRY_ON: &str = "[machine.ai.claude]\nretry = true\n";
+const RETRY_ON: &str = "[agents.claude]\nretry = true\n";
 
 async fn retry(manager: &Manager, workspace: &Workspace) -> Option<TurnRetry> {
     let id = workspace.id.clone();
@@ -255,7 +255,7 @@ async fn turn_failures(manager: &Manager) -> Vec<String> {
 #[tokio::test]
 async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     let (_temp, manager, workspace, execution, _connection) =
-        agent("[machine.ai.claude]\nretry = false\n").await;
+        agent("[agents.claude]\nretry = false\n").await;
     fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
     assert_eq!(retry(&manager, &workspace).await, None);
     assert!(messages(&manager, &workspace).await.is_empty());
@@ -263,7 +263,7 @@ async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
     assert_eq!(told.len(), 1, "{told:?}");
     assert!(told[0].contains("(rate limited)"), "{told:?}");
     assert!(
-        told[0].contains("`retry = true` under `[machine.ai.claude]`"),
+        told[0].contains("`retry = true` under `[agents.claude]`"),
         "{told:?}"
     );
 
@@ -289,7 +289,7 @@ async fn a_failed_turn_with_retry_off_is_told_once_until_a_turn_goes_through() {
 
 #[tokio::test]
 async fn a_failure_no_retry_fixes_is_told_whether_retry_is_on_or_off() {
-    for config in ["", "[machine.ai.claude]\nretry = false\n"] {
+    for config in ["", "[agents.claude]\nretry = false\n"] {
         let (_temp, manager, workspace, execution, _connection) = agent(config).await;
         fail(&manager, &workspace, &execution, TurnFailure::Other).await;
         assert_eq!(retry(&manager, &workspace).await, None);

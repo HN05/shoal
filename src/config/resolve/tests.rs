@@ -18,8 +18,7 @@ git_profile = 'work'\n\
 [hooks]\npre_setup = 'pre-setup'\npost_remove = 'post-remove'\npost_done = 'post-done'\npost_ready = 'post-ready'\npost_agent_exit = 'agent-exit'\n\
 post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup = 'attach'\npre_remove = 'detach'\n\
 [env]\nSESSION = '{workspace}'\n[caches.go]\nscope = 'shared'\n[demos.web]\npreset = 'web'\ncmd = ['npm', 'run', 'dev']\n[secrets.TOKEN]\ncommand = ['token']\n\
-[commands]\nreview = ['review']\n[agent_resume]\nreview = ['review', '--resume']\n[claude]\ndefault_mode = 'app'\n[codex]\ndefault_mode = 'app'\n\
-[ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
+[commands]\ncheck = ['check']\n[ports]\non_conflict = 'auto'\nstart = 3000\nend = 3100\n[ports.web]\nport = 3000\n\
 [resources.lock]\ncapacity = 1\n[resource_pools.devices]\ncapacity = 2\n\
 [resource_pools.devices.resources.phone]\ncapacity = 1\n\
 [simulators]\nrequires_approval = true\napproval_lifetime = 'workspace'\npreferred = ['phone']\n\
@@ -27,7 +26,10 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [cleanup.restore]\nretention_days = 7\narchive_max_mb = 5\n[cleanup.done]\nenabled = false\n[idle_stop]\nenabled = true\n\
 [pr]\ndraft = true\nrequired_labels = ['area/']\nundraft_on_ready = false\ndraft_on_unready = true\n\
 [issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\n[land]\npush = true\n\
-[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n";
+[permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n[agents.review]\ncommand = ['review', '{prompt}']\nresume_command = ['review', '--resume']\ndefault_mode = 'app'\n\
+base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
+fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
+prompt_cache_minutes = 5\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";
 
 fn json<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap()
@@ -384,11 +386,13 @@ fn every_option_survives_layering_in_both_directions() {
         let mut stack = stack("", "", "");
         stack.layers[index].0 = full.clone();
         for entry in stack.report().unwrap() {
-            let built_in_command = entry
-                .key
-                .strip_prefix("commands.")
-                .is_some_and(|name| named_commands::defaults().contains_key(name));
-            if !built_in_command {
+            // The fixture leaves the built-in agents' own settings alone.
+            let built_in_agent = entry.key.strip_prefix("agents.").is_some_and(|key| {
+                named_commands::defaults()
+                    .keys()
+                    .any(|name| key.starts_with(&format!("{name}.")))
+            });
+            if !built_in_agent {
                 assert_eq!(entry.layer, layer, "{}", entry.key);
             }
         }
@@ -401,7 +405,7 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
         ("", "", ""),
         // Explicit defaults win their layer; omitted values fall through.
         (
-            "[cleanup.auto]\nenabled = true\n[codex]\ndefault_mode = 'cli'\n",
+            "[cleanup.auto]\nenabled = true\n[agents.codex]\ndefault_mode = 'cli'\n",
             "[cleanup.auto]\nidle_minutes = 5\n",
             "",
         ),
@@ -461,8 +465,11 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
         entry("cleanup.auto.idle_minutes").layer,
         Layer::WorktreeFile
     );
-    assert_eq!(entry("codex.default_mode").layer, Layer::BuiltInDefault);
-    assert_eq!(entry("codex.default_mode").value, "cli");
+    assert_eq!(
+        entry("agents.codex.default_mode").layer,
+        Layer::BuiltInDefault
+    );
+    assert_eq!(entry("agents.codex.default_mode").value, "cli");
     assert_eq!(entry("setup.command").value, Value::Null);
     assert_eq!(
         entry("simulators.preferred").value,
@@ -638,15 +645,19 @@ fn named_tables_report_replacement_by_name() {
     );
     assert_eq!(command("check").1, Layer::GlobalConfig);
     assert_eq!(command("lint").1, Layer::WorktreeFile);
-    assert_eq!(command("codex").1, Layer::BuiltInDefault);
+    let agent_command = entries
+        .iter()
+        .find(|entry| entry.key == "agents.codex.command")
+        .unwrap();
+    assert_eq!(agent_command.layer, Layer::BuiltInDefault);
     let commands = stack.named(|config| &config.commands);
     for (name, (value, layer)) in &commands {
         assert_eq!((json(value), *layer), command(name), "{name}");
     }
-    // Three configured names plus every built-in provider's launcher.
-    assert_eq!(commands.len(), 3 + crate::ai::PROVIDERS.len());
+    // Only the configured names: agents' launchers sit under [agents].
+    assert_eq!(commands.len(), 3);
     let effective = stack.resolve().unwrap();
     assert_eq!(effective.commands["review"], ["saved", "two words"]);
     assert_eq!(effective.commands["check"], ["check"]);
-    assert!(effective.commands.contains_key("claude"));
+    assert!(!effective.commands.contains_key("claude"));
 }

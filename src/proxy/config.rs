@@ -55,12 +55,15 @@ fn validate_upstream(url: &str) -> Result<()> {
 }
 
 /// `ai.<name>.proxy` names a defined proxy.
-pub fn validate_references(agents: &crate::ai::Agents, proxies: &Proxies) -> Result<()> {
+pub fn validate_references(
+    agents: &BTreeMap<String, crate::config::agents::MachineAgent>,
+    proxies: &Proxies,
+) -> Result<()> {
     for (name, agent) in agents {
         if let Some(proxy) = &agent.proxy {
             ensure!(
                 proxies.contains_key(proxy),
-                "machine.ai.{name}.proxy names {proxy:?}, which no [machine.proxies.{proxy}] defines"
+                "machine.agents.{name}.proxy names {proxy:?}, which no [machine.proxies.{proxy}] defines"
             );
         }
     }

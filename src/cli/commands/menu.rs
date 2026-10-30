@@ -843,7 +843,7 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()
-        .filter(|name| agents::installed(name, &settings.commands, &search_path))
+        .filter(|name| agents::installed(name, &settings.launchers, &search_path))
         .map(|name| (ExecuteChoice::Agent(name.clone()), name));
     let apps = APPS
         .into_iter()

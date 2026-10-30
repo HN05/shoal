@@ -1,6 +1,6 @@
-//! Validation of the `[machine.ai.<name>]` entries a config file sets.
+//! Validation of the AI tools the settings and this machine describe.
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 
@@ -10,38 +10,35 @@ use clap::CommandFactory;
 use super::{Agent, Agents, PROVIDERS, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
 
-/// `commands` is the same file's `[commands]`, which must not define a
-/// launcher `[ai]` also defines.
-pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()> {
+/// Each tool `agents` describes after every layer; `commands`, the
+/// workspace shortcuts, must not name one.
+pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
     for (name, agent) in agents {
         crate::validate::name("AI tool", name)?;
         ensure!(
             name != "all",
             "AI tool name 'all' is reserved for skill installation"
         );
-        if let Some(directory) = &agent.skill_dir {
-            skill_dir(directory, home).with_context(|| format!("machine.ai.{name}.skill_dir"))?;
-        }
         if let Some(argv) = &agent.command {
             validate_command(name, argv, commands)
-                .with_context(|| format!("machine.ai.{name}.command"))?;
+                .with_context(|| format!("agents.{name}.command"))?;
         }
         if let Some(base) = &agent.base {
-            validate_launcher_name(name, commands).with_context(|| format!("machine.ai.{name}"))?;
-            validate_base(agents, name, base).with_context(|| format!("machine.ai.{name}.base"))?;
+            validate_launcher_name(name, commands).with_context(|| format!("agents.{name}"))?;
+            validate_base(agents, name, base).with_context(|| format!("agents.{name}.base"))?;
         }
-        validate_environment(agents, name, agent).with_context(|| format!("machine.ai.{name}"))?;
+        validate_environment(agents, name, agent).with_context(|| format!("agents.{name}"))?;
         ensure!(
             agent.retry.is_none() || runs_as_agent(agents, name),
-            "machine.ai.{name}.retry needs a command or base, or a built-in AI tool"
+            "agents.{name}.retry needs a command or base, or a built-in AI tool"
         );
         ensure!(
             agent.prompt_cache_minutes.is_none() || runs_as_agent(agents, name),
-            "machine.ai.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
+            "agents.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
         );
         ensure!(
             agent.prompt_cache_minutes != Some(0),
-            "machine.ai.{name}.prompt_cache_minutes must be at least 1"
+            "agents.{name}.prompt_cache_minutes must be at least 1"
         );
         for (key, argv, placeholders) in [
             (
@@ -55,13 +52,13 @@ pub fn validate(agents: &Agents, commands: &Commands, home: &Path) -> Result<()>
         ] {
             if let Some(argv) = argv {
                 validate_arguments(argv, placeholders)
-                    .with_context(|| format!("machine.ai.{name}.{key}"))?;
+                    .with_context(|| format!("agents.{name}.{key}"))?;
             }
         }
         // An empty `add_dir` turns the built-in one off.
         if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
             validate_arguments(argv, &["{directory}"])
-                .with_context(|| format!("machine.ai.{name}.add_dir"))?;
+                .with_context(|| format!("agents.{name}.add_dir"))?;
         }
     }
     Ok(())
@@ -85,7 +82,7 @@ fn validate_launcher_name(name: &str, commands: &Commands) -> Result<()> {
     );
     ensure!(
         !commands.contains_key(name),
-        "{name:?} is also defined in [commands]; keep one launcher"
+        "{name:?} is an agent; [commands] holds only workspace shortcuts"
     );
     Ok(())
 }
@@ -177,6 +174,25 @@ fn validate_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {
         !argv.iter().any(|arg| arg.contains('\0')),
         "arguments must not contain NUL"
     );
+    Ok(())
+}
+
+/// Each configured skill directory is absolute or under the home.
+pub fn skill_dirs(
+    machine: &BTreeMap<String, crate::config::agents::MachineAgent>,
+    home: &Path,
+) -> Result<()> {
+    for (name, agent) in machine {
+        crate::validate::name("AI tool", name)?;
+        ensure!(
+            name != "all",
+            "AI tool name 'all' is reserved for skill installation"
+        );
+        if let Some(directory) = &agent.skill_dir {
+            skill_dir(directory, home)
+                .with_context(|| format!("machine.agents.{name}.skill_dir"))?;
+        }
+    }
     Ok(())
 }
 

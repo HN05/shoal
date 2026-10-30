@@ -575,7 +575,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
 
 #[test]
 fn workspace_rename_issue_reopens_the_associated_workspace() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
         fixture.root.path().join("bin/gh"),
@@ -879,7 +879,7 @@ fn cleanup_removes_idle_candidates_on_request() {
 #[test]
 fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
     let workspace = fixture.add("moving");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -1430,7 +1430,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
 #[test]
 fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
     let workspace = fixture.add("removed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -2680,7 +2680,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
 #[test]
 fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agent_resume]\nclaude = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let claude_config = fixture.root.path().join(".claude.json");
@@ -3621,7 +3621,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
 #[test]
 fn review_runs_the_configured_command_or_prompts_an_agent() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\nreviewer = ['printf', '%s|', '{prompt}', '{args}']\n",
+        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n",
     ));
     fixture.add("changes");
     let output = fixture.run(&["review", "changes"]);
@@ -3649,7 +3649,7 @@ fn review_runs_the_configured_command_or_prompts_an_agent() {
     }
     // Without a configured review command, the default agent reviews.
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     fixture.add("agent-only");
     let output = fixture.run(&["review", "agent-only"]);
@@ -3689,7 +3689,7 @@ fn forge_origin(fixture: &Fixture) -> PathBuf {
 #[test]
 fn review_refines_an_issue_in_the_workspace_add_continues() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
@@ -3780,7 +3780,7 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
 #[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     let author = forge_origin(&fixture);
     let commit = |message: &str| {
@@ -4074,7 +4074,7 @@ fn config_show_reports_effective_values_and_their_layers() {
             "global_config",
         ),
         (
-            "codex.default_mode",
+            "agents.codex.default_mode",
             serde_json::json!("cli"),
             "built_in_default",
         ),
@@ -4232,9 +4232,8 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 
 #[test]
 fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
-    let fixture = Fixture::with_config(Some(
-        "[machine.ai.droid]\ncommand = ['fake-droid', '{args}']\n",
-    ));
+    let fixture =
+        Fixture::with_config(Some("[agents.droid]\ncommand = ['fake-droid', '{args}']\n"));
     let bin = fixture.root.path().join("bin");
     install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
     fixture.add("parent");
@@ -4298,7 +4297,7 @@ fn split_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
 #[test]
 fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
     let fixture = Fixture::with_config(Some(
-        "[machine.overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
     ));
     // The daemon's worker starts the child's agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -4741,7 +4740,7 @@ exit 7
     ] {
         fs::write(
             config_dir.join("config.toml"),
-            format!("[codex]\ndefault_mode = '{mode}'"),
+            format!("[agents.codex]\ndefault_mode = '{mode}'\n"),
         )
         .unwrap();
         let output = fixture
@@ -4839,7 +4838,7 @@ exit 7
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
         config_dir.join("config.toml"),
-        "[commands]\ncodex = ['{path}/missing-codex']\n",
+        "[agents.codex]\ncommand = ['{path}/missing-codex']\n",
     )
     .unwrap();
     let output = add("failed-agent");
@@ -4874,7 +4873,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
 
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
-    for config in ["", "[codex]\ndefault_mode = 'app'"] {
+    for config in ["", "[agents.codex]\ndefault_mode = 'app'\n"] {
         // Change the default while the daemon remains running.
         fs::write(config_dir.join("config.toml"), config).unwrap();
         for mode in [None, Some("--cli"), Some("--app")] {
@@ -4922,7 +4921,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
     fs::write(config_dir.join("config.toml"), "").unwrap();
     fs::write(
         Path::new(path).join(".shoal.toml"),
-        "[codex]\ndefault_mode = 'app'\n",
+        "[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let output = fixture
@@ -4976,7 +4975,7 @@ fn claude_app_opens_a_new_session_link_for_the_workspace() {
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(
         config_dir.join("config.toml"),
-        "[claude]\ndefault_mode = 'app'\n",
+        "[agents.claude]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     for args in [vec!["claude", "--app", "claude-app"], vec!["claude"]] {
@@ -5502,7 +5501,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -5569,7 +5568,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -5734,7 +5733,7 @@ fn a_starting_subagent_learns_which_workspace_it_works_in() {
 #[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh', '{prompt}']\n",
     ));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -5909,7 +5908,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 
 #[test]
 fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_restore() {
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("quit");
     let path = Path::new(workspace["path"].as_str().unwrap());
     // The agent reports its session as Claude Code's hooks do, then quits.
@@ -5959,7 +5958,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
 
 #[test]
 fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("carried");
     let path = Path::new(workspace["path"].as_str().unwrap());
     // The agent reports its session as Claude Code's hooks do, also when it
@@ -6048,7 +6047,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     .unwrap();
     fs::write(
         path.join(".shoal.toml"),
-        "[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
+        "[agents.claude]\nresume_command = ['sh', './resume.sh', '{prompt}']\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "printf restored > restored\n").unwrap();
@@ -6081,7 +6080,8 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
 
 #[test]
 fn daemon_restarts_keep_tracked_agents_and_commands_running() {
-    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("restarted");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
@@ -6185,7 +6185,8 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
 
 #[test]
 fn daemon_stop_and_signals_stop_tracked_agents() {
-    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
@@ -12871,7 +12872,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     fs::create_dir_all(&config).unwrap();
     fs::write(
         config.join("config.toml"),
-        "[codex]\ndefault_mode = 'app'\n",
+        "[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let (ignored, transcript) = fixture.interactive(
@@ -12945,7 +12946,7 @@ Path('setup-result').write_text('complete')
         commit_resource_config(
             &fixture.repo,
             &format!(
-                "setup.command = {:?}\n[commands]\npi = ['sh', '-c', 'touch agent-started']\n",
+                "setup.command = {:?}\n[agents.pi]\ncommand = ['sh', '-c', 'touch agent-started']\n",
                 script.to_str().unwrap()
             ),
         );
@@ -13245,7 +13246,9 @@ fn repository_removal_cleans_more_agent_configs_than_fit_in_a_frame() {
 #[test]
 fn trust_entries_follow_the_config_directories_env_gives_agents() {
     // A launch can fail after trust is written, here at its diff base.
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['claude', '{diff_base}']\n"));
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['claude', '{diff_base}']\n",
+    ));
     let home = fixture.root.path();
     // Each workspace's agents get their own directories, from the global
     // config and from the worktree's file.
@@ -13371,7 +13374,7 @@ fn proxied_claude() -> Fixture {
     text.push_str(
         "[machine.proxies.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
          key = { env = 'CLIPROXY_TEST_KEY' }\n\
-         [machine.ai.claude]\nproxy = 'cliproxy'\n",
+         \n[machine.agents.claude]\nproxy = 'cliproxy'",
     );
     fs::write(&config, text).unwrap();
     let reload = fixture.run(&["daemon", "reload"]);
@@ -13476,11 +13479,10 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(
         "[env]\nPROXY_URL = 'http://proxy'\nKEPT = 'kept'\n\
-         [machine.ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
-         env_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n\
-         [machine.ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
+         \n[agents.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\nenv_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n[agents.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
     );
-    let chat_profile = "[machine.ai.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
+    let chat_profile =
+        "[agents.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
     fs::write(&config, format!("{text}{chat_profile}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
@@ -13743,7 +13745,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 
 #[test]
 fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
-    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
     install_test_script_with_mode(
         bin.join("gh"),
@@ -14065,7 +14067,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
 
 #[test]
 fn agent_picker_can_skip_launch_select_agents_or_cancel() {
-    let fixture = Fixture::with_config(Some("[machine.ai.none]\ncommand = ['agent-probe']\n"));
+    let fixture = Fixture::with_config(Some("[agents.none]\ncommand = ['agent-probe']\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -14335,7 +14337,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
 
 #[test]
 fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
         fixture.root.path().join("bin/gh"),
@@ -17277,7 +17279,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
 #[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\nclaude = ['global-claude']\n",
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\n[agents.claude]\ncommand = ['global-claude']\n",
     ));
     let workspace = fixture.add("run-command");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -17322,9 +17324,8 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     );
     let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
     let command = |name: &str| listed.iter().find(|entry| entry["name"] == name).unwrap();
-    assert_eq!(command("codex")["layer"], "built_in_default");
-    assert_eq!(command("codex")["bare_name"], "built_in");
-    assert_eq!(command("claude")["layer"], "global_config");
+    // Agents launch under [agents], so `run` lists only the shortcuts.
+    assert!(!listed.iter().any(|entry| entry["name"] == "claude"));
     assert_eq!(command("global")["bare_name"], "shorthand");
     assert_eq!(command("work")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
@@ -17363,7 +17364,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
-        "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
+        "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
     ).unwrap();
     let output = fixture.run(&["claude", "configured-agent", "--", "{path}", "two words"]);
     assert!(
@@ -17641,7 +17642,7 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
         );
     }
     let config = format!(
-        "[commands]\nclaude = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n[agent.forge_clis]\nfj = {:?}\ngh = {:?}\n",
+        "[agent.forge_clis]\nfj = {:?}\ngh = {:?}\n[agents.claude]\ncommand = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n",
         wrappers.join("fj"),
         wrappers.join("gh")
     );
@@ -17713,7 +17714,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     install_test_script(worktree.join("setup.sh"), "#!/bin/sh\n");
     fs::write(
         worktree.join(".shoal.toml"),
-        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
     )
     .unwrap();
     let output = fixture.run(&["claude", "secrets"]);
@@ -17791,7 +17792,7 @@ fn tool_secrets_reach_only_their_tools() {
     );
     fs::write(
         worktree.join(".shoal.toml"),
-        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
     )
     .unwrap();
     let output = fixture.run(&["claude", "tool-secrets"]);
@@ -17892,7 +17893,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     );
     fs::write(
         worktree.join(".shoal.toml"),
-        "[commands]\nclaude = ['show-token']\n",
+        "[agents.claude]\ncommand = ['show-token']\n",
     )
     .unwrap();
     // The catalog shows what an agent may request, never how it is fetched.
@@ -17991,7 +17992,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     );
     let workspace = fixture.add("agent-git");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
-    let commands = "[commands]\nclaude = ['sh', '-c', 'git config user.email; git config core.abbrev; git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT']\n";
+    let commands = "[agents.claude]\ncommand = ['sh', '-c', 'git config user.email; git config core.abbrev; git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT']\n";
     fs::write(
         worktree.join(".shoal.toml"),
         format!("{commands}[agent]\ngit_profile = 'agent'\n"),
@@ -18581,7 +18582,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'helper'\nagent.templates.worker = 'Follow {branch}'\n[commands]\nhelper = ['missing-global-launcher']\n",
+        "agent.default = 'helper'\nagent.templates.worker = 'Follow {branch}'\n[agents.helper]\ncommand = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -18602,7 +18603,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(
         &saved,
-        "[commands]\nhelper = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
+        "[agents.helper]\ncommand = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
     )
     .unwrap();
     fixture.ok(&[
@@ -18663,13 +18664,23 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "literal {prompt}",
     ]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
-    assert_eq!(
-        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
-        format!("--prompt=\0literal {{prompt}}\0{branch}\0")
+    // An agent run outside an assignment still gets Shoal's guidance.
+    let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    assert!(
+        args.starts_with(&format!("--prompt={GUIDANCE_START}")),
+        "{args}"
+    );
+    assert!(
+        args.ends_with(&format!("\0literal {{prompt}}\0{branch}\0")),
+        "{args}"
     );
 
     // Without an explicit prompt slot, context precedes literal forwarded arguments.
-    fs::write(&saved, "[commands]\nhelper = ['fake-agent', '{args}']\n").unwrap();
+    fs::write(
+        &saved,
+        "[agents.helper]\ncommand = ['fake-agent', '{args}']\n",
+    )
+    .unwrap();
     fixture.ok(&[
         "repo",
         "config",
@@ -18709,8 +18720,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "agent.templates.worker = 'Follow {branch}'\n[machine.ai.droid]\ncommand = ['fake-droid', '{args}']\n\
-         [machine.ai.notes]\nskill_dir = '~/notes'\n",
+        "agent.templates.worker = 'Follow {branch}'\n[agents.droid]\ncommand = ['fake-droid', '{args}']\n[machine.agents.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
     for name in ["fake-droid", "repo-droid"] {
@@ -18756,7 +18766,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
 
     // A repository launcher replaces the one [ai] supplies.
     let saved = fixture.root.path().join("saved.toml");
-    fs::write(&saved, "[commands]\ndroid = ['repo-droid']\n").unwrap();
+    fs::write(&saved, "[agents.droid]\ncommand = ['repo-droid']\n").unwrap();
     fixture.ok(&[
         "repo",
         "config",
@@ -21565,7 +21575,8 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     set_repository_toml(
         &fixture,
         &format!(
-            "hooks.post_agent_exit = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            "hooks.post_agent_exit = '{}'\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n\
+             [commands]\nfailing = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -21590,7 +21601,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     assert!(fixture.ok(&["status", "agent-work"])["completion"].is_null());
     assert_eq!(
         fixture
-            .run(&["run", "helper", "--workspace", "agent-work"])
+            .run(&["run", "failing", "--workspace", "agent-work"])
             .status
             .code(),
         Some(7)
@@ -21643,7 +21654,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     set_repository_toml(
         &fixture,
         &format!(
-            "hooks.post_agent_exit = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n[cleanup.done]\nenabled = false\n",
+            "hooks.post_agent_exit = '{}'\n[cleanup.done]\nenabled = false\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -21679,7 +21690,7 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
     set_repository_toml(
         &fixture,
         &format!(
-            "hooks.post_agent_exit = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            "hooks.post_agent_exit = '{}'\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -22632,7 +22643,7 @@ fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 #[test]
 fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
     ));
     install_fake_herdr(&fixture);
     let directive = fixture.root.path().join("caller-directive");
@@ -22863,7 +22874,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
 
 #[test]
 fn herdr_labels_name_issues_by_repository_and_number() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     install_fake_herdr(&fixture);
@@ -22958,7 +22969,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
 #[test]
 fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'exit 0']\n[terminal.herdr]\ntab_name = 'global'\n",
+        "[terminal.herdr]\ntab_name = 'global'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     fixture.add_github_origin();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
@@ -23044,7 +23055,7 @@ fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
 fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     // Without a watcher, nothing polls the tab after the fixture is gone.
     let fixture = Fixture::with_config(Some(
-        "[terminal.herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "[terminal.herdr]\nclose_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let args = [
@@ -23147,7 +23158,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
     ] {
         let mut config =
             focus.map_or_else(String::new, |focus| format!("terminal.focus = {focus}\n"));
-        config.push_str("[commands]\npi = ['sh', '-c', 'exit 0']\n");
+        config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
         let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
@@ -23256,7 +23267,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
 #[test]
 fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let fixture = Fixture::with_config(Some(
-        "[terminal.herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n[cleanup.done]\nenabled = false\n",
+        "[terminal.herdr]\nclose_when_done = false\n[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -23325,7 +23336,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
 #[test]
 fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done --cleanup; exec sleep 600']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done --cleanup; exec sleep 600']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -23464,7 +23475,7 @@ fn herdr_closed(fixture: &Fixture) -> bool {
 #[test]
 fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     let fixture = Fixture::with_config(Some(
-        "[terminal.herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "[terminal.herdr]\nclose_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -24887,7 +24898,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     // The checkout has no value for a workspace's placeholders.
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "[commands]\nclaude = ['claude', '--name', '{workspace}']\n",
+        "[agents.claude]\ncommand = ['claude', '--name', '{workspace}']\n",
     )
     .unwrap();
     let (output, transcript) = fixture.interactive_command(
@@ -24928,7 +24939,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "machine.max_agents = 1\n[agents.pi]\ncommand = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();
@@ -25029,7 +25040,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
 
 #[test]
 fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
-    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let home = fixture.root.path();
     install_test_script(
         home.join("bin/codex"),
@@ -25074,11 +25085,11 @@ fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
     // The hook turns the app handoff the repository asks for into a CLI launch.
     install_test_script(
         fixture.repo.join("post-setup.sh"),
-        "#!/bin/sh\nprintf \"[codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
+        "#!/bin/sh\nprintf \"[agents.codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
     );
     commit_resource_config(
         &fixture.repo,
-        "hooks.post_setup = 'post-setup.sh'\n[codex]\ndefault_mode = 'app'\n",
+        "hooks.post_setup = 'post-setup.sh'\n[agents.codex]\ndefault_mode = 'app'\n",
     );
     let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
@@ -25277,7 +25288,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
 #[test]
 fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n[cleanup.done]\nenabled = false\n",
+        "[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n",
     ));
     let home = fixture.root.path();
     // The daemon closes the session, so it needs the fake zmx too.
@@ -25316,7 +25327,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
 #[test]
 fn a_detached_session_stays_open_without_close_when_done() {
     let fixture = Fixture::with_config(Some(
-        "terminal.close_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "terminal.close_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
@@ -25343,7 +25354,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
 #[test]
 fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'echo \"${SHOAL_ENDS_SESSION-unset}\" > \"$HOME/agent-env\"; exit 3']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', 'echo \"${SHOAL_ENDS_SESSION-unset}\" > \"$HOME/agent-env\"; exit 3']\n",
     ));
     let home = fixture.root.path();
     let shell = home.join("bin/test-shell");
@@ -26035,7 +26046,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
 #[test]
 fn add_queues_agents_past_max_agents_until_removed() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
@@ -26148,7 +26159,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 #[test]
 fn a_queued_agent_keeps_its_callers_output_setting() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nrecorder = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.recorder]\ncommand = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     // The daemon's worker starts the queued agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -26197,7 +26208,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
     let fixture = Fixture::with_config(Some(
-        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'exit 0']\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();

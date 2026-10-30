@@ -80,7 +80,7 @@ fn integrations_serve_only_the_names_they_list() {
 fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     let config = crate::config::Config::from_toml(
         "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         [machine.ai.claude]\nproxy = 'local'\n[machine.ai.codex]\nproxy = 'local'\n",
+         \n[machine.agents.claude]\nproxy = 'local'\n[machine.agents.codex]\nproxy = 'local'",
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
@@ -153,7 +153,7 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
 fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     let config = crate::config::Config::from_toml(
         "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         [machine.ai.pi]\nproxy = 'local'\n[machine.ai.claude]\nproxy = 'local'\n",
+         \n[machine.agents.pi]\nproxy = 'local'\n[machine.agents.claude]\nproxy = 'local'",
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
@@ -165,7 +165,7 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     // Every launch, a resumed one included, prepares its proxy this way.
     let error = launch_proxy(&settings, "pi").unwrap_err().to_string();
     assert!(
-        error.contains("remove proxy from its [machine.ai.pi]"),
+        error.contains("remove proxy from its [machine.agents.pi]"),
         "{error}"
     );
     let claude = launch_proxy(&settings, "claude").unwrap().unwrap();
@@ -213,8 +213,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
 
 #[test]
 fn only_agents_with_fork_arguments_start_from_a_fork() {
-    let config =
-        crate::config::Config::from_toml("[machine.ai.droid]\ncommand = ['droid']\n").unwrap();
+    let config = crate::config::Config::from_toml("[agents.droid]\ncommand = ['droid']\n").unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
     let child = Path::new("/work/child");
     assert_eq!(
@@ -230,7 +229,7 @@ fn only_agents_with_fork_arguments_start_from_a_fork() {
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains("cannot fork a session of droid: configure [machine.ai.droid] fork"),
+        error.contains("cannot fork a session of droid: configure [agents.droid] fork"),
         "{error}"
     );
 }

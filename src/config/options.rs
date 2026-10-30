@@ -94,6 +94,65 @@ fn append_template(base: Option<String>, addition: Option<String>) -> Option<Str
     }
 }
 
+/// The resolved form of a `named_sections` map.
+pub trait SectionMap {
+    type Resolved;
+}
+
+impl<T: Options> SectionMap for BTreeMap<String, T> {
+    type Resolved = BTreeMap<String, T::Resolved>;
+}
+
+pub fn named_sections<T: Options>(
+    base: &mut BTreeMap<String, T>,
+    top: BTreeMap<String, T>,
+    merge: Merge,
+) {
+    for (name, entry) in top {
+        base.entry(name).or_default().merge(entry, merge);
+    }
+}
+
+/// Each entry over the section's built-in defaults, so an entry no layer
+/// below names still resolves.
+pub fn resolve_sections<T: Options>(
+    sections: BTreeMap<String, T>,
+    prefix: &str,
+) -> Result<BTreeMap<String, T::Resolved>> {
+    sections
+        .into_iter()
+        .map(|(name, entry)| {
+            let mut section = T::built_in();
+            section.merge(entry, Merge::SameLevel);
+            let resolved = section.resolve(&key(prefix, &name))?;
+            Ok((name, resolved))
+        })
+        .collect()
+}
+
+/// Every option of every entry, each from the highest layer naming the
+/// entry that sets it.
+pub fn section_entries<T: Options>(
+    prefix: &str,
+    sources: &[(&BTreeMap<String, T>, Layer)],
+    entries: &mut Vec<Entry>,
+) -> Result<()> {
+    let built_in = T::built_in();
+    let names: std::collections::BTreeSet<&String> = sources
+        .iter()
+        .flat_map(|(sections, _)| sections.keys())
+        .collect();
+    for name in names {
+        let mut layers: Vec<(&T, Layer)> = sources
+            .iter()
+            .filter_map(|(sections, layer)| Some((sections.get(name)?, *layer)))
+            .collect();
+        layers.push((&built_in, Layer::BuiltInDefault));
+        T::entries(&key(prefix, name), &layers, entries)?;
+    }
+    Ok(())
+}
+
 /// One field of each source.
 pub fn project<'a, S, T>(sources: &[(&'a S, Layer)], field: fn(&S) -> &T) -> Vec<(&'a T, Layer)> {
     sources

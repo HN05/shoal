@@ -447,13 +447,13 @@ async fn launch(
 ) -> Result<i32> {
     ensure!(
         !recovery.command.is_empty(),
-        "configure [agent_resume].{} with a session restore command",
+        "configure [agents.{}] resume_command with a session restore command",
         recovery.agent
     );
     if !recovery.automatic {
         ensure!(
             ctx.interactive(),
-            "session picker requires a terminal; configure [agent_resume].{} for noninteractive recovery",
+            "session picker requires a terminal; configure [agents.{}] resume_command for noninteractive recovery",
             recovery.agent
         );
     }

@@ -331,7 +331,7 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
 async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
     let (temp, manager) = manager().await;
     manager.publish_config(crate::test_support::global_config(
-        "[machine.ai.claude]\nprompt_cache_minutes = 5\n",
+        "[agents.claude]\nprompt_cache_minutes = 5\n",
     ));
     let workspace = workspace(&manager, &temp).await;
     let started = manager

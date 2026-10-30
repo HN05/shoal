@@ -14,10 +14,10 @@ pub enum AgentsCommand {
     /// Run Claude Code or open the Claude app.
     Claude {
         workspace: Option<String>,
-        /// Run the Claude Code CLI, overriding claude.default_mode.
+        /// Run the Claude Code CLI, overriding agents.claude.default_mode.
         #[arg(long, conflicts_with = "app")]
         cli: bool,
-        /// Open the workspace in the Claude app, overriding claude.default_mode.
+        /// Open the workspace in the Claude app, overriding agents.claude.default_mode.
         #[arg(long, conflicts_with = "cli")]
         app: bool,
         #[arg(last = true)]
@@ -26,10 +26,10 @@ pub enum AgentsCommand {
     /// Run Codex CLI or open the Codex app.
     Codex {
         workspace: Option<String>,
-        /// Run the Codex CLI, overriding codex.default_mode.
+        /// Run the Codex CLI, overriding agents.codex.default_mode.
         #[arg(long, conflicts_with = "app")]
         cli: bool,
-        /// Open the workspace in the Codex app, overriding codex.default_mode.
+        /// Open the workspace in the Codex app, overriding agents.codex.default_mode.
         #[arg(long, conflicts_with = "cli")]
         app: bool,
         #[arg(last = true)]

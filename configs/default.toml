@@ -55,10 +55,9 @@ root_dir = "~/shoal"
 # [machine.forges."git.example.com"]
 # type = "gitlab"
 
-# Additional AI tools: command runs one as `shoal droid`, and
-# shoal skill install adds <skill>/SKILL.md beneath skill_dir.
-# [machine.ai.droid]
-# command = ["droid", "{args}"]
+# Where shoal skill install adds <skill>/SKILL.md for an AI tool, and the
+# proxy under machine.proxies its tracked agents reach their API through.
+# [machine.agents.droid]
 # skill_dir = "~/.factory/skills"
 
 [machine.overload]
@@ -88,7 +87,7 @@ cleanup_free_gib = 5
 stop_free_gib = 2
 
 [machine.overload.recovery]
-# Automatically restore agents with a configured [agent_resume] command.
+# Automatically restore agents with a resume command or built-in resume arguments.
 enabled = true
 # Require headroom for a full minute; restart agents one at a time.
 # memory_used_percent = 80
@@ -120,7 +119,7 @@ allow_any = false
 
 [agent]
 # Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
-# A built-in launcher or a name defined in [commands].
+# a built-in AI tool or one defined under [agents].
 # default = "codex"
 # Directories every agent and chat may read without a permission prompt, as
 # other working directories. Entries are absolute or start with ~/.
@@ -143,21 +142,28 @@ dirs = ["/tmp"]
 # worker = "Follow repository instructions in {workspace} at {path}."
 # chat = "Discuss the {repo} repository at {path} without changing it."
 
+# Each AI tool's launch settings, merged option by option with a repository's.
+[agents.claude]
+command = ["claude"]
+# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
+default_mode = "cli"
+
+[agents.codex]
+command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+# `shoal codex` without --cli/--app: "cli" or "app".
+default_mode = "cli"
+
+# A custom agent: shoal add <repository> <branch> --agent droid. Its resume
+# command must restore a session rather than repeat the initial prompt.
+# [agents.droid]
+# command = ["droid", "{args}"]
+# resume_command = ["droid", "resume", "{path}"]
+
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
-[commands]
-claude = ["claude"]
-codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+# [commands]
 # check = ["cargo", "test"]
-# Custom agents: shoal add <repository> <branch> --agent pi
-# pi = ["pi", "{args}"]
-# opencode = ["opencode", "--prompt", "{prompt}", "{args}"]
 # Local committed-change review, with tuicr installed on PATH:
 # review = ["tuicr", "-r", "{diff_base}..HEAD"]
-
-# Resume commands must restore a session rather than repeat its initial prompt.
-# Optional, with the same argument substitutions and repository layering as commands.
-# [agent_resume]
-# my-agent = ["my-agent", "resume", "{path}"]
 
 [terminal]
 # `shoal add` focuses workspace shells and agents waiting for a prompt, and
@@ -200,14 +206,6 @@ session_name = "{repo}"
 [terminal.happy]
 # Offer happy-claude and happy-codex, which start detached Happy sessions.
 enabled = false
-
-[claude]
-# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
-default_mode = "cli"
-
-[codex]
-# `shoal codex` without --cli/--app: "cli" or "app".
-default_mode = "cli"
 
 [setup]
 # Copy the main checkout's ignored files into the worktree before setup.

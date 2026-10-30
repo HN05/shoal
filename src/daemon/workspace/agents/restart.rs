@@ -185,7 +185,7 @@ impl Manager {
         }
         ensure!(
             agent.recover,
-            "{} has no command to resume its session; configure [agent_resume] for it",
+            "{} has no command to resume its session; configure its [agents.<name>] resume_command",
             agent.name
         );
         ensure!(!*agent.stop.borrow(), "{} is already stopping", agent.name);

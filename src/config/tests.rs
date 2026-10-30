@@ -16,22 +16,57 @@ impl Config {
 fn agent_modes_default_to_cli_and_reject_invalid_settings() {
     use crate::agent::AgentMode;
 
-    for text in ["", "[claude]\n[codex]"] {
+    for text in ["", ""] {
         let config = Config::from_toml(text).unwrap();
-        assert_eq!(config.repository.claude.default_mode, None);
-        assert_eq!(config.repository.codex.default_mode, None);
+        assert_eq!(
+            config
+                .repository
+                .agents
+                .get("claude")
+                .and_then(|agent| agent.default_mode),
+            None
+        );
+        assert_eq!(
+            config
+                .repository
+                .agents
+                .get("codex")
+                .and_then(|agent| agent.default_mode),
+            None
+        );
         let effective = config.effective(&RepoConfig::default()).unwrap();
-        assert_eq!(effective.claude.default_mode, AgentMode::Cli);
-        assert_eq!(effective.codex.default_mode, AgentMode::Cli);
+        assert_eq!(effective.agents["claude"].default_mode, AgentMode::Cli);
+        assert_eq!(effective.agents["codex"].default_mode, AgentMode::Cli);
     }
-    let config = Config::from_toml("[claude]\ndefault_mode = 'app'").unwrap();
-    assert_eq!(config.repository.claude.default_mode, Some(AgentMode::App));
-    assert_eq!(config.repository.codex.default_mode, None);
-    let config = Config::from_toml("[codex]\ndefault_mode = 'app'").unwrap();
-    assert_eq!(config.repository.codex.default_mode, Some(AgentMode::App));
+    let config = Config::from_toml("[agents.claude]\ndefault_mode = 'app'\n").unwrap();
+    assert_eq!(
+        config
+            .repository
+            .agents
+            .get("claude")
+            .and_then(|agent| agent.default_mode),
+        Some(AgentMode::App)
+    );
+    assert_eq!(
+        config
+            .repository
+            .agents
+            .get("codex")
+            .and_then(|agent| agent.default_mode),
+        None
+    );
+    let config = Config::from_toml("[agents.codex]\ndefault_mode = 'app'\n").unwrap();
+    assert_eq!(
+        config
+            .repository
+            .agents
+            .get("codex")
+            .and_then(|agent| agent.default_mode),
+        Some(AgentMode::App)
+    );
     for section in ["claude", "codex"] {
         for setting in ["default_mode = 'desktop'", "defaut_mode = 'app'"] {
-            let text = format!("[{section}]\n{setting}");
+            let text = format!("[agents.{section}]\n{setting}");
             assert!(Config::from_toml(&text).is_err());
         }
     }
@@ -88,8 +123,12 @@ fn template_states_the_defaults_and_its_examples_are_valid() {
     let written_effective = written.effective(&RepoConfig::default()).unwrap();
     let default_effective = defaults.effective(&RepoConfig::default()).unwrap();
     assert_eq!(
-        written.repository.codex.default_mode,
-        Some(default_effective.codex.default_mode)
+        written
+            .repository
+            .agents
+            .get("codex")
+            .and_then(|agent| agent.default_mode),
+        Some(default_effective.agents["codex"].default_mode)
     );
     assert_eq!(
         written.repository.cleanup.auto.enabled,
@@ -354,21 +393,22 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
     use crate::agent::AgentMode;
 
     let global =
-        Config::from_toml("agent.default = 'claude'\n[codex]\ndefault_mode = 'app'\n").unwrap();
+        Config::from_toml("agent.default = 'claude'\n[agents.codex]\ndefault_mode = 'app'\n")
+            .unwrap();
     let repo = repo::parse("agent.default = 'codex'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
         effective.agent.default,
         "codex".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.codex.default_mode, AgentMode::App);
-    let repo = repo::parse("[codex]\ndefault_mode = 'cli'\n").unwrap();
+    assert_eq!(effective.agents["codex"].default_mode, AgentMode::App);
+    let repo = repo::parse("[agents.codex]\ndefault_mode = 'cli'\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert_eq!(
         effective.agent.default,
         "claude".parse::<crate::agent::Agent>().ok()
     );
-    assert_eq!(effective.codex.default_mode, AgentMode::Cli);
+    assert_eq!(effective.agents["codex"].default_mode, AgentMode::Cli);
     let effective = Config::default().effective(&repo).unwrap();
     assert_eq!(effective.agent.default, None);
 }
@@ -376,10 +416,10 @@ fn agent_defaults_come_from_the_repository_before_the_global_config() {
 #[test]
 fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
     let global = Config::from_toml(
-        "[machine.ai.claude-direct]\nbase = 'claude'\nenv_remove = ['ANTHROPIC_BASE_URL']\n",
+        "[agents.claude-direct]\nbase = 'claude'\nenv_remove = ['ANTHROPIC_BASE_URL']\n",
     )
     .unwrap();
-    let repo = repo::parse("[commands]\nclaude = ['claude', '--verbose']\n").unwrap();
+    let repo = repo::parse("[agents.claude]\ncommand = ['claude', '--verbose']\n").unwrap();
     let effective = global.effective(&repo).unwrap();
     assert!(crate::ai::agents(&effective.tools).any(|agent| agent == "claude-direct"));
     assert_eq!(
@@ -394,7 +434,10 @@ fn launch_profiles_run_with_their_base_tool_as_a_repository_sets_it() {
         effective.integration("undefined"),
         crate::ai::IntegrationKind::None
     );
-    assert_eq!(effective.commands["claude-direct"], ["claude", "--verbose"]);
+    assert_eq!(
+        effective.launchers["claude-direct"],
+        ["claude", "--verbose"]
+    );
     let direct = effective.launch("claude-direct");
     assert_eq!(direct.arguments, effective.launch("claude").arguments);
     assert!(direct.environment.remove.contains("ANTHROPIC_BASE_URL"));

@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod edit;
 pub mod forges;
 pub mod machine;
@@ -337,13 +338,19 @@ impl Config {
     }
 
     /// This machine's repository-overridable settings as the layer below the
-    /// repository's own, with the launchers its AI tools add.
+    /// repository's own.
     pub fn repository_layer(&self) -> RepoConfig {
-        let mut layer = self.repository.clone();
-        layer
-            .commands
-            .extend(crate::ai::commands(&self.machine.ai.entries));
-        layer
+        self.repository.clone()
+    }
+
+    /// Every AI tool as this machine's config describes it, without a
+    /// repository's layers.
+    pub fn tools(&self) -> Result<crate::ai::Tools> {
+        let settings = resolve::Stack::new(self, &ConfigLayers::default()).resolve()?;
+        Ok(crate::ai::tools(&agents::describe(
+            &settings.agents,
+            &self.machine.agents,
+        )))
     }
 
     fn parse(text: &str, paths: &Paths) -> Result<Self> {
@@ -380,9 +387,9 @@ impl Config {
     fn validate(&self, paths: &Paths) -> Result<()> {
         let (machine, repository) = (&self.machine, &self.repository);
         repository.validate()?;
-        crate::ai::validate(&machine.ai.entries, &repository.commands, &paths.home)?;
+        crate::ai::validate::skill_dirs(&machine.agents, &paths.home)?;
         crate::proxy::validate(&machine.proxies)?;
-        crate::proxy::validate_references(&machine.ai.entries, &machine.proxies)?;
+        crate::proxy::validate_references(&machine.agents, &machine.proxies)?;
         self.root_dir(paths)?;
         machine.overload.validate()?;
         machine.simulators.validate()?;
@@ -401,14 +408,12 @@ impl Config {
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
-        let mut settings = resolve::Stack::new(self, layers).resolve()?;
-        let ai = &self.machine.ai;
-        crate::ai::inherit_launchers(&ai.tools, &mut settings.commands);
-        Ok(Effective::new(
-            settings,
-            ai.tools.clone(),
-            crate::proxy::routes(&ai.tools, &self.machine.proxies),
-        ))
+        let settings = resolve::Stack::new(self, layers).resolve()?;
+        let agents = agents::describe(&settings.agents, &self.machine.agents);
+        crate::ai::validate(&agents, &settings.commands)?;
+        let tools = crate::ai::tools(&agents);
+        let proxies = crate::proxy::routes(&tools, &self.machine.proxies);
+        Ok(Effective::new(settings, tools, proxies))
     }
 }
 

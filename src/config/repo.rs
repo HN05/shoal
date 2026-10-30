@@ -1,4 +1,4 @@
-use crate::agent::{Agent, AgentMode};
+use crate::agent::Agent;
 use crate::config::options::Options;
 use crate::sessions::HostName;
 use crate::state::states;
@@ -61,18 +61,15 @@ states!(
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Settings)]
 pub struct RepoConfig {
-    #[option(named, default = crate::config::named_commands::defaults())]
-    pub commands: crate::config::named_commands::Commands,
+    /// Workspace shortcuts that are not agents: `shoal <name> [workspace]`.
     #[option(named)]
-    pub agent_resume: crate::config::named_commands::Commands,
+    pub commands: crate::config::named_commands::Commands,
+    #[option(named_sections, default = crate::config::agents::built_in())]
+    pub agents: BTreeMap<String, crate::config::agents::AgentToolConfig>,
     /// The Git profile new worktrees use.
     pub git_profile: Option<String>,
     #[option(section)]
     pub agent: AgentConfig,
-    #[option(section)]
-    pub claude: ShortcutConfig,
-    #[option(section)]
-    pub codex: ShortcutConfig,
     #[option(section)]
     pub terminal: TerminalConfig,
     #[option(section)]
@@ -375,7 +372,19 @@ impl RepoConfig {
     /// [`Stack::resolve`](crate::config::resolve::Stack::resolve) checks again.
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
-        crate::config::named_commands::validate(&self.agent_resume)?;
+        for (name, agent) in &self.agents {
+            crate::validate::name("agent", name)?;
+            for argv in [&agent.command, &agent.resume_command]
+                .into_iter()
+                .flatten()
+            {
+                crate::config::named_commands::validate(&BTreeMap::from([(
+                    name.clone(),
+                    argv.clone(),
+                )]))
+                .with_context(|| format!("agents.{name}"))?;
+            }
+        }
         self.agent.forge_clis.validate()?;
         for name in [&self.git_profile, &self.agent.git_profile]
             .into_iter()
@@ -418,16 +427,6 @@ pub struct SimulatorsConfig {
     pub approval_lifetime: Option<crate::daemon::approvals::Lifetime>,
     #[option(list)]
     pub preferred: Vec<String>,
-}
-
-/// What `shoal <agent>` does without `--cli` or `--app`, from the agent's
-/// section.
-#[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
-#[serde(default, deny_unknown_fields)]
-#[options(resolved = Shortcut)]
-pub struct ShortcutConfig {
-    #[option(default = AgentMode::default())]
-    pub default_mode: Option<AgentMode>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]

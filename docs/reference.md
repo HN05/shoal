@@ -260,15 +260,15 @@ and recovery durations must be positive. CPU usage measures aggregate busy time
 across all cores, excluding I/O wait. A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
-Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
-agent name. They use the same workspace substitutions and repository layering as
-`[commands]`; they must restore a session without repeating the initial prompt.
+A resume command is an argument array in the agent's `[agents.<name>]
+`resume_command`. It uses the same workspace substitutions and layering as
+`[commands]` and must restore a session without repeating the initial prompt.
 Without one, an AI tool with resume arguments (`resume` and `resume_latest`
-under `[machine.ai.<name>]`, built in for Claude and Codex) continues the session its
+under `[agents.<name>]`, built in for Claude and Codex) continues the session its
 hooks last reported, otherwise the latest session in the workspace, without a
 session picker, with a prompt to continue its unfinished assignment on manual or
-automatic resume. Configured commands receive that prompt through `{prompt}`;
-other agents need an entry in `[agent_resume]`.
+automatic resume. Resume commands receive that prompt through `{prompt}`;
+other agents need a `resume_command`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. After the
@@ -335,7 +335,7 @@ for you to check and stop yourself. An execution Shoal never recorded the launch
 of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking. Stopping several workspaces does not ask: without
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting
-restore and requires explicit resume even with `[agent_resume]` configured;
+restore and requires explicit resume even with a `resume_command` configured;
 a stop that fails keeps the agents it stopped as stopped work.
 Run stop, restart and resume outside scoped executions, except that a workspace
 process may stop the workspaces below its own with `shoal stop <workspace>`,
@@ -403,7 +403,7 @@ there or `shoal done` replaces them. Unlike stopped work they use no agent slot 
 cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
-and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
+and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
 Several workspaces, which each need stopped work or a last session, or `--all` for every workspace whose
 assignment is not done, resume together and report commands without an agent,
@@ -717,16 +717,21 @@ and exit status just like arbitrary `run` commands.
 configured arguments. `{diff_base}` resolves lazily through the same daemon
 fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
 A standalone `{args}` inserts the forwarded arguments there; otherwise they are
-appended. Forwarded arguments are never expanded. The CLI agent defaults are:
+appended. Forwarded arguments are never expanded. Agents' launchers live under
+[`[agents.<name>]`](#agents) `command` with the same substitutions; the built-in
+CLI agents' are:
 
 ```toml
-[commands]
-claude = ["claude"]
-codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+[agents.claude]
+command = ["claude"]
+
+[agents.codex]
+command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 ```
 
-Override their `[commands]` entries to change the executable or flags; prompt
-templates, trust setup, and agent exit notifications still apply.
+Override their `command` to change the executable or flags; prompt templates,
+trust setup, and agent exit notifications still apply. A `[commands]` entry
+cannot name an agent.
 Claude and Codex launches, including Happy's, trust the repository's checkout and
 shared Shoal workspaces directory before launch, creating the agent's user config if
 needed and preserving other settings. Claude Code looks up a worktree's trust under
@@ -736,7 +741,7 @@ Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` takes
 precedence over Shoal's environment; chats and desktop apps use Shoal's. One set
-in the tool's [`[machine.ai]` `env`](#agents) takes precedence over both. A trust
+in the tool's [`[agents.<name>]` `env`](#agents) takes precedence over both. A trust
 update failure warns and still launches the agent. Removing a repository removes
 its trust entries from these files, and from those its agents and chats ran with,
 while preserving other project settings. When the daemon removes a
@@ -981,14 +986,16 @@ Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
 (`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
 take the prompt as their first argument. Each runs as `shoal <name>` once its
-executable is on PATH. Add another AI tool in global config to run it as an agent:
+executable is on PATH. Add another AI tool in global or repository config to run
+it as an agent:
 
 ```toml
-agent.default = "droid"
+[agent]
+default = "droid"
 
-[machine.ai.droid]
+[agents.droid]
 command = ["droid", "{args}"]
-skill_dir = "~/.factory/skills" # Optional; see agent skills below
+resume_command = ["droid", "--continue"]             # Optional
 instructions = ["--system-prompt", "{instructions}"] # Optional
 resume = ["--resume", "{session}"]                    # Optional
 resume_latest = ["--continue"]                        # Optional
@@ -997,17 +1004,19 @@ add_dir = ["--add-dir", "{directory}"]                # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
-workspace the way `shoal claude` does, and `--agent droid` selects it. `command`
-is its launcher at the global layer, so a repository `[commands]` entry with the
-same name replaces it; defining both in the global file is an error. Names that
-collide with built-in commands are rejected. The picker and completion offer AI
-tools only.
+workspace the way `shoal claude` does, and `--agent droid` selects it. A tool is
+an agent when it is built in or has a `command` or `base`. Each option merges on
+its own across layers, so a repository can replace `command` and keep the global
+`resume`. Names that collide with built-in commands are rejected. The picker and
+completion offer AI tools only. What a tool needs of this machine, its
+[skill directory](#agent-skill-outside-project-repositories) and proxy, goes
+under `[machine.agents.<name>]` in the global config.
 
 A `base` makes a tool a launch profile of another, here Claude on its own
 claude.ai login while `claude` keeps going through a proxy:
 
 ```toml
-[machine.ai.claude-direct]
+[agents.claude-direct]
 base = "claude"
 env = { CLAUDE_CONFIG_DIR = "~/.claude-direct" }
 env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
@@ -1025,7 +1034,7 @@ Unsetting a variable does not undo one the agent's own settings file sets, such 
 the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
 `retry` defaults to `true` for Claude Code and its launch profiles, and `false`
-for other tools. Set `retry = false` under `[machine.ai.claude]` to opt out; a tool's
+for other tools. Set `retry = false` under `[agents.claude]` to opt out; a tool's
 launch profiles inherit its setting unless they override it. Retries apply to a
 turn an API error ended, for agents whose failed turns Shoal learns of: Claude
 Code, through its `StopFailure` hook, and any agent whose turn its
@@ -1068,7 +1077,7 @@ API requests through Shoal's retrying proxy to the `upstream` of a global
 upstream = "http://127.0.0.1:8317"   # CLIProxyAPI
 key = { env = "CLIPROXY_API_KEY" }   # or "<the key itself>", or { cmd = ["bw", "get", "password", "cliproxy"] }
 
-[machine.ai.claude]
+[machine.agents.claude]
 proxy = "cliproxy"
 ```
 
@@ -1077,8 +1086,10 @@ so a profile such as `claude-direct` above would go through the proxy too. To
 keep a direct one, name the proxy on a profile and leave the base without it:
 
 ```toml
-[machine.ai.claude-cliproxy]
+[agents.claude-cliproxy]
 base = "claude"
+
+[machine.agents.claude-cliproxy]
 proxy = "cliproxy"
 ```
 
@@ -1129,12 +1140,12 @@ settings. Claude Code keeps its prompt cache for an hour only on a claude.ai
 login within its usage limits, and for 5 minutes with an API key or auth token,
 so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
 environment it runs with sets that variable; a lifetime in
-`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
+`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
 
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
-`resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`);
+`resume` and `resume_latest` restore a stopped agent's session (see `resume_command`);
 `fork` starts a new session from a copy of session `{session}`, which
 [`split --fork`](#child-workspaces) uses and which leaves that session unchanged;
 `{directory}` names the workspace it works in, for a tool such as Codex that
@@ -1155,21 +1166,20 @@ becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex, and their launch profiles, also get Shoal's
 hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
 `shoal` commands that report on and finish its assignment, with or without `--json`;
-the daemon still limits them to its scope. `--agent` and `agent.default` also
-accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool
-remains a plain command invocation without agent prompts or exit notifications,
-expanding `{prompt}` to an empty string.
+the daemon still limits them to its scope. `shoal run <name>` for a `[commands]`
+shortcut remains a plain command invocation without agent prompts or exit
+notifications, expanding `{prompt}` to an empty string.
 
-`shoal claude` and `shoal codex` without `--cli`/`--app` use `claude.default_mode`
-and `codex.default_mode` from the workspace's repository config or
+`shoal claude` and `shoal codex` without `--cli`/`--app` use `agents.claude.default_mode`
+and `agents.codex.default_mode` from the workspace's repository config or
 `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`), read at
 launch without a daemon restart:
 
 ```toml
-[claude]
+[agents.claude]
 default_mode = "cli" # Or "app"
 
-[codex]
+[agents.codex]
 default_mode = "cli" # Or "app"
 ```
 
@@ -2474,7 +2484,7 @@ copied to, and `--new-sessions` on none. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
-`[agent_resume]`. Workspace processes can neither export nor import.
+its `resume_command`. Workspace processes can neither export nor import.
 
 ### Assignment completion
 
@@ -4018,7 +4028,7 @@ tool without `skill_dir`; create a directory, or name the tool, to install for
 it. Set or override a tool's directory in global Shoal config:
 
 ```toml
-[machine.ai.droid]
+[machine.agents.droid]
 skill_dir = "~/.factory/skills"
 ```
 

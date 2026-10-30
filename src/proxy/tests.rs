@@ -5,7 +5,7 @@ use super::*;
 fn parse(text: &str) -> Result<crate::config::Config> {
     let config = crate::config::Config::from_toml(text)?;
     validate(&config.machine.proxies)?;
-    validate_references(&config.machine.ai.entries, &config.machine.proxies)?;
+    validate_references(&config.machine.agents, &config.machine.proxies)?;
     Ok(config)
 }
 
@@ -13,16 +13,16 @@ fn parse(text: &str) -> Result<crate::config::Config> {
 fn tools_and_their_profiles_reach_the_upstream_of_the_proxy_they_name() {
     let config = parse(
         "[machine.proxies.cliproxy]\nupstream = 'http://127.0.0.1:8317'\n\
-         [machine.ai.claude]\nproxy = 'cliproxy'\n[machine.ai.claude-fast]\nbase = 'claude'\n",
+         \n[agents.claude-fast]\nbase = 'claude'\n[machine.agents.claude]\nproxy = 'cliproxy'",
     )
     .unwrap();
-    let routes = routes(&config.machine.ai.tools, &config.machine.proxies);
+    let routes = routes(&config.tools().unwrap(), &config.machine.proxies);
     assert_eq!(routes["claude"].upstream, "http://127.0.0.1:8317");
     assert_eq!(routes["claude-fast"].upstream, "http://127.0.0.1:8317");
     assert!(!routes.contains_key("codex"));
     for (text, message) in [
         (
-            "[machine.ai.claude]\nproxy = 'missing'\n",
+            "[machine.agents.claude]\nproxy = 'missing'\n",
             "no [machine.proxies.missing] defines",
         ),
         (

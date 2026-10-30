@@ -19,7 +19,8 @@ pub struct Machine {
     /// `shoal add` queues past it. Use `none` for unlimited admission.
     pub max_agents: AgentLimit,
     pub overload: overload::Overload,
-    pub ai: crate::ai::Table,
+    /// What each AI tool needs of this machine.
+    pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
     /// Retrying proxies an AI tool's agents reach their API through.
     pub proxies: crate::proxy::Proxies,
     /// Forge hosts whose type is set instead of asked.
