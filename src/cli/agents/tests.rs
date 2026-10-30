@@ -233,3 +233,19 @@ fn only_agents_with_fork_arguments_start_from_a_fork() {
         "{error}"
     );
 }
+
+#[test]
+fn a_launch_profile_opens_its_app_by_its_own_mode() {
+    let config = crate::config::Config::from_toml(
+        "[agents.codex-app]\nbase = 'codex'\ndefault_mode = 'app'\n\
+         [agents.claude]\ndefault_mode = 'app'\n[agents.claude-cli]\nbase = 'claude'\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let opens_app = |name: &str| agent_options(&settings, name).app.is_some();
+    assert!(opens_app("codex-app"));
+    assert!(!opens_app("codex"));
+    assert!(opens_app("claude"));
+    // A profile that sets no mode of its own launches the CLI.
+    assert!(!opens_app("claude-cli"));
+}

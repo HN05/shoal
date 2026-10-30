@@ -1170,8 +1170,9 @@ the daemon still limits them to its scope. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
 
-`shoal claude` and `shoal codex` without `--cli`/`--app` use `agents.claude.default_mode`
-and `agents.codex.default_mode` from the workspace's repository config or
+`shoal claude`, `shoal codex` and their launch profiles without `--cli`/`--app`
+use the launched agent's own `agents.<name>.default_mode` from the workspace's
+repository config or
 `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`), read at
 launch without a daemon restart:
 

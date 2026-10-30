@@ -278,8 +278,8 @@ brings in their latest commits; use `origin/feature/api` for pushed work after
 another workspace's branch, record that with `shoal branch base set <workspace>`;
 `shoal branch base` shows it.
 When the repository has no remote, `shoal land` merges your committed
-branch into the default branch. Unless the repository sets `[land]
-requires_approval = false`, it first exits 2 with `approval_pending` for your
+branch into the default branch. Unless the repository sets `[permissions]
+land = "direct"`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
 commits. A new commit needs a new request; stop on `approval_denied`.
 

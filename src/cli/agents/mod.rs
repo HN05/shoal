@@ -199,14 +199,11 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
     }
 }
 
-/// What `settings` set for the integration of AI tools of `kind`, from the
-/// built-in tool's own `[agents.<name>]`: `default_mode = "app"` hands
-/// launches to its desktop app.
-fn tool_options(kind: IntegrationKind, settings: &Effective) -> Options {
-    let mode = settings
-        .agents
-        .get(kind.as_str())
-        .map(|agent| agent.default_mode);
+/// What `settings` set for agent `name`, which runs with the integration of
+/// `kind`, from its own `[agents.<name>]`: `default_mode = "app"` hands
+/// launches to the integration's desktop app.
+fn tool_options(name: &str, kind: IntegrationKind, settings: &Effective) -> Options {
+    let mode = settings.agents.get(name).map(|agent| agent.default_mode);
     Options {
         app: integration(kind)
             .app()
@@ -266,7 +263,7 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
 fn agent_options(settings: &Effective, name: &str) -> Options {
     match (settings.integration(name), added(name)) {
         (IntegrationKind::None, Some(added)) => (added.options)(settings),
-        (kind, _) => tool_options(kind, settings),
+        (kind, _) => tool_options(name, kind, settings),
     }
 }
 
@@ -423,7 +420,9 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
 /// select: the current directory's, then the caller's scope.
 async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<ConfigTarget>> {
     if let Some(workspace) = workspace {
-        return Ok(Some(ConfigTarget::Workspace(workspace.to_owned())));
+        // A selector that does not resolve is the command's own error.
+        let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.to_owned()).await;
+        return Ok(workspace.ok().map(ConfigTarget::Workspace));
     }
     // Without a daemon there is no workspace context, only the machine's.
     let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
