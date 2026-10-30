@@ -140,11 +140,11 @@ fn fork_arguments_name_the_forked_session() {
 }
 
 #[test]
-fn arguments_describe_a_launcher_defined_in_commands() {
+fn argument_templates_alone_make_no_agent_of_a_shortcut() {
     let agents =
         parse("[commands]\nhelper = ['helper']\n[agents.helper]\nresume_latest = ['--continue']\n")
             .unwrap();
-    // `[commands]` defines the launcher, so `[ai]` alone makes no agent of it.
+    // Without a `command` or `base`, the entry makes no agent of the shortcut.
     assert!(!runs_as_agent(&agents, "helper"));
     assert_eq!(
         arguments(&agents, "helper").resume_args(None),

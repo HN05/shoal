@@ -27,8 +27,8 @@ pub struct Tool {
     /// built in, or configured with a launcher or a base. A tool with only
     /// a skill directory or argument templates is not one.
     pub runs_as_agent: bool,
-    /// What its launcher takes, including that of a `[commands]` agent
-    /// whose `[ai]` entry only describes arguments.
+    /// What its launcher takes: the argument templates of its
+    /// `[agents.<name>]` entry and its bases.
     pub launch: LaunchProfile,
     /// Which Shoal integration it runs with.
     pub integration: IntegrationKind,

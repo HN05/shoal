@@ -437,10 +437,10 @@ configured command for another agent, plus proven child
   Repository-only commands require a current or explicit workspace; unknown names
   report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
-  AI tools (built-in providers and `[agents.<name>]` entries) are agents:
-  an `[ai]` `command` joins the global command layer, and `shoal <name>` and
-  `run` launch it as `shoal claude` does; pickers and completion offer AI tools
-  only. Custom agent names select named commands and run as tracked agents. Their
+  AI tools (built-in providers and `[agents.<name>]` entries with a `command`
+  or `base`) are agents: `shoal <name>` and `run` launch them as `shoal claude`
+  does, as tracked agents, and pickers and completion offer AI tools only.
+  `[commands]` holds only workspace shortcuts and never names an agent. Their
   `{prompt}` combines general instructions and issue context, prepended to
   forwarded arguments when no prompt placeholder is configured.
   Plain command invocations expand `{prompt}` to an empty string.
