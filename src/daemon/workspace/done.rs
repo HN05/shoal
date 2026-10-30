@@ -219,7 +219,11 @@ impl Manager {
     /// A workspace below a completed one goes by that completion.
     pub async fn sweep_completed(&self) -> Result<()> {
         for listed in self.list_workspaces().await? {
-            let _guard = self.gates.lock_prs([&listed.id]).await;
+            // An ancestor's completion that takes the workspace changes under
+            // the ancestor's gate, so that one is held too.
+            let gated = self.completed_ancestor(&listed).await?;
+            let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
+            let _guard = self.gates.lock_prs(gates).await;
             let Some(workspace) = self.find_workspace(&listed.id).await? else {
                 continue;
             };
@@ -227,7 +231,11 @@ impl Manager {
                 continue;
             }
             if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
-                self.sweep_under_completed(&workspace, &ancestor).await?;
+                // Another ancestor's completion waits for the next sweep,
+                // which holds its gate.
+                if gated.is_some_and(|gated| gated.id == ancestor.id) {
+                    self.sweep_under_completed(&workspace, &ancestor).await?;
+                }
                 continue;
             }
             let result = self.cleanup_completed(&workspace).await;
