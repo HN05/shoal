@@ -149,6 +149,6 @@ pub async fn land(paths: &Paths, workspace: String, json: bool, push: bool) -> R
     run_tracked(paths, workspace, vec![], Mode::Land { json, push }, None).await
 }
 
-pub async fn setup(paths: &Paths, workspace: String, json: bool) -> Result<i32> {
-    run_tracked(paths, workspace, vec![], Mode::Setup { json }, None).await
+pub async fn setup(paths: &Paths, workspace: String) -> Result<i32> {
+    run_tracked(paths, workspace, vec![], Mode::Setup, None).await
 }

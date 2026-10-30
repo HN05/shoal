@@ -243,7 +243,6 @@ pub(super) fn spawn(
     if let Mode::Demo { launch } = mode {
         process.env_remove(env::OUTPUT).envs(&launch.environment);
     }
-    let quiet = matches!(mode, Mode::Setup { json: true });
     let (stdin, stdout, stderr) = match mode {
         Mode::Detached { log } => {
             let file = std::fs::OpenOptions::new()
@@ -256,11 +255,6 @@ pub(super) fn spawn(
         }
         Mode::Publish => (
             Stdio::inherit(),
-            Stdio::from(std::io::stderr()),
-            Stdio::inherit(),
-        ),
-        _ if quiet => (
-            Stdio::null(),
             Stdio::from(std::io::stderr()),
             Stdio::inherit(),
         ),

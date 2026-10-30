@@ -60,7 +60,7 @@ when behavior changes, distinguishing decisions from proposals.
   readiness; hooks are untracked user processes with workspace identity and no
   scope token. `hooks.pre_setup` runs in the daemon before tracked setup and gates
   readiness, excluding lifecycle and permit changes; `hooks.post_setup` runs in
-  the CLI after ready, and `hooks.pre_remove` inside the shared daemon removal path.
+  setup's daemon-started operation after ready, and `hooks.pre_remove` inside the shared daemon removal path.
   `hooks.post_remove` runs from the repository checkout after successful removal;
   failure reports a warning and notification without restoring ownership.
   `hooks.post_done` runs in the daemon after completion persists and before cleanup,

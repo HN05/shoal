@@ -27,10 +27,8 @@ pub(super) enum Mode {
     /// A command publishing for the workspace under its agent account, with
     /// output on stderr so stdout stays for the caller's result.
     Publish,
-    /// The repository's configured setup command; `json` keeps stdout clean.
-    Setup {
-        json: bool,
-    },
+    /// The repository's configured setup command.
+    Setup,
     /// A demo, restarted whenever its command exits until it is stopped.
     Demo {
         launch: Box<crate::demos::Launch>,
@@ -46,12 +44,12 @@ impl Mode {
             | Self::Publish
             | Self::Demo { .. } => ExecutionKind::Command,
             Self::Land { .. } => ExecutionKind::Land,
-            Self::Setup { .. } => ExecutionKind::Setup,
+            Self::Setup => ExecutionKind::Setup,
         }
     }
 
     pub(super) fn is_setup(&self) -> bool {
-        matches!(self, Mode::Setup { .. })
+        matches!(self, Mode::Setup)
     }
 
     /// Commands keep running across a daemon restart; setup and landing

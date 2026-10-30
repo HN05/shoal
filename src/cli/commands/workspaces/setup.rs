@@ -1,24 +1,24 @@
-//! Workspace setup: running it, handling its failure and running the post-setup hook.
+//! Workspace setup: starting it, handling its failure and starting the post-setup hook.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, ensure};
 
-use super::{
-    environment::configured_environment,
-    recovery::{issues, reconcile},
-};
+use super::recovery::{issues, reconcile};
 use crate::{
     cli::{
         client::{self, request},
+        commands::operations,
         context::Context,
         output::{Palette, Style},
         ui::{self, Fallback},
     },
     daemon::recovery::ReconcileOptions,
     env, execution, git,
-    hooks::{self, Hook, HookKind},
     model::Workspace,
-    protocol::{RemovalMethod, WorkspaceMethod},
+    protocol::{
+        RemovalMethod,
+        operations::{OperationSpec, Preparation, Prepared},
+    },
     removal::{RemovalResult, UnsavedWork},
     state::WorkspaceState,
 };
@@ -98,52 +98,45 @@ pub(in crate::cli::commands) async fn skip_setup(
     Ok(0)
 }
 
-/// Run the configured `hooks.post_setup`, if any, once the workspace is ready.
-/// A failure keeps the ready workspace and stops what would follow.
+/// Run the configured `hooks.post_setup`, if any, once the workspace is ready,
+/// in an operation the daemon starts. A failure keeps the ready workspace
+/// and stops what would follow.
 pub(in crate::cli::commands) async fn run_post_setup(
     ctx: &Context,
     workspace: &Workspace,
 ) -> Result<()> {
-    let command = request::<Option<PathBuf>>(
-        &ctx.paths,
-        WorkspaceMethod::WorkspaceHook {
-            workspace: workspace.id.clone(),
-            kind: HookKind::PostSetup,
+    let spec = OperationSpec::Prepare {
+        workspace: workspace.id.clone(),
+        steps: Preparation {
+            post_setup: true,
+            ..Default::default()
         },
-    )
-    .await?;
-    if let Some(command) = command {
-        let configured_env = configured_environment(ctx, workspace).await?;
-        hooks::run_interactive(
-            Hook::PostSetup,
-            workspace,
-            &command,
-            &ctx.paths,
-            ctx.json,
-            &configured_env,
-        )
-        .await?;
-    }
+    };
+    operations::run::<Prepared>(ctx, spec).await?;
     Ok(())
 }
 
-/// Run the setup command, then let an interactive user decide what to do with
-/// a failed workspace. `None` means the workspace was deleted or kept as-is.
+/// Run the setup command in an operation the daemon starts, then let an
+/// interactive user decide what to do with a failed workspace. `None` means
+/// the workspace was deleted or kept as-is.
 pub(in crate::cli::commands) async fn setup_workspace(
     ctx: &Context,
     workspace: &Workspace,
 ) -> Result<Option<Workspace>> {
-    let result = execution::setup(&ctx.paths, workspace.id.clone(), ctx.json).await;
+    let spec = OperationSpec::Prepare {
+        workspace: workspace.id.clone(),
+        steps: Preparation {
+            setup: true,
+            ..Default::default()
+        },
+    };
+    let result = operations::run::<Prepared>(ctx, spec).await;
     if let Err(error) = &result
         && let Some(failure) = error.downcast_ref::<execution::SetupVerificationFailure>()
     {
         return report_setup_verification_failure(ctx, workspace, failure.exit_code).await;
     }
-    let failure = match result {
-        Ok(0) => None,
-        Ok(code) => Some(format!("setup command exited with status {code}")),
-        Err(error) => Some(format!("{error:#}")),
-    };
+    let failure = result.err().map(|error| format!("{error:#}"));
     if let Some(error) = failure {
         let name = &workspace.name;
         ensure!(

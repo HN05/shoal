@@ -4702,11 +4702,11 @@ fn interactive_add_preserves_literal_branch_spelling() {
 }
 
 #[test]
-fn execution_and_hooks_restore_terminal_settings_after_exit_and_stop() {
+fn execution_restores_terminal_settings_after_exit_and_stop() {
     use std::io::Read;
 
     let fixture = Fixture::new();
-    let workspace = fixture.add("terminal");
+    fixture.add("terminal");
     let agent = fixture.root.path().join("raw-agent.py");
     install_test_script(
         &agent,
@@ -4729,25 +4729,13 @@ while True:
     time.sleep(0.01)
 "#,
     );
-    let setup = Path::new(workspace["path"].as_str().unwrap()).join("setup.sh");
-    install_test_script(&setup, "#!/bin/sh\nexit 0\n");
-    fs::write(
-        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
-        format!(
-            "setup.command = 'setup.sh'\nhooks.post_setup = '{}'\n",
-            agent.display()
-        ),
-    )
-    .unwrap();
     for (mode, term) in [
         ("success", Some("xterm-256color")),
         ("exit", Some("xterm-256color")),
         ("killed", Some("xterm-256color")),
         ("interrupt", Some("xterm-256color")),
         ("stop", Some("xterm-256color")),
-        ("hook", Some("xterm-256color")),
         ("success", Some("dumb")),
-        ("hook", Some("dumb")),
         ("success", Some("")),
         ("success", None),
     ] {
@@ -4776,8 +4764,7 @@ def terminal_settings():
     return settings
 before = terminal_settings()
 group = os.tcgetpgrp(0)
-command = [binary, 'work', 'setup', 'terminal'] if mode == 'hook' else [
-    binary, 'run', '--workspace', 'terminal', '--', 'python3', agent, mode]
+command = [binary, 'run', '--workspace', 'terminal', '--', 'python3', agent, mode]
 child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 try:
     if mode in ('interrupt', 'stop'):
@@ -4794,7 +4781,7 @@ try:
         else:
             subprocess.run([binary, 'stop', 'terminal'], check=True, capture_output=True, timeout=15)
     stdout, stderr = child.communicate(timeout=15)
-    expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143, 'hook': 0}[mode]
+    expected = {'success': 0, 'exit': 7, 'killed': 137, 'interrupt': 143, 'stop': 143}[mode]
     assert child.returncode == expected, (child.returncode, stdout, stderr)
     assert b'\x1b' not in stdout + stderr, (stdout, stderr)
     assert os.tcgetpgrp(0) == group, 'foreground group was not restored'
@@ -7442,6 +7429,50 @@ fn setup_commands_cannot_recursively_run_setup() {
             .contains("a setup command cannot recursively run setup"),
         "{output:?}"
     );
+}
+
+#[test]
+fn setup_continues_after_the_cli_that_started_it_exits() {
+    let fixture = Fixture::new();
+    let release = fixture.root.path().join("release-setup");
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        format!(
+            "#!/bin/sh\necho preparing\ntouch setup-started\nwhile [ ! -e '{}' ]; do sleep 0.1; done\ntouch setup-finished\n",
+            release.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
+    let repo = fixture.repo.to_str().unwrap();
+    // The CLI shows what setup writes, as it did when it ran setup itself.
+    fs::write(&release, "").unwrap();
+    let output = fixture.run(&["--json", "add", repo, "quick"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("preparing"),
+        "{output:?}"
+    );
+    fs::remove_file(&release).unwrap();
+    let mut add = fixture
+        .command()
+        .args(["--json", "add", repo, "slow"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let path = wait_for("the slow workspace", || {
+        let listed = fixture.ok(&["work"]);
+        let slow = listed.as_array()?.iter().find(|w| w["name"] == "slow")?;
+        Some(PathBuf::from(slow["path"].as_str()?))
+    });
+    wait_until("setup to start", || path.join("setup-started").exists());
+    add.kill().unwrap();
+    add.wait().unwrap();
+    fs::write(&release, "").unwrap();
+    wait_until("setup to finish", || {
+        fixture.ok(&["status", "slow"])["workspace"]["state"] == "ready"
+    });
+    assert!(path.join("setup-finished").exists());
 }
 
 #[cfg(target_os = "macos")]
@@ -13468,7 +13499,8 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
             .status
             .success()
     );
-    // Signal the wrapper so it can stop its recorded process group and report failure.
+    // Signal the CLI, which interrupts the setup's wrapper so it can stop its
+    // recorded process group and report failure.
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
     let status = wait_for("setup to stop", || add.try_wait().unwrap());
     assert!(!status.success());

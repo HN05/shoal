@@ -99,6 +99,20 @@ expose. Linking the same issue again records a newly supplied title.
 Their `running` flag says whether a tracked execution is running; unverified
 executions after a daemon restart do not count. Their `done` flag says whether a
 completion is recorded.
+Workspace setup with the post-setup hook is an operation: the daemon starts its
+work in a worker process of its own, detached as it starts queued agents, so the
+work goes on when the CLI or app that asked for it goes. The worker acts with the
+caller's scope and, from the CLI, its environment, and runs the same tracked
+executions and hooks the CLI ran, under the same checks; what it and its
+processes write becomes the operation's output, and it reports typed steps and
+its end. The CLI starts an operation and follows it, showing its output where it
+showed it before, so the CLI and apps cannot drift. An interrupt or termination
+of the CLI cancels the operation, which interrupts the worker as it interrupted
+the CLI; a CLI that ends otherwise leaves it running. The daemon keeps an
+operation in memory until ten minutes after it ends, so a client follows it
+again by its ID from any event; a restart forgets it, and setup fails with its
+daemon as before.
+
 The execution wrapper owns terminal I/O, environment delivery, exit codes, and
 command process groups. It retains buffered daemon controls across start, stop,
 and recovery transitions so adjacent frames cannot be lost. After commands and
@@ -624,8 +638,8 @@ They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;
 failure marks setup failed. It may be configured without a setup command.
-The post-setup hook runs from the CLI with the terminal once the workspace is
-ready and before any agent; failure keeps the ready workspace. The pre-remove
+The post-setup hook runs in setup's operation, without a terminal, once the
+workspace is ready and before any agent; failure keeps the ready workspace. The pre-remove
 hook runs in the daemon inside the single removal path for manual, repository,
 and automatic removal, after checks pass and commands stop, bounded in time;
 failure retains the workspace. Ownership and removal policy are rechecked after

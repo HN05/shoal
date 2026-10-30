@@ -145,7 +145,7 @@ async fn requests_and_execution_setup_preserve_inspectable_codes() {
         for error in [
             reply::<DaemonStatus>(response()).await.unwrap_err(),
             reply_with(response(), async |paths| {
-                crate::execution::setup(paths, "worker".into(), false).await
+                crate::execution::setup(paths, "worker".into()).await
             })
             .await
             .unwrap_err(),
@@ -179,7 +179,7 @@ async fn protocol_mismatch_precedes_payload_extraction() {
         for error in [
             reply::<DaemonStatus>(response()).await.unwrap_err(),
             reply_with(response(), async |paths| {
-                crate::execution::setup(paths, "worker".into(), false).await
+                crate::execution::setup(paths, "worker".into()).await
             })
             .await
             .unwrap_err(),

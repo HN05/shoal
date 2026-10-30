@@ -69,7 +69,7 @@ pub(in crate::cli::commands) async fn prepare(
 /// Run the setup command as a tracked execution; a setup whose processes
 /// Shoal could not verify keeps its own error.
 async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
-    let failure = match execution::setup(&ctx.paths, workspace.id.clone(), false).await {
+    let failure = match execution::setup(&ctx.paths, workspace.id.clone()).await {
         Ok(0) => None,
         Ok(code) => Some(format!("setup command exited with status {code}")),
         Err(error) if error.is::<execution::SetupVerificationFailure>() => return Err(error),
