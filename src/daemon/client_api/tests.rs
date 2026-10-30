@@ -248,3 +248,19 @@ async fn a_call_after_a_restart_reconnects() {
         .unwrap();
     assert_eq!(found.name, "api");
 }
+
+#[tokio::test]
+async fn a_quiescing_daemon_closes_the_connection_instead_of_refusing() {
+    let daemon = TestDaemon::start().await;
+    let (mut reader, mut writer) = daemon.raw().await;
+    let hello = serde_json::json!({"client_api": {"version": shoal_client::VERSION}});
+    wire::write(&mut writer, &hello).await.unwrap();
+    let _: HandshakeReply = reader.read().await.unwrap().unwrap();
+    let _quiesced = daemon.manager.gates.quiesce().await;
+    let unknown = serde_json::json!({"id": 1, "method": "workspace.teleport", "params": {}});
+    wire::write(&mut writer, &unknown).await.unwrap();
+    let next = tokio::time::timeout(HANG, reader.read::<Response>())
+        .await
+        .unwrap();
+    assert!(matches!(next, Ok(None)), "{next:?}");
+}

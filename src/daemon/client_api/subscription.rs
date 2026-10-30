@@ -37,7 +37,8 @@ pub(super) async fn run(
         Ok(records) => records,
         Err(error) => {
             let reply = Reply::Error(errors::failed(&error));
-            return Ok(wire::write(&mut writer, &Response { id, reply }).await?);
+            super::write_guarded(&manager, &mut writer, &Response { id, reply }).await?;
+            return Ok(());
         }
     };
     {

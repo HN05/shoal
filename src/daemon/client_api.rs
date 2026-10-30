@@ -21,7 +21,7 @@ use tokio::net::{
     unix::{OwnedReadHalf, OwnedWriteHalf},
 };
 
-use super::{Server, scope::Caller};
+use super::{Server, scope::Caller, workspace::Manager};
 
 /// A connection past its handshake.
 pub(super) struct Session {
@@ -43,27 +43,31 @@ pub(super) async fn serve(
 ) -> Result<()> {
     let (reader, mut writer) = stream.into_split();
     let mut reader = FrameReader::new(reader);
+    let manager = server.manager.clone();
     let (_slot, session) = match open(&server, hello).await {
         Ok(opened) => opened,
         Err(error) => {
-            return wire::write(&mut writer, &HandshakeReply::Error(error))
-                .await
-                .map_err(Into::into);
+            write_guarded(&manager, &mut writer, &HandshakeReply::Error(error)).await?;
+            return Ok(());
         }
     };
-    wire::write(&mut writer, &handshake::welcome()).await?;
+    if !write_guarded(&manager, &mut writer, &handshake::welcome()).await? {
+        return Ok(());
+    }
     while let Some(frame) = reader.read::<serde_json::Value>().await? {
         let (id, call) = match request(frame) {
             Ok(request) => (request.id, request.call),
-            Err((id, error)) => {
-                respond(&mut writer, id, Err(error)).await?;
-                continue;
-            }
+            Err((id, error)) => match refuse(&manager, &mut writer, id, error).await? {
+                true => continue,
+                false => return Ok(()),
+            },
         };
         if let Call::Subscribe(subscribe) = call {
             return subscription::run(session, id, subscribe, reader, writer).await;
         }
-        session.answer(&mut writer, id, call).await?;
+        if !session.answer(&mut writer, id, call).await? {
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -96,8 +100,11 @@ fn request(frame: serde_json::Value) -> Result<Request, (u64, ApiError)> {
 impl Session {
     /// Answer request `id`, `call`, within a request slot, holding an
     /// operation guard until its reply is written, so a daemon update
-    /// cannot cut the reply off after the operation took effect.
-    async fn answer(&self, writer: &mut OwnedWriteHalf, id: u64, call: Call) -> Result<()> {
+    /// cannot cut the reply off after the operation took effect. `false`
+    /// when the daemon quiesces for an update before the call can run, so
+    /// the connection closes unanswered.
+    async fn answer(&self, writer: &mut OwnedWriteHalf, id: u64, call: Call) -> Result<bool> {
+        let manager = &self.server.manager;
         let slot = self
             .server
             .capacity
@@ -105,12 +112,40 @@ impl Session {
             .map_err(|error| ApiError::new(ErrorCode::Busy, format!("{error:#}")));
         let _slot = match slot {
             Ok(slot) => slot,
-            Err(error) => return respond(writer, id, Err(error)).await,
+            Err(error) => return refuse(manager, writer, id, error).await,
         };
-        let _operation = self.server.manager.gates.owned_operation().await;
+        let _operation = manager.gates.owned_operation().await;
         let result = calls::answer(self, call).await;
-        respond(writer, id, result).await
+        respond(writer, id, result).await?;
+        Ok(true)
     }
+}
+
+/// Write `value` under a short operation guard, or leave it unwritten while
+/// a daemon update quiesces operations, returning whether it was written;
+/// the caller then closes the connection, and the client tries again on the
+/// replacement daemon.
+pub(super) async fn write_guarded(
+    manager: &Manager,
+    writer: &mut OwnedWriteHalf,
+    value: &impl serde::Serialize,
+) -> Result<bool> {
+    let Some(_operation) = manager.gates.try_operation() else {
+        return Ok(false);
+    };
+    wire::write(writer, value).await?;
+    Ok(true)
+}
+
+/// Refuse request `id` with `error`, as [`write_guarded`] writes.
+async fn refuse(
+    manager: &Manager,
+    writer: &mut OwnedWriteHalf,
+    id: u64,
+    error: ApiError,
+) -> Result<bool> {
+    let reply = Reply::Error(error);
+    write_guarded(manager, writer, &Response { id, reply }).await
 }
 
 /// Send `result` to request `id`: a long list in pages, then the rest.
