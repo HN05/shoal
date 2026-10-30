@@ -268,11 +268,15 @@ fn own_state(action: &Action) -> bool {
     matches!(action, Action::Close | Action::Reopen)
 }
 
-/// Whether `action` is the user's decision, made as their account: merging
-/// and a review's verdict. Every other change is the agent's.
+/// Whether `action` is the user's decision, made as their account: merging,
+/// deleting a PR's branch and a review's verdict. Every other change is the
+/// agent's.
 fn users_decision(action: &Action) -> bool {
     match action {
-        Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge => true,
+        Action::Merge { .. }
+        | Action::AutoMerge { .. }
+        | Action::CancelAutoMerge
+        | Action::DeleteBranch => true,
         Action::Review(review) => review.has_verdict(),
         _ => false,
     }

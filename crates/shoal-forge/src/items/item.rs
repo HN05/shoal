@@ -81,6 +81,15 @@ pub struct Current {
     pub replaced_labels: Vec<String>,
 }
 
+impl Current {
+    /// Whether the PR's head branch is in `repo` rather than in a fork.
+    pub(crate) fn head_in(&self, repo: &ForgeRepo) -> bool {
+        self.head_repository
+            .as_deref()
+            .is_some_and(|path| path.eq_ignore_ascii_case(&repo.path))
+    }
+}
+
 impl ForgeRepo {
     /// The item's REST endpoint.
     pub(crate) fn item_endpoint(&self, kind: ItemKind, number: u64) -> String {

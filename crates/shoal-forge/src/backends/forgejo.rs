@@ -361,6 +361,11 @@ impl Backend for Forgejo {
         (Request::get(endpoint), "/commit/id")
     }
 
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
+        let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, false)));
+        Request::new(HttpMethod::Delete, endpoint, None)
+    }
+
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
         github_rest::pushable(repo, account).await
     }

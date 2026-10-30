@@ -393,6 +393,11 @@ impl Backend for Bitbucket {
         (Request::get(endpoint), "/target/hash")
     }
 
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
+        let endpoint = repo.repo_endpoint(&format!("refs/branches/{}", encode(branch, false)));
+        Request::new(HttpMethod::Delete, endpoint, None)
+    }
+
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
         let query = encode(
             &format!("repository.full_name={}", literal(&repo.path)),

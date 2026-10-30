@@ -392,12 +392,8 @@ impl Backend for GitHub {
             .confirming("merged"),
         ];
         // A fork's branch is not this repository's to delete.
-        if delete_branch && current.head_repository.as_deref() == Some(repo.path.as_str()) {
-            requests.push(Request::new(
-                HttpMethod::Delete,
-                repo.repo_endpoint(&format!("git/refs/heads/{}", encode(&pr.head, true))),
-                None,
-            ));
+        if delete_branch && current.head_in(repo) {
+            requests.push(self.branch_delete(repo, &pr.head));
         }
         Ok(requests)
     }
@@ -501,6 +497,11 @@ impl Backend for GitHub {
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         let endpoint = repo.repo_endpoint(&format!("branches/{}", encode(branch, true)));
         (Request::get(endpoint), "/commit/sha")
+    }
+
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
+        let endpoint = repo.repo_endpoint(&format!("git/refs/heads/{}", encode(branch, true)));
+        Request::new(HttpMethod::Delete, endpoint, None)
     }
 
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {

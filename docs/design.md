@@ -1427,9 +1427,11 @@ needs no agent; a conflicting revert does, so it is abandoned rather than left
 half done. Which commits the merge added is established from their trees and
 patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, while
-merging and a review's verdict stay the user's decisions, so scoped callers can
-comment in a review but not merge, approve or request changes, and those act as
-the user's own login. A forge that refuses a verdict, such as on its author's
+merging, deleting a PR's branch and a review's verdict stay the user's
+decisions, so scoped callers can comment in a review but not merge, delete a
+branch, approve or request changes, and those act as the user's own login.
+Deleting the branch of a merged or closed PR refuses a branch that no longer
+points to the PR's head, since its other commits are in no PR. A forge that refuses a verdict, such as on its author's
 own PR, says so itself rather than Shoal guessing first. A review's line
 comments are checked against the PR's diff before anything is sent, so a
 review is refused whole rather than posted in part. Review

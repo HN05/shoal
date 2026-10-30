@@ -149,6 +149,12 @@ impl Scoped for ItemMethod {
                 ..
             } => bail!("merging is the user's decision; ask them with shoal alerts send"),
             ItemMethod::ItemAction {
+                action: Action::DeleteBranch,
+                ..
+            } => bail!(
+                "deleting a PR's branch is the user's decision; ask them with shoal alerts send"
+            ),
+            ItemMethod::ItemAction {
                 action: Action::Review(review),
                 ..
             } if review.has_verdict() => bail!(

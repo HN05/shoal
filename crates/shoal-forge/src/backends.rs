@@ -343,6 +343,9 @@ pub(crate) trait Backend {
     /// in the response.
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str);
 
+    /// The request that deletes `branch` from the repository.
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request;
+
     /// Whether `account` may push branches to the repository.
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool>;
 
@@ -1051,6 +1054,10 @@ impl Backend for ForgeKind {
 
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str) {
         dispatch!(self, backend => backend.branch_read(repo, branch))
+    }
+
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
+        dispatch!(self, backend => backend.branch_delete(repo, branch))
     }
 
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {

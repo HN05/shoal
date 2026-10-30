@@ -82,6 +82,8 @@ pub enum Action {
         delete_branch: bool,
     },
     CancelAutoMerge,
+    /// Delete the head branch of a merged or closed PR from the repository.
+    DeleteBranch,
     /// Bring a PR's branch up to date with its base on the forge.
     Update {
         method: UpdateMethod,
@@ -140,6 +142,7 @@ impl Action {
             Self::Merge { .. } => "merge",
             Self::AutoMerge { .. } => "auto_merge",
             Self::CancelAutoMerge => "cancel_auto_merge",
+            Self::DeleteBranch => "delete_branch",
             Self::Update { .. } => "update",
             Self::Thread(change) => match change.resolve {
                 Some(true) => "resolve",
@@ -223,6 +226,7 @@ impl Action {
             Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
                 pr_only("merge")?;
             }
+            Self::DeleteBranch => pr_only("branch to delete")?,
             Self::Update { .. } => pr_only("branch to update")?,
             Self::Thread(change) => {
                 pr_only("review threads")?;
@@ -466,6 +470,11 @@ impl ForgeRepo {
                     .await?;
                 self.plan(&current, action)
             }
+            Action::DeleteBranch => {
+                let requests = self.plan(&current, action)?;
+                self.ensure_branch_unmoved(account, &current).await?;
+                Ok(requests)
+            }
             _ => self.plan(&current, action),
         }
     }
@@ -530,6 +539,7 @@ impl ForgeRepo {
                 ensure_open(item)?;
                 self.kind.cancel_auto_merge(self, current)?
             }
+            Action::DeleteBranch => vec![self.branch_deletion(current)?],
             Action::Update { method } => {
                 ensure_open(item)?;
                 self.kind.update_branch(self, current, *method)?
@@ -541,6 +551,53 @@ impl ForgeRepo {
             }
             Action::EditComment(_) => anyhow::bail!("a comment's edit is planned from the comment"),
         })
+    }
+
+    /// The request that deletes the head branch of `current`, refused while
+    /// the PR is open or when the branch is a fork's.
+    fn branch_deletion(&self, current: &Current) -> Result<Request> {
+        let item = &current.item;
+        let pr = item
+            .pr
+            .as_ref()
+            .context("only PRs have a branch to delete")?;
+        ensure!(
+            item.state != ItemState::Open,
+            "#{} is open; merge or close it before deleting its branch",
+            item.number
+        );
+        ensure!(
+            current.head_in(self),
+            "the branch of #{} is in a fork, not in {}",
+            item.number,
+            self.path
+        );
+        Ok(self.kind.branch_delete(self, &pr.head))
+    }
+
+    /// Refuse to delete a PR's branch that no longer points to the PR's
+    /// head, such as one pushed to again after it merged, whose other
+    /// commits are in no PR.
+    async fn ensure_branch_unmoved(&self, account: &Account, current: &Current) -> Result<()> {
+        let item = &current.item;
+        let pr = item
+            .pr
+            .as_ref()
+            .context("only PRs have a branch to delete")?;
+        let head = current
+            .head_sha
+            .as_deref()
+            .context("the forge did not report the PR's head commit")?;
+        let tip = self.branch_commit(account, &pr.head).await?;
+        // Bitbucket reports a PR's head as an abbreviated hash.
+        ensure!(
+            tip.starts_with(head),
+            "branch {} moved to {tip} after #{} was {}; it holds commits the PR does not have",
+            pr.head,
+            item.number,
+            item.state.as_str()
+        );
+        Ok(())
     }
 }
 

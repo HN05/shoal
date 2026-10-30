@@ -459,6 +459,12 @@ impl Backend for GitLab {
         (Request::get(endpoint), "/commit/id")
     }
 
+    fn branch_delete(&self, repo: &ForgeRepo, branch: &str) -> Request {
+        let endpoint =
+            repo.repo_endpoint(&format!("repository/branches/{}", encode(branch, false)));
+        Request::new(HttpMethod::Delete, endpoint, None)
+    }
+
     /// Developers and above may push.
     async fn pushable(&self, repo: &ForgeRepo, account: &Account) -> Result<bool> {
         let project = repo
