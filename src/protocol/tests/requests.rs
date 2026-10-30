@@ -134,7 +134,7 @@ const REQUESTS: &[&str] = &[
     r#"{"merged_pull":{"workspace":"fix","item":null}}"#,
     r#"{"open_issue":{"workspace":"fix","issue":{"title":"Bug","body":"","labels":[],"attachments":[]},"repository":null,"link":false}}"#,
     r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"close"}}}"#,
-    r#"{"list_items":{"workspace":"fix","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","limit":30}}}"#,
+    r#"{"list_items":{"workspace":"fix","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","limit":30},"repository":null}}"#,
     r#"{"forge_api":{"workspace":"fix","request":{"method":"GET","path":"repos/{owner}/{repo}","body":null}}}"#,
     r#"{"select_items":{"workspace":"fix","selection":{"kind":"issue","input":null}}}"#,
     r#"{"forge_type":{"host":"forge.example","scheme":"https"}}"#,

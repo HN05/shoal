@@ -1446,7 +1446,8 @@ a comment the acting login wrote, checked against the item's discussion before
 anything is sent, since an account with admin rights could otherwise rewrite
 someone else's words. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
-and anyone else's as the user's own logins; it uses each forge's own search and
+and anyone else's as the user's own logins, in another repository too, since
+checking for a duplicate before filing there is only a read; it uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models, since fj has no API passthrough to fall back to. The daemon

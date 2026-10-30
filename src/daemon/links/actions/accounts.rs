@@ -71,6 +71,19 @@ impl Manager {
         self.forge(&remote).await
     }
 
+    /// The repository `named` names, as OWNER/NAME on the forge of `own` or
+    /// as a repository URL on any forge, or `own` without one.
+    pub(in crate::daemon::links) async fn named_forge(
+        &self,
+        own: ForgeRepo,
+        named: Option<&str>,
+    ) -> Result<ForgeRepo> {
+        match named {
+            Some(named) => own.resolve_named(named, &self.forge_hosts()).await,
+            None => Ok(own),
+        }
+    }
+
     pub(in crate::daemon::links) async fn workspace_forge_account(
         &self,
         workspace: &Workspace,

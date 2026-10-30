@@ -48,9 +48,16 @@ pub(super) async fn handle(
             context,
             kind,
             search,
+            repository,
         } => {
             let listed = manager
-                .list_items(&context, kind, &search, caller.is_some())
+                .list_items(
+                    &context,
+                    kind,
+                    &search,
+                    repository.as_deref(),
+                    caller.is_some(),
+                )
                 .await;
             return Ok(Answer::pages(listed, Body::Items));
         }

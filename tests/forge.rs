@@ -2670,6 +2670,47 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
 }
 
 #[test]
+fn lists_search_another_repository_with_the_same_filters() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
+    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let search =
+        "GET repos/team/tool/issues?type=issues&state=all&labels=bug&q=crash&limit=50&page=1";
+    fixture.respond(json!({
+        search: {"body": [{"number": 5, "title": "Crash", "state": "closed",
+            "labels": [{"name": "bug"}]}]},
+    }));
+    let list = [
+        "issue",
+        "list",
+        "--repo",
+        "team/tool",
+        "--state",
+        "all",
+        "--label",
+        "bug",
+        "crash",
+    ];
+    let listed = fixture.ok(&[&list[..], &["--workspace", "topic"]].concat());
+    let url = fixture.web.replace("team/project", "team/tool") + "/issues/5";
+    assert_eq!(listed[0]["url"], url, "{listed}");
+    // A workspace process searches it as the agent account.
+    assert_eq!(scoped(&fixture, &list)[0]["url"], url);
+    assert_eq!(
+        fixture.requests(),
+        [
+            json!([search, null, "token usertoken"]),
+            json!([search, null, "token agenttoken"]),
+        ]
+    );
+}
+
+#[test]
 fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({

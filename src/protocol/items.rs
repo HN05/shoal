@@ -77,13 +77,15 @@ pub enum ItemMethod {
         item: Option<String>,
         action: crate::forge::items::action::Action,
     },
-    /// Issues or PRs of the context's repository that `search` matches,
-    /// answered in one or more `items` frames and then `ok`.
+    /// Issues or PRs of the context's repository, or the one `repository`
+    /// names, that `search` matches, answered in one or more `items` frames
+    /// and then `ok`.
     ListItems {
         #[serde(flatten)]
         context: ItemContext,
         kind: crate::forge::items::link::ItemKind,
         search: crate::forge::items::list::Search,
+        repository: Option<String>,
     },
     /// A request to the workspace repository's forge API, answered with
     /// the response's JSON text in one or more `api_response` frames and

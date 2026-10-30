@@ -2759,6 +2759,7 @@ shoal pr delete-branch 12           # delete a merged or closed PR's branch on t
 shoal pr revert 42                  # open a PR that reverts merged PR 42
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
+shoal issue list --repo team/review-bot missed  # search another repository
 shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
@@ -2923,7 +2924,8 @@ through the forge's own search: words after the command are text it searches for
 in titles and descriptions, repeated `--label` keeps items with every label,
 `--author` those a login opened, and `--state open|closed|all` defaults to open,
 with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
-30 by default. Workspace processes search as the agent account, anyone else
+30 by default. `--repo` searches another repository, named as for
+`issue open --repo`. Workspace processes search as the agent account, anyone else
 with your own logins. Each line shows an item's number, state (`draft` for an
 open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.

@@ -1,5 +1,5 @@
 //! `shoal pr list` and `shoal issue list`: search the items of the
-//! repository of the workspace or registered checkout.
+//! repository of the workspace or registered checkout, or of another one.
 use anyhow::Result;
 
 use super::context::select_context;
@@ -29,6 +29,7 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
         context: select_context(ctx, args.workspace).await?,
         kind,
         search,
+        repository: args.repo,
     };
     let items = ctx
         .progress("Searching", client::pages::<Item>(&ctx.paths, method))

@@ -124,7 +124,7 @@ pub enum ChangesCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum PrCommand {
-    /// List or search the workspace repository's PRs, newest first.
+    /// List or search the PRs of the workspace's repository or another one, newest first.
     List(ListArgs),
     /// Push the workspace branch, open a PR for it or find its open PR, and link it.
     Open {
@@ -261,7 +261,7 @@ pub enum PrCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum IssueCommand {
-    /// List or search the workspace repository's issues, newest first.
+    /// List or search the issues of the workspace's repository or another one, newest first.
     List(ListArgs),
     /// Open an issue in the workspace's repository or another one.
     Open {
@@ -339,7 +339,7 @@ pub struct ReactArgs {
     pub remove: bool,
 }
 
-// Which issues or PRs of the workspace's repository to list.
+// Which issues or PRs of the workspace's repository, or another one, to list.
 #[derive(Debug, Args)]
 pub struct ListArgs {
     /// Text the forge searches for in titles and descriptions.
@@ -348,6 +348,10 @@ pub struct ListArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+    /// Search another repository: OWNER/NAME on the workspace's forge, or a
+    /// repository URL on any forge.
+    #[arg(long, value_name = "REPOSITORY")]
+    pub repo: Option<String>,
     /// Which items to list; closed includes merged PRs.
     #[arg(long, value_enum, default_value_t = crate::forge::items::list::StateFilter::Open)]
     pub state: crate::forge::items::list::StateFilter,

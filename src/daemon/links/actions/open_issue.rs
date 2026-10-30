@@ -154,13 +154,7 @@ impl Manager {
         own: ForgeRepo,
         named: Option<&str>,
     ) -> Result<IssueDestination> {
-        let Some(named) = named else {
-            return Ok(IssueDestination {
-                forge: own,
-                elsewhere: false,
-            });
-        };
-        let forge = own.resolve_named(named, &self.forge_hosts()).await?;
+        let forge = self.named_forge(own.clone(), named).await?;
         let elsewhere = forge != own;
         Ok(IssueDestination { forge, elsewhere })
     }

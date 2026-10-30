@@ -214,6 +214,7 @@ shoal pr merge 42 --auto --method squash # Merge it once checks pass; --cancel-a
 shoal pr delete-branch 42     # Delete the branch of a merged or closed PR on the forge; agents cannot
 shoal pr revert 42            # Open a PR that reverts merged PR 42
 shoal issue list --label bug flaky # Search issues by text, label, author and state; pr list too
+shoal issue list --repo team/tool crash # Search another repository's issues
 shoal issue close             # Close the linked issue; edit, comment, reopen too
 shoal issue open --title Bug  # Open an issue, recorded as opened; --link also assigns it
 shoal issue open --repo team/tool --title Bug # Open it in another repository
