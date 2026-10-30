@@ -64,9 +64,23 @@ pub struct MachineAgent {
 }
 
 /// One layer's agents on their own: each entry's names, commands, argument
-/// templates and variables. Bases and the rest resolve across layers, which
+/// templates and variables, and that the layer's `commands` name no agent it
+/// or Shoal defines. Bases and the rest resolve across layers, which
 /// [`crate::ai::validate`] checks once they combine.
-pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
+pub fn validate(
+    agents: &BTreeMap<String, AgentToolConfig>,
+    commands: &crate::config::named_commands::Commands,
+) -> Result<()> {
+    for name in commands.keys() {
+        let defined = agents
+            .get(name)
+            .is_some_and(|agent| agent.command.is_some() || agent.base.is_some());
+        let built_in = crate::ai::default_commands().contains_key(name);
+        anyhow::ensure!(
+            !defined && !built_in,
+            "commands.{name}: {name:?} is an agent; [commands] holds only workspace shortcuts"
+        );
+    }
     for (name, agent) in agents {
         if agent.command.is_some() || agent.base.is_some() {
             crate::ai::validate::reachable_name(name).with_context(|| format!("agents.{name}"))?;

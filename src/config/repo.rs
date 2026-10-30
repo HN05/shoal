@@ -372,7 +372,7 @@ impl RepoConfig {
     /// [`Stack::resolve`](crate::config::resolve::Stack::resolve) checks again.
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
-        crate::config::agents::validate(&self.agents)?;
+        crate::config::agents::validate(&self.agents, &self.commands)?;
         self.agent.forge_clis.validate()?;
         for name in [&self.git_profile, &self.agent.git_profile]
             .into_iter()

@@ -8554,6 +8554,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("default_agnet", "codex"),
         ("agents.claude.prompt_cache_minutes", "0"),
         ("agents.work.command", "['echo']"),
+        ("commands.claude", "['echo']"),
         ("agents.claude.resume", "['--resume']"),
     ] {
         assert!(
