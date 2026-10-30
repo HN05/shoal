@@ -2204,7 +2204,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
     }
     for (args, refusal) in [
         (vec!["status", "context-other"], "scope"),
-        (vec!["status", "missing"], "scope"),
+        (vec!["status", "missing"], "unknown workspace: missing"),
         (vec!["stop"], "stop only the workspaces below theirs"),
         (vec!["stop", "context-other"], "scope"),
         (vec!["config", "show", "context-other"], "scope"),
