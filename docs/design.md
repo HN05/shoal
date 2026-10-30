@@ -1435,7 +1435,10 @@ on every forge, so a client offers one set, which `shoal forge reactions` narrow
 to what an instance allows, and are read for a view with its
 comments, which costs a request per comment on forges that list them per comment;
 reacting reads first and changes only a reaction not already as asked, since
-forges differ in whether adding one twice fails. Listing issues and PRs also
+forges differ in whether adding one twice fails. A comment edit changes only
+a comment the acting login wrote, checked against the item's discussion before
+anything is sent, since an account with admin rights could otherwise rewrite
+someone else's words. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under

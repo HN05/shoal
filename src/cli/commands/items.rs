@@ -48,8 +48,14 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
         PrCommand::Revert { item, revert } => return revert::revert(ctx, item, revert).await,
         PrCommand::Edit { item, edit } => (item, Action::Edit(pr_edit(edit)?), "PR updated"),
         PrCommand::Reviewers { item } => return reviewers::reviewers(ctx, &item).await,
-        PrCommand::Comment { item, body, files } => {
-            (item, comment(body, files)?, "Commented on PR")
+        PrCommand::Comment {
+            item,
+            body,
+            files,
+            edit,
+        } => {
+            let (action, outcome) = comment(body, files, edit, "Commented on PR")?;
+            (item, action, outcome)
         }
         PrCommand::Review { item, review } => {
             let (action, outcome) = review::review(review)?;
@@ -121,8 +127,14 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
         IssueCommand::Edit { item, edit } => {
             (item, Action::Edit(edit_fields(edit)?), "Issue updated")
         }
-        IssueCommand::Comment { item, body, files } => {
-            (item, comment(body, files)?, "Commented on issue")
+        IssueCommand::Comment {
+            item,
+            body,
+            files,
+            edit,
+        } => {
+            let (action, outcome) = comment(body, files, edit, "Commented on issue")?;
+            (item, action, outcome)
         }
         IssueCommand::React { reaction, item } => {
             let (action, outcome) = react(reaction);

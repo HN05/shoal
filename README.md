@@ -202,6 +202,7 @@ shoal pr edit --draft         # Change the linked PR's text, labels, reviewers o
 shoal pr reviewers            # Users and teams who can review the linked PR
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
 shoal pr comment --attach demo.mp4 # Upload a file and show or link it in a comment
+shoal pr comment --edit 812 --body-file fix.md # Replace the body of a comment you wrote
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
 shoal pr react +1 --comment 812 # React to a comment; --remove takes it back, issue react too
 shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours

@@ -12,6 +12,7 @@ use crate::{
     forge::items::{
         action::{Action, Edit},
         attach::{self, Attachment},
+        comment::CommentEdit,
     },
 };
 
@@ -38,16 +39,30 @@ pub(super) fn edit_fields(edit: EditArgs) -> Result<Edit> {
     })
 }
 
-pub(super) fn comment(body: BodyArgs, files: AttachArgs) -> Result<Action> {
+/// A new comment, reported as `posted`, or the edit of comment `edit`.
+pub(super) fn comment(
+    body: BodyArgs,
+    files: AttachArgs,
+    edit: Option<u64>,
+    posted: &'static str,
+) -> Result<(Action, &'static str)> {
     let (body, attachments) = read_content(body, files)?;
+    if let Some(comment) = edit {
+        let body = body.context("editing a comment needs --body or --body-file")?;
+        return Ok((
+            Action::EditComment(CommentEdit { comment, body }),
+            "Comment edited",
+        ));
+    }
     ensure!(
         body.is_some() || !attachments.is_empty(),
         "a comment needs --body, --body-file or --attach"
     );
-    Ok(Action::Comment {
+    let action = Action::Comment {
         body: body.unwrap_or_default(),
         attachments,
-    })
+    };
+    Ok((action, posted))
 }
 
 /// The body and the files to attach, checked before anything is sent, with

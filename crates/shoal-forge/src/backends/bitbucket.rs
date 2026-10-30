@@ -571,8 +571,13 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 
-    async fn own_login(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<String>> {
-        Err(capability::unsupported(self, Capability::Reactions))
+    /// The nickname comments name their authors by.
+    async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
+        let user = repo.send(account, &Request::get("user".into())).await?;
+        text(&user["nickname"])
+            .or_else(|| text(&user["display_name"]))
+            .context("Bitbucket did not report your nickname")
+            .map(Some)
     }
 
     fn add_reaction(&self, _endpoint: String, _content: &str) -> Result<Request> {

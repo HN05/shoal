@@ -157,7 +157,7 @@ pub enum PrCommand {
         #[command(flatten)]
         item: ItemSelector,
     },
-    /// Comment on a PR.
+    /// Comment on a PR, or edit a comment you wrote.
     Comment {
         #[command(flatten)]
         item: ItemSelector,
@@ -165,6 +165,9 @@ pub enum PrCommand {
         body: BodyArgs,
         #[command(flatten)]
         files: AttachArgs,
+        /// Replace the body of this comment or inline comment instead, by its ID as `shoal view` shows it.
+        #[arg(long, value_name = "ID", conflicts_with = "attach")]
+        edit: Option<u64>,
     },
     /// Review a PR: a body, comments on lines of its diff and a verdict.
     ///
@@ -284,7 +287,7 @@ pub enum IssueCommand {
         #[command(flatten)]
         edit: EditArgs,
     },
-    /// Comment on an issue.
+    /// Comment on an issue, or edit a comment you wrote.
     Comment {
         #[command(flatten)]
         item: ItemSelector,
@@ -292,6 +295,9 @@ pub enum IssueCommand {
         body: BodyArgs,
         #[command(flatten)]
         files: AttachArgs,
+        /// Replace the body of this comment instead, by its ID as `shoal view` shows it.
+        #[arg(long, value_name = "ID", conflicts_with = "attach")]
+        edit: Option<u64>,
     },
     /// Add a reaction to an issue or one of its comments, or remove it.
     React {

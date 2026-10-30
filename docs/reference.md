@@ -2721,6 +2721,7 @@ shoal pr open --label area/cli      # push, then link the branch's open PR or op
 shoal pr edit --title "Fix login" --add-label bug --draft
 shoal pr comment --body-file notes.md
 shoal pr comment --body-file notes.md --attach shot.png --attach 'demo.mp4#Login flow'
+shoal pr comment --edit 812 --body-file fixed.md  # replace the body of comment 812
 shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
 shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr review 42 --comment --body-file review.md --line src/a.rs:7 'Why?'
@@ -2816,6 +2817,11 @@ removes it; the reaction is GitHub's name, as `shoal view` shows it, or one the
 forge has, such as a GitLab emoji. A comment must belong to the item, which is
 checked with the item's kind before anything is sent. A reaction already as
 asked is left unchanged. Bitbucket has no reactions.
+`comment --edit ID` replaces the body of a comment, or on a PR an inline
+comment, as `shoal view` shows its ID, with `--body` or `--body-file`; it takes
+no `--attach`. The comment must belong to the item and be written by the login
+Shoal acts as, which is checked before anything is sent, and watches do not
+report a workspace process's edit back.
 `update` brings an open PR's branch up to date with its base on the forge,
 `--method merge` (the default) by merging the base in and `--method rebase` by
 rebasing onto it; workspace processes may update, and then pull the branch

@@ -13,6 +13,7 @@ use crate::{
     capability::Capability,
     items::{
         attach::{Attachment, Holder, Pending},
+        comment::CommentEdit,
         item::{Current, Item, ItemState},
         link::ItemKind,
         reaction::{ReactionChange, Subject},
@@ -66,6 +67,8 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
     },
+    /// Replace the body of a comment the acting login wrote.
+    EditComment(CommentEdit),
     Close,
     Reopen,
     Merge {
@@ -131,6 +134,7 @@ impl Action {
         match self {
             Self::Edit(_) => "edit",
             Self::Comment { .. } => "comment",
+            Self::EditComment(_) => "edit_comment",
             Self::Close => "close",
             Self::Reopen => "reopen",
             Self::Merge { .. } => "merge",
@@ -215,6 +219,7 @@ impl Action {
                 !body.trim().is_empty() || !attachments.is_empty(),
                 "the comment is empty"
             ),
+            Self::EditComment(edit) => edit.validate()?,
             Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
                 pr_only("merge")?;
             }
@@ -323,6 +328,9 @@ impl ForgeRepo {
             // grow the future of every action.
             Action::React(change) => {
                 return Box::pin(self.react(account, kind, number, change)).await;
+            }
+            Action::EditComment(edit) => {
+                return Box::pin(self.edit_own_comment(account, kind, number, edit)).await;
             }
             _ => {}
         }
@@ -531,6 +539,7 @@ impl ForgeRepo {
             Action::React(_) => {
                 anyhow::bail!("a reaction is planned from the reactions it changes")
             }
+            Action::EditComment(_) => anyhow::bail!("a comment's edit is planned from the comment"),
         })
     }
 }
