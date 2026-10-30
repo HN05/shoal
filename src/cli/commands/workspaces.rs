@@ -18,7 +18,7 @@ mod status;
 mod title;
 mod watch;
 
-pub(crate) use add::queued_agent_plan;
+pub(crate) use add::queued_agent_request;
 pub(super) use add::{AddOptions, AgentLaunch, add};
 pub(in crate::cli) use add::{AddPlan, Creation, execute_add, start_queued};
 pub(super) use adopt::adopt;

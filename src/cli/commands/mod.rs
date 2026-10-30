@@ -59,7 +59,7 @@ mod view;
 mod work;
 pub(in crate::cli) mod workspaces;
 
-pub(crate) use workspaces::queued_agent_plan;
+pub(crate) use workspaces::queued_agent_request;
 mod worktree_hooks;
 
 #[cfg(test)]

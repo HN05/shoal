@@ -13,7 +13,7 @@ use crate::{
         terminal::PlaceName,
     },
     env, git,
-    model::Workspace,
+    model::{QueueRequest, Workspace},
     protocol::WorkspaceMethod,
 };
 
@@ -104,18 +104,28 @@ pub(super) async fn planned_workspace_name(
     Ok(crate::daemon::workspace::derive_workspace_name(&branch))
 }
 
-/// The serialized plan of `agent`'s launch in `workspace` with `prompt` as its
-/// first message, which the agent queue starts detached.
-pub(crate) fn queued_agent_plan(
+/// The queue request of `agent`'s launch in `workspace` with `prompt` as its
+/// first message, which the agent queue starts detached in the default host.
+pub(crate) fn queued_agent_request(
     workspace: &Workspace,
     agent: Agent,
     prompt: Option<String>,
-) -> Result<String> {
+) -> Result<QueueRequest> {
     let plan = AddPlan {
         prompt,
-        ..AddPlan::agent_in(workspace, agent, None, Vec::new(), None)
+        ..AddPlan::agent_in(workspace, agent.clone(), None, Vec::new(), None)
     };
-    Ok(serde_json::to_string(&plan)?)
+    Ok(QueueRequest {
+        repository: workspace.repository_id.as_str().into(),
+        name: workspace.name.clone(),
+        agent: agent.into(),
+        issue_title: None,
+        plan: serde_json::to_string(&plan)?,
+        env: crate::cli::terminal::detached_start_environment(),
+        now: false,
+        workspace: Some(workspace.id.clone()),
+        after: Vec::new(),
+    })
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]

@@ -15,6 +15,7 @@ use crate::{
         updates::Snapshot,
     },
     model::{self, Relation},
+    state::QueueState,
 };
 
 use super::agents::Agents;
@@ -25,6 +26,17 @@ pub(super) fn repository(repository: model::Repository) -> api::Repository {
         name: repository.name,
         path: repository.path,
         source: repository.source,
+    }
+}
+
+pub(super) fn queued_agent(entry: model::QueueEntry) -> shoal_client::QueuedAgent {
+    shoal_client::QueuedAgent {
+        id: entry.id,
+        state: match entry.state {
+            QueueState::Queued => shoal_client::QueueState::Queued,
+            QueueState::Starting => shoal_client::QueueState::Starting,
+        },
+        position: entry.position.map(|position| position as u64),
     }
 }
 

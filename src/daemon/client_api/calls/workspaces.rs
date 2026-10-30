@@ -1,16 +1,15 @@
 //! Reading, removing, completing and renaming a workspace, and queuing and
 //! stopping its agent.
 use shoal_client::{
-    ApiError, Completion, MarkDone, QueueAgent, QueueState as ApiQueueState, QueuedAgent, Removal,
-    RemoveWorkspace, RenameWorkspace, StopAgent, UndoDone, records::Workspace,
+    ApiError, Completion, MarkDone, QueueAgent, QueuedAgent, Removal, RemoveWorkspace,
+    RenameWorkspace, StopAgent, UndoDone, records::Workspace,
 };
 
 use super::super::{Session, agents, errors, records};
 use crate::{
-    model::{self, Inspection, QueueAdmission, QueueRequest},
+    model::{self, Inspection, QueueAdmission},
     protocol::{AssignmentMethod, QueueMethod, RemovalMethod, WorkspaceMethod},
     removal::{RemovalCheck, RemovalResult, UnsavedWork},
-    state::QueueState,
 };
 
 pub(super) async fn get(session: &Session, workspace: String) -> Result<Workspace, ApiError> {
@@ -110,33 +109,15 @@ pub(super) async fn queue_agent(
     let agent: crate::agent::Agent = params.agent.parse().map_err(errors::invalid)?;
     let workspace = inspect(session, params.workspace).await?;
     ensure_available(session, &workspace, &agent).await?;
-    let plan = crate::cli::commands::queued_agent_plan(&workspace, agent.clone(), params.prompt)
+    let request = crate::cli::commands::queued_agent_request(&workspace, agent, params.prompt)
         .map_err(|error| errors::failed(&error))?;
-    let request = QueueRequest {
-        repository: workspace.repository_id.as_str().into(),
-        name: workspace.name.clone(),
-        agent: agent.into(),
-        issue_title: None,
-        plan,
-        env: crate::cli::terminal::detached_start_environment(),
-        now: false,
-        workspace: Some(workspace.id),
-        after: Vec::new(),
-    };
     let admission: QueueAdmission = session.ask(QueueMethod::QueueAdd { request }).await?;
     let entry = admission.entry.ok_or_else(|| {
         errors::unexpected(anyhow::anyhow!(
             "the daemon queued the agent without an entry"
         ))
     })?;
-    Ok(QueuedAgent {
-        id: entry.id,
-        state: match entry.state {
-            QueueState::Queued => ApiQueueState::Queued,
-            QueueState::Starting => ApiQueueState::Starting,
-        },
-        position: entry.position.map(|position| position as u64),
-    })
+    Ok(records::queued_agent(entry))
 }
 
 /// Refuse `agent` when it cannot run in `workspace` under its effective
