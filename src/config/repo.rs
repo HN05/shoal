@@ -328,19 +328,25 @@ pub fn local_config_path(repository_dir: &Path) -> PathBuf {
 pub fn load_local(repository_dir: &Path) -> Result<RepoConfig> {
     let path = local_config_path(repository_dir);
     let directory = repository_dir.join(LOCAL_DIR);
-    let Some(text) =
-        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?
-    else {
-        return Ok(RepoConfig::default());
+    let text =
+        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?;
+    let mut config = match text {
+        Some(text) => parse(&text).with_context(|| format!("parse {}", path.display()))?,
+        None => RepoConfig::default(),
     };
-    let mut config = parse(&text).with_context(|| format!("parse {}", path.display()))?;
+    resolve_script_paths(&mut config, &directory);
+    read_templates(&mut config, &directory)?;
+    Ok(config)
+}
+
+/// Make each relative hook path and `setup.command` name a script in
+/// `directory`.
+fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
     for &kind in crate::hooks::HookKind::ALL {
-        if let Some(command) = kind.repository_command_mut(&mut config) {
+        if let Some(command) = kind.repository_command_mut(config) {
             *command = directory.join(&*command).to_string_lossy().into_owned();
         }
     }
-    read_templates(&mut config, &directory)?;
-    Ok(config)
 }
 
 pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {

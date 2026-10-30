@@ -192,6 +192,10 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     );
     let directory = repository.path().join(LOCAL_DIR);
     fs::create_dir(&directory).unwrap();
+    // A template beside it works without a config file.
+    fs::write(directory.join("chat-template.md"), "Local chat").unwrap();
+    let templates = load_local(repository.path()).unwrap().agent.templates;
+    assert_eq!(templates.chat.as_deref(), Some("Local chat"));
     fs::write(
         local_config_path(repository.path()),
         "[setup]\ncommand = 'setup.sh'\n[hooks]\npost_setup = '/abs/attach'\n\
