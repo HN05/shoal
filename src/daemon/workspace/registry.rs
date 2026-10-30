@@ -323,6 +323,17 @@ async fn local_checkout_location(
     let path = fs::canonicalize(toplevel.trim())?;
     let root = prepare_root(root, state, recorded, Some(&path)).await?;
     let repositories = recorded.repositories;
+    for directory in repositories
+        .iter()
+        .filter_map(|repo| repo.workspaces_dir.as_deref())
+    {
+        let local = directory.join(crate::config::repo::LOCAL_DIR);
+        ensure!(
+            !path.starts_with(&local),
+            "{} is where another repository's local config belongs; register a checkout elsewhere",
+            path.display()
+        );
+    }
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
     // directory, unless `<x>` is itself a checkout or another repository's,
     // or the checkout sits where `<x>`'s local config belongs.

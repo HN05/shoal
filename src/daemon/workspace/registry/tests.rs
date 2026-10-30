@@ -160,3 +160,25 @@ async fn a_checkout_where_the_local_config_belongs_gets_its_own_directory() {
     let checkout = std::fs::canonicalize(&checkout).unwrap();
     assert!(!local.starts_with(&checkout), "{}", local.display());
 }
+
+#[tokio::test]
+async fn no_checkout_registers_where_another_repositorys_local_config_belongs() {
+    let (root, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(root.path(), "project");
+    let project = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let local = manager.local_config_path(&project.id).await.unwrap();
+    let directory = local.parent().unwrap();
+    std::fs::create_dir_all(directory).unwrap();
+    let other = crate::test_support::repository(directory, "other");
+    let error = manager
+        .register_repository(other.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("another repository's local config"),
+        "{error:#}"
+    );
+}

@@ -146,11 +146,35 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
     let local = manager.local_config_path(&parent.id).await.unwrap();
     let directory = local.parent().unwrap();
     std::fs::create_dir_all(directory).unwrap();
-    let nested = test_support::repository(directory, "nested");
-    manager
-        .register_repository(nested.to_str().unwrap().into(), None, None)
+    // Registration refuses this place; an earlier version recorded it.
+    let elsewhere = test_support::repository(root.path(), "nested");
+    let registered = manager
+        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
+    let nested = directory.join("nested");
+    std::fs::rename(&elsewhere, &nested).unwrap();
+    let (id, path) = (registered.id.clone(), nested.clone());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE repositories SET path=?2 WHERE id=?1",
+                rusqlite::params![id, path.to_str()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    // Its tracked files are neither read nor edited as the local config.
+    let error = manager
+        .edit_local_config(&parent.id, Vec::new())
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("is where the local config belongs"),
+        "{error:#}"
+    );
     let error = manager.remove_repository(&parent.id).await.unwrap_err();
     assert!(
         format!("{error:#}").contains("contains another registered repository"),

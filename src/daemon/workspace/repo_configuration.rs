@@ -29,7 +29,7 @@ impl Manager {
                 self.workspaces_dir(&repo).await?
             }
         };
-        local_config_outside_checkout(&repo, &directory)
+        local_config_outside_checkouts(&self.repositories().await?, &directory)
     }
 
     /// Apply `changes` to the repository's local config, saving only a valid
@@ -47,7 +47,7 @@ impl Manager {
             let _git = self.gates.lock_git(&repo.id).await;
             self.workspaces_dir(&repo).await?
         };
-        let path = local_config_outside_checkout(&repo, &directory)?;
+        let path = local_config_outside_checkouts(&self.repositories().await?, &directory)?;
         let (config, backup) = tokio::task::spawn_blocking(move || {
             config::file::edit(path, &changes, |edited| {
                 config::repo::parse(edited)
@@ -125,8 +125,9 @@ impl Manager {
         let repository = self.repository(repository_id).await?;
         // A checkout registered where the local config belongs is tracked
         // files, never local settings.
+        let repositories = self.repositories().await?;
         let local_config = match &repository.workspaces_dir {
-            Some(directory) if local_config_outside_checkout(&repository, directory).is_ok() => {
+            Some(directory) if local_config_outside_checkouts(&repositories, directory).is_ok() => {
                 config::repo::load_local(directory)?
             }
             _ => RepoConfig::default(),
@@ -192,17 +193,19 @@ impl Manager {
     }
 }
 
-/// The local config file of `repo`, whose directory is `directory`, unless
-/// the checkout itself was registered where that file's directory belongs.
-fn local_config_outside_checkout(
-    repo: &crate::model::Repository,
+/// The local config file in the repository directory `directory`, unless a
+/// registered checkout lies where that file's directory belongs.
+fn local_config_outside_checkouts(
+    repositories: &[crate::model::Repository],
     directory: &std::path::Path,
 ) -> Result<PathBuf> {
     let local = directory.join(config::repo::LOCAL_DIR);
-    anyhow::ensure!(
-        !repo.path.starts_with(&local),
-        "the checkout {} is where the local config belongs; register it in another directory",
-        repo.path.display()
-    );
+    for repo in repositories {
+        anyhow::ensure!(
+            !repo.path.starts_with(&local),
+            "the checkout {} is where the local config belongs; register it in another directory",
+            repo.path.display()
+        );
+    }
     Ok(config::repo::local_config_path(directory))
 }
