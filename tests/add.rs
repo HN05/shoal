@@ -271,12 +271,12 @@ impl FakeDaemon {
                         match refusal {
                             None => json!({"type": "ok"}),
                             Some(message) => json!({"type": "error", "data": {
-                                "code": "test", "message": message
+                                "code": "operation_failed", "message": message
                             }}),
                         }
                     }
                     "check_dependencies" => json!({"type": "error", "data": {
-                        "code": "test", "message": "missing is neither a workspace nor a queued agent"
+                        "code": "operation_failed", "message": "missing is neither a workspace nor a queued agent"
                     }}),
                     // The forge an issue's host serves, before its number is read.
                     "forge_type" => json!({"type": "forge_type", "data": "forgejo"}),
@@ -284,7 +284,7 @@ impl FakeDaemon {
                         "start": true, "entry": null, "waiting": 0
                     }}),
                     _ => {
-                        json!({"type": "error", "data": {"code": "test", "message": "creation reached"}})
+                        json!({"type": "error", "data": {"code": "operation_failed", "message": "creation reached"}})
                     }
                 };
                 methods.push(method);
