@@ -7513,12 +7513,17 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
         .command()
         .args(["--json", "add", fixture.repo.to_str().unwrap(), "gated"])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .unwrap();
+    let stderr = lines(add.stderr.take().unwrap());
     wait_until("the pre-setup hook to start", || started.exists());
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
-    // The cancel reached the worker before its setup listened for signals.
+    // The CLI says so once the daemon signalled the worker, before its setup
+    // listens for signals.
+    wait_until("the cancel to reach the worker", || {
+        stderr.try_iter().any(|line| line.starts_with("Cancelling"))
+    });
     fs::write(&release, "").unwrap();
     let status = wait_for("the CLI to stop", || add.try_wait().unwrap());
     assert!(!status.success());
@@ -7561,6 +7566,19 @@ fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below
         fixture.ok(&["status", "hooked"])["workspace"]["state"],
         "ready"
     );
+}
+
+/// The lines `stream` carries, as a reader thread receives them.
+fn lines(stream: impl std::io::Read + Send + 'static) -> std::sync::mpsc::Receiver<String> {
+    let (send, receive) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        for line in std::io::BufRead::lines(std::io::BufReader::new(stream)).map_while(Result::ok) {
+            if send.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    receive
 }
 
 #[cfg(target_os = "macos")]

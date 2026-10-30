@@ -115,6 +115,7 @@ async fn cancel(ctx: &Context, id: &str, cancelled: bool) -> Result<bool> {
     );
     let id = id.to_owned();
     client::request::<()>(&ctx.paths, OperationMethod::CancelOperation { id }).await?;
+    eprintln!("Cancelling; interrupt again to stop following and leave it running");
     Ok(true)
 }
 
