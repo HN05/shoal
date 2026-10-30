@@ -17,6 +17,7 @@ use crate::{
         ui,
     },
     daemon::links::proposals::OpenOutcome,
+    execution,
     forge::{
         capability::Capability,
         items::{
@@ -25,7 +26,7 @@ use crate::{
             revert::{MergedPull, revert_options},
         },
     },
-    git::revert::{self as git_revert, Merge, Reverted},
+    git::revert::{self as git_revert, Merge, Merged, Reverted},
     model::Workspace,
     protocol::{AssignmentMethod, ItemMethod, RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
@@ -75,7 +76,7 @@ pub(super) async fn revert(ctx: &Context, selector: ItemSelector, args: RevertAr
     let options = revert_options(&merged.item, options);
     let title = options.title.as_deref().unwrap_or_default();
     let message = format!("{title}\n\nThis reverts {}.", merged.item.url);
-    if let Err(error) = revert_merge(&reverting, &merged, &message).await {
+    if let Err(error) = revert_merge(ctx, &reverting, &merged, &message).await {
         remove(ctx, &reverting).await?;
         return Err(error.context(format!(
             "could not revert {}; removed workspace {}",
@@ -136,20 +137,38 @@ async fn revert_workspace(
     split::prepare(ctx, created).await
 }
 
-/// Revert the merge on the workspace's branch, abandoning a revert that
-/// conflicts, which needs a person or an agent to resolve.
-async fn revert_merge(workspace: &Workspace, merged: &MergedPull, message: &str) -> Result<()> {
+/// Revert the merge on the workspace's branch as tracked commands of that
+/// workspace, once its worktree is verified, since setup ran in it.
+/// A revert that conflicts needs a person or an agent to resolve, so it is
+/// abandoned.
+async fn revert_merge(
+    ctx: &Context,
+    workspace: &Workspace,
+    merged: &MergedPull,
+    message: &str,
+) -> Result<()> {
+    let workspace: Workspace = request(
+        &ctx.paths,
+        WorkspaceMethod::VerifyWorkspace {
+            workspace: workspace.id.clone(),
+            on_branch: true,
+        },
+    )
+    .await?;
     let path = &workspace.path;
-    let merge = Merge::of(path, &merged.merge_commit, &merged.messages).await?;
-    match git_revert::revert(path, &merge, message).await? {
+    let facts = Merged {
+        merge_commit: &merged.merge_commit,
+        commits: &merged.commits,
+        head_ref: merged.head_ref.as_deref(),
+    };
+    let merge = Merge::of(path, &facts).await?;
+    let run = async |command| execution::publish(&ctx.paths, workspace.id.clone(), command).await;
+    match git_revert::revert(path, &merge, message, run).await? {
         Reverted::Committed => Ok(()),
-        Reverted::Conflicts(paths) => {
-            git_revert::abort(path).await?;
-            anyhow::bail!(
-                "the base branch has changed these files since the merge: {}",
-                paths.join(", ")
-            )
-        }
+        Reverted::Conflicts(paths) => anyhow::bail!(
+            "the base branch has changed these files since the merge: {}",
+            paths.join(", ")
+        ),
     }
 }
 

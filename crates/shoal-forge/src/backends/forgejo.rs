@@ -141,8 +141,8 @@ impl Backend for Forgejo {
         "sha"
     }
 
-    fn commit_message(&self) -> &'static str {
-        "/commit/message"
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/pull/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {

@@ -2,12 +2,11 @@
 //! with what reverting its merge with Git needs.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
+    backends::{Backend, rest::commit_shas},
     capability::Capability,
     items::{
         action::Edit,
@@ -38,8 +37,11 @@ pub struct MergedPull {
     /// The commit the merge left at the tip of the base branch: a merge
     /// commit, the squashed commit, or the last of the rebased ones.
     pub merge_commit: String,
-    /// The messages of the PR's commits, in the order the forge lists them.
-    pub messages: Vec<String>,
+    /// The PR's own commits, which a rebase merge copied onto the base.
+    pub commits: Vec<String>,
+    /// Where a remote of the repository keeps the PR's head, so its
+    /// commits can be fetched after its branch goes.
+    pub head_ref: Option<String>,
 }
 
 /// `options` for the revert of `item`, filling what the caller left unset:
@@ -147,7 +149,7 @@ impl ForgeRepo {
         Ok(self.finish_posted(account, posted, &follow_up).await)
     }
 
-    /// The merged PR `number` with its merge commit and commit messages.
+    /// The merged PR `number` with its merge commit and its own commits.
     pub async fn merged_pull(&self, account: &Account, number: u64) -> Result<MergedPull> {
         let current = self.merged(account, number).await?;
         let merge_commit = current.merge_commit.with_context(|| {
@@ -158,7 +160,8 @@ impl ForgeRepo {
         Ok(MergedPull {
             item: current.item,
             merge_commit,
-            messages: messages(&commits, self.kind.commit_message())?,
+            commits: commit_shas(&commits, self.kind.commit_field())?,
+            head_ref: self.kind.pull_head_ref(number),
         })
     }
 
@@ -171,20 +174,6 @@ impl ForgeRepo {
         );
         Ok(current)
     }
-}
-
-/// The message at `pointer` in each of a list of PR commits.
-fn messages(commits: &[Value], pointer: &str) -> Result<Vec<String>> {
-    commits
-        .iter()
-        .map(|commit| {
-            commit
-                .pointer(pointer)
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .context("PR commit has no message")
-        })
-        .collect()
 }
 
 #[cfg(test)]

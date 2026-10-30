@@ -128,8 +128,9 @@ pub(crate) trait Backend {
     /// The field that holds a commit's full ID in a list of PR commits.
     fn commit_field(&self) -> &'static str;
 
-    /// The JSON pointer to a commit's message in a list of PR commits.
-    fn commit_message(&self) -> &'static str;
+    /// The ref a remote of the repository keeps PR `number`'s head
+    /// commit under, where the forge keeps one after its branch goes.
+    fn pull_head_ref(&self, number: u64) -> Option<String>;
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
@@ -804,8 +805,8 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.commit_field())
     }
 
-    fn commit_message(&self) -> &'static str {
-        dispatch!(self, backend => backend.commit_message())
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        dispatch!(self, backend => backend.pull_head_ref(number))
     }
 
     fn login_hint(&self) -> &'static str {

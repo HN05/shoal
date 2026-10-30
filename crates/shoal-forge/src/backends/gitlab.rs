@@ -140,8 +140,8 @@ impl Backend for GitLab {
         "id"
     }
 
-    fn commit_message(&self) -> &'static str {
-        "/message"
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/merge-requests/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {

@@ -137,8 +137,9 @@ impl Backend for Bitbucket {
         "hash"
     }
 
-    fn commit_message(&self) -> &'static str {
-        "/message"
+    // Bitbucket keeps no ref for a pull request's head.
+    fn pull_head_ref(&self, _number: u64) -> Option<String> {
+        None
     }
 
     fn login_hint(&self) -> &'static str {
