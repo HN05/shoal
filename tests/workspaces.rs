@@ -1054,15 +1054,29 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
 }
 
 #[test]
-fn import_resume_queues_the_agents_the_export_stopped() {
+fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    // Once the test arms it, the post-setup hook fails; otherwise it marks
+    // the workspace set up.
+    let armed = fixture.root.path().join("fail-post-setup");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        format!(
+            "#!/bin/sh\nif [ -e '{}' ]; then exit 3; fi\ntouch post-setup-done\n",
+            armed.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
     let workspace = fixture.add("handed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
-    // The agent runs until it is stopped; started again, it records that and
-    // runs until the test releases it, or for at most two minutes.
+    fs::remove_file(path.join("post-setup-done")).unwrap();
+    // The agent runs until it is stopped; started again, it records whether
+    // post-setup ran first and runs until the test releases it, or for at
+    // most two minutes.
     fs::write(
         path.join("agent.sh"),
-        "if [ -e agent-started ]; then touch agent-restarted; \
+        "if [ -e agent-started ]; then \
+         if [ -e post-setup-done ]; then touch agent-restarted; else touch agent-before-setup; fi; \
          i=0; while [ ! -e release ] && [ $i -lt 120 ]; do sleep 1; i=$((i + 1)); done; \
          exit 0; fi\n\
          touch agent-started\ntrap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
@@ -1077,17 +1091,47 @@ fn import_resume_queues_the_agents_the_export_stopped() {
         .spawn()
         .unwrap();
     wait_until("agent started", || path.join("agent-started").exists());
-    let file = fixture.root.path().join("handed.shoal");
-    let file = file.to_str().unwrap();
-    fixture.ok(&["move", "export", "handed", "-o", file]);
+    wait_registered_execution(&fixture, "handed");
+    let repo = fixture.repo.to_str().unwrap();
+    let export = |name: &str| {
+        let file = fixture.root.path().join(name);
+        fixture.ok(&["move", "export", "handed", "-o", file.to_str().unwrap()]);
+        file
+    };
+    let file = export("first.shoal");
     assert!(agent.wait_with_output().unwrap().status.success());
 
-    let repo = fixture.repo.to_str().unwrap();
-    let imported = fixture.ok(&["move", "import", file, "--repo", repo, "--resume"]);
+    // A failed post-setup leaves the agents stopped.
+    fs::write(&armed, "").unwrap();
+    let failed = fixture.run(&[
+        "move",
+        "import",
+        file.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--resume",
+    ]);
+    assert!(!failed.status.success(), "{failed:?}");
+    assert_eq!(fixture.ok(&["queue"]), serde_json::json!([]));
+    assert!(path.exists() && !path.join("post-setup-done").exists());
+
+    fs::remove_file(&armed).unwrap();
+    let file = export("second.shoal");
+    let imported = fixture.ok(&[
+        "move",
+        "import",
+        file.to_str().unwrap(),
+        "--repo",
+        repo,
+        "--resume",
+    ]);
     let queued = imported["queued"]["queued"].as_array().unwrap();
     assert_eq!(queued.len(), 1, "{imported}");
-    wait_until("agent restarted", || path.join("agent-restarted").exists());
+    wait_until("agent restarted", || {
+        path.join("agent-restarted").exists() || path.join("agent-before-setup").exists()
+    });
     fs::write(path.join("release"), "").unwrap();
+    assert!(path.join("agent-restarted").exists());
 }
 
 /// Install an `ssh` in `fixture`'s PATH that runs the remote command in
@@ -1155,6 +1199,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
         .spawn()
         .unwrap();
     wait_until("agent started", || path.join("agent-started").exists());
+    wait_registered_execution(&here, "handed");
 
     // A machine ssh cannot reach removes nothing.
     let shoal = env!("CARGO_BIN_EXE_shoal");

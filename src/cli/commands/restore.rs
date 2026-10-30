@@ -193,14 +193,18 @@ pub(super) async fn finish_reopen(
     let Some(mut reopened) = prepare_reopened(ctx, restored).await? else {
         return Ok(1);
     };
+    // The agents start in a workspace whose post-setup hook succeeded.
     if resume {
+        super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
         reopened.queue_agents(ctx).await;
     }
     ctx.emit(&reopened.message(ctx, action), &reopened)?;
     if terminal::follows_caller(ctx) {
         shell::navigate(&reopened.workspace.path, ctx.json)?;
     }
-    super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
+    if !resume {
+        super::workspaces::run_post_setup(ctx, &reopened.workspace).await?;
+    }
     Ok(0)
 }
 

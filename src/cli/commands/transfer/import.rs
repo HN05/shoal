@@ -150,11 +150,15 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
     let mut report = ImportReport::default();
     for file in files {
         match import_and_prepare(ctx, file, options).await {
-            Ok(reopened) => {
+            Ok(mut reopened) => {
                 let workspace = reopened.workspace.clone();
+                let post_setup = super::super::workspaces::run_post_setup(ctx, &workspace).await;
+                // The agents start in a workspace whose post-setup hook succeeded.
+                if post_setup.is_ok() && options.resume {
+                    reopened.queue_agents(ctx).await;
+                }
                 report.imported(ctx, reopened);
-                if let Err(error) = super::super::workspaces::run_post_setup(ctx, &workspace).await
-                {
+                if let Err(error) = post_setup {
                     let error = error.context(format!(
                         "imported {}, but its hooks.post_setup failed",
                         workspace.name
@@ -175,13 +179,9 @@ async fn import_and_prepare(
     options: &ImportOptions,
 ) -> Result<Reopened> {
     let restored = import_workspace(ctx, file, options).await?;
-    let mut reopened = super::super::restore::prepare_reopened(ctx, restored)
+    super::super::restore::prepare_reopened(ctx, restored)
         .await?
-        .context("its setup did not finish")?;
-    if options.resume {
-        reopened.queue_agents(ctx).await;
-    }
-    Ok(reopened)
+        .context("its setup did not finish")
 }
 
 /// The workspaces an import of several files opened, and the files it could
