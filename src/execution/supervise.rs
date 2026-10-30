@@ -9,6 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use tokio::{
     process::Child,
     signal::unix::{Signal, SignalKind, signal},
+    sync::watch,
     time::timeout,
 };
 
@@ -263,6 +264,9 @@ async fn wait_for_child(
             _ = signals.terminate.recv() => return end_session(child, group, libc::SIGTERM, &ending).await,
             _ = signals.interrupt.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGINT).await?, None)),
             _ = signals.quit.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGQUIT).await?, None)),
+            _ = signals.cancelled.wait_for(|cancelled| *cancelled) => {
+                return Ok(Outcome::ended(stop(child, group, libc::SIGTERM).await?, None));
+            }
             status = child.wait() => {
                 let status = status?;
                 return Ok(Outcome::ended(status, status.signal().and_then(Halt::ended_by)));
@@ -308,6 +312,7 @@ struct ExecutionSignals {
     terminate: Signal,
     interrupt: Signal,
     quit: Signal,
+    cancelled: watch::Receiver<bool>,
 }
 
 impl ExecutionSignals {
@@ -317,6 +322,7 @@ impl ExecutionSignals {
             terminate: signal(SignalKind::terminate())?,
             interrupt: signal(SignalKind::interrupt())?,
             quit: signal(SignalKind::quit())?,
+            cancelled: super::cancellation(),
         })
     }
 }

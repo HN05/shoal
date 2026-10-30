@@ -4,6 +4,7 @@
 //! the same wrapper in a background `shoal` process with a log file instead
 //! of the terminal, so the invoking CLI returns once the launch is recorded.
 mod attachment;
+mod cancellation;
 mod completion;
 mod demo;
 mod detached;
@@ -22,6 +23,7 @@ use anyhow::{Result, ensure};
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{env, paths::Paths};
+pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 pub use detached::{DetachedLaunch, launch_detached};
 use launch::{run_taken_over, run_tracked};

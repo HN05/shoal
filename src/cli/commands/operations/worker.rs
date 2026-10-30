@@ -66,21 +66,20 @@ pub(in crate::cli::commands) async fn run(ctx: &Context) -> Result<i32> {
     Ok(0)
 }
 
-/// Set once the daemon cancels the operation, which it does with SIGTERM,
-/// or the worker is interrupted. Tracked executions stop their commands on
-/// the same signals themselves; the steps between them stop here.
+/// Cancel this process's work once the daemon cancels the operation, which
+/// it does with SIGTERM, or the worker is interrupted: tracked commands
+/// stop, and the steps between them stop here.
 fn cancellation() -> Result<watch::Receiver<bool>> {
     let mut terminate = signal(SignalKind::terminate())?;
     let mut interrupt = signal(SignalKind::interrupt())?;
-    let (cancel, cancelled) = watch::channel(false);
     tokio::spawn(async move {
         tokio::select! {
             _ = terminate.recv() => {}
             _ = interrupt.recv() => {}
         }
-        cancel.send_replace(true);
+        crate::execution::cancel();
     });
-    Ok(cancelled)
+    Ok(crate::execution::cancellation())
 }
 
 async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Result<Outcome> {

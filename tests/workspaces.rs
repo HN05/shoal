@@ -7488,6 +7488,46 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
 }
 
 #[test]
+fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
+    let fixture = Fixture::new();
+    let started = fixture.root.path().join("pre-setup-started");
+    let release = fixture.root.path().join("release-pre-setup");
+    install_test_script(
+        fixture.repo.join("pre-setup.sh"),
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
+            started.display(),
+            release.display()
+        ),
+    );
+    // Setup that ran on would outlast every wait below.
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        "#!/bin/sh\nexec python3 -c 'import time; time.sleep(600)'\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.pre_setup = 'pre-setup.sh'\n",
+    );
+    let mut add = fixture
+        .command()
+        .args(["--json", "add", fixture.repo.to_str().unwrap(), "gated"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("the pre-setup hook to start", || started.exists());
+    assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
+    // The cancel reached the worker before its setup listened for signals.
+    fs::write(&release, "").unwrap();
+    let status = wait_for("the CLI to stop", || add.try_wait().unwrap());
+    assert!(!status.success());
+    let status = fixture.ok(&["status", "gated"]);
+    assert_eq!(status["workspace"]["state"], "failed");
+    assert_eq!(status["executions"], serde_json::json!([]));
+}
+
+#[test]
 fn interrupting_the_cli_stops_the_post_setup_hook_even_one_ignoring_sigterm() {
     let fixture = Fixture::new();
     let pid_file = fixture.root.path().join("hook.pid");
