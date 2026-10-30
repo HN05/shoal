@@ -193,9 +193,11 @@ impl Manager {
             removed.name
         );
         let repo = self.repository(&removed.repository_id).await?;
-        let (sessions, warnings) = self.session_sources(&repo, &removed).await;
+        let (sessions, mut warnings) = self.session_sources(&repo, &removed).await;
+        let (manifest, left_out) = crate::transfer::export(&repo, removed, sessions, file).await?;
+        warnings.extend(left_out);
         Ok(ExportedWorkspace {
-            manifest: crate::transfer::export(&repo, removed, sessions, file).await?,
+            manifest,
             removal: removal.map(|(_, removal)| removal),
             warnings,
         })

@@ -1,4 +1,8 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use super::*;
 use crate::{
@@ -468,4 +472,32 @@ fn moved_records_keep_no_session_place_or_wrapper() {
         (moved.session, moved.origin, moved.waiting),
         (None, None, None)
     );
+}
+
+#[test]
+fn a_session_with_an_unreadable_file_is_left_out_with_a_warning() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let source = |session: &str, name: &str| {
+        let path = directory.path().join(name);
+        fs::write(&path, name).unwrap();
+        SessionSource {
+            agent: "claude".into(),
+            session: session.into(),
+            path: name.into(),
+            source: path,
+        }
+    };
+    let kept = source("s1", "kept.jsonl");
+    let readable = source("s2", "readable.jsonl");
+    let unreadable = source("s2", "unreadable.jsonl");
+    fs::set_permissions(&unreadable.source, fs::Permissions::from_mode(0o000)).unwrap();
+    let (opened, warnings) = open_sessions(vec![kept, readable, unreadable]);
+    let paths: Vec<_> = opened.iter().map(|(file, _)| file.path.clone()).collect();
+    assert_eq!(paths, [PathBuf::from("kept.jsonl")]);
+    assert_eq!(opened[0].0.size, "kept.jsonl".len() as u64);
+    let [warning] = warnings.as_slice() else {
+        panic!("one warning: {warnings:?}");
+    };
+    assert!(warning.contains("claude session s2"), "{warning}");
 }

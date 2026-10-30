@@ -98,18 +98,19 @@ pub struct ExportedWorkspace {
 }
 
 /// Write `removed`, a workspace of `repo`, with its agents' session files
-/// `sessions`, to the new file `path` for `shoal move import`; a failure
+/// `sessions`, to the new file `path` for `shoal move import`, with a warning
+/// for each session left out because a file of it cannot be read; a failure
 /// leaves no partial file and an existing one is never replaced.
 pub async fn export(
     repo: &Repository,
     removed: RemovedWorkspace,
     sessions: Vec<SessionSource>,
     path: PathBuf,
-) -> Result<Manifest> {
+) -> Result<(Manifest, Vec<String>)> {
     let mut manifest = Manifest::of(repo, removed).await?;
-    let sessions = tokio::task::spawn_blocking(move || measure(sessions))
+    let (sessions, warnings) = tokio::task::spawn_blocking(move || open_sessions(sessions))
         .await
-        .context("read the session files")??;
+        .context("read the session files")?;
     manifest.session_files = sessions.iter().map(|(file, _)| file.clone()).collect();
     let bundle = match manifest.bundle {
         true => Some(Bundle::create(&repo.path, &manifest).await?),
@@ -119,27 +120,53 @@ pub async fn export(
     tokio::task::spawn_blocking(move || write_new(&path, &written, &sessions, bundle.as_ref()))
         .await
         .context("write the export")??;
-    Ok(manifest)
+    Ok((manifest, warnings))
 }
 
-/// Each of `sessions` with its size now; its agent has stopped, so it no
-/// longer grows.
-fn measure(sessions: Vec<SessionSource>) -> Result<Vec<(SessionFile, PathBuf)>> {
-    sessions
-        .into_iter()
-        .map(|source| {
-            let size = std::fs::metadata(&source.source)
-                .with_context(|| format!("read {}", source.source.display()))?
-                .len();
-            let file = SessionFile {
-                agent: source.agent,
-                session: source.session,
-                path: source.path,
-                size,
-            };
-            Ok((file, source.source))
-        })
-        .collect()
+/// A session file opened for the export, with its size now; its agent has
+/// stopped, so it no longer grows.
+type OpenedSessionFile = (SessionFile, std::fs::File);
+
+/// Open the files of `sessions`, leaving out every file of a session one of
+/// whose files cannot be opened, with a warning, so that session starts over
+/// rather than the export failing after its workspace's removal.
+fn open_sessions(sessions: Vec<SessionSource>) -> (Vec<OpenedSessionFile>, Vec<String>) {
+    let mut opened: Vec<OpenedSessionFile> = Vec::new();
+    let mut failed: Vec<String> = Vec::new();
+    let mut warnings = Vec::new();
+    for source in sessions {
+        if failed.contains(&source.session) {
+            continue;
+        }
+        match open_session_file(&source) {
+            Ok(file) => opened.push((
+                SessionFile {
+                    agent: source.agent,
+                    session: source.session,
+                    path: source.path,
+                    size: file.1,
+                },
+                file.0,
+            )),
+            Err(error) => {
+                opened.retain(|(file, _)| file.session != source.session);
+                warnings.push(format!(
+                    "left out the files of {} session {}: {error:#}",
+                    source.agent, source.session
+                ));
+                failed.push(source.session);
+            }
+        }
+    }
+    (opened, warnings)
+}
+
+/// The file `source` names, opened, with its size.
+fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
+    let file = std::fs::File::open(&source.source)
+        .with_context(|| format!("read {}", source.source.display()))?;
+    let size = file.metadata()?.len();
+    Ok((file, size))
 }
 
 impl Manifest {
@@ -257,7 +284,7 @@ impl Bundle {
 fn write_new(
     path: &Path,
     manifest: &Manifest,
-    sessions: &[(SessionFile, PathBuf)],
+    sessions: &[OpenedSessionFile],
     bundle: Option<&Bundle>,
 ) -> Result<()> {
     let directory = directory(path);
@@ -270,14 +297,12 @@ fn write_new(
     }
     serde_json::to_writer(&mut out, manifest)?;
     writeln!(out)?;
-    for (session, source) in sessions {
-        let input =
-            std::fs::File::open(source).with_context(|| format!("read {}", source.display()))?;
+    for (session, input) in sessions {
         let copied = std::io::copy(&mut input.take(session.size), &mut out)?;
         ensure!(
             copied == session.size,
             "{} shrank while it was exported",
-            source.display()
+            session.path.display()
         );
     }
     if let Some(bundle) = bundle {
