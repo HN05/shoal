@@ -1,9 +1,10 @@
 //! Where an item command that needs only a repository runs: a workspace, or
 //! a registered checkout, where `shoal chat` runs its agent.
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
+    model::Repository,
     protocol::ItemContext,
 };
 
@@ -33,4 +34,16 @@ pub(in crate::cli::commands) async fn select_context(
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
     Ok(ItemContext::Workspace(workspace))
+}
+
+/// The repository registered with the checkout ID `repository`.
+pub(in crate::cli::commands) async fn checkout_repository(
+    ctx: &Context,
+    repository: &str,
+) -> Result<Repository> {
+    client::repositories(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|repo| repo.id == repository)
+        .context("the checkout's repository is no longer registered")
 }

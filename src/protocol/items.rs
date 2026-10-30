@@ -87,11 +87,12 @@ pub enum ItemMethod {
         search: crate::forge::items::list::Search,
         repository: Option<String>,
     },
-    /// A request to the forge API of the workspace's repository, or the one
+    /// A request to the forge API of the context's repository, or the one
     /// `repository` names, answered with the response's JSON text in one or
     /// more `api_response` frames and then `ok`.
     ForgeApi {
-        workspace: String,
+        #[serde(flatten)]
+        context: ItemContext,
         request: crate::forge::raw::RawRequest,
         repository: Option<String>,
     },

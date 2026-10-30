@@ -62,12 +62,12 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::Items));
         }
         ItemMethod::ForgeApi {
-            workspace,
+            context,
             request: raw,
             repository,
         } => {
             let response = manager
-                .forge_api(&workspace, &raw, repository.as_deref(), caller.is_some())
+                .forge_api(&context, &raw, repository.as_deref(), caller.is_some())
                 .await
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));
@@ -175,6 +175,7 @@ impl Scoped for ItemMethod {
             ),
             ItemMethod::OpenIssue { context, .. }
             | ItemMethod::ListItems { context, .. }
+            | ItemMethod::ForgeApi { context, .. }
             | ItemMethod::ItemAction {
                 context,
                 action:
@@ -198,7 +199,6 @@ impl Scoped for ItemMethod {
             | ItemMethod::OpenPull { workspace, .. }
             | ItemMethod::RevertPull { workspace, .. }
             | ItemMethod::MergedPull { workspace, .. }
-            | ItemMethod::ForgeApi { workspace, .. }
             | ItemMethod::SelectItems { workspace, .. } => Some(workspace),
         })
     }

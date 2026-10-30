@@ -4,10 +4,18 @@
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::{args::repository::RepositoryArgs, client, context::Context, ui},
+    cli::{
+        args::repository::RepositoryArgs,
+        client,
+        commands::{
+            issues,
+            items::{checkout_repository, select_context},
+        },
+        context::Context,
+    },
     forge::{ForgeRepo, capability::Capabilities},
     model::Workspace,
-    protocol::WorkspaceMethod,
+    protocol::{ItemContext, WorkspaceMethod},
     repository,
 };
 
@@ -17,18 +25,24 @@ pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> R
     Ok(0)
 }
 
-/// The repository `--repo` names, or the one of the selected workspace.
+/// The repository `--repo` names, or the one of the selected workspace or
+/// registered checkout.
 pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Result<ForgeRepo> {
-    let own = workspace_forge(ctx, args.workspace).await?;
+    let own = match select_context(ctx, args.workspace).await? {
+        ItemContext::Workspace(workspace) => workspace_forge(ctx, workspace).await?,
+        ItemContext::Checkout(repository) => {
+            let repository = checkout_repository(ctx, &repository).await?;
+            issues::origin_forge(ctx, &repository).await?
+        }
+    };
     match args.repo {
         Some(named) => own.resolve_named(&named, &ctx.forge_hosts()?).await,
         None => Ok(own),
     }
 }
 
-/// The forge of the selected workspace's `origin` remote.
-async fn workspace_forge(ctx: &Context, workspace: Option<String>) -> Result<ForgeRepo> {
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+/// The forge of the workspace's `origin` remote.
+async fn workspace_forge(ctx: &Context, workspace: String) -> Result<ForgeRepo> {
     let workspace: Workspace = client::request(
         &ctx.paths,
         WorkspaceMethod::VerifyWorkspace {

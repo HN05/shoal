@@ -4756,6 +4756,17 @@ fn item_commands_act_from_a_registered_checkout() {
     assert_eq!(reviewers[0]["name"], "kim", "{reviewers}");
     let resolved = in_checkout(&["--json", "pr", "resolve", "6", "8"]);
     assert!(resolved.status.success(), "{resolved:?}");
+    // Another repository's reads work there as in a workspace.
+    fixture.respond(json!({
+        "GET repos/team/tool/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
+        "GET repos/team/tool": {"body": {"name": "tool"}},
+    }));
+    let labels = in_checkout(&["--json", "repo", "labels", "--repo", "team/tool"]);
+    let labels: Value = serde_json::from_slice(&labels.stdout).unwrap();
+    assert_eq!(labels[0]["name"], "bug", "{labels}");
+    let api = ["--json", "forge", "api", "repos/{owner}/{repo}", "--repo", "team/tool"];
+    let read: Value = serde_json::from_slice(&in_checkout(&api).stdout).unwrap();
+    assert_eq!(read, json!({"name": "tool"}));
     // A checkout links nothing, so the item must be named.
     for args in [&["issue", "close"][..], &["view"]] {
         let refused = in_checkout(args);

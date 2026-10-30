@@ -11,13 +11,37 @@ use crate::{
         raw::{HttpMethod, RawRequest},
     },
     model::Workspace,
+    protocol::ItemContext,
 };
 
 impl Manager {
-    /// The forge's response to `request` in the workspace's repository, or
-    /// the one `repository` names, sent as its agent account for a `scoped`
-    /// caller and as the user's own logins otherwise.
+    /// The forge's response to `request` in the repository of `context`, or
+    /// the one `repository` names, sent as the workspace's agent account for
+    /// a `scoped` caller and as the user's own logins otherwise. Only
+    /// unscoped callers send from a registered checkout.
     pub async fn forge_api(
+        &self,
+        context: &ItemContext,
+        request: &RawRequest,
+        repository: Option<&str>,
+        scoped: bool,
+    ) -> Result<Value> {
+        match context {
+            ItemContext::Workspace(selector) => {
+                self.workspace_forge_api(selector, request, repository, scoped)
+                    .await
+            }
+            ItemContext::Checkout(selector) => {
+                let checkout = self.repository(selector).await?;
+                let own = self.checkout_forge(&checkout).await?;
+                let forge = self.named_forge(own, repository).await?;
+                forge.raw(&self.user_account(), request).await
+            }
+        }
+    }
+
+    /// The forge's response to `request` sent for the workspace.
+    async fn workspace_forge_api(
         &self,
         selector: &str,
         request: &RawRequest,

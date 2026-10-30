@@ -2,6 +2,7 @@ use serde_json::json;
 
 use crate::{
     forge::raw::{HttpMethod, RawRequest},
+    protocol::ItemContext,
     test_support::{git, install_test_script, manager, repository},
 };
 
@@ -35,6 +36,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .write_local_config(&repo.id, Some(auth.clone()))
         .await
         .unwrap();
+    let context = ItemContext::Workspace(workspace.id.clone());
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
@@ -42,12 +44,12 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
 
     let read = manager
-        .forge_api(&workspace.id, &request(HttpMethod::Get), None, true)
+        .forge_api(&context, &request(HttpMethod::Get), None, true)
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     let error = manager
-        .forge_api(&workspace.id, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, true)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("api_writes"), "{error:#}");
@@ -63,7 +65,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&workspace.id, &request(HttpMethod::Patch), None, true)
+        .forge_api(&context, &request(HttpMethod::Patch), None, true)
         .await
         .unwrap();
     let sent = std::fs::read_to_string(&log).unwrap();
@@ -71,18 +73,13 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
-        .forge_api(
-            &workspace.id,
-            &request(HttpMethod::Get),
-            Some("team/tool"),
-            true,
-        )
+        .forge_api(&context, &request(HttpMethod::Get), Some("team/tool"), true)
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     let error = manager
         .forge_api(
-            &workspace.id,
+            &context,
             &request(HttpMethod::Patch),
             Some("team/tool"),
             true,

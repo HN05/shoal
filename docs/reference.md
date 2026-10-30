@@ -2705,8 +2705,9 @@ capability of the workspace repository's forge, such as resolving review
 threads, rerunning CI jobs, labels or a merge method, and whether the forge has
 it, with what to do instead when it does not; `--json` returns `forge` and
 `capabilities`, each with `capability`, `supported` and an optional `hint`.
-With `--repo`, named as for `issue open --repo`, this command, `shoal forge
-reactions` and `shoal repo labels` read another repository. A
+Outside a workspace, such as in a chat, this command, `shoal forge reactions`
+and `shoal repo labels` read the repository of the registered checkout they run
+in, and with `--repo`, named as for `issue open --repo`, another repository. A
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
 
@@ -3146,8 +3147,9 @@ shoal forge api 'repos/{owner}/{repo}' -X PATCH --input body.json
 shoal forge api 'repos/{owner}/{repo}/labels' --repo team/review-bot  # another repository
 ```
 
-`shoal forge api` sends a request to a path under the workspace repository's forge API
-root, such as `/api/v1` on Forgejo, and prints the JSON response, which `--json`
+`shoal forge api` sends a request to a path under the forge API root of the
+repository of the workspace, or outside one, such as in a chat, of the
+registered checkout it runs in, such as `/api/v1` on Forgejo, and prints the JSON response, which `--json`
 prints on one line. `{owner}` and `{repo}` fill in the repository, or the one
 `--repo` names as for `issue open --repo`; on GitLab
 `{owner}` is the encoded group path, so `projects/{owner}%2F{repo}` names a

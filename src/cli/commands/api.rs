@@ -1,12 +1,13 @@
-//! `shoal forge api`: any request to the forge API of the workspace's
-//! repository or another one, for what no other command reads.
+//! `shoal forge api`: any request to the forge API of the repository of the
+//! workspace or registered checkout, or of another one, for what no other
+//! command reads.
 use std::{io::Read, path::Path};
 
 use anyhow::{Context as _, Result};
 use serde_json::Value;
 
 use crate::{
-    cli::{args::repository::ApiArgs, client, context::Context, ui},
+    cli::{args::repository::ApiArgs, client, commands::items::select_context, context::Context},
     forge::raw::{HttpMethod, RawRequest},
 };
 
@@ -24,12 +25,11 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
     };
     // Refuse a bad path before the workspace picker asks for anything.
     request.check()?;
-    let workspace =
-        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
+    let context = select_context(ctx, args.workspace).await?;
     let response = ctx
         .progress(
             "Requesting",
-            client::forge_api(&ctx.paths, workspace, request, args.repo),
+            client::forge_api(&ctx.paths, context, request, args.repo),
         )
         .await?;
     ctx.show(&response, |response| {

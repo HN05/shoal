@@ -223,12 +223,12 @@ where
 /// reassembled from the pieces the daemon sends it in.
 pub async fn forge_api(
     paths: &Paths,
-    workspace: String,
+    context: crate::protocol::ItemContext,
     request: crate::forge::raw::RawRequest,
     repository: Option<String>,
 ) -> Result<serde_json::Value> {
     let method = ItemMethod::ForgeApi {
-        workspace,
+        context,
         request,
         repository,
     };

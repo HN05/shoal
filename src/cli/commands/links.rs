@@ -86,11 +86,7 @@ async fn checkout_selected(
     let input = selection
         .input
         .context("outside a workspace, nothing is linked; pass a number or URL")?;
-    let repo = client::repositories(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|repo| repo.id == repository)
-        .context("the checkout's repository is no longer registered")?;
+    let repo = super::items::checkout_repository(ctx, repository).await?;
     let forge = match elsewhere {
         true => item_url_forge(ctx, selection.kind, &input).await?,
         false => None,

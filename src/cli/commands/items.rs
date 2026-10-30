@@ -37,7 +37,7 @@ use self::{
     thread::{reply, resolve, thread},
 };
 pub(crate) use content::read_body;
-pub(super) use context::select_context;
+pub(super) use context::{checkout_repository, select_context};
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
