@@ -229,16 +229,21 @@ pub async fn run_until(
 }
 
 /// Stop the hook's process `group`, which `command` started it in: SIGTERM,
-/// then SIGKILL once the stop grace passes, as a tracked command is stopped.
+/// then SIGKILL unless the whole group exits within the stop grace, as a
+/// tracked command is stopped.
 async fn stop_group(child: &mut tokio::process::Child, group: i32) -> Result<()> {
     // SAFETY: signalling the hook's own process group.
     unsafe {
         libc::kill(-group, libc::SIGTERM);
     }
-    if tokio::time::timeout(timing::EXECUTION_STOP_GRACE, child.wait())
-        .await
-        .is_err()
-    {
+    let exited = async {
+        child.wait().await?;
+        crate::process::identity::group_exited(group as u32).await
+    };
+    if !matches!(
+        tokio::time::timeout(timing::EXECUTION_STOP_GRACE, exited).await,
+        Ok(Ok(()))
+    ) {
         // SAFETY: as above.
         unsafe {
             libc::kill(-group, libc::SIGKILL);

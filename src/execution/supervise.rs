@@ -1,9 +1,6 @@
 //! Supervising a tracked command: registering its process group with the
 //! daemon, handing it the terminal, and waiting for it to exit or be stopped.
-use std::{
-    ffi::OsString, os::unix::process::ExitStatusExt, path::Path, process::ExitStatus,
-    time::Duration,
-};
+use std::{ffi::OsString, os::unix::process::ExitStatusExt, path::Path, process::ExitStatus};
 
 use anyhow::{Context, Result, bail, ensure};
 use tokio::{
@@ -336,16 +333,7 @@ impl ProcessGroup {
     }
 
     async fn wait_for_exit(&self) -> Result<()> {
-        // The leader may exit before descendants finish their signal handlers.
-        // Native identity checks exclude zombies that can no longer clean up.
-        while !process::identity::related(None, Some(self.pid()), None)
-            .await?
-            .1
-            .is_empty()
-        {
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-        Ok(())
+        process::identity::group_exited(self.pid()).await
     }
 
     fn send(&self, signal: i32) {

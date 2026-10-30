@@ -7528,13 +7528,14 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
 }
 
 #[test]
-fn interrupting_the_cli_stops_the_post_setup_hook_even_one_ignoring_sigterm() {
+fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below_it() {
     let fixture = Fixture::new();
     let pid_file = fixture.root.path().join("hook.pid");
+    // The hook exits on SIGTERM; what it started does not.
     install_test_script(
         fixture.repo.join("post-setup.sh"),
         format!(
-            "#!/bin/sh\ntrap '' TERM\necho $$ > '{}'\nexec python3 -c 'import time; time.sleep(60)'\n",
+            "#!/bin/sh\n(trap '' TERM; exec python3 -c 'import time; time.sleep(60)') &\necho $! > '{}'\nwait\n",
             pid_file.display()
         ),
     );
@@ -7555,7 +7556,7 @@ fn interrupting_the_cli_stops_the_post_setup_hook_even_one_ignoring_sigterm() {
     let mut stderr = String::new();
     std::io::Read::read_to_string(add.stderr.as_mut().unwrap(), &mut stderr).unwrap();
     assert!(stderr.contains("hooks.post_setup was stopped"), "{stderr}");
-    wait_until("the hook to stop", || !process_running(pid));
+    wait_until("what the hook started to stop", || !process_running(pid));
     assert_eq!(
         fixture.ok(&["status", "hooked"])["workspace"]["state"],
         "ready"

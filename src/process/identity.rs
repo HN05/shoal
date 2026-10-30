@@ -1381,6 +1381,16 @@ impl Identity {
 /// whose own environment lacks the marker of `execution`, such as a demo the
 /// command started. Without that proof, group members are candidates only and
 /// must not be killed.
+/// Wait until no process of process group `group` remains. A leader may
+/// exit before its descendants finish their signal handlers; native identity
+/// checks exclude zombies that can no longer clean up.
+pub async fn group_exited(group: u32) -> Result<()> {
+    while !related(None, Some(group), None).await?.1.is_empty() {
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    Ok(())
+}
+
 pub async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
