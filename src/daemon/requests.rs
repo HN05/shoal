@@ -11,6 +11,7 @@ mod files;
 mod holds;
 mod items;
 mod notifications;
+mod operations;
 mod ports;
 mod questions;
 mod queue;
@@ -62,6 +63,7 @@ pub(super) async fn handle(
         Operation::Item(method) => items::handle(&server.manager, method, caller).await,
         Operation::Ci(method) => ci::handle(&server.manager, method, caller).await,
         Operation::Notification(method) => notifications::handle(&server.manager, method).await,
+        Operation::Operations(method) => operations::handle(&server.manager, method, caller).await,
         Operation::Question(method) => questions::handle(&server.manager, method, caller).await,
         Operation::Approval(method) => approvals::handle(&server.manager, method, caller).await,
         Operation::Port(method) => ports::handle(&server.manager, method, caller).await,

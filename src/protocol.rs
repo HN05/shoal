@@ -35,6 +35,7 @@ mod files;
 mod holds;
 mod items;
 mod notifications;
+pub mod operations;
 mod ports;
 mod questions;
 mod queue;
@@ -59,6 +60,7 @@ pub use files::FileMethod;
 pub use holds::HoldMethod;
 pub use items::{DownloadPiece, ItemContext, ItemMethod};
 pub use notifications::NotificationMethod;
+pub use operations::OperationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;
 pub use queue::QueueMethod;
@@ -234,6 +236,7 @@ pub enum Operation {
     Item(ItemMethod),
     Ci(CiMethod),
     Notification(NotificationMethod),
+    Operations(OperationMethod),
     Question(QuestionMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),
@@ -302,6 +305,7 @@ impl Operation {
             Self::Queue(method) => method.lifetime(),
             Self::Item(method) => method.lifetime(),
             Self::Notification(method) => method.lifetime(),
+            Self::Operations(method) => method.lifetime(),
             Self::Question(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Repository(_)
@@ -367,6 +371,7 @@ from_domains!(
     Item(ItemMethod),
     Ci(CiMethod),
     Notification(NotificationMethod),
+    Operations(OperationMethod),
     Question(QuestionMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),
@@ -602,6 +607,9 @@ response_bodies! {
     SimCatalog(SimulatorCatalog),
     SimOverview(crate::sim::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
+    OperationStarted(operations::Started),
+    OperationEvent(operations::OperationEvent),
+    OperationEnded(operations::Ended),
 }
 
 impl TryFrom<Body> for () {

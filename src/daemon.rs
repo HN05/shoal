@@ -26,6 +26,7 @@ mod keep_awake;
 pub mod links;
 pub(crate) mod log;
 pub mod notifications;
+pub(crate) mod operations;
 mod overload;
 #[cfg(test)]
 mod overload_tests;

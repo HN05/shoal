@@ -324,6 +324,14 @@ fn queue_start_round_trips_its_entry() {
 }
 
 #[test]
+fn operation_parses_without_arguments() {
+    assert!(matches!(
+        parse(Worker::Operation, false),
+        InternalCommand::Operation
+    ));
+}
+
+#[test]
 fn proxy_report_round_trips_its_json() {
     let report = r#"{"report_upstream_reset":{"workspace":"w","execution":"e"}}"#;
     let InternalCommand::ProxyReport { report: parsed } =

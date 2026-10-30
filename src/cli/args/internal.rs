@@ -129,6 +129,9 @@ pub enum InternalCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Run an operation the daemon started, reading its order on stdin.
+    #[command(name = internal::OPERATION)]
+    Operation,
     /// Start an admitted agent queue entry; the daemon runs it.
     #[command(name = internal::QUEUE_START)]
     QueueStart { entry: String },

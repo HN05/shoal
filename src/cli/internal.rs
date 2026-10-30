@@ -17,6 +17,7 @@ pub const SESSION: &str = "session";
 pub const DEMO: &str = "demo";
 pub const SECRET_TOOL: &str = "secret-tool";
 pub const QUEUE_START: &str = "queue-start";
+pub const OPERATION: &str = "operation";
 pub const ADD: &str = "add";
 pub const LAUNCH: &str = "launch";
 pub const COPY_IGNORED: &str = "copy-ignored";
@@ -72,6 +73,8 @@ pub enum Worker<'a> {
         launch: &'a str,
         command: &'a [OsString],
     },
+    /// Run the operation whose order the daemon writes to standard input.
+    Operation,
     /// Start an admitted queue entry where its launching terminal would.
     QueueStart {
         entry: &'a str,
@@ -249,6 +252,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             ]);
             args.extend_from_slice(command);
         }
+        Worker::Operation => args.push(OPERATION.into()),
         Worker::QueueStart { entry } => args.extend([QUEUE_START.into(), entry.into()]),
         Worker::Add {
             host,
