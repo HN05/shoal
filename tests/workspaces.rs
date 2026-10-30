@@ -3812,7 +3812,7 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
 #[test]
 fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
