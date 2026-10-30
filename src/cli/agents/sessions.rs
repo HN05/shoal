@@ -108,27 +108,48 @@ fn is_file_name(id: &str) -> bool {
     )
 }
 
-/// Put the session files an import carried where the agents of `workspace`
-/// look for them, as [`place`] does. A development build leaves them to the
+/// Whose agents an import's session files go to.
+pub(in crate::cli) enum SessionHome<'a> {
+    /// The workspace the import opened.
+    Workspace(&'a Workspace),
+    /// The repository the import recorded the workspace in when opening it
+    /// failed, so `shoal work restore` reopens it with its sessions; without
+    /// the workspace, its `[env]` is unknown.
+    Repository(crate::repository::Selector),
+}
+
+/// Put the session files an import carried where the agents of `home` look
+/// for them, as [`place`] does. A development build leaves them to the
 /// installed Shoal. Failures only warn; that agent's resume then fails to
 /// find its session.
 pub(in crate::cli) async fn install_session_files(
     ctx: &Context,
-    workspace: &Workspace,
+    home: SessionHome<'_>,
     files: &[ImportedSessionFile],
 ) {
     if files.is_empty() || !crate::build::changes_user_files() {
         return;
     }
-    let settings =
-        match client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await {
-            Ok(settings) => settings,
-            Err(error) => {
-                eprintln!("warning: cannot place the agents' session files: {error:#}");
-                return;
-            }
-        };
-    let workspace_environment = workspaces::agent_environment(ctx, workspace).await;
+    let (target, workspace) = match home {
+        SessionHome::Workspace(workspace) => (
+            ConfigTarget::Workspace(workspace.id.clone()),
+            Some(workspace),
+        ),
+        SessionHome::Repository(selector) => (ConfigTarget::Repository(selector), None),
+    };
+    let settings = match client::settings(&ctx.paths, target).await {
+        Ok(settings) => settings,
+        // The import's own error says why it found no repository.
+        Err(_) if workspace.is_none() => return,
+        Err(error) => {
+            eprintln!("warning: cannot place the agents' session files: {error:#}");
+            return;
+        }
+    };
+    let workspace_environment = match workspace {
+        Some(workspace) => workspaces::agent_environment(ctx, workspace).await,
+        None => BTreeMap::new(),
+    };
     let mut directories = BTreeMap::new();
     for imported in files {
         let agent = &imported.file.agent;

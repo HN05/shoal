@@ -6331,15 +6331,41 @@ fn export_carries_session_files_that_import_puts_back() {
     // the agent continues its session.
     fs::remove_dir_all(&projects).unwrap();
     let repo = fixture.repo.to_str().unwrap();
-    // A development build leaves agents' files to the installed Shoal
-    // unless told otherwise.
+    // The import records the workspace but cannot open it while another
+    // branch has its name; its sessions still arrive, for the restore that
+    // opens it. A development build leaves agents' files to the installed
+    // Shoal unless told otherwise.
+    let tree = git(&fixture.repo, &["write-tree"]);
+    let unrelated = git(
+        &fixture.repo,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit-tree",
+            tree.trim(),
+            "-m",
+            "Another history",
+        ],
+    );
+    git(
+        &fixture.repo,
+        &["branch", "-f", "transcript", unrelated.trim()],
+    );
     let imported = fixture
         .command()
         .env("SHOAL_DEV_USER_FILES", "1")
         .args(["--json", "move", "import", file, "--repo", repo])
         .output()
         .unwrap();
-    assert!(imported.status.success(), "{imported:?}");
+    assert!(!imported.status.success(), "{imported:?}");
+    assert!(
+        String::from_utf8_lossy(&imported.stderr).contains("shoal work restore transcript"),
+        "{imported:?}"
+    );
+    git(&fixture.repo, &["branch", "-D", "transcript"]);
+    fixture.ok(&["work", "restore", "transcript"]);
     assert_eq!(
         fs::read_to_string(project.join("moved-session.jsonl")).unwrap(),
         "{\"turn\":1}\n"

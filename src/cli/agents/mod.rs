@@ -41,8 +41,8 @@ pub(in crate::cli) use claude::APP as CLAUDE_APP;
 pub(in crate::cli) use codex::APP as CODEX_APP;
 pub(in crate::cli) use desktop::{App, T3};
 pub(in crate::cli) use launch::input;
-pub(in crate::cli) use sessions::install_session_files;
 pub(crate) use sessions::session_sources;
+pub(in crate::cli) use sessions::{SessionHome, install_session_files};
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
 pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};

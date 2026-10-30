@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        agents,
+        agents::{self, SessionHome},
         client::request,
         context::Context,
         output::{Palette, Style},
@@ -72,41 +72,49 @@ async fn import_workspace(
         .clone()
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
+    let selector = ui::repository_selector(repository)?;
+    let record = workspace_here(&import.manifest, options.sessions);
+    let kept = kept_sessions(&record);
+    let carried: Vec<_> = import
+        .sessions
+        .into_iter()
+        .filter(|imported| kept.contains(&imported.file.session))
+        .collect();
     let method = RemovalMethod::ImportWorkspace {
-        repository: ui::repository_selector(repository)?,
+        repository: selector.clone(),
         bundle: import
             .bundle
             .as_ref()
             .map(|bundle| bundle.path().to_owned()),
         prerequisite: import.manifest.prerequisite.clone(),
-        workspace: Box::new(workspace_here(&import.manifest, options.sessions)),
+        workspace: Box::new(record),
     };
     let restored = ctx
         .progress(
             "Importing workspace",
             request::<RestoredWorkspace>(&ctx.paths, method),
         )
-        .await?;
-    let kept = kept_sessions(&restored.removed);
-    let carried: Vec<_> = import
-        .sessions
-        .into_iter()
-        .filter(|imported| kept.contains(imported.file.session.as_str()))
-        .collect();
-    agents::install_session_files(ctx, &restored.opened.workspace, &carried).await;
-    Ok(restored)
+        .await;
+    // A workspace recorded but not opened keeps its sessions for `shoal
+    // work restore`.
+    let home = match &restored {
+        Ok(restored) => SessionHome::Workspace(&restored.opened.workspace),
+        Err(_) => SessionHome::Repository(selector),
+    };
+    agents::install_session_files(ctx, home, &carried).await;
+    restored
 }
 
 /// The sessions the agents of the imported record `removed` continue.
-fn kept_sessions(removed: &RemovedWorkspace) -> BTreeSet<&str> {
+fn kept_sessions(removed: &RemovedWorkspace) -> BTreeSet<String> {
     let stopped = removed
         .agents
         .iter()
-        .filter_map(|agent| agent.record.session.as_deref());
+        .filter_map(|agent| agent.record.session.clone());
     let last = removed
         .last_sessions
         .iter()
-        .filter_map(|last| last.session.as_deref());
+        .filter_map(|last| last.session.clone());
     stopped.chain(last).collect()
 }
 
