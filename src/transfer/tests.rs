@@ -476,7 +476,6 @@ fn moved_records_keep_no_session_place_or_wrapper() {
 
 #[test]
 fn a_session_with_an_unreadable_file_is_left_out_with_a_warning() {
-    use std::os::unix::fs::PermissionsExt;
     let directory = tempfile::tempdir().unwrap();
     let source = |session: &str, name: &str| {
         let path = directory.path().join(name);
@@ -490,8 +489,9 @@ fn a_session_with_an_unreadable_file_is_left_out_with_a_warning() {
     };
     let kept = source("s1", "kept.jsonl");
     let readable = source("s2", "readable.jsonl");
+    // Gone since it was found, which no privilege opens.
     let unreadable = source("s2", "unreadable.jsonl");
-    fs::set_permissions(&unreadable.source, fs::Permissions::from_mode(0o000)).unwrap();
+    fs::remove_file(&unreadable.source).unwrap();
     let (opened, warnings) = open_sessions(vec![kept, readable, unreadable]);
     let paths: Vec<_> = opened.iter().map(|(file, _)| file.path.clone()).collect();
     assert_eq!(paths, [PathBuf::from("kept.jsonl")]);
