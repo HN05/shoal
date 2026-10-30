@@ -18200,7 +18200,10 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         worktree.join("post-setup.sh"),
         "#!/bin/sh\nprintf '%s|%s' \"${AGENT_TOKEN-unset}\" \"${SHOAL_SECRET_ENV-unset}\" > hook-env\n",
     );
-    install_test_script(worktree.join("setup.sh"), "#!/bin/sh\n");
+    install_test_script(
+        worktree.join("setup.sh"),
+        "#!/bin/sh\nprintf '%s' \"${AGENT_TOKEN-unset}\" > setup-env\n",
+    );
     fs::write(
         worktree.join(".shoal.toml"),
         "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
@@ -18219,7 +18222,8 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     ]);
     assert!(!output.status.success(), "{output:?}");
 
-    // A hook started beneath an agent drops the secrets it inherited.
+    // Setup and its hook started beneath an agent never get the secrets it
+    // inherited: the daemon starts them, and none travel through it.
     let output = fixture
         .command()
         .env("AGENT_TOKEN", "inherited")
@@ -18231,6 +18235,10 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     assert_eq!(
         fs::read_to_string(worktree.join("hook-env")).unwrap(),
         "unset|unset"
+    );
+    assert_eq!(
+        fs::read_to_string(worktree.join("setup-env")).unwrap(),
+        "unset"
     );
 
     // The local config can replace a secret; a failing command

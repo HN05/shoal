@@ -44,18 +44,15 @@ impl std::fmt::Display for Failed {
 
 impl std::error::Error for Failed {}
 
-/// Start `spec` in this process's environment and follow it to its end,
-/// returning what it did.
+/// Start `spec` in this process's environment, without its secrets, and
+/// follow it to its end, returning what it did.
 pub(super) async fn run<T>(ctx: &Context, spec: OperationSpec) -> Result<T>
 where
     T: TryFrom<Outcome, Error = anyhow::Error>,
 {
-    let env = std::env::vars_os()
-        .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
-        .collect();
     let method = OperationMethod::StartOperation {
         spec,
-        env: Some(env),
+        env: Some(crate::env::without_secrets()),
     };
     let Started { id } = client::request(&ctx.paths, method).await?;
     T::try_from(follow(ctx, id).await?)

@@ -292,6 +292,25 @@ pub fn path_without_secret_tools() -> Option<OsString> {
     .ok()
 }
 
+/// This process's environment for work another process does on its behalf:
+/// without the secrets an enclosing agent launch exported, or their
+/// launchers on the PATH, so no secret travels through the daemon. Values
+/// that are not UTF-8 stay behind.
+pub fn without_secrets() -> BTreeMap<String, String> {
+    let secrets = inherited_secret_exports();
+    let path = path_without_secret_tools();
+    std::env::vars_os()
+        .filter_map(|(name, value)| {
+            let value = match (name.to_str()?, &path) {
+                ("PATH", Some(path)) => path.clone(),
+                _ => value,
+            };
+            Some((name.into_string().ok()?, value.into_string().ok()?))
+        })
+        .filter(|(name, _)| !secrets.contains(name) && name != SECRET_ENV && name != SECRET_TOOLS)
+        .collect()
+}
+
 /// Set rendered `[env]` values on `command`, putting a preset's directories
 /// first on the PATH it would otherwise get.
 pub fn apply_configured(command: &mut Command, values: &BTreeMap<String, OsString>) {

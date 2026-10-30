@@ -105,7 +105,7 @@ Workspace setup with the post-setup hook, `pr open`'s push and landing are
 operations: the daemon starts their work in a worker process of its own,
 detached as it starts queued agents, so the work goes on when the CLI or app that
 asked for it goes. The worker acts with the caller's scope and, from the CLI, its
-environment, and runs the same tracked executions and hooks the CLI ran, under
+environment without the secrets an agent launch exported, and runs the same tracked executions and hooks the CLI ran, under
 the same checks; what it and its processes write becomes the operation's output,
 and it reports typed steps and its end. The CLI starts an operation and follows
 it, showing its output where it showed it before, so the CLI and apps cannot
