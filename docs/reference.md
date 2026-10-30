@@ -3218,7 +3218,8 @@ account; successful and pending checks omit log output.
 report an error, as does a check that links no CI job in the repository, such as
 an outside service's; log downloads are limited to 8 MiB.
 Linked runs show as `shoal view ci` shows a run (see [CI runs](#ci-runs)).
-Kinds and explicit items select as they do for `watch`, and
+Kinds and explicit items select as they do for `watch`, except that an issue
+or PR URL may name another repository's item, shown without failed job logs, and
 `--no-comments` leaves out comments and reviews. Outside a workspace, such as in
 a chat, it shows the item a number or URL names in the repository of the
 registered checkout it runs in, without failed job logs, which `--check` there

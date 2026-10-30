@@ -106,7 +106,12 @@ pub(super) async fn handle(
         ItemMethod::SelectItems {
             workspace,
             selection,
-        } => Body::SelectedItems(manager.select_items(&workspace, &selection).await?),
+            elsewhere,
+        } => Body::SelectedItems(
+            manager
+                .select_items(&workspace, &selection, elsewhere)
+                .await?,
+        ),
         ItemMethod::SetIssue {
             workspace,
             url,

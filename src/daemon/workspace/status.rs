@@ -109,21 +109,66 @@ async fn issue_status(
 }
 
 impl Manager {
-    /// The selected items in link order, with the worktree to look them up from.
+    /// The selected items in link order, with the worktree to look them up
+    /// from. With `elsewhere`, an issue or PR URL of another repository
+    /// selects that item.
     pub async fn select_items(
         &self,
         selector: &str,
         selection: &link::Selection,
+        elsewhere: bool,
     ) -> Result<Selected> {
         let workspace = self.workspace(selector).await?;
-        let items = self.selected_items(&workspace, selection).await?;
-        Ok(Selected {
-            path: workspace.path,
-            items: items
+        let other = match elsewhere {
+            true => self.item_elsewhere(&workspace, selection).await?,
+            false => None,
+        };
+        let items = match other {
+            Some(item) => vec![item],
+            None => (self.selected_items(&workspace, selection).await?)
                 .into_iter()
                 .map(|(url, kind)| SelectedItem { url, kind })
                 .collect(),
+        };
+        Ok(Selected {
+            path: workspace.path,
+            items,
         })
+    }
+
+    /// The issue or PR whose URL `selection` names, when it is of another
+    /// repository than the workspace's.
+    async fn item_elsewhere(
+        &self,
+        workspace: &Workspace,
+        selection: &link::Selection,
+    ) -> Result<Option<SelectedItem>> {
+        let (Some(kind), Some(input)) = (selection.kind, selection.input.as_deref()) else {
+            return Ok(None);
+        };
+        if IssueInput::parse(input) != IssueInput::Url {
+            return Ok(None);
+        }
+        let (forge, url) = match kind {
+            link::LinkKind::Issue => {
+                let forge = self.issue_url_forge(input).await?;
+                let (_, url) = forge.issue(input)?;
+                (forge, url)
+            }
+            link::LinkKind::Pr => {
+                let forge = self.pull_forge(input).await?;
+                let (_, url) = forge.pull(input)?;
+                (forge, url)
+            }
+            link::LinkKind::Ci => return Ok(None),
+        };
+        let remote = repository::remote_url_from_path(&workspace.path)
+            .await?
+            .context("item lookup needs an origin remote")?;
+        if forge == self.forge(&remote).await? {
+            return Ok(None);
+        }
+        Ok(Some(SelectedItem { url, kind }))
     }
 
     /// Workspaces that link an issue or PR, or hold a lease on a resource,

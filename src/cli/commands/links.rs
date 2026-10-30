@@ -14,7 +14,7 @@ use crate::{
     },
     daemon::refusal::{Reason, Refusal},
     forge::{
-        IssueInput, PullRequest,
+        ForgeRepo, IssueInput, PullRequest,
         items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
     },
     git,
@@ -50,11 +50,13 @@ pub(super) async fn select_in_context(
 }
 
 /// The items `selection` names: in the workspace, where it may name linked
-/// ones, or in the repository of the registered checkout.
+/// ones, or in the repository of the registered checkout. With `elsewhere`,
+/// an issue or PR URL of another repository selects that item.
 pub(super) async fn select_items(
     ctx: &Context,
     context: &ItemContext,
     selection: Selection,
+    elsewhere: bool,
 ) -> Result<Selected> {
     match context {
         ItemContext::Workspace(workspace) => {
@@ -62,19 +64,24 @@ pub(super) async fn select_items(
             let method = ItemMethod::SelectItems {
                 workspace,
                 selection,
+                elsewhere,
             };
             client::request(&ctx.paths, method).await
         }
-        ItemContext::Checkout(repository) => checkout_selected(ctx, repository, selection).await,
+        ItemContext::Checkout(repository) => {
+            checkout_selected(ctx, repository, selection, elsewhere).await
+        }
     }
 }
 
 /// The item `selection` names in the repository of its registered checkout,
-/// where nothing is linked.
+/// where nothing is linked, or with `elsewhere` in the repository its issue
+/// or PR URL names.
 async fn checkout_selected(
     ctx: &Context,
     repository: &str,
     selection: Selection,
+    elsewhere: bool,
 ) -> Result<Selected> {
     let input = selection
         .input
@@ -84,7 +91,14 @@ async fn checkout_selected(
         .into_iter()
         .find(|repo| repo.id == repository)
         .context("the checkout's repository is no longer registered")?;
-    let forge = super::issues::origin_forge(ctx, &repo).await?;
+    let forge = match elsewhere {
+        true => item_url_forge(ctx, selection.kind, &input).await?,
+        false => None,
+    };
+    let forge = match forge {
+        Some(forge) => forge,
+        None => super::issues::origin_forge(ctx, &repo).await?,
+    };
     let kind = match selection.kind {
         Some(kind) => kind,
         None => forge
@@ -101,6 +115,23 @@ async fn checkout_selected(
         path: repo.path,
         items: vec![SelectedItem { url, kind }],
     })
+}
+
+/// The repository of the issue or PR whose URL `input` is.
+async fn item_url_forge(
+    ctx: &Context,
+    kind: Option<LinkKind>,
+    input: &str,
+) -> Result<Option<ForgeRepo>> {
+    if IssueInput::parse(input) != IssueInput::Url {
+        return Ok(None);
+    }
+    let hosts = ctx.forge_hosts()?;
+    Ok(Some(match kind {
+        Some(LinkKind::Issue) => ForgeRepo::resolve_issue_url(input, &hosts).await?,
+        Some(LinkKind::Pr) => ForgeRepo::resolve_pull_url(input, &hosts).await?,
+        _ => return Ok(None),
+    }))
 }
 
 /// Give a number selected without a kind the kind of the linked item with
@@ -134,6 +165,7 @@ async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Opti
         ItemMethod::SelectItems {
             workspace: workspace.to_owned(),
             selection: Selection::default(),
+            elsewhere: false,
         },
     )
     .await?;

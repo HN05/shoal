@@ -24,7 +24,7 @@ use crate::{
             run_view::{JobRef, RunView},
         },
         items::{
-            link::{LinkKind, Selection},
+            link::{ItemKind, LinkKind, Selection},
             reaction::Reaction,
         },
         review::view::{AutoMerge, Details, ItemView, PrDetails, Review},
@@ -70,7 +70,7 @@ async fn view(
         };
         return show_log(ctx, workspace, selection, check).await;
     }
-    let selected = links::select_items(ctx, &context, selection).await?;
+    let selected = links::select_items(ctx, &context, selection, true).await?;
     let views = read_views(ctx, &context, &selected, !no_comments).await?;
     ctx.show(&views, |views| render_views(views, ctx.json))?;
     Ok(i32::from(views.iter().any(Shown::failed)))
@@ -118,9 +118,11 @@ async fn read_views(
 ) -> Result<Vec<Shown>> {
     ctx.progress("Reading items", async {
         let hosts = ctx.forge_hosts()?;
-        let mut items = read(selected, &hosts, &ctx.forge_account()?, comments).await?;
+        let own = own_forge(selected, &hosts).await?;
+        let account = ctx.forge_account()?;
+        let mut items = read(selected, &own, &hosts, &account, comments).await;
         if let ItemContext::Workspace(workspace) = context {
-            read_failed_logs(ctx, &hosts, workspace, &mut items).await;
+            read_failed_logs(ctx, &own, workspace, &mut items).await;
         }
         let runs = read_runs(ctx, context, selected).await;
         Ok(in_selection_order(selected, items, runs))
@@ -206,7 +208,7 @@ fn render_views(views: &[Shown], json: bool) {
 async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
     may_open_browser(ctx)?;
     let (context, selection) = links::select_in_context(ctx, items).await?;
-    let selected = links::select_items(ctx, &context, selection).await?;
+    let selected = links::select_items(ctx, &context, selection, true).await?;
     open_urls(
         ctx,
         selected.items.into_iter().map(|item| item.url).collect(),
@@ -260,34 +262,61 @@ async fn show_log(
 /// Each item as the forge reports it now, in selection order.
 async fn read(
     selected: &Selected,
+    own: &ForgeRepo,
     hosts: &ForgeHosts<'_>,
     account: &Account,
     comments: bool,
-) -> Result<Vec<ItemView>> {
+) -> Vec<ItemView> {
+    futures_util::future::join_all(selected.items.iter().filter_map(|item| {
+        let kind = item.kind.item()?;
+        Some(async move {
+            match item_forge(own, kind, &item.url, hosts).await {
+                Ok(forge) => forge.view(account, kind, &item.url, comments).await,
+                Err(error) => ItemView {
+                    url: item.url.clone(),
+                    kind,
+                    details: None,
+                    check_logs: Vec::new(),
+                    errors: vec![format!("{error:#}")],
+                },
+            }
+        })
+    }))
+    .await
+}
+
+/// The repository the items were selected in.
+async fn own_forge(selected: &Selected, hosts: &ForgeHosts<'_>) -> Result<ForgeRepo> {
     let remote = repository::remote_url_from_path(&selected.path)
         .await?
         .context("item lookup needs an origin remote")?;
-    let forge = ForgeRepo::resolve(&remote, hosts).await?;
-    Ok(
-        futures_util::future::join_all(selected.items.iter().filter_map(|item| {
-            let kind = item.kind.item()?;
-            Some(forge.view(account, kind, &item.url, comments))
-        }))
-        .await,
-    )
+    ForgeRepo::resolve(&remote, hosts).await
 }
 
-async fn read_failed_logs(
-    ctx: &Context,
+/// The repository the item at `url` is in: `own`, or the other one its URL
+/// names.
+async fn item_forge(
+    own: &ForgeRepo,
+    kind: ItemKind,
+    url: &str,
     hosts: &ForgeHosts<'_>,
-    workspace: &str,
-    views: &mut [ItemView],
-) {
+) -> Result<ForgeRepo> {
+    match kind {
+        ItemKind::Issue if own.issue(url).is_err() => {
+            ForgeRepo::resolve_issue_url(url, hosts).await
+        }
+        ItemKind::Pr if own.pull(url).is_err() => ForgeRepo::resolve_pull_url(url, hosts).await,
+        _ => Ok(own.clone()),
+    }
+}
+
+/// The failed checks' logs of the workspace repository's PRs among `views`.
+async fn read_failed_logs(ctx: &Context, own: &ForgeRepo, workspace: &str, views: &mut [ItemView]) {
+    if !own.supports(Capability::ReadJobLogs) {
+        return;
+    }
     for view in views {
-        if !ForgeRepo::resolve_pull_url(&view.url, hosts)
-            .await
-            .is_ok_and(|forge| forge.supports(Capability::ReadJobLogs))
-        {
+        if own.pull(&view.url).is_err() {
             continue;
         }
         let Some(pr) = view

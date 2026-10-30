@@ -205,5 +205,5 @@ async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> 
         kind: Some(LinkKind::Pr),
         input: selector.item.clone(),
     };
-    super::links::select_items(ctx, &context, selection).await
+    super::links::select_items(ctx, &context, selection, false).await
 }

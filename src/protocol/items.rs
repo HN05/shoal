@@ -95,10 +95,13 @@ pub enum ItemMethod {
         request: crate::forge::raw::RawRequest,
         repository: Option<String>,
     },
-    /// Linked items, or an explicit one, for the CLI to look up.
+    /// Linked items, or an explicit one, for the CLI to look up; with
+    /// `elsewhere`, also an issue or PR of another repository by its URL.
     SelectItems {
         workspace: String,
         selection: crate::forge::items::link::Selection,
+        #[serde(default)]
+        elsewhere: bool,
     },
     /// The forge `host` serves, asking it over `scheme` once when neither
     /// the global config nor a recorded answer says.

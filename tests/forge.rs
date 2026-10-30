@@ -1114,6 +1114,41 @@ fn views_count_reactions_and_mark_the_logins_own() {
 }
 
 #[test]
+fn views_read_another_repositorys_item_by_its_url() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let issue = "repos/team/tool/issues/5";
+    fixture.respond(json!({
+        format!("GET {issue}"): {"body": {"number": 5, "title": "Crash", "state": "open",
+            "labels": [], "user": {"login": "ann"}}},
+        format!("GET {issue}/comments"): {"body": [{"id": 9, "body": "Same", "user": {"login": "bob"}}]},
+        "GET user": {"body": {"login": "me"}},
+        format!("GET {issue}/reactions?limit=50&page=1"): {"body": []},
+        "GET repos/team/tool/issues/comments/9/reactions": {"body": []},
+    }));
+    let url = fixture.web.replace("team/project", "team/tool") + "/issues/5";
+    let view = &fixture.ok(&["view", &url, "--workspace", "topic"])[0];
+    assert_eq!(view["url"], url, "{view}");
+    assert_eq!(view["title"], "Crash", "{view}");
+    assert_eq!(view["comments"][0]["body"], "Same", "{view}");
+    assert!(view.get("errors").is_none(), "{view}");
+    assert_eq!(scoped(&fixture, &["view", &url])[0]["title"], "Crash");
+    // Watching it stays limited to the workspace's repository.
+    let watched = fixture.run(&[
+        "watch",
+        "issue",
+        &url,
+        "--workspace",
+        "topic",
+        "--timeout",
+        "1",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&watched.stderr).contains("different repository"),
+        "{watched:?}"
+    );
+}
+
+#[test]
 fn github_reactions_find_inline_comments_and_remove_by_id() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
