@@ -3325,6 +3325,31 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
 }
 
 #[test]
+fn a_watched_run_waiting_for_approval_reports_once_it_has_run() {
+    let fixture = Fixture::new(Forge::GitHub, "[cleanup.auto]\nenabled=false\n");
+    let url = "https://github.com/team/project/actions/runs/21";
+    let respond = |conclusion: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/actions/runs/21": {"body": {"id": 21,
+                "head_branch": "contributor", "status": "completed", "conclusion": conclusion,
+                "html_url": url}},
+        }))
+    };
+    // GitHub reports a held run as completed, but it has yet to run.
+    respond("action_required");
+    fixture.ok(&["link", "ci", url, "related", "--workspace", "topic"]);
+    let held = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "1"]);
+    assert_eq!(held["updates"], json!([]), "{held}");
+    respond("success");
+    let finished = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
+    assert_eq!(
+        finished["updates"][0]["message"],
+        format!("Run finished; read it with shoal view ci {url}"),
+        "{finished}"
+    );
+}
+
+#[test]
 fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let mut open = pull(8, "open", "Fix", &[]);
