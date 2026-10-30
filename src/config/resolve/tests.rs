@@ -31,39 +31,13 @@ fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
 }
 
 #[test]
-fn a_former_template_name_still_layers_and_warns() {
-    let stack = stack(
-        "agent_template = 'global'",
-        "agent_template = 'file'",
-        "issue_template = 'Plan first.'",
-    );
-    assert_eq!(
-        stack.clone().resolve().unwrap().worker_template.as_deref(),
-        Some("global\n\nfile")
-    );
-    assert_eq!(
-        stack.warnings(),
-        [
-            "global config: agent_template and agent-template.md are now named \
-                 worker_template and worker-template.md",
-            "worktree file: agent_template and agent-template.md are now named \
-                 worker_template and worker-template.md",
-            "saved repository config: issue_template and issue-template.md are no \
-                 longer used; move their instructions to worker_template",
-        ]
-    );
-    let both = "worker_template = 'new'\nagent_template = 'old'";
-    assert!(parse(both).is_err());
-    assert!(Config::parse(both, &crate::paths::Paths::for_test("/home/test")).is_err());
-
+fn former_template_files_are_not_read() {
     let directory = tempfile::tempdir().unwrap();
-    for name in [
-        config::templates::WORKER_FILE,
-        config::templates::RENAMED_AGENT_FILE,
-    ] {
+    for name in ["agent-template.md", "issue-template.md"] {
         std::fs::write(directory.path().join(name), name).unwrap();
     }
-    assert!(config::repo::load(directory.path()).is_err());
+    let config = config::repo::load(directory.path()).unwrap();
+    assert_eq!(config.worker_template, None);
 }
 
 #[test]
@@ -342,10 +316,6 @@ fn every_option_survives_layering_in_both_directions() {
     let RepoConfig {
         commands,
         agent_resume,
-        // Retired, so no layer passes it on.
-        retired_issue_template: _,
-        // Moved to `worker_template` before layering.
-        renamed_agent_template: _,
         worker_template,
         chat_template,
         agent_auth,
@@ -382,9 +352,6 @@ fn every_option_survives_layering_in_both_directions() {
         resource_pools,
         simulators,
         cleanup,
-        // Parsing folds the former names into `cleanup`.
-        auto_cleanup: _,
-        pr_cleanup: _,
         done,
         idle_stop,
         review,

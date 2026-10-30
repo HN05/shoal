@@ -7107,7 +7107,7 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 }
 
 #[test]
-fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
+fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
     let environment = |fixture: &Fixture| -> Vec<String> {
         fixture
             .ok(&["alerts", "--all", "--keep-unread"])
@@ -7123,22 +7123,29 @@ fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
             .iter()
             .any(|message| message.contains(setting))
     };
-    let fixture = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    let fixture = Fixture::with_config(Some(
+        "worker_template = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'\n",
+    ));
     // The startup check reads the config before it records its alerts, so
     // this one shows it is past reading by the time the config changes.
     wait_until("the startup environment alert", || {
-        reported(&fixture, "agent_template")
+        reported(&fixture, "worker_template")
     });
-    // A setting added later is reported only by the reload.
+    // A problem added later is reported only by the reload. A root inside a
+    // file cannot be created.
+    let root_file = tempfile::NamedTempFile::new().unwrap();
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "issue_template = 'Describe the bug.'\n",
+        format!(
+            "root_dir = {:?}\n",
+            root_file.path().join("repos").to_str().unwrap()
+        ),
     )
     .unwrap();
-    assert!(!reported(&fixture, "issue_template"));
+    assert!(!reported(&fixture, "root_dir"));
     fixture.ok(&["daemon", "reload"]);
     wait_until("the reload environment alert", || {
-        reported(&fixture, "issue_template")
+        reported(&fixture, "root_dir")
     });
 }
 
@@ -13865,88 +13872,6 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
-fn the_built_in_issue_prompt_ignores_retired_issue_templates() {
-    let fixture = Fixture::new();
-    let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(
-        config_dir.join("issue-template.md"),
-        "global {number}: {title} {body}",
-    )
-    .unwrap();
-    let bin = fixture.root.path().join("template-bin");
-    fs::create_dir(&bin).unwrap();
-    for (tool, script) in [
-        (
-            "gh",
-            r#"#!/bin/sh
-printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(false)"}'
-"#,
-        ),
-        ("claude", "#!/bin/sh\nprintf '%s\\0' \"$@\"\n"),
-    ] {
-        let path = bin.join(tool);
-        install_test_script_with_mode(&path, script, 0o700);
-    }
-    fixture.add_github_origin();
-    let local = fixture.root.path().join("local.toml");
-    fs::write(&local, "issue_template = 'saved {body}'").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        local.to_str().unwrap(),
-    ]);
-    let output = fixture
-        .command()
-        .args([
-            "--json",
-            "add",
-            fixture.repo.to_str().unwrap(),
-            "template",
-            "--base",
-            "HEAD",
-            "--issue",
-            "44",
-            "--agent",
-            "claude",
-        ])
-        .env("PATH", fixture.restricted_path(&bin))
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let args = strip_shoal_arguments(stdout.split_once('\n').unwrap().1, '\0');
-    let prompt = args.split('\0').next().unwrap();
-    assert!(
-        prompt.starts_with("Work on issue #44: Literal {body}\n"),
-        "{prompt}"
-    );
-    assert!(
-        prompt.contains("\nIssue description:\n$(false)\n"),
-        "{prompt}"
-    );
-    assert!(
-        !prompt.contains("global") && !prompt.contains("saved"),
-        "{prompt}"
-    );
-    let output = fixture
-        .command()
-        .args(["--json", "config", "show", "template"])
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    for layer in ["global config", "saved repository config"] {
-        assert!(
-            stderr.contains(&format!("warning: {layer}: issue_template")),
-            "{stderr}"
-        );
-    }
-}
-
-#[test]
 fn add_item_finds_the_repository_and_starts_the_default_agent() {
     let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
     let other = fixture.root.path().join("other");
@@ -15244,7 +15169,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
 
 #[test]
 fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("waits");
     fixture.add_github_origin();
     let mut responses = github_pr(7, "waits");
@@ -15871,7 +15796,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
 
 #[test]
 fn view_shows_linked_items_with_status_and_discussion() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("view");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");

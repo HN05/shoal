@@ -54,14 +54,7 @@ states!(
 pub struct RepoConfig {
     pub commands: crate::config::named_commands::Commands,
     pub agent_resume: crate::config::named_commands::Commands,
-    /// Retired with issue templates; kept so configs written by earlier
-    /// versions still load and `config show` can say it is unused.
-    #[serde(rename = "issue_template")]
-    pub retired_issue_template: Option<String>,
     pub worker_template: Option<String>,
-    /// What `worker_template` was called; still read, with a rename warning.
-    #[serde(rename = "agent_template")]
-    pub renamed_agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_auth: crate::agent_auth::Config,
     pub git_profile: Option<String>,
@@ -112,12 +105,6 @@ pub struct RepoConfig {
     pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
     pub simulators: SimulatorPreferences,
     pub cleanup: Cleanup,
-    /// Former names of `[cleanup.auto]` and `[cleanup.pr]`; parsing folds them
-    /// into `cleanup` so existing configs load.
-    #[serde(skip_serializing)]
-    pub auto_cleanup: AutoCleanup,
-    #[serde(skip_serializing)]
-    pub pr_cleanup: PrCleanup,
     pub done: Done,
     pub idle_stop: IdleStop,
     pub review: Review,
@@ -237,17 +224,10 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         }
         None => RepoConfig::default(),
     };
-    if config.retired_issue_template.is_none() {
-        config.retired_issue_template = crate::config::templates::read(
-            workspace_dir,
-            crate::config::templates::RETIRED_ISSUE_FILE,
-        )?;
+    if config.worker_template.is_none() {
+        config.worker_template =
+            crate::config::templates::read(workspace_dir, crate::config::templates::WORKER_FILE)?;
     }
-    crate::config::templates::read_worker(
-        workspace_dir,
-        &mut config.worker_template,
-        &mut config.renamed_agent_template,
-    )?;
     if config.chat_template.is_none() {
         config.chat_template =
             crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
@@ -256,28 +236,9 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
 }
 
 impl RepoConfig {
-    /// Move settings set under a former name to their current one, and warn
-    /// about each, about settings Shoal no longer reads, and about a worker
-    /// template that repeats the built-in guidance.
-    pub fn normalize(&mut self) -> Vec<&'static str> {
+    /// Warn about a worker template that repeats the built-in guidance.
+    pub fn normalize(&self) -> Vec<&'static str> {
         let mut warnings = Vec::new();
-        if let Some(template) = self.renamed_agent_template.take() {
-            self.worker_template = Some(template);
-            warnings.push(
-                "agent_template and agent-template.md are now named \
-                 worker_template and worker-template.md",
-            );
-        }
-        if self
-            .retired_issue_template
-            .as_deref()
-            .is_some_and(crate::config::templates::is_custom_issue_template)
-        {
-            warnings.push(
-                "issue_template and issue-template.md are no longer used; \
-                 move their instructions to worker_template",
-            );
-        }
         if self
             .worker_template
             .as_deref()
@@ -293,16 +254,9 @@ impl RepoConfig {
 }
 
 pub fn parse(text: &str) -> Result<RepoConfig> {
-    let mut config: RepoConfig = toml::from_str(text)?;
-    config
-        .cleanup
-        .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
+    let config: RepoConfig = toml::from_str(text)?;
     crate::config::named_commands::validate(&config.commands)?;
     crate::config::named_commands::validate(&config.agent_resume)?;
-    crate::config::templates::ensure_one_worker(
-        &config.worker_template,
-        &config.renamed_agent_template,
-    )?;
     config.agent_auth.validate()?;
     if let Some(name) = &config.git_profile {
         crate::validate::name("git profile", name)?;
@@ -388,15 +342,6 @@ impl Cleanup {
         }
         Ok(())
     }
-
-    /// Take the values the former `[auto_cleanup]` and `[pr_cleanup]` tables
-    /// set where `[cleanup]` leaves them unset, emptying those tables.
-    pub fn fold_legacy(&mut self, auto: &mut AutoCleanup, pr: &mut PrCleanup) {
-        let (auto, pr) = (std::mem::take(auto), std::mem::take(pr));
-        self.auto.enabled = self.auto.enabled.or(auto.enabled);
-        self.auto.idle_minutes = self.auto.idle_minutes.or(auto.idle_minutes);
-        self.pr.enabled = self.pr.enabled.or(pr.enabled);
-    }
 }
 
 /// Repository values for the global `[cleanup.auto]`.
@@ -435,10 +380,6 @@ pub struct IdleStop {
 #[serde(default, deny_unknown_fields)]
 pub struct Done {
     pub cleanup: Option<bool>,
-    /// Retired with automatic completion, which merged cleanup replaced; read
-    /// and ignored so configs written by earlier versions still load.
-    #[serde(rename = "automatic", skip_serializing)]
-    pub retired_automatic: Option<bool>,
 }
 
 /// Whether agent reviews of PRs and issues post their findings to the forge.

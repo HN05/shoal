@@ -772,7 +772,6 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
         fs::read_to_string(&template).unwrap(),
         include_str!("../src/config/templates/chat.md")
     );
-    assert!(!config.with_file_name("issue-template.md").exists());
     fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
     assert!(!config.with_file_name("worker-template.md").exists());

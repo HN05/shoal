@@ -84,14 +84,7 @@ pub struct Config {
     pub ai: crate::ai::Table,
     pub commands: named_commands::Commands,
     pub agent_resume: named_commands::Commands,
-    /// Retired with issue templates; read so configs written by earlier
-    /// versions still load and `config show` can say it is unused.
-    #[serde(rename = "issue_template")]
-    pub retired_issue_template: Option<String>,
     pub worker_template: Option<String>,
-    /// What `worker_template` was called; still read, with a rename warning.
-    #[serde(rename = "agent_template")]
-    pub renamed_agent_template: Option<String>,
     pub chat_template: Option<String>,
     pub agent_dirs: Option<Vec<String>>,
     pub agent_auth: crate::agent_auth::Config,
@@ -111,8 +104,6 @@ pub struct Config {
     pub post_resource_acquire_cmd: Option<String>,
     pub pre_resource_release_cmd: Option<String>,
     pub root_dir: Option<PathBuf>,
-    /// Former name of `root_dir`; still accepted so existing configs load.
-    pub repositories_dir: Option<PathBuf>,
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default_agent: Option<crate::agent::Agent>,
     /// Agents running at once on this machine; defaults to measured load and
@@ -135,10 +126,6 @@ pub struct Config {
     pub happy: repo::Happy,
     pub overload: overload::Overload,
     pub cleanup: repo::Cleanup,
-    /// Former names of `[cleanup.auto]` and `[cleanup.pr]`; parsing folds them
-    /// into `cleanup` so existing configs load.
-    pub auto_cleanup: repo::AutoCleanup,
-    pub pr_cleanup: repo::PrCleanup,
     pub done: repo::Done,
     pub idle_stop: repo::IdleStop,
     pub review: repo::Review,
@@ -455,7 +442,7 @@ impl Config {
     /// Parent of every repository directory: `<root>/<repo>/` holds the
     /// repository's URL clone as `.checkout` and its workspaces as siblings.
     pub fn root_dir(&self, paths: &Paths) -> Result<PathBuf> {
-        let Some(path) = self.root_dir.as_ref().or(self.repositories_dir.as_ref()) else {
+        let Some(path) = &self.root_dir else {
             return Ok(paths.home.join("shoal"));
         };
         let path = crate::fsutil::expand_home(path, &paths.home);
@@ -612,15 +599,9 @@ impl Config {
         let mut config = Self::load(paths)?;
         let directory = Self::path(paths);
         let directory = directory.parent().context("config has no directory")?;
-        if config.retired_issue_template.is_none() {
-            config.retired_issue_template =
-                templates::read(directory, templates::RETIRED_ISSUE_FILE)?;
+        if config.worker_template.is_none() {
+            config.worker_template = templates::read(directory, templates::WORKER_FILE)?;
         }
-        templates::read_worker(
-            directory,
-            &mut config.worker_template,
-            &mut config.renamed_agent_template,
-        )?;
         if config.chat_template.is_none() {
             config.chat_template = templates::read(directory, templates::CHAT_FILE)?;
         }
@@ -638,9 +619,7 @@ impl Config {
                 .chain(crate::ai::commands(&self.ai.entries))
                 .collect(),
             agent_resume: self.agent_resume.clone(),
-            retired_issue_template: self.retired_issue_template.clone(),
             worker_template: self.worker_template.clone(),
-            renamed_agent_template: self.renamed_agent_template.clone(),
             chat_template: self.chat_template.clone(),
             agent_auth: self.agent_auth.clone(),
             git_profile: self.git_profile.clone(),
@@ -706,14 +685,10 @@ impl Config {
             crate::process::load::swap(),
             overload.unwrap_or(&toml::Table::new()),
         );
-        config
-            .cleanup
-            .fold_legacy(&mut config.auto_cleanup, &mut config.pr_cleanup);
         crate::ai::validate(&config.ai.entries, &config.commands, &paths.home)?;
         crate::proxy::validate(&config.proxy)?;
         crate::proxy::validate_references(&config.ai.entries, &config.proxy)?;
         config.root_dir(paths)?;
-        templates::ensure_one_worker(&config.worker_template, &config.renamed_agent_template)?;
         config.cleanup.validate()?;
         config.overload.validate()?;
         config.simulators.validate()?;

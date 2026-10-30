@@ -66,14 +66,6 @@ fn layering_keeps_omitted_options_and_replaces_named_entries() {
     assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
     assert_eq!(config.cleanup.pr.enabled, None);
     assert!(parse("[cleanup.auto]\nidle_minutes = 0\n").is_err());
-    // Configs written before automatic completion was retired still load.
-    assert_eq!(
-        parse("[done]\ncleanup = false\nautomatic = true\n")
-            .unwrap()
-            .done
-            .cleanup,
-        Some(false)
-    );
     assert!(parse("default_agent = 'Happy'\n").is_err());
     assert!(parse("[codex]\ndefault_mode = 'desktop'\n").is_err());
 }
@@ -105,18 +97,17 @@ fn seed_paths_stay_inside_the_worktree() {
 }
 
 #[test]
-fn former_cleanup_tables_fill_options_cleanup_leaves_unset() {
-    let config = parse(
-        "[auto_cleanup]\nenabled = false\nidle_minutes = 30\n[pr_cleanup]\nenabled = false\n\
-             [cleanup.auto]\nenabled = true\n",
-    )
-    .unwrap();
-    assert_eq!(config.cleanup.auto.enabled, Some(true));
-    assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
-    assert_eq!(config.cleanup.pr.enabled, Some(false));
-    assert!(parse("[auto_cleanup]\nidle_minutes = 0\n").is_err());
-    let saved = toml::to_string(&config).unwrap();
-    assert!(!saved.contains("auto_cleanup") && !saved.contains("pr_cleanup"));
+fn former_option_names_are_unknown_keys() {
+    for text in [
+        "[auto_cleanup]\nenabled = false",
+        "[pr_cleanup]\nenabled = false",
+        "agent_template = 'x'",
+        "issue_template = 'x'",
+        "[done]\nautomatic = true",
+    ] {
+        let error = parse(text).unwrap_err().to_string();
+        assert!(error.contains("unknown field"), "{text}: {error}");
+    }
 }
 
 #[test]

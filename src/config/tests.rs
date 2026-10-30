@@ -298,15 +298,6 @@ fn cleanup_defaults_can_be_disabled_and_typos_are_rejected() {
     assert_eq!(config.cleanup.auto.enabled, Some(false));
     assert_eq!(config.cleanup.auto.idle_minutes, Some(30));
     assert!(toml::from_str::<Config>("[auto_cleanpu]\nenabled = false").is_err());
-    // The former table names still load, behind the `[cleanup]` values.
-    let paths = Paths::for_test("/home/test");
-    let config = Config::parse(
-        "[auto_cleanup]\nenabled = false\n[pr_cleanup]\nenabled = false\n[cleanup.pr]\nenabled = true\n",
-        &paths,
-    )
-    .unwrap();
-    assert_eq!(config.cleanup.auto.enabled, Some(false));
-    assert_eq!(config.cleanup.pr.enabled, Some(true));
 }
 
 #[test]
@@ -488,17 +479,7 @@ fn root_directory_defaults_and_validates_explicit_paths() {
         let config: Config = toml::from_str(&format!("root_dir = {value:?}")).unwrap();
         assert!(config.root_dir(&paths).is_err());
     }
-    let config: Config = toml::from_str("repositories_dir = \"~/old\"").unwrap();
-    assert_eq!(
-        config.root_dir(&paths).unwrap(),
-        PathBuf::from("/home/test/old")
-    );
-    let config: Config =
-        toml::from_str("repositories_dir = \"~/old\"\nroot_dir = \"~/new\"").unwrap();
-    assert_eq!(
-        config.root_dir(&paths).unwrap(),
-        PathBuf::from("/home/test/new")
-    );
+    assert!(toml::from_str::<Config>("repositories_dir = \"~/old\"").is_err());
 }
 
 #[test]

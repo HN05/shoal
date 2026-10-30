@@ -89,15 +89,14 @@ pub struct Entry {
 #[derive(Debug, Clone)]
 pub struct Stack {
     layers: [(RepoConfig, Layer); 4],
-    /// Settings a layer sets under a former name, that Shoal no longer reads
-    /// or that repeat its guidance.
+    /// Settings a layer sets that repeat Shoal's guidance.
     warnings: Vec<String>,
 }
 
 impl Stack {
     pub fn new(global: &Config, repository: &ConfigLayers) -> Self {
         let mut warnings = Vec::new();
-        let mut normalize = |mut config: RepoConfig, layer: Layer| {
+        let mut normalize = |config: RepoConfig, layer: Layer| {
             warnings.extend(
                 config
                     .normalize()
@@ -142,8 +141,7 @@ impl Stack {
         Ok(entries)
     }
 
-    /// Warnings for the settings each layer sets under a former name, that
-    /// Shoal no longer reads or that repeat its guidance.
+    /// Warnings for the settings each layer sets that repeat Shoal's guidance.
     pub fn warnings(&self) -> &[String] {
         &self.warnings
     }
@@ -440,7 +438,6 @@ fn built_in() -> RepoConfig {
         },
         done: config::repo::Done {
             cleanup: Some(Done::default().cleanup),
-            ..Default::default()
         },
         idle_stop: config::repo::IdleStop {
             enabled: Some(IdleStop::default().enabled),

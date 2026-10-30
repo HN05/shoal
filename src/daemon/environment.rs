@@ -91,17 +91,17 @@ async fn root_dir(root: Result<PathBuf>) -> Check {
     }
 }
 
-/// Whether the global config sets something Shoal no longer reads or already
-/// says; `config show` reports the repository layers too.
+/// Whether the global config repeats what Shoal already says; `config show`
+/// reports the repository layers too.
 fn global_config_check(paths: &crate::paths::Paths) -> Check {
-    let retired = crate::config::Config::load_with_templates(paths)
+    let redundant = crate::config::Config::load_with_templates(paths)
         .map(|config| config.repository_layer().normalize());
-    match retired {
-        Ok(retired) if retired.is_empty() => Check::new(
+    match redundant {
+        Ok(redundant) if redundant.is_empty() => Check::new(
             CheckStatus::Ok,
-            "The global config sets no retired or redundant settings".to_owned(),
+            "The global config sets no redundant settings".to_owned(),
         ),
-        Ok(retired) => Check::new(CheckStatus::Warning, retired.join("; ")),
+        Ok(redundant) => Check::new(CheckStatus::Warning, redundant.join("; ")),
         Err(error) => Check::new(
             CheckStatus::Error,
             format!("Could not read the global config: {error:#}"),

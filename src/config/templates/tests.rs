@@ -7,7 +7,6 @@ fn install_seeds_the_chat_template_and_preserves_edits() {
     let path = directory.path().join(CHAT_FILE);
     assert_eq!(fs::read_to_string(&path).unwrap(), CHAT_DEFAULT);
     assert!(!directory.path().join(WORKER_FILE).exists());
-    assert!(!directory.path().join(RETIRED_ISSUE_FILE).exists());
     fs::write(&path, "custom").unwrap();
     install_at(directory.path()).unwrap();
     assert_eq!(fs::read_to_string(path).unwrap(), "custom");
@@ -40,16 +39,6 @@ fn additions_follow_the_current_guidance() {
         instructions(Some("Babysit {branch}."), &workspace, Delivery::Watched),
         format!("{guidance}\n\nBabysit topic.")
     );
-}
-
-#[test]
-fn only_an_edited_retired_issue_template_holds_instructions() {
-    assert!(!is_custom_issue_template(&format!(
-        "{RETIRED_ISSUE_DEFAULT}\n"
-    )));
-    assert!(is_custom_issue_template(&format!(
-        "{RETIRED_ISSUE_DEFAULT}\n\nPlan first."
-    )));
 }
 
 #[test]

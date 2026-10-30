@@ -1616,14 +1616,10 @@ value suppresses local additions while preserving global guidance; an empty
 global value suppresses its base text. Without a global chat template,
 Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
-read at launch without a daemon restart. The issue prompt is built in:
-`issue_template` and `issue-template.md` still load but are unused. The former
-names `agent_template` and `agent-template.md` still work; one level setting
-both names fails. `config show` warns for each layer that holds instructions of
-yours in a retired template, uses a former name, or has a worker template
-repeating the opening of Shoal's guidance, as a copy of an earlier default
-does; the daemon alerts about these in the global config when it starts or
-reloads its config.
+read at launch without a daemon restart. The issue prompt is built in.
+`config show` warns for each layer whose worker template repeats the opening of
+Shoal's guidance, as a copy of an earlier default does; the daemon alerts about
+it in the global config when it starts or reloads its config.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
 followed by the worker template, which holds only your additions and cannot
@@ -3324,8 +3320,6 @@ idle_minutes = 10
 
 Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
-The former `[auto_cleanup]` and `[pr_cleanup]` tables are still read where
-`[cleanup.auto]` and `[cleanup.pr]` leave an option unset.
 
 ### Workspace events
 
