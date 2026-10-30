@@ -106,3 +106,22 @@ fn recorded_identity_verifies_including_legacy_device_inode() -> Result<()> {
     assert!(verify_directory(&directory, Some(&current), false).is_err());
     Ok(())
 }
+
+#[tokio::test]
+async fn the_local_config_goes_only_when_it_is_the_repositorys_own_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    std::fs::create_dir(&elsewhere).unwrap();
+    std::fs::write(elsewhere.join("config.toml"), "").unwrap();
+    let linked = root.path().join("linked");
+    std::fs::create_dir(&linked).unwrap();
+    std::os::unix::fs::symlink(&elsewhere, linked.join(".shoal")).unwrap();
+    delete_local_config(Some(linked.clone())).await.unwrap();
+    assert!(elsewhere.join("config.toml").exists());
+
+    let owned = root.path().join("owned");
+    std::fs::create_dir_all(owned.join(".shoal")).unwrap();
+    std::fs::write(owned.join(".shoal/config.toml"), "").unwrap();
+    delete_local_config(Some(owned.clone())).await.unwrap();
+    assert!(!owned.join(".shoal").exists());
+}

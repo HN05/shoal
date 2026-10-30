@@ -423,15 +423,22 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
 }
 
 /// The local config and the scripts beside it belong to the registration.
+/// Only a real directory in a real repository directory goes: a symlink at
+/// either place may lead to files that are not the repository's.
 async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()> {
     let Some(directory) = directory else {
         return Ok(());
     };
     let local = directory.join(crate::config::repo::LOCAL_DIR);
-    tokio::task::spawn_blocking(move || match fs::remove_dir_all(&local) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error).with_context(|| format!("delete {}", local.display())),
+    tokio::task::spawn_blocking(move || {
+        let real = |path: &Path| {
+            fs::symlink_metadata(path)
+                .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        };
+        if !real(&directory) || !real(&local) {
+            return Ok(());
+        }
+        fs::remove_dir_all(&local).with_context(|| format!("delete {}", local.display()))
     })
     .await?
 }
