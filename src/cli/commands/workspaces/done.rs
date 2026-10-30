@@ -34,9 +34,9 @@ pub(in crate::cli::commands) struct Done {
     /// Another branch has HEAD's work under other commits.
     pub integrated: bool,
     pub keep_demos: bool,
-    /// Absolute paths of the files to hand back, checked before anything
-    /// is picked or stopped.
-    pub results: Vec<std::path::PathBuf>,
+    /// The files to hand back, checked before anything is picked or
+    /// stopped.
+    pub results: Vec<crate::daemon::workspace_files::NewFile>,
 }
 
 /// Stop the workspace's demos unless `keep_demos`, then record completion.

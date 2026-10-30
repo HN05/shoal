@@ -1130,7 +1130,13 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
     let report = temp.path().join("report.md");
     fs::write(&report, "No leaks").unwrap();
     manager
-        .mark_done(&bottom.id, false, false, vec![report], &Attacher::User)
+        .mark_done(
+            &bottom.id,
+            false,
+            false,
+            vec![report.into()],
+            &Attacher::User,
+        )
         .await
         .unwrap();
     manager

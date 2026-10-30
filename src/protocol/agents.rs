@@ -91,9 +91,9 @@ pub enum AgentMethod {
     SendAgentMessage {
         workspace: String,
         message: String,
-        /// Absolute paths of files to attach, which the daemon copies.
+        /// Files to attach by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        attachments: Vec<std::path::PathBuf>,
+        attachments: Vec<crate::daemon::workspace_files::NewFile>,
     },
     /// The workspace's undelivered agent messages, oldest first.
     AgentMessages {

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum AssignmentMethod {
     /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
     /// `integrated` records that another branch has HEAD's work under other
-    /// commits; `results` are absolute paths of files to hand back, which the
+    /// commits; `results` are files to hand back by absolute path, which the
     /// daemon copies.
     WorkspaceDone {
         workspace: String,
@@ -14,7 +14,7 @@ pub enum AssignmentMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        results: Vec<std::path::PathBuf>,
+        results: Vec<crate::daemon::workspace_files::NewFile>,
     },
     WorkspaceUndone {
         workspace: String,

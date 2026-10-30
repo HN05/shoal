@@ -12,8 +12,8 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::agent_messages::AgentMessage,
     daemon::links::wait::Updates,
+    daemon::{agent_messages::AgentMessage, workspace_files::NewFile},
     protocol::{AgentMethod, ChatMethod, Method},
 };
 
@@ -40,16 +40,16 @@ pub(super) async fn send(
     Ok(0)
 }
 
-/// The absolute paths of the files to attach, which the daemon reads, each
-/// checked before a workspace is picked.
-pub(super) fn attachment_paths(files: &[PathBuf]) -> Result<Vec<PathBuf>> {
+/// The files to attach by the absolute paths the daemon reads, each checked
+/// before a workspace is picked.
+pub(super) fn attachment_paths(files: &[PathBuf]) -> Result<Vec<NewFile>> {
     files
         .iter()
         .map(|file| {
             let path =
                 std::path::absolute(file).with_context(|| format!("read {}", file.display()))?;
             crate::daemon::workspace_files::layout::check(&path)?;
-            Ok(path)
+            Ok(path.into())
         })
         .collect()
 }

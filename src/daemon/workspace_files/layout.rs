@@ -9,6 +9,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
+use super::NewFile;
 use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
@@ -53,7 +54,7 @@ impl Layout {
         &self,
         workspace_id: &str,
         message: &str,
-        files: &[PathBuf],
+        files: &[NewFile],
     ) -> Result<Kept> {
         self.keep_in(&self.root.join(workspace_id), workspace_id, message, files)
     }
@@ -61,7 +62,7 @@ impl Layout {
     /// Copies of the files `files` that the workspace `workspace_id` hands
     /// back with its completion, apart from its other files since they
     /// outlive its removal.
-    pub(crate) fn keep_results(&self, workspace_id: &str, files: &[PathBuf]) -> Result<Kept> {
+    pub(crate) fn keep_results(&self, workspace_id: &str, files: &[NewFile]) -> Result<Kept> {
         let directory = self.root.join(RESULTS).join(workspace_id);
         self.keep_in(&directory, workspace_id, "shoal done", files)
     }
@@ -72,10 +73,11 @@ impl Layout {
         directory: &Path,
         workspace_id: &str,
         message: &str,
-        files: &[PathBuf],
+        files: &[NewFile],
     ) -> Result<Kept> {
         for file in files {
-            check(file)?;
+            check(&file.path)?;
+            file.check()?;
         }
         create_marked_dir(&self.root, &self.owner)
             .with_context(|| format!("create {}", self.root.display()))?;
@@ -93,8 +95,8 @@ impl Layout {
         );
         let attachments: Vec<_> = files
             .iter()
-            .map(|path| Attachment {
-                path: path.clone(),
+            .map(|file| Attachment {
+                path: file.path.clone(),
                 alt: None,
             })
             .collect();
@@ -103,22 +105,22 @@ impl Layout {
             remove_dir(&stale)?;
         }
         let copies = keep_copies(directory, workspace_id, message, &attachments)?;
-        let paths: Vec<_> = copies
+        let kept = copies
             .attachments
             .into_iter()
-            .map(|copy| copy.path)
-            .collect();
-        let bytes = paths
-            .iter()
-            .map(|path| {
-                let metadata =
-                    std::fs::metadata(path).with_context(|| format!("read {}", path.display()))?;
-                Ok(metadata.len())
+            .zip(files)
+            .map(|(copy, file)| {
+                let metadata = std::fs::metadata(&copy.path)
+                    .with_context(|| format!("read {}", copy.path.display()))?;
+                Ok(Copy {
+                    path: copy.path,
+                    bytes: metadata.len(),
+                    title: file.title.clone(),
+                })
             })
             .collect::<Result<_>>()?;
         Ok(Kept {
-            paths,
-            bytes,
+            copies: kept,
             created: copies.created,
             workspace: directory.to_owned(),
         })
@@ -241,12 +243,19 @@ impl Layout {
     }
 }
 
+/// One of Shoal's copies, with its size in bytes and the title it was
+/// given, as its record keeps it.
+#[derive(Debug, Clone)]
+pub(crate) struct Copy {
+    pub(crate) path: PathBuf,
+    pub(crate) bytes: u64,
+    pub(crate) title: Option<String>,
+}
+
 /// The copies [`Layout::keep`] made or reused for one message.
 #[derive(Debug)]
 pub(crate) struct Kept {
-    pub(crate) paths: Vec<PathBuf>,
-    /// The size of each copy in `paths`, in bytes.
-    pub(crate) bytes: Vec<u64>,
+    pub(crate) copies: Vec<Copy>,
     /// The directory of copies made for this message, rather than reused.
     created: Option<PathBuf>,
     /// The directory of the workspace's attached files.

@@ -60,7 +60,7 @@ pub enum Attacher {
 pub const MAX_RESULTS: usize = 64;
 
 /// Refuse more results than one completion hands back.
-pub fn check_results(results: &[PathBuf]) -> Result<()> {
+pub fn check_results(results: &[NewFile]) -> Result<()> {
     ensure!(
         results.len() <= MAX_RESULTS,
         "hand back at most {MAX_RESULTS} files with one completion"
@@ -83,6 +83,29 @@ pub fn missing_selection(files: &[AttachedFile], names: &[String], ids: &[i64]) 
         .collect()
 }
 
+/// A file to attach, by absolute path, with the title that says what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewFile {
+    pub path: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+impl From<PathBuf> for NewFile {
+    fn from(path: PathBuf) -> Self {
+        Self { path, title: None }
+    }
+}
+
+impl NewFile {
+    /// Refuse a title that is not a single line of text.
+    pub fn check(&self) -> Result<()> {
+        self.title
+            .as_deref()
+            .map_or(Ok(()), crate::validate::file_title)
+    }
+}
+
 /// A file attached to a workspace: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {
@@ -92,6 +115,10 @@ pub struct AttachedFile {
     pub source: FileSource,
     /// The attached file's name.
     pub name: String,
+    /// What the file is, when whoever attached it said; clients show the
+    /// name otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Shoal's copy.
     pub path: PathBuf,
     pub bytes: u64,
@@ -138,7 +165,7 @@ pub(crate) async fn keep(
     layout: Layout,
     workspace_id: &str,
     message: &str,
-    files: Vec<PathBuf>,
+    files: Vec<NewFile>,
 ) -> Result<Kept> {
     let (id, message) = (workspace_id.to_owned(), message.to_owned());
     tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
@@ -206,7 +233,7 @@ impl Manager {
     pub(crate) async fn keep_results(
         &self,
         workspace: &Workspace,
-        results: Vec<PathBuf>,
+        results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
         if results.is_empty() {
@@ -292,11 +319,11 @@ impl Manager {
 
     /// Attach copies of `files` to the workspace `selector` names, without a
     /// message, as `attacher`, and return their records. Adding the same
-    /// files again keeps the copies they have.
+    /// files again keeps the copies they have, with any new title.
     pub async fn add_workspace_files(
         &self,
         selector: &str,
-        files: Vec<PathBuf>,
+        files: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
@@ -336,9 +363,9 @@ impl Manager {
         kept: &Kept,
     ) -> Result<Vec<AttachedFile>> {
         let (id, attacher) = (workspace_id.to_owned(), attacher.clone());
-        let (paths, bytes) = (kept.paths.clone(), kept.bytes.clone());
+        let copies = kept.copies.clone();
         self.store
-            .run(move |db| records::record_all(db, &id, source, &attacher, &paths, &bytes))
+            .run(move |db| records::record_all(db, &id, source, &attacher, &copies))
             .await
     }
 

@@ -72,7 +72,7 @@ impl Manager {
         selector: &str,
         cleanup: bool,
         integrated: bool,
-        results: Vec<PathBuf>,
+        results: Vec<crate::daemon::workspace_files::NewFile>,
         attacher: &Attacher,
     ) -> Result<Completion> {
         crate::daemon::workspace_files::check_results(&results)?;

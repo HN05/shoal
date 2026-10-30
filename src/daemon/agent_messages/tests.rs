@@ -238,7 +238,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
             .send_agent_message(
                 &workspace.name,
                 "See the log".into(),
-                vec![file.clone()],
+                vec![file.clone().into()],
                 &Attacher::User,
             )
             .await
@@ -248,7 +248,7 @@ async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
         .send_agent_message(
             &workspace.name,
             String::new(),
-            vec![file.clone()],
+            vec![file.clone().into()],
             &Attacher::User,
         )
         .await
@@ -306,7 +306,7 @@ async fn a_refused_message_leaves_no_copies() {
             .send_agent_message(
                 &workspace.name,
                 "See the log".into(),
-                vec![file],
+                vec![file.into()],
                 &Attacher::User
             )
             .await
@@ -333,7 +333,12 @@ async fn an_attached_send_waits_for_the_files_gate() {
         let (manager, name) = (manager.clone(), workspace.name.clone());
         async move {
             manager
-                .send_agent_message(&name, "See the log".into(), vec![file], &Attacher::User)
+                .send_agent_message(
+                    &name,
+                    "See the log".into(),
+                    vec![file.into()],
+                    &Attacher::User,
+                )
                 .await
         }
     });
@@ -376,7 +381,12 @@ async fn a_send_waiting_through_removal_leaves_no_files() {
         let (manager, id) = (manager.clone(), workspace.id.clone());
         async move {
             manager
-                .send_agent_message(&id, "See the log".into(), vec![file], &Attacher::User)
+                .send_agent_message(
+                    &id,
+                    "See the log".into(),
+                    vec![file.into()],
+                    &Attacher::User,
+                )
                 .await
         }
     });
@@ -421,7 +431,7 @@ async fn attachments_must_be_files() {
             .send_agent_message(
                 &workspace.name,
                 "See".into(),
-                vec![refused.clone()],
+                vec![refused.clone().into()],
                 &Attacher::User,
             )
             .await

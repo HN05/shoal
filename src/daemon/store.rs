@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 95;
+const SCHEMA_VERSION: i64 = 96;
 
 #[cfg(test)]
 mod benchmark;
@@ -440,6 +440,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (93, "DROP TABLE IF EXISTS repository_configs;", None),
     (94, FILE_ATTACHERS, None),
     (95, EXECUTION_AGENT_PARENTS, None),
+    (96, FILE_TITLES, None),
 ];
 
 /// The agent execution whose process tree registered each execution, which
@@ -456,6 +457,9 @@ const FILE_ATTACHERS: &str = "ALTER TABLE workspace_files ADD COLUMN attached_by
 const EARLIER_ATTACHED_FILES: &str =
     "CREATE TABLE IF NOT EXISTS earlier_attached_files (repository_id TEXT PRIMARY KEY);
     INSERT OR IGNORE INTO earlier_attached_files SELECT id FROM repositories;";
+
+/// What an attached file is, as whoever attached it said.
+const FILE_TITLES: &str = "ALTER TABLE workspace_files ADD COLUMN title TEXT;";
 
 /// The JSON array of paths of the files attached to an agent message.
 const AGENT_MESSAGE_ATTACHMENTS: &str =

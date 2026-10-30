@@ -6,7 +6,11 @@ use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
 
-use super::{FileSource, layout::Layout, records};
+use super::{
+    FileSource,
+    layout::{Copy, Layout},
+    records,
+};
 use crate::daemon::workspace::Manager;
 
 impl Manager {
@@ -53,22 +57,13 @@ impl Manager {
             .await?;
         for workspace_id in workspaces {
             let (layout, id) = (layout.clone(), workspace_id.clone());
-            let (copies, bytes) = tokio::task::spawn_blocking(move || -> Result<_> {
-                let copies = layout.workspace_copies(&id)?;
-                let bytes = sizes(&copies)?;
-                Ok((copies, bytes))
+            let copies = tokio::task::spawn_blocking(move || -> Result<_> {
+                sized(layout.workspace_copies(&id)?)
             })
             .await??;
             self.store
                 .run(move |db| {
-                    records::record(
-                        db,
-                        &workspace_id,
-                        FileSource::Message,
-                        None,
-                        &copies,
-                        &bytes,
-                    )
+                    records::record(db, &workspace_id, FileSource::Message, None, &copies)
                 })
                 .await?;
         }
@@ -76,15 +71,19 @@ impl Manager {
     }
 }
 
-/// The size of each of `copies`.
-fn sizes(copies: &[PathBuf]) -> Result<Vec<u64>> {
+/// The `copies` with their sizes, untitled.
+fn sized(copies: Vec<PathBuf>) -> Result<Vec<Copy>> {
     copies
-        .iter()
-        .map(|copy| {
-            let metadata = copy
+        .into_iter()
+        .map(|path| {
+            let metadata = path
                 .metadata()
-                .with_context(|| format!("read {}", copy.display()))?;
-            Ok(metadata.len())
+                .with_context(|| format!("read {}", path.display()))?;
+            Ok(Copy {
+                path,
+                bytes: metadata.len(),
+                title: None,
+            })
         })
         .collect()
 }

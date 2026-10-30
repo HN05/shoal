@@ -7,6 +7,7 @@ pub const MAX_MESSAGE_LEN: usize = 512;
 pub const MAX_AGENT_MESSAGE_LEN: usize = 8 * 1024;
 /// Characters, so a title fits a tab whatever its script.
 pub const MAX_TITLE_LEN: usize = 40;
+pub const MAX_FILE_TITLE_LEN: usize = 128;
 
 /// Portable identifier: ASCII letters, digits, `-` or `_`, starting with a
 /// letter or digit. Used for workspaces, repositories, and simulator profiles.
@@ -83,6 +84,18 @@ pub fn title(value: &str) -> Result<()> {
             && value.chars().count() <= MAX_TITLE_LEN
             && !value.chars().any(char::is_control),
         "titles must be a nonempty single line without control characters (max {MAX_TITLE_LEN} characters)"
+    );
+    Ok(())
+}
+
+/// What an attached file is, which listings show beside its name: a single
+/// line without control characters.
+pub fn file_title(value: &str) -> Result<()> {
+    ensure!(
+        !value.trim().is_empty()
+            && value.chars().count() <= MAX_FILE_TITLE_LEN
+            && !value.chars().any(char::is_control),
+        "file titles must be a nonempty single line without control characters (max {MAX_FILE_TITLE_LEN} characters)"
     );
     Ok(())
 }

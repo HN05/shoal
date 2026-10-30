@@ -26,6 +26,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         workspace: "audit".into(),
         source: crate::daemon::workspace_files::FileSource::Result,
         name: "report.md".into(),
+        title: None,
         path: "/repo/.attachments/results/id/key/0/report.md".into(),
         bytes: 960,
         created_at: 0,

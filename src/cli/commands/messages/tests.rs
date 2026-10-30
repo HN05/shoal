@@ -39,7 +39,7 @@ fn attachments_are_checked_before_sending() {
     std::fs::write(&file, "panic").unwrap();
     assert_eq!(
         attachment_paths(std::slice::from_ref(&file)).unwrap(),
-        [file]
+        [NewFile::from(file)]
     );
     for refused in [dir.path().to_path_buf(), dir.path().join("missing.png")] {
         assert!(attachment_paths(&[refused]).is_err());

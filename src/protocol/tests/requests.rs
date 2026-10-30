@@ -157,7 +157,7 @@ const REQUESTS: &[&str] = &[
     r#"{"watch_notifications":{"keep_unread":false,"after":3}}"#,
     r#"{"send_message":{"workspace":"fix","message":"done"}}"#,
     r#"{"withdraw_message":{"workspace":"fix","id":4}}"#,
-    r#"{"send_agent_message":{"workspace":"part","message":"rebase","attachments":["/work/log.txt"]}}"#,
+    r#"{"send_agent_message":{"workspace":"part","message":"rebase","attachments":[{"path":"/work/log.txt","title":"Crash log"},{"path":"/work/shot.png"}]}}"#,
     r#"{"agent_messages":{"workspace":"fix"}}"#,
     r#"{"mark_agent_messages_delivered":{"workspace":"fix","ids":[5]}}"#,
     r#"{"agent_updates":{"workspace":"fix"}}"#,

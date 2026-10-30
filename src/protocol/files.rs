@@ -13,8 +13,8 @@ pub enum FileMethod {
     /// Attach copies of files to a workspace without a message.
     AddFiles {
         workspace: String,
-        /// Absolute paths of the files, which the daemon copies.
-        files: Vec<std::path::PathBuf>,
+        /// The files by absolute path, which the daemon copies.
+        files: Vec<crate::daemon::workspace_files::NewFile>,
     },
     /// Delete a workspace's attached files, only those with one of `names`
     /// and the records `ids` when there are any; without a workspace, those

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     daemon::{
         workspace::Manager,
-        workspace_files::{self, Attacher},
+        workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
     state::WorkspaceState,
 };
@@ -176,7 +176,7 @@ impl Manager {
         &self,
         selector: &str,
         message: String,
-        attachments: Vec<PathBuf>,
+        attachments: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<()> {
         if !message.is_empty() || attachments.is_empty() {
@@ -192,8 +192,7 @@ impl Manager {
             .queue_attached_message(
                 &workspace.id,
                 message,
-                kept.paths.clone(),
-                kept.bytes.clone(),
+                kept.copies.clone(),
                 Some(attacher.clone()),
                 Delivery::Wake,
             )
@@ -219,26 +218,18 @@ impl Manager {
         message: String,
         delivery: Delivery,
     ) -> Result<()> {
-        self.queue_attached_message(
-            workspace_id,
-            message,
-            Vec::new(),
-            Vec::new(),
-            None,
-            delivery,
-        )
-        .await
+        self.queue_attached_message(workspace_id, message, Vec::new(), None, delivery)
+            .await
     }
 
-    /// Queue `message` with Shoal's copies `attachments`, of `bytes` each,
-    /// which the workspace's attached files list from then on as attached by
+    /// Queue `message` with Shoal's copies `attachments`, which the
+    /// workspace's attached files list from then on as attached by
     /// `attacher`.
     async fn queue_attached_message(
         &self,
         workspace_id: &str,
         message: String,
-        attachments: Vec<PathBuf>,
-        bytes: Vec<u64>,
+        attachments: Vec<Copy>,
         attacher: Option<Attacher>,
         delivery: Delivery,
     ) -> Result<()> {
@@ -247,15 +238,14 @@ impl Manager {
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let queued =
-                    insert_delivered(&tx, &workspace_id, &message, &attachments, delivery)?;
+                let paths: Vec<_> = attachments.iter().map(|copy| copy.path.clone()).collect();
+                let queued = insert_delivered(&tx, &workspace_id, &message, &paths, delivery)?;
                 workspace_files::record(
                     &tx,
                     &workspace_id,
                     workspace_files::FileSource::Message,
                     attacher.as_ref(),
                     &attachments,
-                    &bytes,
                 )?;
                 tx.commit()?;
                 Ok(queued.is_some())
