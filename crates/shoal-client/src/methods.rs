@@ -24,7 +24,7 @@ pub trait Method: Serialize {
 macro_rules! methods {
     (
         calls { $($(#[$meta:meta])* $wire:literal => $variant:ident -> $output:ty;)+ }
-        streams { $($(#[$stream_meta:meta])* $stream_wire:literal => $stream:ident($events:ty);)+ }
+        streams { $($(#[$stream_meta:meta])* $stream_wire:literal => $stream:ident($events:ty) $(-> $result:ty)?;)+ }
     ) => {
         /// Every request, tagged with its method name.
         #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -77,10 +77,17 @@ macro_rules! methods {
                 }));
             )+
             $(
-                methods.insert($stream_wire.into(), serde_json::json!({
+                let stream = serde_json::json!({
                     "params": generator.subschema_for::<$stream>(),
                     "events": generator.subschema_for::<$events>(),
-                }));
+                });
+                // A stream that ends with a result names it.
+                $(let stream = {
+                    let mut stream = stream;
+                    stream["result"] = generator.subschema_for::<$result>().into();
+                    stream
+                };)?
+                methods.insert($stream_wire.into(), stream);
             )+
             methods.into()
         }
@@ -141,7 +148,8 @@ methods! {
         /// An operation's progress, from the start or after the events
         /// already read, then its result or error. An operation can be
         /// followed until ten minutes after it ended.
-        "operation.follow" => FollowOperation(crate::operations::OperationEvent);
+        "operation.follow" => FollowOperation(crate::operations::OperationEvent)
+            -> crate::operations::OperationResult;
     }
 }
 

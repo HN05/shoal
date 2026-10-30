@@ -706,6 +706,47 @@
       ],
       "type": "object"
     },
+    "Landed": {
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "default_branch": {
+          "type": "string"
+        },
+        "fast_forward": {
+          "description": "Whether the default branch fast-forwarded rather than taking a merge commit.",
+          "type": "boolean"
+        },
+        "previous_commit": {
+          "description": "The default branch's commit before landing.",
+          "type": "string"
+        },
+        "pushed_to": {
+          "description": "The remote the default branch was pushed to.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated": {
+          "description": "False when the default branch already contained the branch.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "branch",
+        "default_branch",
+        "previous_commit",
+        "commit",
+        "updated",
+        "fast_forward"
+      ],
+      "type": "object"
+    },
     "Link": {
       "description": "An issue or PR a workspace links, with its state as the daemon last\nrecorded it from the forge.",
       "properties": {
@@ -971,6 +1012,41 @@
       ],
       "type": "object"
     },
+    "OpenedPr": {
+      "properties": {
+        "created": {
+          "description": "Whether this call opened it, rather than finding it open.",
+          "type": "boolean"
+        },
+        "linked": {
+          "description": "Whether the workspace links it now.",
+          "type": "boolean"
+        },
+        "number": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "type": "string"
+        },
+        "warnings": {
+          "description": "What the PR lacks of the repository's conventions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "url",
+        "number",
+        "created",
+        "linked",
+        "warnings"
+      ],
+      "type": "object"
+    },
     "Opening": {
       "description": "The client's first frame. Its `client_api` key tells the daemon the\nconnection speaks this API rather than Shoal's internal protocol.",
       "properties": {
@@ -1048,6 +1124,95 @@
         "index"
       ],
       "type": "object"
+    },
+    "OperationResult": {
+      "description": "What a successful operation did.",
+      "oneOf": [
+        {
+          "description": "The created or split workspace, ready, and the agent queued in it.",
+          "properties": {
+            "agent": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QueuedAgent"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": {
+              "const": "prepared",
+              "type": "string"
+            },
+            "workspace": {
+              "$ref": "#/$defs/Workspace"
+            }
+          },
+          "required": [
+            "type",
+            "workspace"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/OpenedPr",
+          "description": "The workspace's PR, opened or found open.",
+          "properties": {
+            "type": {
+              "const": "pr_opened",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The PR waits for the user's approval before Shoal opens it, as the\nrepository's `[permissions] pr_open` asks of workspace agents.",
+          "properties": {
+            "approval": {
+              "$ref": "#/$defs/Approval"
+            },
+            "type": {
+              "const": "pr_proposed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "approval"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Landed",
+          "properties": {
+            "type": {
+              "const": "landed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A result this version does not know.",
+          "properties": {
+            "type": {
+              "const": "unknown",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "OutputStream": {
       "anyOf": [
@@ -2468,6 +2633,9 @@
       },
       "params": {
         "$ref": "#/$defs/FollowOperation"
+      },
+      "result": {
+        "$ref": "#/$defs/OperationResult"
       }
     },
     "pr.open": {
