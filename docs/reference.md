@@ -3808,8 +3808,10 @@ the chat the same way: they stay for `cleanup.restore.retention_days` after it
 ends, listed under its last name. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A chat's name or ID
 names its files wherever a workspace's names a workspace's; run from a chat's
-agent outside any workspace, `shoal files`, `add` and `rm` act on its chat. `--json` gives each as a record with
-`source`, `path`, `bytes`, `title` when it has one, and `attached_by`:
+agent outside any workspace, `shoal files`, `add` and `rm` act on its chat.
+`--json` gives each as a record with `workspace` or `chat`, the name of what it
+is attached to, `source`, `path`, `bytes`, `title` when it has one, and
+`attached_by`:
 `{"kind": "user"}` for a file attached from outside any workspace's agent,
 which includes a chat's agent, since a chat runs with your authority, or
 `{"kind": "agent"}` with the agent's name as `agent`, its `execution` and, once

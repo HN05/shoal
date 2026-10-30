@@ -23,7 +23,8 @@ fn the_add_row_adds_and_refuses_what_needs_a_file() {
 fn each_file_is_a_row_by_its_record_before_the_add_row() {
     let file = AttachedFile {
         id: 7,
-        workspace: "audit".into(),
+        workspace: Some("audit".into()),
+        chat: None,
         source: crate::daemon::workspace_files::FileSource::Result,
         name: "report.md".into(),
         title: Some("Audit findings".into()),

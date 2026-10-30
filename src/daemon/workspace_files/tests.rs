@@ -233,7 +233,7 @@ async fn files_sent_with_messages_are_listed_until_removal() {
     assert_eq!(listed.name, "crash.log");
     assert_eq!(listed.bytes, 5);
     assert_eq!(listed.source, FileSource::Message);
-    assert_eq!(listed.workspace, "receiver");
+    assert_eq!(listed.workspace.as_deref(), Some("receiver"));
     assert_eq!(std::fs::read_to_string(&listed.path).unwrap(), "panic");
 
     manager
@@ -495,7 +495,7 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     let [gone] = deleted.as_slice() else {
         panic!("{deleted:?}");
     };
-    assert_eq!(gone.workspace, "receiver");
+    assert_eq!(gone.workspace.as_deref(), Some("receiver"));
     assert!(!gone.path.exists());
     for spared in [&active, &unresolved] {
         assert_eq!(manager.attached_files(&spared.name).await.unwrap().len(), 1);
@@ -786,7 +786,7 @@ async fn kept_results_answer_to_the_name_the_workspace_had_when_removed() {
         .await
         .unwrap();
     let files = manager.attached_files(&renamed.name).await.unwrap();
-    assert_eq!(files[0].workspace, renamed.name);
+    assert_eq!(files[0].workspace, Some(renamed.name.clone()));
 }
 
 #[tokio::test]
@@ -1165,8 +1165,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     let files = manager.attached_files(&chat.id).await.unwrap();
     assert_eq!(files, added);
     assert_eq!(
-        (files[0].workspace.as_str(), files[0].expires_at),
-        ("planning", None)
+        (files[0].chat.as_deref(), files[0].expires_at),
+        (Some("planning"), None)
     );
     // Deleting the files of every idle workspace spares a running chat's.
     assert!(manager.remove_idle_files().await.unwrap().is_empty());

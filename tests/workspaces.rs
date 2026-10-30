@@ -20263,7 +20263,8 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
 
     // The chat's agent attaches, lists and deletes its chat's files.
     let added = in_chat(&["files", "add", "report.md#Plan"]);
-    assert_eq!(added[0]["workspace"], "planning", "{added}");
+    assert_eq!(added[0]["chat"], "planning", "{added}");
+    assert!(added[0].get("workspace").is_none(), "{added}");
     assert_eq!(added[0]["title"], "Plan", "{added}");
     let copy = PathBuf::from(added[0]["path"].as_str().unwrap());
     assert!(copy.to_str().unwrap().contains(&chat), "{added}");
@@ -20281,6 +20282,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     let kept = fixture.ok(&["files", "planning"]);
     assert_eq!(kept[0]["path"], added[0]["path"], "{kept}");
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");
+    assert_eq!(kept[0]["chat"], "planning", "{kept}");
     assert_eq!(fs::read_to_string(&copy).unwrap(), "Plan");
     let deleted = fixture.ok(&["files", "rm", "--workspace", "planning"]);
     assert_eq!(deleted[0]["path"], added[0]["path"], "{deleted}");

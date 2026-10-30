@@ -13,16 +13,23 @@ const COLUMNS: &str = "id,owner,source,name,title,path,bytes,created_at,attached
     COALESCE((SELECT expires_at FROM removed_workspaces r
             WHERE r.workspace_id=workspace_files.owner_id
                 AND workspace_files.owner_id NOT IN (SELECT id FROM workspaces)),
-        (SELECT expires_at FROM ended_chats e WHERE e.chat_id=workspace_files.owner_id))";
+        (SELECT expires_at FROM ended_chats e WHERE e.chat_id=workspace_files.owner_id)),
+    owner_id IN (SELECT id FROM chats) OR owner_id IN (SELECT chat_id FROM ended_chats)";
 
 /// The owners of attached files that are gone.
 const GONE: &str = "owner_id NOT IN (SELECT id FROM workspaces)
     AND owner_id NOT IN (SELECT id FROM chats)";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
+    let owner: String = row.get(1)?;
+    let (workspace, chat) = match row.get(10)? {
+        true => (None, Some(owner)),
+        false => (Some(owner), None),
+    };
     Ok(AttachedFile {
         id: row.get(0)?,
-        workspace: row.get(1)?,
+        workspace,
+        chat,
         source: row.get(2)?,
         name: row.get(3)?,
         title: row.get(4)?,

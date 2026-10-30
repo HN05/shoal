@@ -111,10 +111,14 @@ impl NewFile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {
     pub id: i64,
-    /// The name of the workspace or chat it is attached to: when it was
-    /// attached, or the last one once the workspace is removed or the chat
-    /// ends.
-    pub workspace: String,
+    /// The name of the workspace it is attached to: when it was attached, or
+    /// the last one once the workspace is removed. None for a chat's file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    /// The name of the chat it is attached to, as [`Self::workspace`] names
+    /// a workspace's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat: Option<String>,
     pub source: FileSource,
     /// The attached file's name.
     pub name: String,
