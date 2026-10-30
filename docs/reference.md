@@ -2704,7 +2704,9 @@ Forges differ in what Shoal can do there. `shoal forge capabilities` lists each
 capability of the workspace repository's forge, such as resolving review
 threads, rerunning CI jobs, labels or a merge method, and whether the forge has
 it, with what to do instead when it does not; `--json` returns `forge` and
-`capabilities`, each with `capability`, `supported` and an optional `hint`. A
+`capabilities`, each with `capability`, `supported` and an optional `hint`.
+With `--repo`, named as for `issue open --repo`, this command, `shoal forge
+reactions` and `shoal repo labels` read another repository. A
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
 
@@ -2764,6 +2766,7 @@ shoal issue edit --add-label bug    # comment, close and reopen work too
 shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
+shoal repo labels --repo team/review-bot # another repository's; forge capabilities and reactions too
 shoal forge capabilities                  # what the repository's forge supports
 shoal forge reactions                     # the reactions the repository's forge allows
 ```

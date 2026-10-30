@@ -1,23 +1,33 @@
-//! `shoal forge capabilities`: what the workspace repository's forge supports, so
-//! agents can check before they ask for something it lacks.
+//! `shoal forge capabilities`: what the forge of the workspace's repository, or
+//! another one, supports, so agents can check before they ask for something it
+//! lacks.
 use anyhow::{Context as _, Result};
 
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{args::repository::RepositoryArgs, client, context::Context, ui},
     forge::{ForgeRepo, capability::Capabilities},
     model::Workspace,
     protocol::WorkspaceMethod,
     repository,
 };
 
-pub(super) async fn capabilities(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let forge = workspace_forge(ctx, workspace).await?;
+pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
+    let forge = repository_forge(ctx, repository).await?;
     ctx.show(&forge.capabilities(), render)?;
     Ok(0)
 }
 
+/// The repository `--repo` names, or the one of the selected workspace.
+pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Result<ForgeRepo> {
+    let own = workspace_forge(ctx, args.workspace).await?;
+    match args.repo {
+        Some(named) => own.resolve_named(&named, &ctx.forge_hosts()?).await,
+        None => Ok(own),
+    }
+}
+
 /// The forge of the selected workspace's `origin` remote.
-pub(super) async fn workspace_forge(ctx: &Context, workspace: Option<String>) -> Result<ForgeRepo> {
+async fn workspace_forge(ctx: &Context, workspace: Option<String>) -> Result<ForgeRepo> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
     let workspace: Workspace = client::request(
         &ctx.paths,

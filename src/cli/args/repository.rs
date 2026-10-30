@@ -30,6 +30,10 @@ pub struct RepositoryArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+    /// Read another repository: OWNER/NAME on the workspace's forge, or a
+    /// repository URL on any forge.
+    #[arg(long, value_name = "REPOSITORY")]
+    pub repo: Option<String>,
 }
 
 // Arguments of `shoal forge api`.

@@ -17,7 +17,7 @@ use crate::cli::{args::repository::RepoCommand, context::Context};
 
 pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
     match command {
-        RepoCommand::Labels(repository) => super::labels::labels(ctx, repository.workspace).await,
+        RepoCommand::Labels(repository) => super::labels::labels(ctx, repository).await,
         RepoCommand::Sync { repository } => sync::sync(ctx, repository).await,
         RepoCommand::Config { repository } => configuration::show(ctx, repository).await,
         RepoCommand::Add { source, name, path } => registration::add(ctx, source, name, path).await,

@@ -1,14 +1,18 @@
-//! `shoal repo labels`: the workspace repository's labels as the forge lists
-//! them, so agents can pick the ones its scheme asks for.
+//! `shoal repo labels`: the labels of the workspace's repository, or another
+//! one, as the forge lists them, so agents can pick the ones its scheme asks
+//! for.
 use anyhow::Result;
 
 use crate::{
-    cli::{commands::capabilities::workspace_forge, context::Context},
+    cli::{
+        args::repository::RepositoryArgs, commands::capabilities::repository_forge,
+        context::Context,
+    },
     forge::conventions::labels::Label,
 };
 
-pub(super) async fn labels(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let forge = workspace_forge(ctx, workspace).await?;
+pub(super) async fn labels(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
+    let forge = repository_forge(ctx, repository).await?;
     let labels = ctx
         .progress("Reading labels", forge.labels(&ctx.forge_account()?))
         .await?;

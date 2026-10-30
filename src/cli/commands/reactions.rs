@@ -1,14 +1,18 @@
-//! `shoal forge reactions`: the reactions the workspace repository's forge
-//! allows, so clients can offer them before reacting.
+//! `shoal forge reactions`: the reactions the forge of the workspace's
+//! repository, or another one, allows, so clients can offer them before
+//! reacting.
 use anyhow::Result;
 
 use crate::{
-    cli::{commands::capabilities::workspace_forge, context::Context},
+    cli::{
+        args::repository::RepositoryArgs, commands::capabilities::repository_forge,
+        context::Context,
+    },
     forge::items::reaction::allowed::AllowedReactions,
 };
 
-pub(super) async fn reactions(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let forge = workspace_forge(ctx, workspace).await?;
+pub(super) async fn reactions(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
+    let forge = repository_forge(ctx, repository).await?;
     let reactions = ctx
         .progress(
             "Reading reactions",

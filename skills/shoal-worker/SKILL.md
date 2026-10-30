@@ -37,7 +37,8 @@ A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
 yourself when the PR completes the issue. Before opening an issue or PR, read the
 repository's contribution rules and forge template for what the description
-needs, and choose labels from `shoal repo labels`, which lists each with its meaning.
+needs, and choose labels from `shoal repo labels` (`--repo` for another
+repository), which lists each with its meaning.
 Opening refuses an item without a label `required_labels` asks for; `pr open`,
 `issue open` and `ready` report `warnings` for missing labels or template
 headings, which you fix with `edit`. Change your PR or issue through Shoal,

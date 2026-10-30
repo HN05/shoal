@@ -388,6 +388,17 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
         reviewers,
         json!([{"name": "kim", "display_name": "Kim Lee", "team": false}])
     );
+
+    // `--repo` reads another repository's.
+    fixture.respond(json!({
+        "GET repos/ann/tool/labels?limit=50&page=1": {"body": [{"name": "type/bug"}]},
+        "GET orgs/ann": {"status": 404, "body": {"message": "GetOrgByName"}},
+    }));
+    let labels = fixture.ok(&["repo", "labels", "--repo", "ann/tool", "--workspace", "topic"]);
+    assert_eq!(
+        labels,
+        json!([{"name": "type/bug", "description": "", "exclusive": false}])
+    );
 }
 
 #[test]
