@@ -19483,7 +19483,8 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     );
 
     // The wake hook prints the next update for the agent and exits 2, which
-    // makes Claude Code start the idle agent's next turn with it.
+    // makes Claude Code start the idle agent's next turn with it. No hook
+    // reports that turn starting, so the wake reports it working.
     fixture.ok(&[
         "messages",
         "send",
@@ -19493,25 +19494,25 @@ fn the_user_messages_agents_who_read_their_own_messages_once() {
     ]);
     let output = fixture
         .command()
-        .args([
-            "run",
-            "--workspace",
-            "receiver",
-            "--",
-            env!("CARGO_BIN_EXE_shoal"),
-        ])
-        .args([
-            "internal",
-            "wake",
-            "--agent",
-            &std::process::id().to_string(),
-        ])
+        .args(["run", "--workspace", "receiver", "--", "sh", "-c"])
+        .arg(concat!(
+            r#""$0" internal agent-state idle >/dev/null && "#,
+            r#""$0" internal wake --agent "$1"; woke=$?; "#,
+            r#""$0" status --json && exit "$woke""#
+        ))
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(std::process::id().to_string())
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(2), "{output:?}");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
         "New Shoal messages for this workspace:\n- Rebase onto main\n"
+    );
+    let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        status["workspace"]["agent_state"]["state"], "working",
+        "{status}"
     );
     assert_eq!(hook(event), "");
 }

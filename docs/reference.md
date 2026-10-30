@@ -3431,7 +3431,8 @@ questions and report status in its chat while you are there, instead of with
 `shoal questions ask` and `shoal alerts send`. Claude Code launches also run
 `shoal internal wake` as a background `Stop` and `StopFailure` hook with
 `asyncRewake`: after each turn, including one an API error ended, it waits up to a week for the next message or item activity, prints it and
-exits 2, so Claude Code starts the idle agent's next turn with it. The wait
+exits 2, so Claude Code starts the idle agent's next turn with it. No other hook
+reports that turn starting, so it first reports the agent `working`. The wait
 outlasts a daemon restart, including its handover to the installed release
 after an upgrade, until the agent's wrapper reattaches; a wait that fails
 otherwise is tried again after a delay that doubles up to a minute, so the

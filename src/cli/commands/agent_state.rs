@@ -44,6 +44,22 @@ pub(super) async fn run(
     emit(ctx, status)
 }
 
+/// Report the agent of `workspace` working on a turn that no hook of its own
+/// reports starting.
+pub(super) async fn report_turn_start(ctx: &Context, workspace: String) -> Result<()> {
+    let _: AgentStatus = request(
+        &ctx.paths,
+        AgentMethod::SetAgentState {
+            workspace,
+            state: AgentState::Working,
+            session: None,
+            turn_end: None,
+        },
+    )
+    .await?;
+    Ok(())
+}
+
 /// Report the turn that the hook event of an agent with `integration`
 /// says an API error ended, which leaves the agent idle. An event the
 /// integration cannot read reports an unknown failure.

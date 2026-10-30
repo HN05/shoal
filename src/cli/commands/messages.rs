@@ -165,12 +165,27 @@ pub(super) async fn wake(
     let Some((inbox, updates)) = next else {
         return Ok(0);
     };
+    report_woken_turn(ctx, &inbox).await;
     eprintln!("{}", inbox.hook_context(&updates));
     std::io::Write::flush(&mut std::io::stderr())?;
     if let Err(error) = inbox.acknowledge(ctx, &updates).await {
         eprintln!("shoal: these updates may be delivered again: {error:#}");
     }
     Ok(2)
+}
+
+/// Report the turn the wake starts before delivering its updates: Claude
+/// Code fires no hook when a hook's exit starts a turn, so the agent would
+/// show idle until its first tool call, and an idle stop could end the turn
+/// that consumed the update meant to restore it. A chat's agent reports no
+/// turn state.
+async fn report_woken_turn(ctx: &Context, inbox: &Inbox) {
+    let Inbox::Workspace(workspace) = inbox else {
+        return;
+    };
+    if let Err(error) = super::agent_state::report_turn_start(ctx, workspace.clone()).await {
+        eprintln!("shoal: the woken turn was not reported: {error:#}");
+    }
 }
 
 /// How often the wake hook checks that its agent still runs.
