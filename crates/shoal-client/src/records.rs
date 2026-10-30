@@ -268,6 +268,8 @@ open_enum! {
 pub struct Approval {
     /// The number it is decided by; reused once the request is gone.
     pub id: i64,
+    /// What names this request for good, unlike its number.
+    pub key: String,
     pub workspace_id: String,
     /// The workspace's name.
     pub workspace: String,

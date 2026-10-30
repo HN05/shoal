@@ -47,17 +47,10 @@ async fn shown_question(
     Ok(question)
 }
 
-/// Only the user decides approval requests through the client API.
 pub(super) async fn decide_approval(
     session: &Session,
     params: DecideApproval,
 ) -> Result<Approval, ApiError> {
-    if session.caller.is_some() {
-        return Err(ApiError::new(
-            ErrorCode::ScopeDenied,
-            "only the user decides approval requests",
-        ));
-    }
     let shown = match &params.shown {
         Some(shown) => Some(Box::new(shown_approval(session, params.id, shown).await?)),
         None => None,

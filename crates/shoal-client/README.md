@@ -42,8 +42,8 @@ loop {
 `$SHOAL_STATE_DIR`, or in `~/.local/state/shoal`. Without a scope token the
 caller is the user. With `.scope(token)`, it is the agent of the workspace the
 token belongs to, under the same scope rules as that agent's `shoal` commands:
-it reaches only its own workspace and those split from it, cannot take holds,
-decide approvals or read notifications.
+it reaches only its own workspace and those split from it, cannot take holds
+or read notifications, and decides only the approval requests passed to it.
 
 A `Client` sends one call at a time and reconnects on the next call after the
 daemon closed its connection. A call cut off by a restart fails with

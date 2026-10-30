@@ -161,6 +161,7 @@ pub(super) fn question(question: Question) -> api::Question {
 pub(super) fn approval(request: ApprovalRequest) -> api::Approval {
     api::Approval {
         id: request.id,
+        key: request.key,
         workspace_id: request.workspace_id,
         workspace: request.workspace,
         target: request.target.to_string(),

@@ -111,7 +111,8 @@ methods! {
         /// Stop what runs in the workspace, saving its agent's session.
         "agent.stop" => StopAgent -> ();
         "question.answer" => AnswerQuestion -> Question;
-        /// Approve or deny a request; only the user decides.
+        /// Approve or deny a request: the user any, a workspace's agent only
+        /// those its children's agents passed to it, as with `shoal approvals`.
         "approval.decide" => DecideApproval -> Approval;
     }
     streams {

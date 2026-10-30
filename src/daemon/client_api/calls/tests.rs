@@ -279,7 +279,7 @@ async fn questions_are_answered_and_an_unknown_one_is_not_found() {
 }
 
 #[tokio::test]
-async fn only_the_user_decides_approvals() {
+async fn a_workspace_agent_cannot_decide_a_request_not_passed_to_it() {
     let daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("requester").await;
     let request = ApprovalRequest::new(
@@ -313,7 +313,7 @@ async fn only_the_user_decides_approvals() {
     );
     let client = daemon.client().await;
     let mut stale = super::super::records::approval(pending.clone());
-    stale.reason = "another reason".into();
+    stale.key = "a released request's key".into();
     assert_eq!(
         code(client.call(decide(pending.id, Some(stale))).await),
         ErrorCode::NotFound

@@ -208,6 +208,10 @@
           "format": "int64",
           "type": "integer"
         },
+        "key": {
+          "description": "What names this request for good, unlike its number.",
+          "type": "string"
+        },
         "name": {
           "type": "string"
         },
@@ -231,6 +235,7 @@
       },
       "required": [
         "id",
+        "key",
         "workspace_id",
         "workspace",
         "target",
@@ -1446,7 +1451,7 @@
           "type": "object"
         },
         {
-          "description": "Approve or deny a request; only the user decides.",
+          "description": "Approve or deny a request: the user any, a workspace's agent only\nthose its children's agents passed to it, as with `shoal approvals`.",
           "properties": {
             "method": {
               "const": "approval.decide",
