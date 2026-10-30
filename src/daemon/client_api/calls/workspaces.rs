@@ -109,6 +109,7 @@ pub(super) async fn queue_agent(
 ) -> Result<QueuedAgent, ApiError> {
     let agent: crate::agent::Agent = params.agent.parse().map_err(errors::invalid)?;
     let workspace = inspect(session, params.workspace).await?;
+    ensure_available(session, &workspace, &agent).await?;
     let plan = crate::cli::commands::queued_agent_plan(&workspace, agent.clone(), params.prompt)
         .map_err(|error| errors::failed(&error))?;
     let request = QueueRequest {
@@ -136,6 +137,23 @@ pub(super) async fn queue_agent(
         },
         position: entry.position.map(|position| position as u64),
     })
+}
+
+/// Refuse `agent` when it cannot run in `workspace` under its effective
+/// settings, as `shoal add` does before anything starts.
+async fn ensure_available(
+    session: &Session,
+    workspace: &model::Workspace,
+    agent: &crate::agent::Agent,
+) -> Result<(), ApiError> {
+    let settings = session
+        .server
+        .manager
+        .workspace_settings(workspace)
+        .await
+        .map_err(|error| errors::failed(&error))?;
+    crate::cli::agents::ensure_available(agent.name(), &settings)
+        .map_err(|error| errors::failed(&error))
 }
 
 /// Stop what runs in the workspace, as `shoal stop` does.

@@ -213,6 +213,8 @@ async fn simulator_leases_follow_the_workspace_scope() {
 #[tokio::test]
 async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
     let daemon = TestDaemon::start().await;
+    // An agent whose command is installed wherever the tests run.
+    crate::test_support::configure(&daemon.manager, "[commands]\nprobe = [\"true\"]\n").await;
     daemon.workspace("worker").await;
     let client = daemon.client().await;
     let queue = |agent: &str| QueueAgent {
@@ -224,7 +226,11 @@ async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
         code(client.call(queue("Not An Agent")).await),
         ErrorCode::InvalidRequest
     );
-    let queued = client.call(queue("claude")).await.unwrap();
+    assert_eq!(
+        code(client.call(queue("undefined")).await),
+        ErrorCode::OperationFailed
+    );
+    let queued = client.call(queue("probe")).await.unwrap();
     let plan = daemon.manager.queued_plan(&queued.id).await.unwrap().plan;
     let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
     // A launcher's `{prompt}` receives it rather than its forwarded arguments.
@@ -235,7 +241,7 @@ async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
         matches!(agent.state, AgentState::Queued | AgentState::Starting),
         "{agent:?}"
     );
-    assert_eq!(agent.agent.as_deref(), Some("claude"));
+    assert_eq!(agent.agent.as_deref(), Some("probe"));
     client
         .call(StopAgent {
             workspace: "worker".into(),
