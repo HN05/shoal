@@ -252,9 +252,11 @@ pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<
     let repos = client::repositories(&ctx.paths).await?;
     let selector = match repository {
         Some(repository) => ui::repository_selector(repository)?,
-        None => super::issues::current_repository(ctx, repos.clone(), "pass a repository")
-            .await?
-            .into(),
+        None => {
+            super::issues::current_repository(ctx, repos.clone(), super::repositories::REPOSITORY)
+                .await?
+                .into()
+        }
     };
     Ok(repository::select(&repos, selector).await?.clone())
 }

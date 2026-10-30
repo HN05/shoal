@@ -9,7 +9,7 @@ mod selection;
 mod sync;
 
 pub(super) use registration::{offer_registration, offer_unregistered};
-pub(super) use selection::{absolute, chosen};
+pub(super) use selection::{REPOSITORY, absolute, chosen};
 
 use anyhow::Result;
 

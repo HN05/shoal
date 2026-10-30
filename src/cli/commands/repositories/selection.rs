@@ -4,11 +4,12 @@ use std::path::PathBuf;
 use anyhow::Result;
 
 use crate::{
-    cli::{client, context::Context, ui},
+    cli::{client, commands::issues, context::Context, ui},
     repository,
 };
 
-/// The named repository, else one chosen from the registered repositories.
+/// The named repository, else the current checkout's or workspace's, else
+/// one chosen from the registered repositories.
 pub(in crate::cli::commands) async fn chosen(
     ctx: &Context,
     repository: Option<String>,
@@ -17,10 +18,15 @@ pub(in crate::cli::commands) async fn chosen(
         Some(repository) => ui::repository_selector(repository),
         None => {
             let repos = client::repositories(&ctx.paths).await?;
-            Ok(ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?.into())
+            Ok(issues::current_repository(ctx, repos, REPOSITORY)
+                .await?
+                .into())
         }
     }
 }
+
+/// How a refusal names an omitted `<repository>` argument.
+pub(in crate::cli::commands) const REPOSITORY: &str = "pass <repository>";
 
 /// Expand `~` and resolve relative paths against the caller's directory.
 pub(in crate::cli::commands) fn absolute(ctx: &Context, path: PathBuf) -> Result<PathBuf> {

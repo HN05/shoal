@@ -625,7 +625,9 @@ token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
 registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
-`repo rename` asks for an omitted name.
+`repo rename` asks for an omitted name. Commands that take a registered
+repository and omit it use the one of the current registered checkout or
+workspace, then a repository picker.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
 scoped workspace or the workspace containing the current directory, then an

@@ -2186,7 +2186,10 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("; pass it explicitly"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass it explicitly"),
+        "{output:?}"
+    );
 }
 
 #[test]
@@ -6470,12 +6473,19 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::new();
     fixture.add("available");
     let workspace = "missing workspace; pass it explicitly";
+    let workspaces = "missing workspaces; pass it explicitly";
     for (args, refusal) in [
-        (&["add"][..], "missing repository; pass <repository>"),
-        (&["run", "--", "true"], workspace),
-        (&["rm"], "missing workspaces; pass it explicitly"),
-        (&["status"], workspace),
-        (&["stop"], "missing workspaces; pass it explicitly"),
+        (
+            &["add"][..],
+            "no current registered repository; pass <repository>",
+        ),
+        (
+            &["run", "--", "true"],
+            "missing workspace; pass it explicitly",
+        ),
+        (&["rm"], workspaces),
+        (&["status"], "missing workspace; pass it explicitly"),
+        (&["stop"], workspaces),
         (&["diff"], workspace),
         (&["done"], workspace),
     ] {
@@ -10286,7 +10296,11 @@ fn repository_commands_pick_an_omitted_repository() {
         .to_owned();
     let missing = fixture.run(&["repo", "rm", "--yes"]);
     assert!(!missing.status.success());
-    assert!(String::from_utf8_lossy(&missing.stderr).contains("; pass it explicitly"));
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains("no current registered repository; pass <repository>"),
+        "{missing:?}"
+    );
 
     let (output, rows) = fixture.pick(&["repo", "config"], &id, "");
     assert!(output.status.success(), "{output:?}");
@@ -10297,6 +10311,37 @@ fn repository_commands_pick_an_omitted_repository() {
     let (output, _) = fixture.pick(&["repo", "rm", "--yes"], &id, "");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(fixture.ok(&["repo", "ls"]), serde_json::json!([]));
+}
+
+#[test]
+fn omitted_repositories_come_from_the_current_checkout() {
+    let fixture = Fixture::new();
+    git(&fixture.repo, &["branch", "topic"]);
+    // No terminal: only the checkout can supply the repository.
+    let run = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .current_dir(&fixture.repo)
+            .output()
+            .unwrap()
+    };
+    let output = run(&["repo", "config"]);
+    assert!(output.status.success(), "{output:?}");
+    let output = run(&["--json", "add", "--existing", "topic"]);
+    assert!(output.status.success(), "{output:?}");
+    for (args, refusal) in [
+        (&["add"][..], "missing branch name; pass it explicitly"),
+        (&["repo", "rename"], "missing new name; pass it explicitly"),
+    ] {
+        let output = run(args);
+        assert!(!output.status.success(), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(refusal),
+            "{args:?}: {output:?}"
+        );
+    }
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
 }
 
 #[test]
@@ -10644,7 +10689,10 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("explicit target"));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass it explicitly"),
+        "{output:?}"
+    );
 }
 
 #[test]

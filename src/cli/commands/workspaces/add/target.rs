@@ -50,15 +50,9 @@ pub(super) async fn resolve_add_target(
                 Some(_) => issues::current_repository(ctx, repos.clone(), issues::REPO_OR_URL)
                     .await?
                     .into(),
-                None => {
-                    ui::require_argument(ctx, "repository", "<repository>")?;
-                    ui::pick(
-                        ctx,
-                        "Repository> ",
-                        ui::repository_choices(repos.clone()).await?,
-                    )?
-                    .into()
-                }
+                None => issues::current_repository(ctx, repos.clone(), repositories::REPOSITORY)
+                    .await?
+                    .into(),
             }
         }
     };
