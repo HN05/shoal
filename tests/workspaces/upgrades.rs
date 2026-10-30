@@ -20,9 +20,20 @@ fn restart_continues_an_upgraded_wrapper_from_the_installed_binary() {
     .unwrap();
     // The wrapper starts from an installed link to an earlier release, a copy
     // of the daemon's binary in the target directory, where it may be cloned.
+    // A child copies it, so parallel spawns cannot inherit its writable
+    // descriptor and cause ETXTBSY when the wrapper executes it.
     let releases = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let earlier = releases.path().join("shoal");
-    fs::copy(env!("CARGO_BIN_EXE_shoal"), &earlier).unwrap();
+    let copied = support::isolated(releases.path(), "cp")
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(&earlier)
+        .output()
+        .unwrap();
+    assert!(
+        copied.status.success(),
+        "copy shoal: {}",
+        String::from_utf8_lossy(&copied.stderr)
+    );
     let installed = fixture.root.path().join("installed/shoal");
     fs::create_dir_all(installed.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(&earlier, &installed).unwrap();
