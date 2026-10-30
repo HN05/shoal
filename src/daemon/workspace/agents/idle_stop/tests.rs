@@ -66,7 +66,10 @@ async fn agent(
             .unwrap();
     }
     if setup.done {
-        manager.mark_done(&workspace.id, true, false).await.unwrap();
+        manager
+            .mark_done(&workspace.id, true, false, Vec::new())
+            .await
+            .unwrap();
     }
     (workspace, execution)
 }

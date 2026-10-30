@@ -24,7 +24,10 @@ async fn idle_in_held_done_workspace(
         .acquire_hold(&workspace.id, "app".into(), None)
         .await
         .unwrap();
-    manager.mark_done(&workspace.id, true, false).await.unwrap();
+    manager
+        .mark_done(&workspace.id, true, false, Vec::new())
+        .await
+        .unwrap();
     id
 }
 
