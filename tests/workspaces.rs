@@ -6468,7 +6468,7 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
 
 #[test]
 fn noninteractive_missing_targets_do_not_open_pickers() {
-    let fixture = Fixture::new();
+    let fixture = Fixture::with_config(Some("[commands]\ncheck = ['true']\n"));
     fixture.add("available");
     let workspace = "missing workspace; pass <workspace>";
     let workspaces = "missing workspaces; pass <workspace>";
@@ -6486,6 +6486,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         (&["stop"], workspaces),
         (&["diff"], workspace),
         (&["done"], workspace),
+        (&["check"], workspace),
     ] {
         for json in [false, true] {
             let mut command = fixture.command();

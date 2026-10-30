@@ -2,7 +2,7 @@
 //! refusal to prompt without a terminal can name what to pass instead.
 use clap::{Arg, CommandFactory};
 
-use super::Cli;
+use super::{Cli, args::Invocation};
 
 /// How the command at `path`, such as `["repo", "rm"]`, takes `argument`,
 /// the ID or value name of one of its arguments: `--workspace <workspace>`
@@ -12,8 +12,17 @@ pub fn of(path: &[String], argument: &str) -> Option<String> {
     let mut root = Cli::command();
     // Arguments are deferred until their command is built.
     root.build();
-    let mut command = &root;
-    for name in path {
+    let (first, rest) = path.split_first()?;
+    let invocation;
+    let mut command = match root.find_subcommand(first) {
+        Some(command) => command,
+        // A name the root does not define runs a configured command.
+        None => {
+            invocation = Invocation::command();
+            &invocation
+        }
+    };
+    for name in rest {
         command = command.find_subcommand(name)?;
     }
     let by_id = command.get_arguments().find(|arg| arg.get_id() == argument);

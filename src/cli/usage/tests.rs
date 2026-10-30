@@ -14,7 +14,8 @@ fn arguments_show_as_the_command_line_passes_them() {
         (&["release", "hold"], "name", Some("--name <name>")),
         (&["repo", "rm"], "repository", Some("<repository>")),
         (&["status"], "repository", None),
-        (&["no-such-command"], "workspace", None),
+        (&["check"], "workspace", Some("<workspace>")),
+        (&["status", "no-such-command"], "workspace", None),
     ] {
         assert_eq!(
             of(&path(command), argument).as_deref(),
