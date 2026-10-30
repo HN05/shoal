@@ -6,6 +6,7 @@ fn started(url: &str) -> StartedRun {
         branch: "topic".into(),
         url: Some(url.into()),
         linked: false,
+        warnings: Vec::new(),
     }
 }
 

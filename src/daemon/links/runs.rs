@@ -38,16 +38,33 @@ impl Manager {
             branch: branch.unwrap_or_else(|| workspace.branch.clone()),
             inputs,
         };
+        // Refuse before the run starts what would refuse its link after.
+        let id = workspace.id.clone();
+        self.store
+            .run(move |db| super::ensure_accepts_links(db, &id))
+            .await?;
         let mut started = forge
             .start_run(&account, &run)
             .await
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
-        if let Some(item) = started_link(&forge, &started) {
-            self.record_items(&workspace.id, vec![(Relation::Opened, item)])
-                .await?;
-            started.linked = true;
-        }
+        self.link_started(&workspace.id, &forge, &mut started).await;
         Ok(started)
+    }
+
+    /// Link the started run where Shoal reads it. The run has started
+    /// whatever happens here, so a failure to link it is a warning, which
+    /// keeps a retry from starting another run.
+    async fn link_started(&self, id: &str, forge: &ForgeRepo, started: &mut StartedRun) {
+        let Some(item) = started_link(forge, started) else {
+            return;
+        };
+        let url = item.url.clone();
+        match self.record_items(id, vec![(Relation::Opened, item)]).await {
+            Ok(()) => started.linked = true,
+            Err(error) => started.warnings.push(format!(
+                "could not link {url}: {error:#}; link it with shoal link ci {url} opened"
+            )),
+        }
     }
 
     /// Rerun or cancel the run `input` names; workspace processes act only

@@ -29,6 +29,9 @@ pub struct StartedRun {
     /// The workspace linked the run, so watches follow it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub linked: bool,
+    /// What went wrong after the run started, such as linking it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
 }
 
 /// Refuse a workflow or branch no forge runs, before any lookup.
@@ -90,6 +93,7 @@ impl ForgeRepo {
             branch: run.branch.clone(),
             url: self.kind.started_run_url(self, &response),
             linked: false,
+            warnings: Vec::new(),
         })
     }
 }

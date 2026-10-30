@@ -32,6 +32,9 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
         },
     )
     .await?;
+    for warning in &started.warnings {
+        eprintln!("{warning}");
+    }
     ctx.emit(&started_text(&started), &started)?;
     Ok(0)
 }
