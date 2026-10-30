@@ -90,6 +90,8 @@ impl Backend for Forgejo {
             Capability::RerunJobs => Support::Unsupported(Some(
                 "rerun them from the web UI, push a fix, or start a new run with shoal ci run",
             )),
+            // Forgejo approves runs only through a web UI route.
+            Capability::ApproveRuns => Support::Unsupported(Some("approve them in the web UI")),
             Capability::CancelJobs
             | Capability::StartRuns
             | Capability::ReadRuns
@@ -692,6 +694,7 @@ impl Backend for Forgejo {
             branch: text(&value["prettyref"]),
             workflow: text(&value["workflow_id"]),
             state: actions::state(&value["status"])?,
+            waiting: value["need_approval"] == true,
         })
     }
 
@@ -709,6 +712,14 @@ impl Backend for Forgejo {
             path.push_str(&format!("&head_sha={}", encode(commit, false)));
         }
         Ok(path)
+    }
+
+    /// Forgejo marks the runs that wait for approval among the commit's.
+    fn waiting_runs_path(&self, head: &str) -> Option<String> {
+        Some(format!(
+            "actions/runs?limit=50&page=1&head_sha={}",
+            encode(head, false)
+        ))
     }
 
     /// Forgejo lists every job of a run at once.

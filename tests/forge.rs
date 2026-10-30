@@ -2808,7 +2808,7 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
                 !fixture
                     .requests()
                     .iter()
-                    .any(|request| request[0].as_str().unwrap().contains("/actions/"))
+                    .any(|request| request[0].as_str().unwrap().ends_with("/logs"))
             );
         }
     }
@@ -3247,6 +3247,31 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     fixture.ok(&["link", "ci", "2765", "opened", "--workspace", "topic"]);
     let again = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
     assert_eq!(again["updates"][0]["kind"], "ci_completed", "{again}");
+}
+
+#[test]
+fn forgejo_lists_runs_waiting_for_approval() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    let run = |number: u64, need_approval: bool| {
+        json!({"id": 9330 + number, "index_in_repo": number, "prettyref": "contributor",
+            "workflow_id": "ci.yml", "status": "blocked", "need_approval": need_approval})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 0, "statuses": []}},
+        "GET repos/team/project/pulls/8/reviews?limit=50&page=1": {"body": []},
+        "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
+        "GET repos/team/project/actions/runs?limit=50&page=1&head_sha=head":
+            {"body": {"workflow_runs": [run(2766, true), run(2765, false)], "total_count": 2}},
+    }));
+    let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--workspace", "topic"])[0];
+    assert_eq!(
+        view["pr"]["waiting_runs"],
+        json!([{"url": format!("{}/actions/runs/2766", fixture.web), "workflow": "ci.yml"}]),
+        "{view}"
+    );
 }
 
 #[test]

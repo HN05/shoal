@@ -5,7 +5,8 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, items::item::ItemState, updates::Snapshot,
+    ForgeRepo, account::Account, backends::Backend, ci::approval::WaitingRun,
+    items::item::ItemState, updates::Snapshot,
 };
 
 crate::state::states!(PrState {
@@ -40,9 +41,16 @@ pub struct PrStatus {
     /// Unknown while the forge computes mergeability, and for drafts and closed PRs.
     pub merge_conflicts: Option<bool>,
     pub checks: Vec<CheckResult>,
+    /// The runs on the open PR's head that wait for approval, which report
+    /// no checks until they are approved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_runs: Vec<WaitingRun>,
     pub review: Option<ReviewState>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
+    /// The open PR's head commit, where its runs are looked up.
+    #[serde(skip)]
+    pub(crate) head: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,8 +87,10 @@ impl PrStatus {
             state,
             merge_conflicts: None,
             checks: Vec::new(),
+            waiting_runs: Vec::new(),
             review: None,
             errors: Vec::new(),
+            head: None,
         }
     }
 
@@ -106,6 +116,7 @@ impl PrStatus {
         }
         self.merge_conflicts = snapshot.conflict;
         self.checks = snapshot.check_results();
+        self.head = Some(snapshot.head).filter(|head| !head.is_empty());
     }
 
     /// The review state, or why it could not be read.
@@ -127,7 +138,23 @@ impl ForgeRepo {
             self.kind.pr_status(self, account, number, url).await
         }
         .await;
-        result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error))
+        let mut status = result.unwrap_or_else(|error| PrStatus::failed(url.into(), &error));
+        self.record_waiting_runs(account, &mut status).await;
+        status
+    }
+
+    /// The runs on the open PR's head that wait for approval, or why they
+    /// could not be read.
+    async fn record_waiting_runs(&self, account: &Account, status: &mut PrStatus) {
+        let Some(head) = &status.head else {
+            return;
+        };
+        match self.waiting_runs(account, head).await {
+            Ok(runs) => status.waiting_runs = runs,
+            Err(error) => status
+                .errors
+                .push(format!("waiting CI runs lookup failed: {error:#}")),
+        }
     }
 }
 

@@ -91,6 +91,8 @@ impl Backend for GitLab {
             Capability::UpdateByMerge => Support::Unsupported(Some(
                 "GitLab only rebases a merge request's branch, so use rebase",
             )),
+            // GitLab holds no pipeline for approval.
+            Capability::ApproveRuns => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
@@ -782,6 +784,7 @@ impl Backend for GitLab {
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
             state: status_state(&value["status"])?,
+            waiting: false,
         })
     }
 

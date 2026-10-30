@@ -665,9 +665,10 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one workspace's current state, changes
 since its fork point, what it holds, its agent sessions, whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
-conflicts, each CI check's result, and a review state from each reviewer's latest
-approval or change request. A failed lookup reports its error on that item
-without failing the command. When the
+conflicts, each CI check's result, the CI runs on an open PR's head that
+[wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
+reviewer's latest approval or change request. A failed lookup reports its error
+on that item without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
@@ -3038,6 +3039,12 @@ each run's `url`, `state`, `branch` and `workflow`, and for `view` its `jobs`
 with their `id`, `name`, `state` and `url`, the `logs` it read and the `errors`
 of those it could not.
 
+Forges hold the runs of PRs from forks and first-time contributors until a
+maintainer approves them, and until then those runs report no checks. `shoal
+view` and `shoal status` list an open PR's waiting runs in `waiting_runs`, each
+with its `url` and `workflow`. GitHub reports the runs it holds; Forgejo and
+Gitea mark them among the head commit's runs; GitLab and Bitbucket hold none.
+
 #### Forge API requests
 
 ```sh
@@ -3107,7 +3114,8 @@ otherwise; a
 PR adds its branches, how many commits its base has that its head lacks (`behind`,
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
-Gitea do not), the merge conflicts, CI checks and review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
+Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
+review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and

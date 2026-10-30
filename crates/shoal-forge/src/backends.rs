@@ -592,6 +592,13 @@ pub(crate) trait Backend {
     /// newest first.
     fn runs_path(&self, filter: &RunFilter) -> Result<String>;
 
+    /// The path under the repository that lists the runs on the commit
+    /// `head` that may wait for approval, or `None` where the forge holds no
+    /// runs for it.
+    fn waiting_runs_path(&self, _head: &str) -> Option<String> {
+        None
+    }
+
     /// The runs a read of the list path returned.
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
         value["workflow_runs"].as_array().map(Vec::as_slice)
@@ -1246,6 +1253,10 @@ impl Backend for ForgeKind {
 
     fn runs_path(&self, filter: &RunFilter) -> Result<String> {
         dispatch!(self, backend => backend.runs_path(filter))
+    }
+
+    fn waiting_runs_path(&self, head: &str) -> Option<String> {
+        dispatch!(self, backend => backend.waiting_runs_path(head))
     }
 
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
