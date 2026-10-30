@@ -1,6 +1,5 @@
 //! The picker `shoal files` opens on a terminal: a workspace's files, and a
 //! row that adds one, where a key binding chooses what to do.
-use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -44,7 +43,7 @@ pub(super) async fn choose(
     match resolve_action(picked.action, &picked.id)? {
         FileAction::Add => {
             let path = ui::input(ctx, "File to add")?;
-            add(ctx, Some(workspace), vec![PathBuf::from(path)]).await
+            add(ctx, Some(workspace), vec![path]).await
         }
         FileAction::Print => print(picked_file(files, &picked.id)?),
         FileAction::PrintPath => {
@@ -67,7 +66,7 @@ pub(super) async fn choose(
 fn entries(files: &[AttachedFile]) -> ui::Entries {
     let now = crate::time::unix_seconds() as i64;
     let rows = files.iter().map(|file| cells(file, now)).collect();
-    let limit = ui::picker_width().map(|width| WidthLimit { column: 5, width });
+    let limit = ui::picker_width().map(|width| WidthLimit { column: 6, width });
     let labels = ui::aligned_to(rows, Palette::picker(), limit);
     files
         .iter()

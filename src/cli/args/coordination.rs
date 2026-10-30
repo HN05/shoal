@@ -56,10 +56,10 @@ pub enum CoordinationCommand {
         /// Leave the workspace's demos running until cleanup removes it.
         #[arg(long, conflicts_with = "undo")]
         keep_demos: bool,
-        /// Hand back a file, such as a report; repeat for more. shoal files
-        /// lists it, after cleanup too.
+        /// Hand back a file, such as a report, as PATH or PATH#TITLE; repeat
+        /// for more. shoal files lists it, after cleanup too.
         #[arg(long, value_name = "FILE", conflicts_with = "undo")]
-        attach: Vec<PathBuf>,
+        attach: Vec<String>,
     },
 }
 
@@ -69,9 +69,9 @@ pub enum FilesCommand {
     /// Attach copies of files to a workspace without a message; its agents
     /// can read them.
     Add {
-        /// Files to attach.
+        /// Files to attach, as PATH or PATH#TITLE.
         #[arg(required = true, value_name = "FILE")]
-        files: Vec<PathBuf>,
+        files: Vec<String>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,
@@ -119,10 +119,11 @@ pub enum MessagesCommand {
         /// Read the message from a file, such as multi-line instructions.
         #[arg(long, value_name = "PATH", conflicts_with = "message")]
         body_file: Option<PathBuf>,
-        /// Attach a file, such as a screenshot or log, which Shoal copies
-        /// where the agents can read it; repeat for more.
+        /// Attach a file, such as a screenshot or log, as PATH or
+        /// PATH#TITLE, which Shoal copies where the agents can read it;
+        /// repeat for more.
         #[arg(long = "attach", value_name = "FILE")]
-        attach: Vec<PathBuf>,
+        attach: Vec<String>,
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(long)]
         workspace: Option<String>,

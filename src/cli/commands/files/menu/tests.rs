@@ -26,7 +26,7 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
         workspace: "audit".into(),
         source: crate::daemon::workspace_files::FileSource::Result,
         name: "report.md".into(),
-        title: None,
+        title: Some("Audit findings".into()),
         path: "/repo/.attachments/results/id/key/0/report.md".into(),
         bytes: 960,
         created_at: 0,
@@ -37,5 +37,6 @@ fn each_file_is_a_row_by_its_record_before_the_add_row() {
     let ids: Vec<_> = rows.iter().map(|(id, _)| id.as_str()).collect();
     assert_eq!(ids, ["7", ADD_ENTRY]);
     assert!(rows[0].1.contains("report.md"), "{}", rows[0].1);
+    assert!(rows[0].1.contains("Audit findings"), "{}", rows[0].1);
     assert_eq!(rows[1].1, "+ Add file");
 }

@@ -113,7 +113,7 @@ pub(in crate::cli::commands) async fn run(
                     integrated,
                     keep_demos,
                     results: {
-                        let results = messages::attachment_paths(&attach)?;
+                        let results = messages::attachments(&attach)?;
                         crate::daemon::workspace_files::check_results(&results)?;
                         results
                     },

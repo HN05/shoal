@@ -19565,7 +19565,7 @@ fn messages_carry_copies_of_attached_files() {
             "messages",
             "send",
             "--attach",
-            "shot.png",
+            "shot.png#Login screen",
             "--workspace",
             "receiver",
         ])
@@ -19582,6 +19582,7 @@ fn messages_carry_copies_of_attached_files() {
     let files = fixture.ok(&["files", "receiver"]);
     assert_eq!(files[0]["name"], "shot.png", "{files}");
     assert_eq!(files[0]["source"], "message", "{files}");
+    assert_eq!(files[0]["title"], "Login screen", "{files}");
     assert_eq!(files[0]["path"], messages[0]["attachments"][0], "{files}");
     let paths = fixture.run(&["files", "receiver", "--path"]);
     assert_eq!(
@@ -19611,9 +19612,36 @@ fn files_add_attaches_copies_without_a_message() {
     assert!(output.status.success(), "{output:?}");
     let added: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(added[0]["source"], "added", "{added}");
+    assert!(added[0].get("title").is_none(), "{added}");
     let copy = Path::new(added[0]["path"].as_str().unwrap());
     assert_eq!(fs::read_to_string(copy).unwrap(), "plan");
     assert_eq!(fixture.ok(&["files", "receiver"]), added);
+    // A title follows the path after #, and the list shows it.
+    fs::write(fixture.root.path().join("chart.html"), "<svg/>").unwrap();
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "--json",
+            "files",
+            "add",
+            "chart.html#Latency by region",
+            "--workspace",
+            "receiver",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let titled: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(titled[0]["name"], "chart.html", "{titled}");
+    assert_eq!(titled[0]["title"], "Latency by region", "{titled}");
+    let listed = fixture.run(&["files", "receiver", "--print", "--text"]);
+    assert!(
+        String::from_utf8_lossy(&listed.stdout).contains("chart.html  Latency by region"),
+        "{listed:?}"
+    );
+    let deleted = fixture.ok(&["files", "rm", "chart.html", "--workspace", "receiver"]);
+    assert_eq!(deleted, titled);
     assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
     // A missing file fails before anything is picked or copied.
     let missing = fixture.run(&["files", "add", "missing.md", "--workspace", "receiver"]);
@@ -19649,7 +19677,13 @@ fn done_hands_back_files_that_shoal_files_lists() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args(["--json", "done", "audit", "--attach", "report.md"])
+        .args([
+            "--json",
+            "done",
+            "audit",
+            "--attach",
+            "report.md#Audit findings",
+        ])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -19660,6 +19694,7 @@ fn done_hands_back_files_that_shoal_files_lists() {
     );
     let files = fixture.ok(&["files", "audit"]);
     assert_eq!(files[0]["source"], "result", "{files}");
+    assert_eq!(files[0]["title"], "Audit findings", "{files}");
     let result = files[0]["path"].as_str().unwrap();
     assert_eq!(fs::read_to_string(result).unwrap(), "No leaks");
     let status = fixture.run(&["status", "audit", "--text"]);

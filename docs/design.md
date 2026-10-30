@@ -1835,7 +1835,10 @@ agent can read them after the worktree is gone; the workspace's other attached
 files go with it. Each attached file records who attached it: the user, or the
 agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
-names the conversation a client shows the file in. Own-workspace withdrawal removes a
+names the conversation a client shows the file in. A file's optional title
+rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
+text, because attach flags repeat and a separate title flag could not say which
+file it names. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: only holds, open questions, a pending PR proposal and queued
 agent launches keep a workspace.

@@ -1,6 +1,9 @@
 //! `shoal messages send` queues a message for a workspace's agents; `shoal messages`
 //! shows the workspace's undelivered messages once.
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result};
 
@@ -12,8 +15,8 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Fallback},
     },
-    daemon::links::wait::Updates,
-    daemon::{agent_messages::AgentMessage, workspace_files::NewFile},
+    daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
+    forge::items::attach::Attachment,
     protocol::{AgentMethod, ChatMethod, Method},
 };
 
@@ -22,10 +25,10 @@ pub(super) async fn send(
     workspace: Option<String>,
     message: Option<String>,
     body_file: Option<PathBuf>,
-    attach: Vec<PathBuf>,
+    attach: Vec<String>,
 ) -> Result<i32> {
     let message = message_text(message, body_file, !attach.is_empty())?;
-    let attachments = attachment_paths(&attach)?;
+    let attachments = attachments(&attach)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
@@ -40,16 +43,21 @@ pub(super) async fn send(
     Ok(0)
 }
 
-/// The files to attach by the absolute paths the daemon reads, each checked
-/// before a workspace is picked.
-pub(super) fn attachment_paths(files: &[PathBuf]) -> Result<Vec<NewFile>> {
-    files
-        .iter()
-        .map(|file| {
-            let path =
-                std::path::absolute(file).with_context(|| format!("read {}", file.display()))?;
+/// The files to attach, given as `PATH` or `PATH#TITLE`, by the absolute
+/// paths the daemon reads, each checked before a workspace is picked.
+pub(super) fn attachments(args: &[String]) -> Result<Vec<NewFile>> {
+    args.iter()
+        .map(|arg| {
+            let given = Attachment::parse(arg, Path::new(""));
+            let path = std::path::absolute(&given.path)
+                .with_context(|| format!("read {}", given.path.display()))?;
             crate::daemon::workspace_files::layout::check(&path)?;
-            Ok(path.into())
+            let file = NewFile {
+                path,
+                title: given.alt,
+            };
+            file.check()?;
+            Ok(file)
         })
         .collect()
 }

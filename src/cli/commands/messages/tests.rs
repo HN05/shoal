@@ -37,12 +37,29 @@ fn attachments_are_checked_before_sending() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("crash.log");
     std::fs::write(&file, "panic").unwrap();
+    let given = |path: &std::path::Path, title: &str| format!("{}{title}", path.display());
     assert_eq!(
-        attachment_paths(std::slice::from_ref(&file)).unwrap(),
-        [NewFile::from(file)]
+        attachments(&[given(&file, ""), given(&file, "#Crash log ")]).unwrap(),
+        [
+            NewFile {
+                path: file.clone(),
+                title: None,
+            },
+            NewFile {
+                path: file.clone(),
+                title: Some("Crash log".into()),
+            },
+        ]
     );
-    for refused in [dir.path().to_path_buf(), dir.path().join("missing.png")] {
-        assert!(attachment_paths(&[refused]).is_err());
+    for refused in [
+        given(dir.path(), ""),
+        given(&dir.path().join("missing.png"), ""),
+        given(&file, "#Crash\u{7}log"),
+    ] {
+        assert!(
+            attachments(std::slice::from_ref(&refused)).is_err(),
+            "{refused}"
+        );
     }
 }
 

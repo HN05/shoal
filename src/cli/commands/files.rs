@@ -1,8 +1,6 @@
 //! `shoal files` lists the files attached to a workspace, or on a terminal
 //! opens a picker over them; `add` attaches more without a message and `rm`
 //! deletes them.
-use std::path::PathBuf;
-
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -72,9 +70,9 @@ pub(super) async fn list(
 pub(super) async fn add(
     ctx: &Context,
     workspace: Option<String>,
-    files: Vec<PathBuf>,
+    files: Vec<String>,
 ) -> Result<i32> {
-    let files = super::messages::attachment_paths(&files)?;
+    let files = super::messages::attachments(&files)?;
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let added =
         client::pages::<AttachedFile>(&ctx.paths, FileMethod::AddFiles { workspace, files })
@@ -177,14 +175,15 @@ async fn confirmation(ctx: &Context, workspace: Option<&str>) -> Result<Option<S
         }))
 }
 
-/// The file's name, size, how it came, when, read at `now`, when a removed
-/// workspace's file is deleted, and Shoal's copy.
-fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 6] {
+/// The file's name, title, size, how it came, when, read at `now`, when a
+/// removed workspace's file is deleted, and Shoal's copy.
+fn cells(file: &AttachedFile, now: i64) -> [ui::Cell; 7] {
     let expiry = file
         .expires_at
         .map(|expires_at| format!("until {}", crate::time::local_minutes(expires_at)));
     [
         (file.name.clone(), Some(Style::Heading)),
+        (file.title.clone().unwrap_or_default(), None),
         (ui::size_label(file.bytes), None),
         (source_label(file.source).into(), None),
         (
