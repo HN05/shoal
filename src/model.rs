@@ -773,6 +773,10 @@ pub struct Chat {
     /// Where it runs in a terminal host, when it runs in one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<crate::sessions::Origin>,
+    /// Its own directory for temporary files, which goes with it; none in a
+    /// repository without a directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tmp_dir: Option<std::path::PathBuf>,
 }
 
 /// A place Shoal created for a workspace, which closes with it.

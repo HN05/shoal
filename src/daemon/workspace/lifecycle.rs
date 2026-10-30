@@ -933,7 +933,10 @@ impl Manager {
             );
         }
         self.delete_session_logs(&workspace.id);
-        if let Err(error) = self.delete_workspace_tmp_dir(workspace).await {
+        if let Err(error) = self
+            .delete_tmp_dir(&workspace.repository_id, &workspace.id)
+            .await
+        {
             crate::daemon::log!(
                 "temporary directory of {} not deleted: {error:#}",
                 workspace.name

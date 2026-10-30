@@ -24409,6 +24409,13 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     let mut listed = started["chat"].clone();
     listed["origin"] = serde_json::json!({"host": "zmx", "place": "outer"});
+    // The listing names the chat's own temporary directory.
+    let tmp_dir = chats[0]["tmp_dir"].as_str().unwrap().to_owned();
+    assert!(
+        tmp_dir.ends_with(&format!("/.tmp/{}", chat.as_str().unwrap())),
+        "{tmp_dir}"
+    );
+    listed["tmp_dir"] = tmp_dir.into();
     assert_eq!(chats, serde_json::json!([listed]));
     let rows = fs::read_to_string(home.join("chat-work")).unwrap();
     let rows: Vec<Vec<&str>> = rows
