@@ -18,7 +18,10 @@ pub(super) async fn get(session: &Session, workspace: String) -> Result<Workspac
 }
 
 /// The workspace `selector` names, once the caller's scope allows reading it.
-async fn inspect(session: &Session, selector: String) -> Result<model::Workspace, ApiError> {
+pub(super) async fn inspect(
+    session: &Session,
+    selector: String,
+) -> Result<model::Workspace, ApiError> {
     let inspection: Inspection = session
         .ask(WorkspaceMethod::InspectWorkspace {
             workspace: selector,

@@ -6,14 +6,21 @@ use shoal_client::{
     records::{ItemKind, Relation},
 };
 
-use super::{super::Session, items, workspaces};
+use super::{
+    super::{Session, errors},
+    items, workspaces,
+};
 use crate::{
+    agent::Agent,
+    config::Effective,
+    daemon::log,
     forge::items::create::PullOptions,
     model::Workspace,
     protocol::{
-        OperationMethod, WorkspaceMethod,
+        OperationMethod, RemovalMethod, WorkspaceMethod,
         operations::{OperationSpec, Preparation, QueuedLaunch, Started},
     },
+    removal::{RemovalResult, UnsavedWork},
     state::WorkspaceState,
 };
 
@@ -21,6 +28,11 @@ pub(super) async fn create(
     session: &Session,
     params: CreateWorkspace,
 ) -> Result<StartedOperation, ApiError> {
+    if let Some(agent) = &params.agent {
+        let manager = &session.server.manager;
+        let settings = manager.repository_settings(&params.repository).await;
+        check_agent(agent, &settings.map_err(|error| errors::failed(&error))?)?;
+    }
     let workspace: Workspace = session
         .ask(WorkspaceMethod::CreateWorkspace {
             path: None,
@@ -38,6 +50,11 @@ pub(super) async fn split(
     session: &Session,
     params: SplitWorkspace,
 ) -> Result<StartedOperation, ApiError> {
+    if let Some(agent) = &params.agent {
+        let parent = workspaces::inspect(session, params.workspace.clone()).await?;
+        let settings = session.server.manager.workspace_settings(&parent).await;
+        check_agent(agent, &settings.map_err(|error| errors::failed(&error))?)?;
+    }
     let child: Workspace = session
         .ask(WorkspaceMethod::SplitWorkspace {
             workspace: params.workspace,
@@ -48,9 +65,18 @@ pub(super) async fn split(
     prepare(session, child, params.issue, None, params.agent).await
 }
 
+/// Refuse `agent` when it cannot run under `settings`, as `shoal add` does
+/// before anything is created.
+fn check_agent(agent: &AgentToQueue, settings: &Effective) -> Result<(), ApiError> {
+    let parsed: Agent = agent.agent.parse().map_err(errors::invalid)?;
+    crate::cli::agents::ensure_available(parsed.name(), settings)
+        .map_err(|error| errors::failed(&error))
+}
+
 /// Assign `issue` to the new `workspace`, then prepare it: its setup while
 /// it is preparing, its post-setup hook, then linking `pr` and queuing
-/// `agent`.
+/// `agent`. A workspace whose issue cannot be linked is removed, since
+/// nothing ran in it yet.
 async fn prepare(
     session: &Session,
     workspace: Workspace,
@@ -65,7 +91,10 @@ async fn prepare(
             item: issue,
             relation: Relation::Assigned,
         };
-        items::link(session, link).await?;
+        if let Err(error) = items::link(session, link).await {
+            discard(session, &workspace).await;
+            return Err(error);
+        }
     }
     let steps = Preparation {
         setup: workspace.state == WorkspaceState::Preparing,
@@ -78,6 +107,20 @@ async fn prepare(
     };
     let workspace = workspace.id;
     start(session, OperationSpec::Prepare { workspace, steps }).await
+}
+
+/// Remove the new `workspace`, which nothing ran in yet.
+async fn discard(session: &Session, workspace: &Workspace) {
+    let removal = RemovalMethod::RemoveWorkspace {
+        workspace: workspace.id.clone(),
+        unsaved: UnsavedWork::All,
+    };
+    if let Err(error) = session.ask::<RemovalResult>(removal).await {
+        log!(
+            "client API: cannot remove {} after its creation failed: {error}",
+            workspace.name
+        );
+    }
 }
 
 pub(super) async fn open_pr(

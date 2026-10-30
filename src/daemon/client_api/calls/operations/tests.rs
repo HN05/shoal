@@ -156,3 +156,38 @@ async fn operations_outside_the_callers_tree_are_refused() {
     let mut missing = follow("missing").await.unwrap();
     assert_eq!(code(missing.next().await), ErrorCode::NotFound);
 }
+
+#[tokio::test]
+async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
+    let daemon = TestDaemon::start().await;
+    let client = daemon.client().await;
+    let create = |issue: Option<&str>, agent: Option<&str>| CreateWorkspace {
+        repository: daemon.repository.id.clone(),
+        name: "api".into(),
+        base: Some("HEAD".into()),
+        issue: issue.map(Into::into),
+        pr: None,
+        agent: agent.map(|agent| shoal_client::AgentToQueue {
+            agent: agent.into(),
+            prompt: None,
+        }),
+    };
+    assert_eq!(
+        code(client.call(create(None, Some("Not An Agent"))).await),
+        ErrorCode::InvalidRequest
+    );
+    assert_eq!(
+        code(client.call(create(None, Some("undefined"))).await),
+        ErrorCode::OperationFailed
+    );
+    assert!(
+        client
+            .call(create(Some("not an issue"), None))
+            .await
+            .is_err()
+    );
+    let get = shoal_client::GetWorkspace {
+        workspace: "api".into(),
+    };
+    assert_eq!(code(client.call(get).await), ErrorCode::NotFound);
+}
