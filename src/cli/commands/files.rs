@@ -158,7 +158,8 @@ async fn check_selected(
 async fn confirmation(ctx: &Context, workspace: Option<&str>) -> Result<Option<String>> {
     let Some(workspace) = workspace else {
         return Ok(Some(
-            "Delete the attached files of every workspace without a running agent or command"
+            "Delete the attached files of every workspace without a running agent or command, \
+             and of every ended chat"
                 .into(),
         ));
     };
