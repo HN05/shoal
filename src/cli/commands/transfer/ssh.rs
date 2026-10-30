@@ -1,7 +1,7 @@
 //! `shoal move ssh`: hand workspaces to another machine's Shoal, as
 //! `shoal move export | ssh <host> shoal move import --resume` does, once
 //! `ssh` reaches Shoal there.
-use std::{path::Path, process::Stdio};
+use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::Value;
@@ -15,6 +15,7 @@ use crate::{
         ui::{self, Fallback},
     },
     model::Workspace,
+    subprocess::{Run, diagnostic},
 };
 
 /// The exit status of a remote shell that cannot find the command.
@@ -130,10 +131,8 @@ struct Remote {
 impl Remote {
     /// Refuse a machine `ssh` cannot reach, or whose Shoal does not answer.
     async fn check(&self) -> Result<()> {
-        let output = self
-            .command(&["repo", "ls"])
-            .stdin(Stdio::null())
-            .output()
+        let output = Run::new(self.command(&["repo", "ls"]))
+            .capture()
             .await
             .context("run ssh")?;
         let hint = match output.status.code() {
@@ -157,10 +156,9 @@ impl Remote {
             args.push("--resume");
         }
         let input = std::fs::File::open(file)?;
-        let output = self
-            .command(&args)
-            .stdin(input)
-            .output()
+        let output = Run::new(self.command(&args))
+            .input_file(input)
+            .capture()
             .await
             .context("run ssh")?;
         if !output.status.success() {
@@ -196,8 +194,8 @@ fn error_message(output: &std::process::Output) -> String {
         error["error"]["message"].as_str().map(str::to_owned)
     });
     match reported {
-        Some(message) => message,
+        Some(message) => diagnostic(message.as_bytes()),
         None if stderr.trim().is_empty() => output.status.to_string(),
-        None => stderr.trim().to_owned(),
+        None => diagnostic(stderr.trim().as_bytes()),
     }
 }
