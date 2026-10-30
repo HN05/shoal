@@ -347,9 +347,11 @@ impl Snapshot {
             .map(|(source, error)| (source.as_str(), error.as_str()))
     }
 
-    /// Whether the PR conflicts with its base, when known.
-    pub fn conflict(&self) -> Option<bool> {
+    /// Whether the PR's head conflicts with its base; `None` when unknown,
+    /// as it is while the observation kept from an earlier head stands.
+    pub fn head_conflict(&self) -> Option<bool> {
         self.conflict
+            .filter(|_| self.head.is_empty() || self.conflict_at.head == self.head)
     }
 
     /// Whether a check on the head commit has not finished.

@@ -222,7 +222,8 @@ pub struct Link {
     pub head: Option<String>,
     /// A PR's CI checks on its head.
     pub checks: Vec<Check>,
-    /// Whether a PR conflicts with its base; absent when unknown.
+    /// Whether a PR's head conflicts with its base; absent when unknown,
+    /// such as while the forge has not checked a new head.
     pub conflict: Option<bool>,
     /// What the daemon could not read when it last looked, such as CI
     /// checks; what it covers may be older than the rest.

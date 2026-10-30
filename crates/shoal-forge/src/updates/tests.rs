@@ -583,3 +583,19 @@ fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
     assert_eq!(checks, [("new", "failure", true)]);
     assert_eq!(snapshot.errors().collect::<Vec<_>>(), [("CI", "timed out")]);
 }
+
+#[test]
+fn a_conflict_kept_from_an_earlier_head_is_unknown_at_the_new_one() {
+    let mut snapshot = Snapshot {
+        head: "1".into(),
+        conflict: Some(true),
+        conflict_at: MergeRevision {
+            head: "1".into(),
+            base: "main".into(),
+        },
+        ..Snapshot::default()
+    };
+    assert_eq!(snapshot.head_conflict(), Some(true));
+    snapshot.head = "2".into();
+    assert_eq!(snapshot.head_conflict(), None);
+}

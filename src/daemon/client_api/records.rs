@@ -141,7 +141,7 @@ pub(super) fn links(
                         })
                         .collect()
                 }),
-                conflict: observed.and_then(Snapshot::conflict),
+                conflict: observed.and_then(Snapshot::head_conflict),
                 lookup_errors: observed.map_or_else(Vec::new, |observed| {
                     observed
                         .errors()

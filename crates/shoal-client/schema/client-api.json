@@ -592,7 +592,7 @@
           "type": "array"
         },
         "conflict": {
-          "description": "Whether a PR conflicts with its base; absent when unknown.",
+          "description": "Whether a PR's head conflicts with its base; absent when unknown,\nsuch as while the forge has not checked a new head.",
           "type": [
             "boolean",
             "null"
