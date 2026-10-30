@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod edit;
+pub mod file;
 pub mod forges;
 pub mod machine;
 pub mod named_commands;
@@ -23,7 +24,6 @@ use std::{
     time::Duration,
 };
 
-use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
@@ -216,14 +216,11 @@ impl Config {
 
     /// Apply `changes` together, saving only when the result is valid.
     pub fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
-        let path = Self::path(paths);
-        let _lock = Self::lock_file(&path)?;
-        let text = crate::fsutil::read_optional(&path)
-            .with_context(|| format!("read {}", path.display()))?
-            .unwrap_or_default();
-        let edited = edit::apply(&text, changes)?;
-        Self::parse(&edited, paths).context("invalid edited config")?;
-        Self::replace_at(path, &edited)
+        file::edit(Self::path(paths), changes, |edited| {
+            Self::parse(edited, paths)
+                .map(drop)
+                .context("invalid edited config")
+        })
     }
 
     pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
@@ -234,53 +231,8 @@ impl Config {
             .with_context(|| format!("unknown packaged config: {name}"))?;
         Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
         let path = Self::path(paths);
-        let _lock = Self::lock_file(&path)?;
-        Self::replace_at(path, text)
-    }
-
-    fn lock_file(path: &std::path::Path) -> Result<fs::File> {
-        fs::create_dir_all(path.parent().context("config path has no parent")?)?;
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(path.with_extension("toml.lock"))?;
-        fs2::FileExt::lock_exclusive(&file)?;
-        Ok(file)
-    }
-
-    fn replace_at(path: PathBuf, text: &str) -> Result<(PathBuf, Option<PathBuf>)> {
-        let parent = path.parent().context("config path has no parent")?;
-        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
-        // Prepare the complete replacement before moving the user's current file.
-        let temporary = fsutil::prepare_atomic_write(
-            &path,
-            text.as_bytes(),
-            ReplaceOptions {
-                permissions: Permissions::Temporary,
-                sync: false,
-            },
-        )?;
-        if let Ok(metadata) = fs::symlink_metadata(&path) {
-            ensure!(
-                !metadata.is_dir(),
-                "config is a directory: {}",
-                path.display()
-            );
-        }
-        let backup = path.with_extension("toml.backup");
-        let moved = match fs::rename(&path, &backup) {
-            Ok(()) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("move {} to {}", path.display(), backup.display()));
-            }
-        };
-        temporary
-            .persist_noclobber(&path)
-            .with_context(|| format!("install config at {}", path.display()))?;
-        Ok((path, moved.then_some(backup)))
+        let _lock = file::lock(&path)?;
+        file::replace(path, text)
     }
 
     fn install_at(path: PathBuf) -> Result<(PathBuf, bool)> {
@@ -317,7 +269,7 @@ impl Config {
     /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
     /// rather than while its file is moved aside.
     pub fn load_settled(paths: &Paths) -> Result<Self> {
-        let _lock = Self::lock_file(&Self::path(paths))?;
+        let _lock = file::lock(&Self::path(paths))?;
         Self::load(paths)
     }
 
