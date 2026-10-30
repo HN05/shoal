@@ -1956,7 +1956,7 @@ too: resuming would need the pre-restart snapshot to prove nothing changed. User
 instead of its assignment: a merged branch, unsaved files only as leftovers the
 removal's checkpoint keeps (the branch has commits of its own), no Git operation under
 way, no open question, nothing running, no leases, permits, directory users,
-stacked or child workspaces or holds, and no recorded activity, file change or per-worktree Git
+stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
 it decides only after fetching the default branch's remote, at most every ten
 minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
