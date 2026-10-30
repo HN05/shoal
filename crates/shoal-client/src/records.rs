@@ -38,7 +38,7 @@ pub enum Record {
     Workspace(Box<Workspace>),
     Link(Box<Link>),
     Question(Question),
-    Approval(Approval),
+    Approval(Box<Approval>),
     Message(Message),
     Notification(Notification),
     /// A kind this version does not know; ignore it.
@@ -287,10 +287,33 @@ pub struct Approval {
     /// What it authorizes, such as `simulator`, `port/web` or `pr_open`.
     pub target: String,
     pub name: String,
+    /// What the user is asked to decide, such as `simulator (lease)` or
+    /// `open issue "Flaky test"`.
+    pub subject: String,
+    pub lifetime: ApprovalLifetime,
+    /// The issue or PR a proposal opens once approved.
+    pub proposal: Option<ProposedItem>,
     pub reason: String,
     pub status: ApprovalStatus,
     /// Unix seconds.
     pub created_at: u64,
+}
+
+open_enum! {
+    /// How long an approved grant lasts.
+    ApprovalLifetime {
+        /// Until its lease is released.
+        Lease => "lease",
+        /// Until the workspace is removed.
+        Workspace => "workspace",
+    }
+}
+
+/// The issue or PR a proposal opens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ProposedItem {
+    pub title: String,
+    pub body: String,
 }
 
 open_enum! {

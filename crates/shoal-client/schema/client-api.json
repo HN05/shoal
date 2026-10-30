@@ -212,14 +212,32 @@
           "description": "What names this request for good, unlike its number.",
           "type": "string"
         },
+        "lifetime": {
+          "$ref": "#/$defs/ApprovalLifetime"
+        },
         "name": {
           "type": "string"
+        },
+        "proposal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposedItem"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The issue or PR a proposal opens once approved."
         },
         "reason": {
           "type": "string"
         },
         "status": {
           "$ref": "#/$defs/ApprovalStatus"
+        },
+        "subject": {
+          "description": "What the user is asked to decide, such as `simulator (lease)` or\n`open issue \"Flaky test\"`.",
+          "type": "string"
         },
         "target": {
           "description": "What it authorizes, such as `simulator`, `port/web` or `pr_open`.",
@@ -240,11 +258,26 @@
         "workspace",
         "target",
         "name",
+        "subject",
+        "lifetime",
         "reason",
         "status",
         "created_at"
       ],
       "type": "object"
+    },
+    "ApprovalLifetime": {
+      "anyOf": [
+        {
+          "enum": [
+            "lease",
+            "workspace"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
     },
     "ApprovalStatus": {
       "anyOf": [
@@ -765,6 +798,22 @@
       },
       "required": [
         "client_api"
+      ],
+      "type": "object"
+    },
+    "ProposedItem": {
+      "description": "The issue or PR a proposal opens.",
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body"
       ],
       "type": "object"
     },

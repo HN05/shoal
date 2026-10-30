@@ -2,7 +2,7 @@ use shoal_client::{
     AcquireHold, AcquireSimulator, AddLink, AnswerQuestion, DecideApproval, ErrorCode,
     GetWorkspace, ListRepositories, MarkDone, QueueAgent, ReleaseHold, ReleaseSimulator,
     RemoveLink, RemoveWorkspace, RenameWorkspace, StopAgent, SyncRepository, UndoDone,
-    records::{AgentState, ApprovalStatus, ItemKind, Relation},
+    records::{AgentState, ApprovalLifetime, ApprovalStatus, ItemKind, Relation},
 };
 
 use super::super::tests::{TestDaemon, code};
@@ -321,6 +321,9 @@ async fn a_workspace_agent_cannot_decide_a_request_not_passed_to_it() {
     let shown = super::super::records::approval(pending.clone());
     let decided = client.call(decide(pending.id, Some(shown))).await.unwrap();
     assert_eq!(decided.status, ApprovalStatus::Approved);
+    assert_eq!(decided.lifetime, ApprovalLifetime::Workspace);
+    assert_eq!(decided.subject, "port web (workspace)");
+    assert_eq!(decided.proposal, None);
     assert_eq!(
         code(client.call(decide(999, None)).await),
         ErrorCode::NotFound

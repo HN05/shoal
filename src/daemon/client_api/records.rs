@@ -5,7 +5,9 @@ use shoal_client::records::{self as api, MessageRecipient};
 
 use crate::{
     daemon::{
-        agent_messages::AgentMessage, approvals::ApprovalRequest, notifications::Notification,
+        agent_messages::AgentMessage,
+        approvals::{ApprovalRequest, Specification},
+        notifications::Notification,
         questions::Question,
     },
     forge::{
@@ -169,6 +171,9 @@ pub(super) fn question(question: Question) -> api::Question {
 
 pub(super) fn approval(request: ApprovalRequest) -> api::Approval {
     api::Approval {
+        subject: request.subject(),
+        lifetime: api::ApprovalLifetime::from(request.lifetime.to_string().as_str()),
+        proposal: proposed_item(&request.specification),
         id: request.id,
         key: request.key,
         workspace_id: request.workspace_id,
@@ -179,6 +184,19 @@ pub(super) fn approval(request: ApprovalRequest) -> api::Approval {
         status: api::ApprovalStatus::from(request.status.to_string().as_str()),
         created_at: request.created_at,
     }
+}
+
+/// The issue or PR a proposal's `specification` opens.
+fn proposed_item(specification: &Specification) -> Option<api::ProposedItem> {
+    let (title, body) = match specification {
+        Specification::Issue(issue) => (&issue.issue.title, &issue.issue.body),
+        Specification::Pull(pull) => (&pull.pull.title, &pull.pull.body),
+        _ => return None,
+    };
+    Some(api::ProposedItem {
+        title: title.clone(),
+        body: body.clone(),
+    })
 }
 
 /// A message queued for the agent of the workspace `workspace` names.

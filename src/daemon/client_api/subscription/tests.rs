@@ -246,12 +246,12 @@ mod streams {
         let Update::Snapshot { records, .. } = subscription.next().await.unwrap() else {
             panic!("a subscription starts with its snapshot");
         };
-        let ids: Vec<_> = records
-            .iter()
-            .filter_map(|record| record.key())
-            .map(|key| key.id)
-            .collect();
-        assert_eq!(ids, [proposal.id.to_string()]);
+        let [shoal_client::Record::Approval(shown)] = records.as_slice() else {
+            panic!("expected the proposal: {records:?}");
+        };
+        assert_eq!(shown.id, proposal.id);
+        let proposed = shown.proposal.as_ref().unwrap();
+        assert_eq!(proposed.title, "Flaky in proposer");
     }
 
     #[tokio::test]

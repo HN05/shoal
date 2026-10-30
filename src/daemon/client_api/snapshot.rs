@@ -143,7 +143,7 @@ async fn approvals(
             request.status == DecisionStatus::Pending
                 && (caller.is_none() || visible.contains(request.workspace_id.as_str()))
         })
-        .map(|request| Record::Approval(records::approval(request)))
+        .map(|request| Record::Approval(Box::new(records::approval(request))))
         .collect())
 }
 
