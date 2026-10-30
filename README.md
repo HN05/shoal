@@ -195,7 +195,7 @@ shoal cleanup                 # Pick leftover workspaces, kept branches and cach
 shoal work checkpoint fix-login    # Keep HEAD and unsaved files to return to later
 shoal work restore fix-login       # Pick a checkpoint, or open a removed workspace again
 shoal work restore fix-login 3     # Return the workspace to checkpoint 3
-shoal move export fix-login -o - | ssh other shoal move import - # Move the workspace to another machine
+shoal move export fix-login | ssh other shoal move import # Move the workspace to another machine
 shoal move export --repo app --all -o moving # Export every workspace of app, a file each
 shoal move import moving           # Import every workspace exported to a directory
 shoal pr open                 # Push, then link the branch's open PR or open one

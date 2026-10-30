@@ -5,7 +5,9 @@ mod export;
 mod import;
 mod root;
 
-use anyhow::Result;
+use std::{io::IsTerminal, path::PathBuf};
+
+use anyhow::{Context as _, Result, ensure};
 
 use crate::cli::{
     args::transfer::{ExportArgs, ImportArgs, MoveCommand},
@@ -22,14 +24,20 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             output,
             confirmation,
             ..
-        }) => export::export_all(ctx, repository, output, confirmation.yes).await,
+        }) => {
+            let directory = output.context("--all writes a file each; name a directory with -o")?;
+            export::export_all(ctx, repository, directory, confirmation.yes).await
+        }
         MoveCommand::Export(ExportArgs {
             workspace,
             repository: None,
             output,
             confirmation,
             ..
-        }) => export::export(ctx, workspace, output, confirmation.yes).await,
+        }) => {
+            let file = output.map_or_else(standard_output, Ok)?;
+            export::export(ctx, workspace, file, confirmation.yes).await
+        }
         MoveCommand::Import(ImportArgs {
             files,
             repository,
@@ -47,6 +55,10 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
                 repository,
                 sessions,
             };
+            let files = match files.is_empty() {
+                true => vec![standard_input()?],
+                false => files,
+            };
             import::import(ctx, files, options).await
         }
         MoveCommand::Root {
@@ -58,4 +70,24 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             Ok(0)
         }
     }
+}
+
+/// Standard output for an export without -o, refusing a terminal, which
+/// cannot show the archive.
+fn standard_output() -> Result<PathBuf> {
+    ensure!(
+        !std::io::stdout().is_terminal(),
+        "the export is an archive, not text; name a file with -o, or pipe it, as in shoal move export | ssh host shoal move import"
+    );
+    Ok(PathBuf::from(STANDARD_STREAM))
+}
+
+/// Standard input for an import without a file, refusing a terminal, which
+/// cannot type an archive.
+fn standard_input() -> Result<PathBuf> {
+    ensure!(
+        !std::io::stdin().is_terminal(),
+        "name the export file to import, or pipe one in"
+    );
+    Ok(PathBuf::from(STANDARD_STREAM))
 }

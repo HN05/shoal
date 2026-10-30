@@ -1016,9 +1016,11 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(args.contains("\nShoal moved this workspace"), "{args}");
     assert!(!path.join("resumed").exists());
 
+    // Without a file, a piped export writes to standard output and a piped
+    // import reads standard input.
     let exported = fixture
         .command()
-        .args(["move", "export", "moving", "-o", "-"])
+        .args(["move", "export", "moving"])
         .output()
         .unwrap();
     assert!(
@@ -1028,7 +1030,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     );
     let mut import = fixture
         .command()
-        .args(["--json", "move", "import", "-", "--repo", repo])
+        .args(["--json", "move", "import", "--repo", repo])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

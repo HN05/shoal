@@ -12,17 +12,18 @@ pub enum MoveCommand {
     ///
     /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
     /// default branch, and the workspace's base, links and stopped agents. A removed workspace
-    /// is exported without another removal. `-` writes to standard output. When -o names a
-    /// directory, several workspaces, or with --all every workspace of the repository, go to a
-    /// file each in it, once each one can be exported.
+    /// is exported without another removal. Without -o, or with `-`, it writes to standard
+    /// output, which must not be a terminal. When -o names a directory, several workspaces, or
+    /// with --all every workspace of the repository, go to a file each in it, once each one can
+    /// be exported.
     Export(ExportArgs),
     /// Open workspaces shoal move export wrote, in the repository with the same origin.
     ///
     /// Fetches the default branch when a file builds on commits the repository lacks. On the
     /// machine that exported it, shoal resume continues the stopped agents' sessions; elsewhere,
     /// it starts new sessions, since the sessions stayed on the other machine. --keep-sessions
-    /// and --new-sessions override that. `-` reads from standard input. A directory imports each
-    /// .shoal file in it.
+    /// and --new-sessions override that. Without a file, or with `-`, it reads from standard
+    /// input, which must not be a terminal. A directory imports each .shoal file in it.
     Import(ImportArgs),
     /// Move every repository directory, with its workspaces and clone, into root_dir.
     Root {
@@ -49,9 +50,9 @@ pub struct ExportArgs {
     #[arg(long = "repo", requires = "all")]
     pub repository: Option<String>,
     /// File to write, or a directory to write a file per workspace in, which several
-    /// workspaces and --all need.
-    #[arg(short, long)]
-    pub output: PathBuf,
+    /// workspaces and --all need; defaults to standard output.
+    #[arg(short, long, required_if_eq("all", "true"))]
+    pub output: Option<PathBuf>,
     #[command(flatten)]
     pub confirmation: ConfirmationArgs,
 }
@@ -59,8 +60,7 @@ pub struct ExportArgs {
 // Arguments of `shoal move import`.
 #[derive(Debug, Args)]
 pub struct ImportArgs {
-    /// Export files or directories of them.
-    #[arg(required = true)]
+    /// Export files or directories of them; defaults to standard input.
     pub files: Vec<PathBuf>,
     /// Repository to import into, when it does not share the exported repository's origin.
     #[arg(long = "repo")]

@@ -2501,15 +2501,15 @@ archive_max_mb = 50
 ```sh
 shoal move export topic -o topic.shoal         # remove topic and write it to a file
 shoal move import topic.shoal                  # open it in the repository with the same origin
-shoal move export topic -o - | ssh other shoal move import -
+shoal move export topic | ssh other shoal move import
 shoal move export --repo app --all -o moving   # remove every workspace of app, a file each
 shoal move export topic spike -o moving        # remove both, a file each
 shoal move import moving                       # open every workspace exported to moving
 ```
 
 `shoal move export [workspace] -o <file>` removes the workspace as `shoal rm` does and
-writes its removal record and checkpoint to a new file, or to standard output for
-`-`. The daemon writes the file, so it is complete even when the terminal closes
+writes its removal record and checkpoint to a new file, or to standard output
+without `-o` or for `-`, refusing a terminal. The daemon writes the file, so it is complete even when the terminal closes
 with the workspace, as its Herdr tab does. It refuses before removing anything
 when the file exists or lies inside the workspace, when the daemon cannot create
 a file in its directory within 30 seconds, when a checkpoint cannot keep
@@ -2533,7 +2533,8 @@ releasing all of their holds, then exports each workspace and lists the files it
 wrote; a failure there leaves the remaining ones to export, and the command
 exits 1 naming each failed workspace.
 
-`shoal move import <file>` reads an export, or standard input for `-`, and opens it in
+`shoal move import <file>` reads an export, or standard input without a file or for
+`-`, refusing a terminal, and opens it in
 the registered repository with the exported repository's origin, or the one
 `--repo` names. Given several files, or a directory, whose `.shoal` files it
 reads in name order, it imports each one, going on after a failure, lists every
