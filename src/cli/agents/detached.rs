@@ -104,12 +104,13 @@ pub(super) async fn start(
         ..
     } = launch;
     super::ensure_available(&name, &settings)?;
+    let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
     let (prompt, args) = workspace_input(
         integration,
         app,
         &settings,
         &workspace,
-        &ctx.paths.home,
+        directories,
         prompt,
         args,
     );
@@ -208,14 +209,14 @@ fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
 }
 
 /// The first message and arguments of a workspace session, which runs
-/// without Shoal's hooks, as a tracked launch separates them; `~/` in agent
-/// directories names a path under `home`.
+/// without Shoal's hooks, as a tracked launch separates them, with the
+/// arguments that give it `directories`.
 fn workspace_input(
     integration: &dyn Integration,
     app: &dyn App,
     settings: &Effective,
     workspace: &Workspace,
-    home: &Path,
+    directories: Vec<OsString>,
     prompt: Option<String>,
     args: Vec<OsString>,
 ) -> (Option<String>, Vec<OsString>) {
@@ -230,7 +231,7 @@ fn workspace_input(
     let prompt = Some(prompt).filter(|prompt| !prompt.is_empty());
     let args = instruction_args
         .into_iter()
-        .chain(agent_dir_args(app, settings, home))
+        .chain(directories)
         .chain(args)
         .collect();
     (prompt, args)
@@ -250,11 +251,16 @@ fn instruction_args(
         .filter(|_| app.takes_agent_args())
 }
 
-/// The arguments that give `app`'s agent the configured agent directories,
-/// when it takes arguments.
-fn agent_dir_args(app: &dyn App, settings: &Effective, home: &Path) -> Vec<OsString> {
+/// The arguments that give `app`'s agent the directories a workspace's agent
+/// works in, when it takes arguments.
+async fn workspace_dir_args(
+    ctx: &Context,
+    app: &dyn App,
+    settings: &Effective,
+    workspace: &Workspace,
+) -> Vec<OsString> {
     if app.takes_agent_args() {
-        super::agent_dir_args(settings, app.agent(), home)
+        super::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace).await
     } else {
         Vec::new()
     }

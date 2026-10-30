@@ -203,9 +203,43 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     std::os::unix::fs::symlink(&cache, home.path().join("link")).unwrap();
     assert_eq!(
         agent_dirs(&configured, home.path()),
-        BTreeSet::from([tmp, fs::canonicalize(&cache).unwrap()])
+        BTreeSet::from([tmp.clone(), fs::canonicalize(&cache).unwrap()])
     );
     assert!(agent_dirs(&settings("agent_dirs = []\n"), home.path()).is_empty());
+    // A workspace's or chat's own directory follows the configured ones.
+    assert_eq!(
+        dir_args(
+            &defaults,
+            "codex",
+            home.path(),
+            Some(Path::new("/root/repo"))
+        ),
+        [
+            OsString::from("--add-dir"),
+            tmp.clone().into(),
+            "--add-dir".into(),
+            "/root/repo".into()
+        ]
+    );
+    let chat = Chat {
+        id: "chat-id".into(),
+        repository_id: "repo".into(),
+        name: "talk".into(),
+        agent: "codex".into(),
+        pid: 1,
+        started_at: 0,
+        origin: None,
+        tmp_dir: Some(cache.join("chat-id")),
+    };
+    assert_eq!(
+        chat_dir_args(&defaults, "codex", home.path(), &chat),
+        [
+            OsString::from("--add-dir"),
+            tmp.into(),
+            "--add-dir".into(),
+            cache.join("chat-id").into()
+        ]
+    );
 }
 
 #[test]

@@ -45,3 +45,32 @@ fn stopping_a_session_stops_the_agent_it_started() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+#[test]
+fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments() {
+    let config: crate::config::Config = toml::from_str("").unwrap();
+    let settings = config
+        .resolve(&crate::config::repo::ConfigLayers::default())
+        .unwrap();
+    let workspace = Workspace::new_record(
+        "repo".into(),
+        "feature".into(),
+        PathBuf::from("/root/repo/feature"),
+        "feature".into(),
+        crate::state::WorkspaceState::Ready,
+    );
+    let happy = &super::super::happy::CLAUDE;
+    let directories = vec![OsString::from("--add-dir=/root/repo")];
+    let (_, args) = workspace_input(
+        happy,
+        happy,
+        &settings,
+        &workspace,
+        directories,
+        None,
+        vec!["--own".into()],
+    );
+    let at = |arg: &str| args.iter().position(|candidate| candidate == arg);
+    let directory = at("--add-dir=/root/repo").expect("the directories are given");
+    assert!(directory < at("--own").expect("its own arguments follow"));
+}

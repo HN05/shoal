@@ -726,9 +726,7 @@ pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Ve
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
-/// and forwarded arguments: Shoal's hooks, and the configured agent
-/// directories and the repository's workspaces directory as other working
-/// directories, so it may also work in the child workspaces it splits there.
+/// and forwarded arguments: Shoal's hooks and [`workspace_dir_args`].
 pub(crate) async fn workspace_args(
     paths: &crate::paths::Paths,
     settings: &Effective,
@@ -737,11 +735,22 @@ pub(crate) async fn workspace_args(
 ) -> Result<Vec<OsString>> {
     let proxied = settings.proxy(name).is_some();
     let mut args = hook_args(settings.integration(name), proxied)?;
-    args.extend(agent_dir_args(settings, name, &paths.home));
-    if let Some(directory) = workspaces_dir(paths, workspace).await {
-        args.extend(settings.launch(name).arguments.add_dir_args(&directory));
-    }
+    args.extend(workspace_dir_args(paths, settings, name, workspace).await);
     Ok(args)
+}
+
+/// The arguments that give a workspace's agent `name` the configured agent
+/// directories and the repository's workspaces directory as other working
+/// directories, so it may also work in the child workspaces it splits there
+/// and in its temporary directory.
+pub(in crate::cli) async fn workspace_dir_args(
+    paths: &crate::paths::Paths,
+    settings: &Effective,
+    name: &str,
+    workspace: &Workspace,
+) -> Vec<OsString> {
+    let workspaces_dir = workspaces_dir(paths, workspace).await;
+    dir_args(settings, name, &paths.home, workspaces_dir.as_deref())
 }
 
 /// The arguments that give agent `name` the configured agent directories as
@@ -764,10 +773,19 @@ pub(in crate::cli) fn chat_dir_args(
     home: &Path,
     chat: &Chat,
 ) -> Vec<OsString> {
+    let tmp_dir = chat
+        .tmp_dir
+        .as_ref()
+        .map(|directory| std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone()));
+    dir_args(settings, name, home, tmp_dir.as_deref())
+}
+
+/// The arguments that give agent `name` the configured agent directories and
+/// `extra`, resolved as agents compare paths, as other working directories.
+fn dir_args(settings: &Effective, name: &str, home: &Path, extra: Option<&Path>) -> Vec<OsString> {
     let mut args = agent_dir_args(settings, name, home);
-    if let Some(directory) = &chat.tmp_dir {
-        let directory = std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone());
-        args.extend(settings.launch(name).arguments.add_dir_args(&directory));
+    if let Some(directory) = extra {
+        args.extend(settings.launch(name).arguments.add_dir_args(directory));
     }
     args
 }
