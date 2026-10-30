@@ -247,11 +247,16 @@ fn a_failed_comment_lookup_keeps_that_sources_comments() {
     let mut previous = Snapshot::default();
     previous.record_comments("discussion", Ok(vec![("1".into(), "hi".into())]));
     previous.record_comments("reviews", Ok(vec![("2".into(), "lgtm".into())]));
+    previous.record_comments("inline", Ok(vec![("3".into(), "nit".into())]));
     let mut failed = Snapshot::default();
     failed.record_comments("discussion", Err(anyhow::anyhow!("timed out")));
     failed.record_comments("reviews", Ok(Vec::new()));
+    failed.record_comments("inline", Err(anyhow::anyhow!("HTTP 500")));
     failed.normalize(&previous, 1000);
-    assert_eq!(failed.comments.keys().collect::<Vec<_>>(), ["discussion:1"]);
+    assert_eq!(
+        failed.comments.keys().collect::<Vec<_>>(),
+        ["discussion:1", "inline:3"]
+    );
     let mut recovered = failed.clone();
     recovered.errors.clear();
     assert!(failed.changes(&recovered, "pr").is_empty());

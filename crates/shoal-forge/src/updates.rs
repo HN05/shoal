@@ -262,17 +262,16 @@ impl Snapshot {
         if self.errors.contains_key("CI") {
             self.checks = previous.checks.clone();
         }
-        for source in [DISCUSSION, "reviews"] {
-            if self.errors.contains_key(source) {
-                let prefix = format!("{source}:");
-                self.comments.extend(
-                    previous
-                        .comments
-                        .iter()
-                        .filter(|(key, _)| key.starts_with(&prefix))
-                        .map(|(key, comment)| (key.clone(), comment.clone())),
-                );
-            }
+        // Each comment source records its entries under its own name.
+        for source in self.errors.keys() {
+            let prefix = format!("{source}:");
+            self.comments.extend(
+                previous
+                    .comments
+                    .iter()
+                    .filter(|(key, _)| key.starts_with(&prefix))
+                    .map(|(key, comment)| (key.clone(), comment.clone())),
+            );
         }
     }
 
