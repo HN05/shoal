@@ -584,10 +584,7 @@ impl Manager {
                 continue;
             }
             let id = workspace.id.clone();
-            let items = self
-                .store
-                .run(move |db| followed_items(db, &id, None))
-                .await?;
+            let items = self.store.run(move |db| polled_items(db, &id)).await?;
             if items.is_empty() {
                 continue;
             }
@@ -671,7 +668,7 @@ impl Manager {
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
-                let linked = followed_items(&tx, &id, None)?;
+                let linked = polled_items(&tx, &id)?;
                 for (url, kind, mut snapshot) in observations.into_iter().filter_map(
                     |(url, snapshot)| {
                         linked
@@ -1223,6 +1220,13 @@ pub(crate) fn followed_items(
     with_runs(db, id, kind, unfinished_runs)
 }
 
+/// The items the background poll reads for integrations: the assigned issue
+/// and PRs, and the linked runs its own baseline has not seen finish, apart
+/// from what watches delivered.
+pub(crate) fn polled_items(db: &rusqlite::Connection, id: &str) -> Result<Vec<(String, LinkKind)>> {
+    with_runs(db, id, None, unpolled_runs)
+}
+
 /// The items `shoal view` shows for `kind`, or every kind: the assigned
 /// issue and PRs, and every linked run.
 fn shown_items(
@@ -1297,6 +1301,19 @@ fn unfinished_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
         }
     }
     runs.retain(|url| !delivered.contains(url));
+    Ok(runs)
+}
+
+/// The workspace's linked runs the background poll has not seen finish.
+fn unpolled_runs(db: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    let mut runs = linked_runs(db, id)?;
+    let mut finished = Vec::new();
+    for url in &runs {
+        if observed_item(db, id, url)?.is_some_and(|snapshot| snapshot.run_finished()) {
+            finished.push(url.clone());
+        }
+    }
+    runs.retain(|url| !finished.contains(url));
     Ok(runs)
 }
 

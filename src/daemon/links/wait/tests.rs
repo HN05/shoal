@@ -1767,3 +1767,78 @@ fn resolved_branch(workspace_id: &str) -> Snapshot {
         files: Vec::new(),
     }))
 }
+
+/// A run in `state`, as a poll observes it.
+fn run_snapshot(state: &str) -> Snapshot {
+    serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
+        "state": state, "errors": {}}))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "runs".into(), None, None, None)
+        .await
+        .unwrap();
+    let id = workspace.id.clone();
+    let run = crate::model::LinkedItem {
+        kind: LinkKind::Ci,
+        url: "run".into(),
+        title: None,
+    };
+    manager
+        .record_items(&id, vec![(crate::model::Relation::Related, run)])
+        .await
+        .unwrap();
+    manager
+        .record_background_activity(&id, vec![("run".into(), run_snapshot("running"))])
+        .await
+        .unwrap();
+
+    // A watch sees the run finish and delivers it before the background poll.
+    let selection = Selection {
+        kind: Some(LinkKind::Ci),
+        input: None,
+    };
+    let delivered = manager
+        .record_activity(
+            &id,
+            vec![("run".into(), run_snapshot("finished"))],
+            &selection,
+        )
+        .await
+        .unwrap();
+    assert_eq!(delivered.len(), 1, "{delivered:?}");
+    manager
+        .acknowledge_pr_updates(&id, vec![delivered[0].delivery.clone()])
+        .await
+        .unwrap();
+    let (watched, polled) = manager
+        .store
+        .run({
+            let id = id.clone();
+            move |db| Ok((followed_items(db, &id, None)?, polled_items(db, &id)?))
+        })
+        .await
+        .unwrap();
+    assert!(watched.is_empty(), "{watched:?}");
+    assert_eq!(polled, [("run".to_owned(), LinkKind::Ci)]);
+
+    // The background poll still records the finish on its own baseline.
+    manager
+        .record_background_activity(&id, vec![("run".into(), run_snapshot("finished"))])
+        .await
+        .unwrap();
+    let events = manager.workspace_events(None, 100).await.unwrap();
+    assert!(events.iter().any(|item| matches!(item,
+        crate::daemon::events::EventItem::Event(event)
+            if event.details.item_activity.as_deref().is_some_and(|activity|
+                activity.url == "run" && activity.update.kind == UpdateKind::CiCompleted))));
+}
