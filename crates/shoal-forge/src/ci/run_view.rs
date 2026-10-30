@@ -137,8 +137,14 @@ impl ForgeRepo {
     /// its failed jobs with the steps that failed where their logs say.
     pub async fn run_activity(&self, account: &Account, input: &str) -> Result<Snapshot> {
         let run = self.view_run(account, input).await?;
-        let mut snapshot = Snapshot::new(run.state.as_str());
-        if run.state == JobState::Failed {
+        // A run held for approval has yet to run, whatever state the forge
+        // gives it, so its watch goes on.
+        let state = match run.waiting {
+            true => "waiting",
+            false => run.state.as_str(),
+        };
+        let mut snapshot = Snapshot::new(state);
+        if state == JobState::Failed.as_str() {
             snapshot.failed_jobs = self.failed_jobs(account, &run).await?;
         }
         Ok(snapshot)

@@ -42,6 +42,14 @@ pub enum CiMethod {
         pr: Option<String>,
         filter: crate::forge::ci::run_view::RunFilter,
     },
+    /// Approve the run `run` names, or every run on the head of the PR `pr`
+    /// names, by default the linked one, that waits for approval, as the
+    /// user.
+    ApproveCiRuns {
+        workspace: String,
+        run: Option<String>,
+        pr: Option<String>,
+    },
     /// Start a CI workflow run on a branch, by default the workspace's.
     StartCiRun {
         workspace: String,

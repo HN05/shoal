@@ -23,7 +23,8 @@ pub enum RepositoryCommand {
     },
 }
 
-// Arguments of `shoal repo labels` and `shoal forge capabilities`.
+// Arguments of `shoal repo labels`, `shoal forge capabilities` and
+// `shoal forge reactions`.
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
     /// Workspace to use; defaults to the current workspace or picker.
@@ -53,6 +54,8 @@ pub struct ApiArgs {
 pub enum ForgeCommand {
     /// List what the repository's forge supports.
     Capabilities(RepositoryArgs),
+    /// List the reactions the repository's forge allows.
+    Reactions(RepositoryArgs),
     /// Send a request to the repository's forge API and print its JSON response.
     ///
     /// Workspace processes send it as the agent account, and only GET unless

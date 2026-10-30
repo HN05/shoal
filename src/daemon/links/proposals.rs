@@ -1,6 +1,7 @@
 //! Issues and PRs a repository's `[permissions]` makes scoped callers propose
 //! instead of opening: recording them, and opening, denying or merging them
 //! as duplicates once the user decides.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -671,10 +672,12 @@ impl Manager {
         number: i64,
         locked: Option<&ApprovalRequest>,
     ) -> Result<()> {
-        let mut original = self
-            .approval_request(number)
-            .await?
-            .with_context(|| format!("unknown approval request {number}"))?;
+        let mut original = self.approval_request(number).await?.ok_or_else(|| {
+            Refusal::new(
+                Reason::NotFound,
+                format!("unknown approval request {number}"),
+            )
+        })?;
         ensure!(
             locked.is_some_and(|locked| locked.key == original.key),
             "approval request {number} changed while this decision waited; decide again"
@@ -904,4 +907,4 @@ fn comment(finding: Finding) -> Action {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

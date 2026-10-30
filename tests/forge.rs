@@ -1185,6 +1185,29 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
 }
 
 #[test]
+fn forge_reactions_list_what_the_instance_allows_or_githubs() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    fixture.respond(json!({"GET settings/ui": {"body": {"allowed_reactions": ["+1", "heart"]}}}));
+    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(
+        reactions,
+        json!({"names": ["+1", "heart"], "accepts_other_names": false})
+    );
+    let text = fixture.run(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(String::from_utf8_lossy(&text.stdout), "+1\nheart\n");
+
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(
+        reactions["names"].as_array().map(Vec::len),
+        Some(8),
+        "{reactions}"
+    );
+    assert_eq!(reactions["accepts_other_names"], false, "{reactions}");
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
 fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let issue = "repos/team/project/issues/3";
@@ -2808,7 +2831,7 @@ fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() 
                 !fixture
                     .requests()
                     .iter()
-                    .any(|request| request[0].as_str().unwrap().contains("/actions/"))
+                    .any(|request| request[0].as_str().unwrap().ends_with("/logs"))
             );
         }
     }
@@ -3247,6 +3270,150 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     fixture.ok(&["link", "ci", "2765", "opened", "--workspace", "topic"]);
     let again = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
     assert_eq!(again["updates"][0]["kind"], "ci_completed", "{again}");
+}
+
+#[test]
+fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    let run = |id: u64, conclusion: &str| {
+        json!({"id": id, "head_branch": "contributor", "status": "completed",
+            "conclusion": conclusion, "path": ".github/workflows/ci.yml",
+            "html_url": format!("https://github.com/team/project/actions/runs/{id}")})
+    };
+    let url = |id: u64| format!("https://github.com/team/project/actions/runs/{id}");
+    fixture.respond(json!({
+        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
+            "author": {"login": "contributor"}, "labels": [], "createdAt": "t0",
+            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
+            "headRefOid": "head", "baseRefOid": "base", "commits": [], "comments": [],
+            "reviews": [], "mergeable": "MERGEABLE", "statusCheckRollup": []}},
+        "GET repos/team/project/pulls/8/comments": {"body": [[]]},
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/actions/runs?head_sha=head&status=action_required&per_page=50&page=1":
+            {"body": {"total_count": 1, "workflow_runs": [run(21, "action_required")]}},
+        "GET repos/team/project/actions/runs/21": {"body": run(21, "action_required")},
+        "GET repos/team/project/actions/runs/22": {"body": run(22, "success")},
+        "POST repos/team/project/actions/runs/21/approve": {"status": 201},
+    }));
+    let waiting = json!([{"url": url(21), "workflow": "ci.yml"}]);
+    let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--workspace", "topic"])[0];
+    assert_eq!(view["pr"]["checks"], json!([]), "{view}");
+    assert_eq!(view["pr"]["waiting_runs"], waiting, "{view}");
+    let output = fixture.run(&["view", "pr", "8", "--no-comments", "--workspace", "topic"]);
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("1 CI run waits for approval; approve it with shoal ci approve --pr 8"),
+        "{output:?}"
+    );
+    fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
+    let status = fixture.ok(&["status", "topic"]);
+    assert_eq!(status["prs"][0]["waiting_runs"], waiting, "{status}");
+    fixture.requests();
+
+    // Approving lets a contributor's code run, so it is the user's decision.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let approve = ["ci", "approve", "--pr", "8"];
+    let scoped =
+        fixture.run(&[&["run", "--workspace", "topic", "--", shoal][..], &approve].concat());
+    assert!(
+        String::from_utf8_lossy(&scoped.stderr)
+            .contains("approving CI runs is the user's decision"),
+        "{scoped:?}"
+    );
+    assert!(fixture.requests().is_empty());
+
+    let approved = fixture.ok(&["ci", "approve", "--workspace", "topic"]);
+    assert_eq!(approved, json!({"approved": [url(21)]}));
+    let posts = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0].as_str().unwrap().starts_with("POST"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        posts,
+        [json!([
+            "POST repos/team/project/actions/runs/21/approve",
+            null,
+            null
+        ])]
+    );
+    let output = fixture.run(&["ci", "approve", "22", "--workspace", "topic"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("does not wait for approval"),
+        "{output:?}"
+    );
+    assert!(writes(&fixture).is_empty());
+}
+
+#[test]
+fn a_watched_run_waiting_for_approval_reports_once_it_has_run() {
+    let fixture = Fixture::new(Forge::GitHub, "[cleanup.auto]\nenabled=false\n");
+    let url = "https://github.com/team/project/actions/runs/21";
+    let respond = |conclusion: &str| {
+        fixture.respond(json!({
+            "GET repos/team/project/actions/runs/21": {"body": {"id": 21,
+                "head_branch": "contributor", "status": "completed", "conclusion": conclusion,
+                "html_url": url}},
+        }))
+    };
+    // GitHub reports a held run as completed, but it has yet to run.
+    respond("action_required");
+    fixture.ok(&["link", "ci", url, "related", "--workspace", "topic"]);
+    let held = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "1"]);
+    assert_eq!(held["updates"], json!([]), "{held}");
+    respond("success");
+    let finished = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
+    assert_eq!(
+        finished["updates"][0]["message"],
+        format!("Run finished; read it with shoal view ci {url}"),
+        "{finished}"
+    );
+}
+
+#[test]
+fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    let run = |number: u64, need_approval: bool| {
+        json!({"id": 9330 + number, "index_in_repo": number, "prettyref": "contributor",
+            "workflow_id": "ci.yml", "status": "blocked", "need_approval": need_approval})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 0, "statuses": []}},
+        "GET repos/team/project/pulls/8/reviews?limit=50&page=1": {"body": []},
+        "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
+        // The waiting run is on the second page, after a full first page.
+        "GET repos/team/project/actions/runs?limit=50&page=1&head_sha=head": {"body": {
+            "workflow_runs": (2700..2750).map(|number| run(number, false)).collect::<Vec<_>>(),
+            "total_count": 51}},
+        "GET repos/team/project/actions/runs?limit=50&page=2&head_sha=head":
+            {"body": {"workflow_runs": [run(2766, true)], "total_count": 51}},
+    }));
+    let view = &fixture.ok(&["view", "pr", "8", "--no-comments", "--workspace", "topic"])[0];
+    assert_eq!(
+        view["pr"]["waiting_runs"],
+        json!([{"url": format!("{}/actions/runs/2766", fixture.web), "workflow": "ci.yml"}]),
+        "{view}"
+    );
+    let output = fixture.run(&["view", "pr", "8", "--no-comments", "--workspace", "topic"]);
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("1 CI run waits for approval; approve it in the forge's web UI"),
+        "{output:?}"
+    );
+    fixture.requests();
+    let output = fixture.run(&["ci", "approve", "--pr", "8", "--workspace", "topic"]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(
+            "Shoal cannot approve CI runs on Forgejo or Gitea; approve them in the web UI"
+        ),
+        "{output:?}"
+    );
+    assert!(fixture.requests().is_empty());
 }
 
 #[test]

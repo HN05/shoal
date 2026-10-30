@@ -251,6 +251,20 @@ pub(crate) fn start_environment() -> BTreeMap<String, String> {
     env
 }
 
+/// The variables of a start that comes from no terminal, such as one an
+/// app queues through the client API: no origin and every host's server
+/// unset, so it opens in `terminal.default_host` whatever the daemon's own
+/// environment names.
+pub(crate) fn detached_start_environment() -> BTreeMap<String, String> {
+    let mut env = BTreeMap::from([env::output_setting()]);
+    env.insert(env::ORIGIN.to_owned(), NO_ORIGIN.to_owned());
+    env.extend(server_selection(|_| None));
+    env
+}
+
+/// The recorded origin of a start that comes from no place.
+const NO_ORIGIN: &str = "null";
+
 /// The variables that choose a host's server, with the values `var` gives
 /// them, so a start queued outside the host's places opens its place on
 /// that server. An unset one is empty, which hosts read as unset, so the
@@ -269,11 +283,15 @@ fn server_selection(
 /// host's variables name.
 fn queued_origin() -> Result<Option<Origin>> {
     match std::env::var(env::ORIGIN) {
-        Ok(origin) => Ok(Some(
-            serde_json::from_str(&origin).context("invalid queued start origin")?,
-        )),
+        Ok(origin) => recorded_origin(&origin),
         Err(_) => Ok(current_origin()),
     }
+}
+
+/// The origin a queued start recorded: a place, or none for a start from
+/// no terminal.
+fn recorded_origin(recorded: &str) -> Result<Option<Origin>> {
+    serde_json::from_str(recorded).context("invalid queued start origin")
 }
 
 /// Run Shoal with `args` where the agent of `record` stopped, when that

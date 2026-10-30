@@ -562,3 +562,44 @@ fn a_run_with_many_failed_jobs_reports_a_bounded_update() {
     assert!(message.len() < 4096, "{} bytes", message.len());
     assert!(message.contains("and 4990 more"), "{message}");
 }
+
+#[test]
+fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
+    let mut snapshot = Snapshot {
+        head: "2".into(),
+        ..Snapshot::default()
+    };
+    for (key, revision) in [("old", "1"), ("new", "2")] {
+        let check = Check {
+            name: key.into(),
+            state: "failure".into(),
+            revision: revision.into(),
+            complete: true,
+        };
+        snapshot.checks.insert(key.into(), check);
+    }
+    snapshot.errors.insert("CI".into(), "timed out".into());
+    let checks: Vec<_> = snapshot.head_checks().collect();
+    assert_eq!(checks, [("new", "failure", true)]);
+    assert_eq!(snapshot.errors().collect::<Vec<_>>(), [("CI", "timed out")]);
+}
+
+#[test]
+fn a_conflict_kept_from_an_earlier_head_or_base_is_unknown_at_the_new_one() {
+    let mut snapshot = Snapshot {
+        head: "1".into(),
+        base: "main".into(),
+        conflict: Some(true),
+        conflict_at: MergeRevision {
+            head: "1".into(),
+            base: "main".into(),
+        },
+        ..Snapshot::default()
+    };
+    assert_eq!(snapshot.head_conflict(), Some(true));
+    snapshot.base = "main-2".into();
+    assert_eq!(snapshot.head_conflict(), None);
+    snapshot.base = "main".into();
+    snapshot.head = "2".into();
+    assert_eq!(snapshot.head_conflict(), None);
+}

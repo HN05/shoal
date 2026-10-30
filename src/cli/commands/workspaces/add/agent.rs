@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::{
     agent::Agent,
-    cli::{agents, client, commands::issues, context::Context, terminal},
+    cli::{agents, client, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
 };
@@ -142,20 +142,19 @@ pub(super) async fn resolve_add_agent(
 }
 
 impl ResolvedAddAgent {
-    /// Start the agent in `workspace`, from a fork of session `fork` when
-    /// given, else open a shell there.
+    /// Start the agent in `workspace` with `prompt` as its first message,
+    /// from a fork of session `fork` when given, else open a shell there.
     pub(super) async fn launch(
         self,
         ctx: &Context,
         workspace: Workspace,
-        issue: Option<issues::Issue>,
+        prompt: Option<String>,
         args: Vec<OsString>,
         fork: Option<String>,
     ) -> Result<i32> {
         let Some(agent) = self.agent else {
             return terminal::open_shell(ctx, &workspace.path).await;
         };
-        let prompt = issue.map(|issue| issue.prompt());
         let options = agents::LaunchOptions {
             tracked: self.tracked,
             fork,

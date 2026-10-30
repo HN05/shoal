@@ -487,6 +487,15 @@ assignment is done and whatever `[machine.overload.recovery]` says. Timers the a
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
+### Client API
+
+Apps other than the CLI, such as Quay, use the client API on the daemon's
+socket: typed requests for a subset of the CLI's operations, error codes, and
+subscriptions to repositories, workspaces and the rest as they change.
+[`crates/shoal-client`](../crates/shoal-client/README.md) is its Rust client and
+describes the protocol. Without a scope token the caller is the user; with one,
+it is that workspace's agent, under the rules of its `shoal` commands.
+
 ## Workspaces
 
 `shoal branch rename [WORKSPACE] BRANCH` renames a ready workspace's checked-out Git
@@ -671,9 +680,10 @@ own stdin, stdout, stderr, and exit code.
 `shoal status [target]` summarizes one workspace's current state, changes
 since its fork point, what it holds, its agent sessions, whether its linked issue is open or closed,
 and each watched PR as the forge reports it now: open, merged or closed, merge
-conflicts, each CI check's result, and a review state from each reviewer's latest
-approval or change request. A failed lookup reports its error on that item
-without failing the command. When the
+conflicts, each CI check's result, the CI runs on an open PR's head that
+[wait for approval](#ci-runs) in `waiting_runs`, and a review state from each
+reviewer's latest approval or change request. A failed lookup reports its error
+on that item without failing the command. When the
 daemon's automatic cleanup is failing or has not finished a pass for 10 minutes,
 status says so in `cleanup_error`. Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
@@ -2666,6 +2676,12 @@ it, with what to do instead when it does not; `--json` returns `forge` and
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
 
+`shoal forge reactions` lists the reactions the forge allows, under the names
+`shoal view` reports: on Forgejo and Gitea those the instance's settings allow,
+on GitHub its eight, and on GitLab the same eight as suggestions, since any emoji
+it knows works. `--json` returns `names` and `accepts_other_names`. Bitbucket
+has no reactions.
+
 Bitbucket has no official CLI, so the global `[machine.bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
 each lookup or change and keeps nothing. The token is an access token, or an
@@ -2714,6 +2730,7 @@ shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
 shoal forge capabilities                  # what the repository's forge supports
+shoal forge reactions                     # the reactions the repository's forge allows
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its
@@ -3005,6 +3022,7 @@ shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
+shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
@@ -3057,6 +3075,19 @@ repository as the agent account, on every forge but Bitbucket. `--json` returns
 each run's `url`, `state`, `branch` and `workflow`, and for `view` its `jobs`
 with their `id`, `name`, `state` and `url`, the `logs` it read and the `errors`
 of those it could not.
+
+Forges hold the runs of PRs from forks and first-time contributors until a
+maintainer approves them, and until then those runs report no checks. `shoal
+view` and `shoal status` list an open PR's waiting runs in `waiting_runs`, each
+with its `url` and `workflow`, and the text names how to approve them. GitHub
+reports the runs it holds; Forgejo and Gitea mark them among the head commit's
+runs; GitLab and Bitbucket hold none. `shoal ci approve` approves one run, which
+must be waiting, or with `--pr`, or neither for the linked PR, every waiting run
+on the PR's head, failing when none waits. It uses your login, as merging does,
+and records an `item_changed` event; workspace processes cannot approve. Only
+GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
+there the command fails before any request. `--json` returns the `approved`
+runs' URLs.
 
 #### Forge API requests
 
@@ -3127,7 +3158,8 @@ otherwise; a
 PR adds its branches, how many commits its base has that its head lacks (`behind`,
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
-Gitea do not), the merge conflicts, CI checks and review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
+Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
+review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and

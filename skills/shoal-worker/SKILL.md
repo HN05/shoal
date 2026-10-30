@@ -149,6 +149,8 @@ outlives its PR. `shoal ci rerun <run-url>` (`--failed` for failed jobs
 only) and `shoal ci cancel <run-url>` act on one run of your branch.
 `shoal view ci <run-url>` shows a run's jobs and the log tails of failed ones,
 and `shoal ci list` the newest runs on your branch, or on a PR's head with `--pr N`.
+A PR from a fork or first-time contributor can show runs that wait for approval
+instead of checks; approving them is the user's, so ask with `shoal alerts send`.
 
 `shoal done` defaults to cleanup, which may stop your execution once a grace
 period (`[cleanup] grace_minutes`) has passed. Removal is reversible: the user

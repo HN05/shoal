@@ -607,7 +607,7 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
 }
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
-pub(in crate::cli) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
+pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
     if let Some(reason) = agent_options(settings, name).off {
         anyhow::bail!("cannot start {name}: {reason}");
     }

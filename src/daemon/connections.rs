@@ -79,18 +79,7 @@ impl Capacity {
     /// capacity for one that stays open, otherwise a request slot.
     pub(super) fn admit(&self, method: &Method) -> Result<Slot> {
         if method.holds_connection() {
-            let Some(permit) = self.long_lived.try_acquire() else {
-                self.long_lived
-                    .log_full("refusing long-lived connections", "");
-                bail!(
-                    "the daemon already serves its limit of {} long-lived connections",
-                    self.long_lived.limit
-                );
-            };
-            return Ok(Slot {
-                _permit: Some(permit),
-                _running: None,
-            });
+            return self.long_lived();
         }
         if method.controls_daemon() {
             return Ok(Slot {
@@ -98,6 +87,27 @@ impl Capacity {
                 _running: None,
             });
         }
+        self.request(method.name())
+    }
+
+    /// Long-lived capacity, for a connection that stays open.
+    pub(super) fn long_lived(&self) -> Result<Slot> {
+        let Some(permit) = self.long_lived.try_acquire() else {
+            self.long_lived
+                .log_full("refusing long-lived connections", "");
+            bail!(
+                "the daemon already serves its limit of {} long-lived connections",
+                self.long_lived.limit
+            );
+        };
+        Ok(Slot {
+            _permit: Some(permit),
+            _running: None,
+        })
+    }
+
+    /// A request slot for the request `name`, while it runs.
+    pub(super) fn request(&self, name: String) -> Result<Slot> {
         let Some(permit) = self.requests.try_acquire() else {
             let held = self.running.summary();
             self.requests
@@ -109,7 +119,7 @@ impl Capacity {
         };
         Ok(Slot {
             _permit: Some(permit),
-            _running: Some(self.running.start(method.name())),
+            _running: Some(self.running.start(name)),
         })
     }
 }

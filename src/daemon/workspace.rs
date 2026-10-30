@@ -67,6 +67,7 @@ pub(crate) use tree::{
     Source, TrackedAgents, ancestors_with_agents, coordinators, delegated, receiving_paths,
 };
 
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
     daemon::store::{self, Store},
@@ -302,7 +303,9 @@ impl Manager {
                         store::workspace,
                     )
                     .optional()?
-                    .with_context(|| format!("unknown workspace: {selector}"))?;
+                    .ok_or_else(|| {
+                        Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}"))
+                    })?;
                 load_details(db, &mut workspace)?;
                 Ok(workspace)
             })

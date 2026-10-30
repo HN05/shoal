@@ -15999,14 +15999,16 @@ fn view_shows_linked_items_with_status_and_discussion() {
             &serde_json::json!(false)
         )
     );
-    // This gh answers no log or comparison lookup; tests/forge.rs covers
-    // failed logs and how far a PR is behind.
+    // This gh answers no log, comparison or run lookup; tests/forge.rs
+    // covers failed logs, how far a PR is behind and runs waiting for
+    // approval.
     let errors = pr["errors"].as_array().unwrap();
     assert!(
         errors.iter().all(|error| {
             let error = error.as_str().unwrap();
             error.starts_with("rust: log unavailable: ")
                 || error.starts_with("behind lookup failed: ")
+                || error.starts_with("waiting CI runs lookup failed: ")
         }),
         "{pr}"
     );

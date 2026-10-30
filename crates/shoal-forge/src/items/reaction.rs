@@ -1,5 +1,7 @@
 //! Reactions on an issue, a PR or one of their comments: read for item
 //! views, and added or removed as the acting account's own.
+pub mod allowed;
+
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};

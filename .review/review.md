@@ -15,6 +15,10 @@ instead of the PR delivery guidance below.
   backlog and ownership lock across exec; read-only streams reconnect after the
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
+- The client API (`crates/shoal-client`) stays compatible within a major
+  version: never remove or rename a field, method, enum value or error code
+  without a major bump. Its daemon side runs existing operations under their
+  scope checks rather than its own rules.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
 - Treat function abstraction as a blocking correctness check. Require every
@@ -114,7 +118,7 @@ instead of the PR delivery guidance below.
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
   GET requests to the own repository's forge API, or others where `[permissions] api_writes`
   allows them, own-repository sync and
-  effective-configuration reads are allowed;
+  effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.
