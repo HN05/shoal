@@ -843,13 +843,15 @@ impl Backend for Forgejo {
         }
     }
 
-    fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
-        let endpoint = repo.repo_endpoint(&format!("issues/comments/{id}"));
-        Ok(Request::new(
-            HttpMethod::Patch,
-            endpoint,
-            Some(json!({ "body": body })),
-        ))
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        _kind: ItemKind,
+        _number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        github_rest::edit_comment(repo, subject, body, Dialect::Forgejo)
     }
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

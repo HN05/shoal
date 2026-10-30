@@ -708,6 +708,26 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Attachments))
     }
 
+    /// Inline comments are among a pull request's comments.
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        let (Subject::Comment(id) | Subject::ReviewComment(id)) = subject else {
+            bail!("only a comment can be edited");
+        };
+        let endpoint = format!("{}/comments/{id}", repo.item_endpoint(kind, number));
+        Ok(Request::new(
+            HttpMethod::Put,
+            endpoint,
+            Some(json!({ "content": { "raw": body } })),
+        ))
+    }
+
     fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         Vec::new()
     }

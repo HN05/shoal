@@ -15,7 +15,7 @@ use crate::{
         attach::{Attachment, Holder, Pending},
         item::{Current, Item, ItemState},
         link::ItemKind,
-        reaction::ReactionChange,
+        reaction::{ReactionChange, Subject},
     },
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
@@ -345,7 +345,7 @@ impl ForgeRepo {
             }
         }
         if let (Some(pending), Some(comment)) = (pending, &first) {
-            self.attach_to_comment(account, comment, pending)
+            self.attach_to_comment(account, kind, number, comment, pending)
                 .await
                 .context("the comment was posted, but attaching its files failed")
                 .map_err(|error| after_post(error, first.is_some(), &authored))?;
@@ -401,10 +401,13 @@ impl ForgeRepo {
         }
     }
 
-    /// Upload a posted comment's files to it and embed them in its body.
+    /// Upload the files of a comment posted on item `number` to it and
+    /// embed them in its body.
     async fn attach_to_comment(
         &self,
         account: &Account,
+        kind: ItemKind,
+        number: u64,
         comment: &serde_json::Value,
         pending: Pending,
     ) -> Result<()> {
@@ -413,7 +416,10 @@ impl ForgeRepo {
         let body = self
             .attach(account, holder, &pending.body, &pending.attachments)
             .await?;
-        let edit = self.kind.edit_comment(self, id, &body)?.repeatable();
+        let edit = self
+            .kind
+            .edit_comment(self, kind, number, Subject::Comment(id), &body)?
+            .repeatable();
         self.send(account, &edit).await?;
         Ok(())
     }

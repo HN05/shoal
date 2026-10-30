@@ -704,11 +704,16 @@ pub(crate) trait Backend {
         }
     }
 
-    /// The request that replaces the body of the discussion comment `id`,
-    /// where the forge keeps uploads with comments.
-    fn edit_comment(&self, _repo: &ForgeRepo, _id: u64, _body: &str) -> Result<Request> {
-        anyhow::bail!("this forge keeps attached files with the repository")
-    }
+    /// The request that replaces the body of the comment `subject` of item
+    /// `number`.
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request>;
 
     /// Where the forge looks for the description templates of a new item
     /// of `kind`, in its lookup order.
@@ -1359,8 +1364,15 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.markup(attachment, alt, url))
     }
 
-    fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
-        dispatch!(self, backend => backend.edit_comment(repo, id, body))
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        dispatch!(self, backend => backend.edit_comment(repo, kind, number, subject, body))
     }
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

@@ -900,6 +900,26 @@ impl Backend for GitLab {
         ))
     }
 
+    /// Discussion and inline comments are both an item's notes.
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        let (Subject::Comment(id) | Subject::ReviewComment(id)) = subject else {
+            bail!("only a comment can be edited");
+        };
+        let endpoint = format!("{}/notes/{id}", repo.item_endpoint(kind, number));
+        Ok(Request::new(
+            HttpMethod::Put,
+            endpoint,
+            Some(json!({ "body": body })),
+        ))
+    }
+
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         match kind {
             ItemKind::Pr => vec![(

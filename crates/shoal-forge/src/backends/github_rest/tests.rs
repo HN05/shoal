@@ -35,7 +35,7 @@ fn dependencies_keep_open_issues() {
 }
 
 #[test]
-fn forgejo_keeps_inline_comment_reactions_with_issue_comments() {
+fn forgejo_keeps_inline_comments_and_their_reactions_with_issue_comments() {
     let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
     let endpoint = |repo, subject, dialect| reactions_endpoint(repo, 4, subject, dialect);
     assert_eq!(
@@ -55,6 +55,21 @@ fn forgejo_keeps_inline_comment_reactions_with_issue_comments() {
         endpoint(&forgejo, Subject::ReviewComment(9), Dialect::Forgejo)
             .ends_with("issues/comments/9/reactions")
     );
+    // Comment edits go to the same comments.
+    let edit = |subject, dialect| edit_comment(&github, subject, "Why?", dialect).unwrap();
+    assert_eq!(
+        edit(Subject::ReviewComment(9), Dialect::GitHub),
+        Request::new(
+            HttpMethod::Patch,
+            "repos/team/repo/pulls/comments/9".into(),
+            Some(json!({"body": "Why?"})),
+        )
+    );
+    assert_eq!(
+        edit(Subject::ReviewComment(9), Dialect::Forgejo).endpoint,
+        "repos/team/repo/issues/comments/9"
+    );
+    assert!(edit_comment(&github, Subject::Item, "Why?", Dialect::GitHub).is_err());
     let reaction = json!({"id": 2, "content": "eyes", "user": {"login": "ann"}});
     let listed = listed_reaction(&reaction).unwrap();
     assert_eq!(
