@@ -395,27 +395,9 @@ async fn clone_into_reserved_directory(
         "repository path does not exist: {source}"
     );
     let root = prepare_root(root, state, recorded, None).await?;
-    if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
-        crate::daemon::access::ensure_writable(parent).await?;
-    }
-    let requested = cloning
-        .path
-        .as_deref()
-        .map(super::paths::canonical_with_missing_tail)
-        .transpose()?;
-    if let Some(path) = &requested {
-        outside_local_configs(path, repositories)?;
-    }
-    let workspaces_dir = reserve_directory(&root, directory_name, repositories, &[])?;
-    let local = workspaces_dir.join(crate::config::repo::LOCAL_DIR);
-    if let Some(path) = requested.filter(|path| path.starts_with(&local)) {
-        // The reservation belongs exclusively to this attempt.
-        let _ = fs::remove_dir(&workspaces_dir);
-        bail!(
-            "{} is where the repository's local config belongs; clone it elsewhere",
-            path.display()
-        );
-    }
+    let requested = requested_clone_path(cloning.path.as_deref(), repositories).await?;
+    let workspaces_dir =
+        reserve_clone_directory(&root, directory_name, repositories, requested.as_deref())?;
     let destination = match cloning.path {
         Some(path) => create_clone_directory(path),
         None => create_clone_directory(workspaces_dir.join(CHECKOUT_DIR)),
@@ -432,6 +414,45 @@ async fn clone_into_reserved_directory(
             Err(error)
         }
     }
+}
+
+/// The canonical form of an explicit clone path, which the daemon can write
+/// and no repository's local config holds.
+async fn requested_clone_path(
+    path: Option<&Path>,
+    repositories: &[Repository],
+) -> Result<Option<PathBuf>> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    if let Some(parent) = path.parent() {
+        crate::daemon::access::ensure_writable(parent).await?;
+    }
+    let path = super::paths::canonical_with_missing_tail(path)?;
+    outside_local_configs(&path, repositories)?;
+    Ok(Some(path))
+}
+
+/// Reserve the repository directory for a clone to `requested`, or into the
+/// directory itself, releasing it when the clone would land where its local
+/// config belongs.
+fn reserve_clone_directory(
+    root: &Path,
+    name: &str,
+    repositories: &[Repository],
+    requested: Option<&Path>,
+) -> Result<PathBuf> {
+    let workspaces_dir = reserve_directory(root, name, repositories, &[])?;
+    let local = workspaces_dir.join(crate::config::repo::LOCAL_DIR);
+    if let Some(path) = requested.filter(|path| path.starts_with(&local)) {
+        // The reservation belongs exclusively to this attempt.
+        let _ = fs::remove_dir(&workspaces_dir);
+        bail!(
+            "{} is where the repository's local config belongs; clone it elsewhere",
+            path.display()
+        );
+    }
+    Ok(workspaces_dir)
 }
 
 async fn clone(source: &str, fork: Option<&str>, destination: &Path) -> Result<PathBuf> {
