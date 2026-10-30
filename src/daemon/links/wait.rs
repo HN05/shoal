@@ -360,7 +360,7 @@ impl Manager {
             // held ones settle, which no signal announces.
             let unread = self.unread_agent_messages(&workspace.id).await?;
             let hold = self.message_hold(&workspace, &unread.messages).await?;
-            let messages_due = unread.wakes && hold.is_none();
+            let messages_due = wake_messages_due(unread.wakes, hold, due);
             if self
                 .agent_wake_due(&workspace, interrupted, messages_due)
                 .await?
@@ -1477,6 +1477,14 @@ fn watches_branch(selection: &Selection, items: &[(String, LinkKind)]) -> bool {
     selection.input.is_none()
         && selection.kind.is_none()
         && !items.iter().any(|(_, kind)| *kind == LinkKind::Pr)
+}
+
+/// Whether unread messages, of which one `wakes` the agent and which settle
+/// after `hold`, make a wake due. Settling only delays `arming` a wake: once
+/// prompted, the agent stays due until it takes them or starts a turn, so
+/// a message arriving meanwhile cannot end that wait and prompt it again.
+fn wake_messages_due(wakes: bool, hold: Option<Duration>, arming: bool) -> bool {
+    wakes && (hold.is_none() || !arming)
 }
 
 /// When a watch with a timeout of `seconds` started now ends.

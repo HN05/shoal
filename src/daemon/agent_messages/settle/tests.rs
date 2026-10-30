@@ -67,14 +67,13 @@ async fn age_messages(manager: &Manager, workspace: &Workspace, seconds: i64) {
         .unwrap();
 }
 
-/// Return once whether a wake prompt is due for the workspace's agent
-/// matches `due`.
-async fn wake_due(manager: &Manager, workspace: &Workspace, due: bool) {
+/// Return once a wake prompt is due for the workspace's agent.
+async fn wake_due(manager: &Manager, workspace: &Workspace) {
     // A hang guard only: the wake settles within two seconds.
-    let wait = manager.wait_agent_wake(&workspace.id, due, None);
+    let wait = manager.wait_agent_wake(&workspace.id, true, None);
     tokio::time::timeout(std::time::Duration::from_secs(60), wait)
         .await
-        .expect("the wake check ended")
+        .expect("the wake was due")
         .unwrap();
 }
 
@@ -107,7 +106,6 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     .await;
     let delivered = manager.agent_updates(&workspace.id).await.unwrap();
     assert!(delivered.messages.is_empty(), "{delivered:?}");
-    wake_due(&manager, &workspace, false).await;
     // `shoal messages` reads a run before it settles.
     assert_eq!(
         manager.agent_messages(&workspace.id).await.unwrap().len(),
@@ -115,7 +113,7 @@ async fn hooks_and_wake_prompts_deliver_a_run_once_it_settles() {
     );
 
     age_messages(&manager, &workspace, 60).await;
-    wake_due(&manager, &workspace, true).await;
+    wake_due(&manager, &workspace).await;
     let delivered = manager.agent_updates(&workspace.id).await.unwrap();
     let messages = delivered.messages.iter().map(|message| &message.message);
     assert_eq!(
@@ -154,7 +152,7 @@ async fn a_wake_prompt_follows_a_run_that_settles_while_it_waits() {
     send(&manager, &workspace, &["Request 1 approved"]).await;
     // The run settles within two seconds, announced by no signal.
     age_messages(&manager, &workspace, 59).await;
-    wake_due(&manager, &workspace, true).await;
+    wake_due(&manager, &workspace).await;
 }
 
 #[tokio::test]
@@ -166,5 +164,5 @@ async fn a_wake_prompt_does_not_wait_for_the_pr_gate() {
     age_messages(&manager, &workspace, 60).await;
     // Cleanup or an item change holds the gate for minutes.
     let _held = manager.gates.lock_prs([&workspace.id]).await;
-    wake_due(&manager, &workspace, true).await;
+    wake_due(&manager, &workspace).await;
 }
