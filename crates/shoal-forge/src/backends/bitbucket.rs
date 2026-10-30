@@ -137,7 +137,7 @@ impl Backend for Bitbucket {
     }
 
     fn login_hint(&self) -> &'static str {
-        "Bitbucket API request failed; private repositories need [bitbucket] token_command"
+        "Bitbucket API request failed; private repositories need [machine.bitbucket] token_command"
     }
 
     async fn send(
@@ -806,7 +806,7 @@ impl RestReads for Bitbucket {
     }
 }
 
-/// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
+/// The `[machine.bitbucket]` global config: how to sign in to Bitbucket Cloud.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Credentials {
@@ -822,21 +822,21 @@ impl Credentials {
         if let Some(program) = self.token_command.first() {
             ensure!(
                 !program.is_empty(),
-                "bitbucket.token_command must name a program"
+                "machine.bitbucket.token_command must name a program"
             );
         }
         ensure!(
             self.token_command.iter().all(|word| !word.contains('\0')),
-            "bitbucket.token_command contains NUL"
+            "machine.bitbucket.token_command contains NUL"
         );
         if let Some(email) = &self.email {
             ensure!(
                 !self.token_command.is_empty(),
-                "bitbucket.email needs bitbucket.token_command"
+                "machine.bitbucket.email needs machine.bitbucket.token_command"
             );
             ensure!(
                 email.contains('@') && email.chars().all(|c| c.is_ascii_graphic()),
-                "bitbucket.email must be an email address"
+                "machine.bitbucket.email must be an email address"
             );
         }
         Ok(())
@@ -854,7 +854,7 @@ impl Credentials {
             .timeout(crate::transport::api::TIMEOUT)
             .output()
             .await
-            .context("run bitbucket.token_command")?;
+            .context("run machine.bitbucket.token_command")?;
         Ok(Some(authorization(token.trim(), self.email.as_deref())?))
     }
 }
@@ -867,7 +867,7 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
             && token
                 .chars()
                 .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
-        "bitbucket.token_command printed no token or an unexpected token format"
+        "machine.bitbucket.token_command printed no token or an unexpected token format"
     );
     let value = match email {
         Some(email) => format!("Basic {}", BASE64.encode(format!("{email}:{token}"))),

@@ -62,7 +62,7 @@ pub struct Agent {
     pub proxy: Option<String>,
 }
 
-/// The `[ai]` table as written and every AI tool resolved from it once,
+/// The `[machine.ai]` table as written and every AI tool resolved from it once,
 /// when the config is read.
 #[derive(Debug, Deserialize)]
 #[serde(from = "Agents")]
@@ -87,7 +87,7 @@ impl Default for Table {
     }
 }
 
-/// Launchers configured under `[ai]`, which join the global `[commands]`.
+/// Launchers configured under `[machine.ai]`, which join the global `[commands]`.
 pub fn commands(agents: &Agents) -> impl Iterator<Item = (String, Vec<String>)> + '_ {
     agents
         .iter()

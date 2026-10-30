@@ -736,7 +736,7 @@ Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` takes
 precedence over Shoal's environment; chats and desktop apps use Shoal's. One set
-in the tool's [`[ai]` `env`](#agents) takes precedence over both. A trust
+in the tool's [`[machine.ai]` `env`](#agents) takes precedence over both. A trust
 update failure warns and still launches the agent. Removing a repository removes
 its trust entries from these files, and from those its agents and chats ran with,
 while preserving other project settings. When the daemon removes a

@@ -385,7 +385,7 @@ that replaces itself with another program, such as `internal launch` or
 
 ## Workspaces and Git
 
-Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
+Every repository owns `~/shoal/<name>/` (`machine.root_dir`): its workspaces
 default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
 checkout, and outside the state directory; a root inside either, or inside a
@@ -1623,7 +1623,7 @@ loading with a warning: the format broke once, so no setting keeps two names.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
-policy: `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
+policy: the `[machine]` table holds `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
 definitions stay global; global pools span repositories, repository pools span
 that repository's worktrees.
 The repository `[env]` table layers by variable name and is rendered once when a

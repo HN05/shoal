@@ -1,4 +1,4 @@
-//! Each AI tool resolved once from the `[ai]` entries along its `base`
+//! Each AI tool resolved once from the `[machine.ai]` entries along its `base`
 //! lineage, which nothing else walks.
 use std::{
     collections::BTreeMap,

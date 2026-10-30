@@ -802,7 +802,7 @@ impl Manager {
         } else if protection.follows_overload_recovery()
             && !self.config().machine.overload.recovery.enabled
         {
-            "automatic recovery disabled by overload.recovery.enabled".into()
+            "automatic recovery disabled by machine.overload.recovery.enabled".into()
         } else {
             format!(
                 "automatic session restore waits until {}",
