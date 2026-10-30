@@ -2756,11 +2756,14 @@ the user's approval, since the forge's revert cannot wait for it. Elsewhere
 Shoal creates a workspace on branch `revert-<number>` from the base branch as
 `origin` has it, set up as any new workspace and a child of the workspace a
 workspace process runs in. As that workspace's tracked commands, it reverts
-the merge in one commit: a merge commit against its first parent; the base's
-latest first-parent commits when they carry the patches of the PR's commits,
-as after a rebase or fast-forward, fetching those from the PR's head ref on
-`origin` once its branch is gone; otherwise the one squashed commit. Changes
-setup left to tracked files refuse the revert. It then pushes and opens the PR as `pr open` does, linked
+the merge in one commit, after establishing which commits it added: a merge
+commit whose later parent has the PR head's tree, against its first parent;
+the base's latest first-parent commits when they carry the patches of the
+PR's commits, as after a rebase or fast-forward; or one squashed commit whose
+tree is the PR's head merged onto its parent. It fetches the PR's commits
+from its head ref on `origin` once its branch is gone. A merge it cannot
+establish, and changes setup left to tracked files, refuse the revert. It
+then pushes and opens the PR as `pr open` does, linked
 to the new workspace, and marks that workspace done with cleanup, so it goes
 once the revert merges. A revert that conflicts, or that changes nothing,
 removes the new workspace and fails, listing the conflicting files; when only

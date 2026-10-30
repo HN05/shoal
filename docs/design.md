@@ -1383,7 +1383,8 @@ capability, so a backend gains a capability without changes elsewhere;
 the forge's own where it has one, and elsewhere reverts the merge with Git in a
 new workspace that opens the PR and goes once it merges, so backing out a merge
 needs no agent; a conflicting revert does, so it is abandoned rather than left
-half done. Actions run in the
+half done. Which commits the merge added is established from their trees and
+patches, never assumed, since reverting a guess can undo someone else's work. Actions run in the
 daemon, where scope applies: they act as the workspace's agent account, while
 merging and a review's verdict stay the user's decisions, so scoped callers can
 comment in a review but not merge, approve or request changes, and those act as

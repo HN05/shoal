@@ -28,6 +28,8 @@ async fn revert_cases() {
     merge_commits_revert_against_their_first_parent().await;
     rebased_commits_revert_together_and_a_squash_alone().await;
     a_matching_message_does_not_make_a_base_commit_part_of_the_pr().await;
+    merges_of_a_squashed_head_revert_and_imported_merges_refuse().await;
+    a_partial_copy_of_the_pr_is_refused().await;
     missing_pr_commits_are_fetched_from_the_head_ref().await;
     conflicting_reverts_report_their_paths_and_abort_cleanly().await;
     changes_to_tracked_files_refuse_the_revert().await;
@@ -68,6 +70,7 @@ fn head(repo: &Path) -> String {
 fn merged<'a>(merge_commit: &'a str, commits: &'a [String]) -> Merged<'a> {
     Merged {
         merge_commit,
+        head: commits.last().map_or("", String::as_str),
         commits,
         head_ref: None,
     }
@@ -150,6 +153,50 @@ async fn a_matching_message_does_not_make_a_base_commit_part_of_the_pr() {
         .await
         .unwrap();
     assert_eq!(merge, Merge::Commits(vec![squashed]));
+}
+
+async fn merges_of_a_squashed_head_revert_and_imported_merges_refuse() {
+    let (_root, repo) = with_topic();
+    let commits = topic_commits(&repo);
+    // GitLab squashes the source branch, then merges the squash.
+    git(&repo, &["switch", "-c", "squashed", "main~1"]);
+    git(&repo, &["merge", "--squash", "topic"]);
+    git(&repo, &["commit", "-m", "Topic"]);
+    git(&repo, &["switch", "main"]);
+    git(
+        &repo,
+        &["merge", "--no-ff", "-m", "Merge topic", "squashed"],
+    );
+    let merge = Merge::of(&repo, &merged(&head(&repo), &commits))
+        .await
+        .unwrap();
+    assert_eq!(merge, Merge::Commit(head(&repo)));
+
+    // A source branch that merged main, then fast-forwarded main: its tip
+    // merges main's commits, not the PR's.
+    git(&repo, &["reset", "--hard", "HEAD~1"]);
+    git(&repo, &["switch", "topic"]);
+    git(&repo, &["merge", "--no-ff", "-m", "Merge main", "main"]);
+    let tip = head(&repo);
+    git(&repo, &["switch", "main"]);
+    git(&repo, &["merge", "--ff-only", "topic"]);
+    let facts = Merged {
+        head: &tip,
+        ..merged(&tip, &commits)
+    };
+    let error = Merge::of(&repo, &facts).await.unwrap_err();
+    assert!(error.to_string().contains("by hand"), "{error:#}");
+}
+
+async fn a_partial_copy_of_the_pr_is_refused() {
+    let (_root, repo) = with_topic();
+    let commits = topic_commits(&repo);
+    // Only the PR's last commit reached the base.
+    git(&repo, &["cherry-pick", "topic"]);
+    let error = Merge::of(&repo, &merged(&head(&repo), &commits))
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("by hand"), "{error:#}");
 }
 
 async fn missing_pr_commits_are_fetched_from_the_head_ref() {

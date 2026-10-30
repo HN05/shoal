@@ -9,6 +9,8 @@ use crate::{git, tools::Tool};
 pub struct Merged<'a> {
     /// The commit the merge left at the tip of the base branch.
     pub merge_commit: &'a str,
+    /// The commit the PR's head branch pointed to when it merged.
+    pub head: &'a str,
     /// The PR's own commits.
     pub commits: &'a [String],
     /// Where `origin` keeps the PR's head, when the forge keeps it.
@@ -26,22 +28,32 @@ pub enum Merge {
 }
 
 impl Merge {
-    /// How the PR merged: a merge commit has several parents; a rebase
-    /// leaves copies of the PR's commits, with their patches, as the base's
-    /// latest first-parent commits; anything else is one squashed commit,
-    /// whose revert undoes nothing else.
+    /// How the PR merged, established from the commits rather than assumed,
+    /// so a revert never undoes anything but the PR: a merge commit brings
+    /// in the PR head's tree as a later parent; a rebase leaves copies of the
+    /// PR's commits, with their patches, as the base's latest first-parent
+    /// commits; a squash leaves one commit whose tree is the PR's head merged
+    /// onto its parent. Anything else is refused.
     pub async fn of(repo: &Path, merged: &Merged<'_>) -> Result<Self> {
         let merge_commit = merged.merge_commit;
-        if parent_count(repo, merge_commit).await? > 1 {
+        ensure_present(repo, merged).await?;
+        let parents = parents(repo, merge_commit).await?;
+        if let [_, merged_in @ ..] = parents.as_slice()
+            && !merged_in.is_empty()
+        {
+            ensure!(
+                merges_head(repo, merged_in, merged.head).await?,
+                "{merge_commit} merges commits other than the PR's head, so Shoal cannot tell which changes are the PR's; revert it by hand"
+            );
             return Ok(Self::Commit(merge_commit.to_owned()));
         }
-        if merged.commits.len() > 1 {
-            ensure_present(repo, merged).await?;
-            let latest = first_parent_commits(repo, merge_commit, merged.commits.len()).await?;
-            if patch_ids(repo, &latest).await? == patch_ids(repo, merged.commits).await? {
-                return Ok(Self::Commits(latest));
-            }
+        if let Some(rebased) = rebased(repo, merged).await? {
+            return Ok(Self::Commits(rebased));
         }
+        ensure!(
+            squashed(repo, merged, &parents).await?,
+            "Shoal cannot tell which commits on the base branch merged the PR; revert it by hand"
+        );
         Ok(Self::Commits(vec![merge_commit.to_owned()]))
     }
 
@@ -139,19 +151,90 @@ async fn conflicted_paths(repo: &Path) -> Result<Vec<String>> {
         .collect())
 }
 
-/// The number of parents `commit` has.
-async fn parent_count(repo: &Path, commit: &str) -> Result<usize> {
+/// The parents of `commit`, first parent first.
+async fn parents(repo: &Path, commit: &str) -> Result<Vec<String>> {
     let line = git::run(repo, &["rev-list", "--parents", "-n", "1", commit])
         .await
         .with_context(|| format!("the merge commit {commit} is not in the repository"))?;
     // The commit itself comes first.
-    Ok(line.split_whitespace().count().saturating_sub(1))
+    Ok(line.split_whitespace().skip(1).map(str::to_owned).collect())
 }
 
-/// Fetch the PR's head from `origin` when its commits are missing, as once
-/// its branch is gone.
+/// Whether one of `merged_in`, a merge commit's later parents, has the PR
+/// head's tree: the head itself, or the commit a forge squashed it into.
+async fn merges_head(repo: &Path, merged_in: &[String], head: &str) -> Result<bool> {
+    let head_tree = tree(repo, head).await?;
+    for parent in merged_in {
+        if tree(repo, parent).await? == head_tree {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// The base's latest first-parent commits up to the merge commit, newest
+/// first, when they are copies of the PR's several commits.
+async fn rebased(repo: &Path, merged: &Merged<'_>) -> Result<Option<Vec<String>>> {
+    if merged.commits.len() < 2 {
+        return Ok(None);
+    }
+    let latest = first_parent_commits(repo, merged.merge_commit, merged.commits.len()).await?;
+    let copies = patch_ids(repo, &latest).await? == patch_ids(repo, merged.commits).await?;
+    Ok(copies.then_some(latest))
+}
+
+/// Whether the single-parent merge commit holds exactly the PR's changes:
+/// its tree is the PR's head merged onto its parent, and it is not one of
+/// several PR commits a rebase copied, whose revert would leave the others.
+async fn squashed(repo: &Path, merged: &Merged<'_>, parents: &[String]) -> Result<bool> {
+    let [parent] = parents else {
+        return Ok(false);
+    };
+    let merge_commit = merged.merge_commit;
+    if merged_tree(repo, parent, merged.head).await? != Some(tree(repo, merge_commit).await?) {
+        return Ok(false);
+    }
+    if merged.commits.len() < 2 {
+        return Ok(true);
+    }
+    let own = patch_ids(repo, &[merge_commit.to_owned()]).await?;
+    let copied = patch_ids(repo, merged.commits).await?;
+    Ok(!own.iter().any(|id| copied.contains(id)))
+}
+
+async fn tree(repo: &Path, commit: &str) -> Result<String> {
+    let tree = git::run(repo, &["rev-parse", &format!("{commit}^{{tree}}")]).await?;
+    Ok(tree.trim().to_owned())
+}
+
+/// The tree of merging `theirs` into `ours`, or `None` when it conflicts.
+/// `git merge-tree` writes objects only, never the index, worktree or refs.
+async fn merged_tree(repo: &Path, ours: &str, theirs: &str) -> Result<Option<String>> {
+    let mut command = git::isolated_command_without_submodules(repo);
+    command.args(["merge-tree", "--write-tree", "--no-messages", ours, theirs]);
+    let output = git::bounded(command).capture().await?;
+    match output.status.code() {
+        Some(0) => {
+            let stdout = String::from_utf8(output.stdout).context("Git output is not UTF-8")?;
+            Ok(stdout.lines().next().map(str::to_owned))
+        }
+        Some(1) => Ok(None),
+        _ => crate::subprocess::checked_output("git merge-tree", Ok(output))
+            .context("merge the PR's head onto the base; Git 2.38 or newer is required")
+            .map(|_| None),
+    }
+}
+
+/// Fetch the PR's head from `origin` when it or the PR's commits are
+/// missing, as once its branch is gone.
 async fn ensure_present(repo: &Path, merged: &Merged<'_>) -> Result<()> {
-    if has_all(repo, merged.commits).await? {
+    let needed: Vec<String> = merged
+        .commits
+        .iter()
+        .cloned()
+        .chain([merged.head.to_owned()])
+        .collect();
+    if has_all(repo, &needed).await? {
         return Ok(());
     }
     let head_ref = merged.head_ref.context(
@@ -163,7 +246,7 @@ async fn ensure_present(repo: &Path, merged: &Merged<'_>) -> Result<()> {
     .await
     .context("could not fetch the PR's commits")?;
     ensure!(
-        has_all(repo, merged.commits).await?,
+        has_all(repo, &needed).await?,
         "the PR's head does not have the commits the forge lists for it"
     );
     Ok(())

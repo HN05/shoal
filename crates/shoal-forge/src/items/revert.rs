@@ -37,6 +37,8 @@ pub struct MergedPull {
     /// The commit the merge left at the tip of the base branch: a merge
     /// commit, the squashed commit, or the last of the rebased ones.
     pub merge_commit: String,
+    /// The commit the PR's head branch pointed to when it merged.
+    pub head: String,
     /// The PR's own commits, which a rebase merge copied onto the base.
     pub commits: Vec<String>,
     /// Where a remote of the repository keeps the PR's head, so its
@@ -155,11 +157,15 @@ impl ForgeRepo {
         let merge_commit = current.merge_commit.with_context(|| {
             format!("the forge did not report the commit PR #{number} merged as")
         })?;
+        let head = current
+            .head_sha
+            .with_context(|| format!("the forge did not report PR #{number}'s head commit"))?;
         let endpoint = format!("{}/commits", self.item_endpoint(ItemKind::Pr, number));
         let commits = self.pages(account, &endpoint).await?;
         Ok(MergedPull {
             item: current.item,
             merge_commit,
+            head,
             commits: commit_shas(&commits, self.kind.commit_field())?,
             head_ref: self.kind.pull_head_ref(number),
         })

@@ -158,6 +158,7 @@ async fn revert_merge(
     let path = &workspace.path;
     let facts = Merged {
         merge_commit: &merged.merge_commit,
+        head: &merged.head,
         commits: &merged.commits,
         head_ref: merged.head_ref.as_deref(),
     };
