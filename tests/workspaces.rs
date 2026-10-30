@@ -8555,6 +8555,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("agents.claude.prompt_cache_minutes", "0"),
         ("agents.work.command", "['echo']"),
         ("commands.claude", "['echo']"),
+        ("agents.loop.base", "loop"),
         ("agents.claude.resume", "['--resume']"),
     ] {
         assert!(
@@ -24918,7 +24919,9 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     );
     assert!(!output.status.success());
     assert!(
-        transcript.contains("cannot start happy-claude: Happy sessions are off"),
+        transcript.contains(
+            "cannot start happy-claude: Happy sessions are off; set terminal.happy.enabled = true"
+        ),
         "{transcript}"
     );
     let output = fixture.run(&["chat", repo, "--agent", "claude"]);

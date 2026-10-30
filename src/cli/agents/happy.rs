@@ -96,11 +96,11 @@ impl App for Happy {
     }
 }
 
-/// What Happy's section sets: `happy.enabled` turns Happy sessions on.
+/// What Happy's section sets: `terminal.happy.enabled` turns Happy sessions on.
 pub(super) fn options(config: &config::Happy) -> Options {
     Options {
         off: (!config.enabled).then_some(
-            "Happy sessions are off; set happy.enabled = true in the repository or global config",
+            "Happy sessions are off; set terminal.happy.enabled = true in the repository or global config",
         ),
         ..Options::default()
     }
