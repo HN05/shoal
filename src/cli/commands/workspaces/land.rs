@@ -18,6 +18,7 @@ use crate::{
     env,
     execution::{self, LandResult},
     model::{LandPlan, LandedBranch},
+    paths::Paths,
     protocol::{
         ConfigTarget, ExecutionMethod,
         operations::{OperationSpec, Step},
@@ -87,8 +88,14 @@ pub(in crate::cli::commands) async fn land_branch(
         }
     };
     reporter.step(Step::LandStarted).await?;
+    run_landing(&ctx.paths, workspace, push).await
+}
+
+/// Land `workspace` as a tracked execution, reading what its worker landed,
+/// or why it could not, from the file the worker writes.
+async fn run_landing(paths: &Paths, workspace: String, push: bool) -> Result<LandedBranch> {
     let result = tempfile::NamedTempFile::new().context("create the landing result file")?;
-    let code = execution::land(&ctx.paths, workspace, push, result.path().to_owned()).await?;
+    let code = execution::land(paths, workspace, push, result.path().to_owned()).await?;
     let written = std::fs::read(result.path()).context("read the landing result")?;
     let landed: LandResult = match written.is_empty() {
         true => Err(format!("landing exited with status {code}")),
