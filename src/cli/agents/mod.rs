@@ -401,10 +401,40 @@ pub(super) async fn launch_agent(
     Ok(code)
 }
 
-/// Whether `shoal <name>` launches an agent rather than a configured command.
-pub(super) fn is_agent(ctx: &Context, name: &str) -> Result<bool> {
-    let tools = Config::load(&ctx.paths)?.tools()?;
-    Ok(crate::ai::agents(&tools).any(|agent| agent == name) || added(name).is_some())
+/// Whether `shoal <name>` launches an agent rather than a configured command:
+/// one the targeted workspace's settings resolve, else this machine's config.
+pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<bool> {
+    if added(name).is_some() {
+        return Ok(true);
+    }
+    // A workspace that does not resolve is the command's own error to report.
+    let settings = match agent_target(ctx, workspace).await? {
+        Some(target) => client::settings(&ctx.paths, target).await.ok(),
+        None => None,
+    };
+    let tools = match settings {
+        Some(settings) => settings.tools,
+        None => Config::load(&ctx.paths)?.tools()?,
+    };
+    Ok(crate::ai::agents(&tools).any(|agent| agent == name))
+}
+
+/// The workspace `workspace` names, else the caller's own or the one around
+/// the current directory.
+async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<ConfigTarget>> {
+    if let Some(workspace) = workspace {
+        return Ok(Some(ConfigTarget::Workspace(workspace.to_owned())));
+    }
+    if let Some(own) =
+        std::env::var_os(crate::env::WORKSPACE_ID).filter(|_| crate::env::is_scoped())
+    {
+        return Ok(Some(ConfigTarget::Workspace(
+            own.to_string_lossy().into_owned(),
+        )));
+    }
+    let workspaces = client::workspaces(&ctx.paths).await?;
+    let current = crate::cli::ui::current_workspace(&workspaces)?;
+    Ok(current.map(|workspace| ConfigTarget::Workspace(workspace.id.clone())))
 }
 
 /// `shoal <name>` and `shoal run <name>`: agents launch with their prompts,
@@ -415,7 +445,7 @@ pub(super) async fn run_named(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    if !is_agent(ctx, name)? {
+    if !is_agent(ctx, name, workspace.as_deref()).await? {
         return configured::run(ctx, name, workspace, args).await;
     }
     launch::shortcut(

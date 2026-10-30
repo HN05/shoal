@@ -18778,6 +18778,21 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
 
+    // An agent only the worktree's file defines launches from that workspace.
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
+        "[agents.repo-only]\ncommand = ['repo-droid']\n",
+    )
+    .unwrap();
+    for words in [
+        vec!["repo-only", "provider"],
+        vec!["run", "repo-only", "--workspace", "provider"],
+    ] {
+        let output = fixture.run(&words);
+        assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
+        assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
+    }
+
     // Built-in providers without specialized launchers place the prompt the
     // same way.
     fs::copy(bin.join("fake-droid"), bin.join("opencode")).unwrap();

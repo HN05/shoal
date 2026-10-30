@@ -146,7 +146,10 @@ impl Manager {
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
-            prompt_cache: Some(self.prompt_cache(execution.as_deref(), turn_end).await),
+            prompt_cache: Some(
+                self.prompt_cache(selector, execution.as_deref(), turn_end)
+                    .await,
+            ),
             ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
@@ -188,7 +191,7 @@ impl Manager {
         let ending = TurnEnding {
             interrupted: true,
             prompt_cache: Some(
-                self.prompt_cache(Some(&execution), TurnEnd::default())
+                self.prompt_cache(selector, Some(&execution), TurnEnd::default())
                     .await,
             ),
             ..TurnEnding::ended()
@@ -197,17 +200,29 @@ impl Manager {
             .await
     }
 
-    /// How long the prompt cache of the agent `execution` runs lives after
-    /// the turn `turn_end` reports: as its AI tool resolves it, or as
-    /// reported for an agent without one, else the default lifetime.
-    async fn prompt_cache(&self, execution: Option<&str>, turn_end: TurnEnd) -> Duration {
+    /// How long the prompt cache of the agent `execution` runs in the
+    /// workspace `selector` names lives after the turn `turn_end` reports: as
+    /// its AI tool resolves there, or as reported for an agent without one,
+    /// else the default lifetime.
+    async fn prompt_cache(
+        &self,
+        selector: &str,
+        execution: Option<&str>,
+        turn_end: TurnEnd,
+    ) -> Duration {
         let reported = turn_end.prompt_cache_secs.map(Duration::from_secs);
         let agent = match execution {
             Some(execution) => self.agent_name(execution).await,
             None => None,
         };
-        let config = self.config();
-        let tools = config.tools().unwrap_or_default();
+        let tools = match self.workspace(selector).await {
+            Ok(workspace) => self
+                .workspace_settings(&workspace)
+                .await
+                .map(|settings| settings.tools)
+                .unwrap_or_default(),
+            Err(_) => Default::default(),
+        };
         match agent.and_then(|agent| tools.get(&agent)) {
             Some(tool) => tool.prompt_cache(reported),
             None => reported.unwrap_or(crate::ai::DEFAULT_PROMPT_CACHE),
@@ -265,7 +280,10 @@ impl Manager {
         }
         let ending = TurnEnding {
             failed: true,
-            prompt_cache: Some(self.prompt_cache(execution.as_deref(), turn_end).await),
+            prompt_cache: Some(
+                self.prompt_cache(selector, execution.as_deref(), turn_end)
+                    .await,
+            ),
             ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)

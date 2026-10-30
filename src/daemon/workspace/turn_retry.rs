@@ -397,7 +397,7 @@ impl Manager {
             return Ok(());
         };
         let workspace = self.workspace(selector).await?;
-        if let Some(reason) = Unretried::of(failure, self.retries(&agent)) {
+        if let Some(reason) = Unretried::of(failure, self.retries(&workspace, &agent).await) {
             return self
                 .leave_failed_turn(&workspace, execution, &agent, failure, reason)
                 .await;
@@ -429,11 +429,11 @@ impl Manager {
         Ok(())
     }
 
-    /// Whether the AI tool `agent` names has `retry` on.
-    fn retries(&self, agent: &str) -> bool {
-        self.config()
-            .tools()
-            .is_ok_and(|tools| tools.get(agent).is_some_and(|tool| tool.retry))
+    /// Whether the AI tool `agent` names has `retry` on in `workspace`.
+    async fn retries(&self, workspace: &crate::model::Workspace, agent: &str) -> bool {
+        self.workspace_settings(workspace)
+            .await
+            .is_ok_and(|settings| settings.tools.get(agent).is_some_and(|tool| tool.retry))
     }
 
     /// Deliver the retries due now; when the next one is due.

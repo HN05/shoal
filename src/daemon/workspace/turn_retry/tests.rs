@@ -489,3 +489,12 @@ async fn usage_limits_keep_retrying_beyond_a_week_and_survive_reopen() -> Result
     assert_eq!(limited.attempt, 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_repository_setting_decides_whether_its_agents_retry() {
+    let (_temp, manager, workspace, execution, _connection) =
+        agent("[agents.claude]\nretry = false\n").await;
+    std::fs::write(workspace.path.join(".shoal.toml"), RETRY_ON).unwrap();
+    fail(&manager, &workspace, &execution, TurnFailure::RateLimited).await;
+    assert!(retry(&manager, &workspace).await.is_some());
+}
