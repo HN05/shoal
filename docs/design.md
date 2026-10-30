@@ -1563,7 +1563,9 @@ may decide them. A repository may have several chats, so each call starts a new
 one and focuses it. A chat has a name from the same namespace as workspaces,
 since both are places the user returns to by name, and its name frees when it
 ends or is renamed. Renaming changes the record and the files kept under the
-name, not the zmx session, which zmx names only at creation. The process the user runs chooses the name, so the tab or session that
+name, not the zmx session, which zmx names only at creation. A tab or block
+that hosts the chat takes the new name only while it still shows the old one,
+since another label is the user's. The process the user runs chooses the name, so the tab or session that
 hosts the chat carries it before the chat is recorded; the chat's record names
 the session it runs in, so `shoal attach` finds it there, not by a session name
 zmx may have suffixed, and the chat labels the session with its ID so no
