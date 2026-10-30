@@ -12,6 +12,13 @@ nonempty value, which they keep, also when they start later from the queue or in
 a Herdr tab; the commands and shells Shoal runs only inherit one. An agent Shoal does not start, such as one an
 app launch opens, gets JSON by default only when its own environment sets it.
 
+A JSON error is `{"error": {"code": ..., "message": ...}}`. Programs tell
+failures apart by `code`, never by the message, which may change: `scope_denied`
+refuses a workspace process what its scope does not cover, `command_failed` is
+a failure without a specific code, and any other code is the daemon's, as it
+sent it. A command that waits on an approval it requested is not an error: it
+exits 2 with `code: "approval_pending"` or `"approval_denied"` on stdout.
+
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
 stay plain; stdout and stderr are detected independently.

@@ -44,7 +44,6 @@ mod transfer;
 mod validate;
 
 use cli::Cli;
-use serde_json::json;
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 
@@ -121,10 +120,7 @@ async fn run_commands(cli: Cli) {
         }
         Err(error) => {
             if json_output {
-                eprintln!(
-                    "{}",
-                    json!({"error": {"code": "command_failed", "message": format!("{error:#}")}})
-                );
+                eprintln!("{}", cli::output::json_error(&error));
             } else {
                 eprintln!(
                     "{} {error:#}",

@@ -968,6 +968,12 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "future_code: failed: detail",
         ),
     ] {
+        // `operation_failed` is the daemon's failure without a specific code.
+        let code = match body["data"]["code"].as_str() {
+            None | Some("operation_failed") => "command_failed",
+            Some(code) => code,
+        }
+        .to_owned();
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         listener.set_nonblocking(true).unwrap();
@@ -999,7 +1005,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         if args.contains(&"--json") {
             assert_eq!(
                 serde_json::from_str::<Value>(&stderr).unwrap(),
-                json!({"error": {"code": "command_failed", "message": expected}})
+                json!({"error": {"code": code, "message": expected}})
             );
         } else {
             assert!(stderr.contains(expected), "{args:?}: {stderr}");

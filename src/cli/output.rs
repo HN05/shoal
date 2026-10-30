@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     forge::review::status::ReviewState,
+    protocol::{ErrorCode, RemoteError},
     sim::SimulatorState,
     state::{ExecutionState, WorkspaceState},
 };
@@ -80,6 +81,17 @@ pub enum Style {
     Idle,
     /// Work is complete and needs nothing more.
     Done,
+}
+
+/// A failure as JSON output reports it: under the daemon's code when it has a
+/// specific one, otherwise `command_failed`.
+pub fn json_error(error: &anyhow::Error) -> serde_json::Value {
+    let code = error
+        .downcast_ref::<RemoteError>()
+        .map(|remote| &remote.code)
+        .filter(|code| **code != ErrorCode::OperationFailed)
+        .map_or_else(|| "command_failed".to_owned(), ToString::to_string);
+    serde_json::json!({"error": {"code": code, "message": format!("{error:#}")}})
 }
 
 /// Print the help or version text clap reports as a parse error, which clap's
