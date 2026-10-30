@@ -105,7 +105,8 @@
             "running",
             "queued",
             "starting",
-            "stopped"
+            "stopped",
+            "unconfirmed"
           ]
         },
         {

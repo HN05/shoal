@@ -9,13 +9,14 @@ use crate::{
     daemon::{store, workspace::Manager},
     execution::recovery,
     model::{QueueEntry, Workspace},
-    state::{AgentState, QueueState},
+    state::{AgentState, ExecutionState, QueueState},
 };
 
 /// What the daemon knows of the agents of every workspace.
 pub(super) struct Agents {
-    /// The agent each workspace runs, by workspace ID.
-    running: HashMap<String, String>,
+    /// The agent each workspace's recorded execution runs, by workspace ID,
+    /// and whether it is known to run.
+    running: HashMap<String, (String, ExecutionState)>,
     /// Queued launches and restores, by the workspace they start in.
     queued: HashMap<String, QueueEntry>,
     /// The first stopped agent with a session to restore, by workspace ID.
@@ -25,10 +26,13 @@ pub(super) struct Agents {
 impl Agents {
     /// The workspace's agent: running, else queued, else stopped.
     pub(super) fn status(&self, workspace: &Workspace) -> Option<api::AgentStatus> {
-        if let Some(agent) = self.running.get(&workspace.id) {
-            let (state, since) = match workspace.agent_state {
-                Some(status) => (agent_state(status.state), Some(status.since)),
-                None => (api::AgentState::Running, None),
+        if let Some((agent, execution)) = self.running.get(&workspace.id) {
+            let (state, since) = match (execution, workspace.agent_state) {
+                (ExecutionState::Unknown, _) => (api::AgentState::Unconfirmed, None),
+                (ExecutionState::Running, Some(status)) => {
+                    (agent_state(status.state), Some(status.since))
+                }
+                (ExecutionState::Running, None) => (api::AgentState::Running, None),
             };
             return Some(api::AgentStatus {
                 state,
@@ -67,7 +71,7 @@ fn agent_state(state: AgentState) -> api::AgentState {
 /// The running, queued and stopped agents of `workspaces`.
 pub(super) async fn load(manager: &Manager, workspaces: &[Workspace]) -> Result<Agents> {
     Ok(Agents {
-        running: manager.store.run(store::running_agents).await?,
+        running: manager.store.run(store::agent_executions).await?,
         queued: queued(manager).await?,
         stopped: stopped(manager, workspaces)?,
     })

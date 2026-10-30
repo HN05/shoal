@@ -180,6 +180,9 @@ open_enum! {
         Starting => "starting",
         /// Stopped with a session to restore.
         Stopped => "stopped",
+        /// Its execution has not reported back since a daemon restart, so
+        /// whether it still runs is unconfirmed.
+        Unconfirmed => "unconfirmed",
     }
 }
 

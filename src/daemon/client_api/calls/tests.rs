@@ -346,3 +346,26 @@ async fn an_agent_stopped_with_a_session_to_resume_shows_as_stopped() {
     assert_eq!(agent.state, AgentState::Stopped);
     assert_eq!(agent.agent.as_deref(), Some("claude"));
 }
+
+#[tokio::test]
+async fn an_agent_that_did_not_reattach_after_a_restart_is_unconfirmed() {
+    let daemon = TestDaemon::start().await;
+    let workspace = daemon.workspace("restarted").await;
+    let id = workspace.id.clone();
+    daemon
+        .manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state,agent) VALUES ('agent',?1,'unknown','claude')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let client = daemon.client().await;
+    let agent = client.call(get("restarted")).await.unwrap().agent.unwrap();
+    assert_eq!(agent.state, AgentState::Unconfirmed);
+    assert_eq!(agent.agent.as_deref(), Some("claude"));
+}

@@ -1087,12 +1087,27 @@ pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
         .flatten())
 }
 
-/// The agent each workspace runs, by workspace ID.
-pub fn running_agents(db: &mut Connection) -> Result<HashMap<String, String>> {
-    Ok(db
-        .prepare("SELECT workspace_id,agent FROM executions WHERE agent IS NOT NULL")?
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?)
+/// The agent each workspace's recorded execution runs, by workspace ID,
+/// with the execution's state; a running execution wins over an unknown one.
+pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, (String, ExecutionState)>> {
+    let mut agents = HashMap::new();
+    let mut statement =
+        db.prepare("SELECT workspace_id,agent,state FROM executions WHERE agent IS NOT NULL")?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (workspace, agent, state) = row?;
+        let known = agents.entry(workspace).or_insert((agent.clone(), state));
+        if state == ExecutionState::Running {
+            *known = (agent, state);
+        }
+    }
+    Ok(agents)
 }
 
 /// The executions running in the workspaces of repository `repository_id`.
