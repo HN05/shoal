@@ -7475,6 +7475,41 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
     assert!(path.join("setup-finished").exists());
 }
 
+#[test]
+fn interrupting_the_cli_stops_the_post_setup_hook() {
+    let fixture = Fixture::new();
+    let pid_file = fixture.root.path().join("hook.pid");
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        format!(
+            "#!/bin/sh\necho $$ > '{}'\nexec python3 -c 'import time; time.sleep(60)'\n",
+            pid_file.display()
+        ),
+    );
+    commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
+    let mut add = fixture
+        .command()
+        .args(["--json", "add", fixture.repo.to_str().unwrap(), "hooked"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let pid: u32 = wait_for("the hook to start", || {
+        fs::read_to_string(&pid_file).ok()?.trim().parse().ok()
+    });
+    assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
+    let status = wait_for("the CLI to stop", || add.try_wait().unwrap());
+    assert!(!status.success());
+    let mut stderr = String::new();
+    std::io::Read::read_to_string(add.stderr.as_mut().unwrap(), &mut stderr).unwrap();
+    assert!(stderr.contains("hooks.post_setup was stopped"), "{stderr}");
+    wait_until("the hook to stop", || !process_running(pid));
+    assert_eq!(
+        fixture.ok(&["status", "hooked"])["workspace"]["state"],
+        "ready"
+    );
+}
+
 #[cfg(target_os = "macos")]
 const SIM_CONFIG: &str = r#"
 [machine.simulators]

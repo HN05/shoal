@@ -1,4 +1,4 @@
-//! The terminal a tracked command or interactive hook runs in, handed to it as
+//! The terminal a tracked command or a demo's command runs in, handed to it as
 //! its foreground job and restored when it exits.
 use std::{
     io::{IsTerminal, Write},
@@ -18,11 +18,6 @@ pub(crate) struct Terminal {
 }
 
 impl Terminal {
-    pub(crate) fn stdin_is_background() -> bool {
-        std::io::stdin().is_terminal()
-            && unsafe { libc::tcgetpgrp(libc::STDIN_FILENO) != libc::getpgrp() }
-    }
-
     /// Capture before launching a child. Background hooks skip the terminal;
     /// tracked commands require foreground ownership when stdin is a terminal.
     pub(crate) fn capture(require_foreground: bool) -> Result<Option<Self>> {
@@ -119,9 +114,9 @@ pub(super) fn clear_terminal() {
     }
 }
 
-/// Run `command` in this process's terminal as its foreground job, as an
-/// interactive hook runs, then restore the terminal's foreground group, OS
-/// settings and emulator input modes, whatever the command left.
+/// Run `command` in this process's terminal as its foreground job, then
+/// restore the terminal's foreground group, OS settings and emulator input
+/// modes, whatever the command left.
 pub(crate) async fn run_in_terminal(mut command: Command) -> Result<ExitStatus> {
     let mut terminal = Terminal::capture(false)?;
     let mut child = command.process_group(0).spawn()?;

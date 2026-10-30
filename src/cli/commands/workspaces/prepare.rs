@@ -41,7 +41,7 @@ pub(in crate::cli::commands) async fn prepare(
     }
     if steps.post_setup {
         reporter.step(Step::PostSetupStarted).await?;
-        run_post_setup_hook(ctx, &workspace)
+        run_post_setup_hook(ctx, &workspace, reporter)
             .await
             .map_err(|error| {
                 Failed(Failure::HookFailed {
@@ -88,8 +88,13 @@ async fn run_setup(ctx: &Context, workspace: &Workspace) -> Result<Workspace> {
     Ok(workspace)
 }
 
-/// Run the configured `hooks.post_setup`, if any.
-async fn run_post_setup_hook(ctx: &Context, workspace: &Workspace) -> Result<()> {
+/// Run the configured `hooks.post_setup`, if any, until the operation is
+/// cancelled.
+async fn run_post_setup_hook(
+    ctx: &Context,
+    workspace: &Workspace,
+    reporter: &Reporter<'_>,
+) -> Result<()> {
     let command = request::<Option<PathBuf>>(
         &ctx.paths,
         WorkspaceMethod::WorkspaceHook {
@@ -100,13 +105,13 @@ async fn run_post_setup_hook(ctx: &Context, workspace: &Workspace) -> Result<()>
     .await?;
     if let Some(command) = command {
         let configured_env = configured_environment(ctx, workspace).await?;
-        hooks::run_interactive(
+        hooks::run_until(
             Hook::PostSetup,
             workspace,
             &command,
             &ctx.paths,
-            ctx.json,
             &configured_env,
+            reporter.cancelled(),
         )
         .await?;
     }

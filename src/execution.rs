@@ -28,7 +28,7 @@ use launch::{run_taken_over, run_tracked};
 use mode::Mode;
 pub use supervise::exit_code;
 use terminal::clear_terminal;
-pub(crate) use terminal::{Terminal, reset_input_modes, run_in_terminal};
+pub(crate) use terminal::{reset_input_modes, run_in_terminal};
 
 /// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
 pub async fn run(

@@ -195,43 +195,34 @@ fn command(
     Ok(command)
 }
 
-/// Run a hook from the CLI with the caller's terminal. `quiet` keeps stdout
-/// clean for `--json` output, as setup does.
-pub async fn run_interactive(
+/// Run a hook without a terminal, its output on this process's, until it
+/// exits or `stop` completes, which stops its process group.
+pub async fn run_until(
     hook: Hook<'_>,
     workspace: &Workspace,
     executable: &Path,
     paths: &Paths,
-    quiet: bool,
     configured_env: &BTreeMap<String, OsString>,
+    stop: impl Future<Output = ()>,
 ) -> Result<()> {
-    let background_terminal = crate::execution::Terminal::stdin_is_background();
-    let mut terminal = crate::execution::Terminal::capture(false)?;
     let mut child = command(hook, workspace, executable, paths, configured_env)?
-        .stdin(if quiet || background_terminal {
-            Stdio::null()
-        } else {
-            Stdio::inherit()
-        })
-        .stdout(if quiet {
-            Stdio::from(std::io::stderr())
-        } else {
-            Stdio::inherit()
-        })
+        .stdin(Stdio::null())
         .spawn()
         .with_context(|| format!("launch {} {}", hook.kind().key(), executable.display()))?;
     let group = child.id().context("hook process ID unavailable")? as i32;
-    if let Some(terminal) = &mut terminal {
-        terminal.give_to(group)?;
+    let status = tokio::select! {
+        status = child.wait() => status,
+        () = stop => {
+            // SAFETY: signalling the hook's own process group, which
+            // `command` started it in.
+            unsafe {
+                libc::kill(-group, libc::SIGTERM);
+            }
+            child.wait().await?;
+            anyhow::bail!("{} was stopped; the workspace is kept", hook.kind().key());
+        }
     }
-    // The hook may have stopped on terminal I/O before becoming foreground.
-    unsafe {
-        libc::kill(-group, libc::SIGCONT);
-    }
-    let status = child
-        .wait()
-        .await
-        .with_context(|| format!("wait for {} {}", hook.kind().key(), executable.display()))?;
+    .with_context(|| format!("wait for {} {}", hook.kind().key(), executable.display()))?;
     ensure!(
         status.success(),
         "{} exited with {}; the workspace is kept",
