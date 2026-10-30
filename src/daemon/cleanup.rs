@@ -333,7 +333,7 @@ pub async fn sweep(manager: &Manager, timers: &mut Timers) -> Result<()> {
         kept_branches::sweep(manager, &mut timers.kept_branches).await,
     );
     step("checkpoint expiry", manager.expire_checkpoints().await);
-    step("result expiry", manager.expire_results().await);
+    step("attached file expiry", manager.expire_kept_files().await);
     step(
         "earlier attached files",
         manager.record_earlier_files().await,

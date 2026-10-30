@@ -1,6 +1,7 @@
-//! `shoal files` lists the files attached to a workspace, or on a terminal
-//! opens a picker over them; `add` attaches more without a message and `rm`
-//! deletes them.
+//! `shoal files` lists the files attached to a workspace or chat, or on a
+//! terminal opens a picker over them; `add` attaches more without a message
+//! and `rm` deletes them. A chat's agent acts on its chat's files unless it
+//! names another owner.
 use anyhow::{Result, ensure};
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
 
 mod menu;
 
-/// How `shoal files` shows a workspace's files.
+/// How `shoal files` shows a workspace's or chat's files.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Listing {
     /// A picker on a terminal, otherwise a list.
@@ -28,22 +29,18 @@ pub(super) enum Listing {
     Paths,
 }
 
-/// Show the workspace's files as `listing` asks.
-pub(super) async fn list(
-    ctx: &Context,
-    workspace: Option<String>,
-    listing: Listing,
-) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+/// Show the files of the workspace or chat `owner` names as `listing` asks.
+pub(super) async fn list(ctx: &Context, owner: Option<String>, listing: Listing) -> Result<i32> {
+    let owner = select_owner(ctx, owner).await?;
     let files = client::pages::<AttachedFile>(
         &ctx.paths,
         FileMethod::ListFiles {
-            workspace: workspace.clone(),
+            owner: owner.clone(),
         },
     )
     .await?;
     if listing == Listing::Menu && ctx.interactive_output() {
-        return menu::choose(ctx, workspace, &files).await;
+        return menu::choose(ctx, owner, &files).await;
     }
     let paths = listing == Listing::Paths;
     ctx.show(&files, |files| {
@@ -65,18 +62,17 @@ pub(super) async fn list(
     Ok(0)
 }
 
-/// Attach copies of `files` to the workspace, checking each before a
-/// workspace is picked.
-pub(super) async fn add(
-    ctx: &Context,
-    workspace: Option<String>,
-    files: Vec<String>,
-) -> Result<i32> {
+/// Attach copies of `files` to the workspace or chat `owner` names,
+/// checking each before a workspace is picked.
+pub(super) async fn add(ctx: &Context, owner: Option<String>, files: Vec<String>) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let added =
-        client::pages::<AttachedFile>(&ctx.paths, FileMethod::AddFiles { workspace, files })
-            .await?;
+    let owner = select_owner(ctx, owner).await?;
+    let method = FileMethod::AddFiles {
+        owner,
+        files,
+        from_chat: crate::env::chat(),
+    };
+    let added = client::pages::<AttachedFile>(&ctx.paths, method).await?;
     ctx.show(&added, |added| {
         let now = crate::time::unix_seconds() as i64;
         let rows = added.iter().map(|file| cells(file, now)).collect();
@@ -87,10 +83,11 @@ pub(super) async fn add(
     Ok(0)
 }
 
-/// Delete the files of the workspace `scope` selects, only those with one of
-/// `names` and the records `ids` when there are any, or of every workspace
-/// without a running agent or command. Asks first for every workspace, or
-/// one where an agent or command runs, unless `yes`.
+/// Delete the files of the workspace or chat `scope` selects, only those
+/// with one of `names` and the records `ids` when there are any, or of every
+/// workspace without a running agent or command and every ended chat. Asks
+/// first for all of them, or a workspace where an agent or command runs, or
+/// another running chat, unless `yes`.
 pub(super) async fn remove(
     ctx: &Context,
     scope: WorkspaceScope,
@@ -98,28 +95,22 @@ pub(super) async fn remove(
     ids: Vec<i64>,
     yes: bool,
 ) -> Result<i32> {
-    // Names and records belong to one workspace, so they offer no choice of
-    // every workspace.
-    let workspace = if names.is_empty() && ids.is_empty() {
-        ui::select_workspace_filter(ctx, scope).await?
-    } else {
-        Some(ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?)
+    // Names and records belong to one owner, so they offer no choice of
+    // every owner.
+    let owner = match own_chat(&scope.workspace) {
+        Some(chat) if !scope.all => Some(chat),
+        _ if names.is_empty() && ids.is_empty() => ui::select_workspace_filter(ctx, scope).await?,
+        _ => Some(select_owner(ctx, scope.workspace).await?),
     };
-    if let Some(workspace) = &workspace {
-        check_selected(ctx, workspace, &names, &ids).await?;
+    if let Some(owner) = &owner {
+        check_selected(ctx, owner, &names, &ids).await?;
     }
-    if !yes && let Some(action) = confirmation(ctx, workspace.as_deref()).await? {
+    if !yes && let Some(action) = confirmation(ctx, owner.as_deref()).await? {
         ensure!(ui::confirm(ctx, &action, "--yes")?, "deletion canceled");
     }
-    let deleted = client::pages::<AttachedFile>(
-        &ctx.paths,
-        FileMethod::RemoveFiles {
-            workspace,
-            names,
-            ids,
-        },
-    )
-    .await?;
+    let deleted =
+        client::pages::<AttachedFile>(&ctx.paths, FileMethod::RemoveFiles { owner, names, ids })
+            .await?;
     let text = match deleted.len() {
         0 => "No files deleted".to_owned(),
         1 => "Deleted 1 file".to_owned(),
@@ -129,50 +120,68 @@ pub(super) async fn remove(
     Ok(0)
 }
 
-/// Refuse names and records the workspace's files do not have before asking
+/// The workspace or chat whose files a command acts on: the one `owner`
+/// names, else the chat this runs under, else the current workspace or the
+/// one picked.
+async fn select_owner(ctx: &Context, owner: Option<String>) -> Result<String> {
+    match own_chat(&owner) {
+        Some(chat) => Ok(chat),
+        None => ui::select_workspace(ctx, owner, Fallback::CurrentDirectory).await,
+    }
+}
+
+/// The chat this runs under, when `owner` names none.
+fn own_chat(owner: &Option<String>) -> Option<String> {
+    owner.is_none().then(crate::env::chat).flatten()
+}
+
+/// Refuse names and records the owner's files do not have before asking
 /// anything; the daemon checks again as it deletes.
-async fn check_selected(
-    ctx: &Context,
-    workspace: &str,
-    names: &[String],
-    ids: &[i64],
-) -> Result<()> {
+async fn check_selected(ctx: &Context, owner: &str, names: &[String], ids: &[i64]) -> Result<()> {
     if names.is_empty() && ids.is_empty() {
         return Ok(());
     }
     let method = FileMethod::ListFiles {
-        workspace: workspace.to_owned(),
+        owner: owner.to_owned(),
     };
     let files = client::pages::<AttachedFile>(&ctx.paths, method).await?;
     let missing = crate::daemon::workspace_files::missing_selection(&files, names, ids);
     ensure!(
         missing.is_empty(),
-        "the workspace has no attached file {}",
+        "{owner} has no attached file {}",
         missing.join(", ")
     );
     Ok(())
 }
 
-/// What deleting the files of `workspace`, or of every workspace, asks the
-/// user to confirm, if anything.
-async fn confirmation(ctx: &Context, workspace: Option<&str>) -> Result<Option<String>> {
-    let Some(workspace) = workspace else {
+/// What deleting the files of `owner`, or of every workspace and ended
+/// chat, asks the user to confirm, if anything.
+async fn confirmation(ctx: &Context, owner: Option<&str>) -> Result<Option<String>> {
+    let Some(owner) = owner else {
         return Ok(Some(
-            "Delete the attached files of every workspace without a running agent or command"
+            "Delete the attached files of every workspace without a running agent or command and of every ended chat"
                 .into(),
         ));
     };
     let workspaces = client::workspaces(&ctx.paths).await?;
-    Ok(workspaces
+    if let Some(workspace) = workspaces
         .iter()
-        .find(|listed| listed.id == workspace || listed.name == workspace)
-        .filter(|listed| listed.running)
-        .map(|listed| {
+        .find(|listed| listed.id == owner || listed.name == owner)
+    {
+        return Ok(workspace.running.then(|| {
             format!(
                 "An agent or command runs in {}. Delete its attached files",
-                listed.name
+                workspace.name
             )
-        }))
+        }));
+    }
+    // A chat's own agent deletes its files without asking.
+    let chats = client::chats(&ctx.paths).await?;
+    Ok(chats
+        .iter()
+        .find(|chat| chat.id == owner || chat.name == owner)
+        .filter(|chat| crate::env::chat().as_deref() != Some(chat.id.as_str()))
+        .map(|chat| format!("Chat {} runs. Delete its attached files", chat.name)))
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a

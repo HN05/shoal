@@ -1,7 +1,8 @@
 //! Files attached to workspaces, such as those sent with a message to their
-//! agents. Each repository keeps Shoal's copies beside its workspaces, in a
-//! directory its agents are given as a working directory, and the store
-//! records each copy with how it came, so `shoal files` lists them.
+//! agents, and to chats. Each repository keeps Shoal's copies beside its
+//! workspaces, in a directory its agents are given as a working directory,
+//! and the store records each copy with its owner and how it came, so
+//! `shoal files` lists them.
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, ensure};
@@ -10,7 +11,7 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::{
     daemon::{scope::Caller, workspace::Manager},
-    model::{HandedBack, Repository, Workspace},
+    model::{Chat, HandedBack, Repository, Workspace},
     state::{WorkspaceState, states},
 };
 
@@ -19,7 +20,7 @@ pub(crate) mod layout;
 mod records;
 mod retention;
 
-pub(crate) use records::{forget_removed, rebase, record};
+pub(crate) use records::{forget_removed, rebase, record, rename_chat};
 
 use layout::{Kept, Layout};
 
@@ -34,6 +35,14 @@ states!(FileSource {
     /// Handed back with `shoal done`; kept after the workspace's removal for
     /// as long as its removal record.
     Result => "result",
+});
+
+states!(OwnerKind {
+    /// A workspace, whose files go with it except its results.
+    Workspace => "workspace",
+    /// A chat, whose files stay for `cleanup.restore.retention_days` after
+    /// it ends.
+    Chat => "chat",
 });
 
 /// Who attached a file.
@@ -52,6 +61,13 @@ pub enum Attacher {
         /// before its first report.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session: Option<String>,
+    },
+    /// A chat's agent, which runs outside any execution.
+    Chat {
+        /// The agent, named as `--agent` names it.
+        agent: String,
+        /// The chat's ID.
+        chat: String,
     },
 }
 
@@ -106,12 +122,17 @@ impl NewFile {
     }
 }
 
-/// A file attached to a workspace: Shoal's copy and how it came.
+/// A file attached to a workspace or chat: Shoal's copy and how it came.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttachedFile {
     pub id: i64,
-    /// The workspace's name when the file was attached.
-    pub workspace: String,
+    /// The workspace's name, for a workspace's file: when the file was
+    /// attached, or its last once it is removed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    /// The chat's name, for a chat's file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat: Option<String>,
     pub source: FileSource,
     /// The attached file's name.
     pub name: String,
@@ -127,25 +148,28 @@ pub struct AttachedFile {
     /// None for a file attached before Shoal recorded who attached it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attached_by: Option<Attacher>,
-    /// When a removed workspace's file is deleted, in Unix seconds.
+    /// When a removed workspace's or ended chat's file is deleted, in Unix
+    /// seconds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<i64>,
 }
 
-/// The workspace whose attached files a request names: one that exists, or
-/// a removed one whose results are kept.
+/// The workspace or chat whose attached files a request names: one that
+/// exists, or one that is gone while its files are kept.
 #[derive(Debug, Clone)]
 pub(crate) struct Owner {
+    pub(crate) kind: OwnerKind,
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) repository_id: String,
-    /// The workspace's parent when it attached the files.
+    /// The workspace's parent when it attached the files; none for a chat.
     pub(crate) parent_id: Option<String>,
 }
 
 impl From<Workspace> for Owner {
     fn from(workspace: Workspace) -> Self {
         Self {
+            kind: OwnerKind::Workspace,
             id: workspace.id,
             name: workspace.name,
             repository_id: workspace.repository_id,
@@ -154,21 +178,50 @@ impl From<Workspace> for Owner {
     }
 }
 
+impl From<Chat> for Owner {
+    fn from(chat: Chat) -> Self {
+        Self {
+            kind: OwnerKind::Chat,
+            id: chat.id,
+            name: chat.name,
+            repository_id: chat.repository_id,
+            parent_id: None,
+        }
+    }
+}
+
+impl Owner {
+    /// The owner as messages name it, such as `workspace audit`.
+    pub(crate) fn described(&self) -> String {
+        format!("{} {}", self.kind, self.name)
+    }
+
+    /// The files it keeps once gone, as messages name them.
+    pub(crate) fn kept_files(&self) -> String {
+        match self.kind {
+            OwnerKind::Workspace => {
+                format!("the results removed workspace {} handed back", self.name)
+            }
+            OwnerKind::Chat => format!("the files of ended chat {}", self.name),
+        }
+    }
+}
+
 /// The text copies of added files are kept under, which tells them from a
 /// message that is only its files.
 const ADDED: &str = "shoal files add";
 
-/// Copies of `files`, attached to `message` for the workspace
-/// `workspace_id`, made off the async runtime. Callers hold the gate of the
-/// repository's attached files.
+/// Copies of `files`, attached to `message` for the workspace or chat
+/// `owner_id` of `kind`, made off the async runtime. Callers hold the gate
+/// of the repository's attached files.
 pub(crate) async fn keep(
     layout: Layout,
-    workspace_id: &str,
+    (kind, owner_id): (OwnerKind, &str),
     message: &str,
     files: Vec<NewFile>,
 ) -> Result<Kept> {
-    let (id, message) = (workspace_id.to_owned(), message.to_owned());
-    tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
+    let (id, message) = (owner_id.to_owned(), message.to_owned());
+    tokio::task::spawn_blocking(move || layout.keep(kind, &id, &message, &files)).await?
 }
 
 /// Delete the copies of files that were refused, such as ones for a
@@ -185,13 +238,30 @@ pub(crate) async fn discard(kept: Kept) {
 }
 
 impl Manager {
-    /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, else the user.
-    pub(crate) async fn attacher(&self, caller: Option<&Caller>) -> Attacher {
-        let Some(agent) = (match caller {
-            Some(caller) => self.caller_agent(caller).await,
-            None => None,
-        }) else {
+    /// Who a request from `caller`, sent from under the chat `chat` when it
+    /// names one, attaches files as: the agent it comes from, else the user.
+    pub(crate) async fn attacher(&self, caller: Option<&Caller>, chat: Option<&str>) -> Attacher {
+        match (caller, chat) {
+            (Some(caller), _) => self.workspace_attacher(caller).await,
+            (None, Some(chat)) => self.chat_attacher(chat).await,
+            (None, None) => Attacher::User,
+        }
+    }
+
+    /// The running chat `chat`'s agent, else the user.
+    async fn chat_attacher(&self, chat: &str) -> Attacher {
+        match self.running_chat(chat).await {
+            Ok(Some(chat)) => Attacher::Chat {
+                agent: chat.agent,
+                chat: chat.id,
+            },
+            _ => Attacher::User,
+        }
+    }
+
+    /// The agent the scoped `caller` comes from, else the user.
+    async fn workspace_attacher(&self, caller: &Caller) -> Attacher {
+        let Some(agent) = self.caller_agent(caller).await else {
             return Attacher::User;
         };
         Attacher::Agent {
@@ -205,26 +275,38 @@ impl Manager {
         }
     }
 
-    /// The files attached to the workspace `selector` names, or that a
-    /// removed workspace of that name handed back, oldest first.
-    pub async fn workspace_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
+    /// The files attached to the workspace or chat `selector` names, or
+    /// kept from a removed workspace or ended chat of that name, oldest
+    /// first.
+    pub async fn attached_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
         let owner = self.file_owner(selector).await?;
         self.store.run(move |db| records::list(db, &owner.id)).await
     }
 
-    /// The workspace `selector` names, or else the latest removed one of
-    /// that name or ID whose results are kept.
+    /// The workspace or running chat `selector` names, or else the latest
+    /// removed workspace or ended chat of that name or ID whose files are
+    /// kept.
     pub(crate) async fn file_owner(&self, selector: &str) -> Result<Owner> {
+        let error = match self.living_file_owner(selector).await {
+            Ok(owner) => return Ok(owner),
+            Err(error) => error,
+        };
+        let selector = selector.to_owned();
+        let gone = self
+            .store
+            .run(move |db| records::gone_owner(db, &selector))
+            .await?;
+        gone.ok_or(error)
+    }
+
+    /// The workspace or running chat `selector` names.
+    async fn living_file_owner(&self, selector: &str) -> Result<Owner> {
         let error = match self.workspace(selector).await {
             Ok(workspace) => return Ok(workspace.into()),
             Err(error) => error,
         };
-        let selector = selector.to_owned();
-        let removed = self
-            .store
-            .run(move |db| records::removed_owner(db, &selector))
-            .await?;
-        removed.ok_or(error)
+        let chat = self.running_chat(selector).await?;
+        chat.map(Owner::from).ok_or(error)
     }
 
     /// Copies of the files `results` that `workspace` hands back with its
@@ -243,8 +325,9 @@ impl Manager {
         let id = workspace.id.clone();
         let kept =
             tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
+        let owner = (OwnerKind::Workspace, workspace.id.as_str());
         let records = self
-            .record_or_discard(&workspace.id, FileSource::Result, attacher, kept)
+            .record_or_discard(owner, FileSource::Result, attacher, kept)
             .await?;
         Ok(records
             .into_iter()
@@ -255,11 +338,11 @@ impl Manager {
             .collect())
     }
 
-    /// Delete the files attached to the workspace `selector` names, only the
-    /// copies of files with one of `names` and the records `ids` when there
-    /// are any, and return their records. A name or record the workspace does
-    /// not have deletes nothing.
-    pub async fn remove_workspace_files(
+    /// Delete the files attached to the workspace or chat `selector` names,
+    /// only the copies of files with one of `names` and the records `ids`
+    /// when there are any, and return their records. A name or record the
+    /// owner does not have deletes nothing.
+    pub async fn remove_attached_files(
         &self,
         selector: &str,
         names: Vec<String>,
@@ -273,8 +356,8 @@ impl Manager {
             let missing = missing_selection(&files, &names, &ids);
             ensure!(
                 missing.is_empty(),
-                "workspace {} has no attached file {}",
-                owner.name,
+                "{} has no attached file {}",
+                owner.described(),
                 missing.join(", ")
             );
             files.retain(|file| names.contains(&file.name) || ids.contains(&file.id));
@@ -283,7 +366,8 @@ impl Manager {
     }
 
     /// Delete the attached files of every workspace without a running agent
-    /// or command, or one whose end is unresolved, and return their records.
+    /// or command, or one whose end is unresolved, and of every ended chat,
+    /// and return their records.
     /// No execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
@@ -317,55 +401,58 @@ impl Manager {
         Ok(files)
     }
 
-    /// Attach copies of `files` to the workspace `selector` names, without a
-    /// message, as `attacher`, and return their records. Adding the same
-    /// files again keeps the copies they have, with any new title.
-    pub async fn add_workspace_files(
+    /// Attach copies of `files` to the workspace or running chat `selector`
+    /// names, without a message, as `attacher`, and return their records.
+    /// Adding the same files again keeps the copies they have, with any new
+    /// title.
+    pub async fn add_attached_files(
         &self,
         selector: &str,
         files: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
-        let workspace = self.workspace(selector).await?;
-        let (layout, _files) = self.lock_files(&workspace).await?;
-        let kept = keep(layout, &workspace.id, ADDED, files).await?;
-        self.record_or_discard(&workspace.id, FileSource::Added, attacher, kept)
+        let owner = self.living_file_owner(selector).await?;
+        let (layout, _files) = match owner.kind {
+            OwnerKind::Workspace => self.lock_files(&self.workspace(&owner.id).await?).await?,
+            OwnerKind::Chat => self.lock_chat_files(&owner).await?,
+        };
+        let owner = (owner.kind, owner.id.as_str());
+        let kept = keep(layout, owner, ADDED, files).await?;
+        self.record_or_discard(owner, FileSource::Added, attacher, kept)
             .await
     }
 
-    /// Record the copies `kept` as attached to the workspace `workspace_id`
+    /// Record the copies `kept` as attached to the workspace or chat `owner`
     /// from `source` by `attacher` and return their records, or delete the
     /// copies made for them when that fails.
     async fn record_or_discard(
         &self,
-        workspace_id: &str,
+        owner: (OwnerKind, &str),
         source: FileSource,
         attacher: &Attacher,
         kept: Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let recorded = self
-            .record_kept(workspace_id, source, attacher, &kept)
-            .await;
+        let recorded = self.record_kept(owner, source, attacher, &kept).await;
         if recorded.is_err() {
             discard(kept).await;
         }
         recorded
     }
 
-    /// Record the copies `kept` as attached to the workspace `workspace_id`
+    /// Record the copies `kept` as attached to the workspace or chat `owner`
     /// from `source` by `attacher`, and return their records.
     async fn record_kept(
         &self,
-        workspace_id: &str,
+        (kind, owner_id): (OwnerKind, &str),
         source: FileSource,
         attacher: &Attacher,
         kept: &Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let (id, attacher) = (workspace_id.to_owned(), attacher.clone());
+        let (id, attacher) = (owner_id.to_owned(), attacher.clone());
         let copies = kept.copies.clone();
         self.store
-            .run(move |db| records::record_all(db, &id, source, &attacher, &copies))
+            .run(move |db| records::record_all(db, (kind, &id), source, &attacher, &copies))
             .await
     }
 
@@ -400,6 +487,29 @@ impl Manager {
             current.state != WorkspaceState::Removing,
             "the workspace is being removed"
         );
+        let repo = self.repository(&repo.id).await?;
+        let layout = Layout::of(&repo).context("the repository has no directory")?;
+        Ok((layout, guard))
+    }
+
+    /// Hold the gate of the files attached to the chat `owner`, with where
+    /// its repository keeps them, once the chat still runs. A registration
+    /// older than the repository's directory reserves it first.
+    async fn lock_chat_files(&self, owner: &Owner) -> Result<(Layout, OwnedMutexGuard<()>)> {
+        let repo = self
+            .reserve_repository_directory(&owner.repository_id)
+            .await?;
+        let guard = self.gates.lock_message_files(&repo.id).await;
+        // A move may have finished while this waited; the chat's end takes
+        // no gate, so a chat ending from here on records nothing.
+        let id = owner.id.clone();
+        let running = self
+            .store
+            .run(move |db| {
+                crate::daemon::store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [&id])
+            })
+            .await?;
+        ensure!(running, "chat {} has ended", owner.name);
         let repo = self.repository(&repo.id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         Ok((layout, guard))

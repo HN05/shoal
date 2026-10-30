@@ -23,8 +23,8 @@ async fn long_file_listings_go_in_pages() {
         .run(move |db| {
             for n in 0..1000 {
                 db.execute(
-                    "INSERT INTO workspace_files
-                        (workspace_id,workspace,repository_id,source,name,path,bytes,created_at)
+                    "INSERT INTO attached_files
+                        (owner_id,owner_name,repository_id,source,name,path,bytes,created_at)
                         VALUES (?1,'receiver',?2,'added','notes.md',?3,1,0)",
                     rusqlite::params![id, repository_id, format!("/attachments/{n:0>64}/notes.md")],
                 )?;
@@ -36,7 +36,7 @@ async fn long_file_listings_go_in_pages() {
     let answer = handle(
         &manager,
         FileMethod::ListFiles {
-            workspace: workspace.name.clone(),
+            owner: workspace.name.clone(),
         },
         None,
     )
@@ -72,13 +72,13 @@ async fn deleting_by_name_needs_a_workspace() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     manager
-        .add_workspace_files(&workspace.name, vec![file.into()], &Attacher::User)
+        .add_attached_files(&workspace.name, vec![file.into()], &Attacher::User)
         .await
         .unwrap();
     let refused = handle(
         &manager,
         FileMethod::RemoveFiles {
-            workspace: None,
+            owner: None,
             names: vec!["notes.md".into()],
             ids: vec![],
         },
@@ -89,15 +89,11 @@ async fn deleting_by_name_needs_a_workspace() {
         panic!("deleting by name without a workspace was accepted");
     };
     assert!(
-        error.to_string().contains("name the workspace"),
+        error.to_string().contains("name the workspace or chat"),
         "{error:#}"
     );
     assert_eq!(
-        manager
-            .workspace_files(&workspace.name)
-            .await
-            .unwrap()
-            .len(),
+        manager.attached_files(&workspace.name).await.unwrap().len(),
         1
     );
 }

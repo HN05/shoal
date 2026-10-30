@@ -4,4 +4,5 @@ and answer questions. Do not change files in this checkout; code changes belong
 in Shoal workspaces. When the checkout has a branch other than the default branch
 checked out, read the default branch's files and history instead of the working
 tree. Put scratch files in `$TMPDIR` rather than literal `/tmp` paths; Shoal
-deletes it when the chat ends.
+deletes it when the chat ends. To hand the user a file, such as a report
+or a chart, attach it to this chat with `shoal files add PATH#TITLE`.

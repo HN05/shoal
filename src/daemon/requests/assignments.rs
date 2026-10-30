@@ -38,7 +38,7 @@ pub(super) async fn handle(
             integrated,
             results,
         } => {
-            let attacher = manager.attacher(caller).await;
+            let attacher = manager.attacher(caller, None).await;
             Body::Completion(
                 manager
                     .mark_done(&workspace, cleanup, integrated, results, &attacher)

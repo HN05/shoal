@@ -63,6 +63,7 @@ async fn send_to_workspace(
             workspace,
             message,
             attachments,
+            from_chat: crate::env::chat(),
         },
     )
     .await?;
@@ -88,6 +89,7 @@ async fn send_to_repository(
             repository: chosen_repository(ctx, repository).await?,
             message,
             attachments,
+            from_chat: crate::env::chat(),
         },
     )
     .await?;

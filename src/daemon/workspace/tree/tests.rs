@@ -797,6 +797,7 @@ async fn coordinating_agents_answer_and_message_the_workspaces_below_them() {
                 workspace: name(),
                 message: "Rebase onto main".into(),
                 attachments: Vec::new(),
+                from_chat: None,
             },
             AgentMethod::WorkspaceAgents { workspace: name() },
             AgentMethod::InterruptTurn {

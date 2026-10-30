@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 96;
+const SCHEMA_VERSION: i64 = 97;
 
 #[cfg(test)]
 mod benchmark;
@@ -441,6 +441,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (94, FILE_ATTACHERS, None),
     (95, EXECUTION_AGENT_PARENTS, None),
     (96, FILE_TITLES, None),
+    (97, CHAT_FILES, None),
 ];
 
 /// The agent execution whose process tree registered each execution, which
@@ -460,6 +461,15 @@ const EARLIER_ATTACHED_FILES: &str =
 
 /// What an attached file is, as whoever attached it said.
 const FILE_TITLES: &str = "ALTER TABLE workspace_files ADD COLUMN title TEXT;";
+
+/// Files belong to a workspace or a chat, which the owner columns name; a
+/// chat's stay until `expires_at` once it has ended.
+const CHAT_FILES: &str = "ALTER TABLE workspace_files RENAME TO attached_files;
+    ALTER TABLE attached_files RENAME COLUMN workspace_id TO owner_id;
+    ALTER TABLE attached_files RENAME COLUMN workspace TO owner_name;
+    ALTER TABLE attached_files ADD COLUMN owner_kind TEXT NOT NULL DEFAULT 'workspace'
+        CHECK(owner_kind IN ('workspace','chat'));
+    ALTER TABLE attached_files ADD COLUMN expires_at INTEGER;";
 
 /// The JSON array of paths of the files attached to an agent message.
 const AGENT_MESSAGE_ATTACHMENTS: &str =

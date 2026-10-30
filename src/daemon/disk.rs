@@ -343,41 +343,36 @@ async fn empty_caches(
     Ok(())
 }
 
-/// Delete the results removed workspaces handed back on the filesystem, the
-/// oldest first, until it has enough space. They go last: unlike what the
-/// steps before delete, they may exist nowhere else.
+/// Delete the results removed workspaces handed back and the files ended
+/// chats kept on the filesystem, the oldest first, until it has enough
+/// space. They go last: unlike what the steps before delete, they may exist
+/// nowhere else.
 async fn delete_results(
     manager: &Manager,
     settings: &Disk,
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
-    for owner in manager.kept_results().await? {
+    for owner in manager.kept_file_owners().await? {
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }
         let deleted = manager
-            .delete_results_in(&owner, |path| filesystem.holds(path))
+            .delete_kept_in(&owner, |path| filesystem.holds(path))
             .await;
+        let files = owner.kept_files();
         let (kind, message) = match deleted {
             Ok(false) => continue,
             Ok(true) => {
-                log!("disk space cleanup deleted the results of {}", owner.name);
+                log!("disk space cleanup deleted {files}");
                 (
                     NotificationKind::ResultsDeleted,
-                    format!(
-                        "Deleted the results removed workspace {} handed back, for disk space; {}",
-                        owner.name,
-                        filesystem.describe()
-                    ),
+                    format!("Deleted {files}, for disk space; {}", filesystem.describe()),
                 )
             }
             Err(error) => (
                 NotificationKind::CleanupFailed,
-                format!(
-                    "Disk space cleanup could not delete the results of {}: {error:#}",
-                    owner.name
-                ),
+                format!("Disk space cleanup could not delete {files}: {error:#}"),
             ),
         };
         manager.notify(None, kind, message).await;

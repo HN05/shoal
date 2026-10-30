@@ -148,6 +148,14 @@ impl Manager {
         self.store.run(|db| running(db)).await
     }
 
+    /// The running chat with the ID or name `selector`, if any.
+    pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
+        let chats = self.chats().await?;
+        Ok(chats
+            .into_iter()
+            .find(|chat| chat.id == selector || chat.name == selector))
+    }
+
     /// End chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(recorded_processes).await?);
@@ -156,7 +164,8 @@ impl Manager {
 
     /// End the chats still recorded with the process found ended: return
     /// their workspaces to the user along with the messages the chats had not
-    /// received, and delete their records and temporary directories. A chat
+    /// received, delete their records and temporary directories, and keep
+    /// their attached files for as long as their repository says. A chat
     /// moved to another process since keeps running.
     async fn end_chats(&self, ended: Vec<(String, Identity)>) -> Result<()> {
         if ended.is_empty() {
@@ -166,6 +175,10 @@ impl Manager {
         for (repository_id, id) in deleted.chats {
             if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
                 log!("chat {id}: temporary directory not deleted: {error:#}");
+            }
+            // The cleanup sweep stamps what this misses.
+            if let Err(error) = self.stamp_ended_chat_files(&repository_id).await {
+                log!("chat {id}: attached files not given an expiry: {error:#}");
             }
         }
         if let Some(id) = deleted.notification {
@@ -305,6 +318,7 @@ fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
             "UPDATE chats SET name=?2 WHERE id=?1",
             params![old.id, name],
         )?;
+        crate::daemon::workspace_files::rename_chat(&tx, &old.id, name)?;
     }
     tx.commit()?;
     let renamed = Chat {

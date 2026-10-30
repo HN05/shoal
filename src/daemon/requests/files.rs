@@ -18,27 +18,29 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let files = match method {
-        FileMethod::ListFiles { workspace } => manager.workspace_files(&workspace).await,
-        FileMethod::AddFiles { workspace, files } => {
-            let attacher = manager.attacher(caller).await;
-            manager
-                .add_workspace_files(&workspace, files, &attacher)
-                .await
+        FileMethod::ListFiles { owner } => manager.attached_files(&owner).await,
+        FileMethod::AddFiles {
+            owner,
+            files,
+            from_chat,
+        } => {
+            let attacher = manager.attacher(caller, from_chat.as_deref()).await;
+            manager.add_attached_files(&owner, files, &attacher).await
         }
         FileMethod::RemoveFiles {
-            workspace: Some(workspace),
+            owner: Some(owner),
             names,
             ids,
-        } => manager.remove_workspace_files(&workspace, names, ids).await,
+        } => manager.remove_attached_files(&owner, names, ids).await,
         FileMethod::RemoveFiles {
-            workspace: None,
+            owner: None,
             names,
             ids,
         } => {
-            // Names and records belong to one workspace's files.
+            // Names and records belong to one owner's files.
             ensure!(
                 names.is_empty() && ids.is_empty(),
-                "name the workspace whose files to delete by name"
+                "name the workspace or chat whose files to delete by name"
             );
             manager.remove_idle_files().await
         }
@@ -49,21 +51,18 @@ pub(super) async fn handle(
 impl Scoped for FileMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         match self {
-            FileMethod::AddFiles { workspace, .. } => Ok(Some(workspace)),
-            FileMethod::ListFiles { workspace }
+            FileMethod::AddFiles { owner, .. } => Ok(Some(owner)),
+            FileMethod::ListFiles { owner }
             | FileMethod::RemoveFiles {
-                workspace: Some(workspace),
-                ..
+                owner: Some(owner), ..
             } => {
-                if manager.workspace(workspace).await.is_ok() {
-                    return Ok(Some(workspace));
+                if manager.workspace(owner).await.is_ok() {
+                    return Ok(Some(owner));
                 }
-                narrow_to_removed(manager, caller, workspace).await?;
+                narrow_to_removed(manager, caller, owner).await?;
                 Ok(None)
             }
-            FileMethod::RemoveFiles {
-                workspace: None, ..
-            } => bail!(
+            FileMethod::RemoveFiles { owner: None, .. } => bail!(
                 "workspace processes can delete only the files of their own workspace and those split from it"
             ),
         }
@@ -72,7 +71,7 @@ impl Scoped for FileMethod {
 
 /// Point `workspace` at the removed workspace it names, whose results a
 /// caller may reach when the workspace was split from the caller's own or
-/// one below it.
+/// one below it; a chat has no parent, so its files stay out of reach.
 async fn narrow_to_removed(
     manager: &Manager,
     caller: &Caller,

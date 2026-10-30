@@ -189,7 +189,8 @@ impl Manager {
             return self.queue_agent_message(&workspace.id, message).await;
         }
         let (layout, _files) = self.lock_files(&workspace).await?;
-        let kept = workspace_files::keep(layout, &workspace.id, &message, attachments).await?;
+        let owner = (workspace_files::OwnerKind::Workspace, workspace.id.as_str());
+        let kept = workspace_files::keep(layout, owner, &message, attachments).await?;
         let queued = self
             .queue_attached_message(
                 &workspace.id,
@@ -299,6 +300,7 @@ impl Manager {
                 let queued = insert_delivered(&tx, &workspace_id, &message, &paths, delivery)?;
                 workspace_files::record(
                     &tx,
+                    workspace_files::OwnerKind::Workspace,
                     &workspace_id,
                     workspace_files::FileSource::Message,
                     attacher.as_ref(),

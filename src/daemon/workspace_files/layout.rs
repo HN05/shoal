@@ -1,7 +1,6 @@
-//! Where a repository keeps the files attached to its workspaces: beside the
-//! workspaces, in a directory its agents are given as a working directory, so
-//! they read the files where any sandbox lets them; they stay until their
-//! workspace is removed.
+//! Where a repository keeps the files attached to its workspaces and chats:
+//! beside the workspaces, in a directory its agents are given as a working
+//! directory, so they read the files where any sandbox lets them.
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -9,7 +8,7 @@ use std::{
 
 use anyhow::{Context, Result, ensure};
 
-use super::NewFile;
+use super::{NewFile, OwnerKind};
 use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
@@ -20,6 +19,10 @@ use crate::{
 /// The directory below a repository's attached files that keeps what
 /// workspaces handed back, which no workspace ID names.
 const RESULTS: &str = "results";
+
+/// The directory below a repository's attached files that keeps the files
+/// of its chats.
+const CHATS: &str = "chats";
 
 /// The largest file a message may attach.
 pub(crate) const MAX_FILE_BYTES: u64 = 100 * 1024 * 1024;
@@ -47,31 +50,37 @@ impl Layout {
             .map(|directory| Self::new(directory, &repo.id))
     }
 
-    /// Copies of `files`, attached to `message` for the workspace
-    /// `workspace_id`. The same message with the same files reuses its
+    /// Copies of `files`, attached to `message` for the workspace or chat
+    /// `owner_id` of `kind`. The same message with the same files reuses its
     /// copies, so sending it again collapses with the unread one.
     pub(crate) fn keep(
         &self,
-        workspace_id: &str,
+        kind: OwnerKind,
+        owner_id: &str,
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
-        self.keep_in(&self.root.join(workspace_id), workspace_id, message, files)
+        let directory = match kind {
+            OwnerKind::Workspace => self.root.join(owner_id),
+            OwnerKind::Chat => self.kept(kind, owner_id),
+        };
+        self.keep_in(&directory, owner_id, message, files)
     }
 
     /// Copies of the files `files` that the workspace `workspace_id` hands
     /// back with its completion, apart from its other files since they
     /// outlive its removal.
     pub(crate) fn keep_results(&self, workspace_id: &str, files: &[NewFile]) -> Result<Kept> {
-        let directory = self.root.join(RESULTS).join(workspace_id);
+        let directory = self.kept(OwnerKind::Workspace, workspace_id);
         self.keep_in(&directory, workspace_id, "shoal done", files)
     }
 
-    /// Copies of `files` in `directory`, for the workspace `workspace_id`.
+    /// Copies of `files` in `directory`, for the workspace or chat
+    /// `owner_id`.
     fn keep_in(
         &self,
         directory: &Path,
-        workspace_id: &str,
+        owner_id: &str,
         message: &str,
         files: &[NewFile],
     ) -> Result<Kept> {
@@ -101,10 +110,10 @@ impl Layout {
             })
             .collect();
         // A copy someone deleted is made again with the others.
-        if let Some(stale) = incomplete_copies(directory, workspace_id, message, &attachments)? {
+        if let Some(stale) = incomplete_copies(directory, owner_id, message, &attachments)? {
             remove_dir(&stale)?;
         }
-        let copies = keep_copies(directory, workspace_id, message, &attachments)?;
+        let copies = keep_copies(directory, owner_id, message, &attachments)?;
         let kept = copies
             .attachments
             .into_iter()
@@ -122,7 +131,7 @@ impl Layout {
         Ok(Kept {
             copies: kept,
             created: copies.created,
-            workspace: directory.to_owned(),
+            owner: directory.to_owned(),
         })
     }
 
@@ -192,23 +201,29 @@ impl Layout {
         remove_dir(&self.root.join(workspace_id))
     }
 
-    /// The directory of the files the workspace `workspace_id` handed back.
-    pub(crate) fn results(&self, workspace_id: &str) -> PathBuf {
-        self.root.join(RESULTS).join(workspace_id)
+    /// The directory of the files that outlive the workspace or chat
+    /// `owner_id` of `kind`: a workspace's results, or all of a chat's.
+    pub(crate) fn kept(&self, kind: OwnerKind, owner_id: &str) -> PathBuf {
+        let directory = match kind {
+            OwnerKind::Workspace => RESULTS,
+            OwnerKind::Chat => CHATS,
+        };
+        self.root.join(directory).join(owner_id)
     }
 
-    /// Delete the files the workspace `workspace_id` handed back.
-    pub(crate) fn remove_results(&self, workspace_id: &str) -> Result<()> {
+    /// Delete the files that outlive the workspace or chat `owner_id` of
+    /// `kind`.
+    pub(crate) fn remove_kept(&self, kind: OwnerKind, owner_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        let results = self.results(workspace_id);
+        let kept = self.kept(kind, owner_id);
         ensure!(
-            self.contains(&results),
+            self.contains(&kept),
             "{} is not among the repository's attached files",
-            results.display()
+            kept.display()
         );
-        remove_dir(&results)
+        remove_dir(&kept)
     }
 
     /// Whether `path` is below this repository's attached files and its
@@ -258,26 +273,26 @@ pub(crate) struct Kept {
     pub(crate) copies: Vec<Copy>,
     /// The directory of copies made for this message, rather than reused.
     created: Option<PathBuf>,
-    /// The directory of the workspace's attached files.
-    workspace: PathBuf,
+    /// The directory of the owner's attached files.
+    owner: PathBuf,
 }
 
 impl Kept {
     /// Delete the copies made for a message that was not queued, and the
-    /// workspace's directory when nothing else is left in it, as when the
-    /// workspace was removed while they were copied.
+    /// owner's directory when nothing else is left in it, as when the
+    /// workspace was removed or the chat ended while they were copied.
     pub(crate) fn discard(self) -> Result<()> {
         if let Some(created) = &self.created {
             remove_dir(created)?;
         }
-        match std::fs::remove_dir(&self.workspace) {
+        match std::fs::remove_dir(&self.owner) {
             Err(error)
                 if !matches!(
                     error.kind(),
                     ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
                 ) =>
             {
-                Err(error).with_context(|| format!("delete {}", self.workspace.display()))
+                Err(error).with_context(|| format!("delete {}", self.owner.display()))
             }
             _ => Ok(()),
         }

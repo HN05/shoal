@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use anyhow::{Context as _, Result, ensure};
 
 use super::{
-    FileSource,
+    FileSource, OwnerKind,
     layout::{Copy, Layout},
     records,
 };
@@ -63,7 +63,14 @@ impl Manager {
             .await??;
             self.store
                 .run(move |db| {
-                    records::record(db, &workspace_id, FileSource::Message, None, &copies)
+                    records::record(
+                        db,
+                        OwnerKind::Workspace,
+                        &workspace_id,
+                        FileSource::Message,
+                        None,
+                        &copies,
+                    )
                 })
                 .await?;
         }

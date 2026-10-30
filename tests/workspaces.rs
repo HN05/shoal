@@ -24481,6 +24481,76 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
 }
 
 #[test]
+fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
+    let fixture = Fixture::new();
+    let home = fixture.root.path();
+    fs::write(home.join("report.md"), "No leaks").unwrap();
+    fs::write(home.join("draft.md"), "Draft").unwrap();
+    // The chat's agent attaches two files to its chat, deletes one and lists
+    // the rest.
+    install_test_script(
+        home.join("bin/claude"),
+        format!(
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json files add \"$HOME/report.md#Audit findings\" \"$HOME/draft.md\" > \"$HOME/chat-added\"\n\"$shoal\" --json files rm draft.md > \"$HOME/chat-deleted\"\n\"$shoal\" --json files > \"$HOME/chat-files\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) = fixture.terminal_command(
+        fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("ZMX_SESSION", "outer")
+            .args(["chat", "--agent", "claude"]),
+        "\n",
+        true,
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let chat = journal(&fixture)
+        .into_iter()
+        .find(|event| event["kind"] == "chat_started")
+        .unwrap()["chat"]["id"]
+        .clone();
+    let read = |name: &str| -> Value {
+        let text = fs::read_to_string(home.join(name)).unwrap();
+        serde_json::from_str(&text).unwrap_or_else(|error| panic!("{name}: {error}: {text}"))
+    };
+    let added = read("chat-added");
+    assert_eq!(added.as_array().map(Vec::len), Some(2), "{added}");
+    let deleted = read("chat-deleted");
+    assert_eq!(deleted[0]["name"], "draft.md", "{deleted}");
+    let listed = read("chat-files");
+    let [file] = listed.as_array().unwrap().as_slice() else {
+        panic!("{listed}");
+    };
+    assert_eq!(
+        (&file["name"], &file["title"], &file["chat"]),
+        (
+            &"report.md".into(),
+            &"Audit findings".into(),
+            &CHAT_NAME.into()
+        )
+    );
+    assert_eq!(file["workspace"], Value::Null);
+    // The chat's agent attached it, not the user.
+    assert_eq!(
+        file["attached_by"],
+        serde_json::json!({"kind": "chat", "agent": "claude", "chat": chat})
+    );
+    assert_eq!(file["expires_at"], Value::Null);
+
+    // Once the chat has ended, its file stays, listed by the chat's name
+    // with when it goes.
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+    let kept = fixture.ok(&["files", CHAT_NAME]);
+    assert_eq!(kept[0]["path"], file["path"], "{kept}");
+    assert!(kept[0]["expires_at"].as_i64().is_some(), "{kept}");
+    assert_eq!(
+        fs::read_to_string(kept[0]["path"].as_str().unwrap()).unwrap(),
+        "No leaks"
+    );
+}
+
+#[test]
 fn chat_instructions_append_the_checkout_template_to_the_global_one() {
     let fixture = Fixture::new();
     install_recording_agent(&fixture, "claude");

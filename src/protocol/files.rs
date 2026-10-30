@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Requests about the files attached to workspaces.
+/// Requests about the files attached to workspaces and chats, each named by
+/// name or ID as `owner`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(
@@ -8,19 +9,24 @@ use serde::{Deserialize, Serialize};
     reason = "variants are named as their requests are spelled on the wire"
 )]
 pub enum FileMethod {
-    /// The files attached to a workspace, oldest first.
-    ListFiles { workspace: String },
-    /// Attach copies of files to a workspace without a message.
+    /// The files attached to a workspace or chat, oldest first.
+    ListFiles { owner: String },
+    /// Attach copies of files to a workspace or running chat without a
+    /// message.
     AddFiles {
-        workspace: String,
+        owner: String,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::daemon::workspace_files::NewFile>,
+        /// The chat whose agent sends the request, which attaches the files.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_chat: Option<String>,
     },
-    /// Delete a workspace's attached files, only those with one of `names`
-    /// and the records `ids` when there are any; without a workspace, those
-    /// of every workspace without a running agent or command.
+    /// Delete the attached files of a workspace or chat, only those with one
+    /// of `names` and the records `ids` when there are any; without an
+    /// owner, those of every workspace without a running agent or command
+    /// and of every ended chat.
     RemoveFiles {
-        workspace: Option<String>,
+        owner: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         names: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -94,6 +94,9 @@ pub enum AgentMethod {
         /// Files to attach by absolute path, which the daemon copies.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::daemon::workspace_files::NewFile>,
+        /// The chat whose agent sends the message, which attaches the files.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_chat: Option<String>,
     },
     /// [`Self::SendAgentMessage`] to every workspace of the repository with
     /// a running agent, answered with the workspaces it reached.
@@ -102,6 +105,9 @@ pub enum AgentMethod {
         message: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::daemon::workspace_files::NewFile>,
+        /// The chat whose agent sends the message, which attaches the files.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from_chat: Option<String>,
     },
     /// The workspace's undelivered agent messages, oldest first.
     AgentMessages {

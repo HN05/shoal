@@ -265,7 +265,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         )
         .await
         .unwrap();
-    let result = manager.workspace_files(&audit.id).await.unwrap()[0]
+    let result = manager.attached_files(&audit.id).await.unwrap()[0]
         .path
         .clone();
     manager

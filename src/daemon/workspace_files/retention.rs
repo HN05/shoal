@@ -1,6 +1,7 @@
 //! How long attached files stay: a workspace's files go with it, except its
-//! results, which stay as long as its removal record, and every file goes
-//! with its repository.
+//! results, which stay as long as its removal record; a chat's stay for
+//! `cleanup.restore.retention_days` after it ends; and every file goes with
+//! its repository.
 use std::path::Path;
 
 use anyhow::{Result, ensure};
@@ -13,7 +14,7 @@ use crate::{
 
 impl Manager {
     /// Delete the files attached to `workspace` once it is removed; its
-    /// results stay until [`Manager::expire_results`]. The removal's own
+    /// results stay until [`Manager::expire_kept_files`]. The removal's own
     /// transaction already forgot their records.
     pub(crate) async fn delete_workspace_files(&self, workspace: &Workspace) -> Result<()> {
         let (repo, _files) = self.lock_repository_files(&workspace.repository_id).await?;
@@ -39,12 +40,13 @@ impl Manager {
     }
 
     /// Delete the results of removed workspaces whose removal record has
-    /// expired, or that never had one. A failure keeps what it concerns for
-    /// the next pass and does not skip the rest.
-    pub async fn expire_results(&self) -> Result<()> {
+    /// expired, or that never had one, and the files of chats that ended
+    /// longer ago than their repository keeps them. A failure keeps what it
+    /// concerns for the next pass and does not skip the rest.
+    pub async fn expire_kept_files(&self) -> Result<()> {
         let mut failed = Vec::new();
         for repo in self.repositories().await? {
-            if let Err(error) = self.expire_repository_results(&repo).await {
+            if let Err(error) = self.expire_repository_files(&repo).await {
                 failed.push(format!("{}: {error:#}", repo.path.display()));
             }
         }
@@ -52,48 +54,69 @@ impl Manager {
         Ok(())
     }
 
-    async fn expire_repository_results(&self, listed: &Repository) -> Result<()> {
+    async fn expire_repository_files(&self, listed: &Repository) -> Result<()> {
+        self.stamp_ended_chat_files(&listed.id).await?;
         let (repo, _files) = self.lock_repository_files(&listed.id).await?;
         let id = repo.id.clone();
         let expired = self.store.run(move |db| records::expired(db, &id)).await?;
-        for workspace_id in expired {
-            self.delete_results_of(&repo, workspace_id).await?;
+        for owner in expired {
+            self.delete_kept_of(&repo, owner).await?;
         }
         Ok(())
     }
 
-    /// The removed workspaces whose results are kept, those that handed them
-    /// back first oldest first.
-    pub(crate) async fn kept_results(&self) -> Result<Vec<Owner>> {
+    /// Give the files of repository `repository_id`'s ended chats the time
+    /// they go, `cleanup.restore.retention_days` from now, unless they have
+    /// one.
+    pub(crate) async fn stamp_ended_chat_files(&self, repository_id: &str) -> Result<()> {
+        let retention = self
+            .repository_settings(repository_id)
+            .await?
+            .cleanup
+            .restore
+            .retention();
+        let expires_at = i64::try_from(crate::time::unix_seconds() + retention.as_secs())?;
+        let id = repository_id.to_owned();
+        self.store
+            .run(move |db| records::stamp_ended_chats(db, &id, expires_at))
+            .await
+    }
+
+    /// The removed workspaces and ended chats whose files are kept, those
+    /// that kept them first oldest first.
+    pub(crate) async fn kept_file_owners(&self) -> Result<Vec<Owner>> {
         self.store.run(|db| records::kept(db)).await
     }
 
-    /// Delete the results that the removed workspace `owner` handed back
-    /// when they are where `holds` says, as on a filesystem low on space,
-    /// and return whether it did. The place is checked with the files gate
-    /// held, so a move of the repository's directory cannot come between.
-    pub(crate) async fn delete_results_in(
+    /// Delete the files that the removed workspace or ended chat `owner`
+    /// kept when they are where `holds` says, as on a filesystem low on
+    /// space, and return whether it did. The place is checked with the files
+    /// gate held, so a move of the repository's directory cannot come
+    /// between.
+    pub(crate) async fn delete_kept_in(
         &self,
         owner: &Owner,
         holds: impl Fn(&Path) -> bool,
     ) -> Result<bool> {
         let (repo, _files) = self.lock_repository_files(&owner.repository_id).await?;
-        let there = Layout::of(&repo).is_some_and(|layout| holds(&layout.results(&owner.id)));
+        let there =
+            Layout::of(&repo).is_some_and(|layout| holds(&layout.kept(owner.kind, &owner.id)));
         if there {
-            self.delete_results_of(&repo, owner.id.clone()).await?;
+            self.delete_kept_of(&repo, owner.clone()).await?;
         }
         Ok(there)
     }
 
-    /// Delete the results of the workspace `workspace_id` of `repo`, and then
-    /// their records. Callers hold the gate of the repository's files.
-    async fn delete_results_of(&self, repo: &Repository, workspace_id: String) -> Result<()> {
+    /// Delete the files that the removed workspace or ended chat `owner` of
+    /// `repo` kept, and then their records. Callers hold the gate of the
+    /// repository's files.
+    async fn delete_kept_of(&self, repo: &Repository, owner: Owner) -> Result<()> {
         if let Some(layout) = Layout::of(repo) {
-            let id = workspace_id.clone();
-            tokio::task::spawn_blocking(move || layout.remove_results(&id)).await??;
+            let (kind, id) = (owner.kind, owner.id.clone());
+            tokio::task::spawn_blocking(move || layout.remove_kept(kind, &id)).await??;
         }
         self.store
-            .run(move |db| records::forget_workspace(db, &workspace_id))
+            .run(move |db| records::forget_owner(db, &owner.id))
             .await
     }
 }

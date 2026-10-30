@@ -219,6 +219,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
         workspace: workspace.name.clone(),
         message: "hello".into(),
         attachments: Vec::new(),
+        from_chat: None,
     };
     assert!(
         scope::authorize(&manager, Some("scope"), &mut method)
@@ -328,6 +329,7 @@ async fn a_repository_message_reaches_its_running_agents_below_the_sender() {
             repository: repository.clone().into(),
             message: "Rebase onto main".into(),
             attachments: Vec::new(),
+            from_chat: None,
         };
         assert_eq!(
             scope::authorize(&manager, Some("scope"), &mut method)

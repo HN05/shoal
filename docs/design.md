@@ -1562,6 +1562,13 @@ returns it to the user, so Shoal knows which chat coordinates which workers.
 Having no workspace, a chat keeps its messages in its own queue, which the same
 hooks deliver; a chat that ends gives the user the notifications its unread
 messages stand for, and its workers return to the user even if it is resumed.
+A chat owns attached files as a workspace does, so its agent can hand the user
+a report, or a page for a client to show in the conversation. A chat ends when
+its process exits, with no step that hands files back, so all of its files
+outlive it as a removed workspace's results do, for
+`cleanup.restore.retention_days` after Shoal sees it end. Commands name them by
+the chat's name, which shares the workspaces' namespace, rather than through a
+flag of their own.
 A chat passes a question up by asking the user, who attends it. Holding no
 grant, it receives no approval requests, though with the user's authority it
 may decide them. A repository may have several chats, so each call starts a new
@@ -1837,10 +1844,11 @@ rather than something to merge hands back files with its completion. They are
 the workspace's results among its attached files, which stay when cleanup
 removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
-files go with it. Each attached file records who attached it: the user, or the
+files go with it. Each attached file records who attached it: the user; the
 agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
-names the conversation a client shows the file in. A file's optional title
+names the conversation a client shows the file in; or a chat's agent, which the
+CLI names from its environment, since a chat has no execution to find it by. A file's optional title
 rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
 text, because attach flags repeat and a separate title flag could not say which
 file it names. Own-workspace withdrawal removes a

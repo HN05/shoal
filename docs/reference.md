@@ -3652,18 +3652,18 @@ settle_seconds = 5 # Default: 5; at most 60
 ### Attached files
 
 ```sh
-shoal files [workspace]          # Pick among the workspace's files, or list them
+shoal files [workspace]          # Pick among the workspace's or chat's files, or list them
 shoal files [workspace] --print  # List them on a terminal too
 shoal files [workspace] --path   # Only the paths of Shoal's copies
 shoal done --attach report.md    # Hand back a file with the completion
 shoal files add notes.md [--workspace W]  # Attach files without a message
 shoal files add 'chart.html#Latency by region'  # Attach a file with a title
-shoal files rm [FILE...] [--workspace W]  # Delete a workspace's files, or those with these names
-shoal files rm --all                      # Delete the files of every idle workspace
+shoal files rm [FILE...] [--workspace W]  # Delete a workspace's or chat's files, or those with these names
+shoal files rm --all                      # Delete the files of every idle workspace and ended chat
 ```
 
-`shoal files` lists the files attached to a workspace, or on a terminal opens a
-picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
+`shoal files` lists the files attached to a workspace or [chat](#chats), or on
+a terminal opens a picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
 copy's path, Ctrl-O opens it in the application the desktop chooses and prints
 its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
 add row, asks for a file to add. Workspace processes cannot open files.
@@ -3675,13 +3675,19 @@ how it came (`message` for a file sent with `shoal messages send --attach`,
 directory's `.attachments`. Results outlive the workspace: they stay for as
 long as its removal record, `cleanup.restore.retention_days` like its
 [checkpoints](#checkpoints-and-restore), and `shoal files <name>` still lists
-them, with when they go, and deletes them with `rm`. Disk space cleanup
-deletes them sooner when nothing else frees enough space. `--json` gives each as a record with
-`source`, `path`, `bytes`, `title` when it has one, and `attached_by`:
-`{"kind": "user"}` for a file attached from outside any agent, or
-`{"kind": "agent"}` with the agent's name as `agent`, its `execution` and, once
-the agent has reported it, its `session`. Files attached before Shoal recorded
-this have no `attached_by`. Every way of attaching takes a file as `PATH` or
+them, with when they go, and deletes them with `rm`. Every command here takes a
+chat's name where it takes a workspace's, since they share one set of names,
+and run from a chat's agent without one acts on that chat's files. A chat's
+files outlive it the same way, for `cleanup.restore.retention_days` after it
+ends. Disk space cleanup deletes results and ended chats' files sooner when
+nothing else frees enough space. `--json` gives each as a record with
+`workspace` or `chat` naming its owner, `source`, `path`, `bytes`, `title` when
+it has one, and `attached_by`: `{"kind": "user"}` for a file attached from
+outside any agent, `{"kind": "agent"}` with the agent's name as `agent`, its
+`execution` and, once the agent has reported it, its `session`, or
+`{"kind": "chat"}` with the chat agent's name as `agent` and the chat's ID as
+`chat`, also for files the chat's agent attaches to a workspace. Files attached
+before Shoal recorded this have no `attached_by`. Every way of attaching takes a file as `PATH` or
 `PATH#TITLE`, splitting at the first `#`; the title, a single line of at most
 128 characters, says what the file is, and clients show the name where there is
 none. `shoal files add` copies files of at most 100 MiB
@@ -3689,11 +3695,13 @@ there without telling the workspace's agents; adding the same file again keeps
 its copy, and its title unless a new one is given. The other copies stay until the workspace is removed, or until
 `shoal files rm` deletes them sooner: all of a workspace's, or with file names
 only the copies of those files. It asks first when an agent or command runs in
-the workspace. `--all` deletes the files of every workspace where none runs,
-after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
+the workspace, or when another chat than the one it runs under is running.
+`--all` deletes the files of every workspace where none runs and of every ended
+chat, after asking; noninteractive and JSON calls confirm with `--yes`. Sending files
 again copies any deleted copy anew. Scoped agents may list, add and delete the
 files of their own workspace and those split from it, and the results of a
-removed workspace that was split from one of those, but not use `--all`.
+removed workspace that was split from one of those, but not a chat's files or
+use `--all`.
 
 ### Questions
 

@@ -1,5 +1,5 @@
-//! The picker `shoal files` opens on a terminal: a workspace's files, and a
-//! row that adds one, where a key binding chooses what to do.
+//! The picker `shoal files` opens on a terminal: a workspace's or chat's
+//! files, and a row that adds one, where a key binding chooses what to do.
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -33,17 +33,14 @@ const BINDINGS: &[(&str, &str, FileAction)] = &[
     ("ctrl-d", "delete", FileAction::Delete),
 ];
 
-/// Pick one of the workspace's `files`, or the add row, and act on it.
-pub(super) async fn choose(
-    ctx: &Context,
-    workspace: String,
-    files: &[AttachedFile],
-) -> Result<i32> {
+/// Pick one of `files` of the workspace or chat `owner`, or the add row,
+/// and act on it.
+pub(super) async fn choose(ctx: &Context, owner: String, files: &[AttachedFile]) -> Result<i32> {
     let picked = ui::pick_with_keys(ctx, "File> ", entries(files), KeyBindings(BINDINGS))?;
     match resolve_action(picked.action, &picked.id)? {
         FileAction::Add => {
             let path = ui::input(ctx, "File to add")?;
-            add(ctx, Some(workspace), vec![path]).await
+            add(ctx, Some(owner), vec![path]).await
         }
         FileAction::Print => print(picked_file(files, &picked.id)?),
         FileAction::PrintPath => {
@@ -54,7 +51,7 @@ pub(super) async fn choose(
         FileAction::Delete => {
             let file = picked_file(files, &picked.id)?;
             let scope = WorkspaceScope {
-                workspace: Some(workspace),
+                workspace: Some(owner),
                 all: false,
             };
             remove(ctx, scope, vec![], vec![file.id], false).await

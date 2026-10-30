@@ -548,7 +548,7 @@ async fn messages_and_files_follow_their_copies_to_the_new_root() -> Result<()> 
         "{copy:?}"
     );
     assert_eq!(fs::read_to_string(copy)?, "panic");
-    let files = manager.workspace_files(&workspace.id).await?;
+    let files = manager.attached_files(&workspace.id).await?;
     assert_eq!(files[0].path, *copy);
     let result = &files[1].path;
     assert!(result.starts_with(root.join("origin")), "{result:?}");
@@ -652,7 +652,7 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     let file = temp.path().join("notes.md");
     fs::write(&file, "plan")?;
     manager
-        .add_workspace_files(&workspace.id, vec![file.into()], &Attacher::User)
+        .add_attached_files(&workspace.id, vec![file.into()], &Attacher::User)
         .await?;
     // A move, then a deletion, wait for the files gate this test holds.
     let held = manager.gates.lock_message_files(&repo.id).await;
@@ -673,7 +673,7 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
     waiting(4).await.context("the move reaches the gate")?;
     let deleting = tokio::spawn({
         let (manager, id) = (manager.clone(), workspace.id.clone());
-        async move { manager.remove_workspace_files(&id, vec![], vec![]).await }
+        async move { manager.remove_attached_files(&id, vec![], vec![]).await }
     });
     waiting(5).await.context("the deletion reaches the gate")?;
     drop(held);
@@ -688,7 +688,7 @@ async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<
         gone.path
     );
     assert!(!gone.path.exists());
-    assert!(manager.workspace_files(&workspace.id).await?.is_empty());
+    assert!(manager.attached_files(&workspace.id).await?.is_empty());
     Ok(())
 }
 
@@ -713,10 +713,11 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
             crate::removal::InspectionPolicy::GitOnly,
         )
         .await?;
-    let [owner] =
-        manager.kept_results().await?.try_into().map_err(|kept| {
-            anyhow::anyhow!("expected one removed workspace with results: {kept:?}")
-        })?;
+    let [owner] = manager
+        .kept_file_owners()
+        .await?
+        .try_into()
+        .map_err(|kept| anyhow::anyhow!("expected one removed workspace with results: {kept:?}"))?;
     let old = repo.workspaces_dir.clone().context("no directory")?;
     // A move, then disk cleanup for the old place, wait for the gate.
     let held = manager.gates.lock_message_files(&repo.id).await;
@@ -738,7 +739,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
         let manager = manager.clone();
         async move {
             manager
-                .delete_results_in(&owner, |path| path.starts_with(&old))
+                .delete_kept_in(&owner, |path| path.starts_with(&old))
                 .await
         }
     });
@@ -746,7 +747,7 @@ async fn disk_cleanup_behind_a_move_checks_where_results_went() -> Result<()> {
     drop(held);
     moving.await??;
     assert!(!cleaning.await??, "the results moved off the low place");
-    let kept = manager.workspace_files(&workspace.name).await?;
+    let kept = manager.attached_files(&workspace.name).await?;
     assert!(kept[0].path.starts_with(root.join("origin")), "{kept:?}");
     assert!(kept[0].path.exists());
     Ok(())

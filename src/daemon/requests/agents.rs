@@ -132,8 +132,9 @@ pub(super) async fn handle(
             workspace,
             message,
             attachments,
+            from_chat,
         } => {
-            let attacher = manager.attacher(caller).await;
+            let attacher = manager.attacher(caller, from_chat.as_deref()).await;
             manager
                 .send_agent_message(&workspace, message, attachments, &attacher)
                 .await?;
@@ -143,8 +144,9 @@ pub(super) async fn handle(
             repository,
             message,
             attachments,
+            from_chat,
         } => {
-            let attacher = manager.attacher(caller).await;
+            let attacher = manager.attacher(caller, from_chat.as_deref()).await;
             let below = caller.map(|caller| caller.workspace_id.as_str());
             Body::Workspaces(
                 manager
