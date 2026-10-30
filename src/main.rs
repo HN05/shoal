@@ -92,7 +92,7 @@ fn main() {
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon
 /// polls deep async paths, such as manual cleanup's removal, whose debug
 /// builds overflow that on Linux. Unused stack is reserved, not committed.
-const WORKER_STACK: usize = 8 << 20;
+pub(crate) const WORKER_STACK: usize = 8 << 20;
 
 fn run_cli(cli: Cli) {
     tokio::runtime::Builder::new_multi_thread()
