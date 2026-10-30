@@ -331,6 +331,18 @@ impl Snapshot {
         &self.head
     }
 
+    /// Each recorded check: its name, state and whether it finished.
+    pub fn checks(&self) -> impl Iterator<Item = (&str, &str, bool)> {
+        self.checks
+            .values()
+            .map(|check| (check.name.as_str(), check.state.as_str(), check.complete))
+    }
+
+    /// Whether the PR conflicts with its base, when known.
+    pub fn conflict(&self) -> Option<bool> {
+        self.conflict
+    }
+
     /// Whether a check on the head commit has not finished.
     pub fn checks_pending(&self) -> bool {
         self.checks.values().any(|check| !check.complete)
