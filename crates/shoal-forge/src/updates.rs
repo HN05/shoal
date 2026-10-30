@@ -426,9 +426,34 @@ impl Snapshot {
         }
     }
 
-    /// An open PR's mergeability and the CI checks on its head commit. A
-    /// failed check lookup keeps the previous checks.
+    /// An open PR's mergeability and the CI checks on its head commit, each
+    /// under its name. A failed check lookup keeps the previous checks.
     pub(crate) fn record_checks(&mut self, pull: &Current, checks: Result<Vec<RestCheck>>) {
+        let head = pull.head_sha.clone().unwrap_or_default();
+        let checks = checks.map(|checks| {
+            checks
+                .into_iter()
+                .map(|check| {
+                    let entry = Check {
+                        complete: check.state != "Pending",
+                        state: check.state.into(),
+                        name: check.name.clone(),
+                        revision: head.clone(),
+                    };
+                    (check.name, entry)
+                })
+                .collect()
+        });
+        self.record_keyed_checks(pull, checks);
+    }
+
+    /// An open PR's mergeability and the CI checks on its head commit, each
+    /// under its key. A failed check lookup keeps the previous checks.
+    pub(crate) fn record_keyed_checks(
+        &mut self,
+        pull: &Current,
+        checks: Result<Vec<(String, Check)>>,
+    ) {
         self.head = pull.head_sha.clone().unwrap_or_default();
         self.conflict = pull.conflict;
         self.conflict_at = MergeRevision {
@@ -436,19 +461,7 @@ impl Snapshot {
             base: pull.base_sha.clone().unwrap_or_default(),
         };
         match checks {
-            Ok(checks) => {
-                for check in checks {
-                    self.checks.insert(
-                        check.name.clone(),
-                        Check {
-                            complete: check.state != "Pending",
-                            state: check.state.into(),
-                            name: check.name,
-                            revision: pull.head_sha.clone().unwrap_or_default(),
-                        },
-                    );
-                }
-            }
+            Ok(checks) => self.checks.extend(checks),
             Err(error) => self.record_error("CI", error),
         }
     }

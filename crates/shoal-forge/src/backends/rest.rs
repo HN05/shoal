@@ -123,11 +123,7 @@ pub(crate) async fn pr_status(
 ) -> Result<PrStatus> {
     async {
         let pull = repo.read(account, ItemKind::Pr, number).await?;
-        let state = match pull.item.state {
-            ItemState::Open => PrState::Open,
-            ItemState::Merged => PrState::Merged,
-            ItemState::Closed => PrState::Closed,
-        };
+        let state = PrState::from(pull.item.state);
         let mut status = PrStatus::new(url.into(), Some(state));
         if state == PrState::Open {
             let mut snapshot = Snapshot::default();

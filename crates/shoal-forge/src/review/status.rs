@@ -4,13 +4,25 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend, updates::Snapshot};
+use crate::{
+    ForgeRepo, account::Account, backends::Backend, items::item::ItemState, updates::Snapshot,
+};
 
 crate::state::states!(PrState {
     Open => "open",
     Merged => "merged",
     Closed => "closed",
 });
+
+impl From<ItemState> for PrState {
+    fn from(state: ItemState) -> Self {
+        match state {
+            ItemState::Open => Self::Open,
+            ItemState::Merged => Self::Merged,
+            ItemState::Closed => Self::Closed,
+        }
+    }
+}
 
 crate::state::states!(ReviewState {
     Unreviewed => "none",
