@@ -1591,8 +1591,9 @@ registration. Inline repository key edits use the same validation as imports and
 serialize read/modify/write in the daemon; unset restores lower-layer values. Every option
 that does not describe the machine may be set at either level and resolves per
 option: saved config, worktree file, global config, then the built-in default.
-One option table defines both the merge and its provenance, so a reported layer
-is the one whose value is in use; the daemon resolves a workspace's settings
+One declaration of each option, the field of the repository schema with its
+kind, generates its built-in default, merge, resolved form and provenance, so a
+reported layer is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
 Prompt templates select repository additions by saved/worktree precedence and
 append them to global guidance, using the bundled chat template when
@@ -1613,9 +1614,8 @@ The issue prompt is built in and states only the task, pointing to `shoal view`
 for the rest: a seeded issue template froze the default for whoever had a copy,
 and instructions for issue work belong in the worker template. That template was
 the agent template, a name that read as one per AI tool although it applies to
-every workspace agent. A retired or renamed setting still loads; `config show`
-warns about it in every layer, and the daemon alerts about one in the global
-config when it starts or reloads its config.
+every workspace agent. Former option names fail as unknown keys rather than
+loading with a warning: the format broke once, so no setting keeps two names.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine

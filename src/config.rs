@@ -1,6 +1,7 @@
 pub mod edit;
 pub mod forges;
 pub mod named_commands;
+pub mod options;
 pub mod overload;
 pub(crate) mod placeholders;
 pub mod repo;
@@ -22,6 +23,10 @@ use std::{
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 use crate::paths::Paths;
+pub use repo::{
+    AutoCleanup, Cleanup, Happy, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Settings,
+    Simulators,
+};
 use repo::{ConfigLayers, RepoConfig};
 pub use resolve::Effective;
 
@@ -119,23 +124,23 @@ pub struct Config {
     pub close_when_done: Option<bool>,
     /// The terminal host for launches from a terminal no host serves.
     pub default_host: Option<repo::DefaultHost>,
-    pub claude: repo::Shortcut,
-    pub codex: repo::Shortcut,
-    pub herdr: repo::Herdr,
-    pub rex: repo::Rex,
-    pub happy: repo::Happy,
+    pub claude: repo::ShortcutConfig,
+    pub codex: repo::ShortcutConfig,
+    pub herdr: repo::HerdrConfig,
+    pub rex: repo::RexConfig,
+    pub happy: repo::HappyConfig,
     pub overload: overload::Overload,
-    pub cleanup: repo::Cleanup,
-    pub done: repo::Done,
-    pub idle_stop: repo::IdleStop,
-    pub review: repo::Review,
-    pub ready: repo::Ready,
-    pub unready: repo::Unready,
-    pub pr: repo::Pr,
-    pub issue: repo::Issue,
-    pub land: repo::Land,
-    pub approvals: repo::Approvals,
-    pub api: repo::Api,
+    pub cleanup: repo::CleanupConfig,
+    pub done: repo::DoneConfig,
+    pub idle_stop: repo::IdleStopConfig,
+    pub review: repo::ReviewConfig,
+    pub ready: repo::ReadyConfig,
+    pub unready: repo::UnreadyConfig,
+    pub pr: repo::PrConfig,
+    pub issue: repo::IssueConfig,
+    pub land: repo::LandConfig,
+    pub approvals: repo::ApprovalsConfig,
+    pub api: repo::ApiConfig,
     pub ports: PortRange,
     /// Environment variables layered per repository and rendered for a workspace.
     pub env: BTreeMap<String, String>,
@@ -152,13 +157,6 @@ pub struct Config {
     pub proxy: crate::proxy::Proxies,
 }
 
-/// What `shoal <agent>` does without `--cli` or `--app`, from the agent's
-/// section.
-#[derive(Debug, Default, Serialize)]
-pub struct Shortcut {
-    pub default_mode: crate::agent::AgentMode,
-}
-
 /// The global `[ports]` range as written, so an omitted bound stays
 /// distinguishable from its built-in default.
 #[derive(Debug, Default, Deserialize)]
@@ -166,26 +164,6 @@ pub struct Shortcut {
 pub struct PortRange {
     pub start: Option<u16>,
     pub end: Option<u16>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Ports {
-    pub start: u16,
-    pub end: u16,
-    pub on_conflict: repo::ConflictPolicy,
-    #[serde(flatten)]
-    pub definitions: std::collections::BTreeMap<String, repo::PortDefinition>,
-}
-
-impl Default for Ports {
-    fn default() -> Self {
-        Self {
-            start: 49152,
-            end: 65535,
-            on_conflict: repo::ConflictPolicy::default(),
-            definitions: Default::default(),
-        }
-    }
 }
 
 impl Ports {
@@ -219,54 +197,10 @@ pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
     Ok(())
 }
 
-/// The repository-overridable simulator settings after every layer.
-#[derive(Debug, Default, Clone, Serialize)]
-pub struct Simulators {
-    pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
-    pub preferred: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Cleanup {
-    pub grace_minutes: u64,
-    pub auto: AutoCleanup,
-    pub pr: PrCleanup,
-    pub merged: MergedCleanup,
-    pub restore: Restore,
-}
-
-impl Default for Cleanup {
-    fn default() -> Self {
-        Self {
-            grace_minutes: 10,
-            auto: AutoCleanup::default(),
-            pr: PrCleanup::default(),
-            merged: MergedCleanup::default(),
-            restore: Restore::default(),
-        }
-    }
-}
-
 impl Cleanup {
     /// How long a workspace stays eligible before automatic cleanup removes it.
     pub fn grace(&self) -> Duration {
         Duration::from_secs(self.grace_minutes * 60)
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct AutoCleanup {
-    pub enabled: bool,
-    pub idle_minutes: u64,
-}
-
-impl Default for AutoCleanup {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            idle_minutes: 10,
-        }
     }
 }
 
@@ -286,39 +220,6 @@ pub fn validate_idle_minutes(key: &str, minutes: u64) -> Result<()> {
     Ok(())
 }
 
-/// Removal of merged workspaces whether or not their assignment is done.
-#[derive(Debug, Serialize)]
-pub struct MergedCleanup {
-    pub enabled: bool,
-    pub idle_minutes: u64,
-}
-
-impl Default for MergedCleanup {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            idle_minutes: 240,
-        }
-    }
-}
-
-/// How long checkpoints and removed workspaces stay restorable, and how
-/// much of the unsaved files a checkpoint keeps.
-#[derive(Debug, Serialize)]
-pub struct Restore {
-    pub retention_days: u64,
-    pub archive_max_mb: u64,
-}
-
-impl Default for Restore {
-    fn default() -> Self {
-        Self {
-            retention_days: 30,
-            archive_max_mb: 50,
-        }
-    }
-}
-
 impl Restore {
     pub fn retention(&self) -> Duration {
         Duration::from_secs(self.retention_days * 24 * 3600)
@@ -334,107 +235,6 @@ impl MergedCleanup {
     pub fn delay(&self) -> Option<Duration> {
         self.enabled
             .then(|| Duration::from_secs(self.idle_minutes * 60))
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct PrCleanup {
-    pub enabled: bool,
-}
-impl Default for PrCleanup {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
-
-/// Stopping any agent idle once its prompt cache expires, which is opt-in.
-#[derive(Debug, Default, Serialize)]
-pub struct IdleStop {
-    pub enabled: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Review {
-    pub post: bool,
-}
-
-impl Default for Review {
-    fn default() -> Self {
-        Self { post: true }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct Ready {
-    pub undraft: bool,
-}
-
-impl Default for Ready {
-    fn default() -> Self {
-        Self { undraft: true }
-    }
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct Unready {
-    pub draft: bool,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct Pr {
-    pub draft: bool,
-    /// Entries a new PR's labels must each start with.
-    pub required_labels: Vec<String>,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct Issue {
-    /// Entries a new issue's labels must each start with.
-    pub required_labels: Vec<String>,
-    /// Whether scoped callers may open issues in other repositories.
-    pub other_repositories: repo::OtherRepositories,
-    /// Marks an issue that needs a plan before anyone implements it.
-    pub plan_label: Option<String>,
-    /// Marks an issue whose body holds a settled plan.
-    pub planned_label: Option<String>,
-}
-
-/// Whether `shoal forge api` sends an agent's requests that are not reads.
-#[derive(Debug, Default, Serialize)]
-pub struct Api {
-    pub agent_writes: bool,
-}
-
-/// Which agent forge writes wait for the user's approval.
-#[derive(Debug, Default, Serialize)]
-pub struct Approvals {
-    pub issue_open: repo::Opening,
-    pub pr_open: repo::Opening,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Land {
-    pub push: bool,
-    pub requires_approval: bool,
-}
-
-impl Default for Land {
-    fn default() -> Self {
-        Self {
-            push: false,
-            requires_approval: true,
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct Done {
-    pub cleanup: bool,
-}
-
-impl Default for Done {
-    fn default() -> Self {
-        Self { cleanup: true }
     }
 }
 
@@ -644,7 +444,7 @@ impl Config {
             post_agent_exit_cmd: self.post_agent_exit_cmd.clone(),
             post_resource_acquire_cmd: self.post_resource_acquire_cmd.clone(),
             pre_resource_release_cmd: self.pre_resource_release_cmd.clone(),
-            ports: repo::PortDefaults {
+            ports: repo::PortsConfig {
                 start: self.ports.start,
                 end: self.ports.end,
                 ..Default::default()
@@ -656,7 +456,7 @@ impl Config {
             secrets: self.secrets.clone(),
             resources: self.resources.clone(),
             resource_pools: self.resource_pools.clone(),
-            simulators: repo::SimulatorPreferences {
+            simulators: repo::SimulatorsConfig {
                 requires_approval: self.simulators.requires_approval,
                 approval_lifetime: self.simulators.approval_lifetime,
                 ..Default::default()
@@ -696,10 +496,9 @@ impl Config {
         config.agent_auth.validate()?;
         config.bitbucket.validate()?;
         config.forges.validate()?;
+        let layer = config.repository_layer();
         for &kind in crate::hooks::HookKind::ALL {
-            if kind.allows_global() {
-                kind.validate(kind.global_command(&config))?;
-            }
+            kind.validate(kind.repository_command(&layer))?;
         }
         named_commands::validate(&config.commands)?;
         named_commands::validate(&config.agent_resume)?;
@@ -726,11 +525,13 @@ impl Config {
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
-        let mut effective = resolve::Stack::new(self, layers).resolve()?;
-        crate::ai::inherit_launchers(&self.ai.tools, &mut effective.commands);
-        effective.proxies = crate::proxy::routes(&self.ai.tools, &self.proxy);
-        effective.tools = self.ai.tools.clone();
-        Ok(effective)
+        let mut settings = resolve::Stack::new(self, layers).resolve()?;
+        crate::ai::inherit_launchers(&self.ai.tools, &mut settings.commands);
+        Ok(Effective::new(
+            settings,
+            self.ai.tools.clone(),
+            crate::proxy::routes(&self.ai.tools, &self.proxy),
+        ))
     }
 }
 
@@ -744,33 +545,3 @@ fn default_template() -> &'static str {
 
 /// Named templates shipped in this binary, independent of the source checkout.
 pub const PACKAGED: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/packaged_configs.rs"));
-
-#[derive(Debug, Serialize)]
-pub struct Happy {
-    pub enabled: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Herdr {
-    pub enabled: bool,
-    pub tab_name: Option<String>,
-    pub new_tab: bool,
-    /// The workspace Shoal opens tabs in when it has none of its own;
-    /// `{repo}` is the repository's name.
-    pub workspace_name: String,
-    /// Overrides the top-level `close_when_done` for Herdr tabs.
-    pub close_when_done: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct Rex {
-    pub enabled: bool,
-    pub new_window: bool,
-    pub placement: repo::RexPlacement,
-    pub window_name: Option<String>,
-    /// The session Shoal opens windows in when it has none of its own;
-    /// `{repo}` is the repository's name.
-    pub session_name: String,
-    /// Overrides the top-level `close_when_done` for Rex windows.
-    pub close_when_done: Option<bool>,
-}

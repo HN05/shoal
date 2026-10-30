@@ -62,7 +62,12 @@ impl Manager {
 
     /// Whether a checkpoint would keep all of the workspace's unsaved files.
     pub(crate) async fn archives_unsaved_files(&self, workspace: &Workspace) -> Result<bool> {
-        let settings = self.workspace_settings(workspace).await?.cleanup.restore;
+        let settings = self
+            .workspace_settings(workspace)
+            .await?
+            .into_settings()
+            .cleanup
+            .restore;
         Ok(git::checkpoint::unsaved_bytes(&workspace.path)
             .await?
             .is_some_and(|bytes| bytes <= settings.archive_max_bytes()))

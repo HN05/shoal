@@ -365,7 +365,7 @@ fn command(
 /// The resolved chat template with the repository's name and checkout.
 fn instructions(settings: &Effective, repo: &Repository) -> String {
     templates::render(
-        settings.chat_template.as_deref().unwrap_or_default(),
+        &settings.chat_template,
         &[
             ("{repo}", repository::name(repo)),
             ("{path}", &repo.path.to_string_lossy()),

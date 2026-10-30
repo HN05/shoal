@@ -374,6 +374,7 @@ async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
         Some(workspace) => {
             client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone()))
                 .await?
+                .into_settings()
                 .demos
         }
         None => BTreeMap::new(),

@@ -59,7 +59,7 @@ fn additional_hook_paths_are_validated_in_global_config() {
     let paths = Paths::for_test("/home/test");
     for &kind in crate::hooks::HookKind::ALL {
         let key = kind.key();
-        if !kind.allows_global() {
+        if kind == crate::hooks::HookKind::Setup {
             assert!(Config::parse(&format!("{key} = 'scripts/hook'"), &paths).is_err());
             continue;
         }
@@ -248,7 +248,7 @@ fn agent_limits_accept_dynamic_fixed_and_unlimited_values() {
             .effective(&RepoConfig::default())
             .unwrap()
             .max_agents,
-        Some(AgentLimit::Dynamic)
+        AgentLimit::Dynamic
     );
 }
 
@@ -407,6 +407,7 @@ fn global_edits_must_leave_a_valid_range_with_the_defaults() {
         .unwrap()
         .resolve(&ConfigLayers::default())
         .unwrap()
+        .into_settings()
         .ports;
     assert_eq!((ports.start, ports.end), (3000, 4000));
     // Removing the start leaves the default start above the saved end.
@@ -450,9 +451,13 @@ fn dependent_global_edits_validate_together() {
 fn port_range_layers_per_bound_and_must_stay_nonempty() {
     let global: Config = toml::from_str("[ports]\nstart = 3000\nend = 3100\n").unwrap();
     let repo = repo::parse("[ports]\nstart = 3050\n[ports.web]\nport = 8080\n").unwrap();
-    let ports = global.effective(&repo).unwrap().ports;
+    let ports = global.effective(&repo).unwrap().into_settings().ports;
     assert_eq!((ports.start, ports.end), (3050, 3100));
-    let ports = global.effective(&RepoConfig::default()).unwrap().ports;
+    let ports = global
+        .effective(&RepoConfig::default())
+        .unwrap()
+        .into_settings()
+        .ports;
     assert_eq!((ports.start, ports.end), (3000, 3100));
     let repo = repo::parse("[ports]\nend = 2000\n").unwrap();
     assert!(global.effective(&repo).is_err());

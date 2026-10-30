@@ -693,7 +693,7 @@ impl Manager {
             let resolved = config.resolve(&layers)?;
             limits
                 .repositories
-                .insert(id, resolved.max_agents.and_then(fixed_limit));
+                .insert(id, fixed_limit(resolved.max_agents));
         }
         if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
             limits.disk = self.disk_limit(&config.overload, slots).await?;

@@ -232,6 +232,7 @@ impl Manager {
         let preferred = self
             .workspace_settings_from(&config, &workspace)
             .await?
+            .into_settings()
             .simulators
             .preferred;
         let (device_types, runtimes, inventory_error) = match simctl::inventory().await {

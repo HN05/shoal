@@ -41,7 +41,7 @@ impl Manager {
         let _guard = self.gates.lock_git(&workspace.repository_id).await;
         let workspace = self.workspace(&workspace.id).await?;
         self.verify_worktree(&workspace).await?;
-        let settings = self.workspace_settings(&workspace).await?;
+        let settings = self.workspace_settings(&workspace).await?.into_settings();
         let repository = self.repository(&workspace.repository_id).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;
         let configured = settings.env;

@@ -478,7 +478,12 @@ impl Manager {
             if let Err(reason) = self.cleanup_candidate(&workspace.id, &[]).await? {
                 return Ok(reason);
             }
-            let auto = self.workspace_settings(workspace).await?.cleanup.auto;
+            let auto = self
+                .workspace_settings(workspace)
+                .await?
+                .into_settings()
+                .cleanup
+                .auto;
             Ok(if auto.enabled {
                 CleanupReason::Idle {
                     minutes: auto.idle_minutes,

@@ -1,12 +1,14 @@
 //! User-owned forge authentication wrappers and a Git profile, selected only
 //! for agent launches.
+use crate::config::options::Options;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
+#[options(resolved = Self)]
 pub struct Config {
     pub fj: Option<PathBuf>,
     /// The HOME the agent's `fj` runs with, holding the login Shoal uses for

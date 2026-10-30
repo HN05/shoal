@@ -1255,6 +1255,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "shoal-config-derive",
  "shoal-forge",
  "shoal-proxy",
  "shoal-subprocess",
@@ -1265,6 +1266,15 @@ dependencies = [
  "toml_edit",
  "uuid",
  "zbus",
+]
+
+[[package]]
+name = "shoal-config-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

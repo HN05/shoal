@@ -1,5 +1,7 @@
 use super::*;
-use crate::config::repo::parse;
+use crate::config::{self, named_commands, repo::parse};
+use crate::hooks::HookKind;
+use serde_json::Value;
 
 /// Every option set, so a field missing from the table shows up as a
 /// value that does not survive layering. Adding a field to `RepoConfig`
