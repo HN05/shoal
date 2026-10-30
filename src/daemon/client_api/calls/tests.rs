@@ -179,7 +179,11 @@ async fn holds_belong_to_the_user() {
     assert_eq!(hold.name, "quay");
     assert_eq!(client.call(get("held")).await.unwrap().holds, [hold]);
     let scoped = daemon.scoped(&workspace).await;
-    assert_eq!(code(scoped.call(acquire()).await), ErrorCode::ScopeDenied);
+    let review = AcquireHold {
+        name: "review".into(),
+        ..acquire()
+    };
+    assert_eq!(code(scoped.call(review).await), ErrorCode::ApprovalPending);
     client
         .call(ReleaseHold {
             workspace: "held".into(),
