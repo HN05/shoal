@@ -1185,6 +1185,29 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
 }
 
 #[test]
+fn forge_reactions_list_what_the_instance_allows_or_githubs() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    fixture.respond(json!({"GET settings/ui": {"body": {"allowed_reactions": ["+1", "heart"]}}}));
+    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(
+        reactions,
+        json!({"names": ["+1", "heart"], "accepts_other_names": false})
+    );
+    let text = fixture.run(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(String::from_utf8_lossy(&text.stdout), "+1\nheart\n");
+
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    assert_eq!(
+        reactions["names"].as_array().map(Vec::len),
+        Some(8),
+        "{reactions}"
+    );
+    assert_eq!(reactions["accepts_other_names"], false, "{reactions}");
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
 fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let issue = "repos/team/project/issues/3";

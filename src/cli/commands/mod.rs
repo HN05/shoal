@@ -34,6 +34,7 @@ mod plan;
 mod ports;
 mod questions;
 mod queue;
+mod reactions;
 mod repo_menu;
 mod repo_migrate;
 mod repo_setup;

@@ -216,6 +216,7 @@ shoal issue open --title Bug  # Open an issue, recorded as opened; --link also a
 shoal issue open --repo team/tool --title Bug # Open it in another repository
 shoal repo labels                  # The repository's labels and what each one means
 shoal forge capabilities            # What the repository's forge supports, such as resolving threads
+shoal forge reactions               # The reactions the repository's forge allows
 shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
 shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
 shoal ci list --pr 44               # The runs on a PR's head; --branch and --workflow filter too

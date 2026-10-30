@@ -2656,6 +2656,12 @@ it, with what to do instead when it does not; `--json` returns `forge` and
 command that needs a capability the forge lacks fails before sending anything,
 naming the forge and the capability.
 
+`shoal forge reactions` lists the reactions the forge allows, under the names
+`shoal view` reports: on Forgejo and Gitea those the instance's settings allow,
+on GitHub its eight, and on GitLab the same eight as suggestions, since any emoji
+it knows works. `--json` returns `names` and `accepts_other_names`. Bitbucket
+has no reactions.
+
 Bitbucket has no official CLI, so the global `[bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
 each lookup or change and keeps nothing. The token is an access token, or an
@@ -2704,6 +2710,7 @@ shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
 shoal forge capabilities                  # what the repository's forge supports
+shoal forge reactions                     # the reactions the repository's forge allows
 ```
 
 `shoal pr open` verifies the workspace's worktree identity and that it is on its

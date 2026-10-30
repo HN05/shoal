@@ -1429,7 +1429,8 @@ own PR, says so itself rather than Shoal guessing first. A review's line
 comments are checked against the PR's diff before anything is sent, so a
 review is refused whole rather than posted in part. Review
 threads are named by any of their comments' IDs. Reactions use GitHub's names
-on every forge, so a client offers one set, and are read for a view with its
+on every forge, so a client offers one set, which `shoal forge reactions` narrows
+to what an instance allows, and are read for a view with its
 comments, which costs a request per comment on forges that list them per comment;
 reacting reads first and changes only a reaction not already as asked, since
 forges differ in whether adding one twice fails. Listing issues and PRs also
