@@ -3159,6 +3159,13 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         writes(&fixture),
         [json!([dispatch, {"ref": "topic", "inputs": {}, "return_run_info": true}])]
     );
+    // The run is linked as opened, so watches follow it.
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    assert_eq!(
+        links["opened"],
+        json!([{"kind": "ci", "url": started["url"], "title": "deps.yml"}]),
+        "{links}"
+    );
     let output = fixture.run(&["ci", "run", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(

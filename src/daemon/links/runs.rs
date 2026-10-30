@@ -17,12 +17,14 @@ use crate::{
             run_action::{Run, RunActed, validate_run_reference},
             run_view::{JobRef, RunFilter, RunJob, validate_filter},
         },
+        items::link::LinkKind,
     },
-    model::Workspace,
+    model::{LinkedItem, Relation, Workspace},
 };
 
 impl Manager {
-    /// Start `workflow` on `branch`, by default the workspace's.
+    /// Start `workflow` on `branch`, by default the workspace's, and link the
+    /// run as opened where the forge reports it, so watches follow it.
     pub async fn start_ci_run(
         &self,
         selector: &str,
@@ -36,10 +38,20 @@ impl Manager {
             branch: branch.unwrap_or_else(|| workspace.branch.clone()),
             inputs,
         };
-        forge
+        let started = forge
             .start_run(&account, &run)
             .await
-            .with_context(|| format!("could not start a CI run on {}", run.branch))
+            .with_context(|| format!("could not start a CI run on {}", run.branch))?;
+        if let Some(url) = &started.url {
+            let item = LinkedItem {
+                kind: LinkKind::Ci,
+                url: forge.run(url)?.1,
+                title: started.workflow.clone(),
+            };
+            self.record_items(&workspace.id, vec![(Relation::Opened, item)])
+                .await?;
+        }
+        Ok(started)
     }
 
     /// Rerun or cancel the run `input` names; workspace processes act only

@@ -2927,7 +2927,9 @@ custom pipeline, or the branch's own without one, with the inputs as its
 variables. The daemon starts it as the [agent account](#agent-accounts), and
 processes inside a workspace may start runs only on that workspace's branch.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
-reports it, which GitHub and Gitea do not.
+reports it, which GitHub and Gitea do not. A run with a URL is
+[linked](#linked-items-and-cleanup) as opened, so `shoal watch` reports when it
+finishes.
 
 `shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
 `ci run` or a check links it, or the number in that URL. `rerun` reruns every
@@ -3008,7 +3010,8 @@ and PR numbers. The relation is required:
 Opened and related issues and PRs have no watch, completion or cleanup effect;
 `status pr <number>` finds the workspaces that link an item under any relation.
 A run is linked only as opened or related, since an assigned item drives
-completion and cleanup, and records its workflow as its title. Linked runs
+completion and cleanup, and records its workflow as its title. `shoal ci run`
+links the run it starts as opened where the forge reports its URL. Linked runs
 have no completion or cleanup effect; `shoal watch` follows each until it
 finishes, and it stays linked until it is unlinked or the workspace is removed.
 A PR's runs are not linked; the PR's checks cover them, so link one only to
