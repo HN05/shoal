@@ -1957,7 +1957,8 @@ there and opens the PR from the fork. Forking needs GitHub, Forgejo or Gitea.
 The cleanup sweep removes a contribution repository as `repo rm` does once it has
 had no workspace, queued agent, chat, pending issue proposal, kept branch or
 resource another repository's workspace borrows, no unexpired
-[checkpoint](#checkpoints-and-restore) or removal record, and no changed files,
+[checkpoint](#checkpoints-and-restore), removal record or ended chat's
+[files](#attached-files), and no changed files,
 stash, Git operation under way or commits in its checkout that no branch or tag
 its remotes advertise has, for
 `[cleanup] grace_minutes`, then records a `repository_removed` notification.

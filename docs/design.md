@@ -469,7 +469,7 @@ becomes the `fork` remote and `remote.pushDefault`, which Git, `pr open` and
 cleanup all honour. It goes through `repo rm`'s path once nothing of it has been
 left for the unattended grace period: no workspace, queued agent, chat, pending
 issue proposal, kept branch or borrowed resource, nothing `shoal work restore` could
-use, and no work in its checkout that the remotes' advertised branches and tags
+use, no files an ended chat keeps, and no work in its checkout that the remotes' advertised branches and tags
 lack. The final
 check records the removal in the same transaction, under the gates creation
 takes, and queue and chat records refuse a repository being removed. An existing

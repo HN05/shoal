@@ -212,3 +212,53 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
             .any(|notification| notification.kind == NotificationKind::RepositoryRemoved)
     );
 }
+
+#[tokio::test]
+async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let mut process = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let report = root.path().join("report.md");
+    std::fs::write(&report, "Plan").unwrap();
+    manager
+        .add_attached_files(
+            &chat.id,
+            vec![report.into()],
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    process.kill().unwrap();
+    process.wait().unwrap();
+    manager.end_finished_chats().await.unwrap();
+    manager.sweep_contributions().await.unwrap();
+    assert!(
+        registered(&manager, &repo).await,
+        "the ended chat's files keep it"
+    );
+
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE ended_chats SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.sweep_contributions().await.unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
