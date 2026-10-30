@@ -243,6 +243,23 @@ impl Manager {
             .await;
     }
 
+    /// Mark the agent of `id` working on the turn a wake starts, unless a
+    /// stop of it came first, under the lock a stop takes, so a stop that
+    /// read the agent idle before cannot follow. Whether it is marked; an
+    /// execution that runs no tracked agent has nothing to stop.
+    pub(crate) async fn claim_woken_turn(&self, id: &str) -> bool {
+        self.executions
+            .with_agent(id, |agent| {
+                let running = agent.running();
+                if running {
+                    agent.turn = Some(AgentState::Working);
+                }
+                running
+            })
+            .await
+            .unwrap_or(true)
+    }
+
     /// Whether `shoal restart` is restarting the agent of `id`.
     pub(crate) async fn restart_requested(&self, id: &str) -> bool {
         self.executions

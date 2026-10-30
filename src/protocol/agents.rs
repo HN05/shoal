@@ -17,6 +17,12 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_end: Option<TurnEnd>,
     },
+    /// [`Self::SetAgentState`] working for the turn a wake hook starts with
+    /// an update, unless a stop of the caller's agent came first, which
+    /// leaves the update for its restore. Answers whether the turn starts.
+    StartWokenTurn {
+        workspace: String,
+    },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
     /// schedule a retry of the turn. An unscoped caller, such as the wrapper
     /// whose proxy ended the turn, names the reporting `execution`; a scoped
@@ -114,6 +120,13 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         attached: Option<bool>,
     },
+}
+
+/// Whether the turn a wake hook starts goes ahead: not when a stop of the
+/// agent came first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WokenTurn {
+    pub starts: bool,
 }
 
 /// What an agent reports when a turn ends.

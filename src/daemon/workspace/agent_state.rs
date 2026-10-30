@@ -153,6 +153,30 @@ impl Manager {
             .await
     }
 
+    /// Record the turn a wake hook starts for the agent `execution` runs,
+    /// unless a stop of the agent came first: the hook then keeps the update
+    /// for the agent's restore. Whether the turn starts.
+    pub(crate) async fn start_woken_turn(
+        &self,
+        selector: &str,
+        execution: Option<String>,
+    ) -> Result<bool> {
+        if let Some(id) = &execution
+            && !self.claim_woken_turn(id).await
+        {
+            return Ok(false);
+        }
+        self.record_agent_state(
+            selector,
+            AgentState::Working,
+            execution,
+            None,
+            TurnEnding::default(),
+        )
+        .await?;
+        Ok(true)
+    }
+
     /// Record that an interrupt ended the turn of the agent `execution`
     /// runs, which leaves it idle without the hook that ends its other
     /// turns.

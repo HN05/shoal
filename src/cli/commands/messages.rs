@@ -165,7 +165,9 @@ pub(super) async fn wake(
     let Some((inbox, updates)) = next else {
         return Ok(0);
     };
-    report_woken_turn(ctx, &inbox).await;
+    if !woken_turn_starts(ctx, &inbox).await {
+        return Ok(0);
+    }
     eprintln!("{}", inbox.hook_context(&updates));
     std::io::Write::flush(&mut std::io::stderr())?;
     if let Err(error) = inbox.acknowledge(ctx, &updates).await {
@@ -177,15 +179,20 @@ pub(super) async fn wake(
 /// Report the turn the wake starts before delivering its updates: Claude
 /// Code fires no hook when a hook's exit starts a turn, so the agent would
 /// show idle until its first tool call, and an idle stop could end the turn
-/// that consumed the update meant to restore it. A chat's agent reports no
-/// turn state.
-async fn report_woken_turn(ctx: &Context, inbox: &Inbox) {
+/// that consumed the update meant to restore it. Whether to deliver them:
+/// not when a stop of the agent came first, which leaves them unread for its
+/// restore. A chat's agent reports no turn state, and a failed report still
+/// delivers, since without the turn the agent would stay idle.
+async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
     let Inbox::Workspace(workspace) = inbox else {
-        return;
+        return true;
     };
-    if let Err(error) = super::agent_state::report_turn_start(ctx, workspace.clone()).await {
-        eprintln!("shoal: the woken turn was not reported: {error:#}");
-    }
+    super::agent_state::start_woken_turn(ctx, workspace.clone())
+        .await
+        .unwrap_or_else(|error| {
+            eprintln!("shoal: the woken turn was not reported: {error:#}");
+            true
+        })
 }
 
 /// How often the wake hook checks that its agent still runs.

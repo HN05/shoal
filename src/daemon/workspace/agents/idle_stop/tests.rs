@@ -250,6 +250,43 @@ async fn a_turn_during_the_final_read_of_the_turns_keeps_the_agent() {
     assert!(!*execution.stop.borrow());
 }
 
+#[tokio::test]
+async fn a_wake_after_an_idle_stop_leaves_its_update_for_the_restore() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    manager.stop_idle_agents().await.unwrap();
+    assert!(*execution.stop.borrow());
+    let woken = manager
+        .start_woken_turn(&workspace.name, Some(id))
+        .await
+        .unwrap();
+    assert!(!woken, "the stop came first");
+}
+
+#[tokio::test]
+async fn an_idle_stop_after_a_wake_keeps_the_agent() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (_, execution) = agent(&manager, &repo.id, "held", HELD_DONE_IDLE).await;
+    let id = execution.plan.id.clone();
+    let chosen = chosen_held(&id, 0);
+    let turns = manager.agent_turns().await.unwrap();
+    // The wake claims the turn before it records it.
+    assert!(manager.claim_woken_turn(&id).await);
+    manager.stop_idle(turns, chosen, unix_now()).await;
+    assert!(!*execution.stop.borrow());
+}
+
 /// The sweep's choice to stop `execution` as idle in a held done workspace
 /// when it had started `turns_started` turns.
 fn chosen_held(execution: &str, turns_started: u64) -> HashMap<String, Chosen> {

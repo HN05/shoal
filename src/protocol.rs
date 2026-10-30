@@ -47,7 +47,7 @@ mod secrets;
 mod simulators;
 mod workspaces;
 
-pub use agents::{AgentMethod, TurnEnd};
+pub use agents::{AgentMethod, TurnEnd, WokenTurn};
 pub use approvals::ApprovalMethod;
 pub use assignments::AssignmentMethod;
 pub use chats::ChatMethod;
@@ -515,6 +515,7 @@ response_bodies! {
     Discarded(crate::daemon::workspace::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
+    WokenTurn(WokenTurn),
     AgentSession(crate::model::AgentSession),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::model::Selected),

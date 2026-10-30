@@ -17,7 +17,7 @@ use crate::{
     },
     execution::recovery,
     model::AgentStatus,
-    protocol::{AgentMethod, TurnEnd},
+    protocol::{AgentMethod, TurnEnd, WokenTurn},
     state::{AgentState, TurnFailure},
 };
 
@@ -44,20 +44,12 @@ pub(super) async fn run(
     emit(ctx, status)
 }
 
-/// Report the agent of `workspace` working on a turn that no hook of its own
-/// reports starting.
-pub(super) async fn report_turn_start(ctx: &Context, workspace: String) -> Result<()> {
-    let _: AgentStatus = request(
-        &ctx.paths,
-        AgentMethod::SetAgentState {
-            workspace,
-            state: AgentState::Working,
-            session: None,
-            turn_end: None,
-        },
-    )
-    .await?;
-    Ok(())
+/// Report the agent of `workspace` working on the turn a wake starts, which
+/// no hook of its own reports starting. Whether the turn starts: a stop of
+/// the agent that came first leaves the update for its restore.
+pub(super) async fn start_woken_turn(ctx: &Context, workspace: String) -> Result<bool> {
+    let turn: WokenTurn = request(&ctx.paths, AgentMethod::StartWokenTurn { workspace }).await?;
+    Ok(turn.starts)
 }
 
 /// Report the turn that the hook event of an agent with `integration`

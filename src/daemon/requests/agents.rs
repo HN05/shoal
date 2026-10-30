@@ -9,7 +9,7 @@ use super::super::{
     workspace::Manager,
 };
 use crate::{
-    protocol::{AgentMethod, Body},
+    protocol::{AgentMethod, Body, WokenTurn},
     state::AgentState,
 };
 
@@ -70,6 +70,11 @@ pub(super) async fn handle(
                     .set_agent_state(&workspace, state, execution(caller), session)
                     .await?
             }
+        }),
+        AgentMethod::StartWokenTurn { workspace } => Body::WokenTurn(WokenTurn {
+            starts: manager
+                .start_woken_turn(&workspace, execution(caller))
+                .await?,
         }),
         AgentMethod::ReportTurnFailure {
             workspace,
@@ -176,6 +181,7 @@ impl Scoped for AgentMethod {
             // A report claims the workspace for the reporting agent, which
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
+            | AgentMethod::StartWokenTurn { workspace }
             | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
                 manager
                     .own_workspace(
