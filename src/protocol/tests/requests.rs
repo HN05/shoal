@@ -148,6 +148,7 @@ const REQUESTS: &[&str] = &[
     r#"{"ci_run_job_log":{"workspace":"fix","run":"12","job":{"name":"rust"}}}"#,
     r#"{"list_ci_runs":{"workspace":"fix","filter":{"branch":null,"workflow":"ci.yml","limit":10}}}"#,
     r#"{"start_ci_run":{"workspace":"fix","workflow":null,"branch":null,"inputs":{"level":"high"}}}"#,
+    r#"{"approve_ci_runs":{"workspace":"fix","run":null,"pr":"7"}}"#,
     // Reconciliation.
     r#"{"reconcile":{"workspace":null,"options":{"repair":true,"stop":false,"acknowledge_stopped":false,"reclaim":false}}}"#,
     // Notifications and messages.
