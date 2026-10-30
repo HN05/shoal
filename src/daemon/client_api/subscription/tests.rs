@@ -55,7 +55,7 @@ mod streams {
     use crate::{
         daemon::{notifications::NotificationKind, questions::Ask},
         forge::items::link::LinkKind,
-        model::Relation,
+        model::{HoldPlacer, Relation},
         removal::{InspectionPolicy, UnsavedWork},
     };
 
@@ -133,7 +133,7 @@ mod streams {
         until(&mut subscription, changed(RecordKind::Repository)).await;
 
         manager
-            .acquire_hold(&workspace.id, "quay".into(), None)
+            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
             .await
             .unwrap();
         until(&mut subscription, |update| {
@@ -316,7 +316,7 @@ mod streams {
         );
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None)
+            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
             .await
             .unwrap();
         let ended = tokio::time::timeout(HANG, subscription.next())
@@ -401,7 +401,7 @@ mod streams {
         let _quiesced = daemon.manager.gates.quiesce().await;
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None)
+            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
             .await
             .unwrap();
         let next = tokio::time::timeout(HANG, reader.read::<Response>())
@@ -420,7 +420,7 @@ mod streams {
         daemon.restart().await;
         daemon
             .manager
-            .acquire_hold(&workspace.id, "quay".into(), None)
+            .acquire_hold(&workspace.id, "quay".into(), None, HoldPlacer::User)
             .await
             .unwrap();
         let update = until(&mut subscription, |update| {
