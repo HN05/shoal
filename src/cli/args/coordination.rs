@@ -125,8 +125,15 @@ pub enum MessagesCommand {
         #[arg(long = "attach", value_name = "FILE")]
         attach: Vec<String>,
         /// Workspace to use; defaults to the current workspace or picker.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "all")]
         workspace: Option<String>,
+        /// Send to every workspace of the repository with a running agent,
+        /// such as to have them rebase onto a fix on the default branch.
+        #[arg(long)]
+        all: bool,
+        /// Repository whose agents --all reaches; defaults to the current one.
+        #[arg(long = "repo", requires = "all")]
+        repository: Option<String>,
     },
 }
 

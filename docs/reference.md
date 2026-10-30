@@ -3561,6 +3561,7 @@ workspace and withdraw those messages. Read entries older than the newest
 shoal messages send "Stop the dev server" [--workspace W]  # Queue one for a workspace's agents
 shoal messages send --body-file plan.md [--workspace W]    # Queue a file's text as one message
 shoal messages send "Crash on launch" --attach shot.png    # Attach files; repeat --attach for more
+shoal messages send --all "Rebase onto main" [--repo R]    # Queue one for every running agent
 shoal messages [workspace]     # New messages, oldest first, shown once
 ```
 
@@ -3574,6 +3575,14 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 is removed, and [`shoal files`](#attached-files) lists them. Agents read messages with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
+
+`--all` queues the message for every workspace of the current repository, or
+the one `--repo` names, whose agent runs, and lists the workspaces it reached,
+in `workspaces` with `--json`; a workspace process reaches only the workspaces
+below its own. Workspaces without a running agent get nothing, since a message
+waits there until an agent reads it. Sending the same message again after a
+failure reaches only the workspaces that missed it, because identical unread
+messages collapse.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`

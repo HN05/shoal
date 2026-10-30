@@ -170,6 +170,7 @@ shoal alerts                  # Conflicts, finished agents, and removals you mis
 shoal alerts send "PR #12 is ready to merge"  # Notify the user from a workspace
 shoal messages send "Stop the dev server" --workspace fix-login  # Message the workspace's agents
 shoal messages send "Crash on launch" --attach shot.png  # Attach a file the agents can read
+shoal messages send --all "Rebase onto main"  # Message every running agent of the repository
 shoal files fix-login         # The files attached to the workspace
 shoal questions               # Pick a question and answer it
 shoal questions 3 --answer 2  # Answer question 3 with its second choice

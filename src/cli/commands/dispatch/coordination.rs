@@ -53,9 +53,18 @@ pub(in crate::cli::commands) async fn run(
                     body_file,
                     attach,
                     workspace,
+                    all,
+                    repository,
                 }),
             ..
-        } => messages::send(&ctx, workspace, message, body_file, attach).await,
+        } => {
+            let recipients = if all {
+                messages::Recipients::Repository(repository)
+            } else {
+                messages::Recipients::Workspace(workspace)
+            };
+            messages::send(&ctx, recipients, message, body_file, attach).await
+        }
         CoordinationCommand::Messages {
             command: None,
             workspace,

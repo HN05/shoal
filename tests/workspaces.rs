@@ -19429,6 +19429,25 @@ fn the_wake_hook_exits_with_its_agent() {
 }
 
 #[test]
+fn a_message_to_all_skips_workspaces_without_a_running_agent() {
+    let fixture = Fixture::new();
+    fixture.add("idle");
+    let repo = fixture.repo.to_str().unwrap();
+    let sent = fixture.ok(&[
+        "messages",
+        "send",
+        "--all",
+        "--repo",
+        repo,
+        "Rebase onto main",
+    ]);
+    assert_eq!(sent, serde_json::json!({"workspaces": []}));
+    assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
+    let output = fixture.run(&["messages", "send", "--all", "--workspace", "idle", "hi"]);
+    assert!(!output.status.success(), "{output:?}");
+}
+
+#[test]
 fn the_user_messages_agents_who_read_their_own_messages_once() {
     let fixture = Fixture::new();
     fixture.add("receiver");

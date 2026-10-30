@@ -1,4 +1,5 @@
-//! `shoal messages send` queues a message for a workspace's agents; `shoal messages`
+//! `shoal messages send` queues a message for a workspace's agents, or with
+//! `--all` for every running agent of a repository; `shoal messages`
 //! shows the workspace's undelivered messages once.
 use std::{
     ffi::OsString,
@@ -17,18 +18,44 @@ use crate::{
     },
     daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
     forge::items::attach::Attachment,
+    model::Workspace,
     protocol::{AgentMethod, ChatMethod, Method},
+    repository::Selector,
 };
+
+/// Who `shoal messages send` reaches.
+pub(super) enum Recipients {
+    /// The agents of the named workspace, else the current one or a picked one.
+    Workspace(Option<String>),
+    /// Every running agent of the named repository, else the current one.
+    Repository(Option<String>),
+}
 
 pub(super) async fn send(
     ctx: &Context,
-    workspace: Option<String>,
+    recipients: Recipients,
     message: Option<String>,
     body_file: Option<PathBuf>,
     attach: Vec<String>,
 ) -> Result<i32> {
     let message = message_text(message, body_file, !attach.is_empty())?;
     let attachments = attachments(&attach)?;
+    match recipients {
+        Recipients::Workspace(workspace) => {
+            send_to_workspace(ctx, workspace, message, attachments).await
+        }
+        Recipients::Repository(repository) => {
+            send_to_repository(ctx, repository, message, attachments).await
+        }
+    }
+}
+
+async fn send_to_workspace(
+    ctx: &Context,
+    workspace: Option<String>,
+    message: String,
+    attachments: Vec<NewFile>,
+) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     request::<()>(
         &ctx.paths,
@@ -41,6 +68,62 @@ pub(super) async fn send(
     .await?;
     ctx.emit("Message queued for the workspace's agents.", ())?;
     Ok(0)
+}
+
+/// The workspaces a repository-wide message reached, by name.
+#[derive(serde::Serialize)]
+struct Reached {
+    workspaces: Vec<String>,
+}
+
+async fn send_to_repository(
+    ctx: &Context,
+    repository: Option<String>,
+    message: String,
+    attachments: Vec<NewFile>,
+) -> Result<i32> {
+    let reached: Vec<Workspace> = request(
+        &ctx.paths,
+        AgentMethod::SendRepositoryAgentMessage {
+            repository: chosen_repository(ctx, repository).await?,
+            message,
+            attachments,
+        },
+    )
+    .await?;
+    let reached = Reached {
+        workspaces: reached
+            .into_iter()
+            .map(|workspace| workspace.name)
+            .collect(),
+    };
+    ctx.show(&reached, |reached| {
+        if reached.workspaces.is_empty() {
+            outln!("No workspace has a running agent.");
+            return;
+        }
+        outln!("Message queued for the agents of:");
+        for workspace in &reached.workspaces {
+            outln!("  {workspace}");
+        }
+    })?;
+    Ok(0)
+}
+
+/// The repository `--repo` names, else the current checkout's or
+/// workspace's, else a picked one.
+async fn chosen_repository(ctx: &Context, repository: Option<String>) -> Result<Selector> {
+    match repository {
+        Some(repository) => ui::repository_selector(repository),
+        None => {
+            let repos = client::repositories(&ctx.paths).await?;
+            Ok(
+                super::issues::current_repository(ctx, repos, "pass --repo <repository>")
+                    .await?
+                    .into(),
+            )
+        }
+    }
 }
 
 /// The files to attach, given as `PATH` or `PATH#TITLE`, by the absolute
