@@ -1719,3 +1719,65 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);
 }
+
+#[tokio::test]
+async fn a_removal_takes_only_the_children_it_was_confirmed_with() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let check = manager
+        .check_manual_removal(&parent.id, false)
+        .await
+        .unwrap();
+    assert_eq!(check.children, [reference(&child)]);
+    let confirmed = UnsavedWork::confirming(&check);
+    // Splits after the confirmation, directly or below a confirmed child,
+    // keep the whole tree.
+    let late = manager
+        .split_workspace(&child.id, "late".into(), None)
+        .await
+        .unwrap();
+    let error = manager
+        .remove_workspace(&parent.id, confirmed.clone(), InspectionPolicy::GitOnly)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("late was split from child after the removal was confirmed"),
+        "{error:#}"
+    );
+    for workspace in [&parent, &child, &late] {
+        assert!(
+            manager
+                .find_workspace(&workspace.id)
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(workspace.path.exists());
+    }
+    // Confirmed again, the removal takes them all.
+    let check = manager
+        .check_manual_removal(&parent.id, false)
+        .await
+        .unwrap();
+    let removed = manager
+        .remove_workspace(
+            &parent.id,
+            UnsavedWork::confirming(&check),
+            InspectionPolicy::GitOnly,
+        )
+        .await
+        .unwrap();
+    assert_eq!(removed.children, ["late", "child"]);
+}

@@ -47,7 +47,7 @@ pub struct RemovalCheck {
     /// The workspaces below it, which removal takes first, each after those
     /// below it; filled in for a manual removal's check.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub children: Vec<String>,
+    pub children: Vec<crate::model::WorkspaceRef>,
     /// The restores of idle agents, which `running_commands` and
     /// `processes` leave out; daemon state like `default_branch`.
     #[serde(skip)]
@@ -74,11 +74,15 @@ pub enum UnsavedWork {
     /// and the commits of a detached HEAD while HEAD is still that commit.
     /// `files_restorable` records that the caller was told the checkpoint
     /// keeps the files, so removal refuses when it cannot after all.
+    /// `children` are the IDs of the workspaces below it the caller saw, the
+    /// only ones it may take; without them it takes whatever is below.
     Confirmed {
         files: bool,
         detached_head: Option<String>,
         #[serde(default)]
         files_restorable: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        children: Option<Vec<String>>,
     },
     /// Everything, for removals that delete more than the workspace.
     All,
@@ -89,6 +93,7 @@ pub static NOTHING: UnsavedWork = UnsavedWork::Confirmed {
     files: false,
     detached_head: None,
     files_restorable: false,
+    children: None,
 };
 
 impl Default for UnsavedWork {
@@ -104,6 +109,22 @@ impl UnsavedWork {
             files: check.dirty,
             detached_head: check.head.clone().filter(|_| check.detached_commits() > 0),
             files_restorable: check.dirty && check.unsaved_files_archived,
+            children: Some(
+                check
+                    .children
+                    .iter()
+                    .map(|child| child.id.clone())
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The IDs of the workspaces below it the caller saw and lets removal
+    /// take, or `None` when it may take any.
+    pub fn children(&self) -> Option<&[String]> {
+        match self {
+            Self::Confirmed { children, .. } => children.as_deref(),
+            Self::All => None,
         }
     }
 

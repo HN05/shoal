@@ -168,7 +168,12 @@ fn removal_losses(ctx: &Context, check: &RemovalCheck) -> Vec<String> {
     if !check.children.is_empty() {
         lines.push(format!(
             "Removes the workspaces split from it first, whatever their work or holds; shoal work restore brings each back: {}",
-            check.children.join(", ")
+            check
+                .children
+                .iter()
+                .map(|child| child.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     for work in &unsaved {

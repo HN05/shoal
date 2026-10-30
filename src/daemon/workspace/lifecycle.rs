@@ -96,10 +96,12 @@ enum Removal<'a> {
     UnderCompleted { ancestor: &'a Workspace },
     /// The workspace's parent is being removed, which nothing about the
     /// workspace keeps: it goes with its unsaved files once a checkpoint
-    /// keeps them. `cause` and `refuse_holds` are the parent removal's.
+    /// keeps them. `cause`, `refuse_holds` and the `confirmed` IDs of the
+    /// workspaces it may take below it are the parent removal's.
     Parent {
         cause: EventCause,
         refuse_holds: bool,
+        confirmed: Option<&'a [String]>,
     },
 }
 
@@ -211,13 +213,24 @@ impl<'a> Removal<'a> {
 
     /// The removal of a child of the workspace this removes. A removal the
     /// user asked for is theirs, not the parent's, whatever its children.
-    fn of_child(self) -> Removal<'static> {
+    fn of_child(self) -> Removal<'a> {
         Removal::Parent {
             cause: match self {
                 Removal::Parent { cause, .. } => cause,
                 removal => removal.cause(),
             },
             refuse_holds: self.refuses_holds(),
+            confirmed: self.confirmed_children(),
+        }
+    }
+
+    /// The IDs of the workspaces below the workspace that a manual removal
+    /// confirmed, the only ones it takes; `None` takes whatever is below.
+    fn confirmed_children(self) -> Option<&'a [String]> {
+        match self {
+            Removal::Manual { unsaved, .. } => unsaved.children(),
+            Removal::Parent { confirmed, .. } => confirmed,
+            _ => None,
         }
     }
 
@@ -368,7 +381,12 @@ impl Manager {
             .skip(1)
             .rev()
         {
-            check.children.push(self.workspace(&id).await?.name);
+            let child = self.workspace(&id).await?;
+            check.children.push(crate::model::WorkspaceRef {
+                id: child.id,
+                name: child.name,
+                branch: child.branch,
+            });
         }
         if include_changes && check.dirty {
             check.load_changed_files().await?;
@@ -1280,6 +1298,15 @@ impl Manager {
     ) -> Result<Vec<String>> {
         let mut removed = Vec::new();
         for child in self.workspace(&workspace.id).await?.child_workspaces {
+            // Listed once `workspace` was reserved, so no split can follow.
+            ensure!(
+                removal
+                    .confirmed_children()
+                    .is_none_or(|confirmed| confirmed.contains(&child.id)),
+                "{} was split from {} after the removal was confirmed; retaining both",
+                child.name,
+                workspace.name
+            );
             let result = Box::pin(self.remove(&child.id, removal.of_child()))
                 .await
                 .with_context(|| {

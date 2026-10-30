@@ -462,7 +462,7 @@ fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<(
     let missing: Vec<&str> = check
         .children
         .iter()
-        .map(String::as_str)
+        .map(|child| child.name.as_str())
         .filter(|child| !exported.contains(child))
         .collect();
     ensure!(

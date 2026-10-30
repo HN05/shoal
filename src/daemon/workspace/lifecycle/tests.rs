@@ -509,6 +509,7 @@ async fn removal_keeps_files_it_promised_to_restore_when_the_checkpoint_cannot()
         files: true,
         detached_head: None,
         files_restorable,
+        children: None,
     };
     // The files grew past the archive limit after the user confirmed.
     crate::test_support::configure(&manager, "[cleanup.restore]\narchive_max_mb = 0\n").await;
