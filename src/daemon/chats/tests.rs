@@ -226,7 +226,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .unwrap();
     manager
         .store
-        .run(move |db| delete(db, &ended))
+        .run(move |db| delete(db, &ended, &Default::default()))
         .await
         .unwrap();
     assert_eq!(manager.chats().await.unwrap(), [moved]);

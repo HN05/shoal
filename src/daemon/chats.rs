@@ -2,6 +2,7 @@
 //! They are records, not tracked executions, so they never queue, stop under
 //! pressure or resume; a chat lasts while its process lives.
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -15,6 +16,7 @@ use crate::{
     daemon::{
         chat_messages, log, store,
         workspace::{Manager, derive_workspace_name},
+        workspace_files,
     },
     model::{Chat, OpenedWorkspace, Repository, Workspace},
     process::identity::{self, Identity},
@@ -148,6 +150,15 @@ impl Manager {
         self.store.run(|db| running(db)).await
     }
 
+    /// The running chat `selector` names, by ID or name.
+    pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
+        Ok(self
+            .chats()
+            .await?
+            .into_iter()
+            .find(|chat| chat.id == selector || chat.name == selector))
+    }
+
     /// End chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(recorded_processes).await?);
@@ -156,13 +167,18 @@ impl Manager {
 
     /// End the chats still recorded with the process found ended: return
     /// their workspaces to the user along with the messages the chats had not
-    /// received, and delete their records and temporary directories. A chat
-    /// moved to another process since keeps running.
+    /// received, keep their attached files for the retention period, and
+    /// delete their records and temporary directories. A chat moved to
+    /// another process since keeps running.
     async fn end_chats(&self, ended: Vec<(String, Identity)>) -> Result<()> {
         if ended.is_empty() {
             return Ok(());
         }
-        let deleted = self.store.run(move |db| delete(db, &ended)).await?;
+        let expiries = self.files_expiries(&ended).await?;
+        let deleted = self
+            .store
+            .run(move |db| delete(db, &ended, &expiries))
+            .await?;
         for (repository_id, id) in deleted.chats {
             if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
                 log!("chat {id}: temporary directory not deleted: {error:#}");
@@ -172,6 +188,18 @@ impl Manager {
             self.signals.notification_recorded(id);
         }
         Ok(())
+    }
+
+    /// When the attached files of each chat in `ended` expire if it ends
+    /// now, by its repository's retention.
+    async fn files_expiries(&self, ended: &[(String, Identity)]) -> Result<HashMap<String, i64>> {
+        let ids: Vec<String> = ended.iter().map(|(id, _)| id.clone()).collect();
+        let repositories = self.store.run(move |db| repositories(db, &ids)).await?;
+        let mut expiries = HashMap::new();
+        for (chat, repository_id) in repositories {
+            expiries.insert(chat, self.chat_files_expiry(&repository_id).await);
+        }
+        Ok(expiries)
     }
 
     /// Give `workspace` to the running chat that opened it, or to the user
@@ -408,9 +436,26 @@ struct Deleted {
     chats: Vec<(String, String)>,
 }
 
+/// The repository of each recorded chat of `ids`, by chat.
+fn repositories(db: &mut Connection, ids: &[String]) -> Result<Vec<(String, String)>> {
+    let mut statement = db.prepare("SELECT repository_id FROM chats WHERE id=?1")?;
+    let mut repositories = Vec::new();
+    for id in ids {
+        if let Some(repository_id) = statement.query_row([id], |row| row.get(0)).optional()? {
+            repositories.push((id.clone(), repository_id));
+        }
+    }
+    Ok(repositories)
+}
+
 /// Delete the records of the chats still recorded with the process found
-/// ended, giving the user their unread messages.
-fn delete(db: &mut Connection, ended: &[(String, Identity)]) -> Result<Deleted> {
+/// ended, giving the user their unread messages and keeping their attached
+/// files until `expiries` says, by chat.
+fn delete(
+    db: &mut Connection,
+    ended: &[(String, Identity)],
+    expiries: &HashMap<String, i64>,
+) -> Result<Deleted> {
     let tx = db.transaction()?;
     let mut last = None;
     let mut deleted = Vec::new();
@@ -426,6 +471,8 @@ fn delete(db: &mut Connection, ended: &[(String, Identity)]) -> Result<Deleted> 
             continue;
         };
         last = chat_messages::hand_to_user(&tx, id)?.or(last);
+        let expires_at = expiries.get(id).copied().unwrap_or_default();
+        workspace_files::keep_ended_chat(&tx, id, expires_at)?;
         tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
         deleted.push((repository_id, id.clone()));
     }

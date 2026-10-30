@@ -18,18 +18,18 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     let files = match method {
-        FileMethod::ListFiles { workspace } => manager.workspace_files(&workspace).await,
+        FileMethod::ListFiles { workspace } => manager.attached_files(&workspace).await,
         FileMethod::AddFiles { workspace, files } => {
             let attacher = manager.attacher(caller).await;
             manager
-                .add_workspace_files(&workspace, files, &attacher)
+                .add_attached_files(&workspace, files, &attacher)
                 .await
         }
         FileMethod::RemoveFiles {
             workspace: Some(workspace),
             names,
             ids,
-        } => manager.remove_workspace_files(&workspace, names, ids).await,
+        } => manager.remove_attached_files(&workspace, names, ids).await,
         FileMethod::RemoveFiles {
             workspace: None,
             names,

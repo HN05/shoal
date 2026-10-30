@@ -1,7 +1,6 @@
-//! Where a repository keeps the files attached to its workspaces: beside the
-//! workspaces, in a directory its agents are given as a working directory, so
-//! they read the files where any sandbox lets them; they stay until their
-//! workspace is removed.
+//! Where a repository keeps the files attached to its workspaces and chats:
+//! beside the workspaces, in a directory its agents are given as a working
+//! directory, so they read the files where any sandbox lets them.
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -192,23 +191,31 @@ impl Layout {
         remove_dir(&self.root.join(workspace_id))
     }
 
-    /// The directory of the files the workspace `workspace_id` handed back.
-    pub(crate) fn results(&self, workspace_id: &str) -> PathBuf {
-        self.root.join(RESULTS).join(workspace_id)
+    /// The directories that may hold the files kept for the workspace or
+    /// chat `owner_id` after it is gone: a chat's own, and the results a
+    /// workspace handed back.
+    pub(crate) fn kept(&self, owner_id: &str) -> [PathBuf; 2] {
+        [
+            self.root.join(owner_id),
+            self.root.join(RESULTS).join(owner_id),
+        ]
     }
 
-    /// Delete the files the workspace `workspace_id` handed back.
-    pub(crate) fn remove_results(&self, workspace_id: &str) -> Result<()> {
+    /// Delete the files kept for the workspace or chat `owner_id` after it
+    /// is gone.
+    pub(crate) fn remove_kept(&self, owner_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        let results = self.results(workspace_id);
-        ensure!(
-            self.contains(&results),
-            "{} is not among the repository's attached files",
-            results.display()
-        );
-        remove_dir(&results)
+        for directory in self.kept(owner_id) {
+            ensure!(
+                self.contains(&directory),
+                "{} is not among the repository's attached files",
+                directory.display()
+            );
+            remove_dir(&directory)?;
+        }
+        Ok(())
     }
 
     /// Whether `path` is below this repository's attached files and its

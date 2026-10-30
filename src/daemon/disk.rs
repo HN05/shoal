@@ -343,8 +343,8 @@ async fn empty_caches(
     Ok(())
 }
 
-/// Delete the results removed workspaces handed back on the filesystem, the
-/// oldest first, until it has enough space. They go last: unlike what the
+/// Delete the files kept for removed workspaces and ended chats on the
+/// filesystem, the oldest first, until it has enough space. They go last: unlike what the
 /// steps before delete, they may exist nowhere else.
 async fn delete_results(
     manager: &Manager,
@@ -362,11 +362,14 @@ async fn delete_results(
         let (kind, message) = match deleted {
             Ok(false) => continue,
             Ok(true) => {
-                log!("disk space cleanup deleted the results of {}", owner.name);
+                log!(
+                    "disk space cleanup deleted the kept files of {}",
+                    owner.name
+                );
                 (
                     NotificationKind::ResultsDeleted,
                     format!(
-                        "Deleted the results removed workspace {} handed back, for disk space; {}",
+                        "Deleted the kept files of {}, for disk space; {}",
                         owner.name,
                         filesystem.describe()
                     ),
@@ -375,7 +378,7 @@ async fn delete_results(
             Err(error) => (
                 NotificationKind::CleanupFailed,
                 format!(
-                    "Disk space cleanup could not delete the results of {}: {error:#}",
+                    "Disk space cleanup could not delete the kept files of {}: {error:#}",
                     owner.name
                 ),
             ),

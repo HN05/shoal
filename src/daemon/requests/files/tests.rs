@@ -72,7 +72,7 @@ async fn deleting_by_name_needs_a_workspace() {
     let file = temp.path().join("notes.md");
     std::fs::write(&file, "plan").unwrap();
     manager
-        .add_workspace_files(&workspace.name, vec![file.into()], &Attacher::User)
+        .add_attached_files(&workspace.name, vec![file.into()], &Attacher::User)
         .await
         .unwrap();
     let refused = handle(
@@ -93,11 +93,7 @@ async fn deleting_by_name_needs_a_workspace() {
         "{error:#}"
     );
     assert_eq!(
-        manager
-            .workspace_files(&workspace.name)
-            .await
-            .unwrap()
-            .len(),
+        manager.attached_files(&workspace.name).await.unwrap().len(),
         1
     );
 }

@@ -188,7 +188,7 @@ impl Manager {
         if attachments.is_empty() {
             return self.queue_agent_message(&workspace.id, message).await;
         }
-        let (layout, _files) = self.lock_files(&workspace).await?;
+        let (layout, _files) = self.lock_files(&workspace.clone().into()).await?;
         let kept = workspace_files::keep(layout, &workspace.id, &message, attachments).await?;
         let queued = self
             .queue_attached_message(

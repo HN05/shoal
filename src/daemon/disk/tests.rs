@@ -265,7 +265,7 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         )
         .await
         .unwrap();
-    let result = manager.workspace_files(&audit.id).await.unwrap()[0]
+    let result = manager.attached_files(&audit.id).await.unwrap()[0]
         .path
         .clone();
     manager
@@ -290,9 +290,9 @@ async fn cleanup_deletes_the_results_of_removed_workspaces_last() {
         .find(|notification| notification.kind == NotificationKind::ResultsDeleted)
         .expect("results deleted notification");
     assert!(
-        deleted.message.starts_with(
-            "Deleted the results removed workspace audit handed back, for disk space; "
-        ),
+        deleted
+            .message
+            .starts_with("Deleted the kept files of audit, for disk space; "),
         "{}",
         deleted.message
     );

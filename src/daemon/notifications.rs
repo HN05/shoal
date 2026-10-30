@@ -57,7 +57,8 @@ states!(NotificationKind {
     SeedFailed => "seed_failed",
     /// Disk space cleanup emptied a repository's shared caches.
     CachesEmptied => "caches_emptied",
-    /// Disk space cleanup deleted the results a removed workspace handed back.
+    /// Disk space cleanup deleted the files kept for a removed workspace or an
+    /// ended chat.
     ResultsDeleted => "results_deleted",
     /// A forge limits the requests Shoal sends it, so polling waits.
     ForgeLimited => "forge_limited",
