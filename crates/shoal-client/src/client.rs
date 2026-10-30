@@ -215,31 +215,31 @@ impl Client {
         self.connector.clone().subscribe(topics).await
     }
 
+    /// Send `call` on the open connection, or a new one. The connection is
+    /// kept only once the exchange ends cleanly: one that a cancelled or
+    /// failed call left holding part of a request or reply is dropped.
     async fn call_value(&self, call: Call) -> Result<serde_json::Value, Error> {
-        let mut connection = self.connection.lock().await;
-        let open = match connection.take() {
+        let mut kept = self.connection.lock().await;
+        let mut open = match kept.take() {
             Some(open) => open,
             None => self.connector.open().await?,
         };
-        let open = connection.insert(open);
         let name = call.name();
         let exchange = async {
             let id = open.send(call).await?;
             open.result(id).await
         };
         let Ok(result) = tokio::time::timeout(self.connector.call_timeout(), exchange).await else {
-            // A connection cut off mid-reply cannot take another request.
-            *connection = None;
             return Err(Error::Api(ApiError::new(
                 ErrorCode::OperationFailed,
                 format!("{name} did not finish in time"),
             )));
         };
-        if matches!(
+        if !matches!(
             result,
             Err(Error::Closed | Error::Io(_) | Error::Protocol(_))
         ) {
-            *connection = None;
+            *kept = Some(open);
         }
         result
     }
@@ -249,3 +249,6 @@ impl Client {
 pub(crate) fn subscribe_call(topics: Vec<Topic>) -> Call {
     Call::Subscribe(Subscribe { topics })
 }
+
+#[cfg(test)]
+mod tests;
