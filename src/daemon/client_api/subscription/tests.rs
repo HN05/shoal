@@ -292,6 +292,43 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn a_revoked_scope_token_ends_its_subscriptions() {
+        let daemon = TestDaemon::start().await;
+        let workspace = daemon.workspace("revoked").await;
+        let token = daemon.scope_token(&workspace).await;
+        let revoke = || {
+            daemon
+                .manager
+                .revoke_workspace_environment(&workspace.id, token.clone())
+        };
+        let connector = || daemon.connector().scope(token.clone());
+        let mut subscription = connector()
+            .subscribe(vec![Topic::Workspaces])
+            .await
+            .unwrap();
+        subscription.next().await.unwrap();
+        let client = connector().connect().await.unwrap();
+        revoke().await.unwrap();
+        let refused = client.subscribe(vec![Topic::Workspaces]).await;
+        assert_eq!(
+            super::super::super::tests::code(refused.map(|_| ())),
+            shoal_client::ErrorCode::ScopeDenied
+        );
+        daemon
+            .manager
+            .acquire_hold(&workspace.id, "quay".into(), None)
+            .await
+            .unwrap();
+        let ended = tokio::time::timeout(HANG, subscription.next())
+            .await
+            .unwrap();
+        assert_eq!(
+            super::super::super::tests::code(ended),
+            shoal_client::ErrorCode::ScopeDenied
+        );
+    }
+
+    #[tokio::test]
     async fn a_large_snapshot_arrives_in_pages() {
         use shoal_client::wire::{self, Event, HandshakeReply, Reply, Response};
         let daemon = TestDaemon::start().await;

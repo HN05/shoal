@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use shoal_client::{
-    Subscribe,
+    ApiError, ErrorCode, Subscribe,
     wire::{self, Event, Reply, Response},
 };
 use tokio::{io::AsyncReadExt as _, net::unix::OwnedWriteHalf};
@@ -28,15 +28,14 @@ pub(super) async fn run(
     mut writer: OwnedWriteHalf,
 ) -> Result<()> {
     let manager = session.server.manager.clone();
-    let caller = session.caller.as_ref();
-    let topics = Topics::new(&subscribe.topics, caller);
+    let topics = Topics::new(&subscribe.topics, session.caller.as_ref());
     // Watch before reading, so a change in between still wakes it.
     let mut stored = manager.store.watch_changes();
     let mut agents = manager.signals.watch_agents();
-    let mut sent = match snapshot::take(&manager, caller, &topics).await {
+    let mut sent = match records(&session, &topics).await {
         Ok(records) => records,
         Err(error) => {
-            let reply = Reply::Error(errors::failed(&error));
+            let reply = Reply::Error(error);
             super::write_guarded(&manager, &mut writer, &Response { id, reply }).await?;
             return Ok(());
         }
@@ -56,11 +55,16 @@ pub(super) async fn run(
         tokio::time::sleep(SETTLE).await;
         stored.borrow_and_update();
         agents.borrow_and_update();
-        let current = match snapshot::take(&manager, caller, &topics).await {
+        let current = match records(&session, &topics).await {
             Ok(records) => records,
+            Err(error) if error.code == ErrorCode::ScopeDenied => {
+                let reply = Reply::Error(error);
+                super::write_guarded(&manager, &mut writer, &Response { id, reply }).await?;
+                return Ok(());
+            }
             // The next change compares again.
             Err(error) => {
-                log!("client API subscription: {error:#}");
+                log!("client API subscription: {error}");
                 continue;
             }
         };
@@ -74,6 +78,15 @@ pub(super) async fn run(
         }
         sent = current;
     }
+}
+
+/// The records of `topics` that the session's caller may read now, once its
+/// scope token still names it.
+async fn records(session: &Session, topics: &Topics) -> Result<Records, ApiError> {
+    let caller = session.current_caller().await?;
+    snapshot::take(&session.server.manager, caller.as_ref(), topics)
+        .await
+        .map_err(|error| errors::failed(&error))
 }
 
 /// `records` as snapshot events that each stay within a page.

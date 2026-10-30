@@ -98,6 +98,23 @@ fn request(frame: serde_json::Value) -> Result<Request, (u64, ApiError)> {
 }
 
 impl Session {
+    /// The caller the scope token names now, refusing a token revoked or
+    /// expired since the handshake.
+    async fn current_caller(&self) -> Result<Option<Caller>, ApiError> {
+        let Some(token) = &self.scope else {
+            return Ok(None);
+        };
+        self.server
+            .manager
+            .caller(token)
+            .await
+            .map_err(|error| errors::failed(&error))?
+            .map(Some)
+            .ok_or_else(|| {
+                ApiError::new(ErrorCode::ScopeDenied, "expired or unknown workspace scope")
+            })
+    }
+
     /// Answer request `id`, `call`, within a request slot, holding an
     /// operation guard until its reply is written, so a daemon update
     /// cannot cut the reply off after the operation took effect. `false`
