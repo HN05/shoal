@@ -128,6 +128,19 @@ impl UnsavedWork {
         }
     }
 
+    /// Whether it consents to deleting any unsaved work, which removal then
+    /// forces; the children it names are no unsaved work.
+    pub fn deletes_unsaved(&self) -> bool {
+        match self {
+            Self::All => true,
+            Self::Confirmed {
+                files,
+                detached_head,
+                ..
+            } => *files || detached_head.is_some(),
+        }
+    }
+
     /// The caller was told the removal's checkpoint keeps the files.
     pub fn promises_restorable_files(&self) -> bool {
         matches!(

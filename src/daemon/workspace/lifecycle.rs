@@ -1382,10 +1382,10 @@ fn worktrunk_removal_options(
     } else {
         BranchRemoval::Keep
     };
-    let files = if *unsaved == NOTHING {
-        FileRemoval::CleanOnly
-    } else {
+    let files = if unsaved.deletes_unsaved() {
         FileRemoval::Force
+    } else {
+        FileRemoval::CleanOnly
     };
     (files, branch)
 }

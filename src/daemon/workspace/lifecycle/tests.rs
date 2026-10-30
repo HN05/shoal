@@ -1160,3 +1160,24 @@ async fn a_removal_moves_results_up_in_the_transaction_that_deletes_it() {
         .unwrap();
     assert_eq!(parent.as_deref(), Some(top.id.as_str()));
 }
+
+#[tokio::test]
+async fn a_clean_confirmation_naming_children_removes_clean_only() {
+    let (_root, manager, workspace) = fixture().await;
+    let child = manager
+        .split_workspace(&workspace.id, "child".into(), None)
+        .await
+        .unwrap();
+    let check = manager
+        .check_manual_removal(&workspace.id, false)
+        .await
+        .unwrap();
+    let confirmed = UnsavedWork::confirming(&check);
+    assert_eq!(confirmed.children(), Some(&[child.id][..]));
+    // Files appearing after the final inspection are not the caller's to
+    // delete, so only unsaved work it confirmed forces removal.
+    let (files, _) = worktrunk_removal_options(&check, &confirmed);
+    assert!(matches!(files, FileRemoval::CleanOnly));
+    let (files, _) = worktrunk_removal_options(&check, &UnsavedWork::All);
+    assert!(matches!(files, FileRemoval::Force));
+}
