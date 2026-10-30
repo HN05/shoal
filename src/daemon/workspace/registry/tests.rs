@@ -195,3 +195,24 @@ async fn no_checkout_registers_where_another_repositorys_local_config_belongs() 
     );
     assert!(!directory.join("clone").exists());
 }
+
+#[tokio::test]
+async fn no_clone_lands_where_its_own_local_config_belongs() {
+    let (_root, manager) = crate::test_support::manager().await;
+    let root = crate::config::Config::default()
+        .root_dir(&manager.paths)
+        .unwrap();
+    let error = manager
+        .register_repository(
+            "https://example.test/team/project.git".into(),
+            Some("project".into()),
+            Some(root.join("project").join(".shoal")),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("the repository's local config"),
+        "{error:#}"
+    );
+    assert!(!root.join("project").exists());
+}
