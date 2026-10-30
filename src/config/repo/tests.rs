@@ -113,6 +113,20 @@ fn former_option_names_are_unknown_keys() {
 }
 
 #[test]
+fn no_agent_names_the_reserved_tool_all() {
+    for text in [
+        "[agents.all]\ncommand = ['all']\n",
+        "[agents.helper]\nbase = 'all'\n",
+    ] {
+        let error = format!("{:#}", parse(text).unwrap_err());
+        assert!(
+            error.contains("reserved for skill installation"),
+            "{text}: {error}"
+        );
+    }
+}
+
+#[test]
 fn config_serializes_in_its_own_spelling() {
     let config = parse(
         "agent.default = 'happy-codex'\n[ports.web]\nport = 1\n[agents.codex]\ndefault_mode = 'app'\n",

@@ -43,10 +43,7 @@ pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
 /// single layer can be checked before it is saved.
 pub fn entry(name: &str, agent: &Agent) -> Result<()> {
     crate::validate::name("AI tool", name)?;
-    ensure!(
-        name != "all",
-        "AI tool name 'all' is reserved for skill installation"
-    );
+    not_reserved(name)?;
     ensure!(
         agent.prompt_cache_minutes != Some(0),
         "agents.{name}.prompt_cache_minutes must be at least 1"
@@ -101,6 +98,15 @@ pub fn reachable_name(name: &str) -> Result<()> {
     ensure!(
         built_in_provider || !built_in_commands().iter().any(|command| command == name),
         "{name:?} is a built-in Shoal command; choose another name"
+    );
+    not_reserved(name)
+}
+
+/// `all` stands for every AI tool in skill installation, so none takes it.
+fn not_reserved(name: &str) -> Result<()> {
+    ensure!(
+        name != "all",
+        "AI tool name 'all' is reserved for skill installation"
     );
     Ok(())
 }
@@ -195,10 +201,7 @@ pub fn skill_dirs(
 ) -> Result<()> {
     for (name, agent) in machine {
         crate::validate::name("AI tool", name)?;
-        ensure!(
-            name != "all",
-            "AI tool name 'all' is reserved for skill installation"
-        );
+        not_reserved(name)?;
         if let Some(directory) = &agent.skill_dir {
             skill_dir(directory, home)
                 .with_context(|| format!("machine.agents.{name}.skill_dir"))?;

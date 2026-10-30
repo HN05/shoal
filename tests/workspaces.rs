@@ -8557,6 +8557,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         ("commands.claude", "['echo']"),
         ("agents.loop.base", "loop"),
         ("agents.helper.base", "work"),
+        ("agents.helper.base", "all"),
         ("agents.claude.resume", "['--resume']"),
     ] {
         assert!(
