@@ -585,9 +585,10 @@ fn head_checks_leave_out_failures_kept_from_an_earlier_head() {
 }
 
 #[test]
-fn a_conflict_kept_from_an_earlier_head_is_unknown_at_the_new_one() {
+fn a_conflict_kept_from_an_earlier_head_or_base_is_unknown_at_the_new_one() {
     let mut snapshot = Snapshot {
         head: "1".into(),
+        base: "main".into(),
         conflict: Some(true),
         conflict_at: MergeRevision {
             head: "1".into(),
@@ -596,6 +597,9 @@ fn a_conflict_kept_from_an_earlier_head_is_unknown_at_the_new_one() {
         ..Snapshot::default()
     };
     assert_eq!(snapshot.head_conflict(), Some(true));
+    snapshot.base = "main-2".into();
+    assert_eq!(snapshot.head_conflict(), None);
+    snapshot.base = "main".into();
     snapshot.head = "2".into();
     assert_eq!(snapshot.head_conflict(), None);
 }
