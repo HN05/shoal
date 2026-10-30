@@ -1,9 +1,10 @@
 //! SQLite persistence: schema migrations, row mappers, and the small
 //! guards every mutation shares.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Row};
 use serde::{Serialize, de::DeserializeOwned};
-use std::{path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
     model::{
@@ -756,11 +757,21 @@ fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<O
 pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
     match name_holder(db, name, except_id)? {
         None => Ok(()),
-        Some(NameHolder::Workspace) => anyhow::bail!("workspace name already exists: {name}"),
-        Some(NameHolder::Rename) => {
-            anyhow::bail!("workspace name is reserved by an unfinished rename: {name}")
-        }
-        Some(NameHolder::Chat) => anyhow::bail!("a running chat already has the name {name}"),
+        Some(NameHolder::Workspace) => Err(Refusal::new(
+            Reason::NameTaken,
+            format!("workspace name already exists: {name}"),
+        )
+        .into()),
+        Some(NameHolder::Rename) => Err(Refusal::new(
+            Reason::NameTaken,
+            format!("workspace name is reserved by an unfinished rename: {name}"),
+        )
+        .into()),
+        Some(NameHolder::Chat) => Err(Refusal::new(
+            Reason::NameTaken,
+            format!("a running chat already has the name {name}"),
+        )
+        .into()),
     }
 }
 
@@ -788,7 +799,11 @@ pub fn ensure_name_and_branch_available(
         )
         .optional()?;
     if let Some(owner) = owner {
-        anyhow::bail!("branch is already owned by workspace {owner}");
+        return Err(Refusal::new(
+            Reason::NameTaken,
+            format!("branch is already owned by workspace {owner}"),
+        )
+        .into());
     }
     Ok(())
 }
@@ -847,7 +862,10 @@ pub fn require_ready(db: &Connection, workspace_id: &str) -> Result<()> {
         rusqlite::params![workspace_id, WorkspaceState::Ready],
         |row| row.get(0),
     )?;
-    ensure!(ready, "workspace is not ready");
+    ensure!(
+        ready,
+        Refusal::new(Reason::NotReady, "workspace is not ready")
+    );
     Ok(())
 }
 
@@ -1067,6 +1085,54 @@ pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
         })
         .optional()?
         .flatten())
+}
+
+/// A recorded execution that runs an agent.
+pub struct AgentExecution {
+    pub agent: String,
+    pub state: ExecutionState,
+    /// Whether its wrapper runs the agent now, rather than waiting to start
+    /// it or to restore one protection or a queue move stopped.
+    pub started: bool,
+}
+
+impl AgentExecution {
+    /// How much the execution says about its workspace's agent: one that
+    /// runs, then one not known to, then a wrapper without one.
+    fn weight(&self) -> u8 {
+        match (self.state, self.started) {
+            (ExecutionState::Running, true) => 2,
+            (ExecutionState::Unknown, _) => 1,
+            (ExecutionState::Running, false) => 0,
+        }
+    }
+}
+
+/// The agent execution saying most about each workspace's agent, by
+/// workspace ID.
+pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, AgentExecution>> {
+    let mut agents: HashMap<String, AgentExecution> = HashMap::new();
+    let mut statement = db.prepare(
+        "SELECT workspace_id,agent,state,child IS NOT NULL FROM executions WHERE agent IS NOT NULL",
+    )?;
+    let rows = statement.query_map([], |row| {
+        let execution = AgentExecution {
+            agent: row.get(1)?,
+            state: row.get(2)?,
+            started: row.get(3)?,
+        };
+        Ok((row.get::<_, String>(0)?, execution))
+    })?;
+    for row in rows {
+        let (workspace, execution) = row?;
+        match agents.get(&workspace) {
+            Some(known) if known.weight() >= execution.weight() => {}
+            _ => {
+                agents.insert(workspace, execution);
+            }
+        }
+    }
+    Ok(agents)
 }
 
 /// The executions running in the workspaces of repository `repository_id`.

@@ -34,6 +34,7 @@ mod plan;
 mod ports;
 mod questions;
 mod queue;
+mod reactions;
 mod repo_menu;
 mod repo_migrate;
 mod repo_setup;
@@ -57,6 +58,8 @@ mod update;
 mod view;
 mod work;
 pub(in crate::cli) mod workspaces;
+
+pub(crate) use workspaces::queued_agent_plan;
 mod worktree_hooks;
 
 #[cfg(test)]

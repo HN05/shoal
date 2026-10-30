@@ -1,0 +1,2096 @@
+{
+  "$defs": {
+    "AcquireHold": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "AcquireSimulator": {
+      "properties": {
+        "device": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "default": null,
+          "description": "The lease's name; `default` when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "A configured simulator profile.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "default": null,
+          "description": "Why the lease is needed, which a lease that needs approval asks for.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "AddLink": {
+      "properties": {
+        "item": {
+          "description": "The item's number in the workspace's repository, or its URL.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "kind",
+        "item",
+        "relation"
+      ],
+      "type": "object"
+    },
+    "AgentState": {
+      "anyOf": [
+        {
+          "enum": [
+            "working",
+            "waiting",
+            "idle",
+            "running",
+            "queued",
+            "starting",
+            "stopped",
+            "unconfirmed"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "AgentStatus": {
+      "description": "A workspace's agent and its state.",
+      "properties": {
+        "agent": {
+          "description": "The agent's name, such as `claude`, when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since": {
+          "description": "Unix seconds since the state was reported, when known.",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/AgentState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "AnswerQuestion": {
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Question"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The question as shown. When given, a question that no longer matches\nit, such as a later one reusing its number, is refused with `not_found`."
+        }
+      },
+      "required": [
+        "id",
+        "answer"
+      ],
+      "type": "object"
+    },
+    "ApiError": {
+      "description": "A refusal from the daemon.",
+      "properties": {
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Approval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The approval request of an `approval_pending` or `approval_denied` refusal."
+        },
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "Approval": {
+      "description": "A workspace's request for the user's approval.",
+      "properties": {
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "description": "The number it is decided by; reused once the request is gone.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "key": {
+          "description": "What names this request for good, unlike its number.",
+          "type": "string"
+        },
+        "lifetime": {
+          "$ref": "#/$defs/ApprovalLifetime"
+        },
+        "name": {
+          "type": "string"
+        },
+        "proposal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProposedItem"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The issue or PR a proposal opens once approved."
+        },
+        "reason": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ApprovalStatus"
+        },
+        "subject": {
+          "description": "What the user is asked to decide, such as `simulator (lease)` or\n`open issue \"Flaky test\"`.",
+          "type": "string"
+        },
+        "target": {
+          "description": "What it authorizes, such as `simulator`, `port/web` or `pr_open`.",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "The workspace's name.",
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key",
+        "workspace_id",
+        "workspace",
+        "target",
+        "name",
+        "subject",
+        "lifetime",
+        "reason",
+        "status",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ApprovalLifetime": {
+      "anyOf": [
+        {
+          "enum": [
+            "lease",
+            "workspace"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ApprovalStatus": {
+      "anyOf": [
+        {
+          "enum": [
+            "pending",
+            "approved",
+            "denied",
+            "outdated",
+            "withdrawn"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Check": {
+      "description": "One CI check of a PR.",
+      "properties": {
+        "complete": {
+          "description": "Whether the check finished.",
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "state": {
+          "description": "The forge's state, such as `success`, `failure` or `pending`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "complete"
+      ],
+      "type": "object"
+    },
+    "Completion": {
+      "properties": {
+        "cleanup": {
+          "description": "Whether the workspace is removed once it qualifies.",
+          "type": "boolean"
+        },
+        "head": {
+          "description": "The commit the completion covers.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "head",
+        "cleanup"
+      ],
+      "type": "object"
+    },
+    "DecideApproval": {
+      "properties": {
+        "approve": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Approval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The request as shown. When given, a request that no longer matches\nit, such as a later one reusing its number, is refused with `not_found`."
+        }
+      },
+      "required": [
+        "id",
+        "approve"
+      ],
+      "type": "object"
+    },
+    "ErrorCode": {
+      "anyOf": [
+        {
+          "enum": [
+            "invalid_request",
+            "unsupported_version",
+            "not_found",
+            "name_taken",
+            "scope_denied",
+            "approval_pending",
+            "approval_denied",
+            "busy",
+            "not_ready",
+            "unsaved_work",
+            "operation_failed"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Event": {
+      "description": "What a subscription sends: its snapshot in one or more parts, then each\nchange. After a daemon restart the connection closes; a new subscription\nstarts with a new snapshot.",
+      "oneOf": [
+        {
+          "description": "Some of the records the subscription covers, as they are now;\n`complete` marks the last part.",
+          "properties": {
+            "complete": {
+              "type": "boolean"
+            },
+            "records": {
+              "items": {
+                "$ref": "#/$defs/Record"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "snapshot",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "records",
+            "complete"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A record was added or changed, and is now `record`.",
+          "properties": {
+            "record": {
+              "$ref": "#/$defs/Record"
+            },
+            "type": {
+              "const": "changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "record"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The record `key` names was removed.",
+          "properties": {
+            "key": {
+              "$ref": "#/$defs/RecordKey"
+            },
+            "type": {
+              "const": "removed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An event this version does not know; ignore it.",
+          "properties": {
+            "type": {
+              "const": "unknown",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "GetWorkspace": {
+      "properties": {
+        "workspace": {
+          "description": "The workspace's ID or name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "HandshakeReply": {
+      "description": "The daemon's answer to [`Opening`].",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "welcome": {
+              "$ref": "#/$defs/Welcome"
+            }
+          },
+          "required": [
+            "welcome"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The daemon refused the connection, such as with `unsupported_version`.",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ApiError"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Hello": {
+      "properties": {
+        "client": {
+          "description": "The client's name, for the daemon's log.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "description": "A workspace's scope token; without one the caller is the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "description": "The API version the client speaks, such as `1.0.0`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "type": "object"
+    },
+    "Hold": {
+      "description": "A named claim that a workspace is still in use.",
+      "properties": {
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "Item": {
+      "description": "An issue or PR.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "url"
+      ],
+      "type": "object"
+    },
+    "ItemKind": {
+      "anyOf": [
+        {
+          "enum": [
+            "issue",
+            "pr",
+            "ci"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Link": {
+      "description": "An issue or PR a workspace links, with its state as the daemon last\nrecorded it from the forge.",
+      "properties": {
+        "checks": {
+          "description": "A PR's CI checks on its head.",
+          "items": {
+            "$ref": "#/$defs/Check"
+          },
+          "type": "array"
+        },
+        "conflict": {
+          "description": "Whether a PR's head conflicts with its base; absent when unknown,\nsuch as while the forge has not checked a new head or base.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "head": {
+          "description": "A PR's head commit, which its checks ran on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "lookup_errors": {
+          "description": "What the daemon could not read when it last looked, such as CI\nchecks; what it covers may be older than the rest.",
+          "items": {
+            "$ref": "#/$defs/LookupError"
+          },
+          "type": "array"
+        },
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        },
+        "state": {
+          "description": "The forge's state, such as `open`, `closed` or `merged`; absent until\nthe daemon has looked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "workspace_id",
+        "kind",
+        "url",
+        "relation",
+        "checks",
+        "lookup_errors"
+      ],
+      "type": "object"
+    },
+    "ListRepositories": {
+      "type": "object"
+    },
+    "LookupError": {
+      "description": "A part of an item the daemon could not read from its forge.",
+      "properties": {
+        "message": {
+          "type": "string"
+        },
+        "source": {
+          "description": "What it could not read, such as `CI`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "message"
+      ],
+      "type": "object"
+    },
+    "MarkDone": {
+      "properties": {
+        "cleanup": {
+          "default": false,
+          "description": "Remove the workspace once it qualifies, even where `[done] cleanup` is false.",
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "Message": {
+      "description": "A message to a workspace's agent or from one to the user.",
+      "properties": {
+        "attachments": {
+          "description": "Shoal's copies of the attached files.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "recipient": {
+          "$ref": "#/$defs/MessageRecipient"
+        },
+        "text": {
+          "description": "Empty when the message is only its attachments.",
+          "type": "string"
+        },
+        "workspace": {
+          "description": "The workspace's name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace_id": {
+          "description": "The workspace's ID, for a message to its agent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "recipient",
+        "text",
+        "attachments",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "MessageRecipient": {
+      "anyOf": [
+        {
+          "enum": [
+            "agent",
+            "user"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Notification": {
+      "description": "Something the daemon tells the user.",
+      "properties": {
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "kind": {
+          "description": "What happened, such as `question_asked` or `workspace_removed`.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "workspace": {
+          "description": "The workspace's name when it happened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "message",
+        "read",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "Opening": {
+      "description": "The client's first frame. Its `client_api` key tells the daemon the\nconnection speaks this API rather than Shoal's internal protocol.",
+      "properties": {
+        "client_api": {
+          "$ref": "#/$defs/Hello"
+        }
+      },
+      "required": [
+        "client_api"
+      ],
+      "type": "object"
+    },
+    "ProposedItem": {
+      "description": "The issue or PR a proposal opens.",
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "type": "object"
+    },
+    "Question": {
+      "description": "An open question a workspace's agent asked the user.",
+      "properties": {
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "description": "The number it is answered by; reused once the question is gone.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "question": {
+          "type": "string"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recommendation": {
+          "type": "string"
+        },
+        "workspace": {
+          "description": "The workspace's name.",
+          "type": "string"
+        },
+        "workspace_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "workspace_id",
+        "workspace",
+        "question",
+        "recommendation",
+        "choices",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "QueueAgent": {
+      "properties": {
+        "agent": {
+          "description": "The agent to start, such as `claude` or `codex`.",
+          "type": "string"
+        },
+        "prompt": {
+          "default": null,
+          "description": "The agent's first message; without one it waits for the user.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "agent"
+      ],
+      "type": "object"
+    },
+    "QueueState": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "starting"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "QueuedAgent": {
+      "properties": {
+        "id": {
+          "description": "The queue entry's ID.",
+          "type": "string"
+        },
+        "position": {
+          "description": "Its place among waiting entries, from 1; absent once starting.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/QueueState"
+        }
+      },
+      "required": [
+        "id",
+        "state"
+      ],
+      "type": "object"
+    },
+    "ReadyMark": {
+      "description": "A statement that linked work is ready for review at a commit.",
+      "properties": {
+        "created_at": {
+          "description": "Unix seconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "head": {
+          "description": "The commit the mark covers.",
+          "type": "string"
+        },
+        "item": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Item"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The marked issue or PR; absent when the mark covers the workspace."
+        }
+      },
+      "required": [
+        "head",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "Record": {
+      "description": "One record, tagged with its kind as `type`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Repository",
+          "properties": {
+            "type": {
+              "const": "repository",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Workspace",
+          "properties": {
+            "type": {
+              "const": "workspace",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Link",
+          "properties": {
+            "type": {
+              "const": "link",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Question",
+          "properties": {
+            "type": {
+              "const": "question",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Approval",
+          "properties": {
+            "type": {
+              "const": "approval",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Message",
+          "properties": {
+            "type": {
+              "const": "message",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Notification",
+          "properties": {
+            "type": {
+              "const": "notification",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A kind this version does not know; ignore it.",
+          "properties": {
+            "type": {
+              "const": "unknown",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RecordKey": {
+      "description": "What names a record among those of its kind. The ID is opaque: compare\nit, never parse it.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RecordKind"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "type": "object"
+    },
+    "RecordKind": {
+      "anyOf": [
+        {
+          "enum": [
+            "repository",
+            "workspace",
+            "link",
+            "question",
+            "approval",
+            "message",
+            "notification"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "Relation": {
+      "anyOf": [
+        {
+          "enum": [
+            "assigned",
+            "opened",
+            "related"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "ReleaseHold": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ReleaseSimulator": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "name"
+      ],
+      "type": "object"
+    },
+    "Removal": {
+      "properties": {
+        "branch": {
+          "description": "The workspace's branch.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch_deleted": {
+          "description": "Whether the branch was deleted; it is kept when only it has some commits.",
+          "type": "boolean"
+        },
+        "hook_error": {
+          "description": "Why the best-effort removal hook failed, after a removal that succeeded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "branch_deleted"
+      ],
+      "type": "object"
+    },
+    "RemoveLink": {
+      "properties": {
+        "item": {
+          "description": "The item's number in the workspace's repository, or its URL.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ItemKind"
+        },
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "kind",
+        "item",
+        "relation"
+      ],
+      "type": "object"
+    },
+    "RemoveWorkspace": {
+      "properties": {
+        "discard_unsaved": {
+          "default": false,
+          "description": "Delete uncommitted files and the commits of a detached HEAD. Without\nit, a workspace with either is refused with `unsaved_work`.",
+          "type": "boolean"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "RenameWorkspace": {
+      "properties": {
+        "branch": {
+          "description": "The new branch name; the workspace takes the name derived from it.",
+          "type": "string"
+        },
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace",
+        "branch"
+      ],
+      "type": "object"
+    },
+    "Repository": {
+      "description": "A repository registered with Shoal.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "description": "The name it was registered under, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Its registered checkout.",
+          "type": "string"
+        },
+        "source": {
+          "description": "The path or URL it was registered from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "path",
+        "source"
+      ],
+      "type": "object"
+    },
+    "Request": {
+      "description": "A request; its responses carry its ID.",
+      "oneOf": [
+        {
+          "description": "Every registered repository, most recently used first.",
+          "properties": {
+            "method": {
+              "const": "repositories.list",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ListRepositories"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Fetch a repository's default branch from its remote and\nfast-forward the local default branch.",
+          "properties": {
+            "method": {
+              "const": "repository.sync",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/SyncRepository"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "workspace.get",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/GetWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Remove a workspace as `shoal rm` does, keeping a checkpoint.",
+          "properties": {
+            "method": {
+              "const": "workspace.remove",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/RemoveWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Record the workspace's assignment as done, as `shoal done` does.",
+          "properties": {
+            "method": {
+              "const": "workspace.done",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/MarkDone"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Withdraw a recorded completion, as `shoal done --undo` does.",
+          "properties": {
+            "method": {
+              "const": "workspace.undo_done",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/UndoDone"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Rename the workspace's branch, and the workspace with it.",
+          "properties": {
+            "method": {
+              "const": "workspace.rename",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/RenameWorkspace"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "link.add",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/AddLink"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "link.remove",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/RemoveLink"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "hold.acquire",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/AcquireHold"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "hold.release",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ReleaseHold"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "simulator.acquire",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/AcquireSimulator"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "simulator.release",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/ReleaseSimulator"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Queue an agent in the workspace, which the daemon starts detached\nin the default host once the agent queue admits it.",
+          "properties": {
+            "method": {
+              "const": "agent.queue",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/QueueAgent"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stop what runs in the workspace, saving its agent's session.",
+          "properties": {
+            "method": {
+              "const": "agent.stop",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/StopAgent"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "question.answer",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/AnswerQuestion"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Approve or deny a request: the user any, a workspace's agent only\nthose its children's agents passed to it, as with `shoal approvals`.",
+          "properties": {
+            "method": {
+              "const": "approval.decide",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/DecideApproval"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The records of the topics asked for: a snapshot, then their\nchanges, until the client hangs up.",
+          "properties": {
+            "method": {
+              "const": "subscribe",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/$defs/Subscribe"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "Response": {
+      "description": "One response to a request. A result too large for one frame arrives as\n`page` frames holding the first items of its list, then a `result`\nholding the rest.",
+      "oneOf": [
+        {
+          "properties": {
+            "page": {
+              "items": true,
+              "type": "array"
+            }
+          },
+          "required": [
+            "page"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "result": true
+          },
+          "required": [
+            "result"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ApiError"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A subscription's records, until the client hangs up.",
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/Event"
+            }
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "id": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "SimulatorLease": {
+      "description": "A simulator leased to a workspace.",
+      "properties": {
+        "device": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "runtime": {
+          "type": "string"
+        },
+        "udid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "device",
+        "runtime"
+      ],
+      "type": "object"
+    },
+    "StopAgent": {
+      "properties": {
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "Subscribe": {
+      "properties": {
+        "topics": {
+          "description": "A daemon skips topics it does not know.",
+          "items": {
+            "$ref": "#/$defs/Topic"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "topics"
+      ],
+      "type": "object"
+    },
+    "SyncRepository": {
+      "properties": {
+        "repository": {
+          "description": "The repository's ID, name or path.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository"
+      ],
+      "type": "object"
+    },
+    "SyncedRepository": {
+      "properties": {
+        "default_branch": {
+          "type": "string"
+        },
+        "remote": {
+          "description": "The default branch's upstream remote, absent when it has none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_id",
+        "default_branch"
+      ],
+      "type": "object"
+    },
+    "Topic": {
+      "anyOf": [
+        {
+          "enum": [
+            "repositories",
+            "workspaces",
+            "links",
+            "questions",
+            "approvals",
+            "messages",
+            "notifications"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    },
+    "UndoDone": {
+      "properties": {
+        "workspace": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "Welcome": {
+      "description": "What the daemon serves.",
+      "properties": {
+        "features": {
+          "description": "The methods and subscription topics the daemon offers, such as\n`workspace.get` and `topic:workspaces`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "supported_majors": {
+          "description": "The major versions the daemon serves.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "version": {
+          "description": "The API version the daemon speaks.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "supported_majors",
+        "features"
+      ],
+      "type": "object"
+    },
+    "Workspace": {
+      "description": "A workspace: a worktree on its own branch, with what Shoal records about it.",
+      "properties": {
+        "agent": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its agent, when one runs, waits in the queue or stopped with a session to restore."
+        },
+        "base_workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The workspace whose branch this one builds on."
+        },
+        "branch": {
+          "type": "string"
+        },
+        "done": {
+          "description": "Its assignment is done and the completion not withdrawn.",
+          "type": "boolean"
+        },
+        "error": {
+          "description": "Why the workspace failed or needs repair.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "holds": {
+          "description": "Holds that keep it from cleanup.",
+          "items": {
+            "$ref": "#/$defs/Hold"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parent_workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The workspace this one was split from."
+        },
+        "path": {
+          "type": "string"
+        },
+        "ready_marks": {
+          "description": "Marks that its work is ready for review.",
+          "items": {
+            "$ref": "#/$defs/ReadyMark"
+          },
+          "type": "array"
+        },
+        "repository_id": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/WorkspaceState"
+        },
+        "title": {
+          "description": "What its agent calls the work.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "repository_id",
+        "name",
+        "path",
+        "branch",
+        "state",
+        "done",
+        "holds",
+        "ready_marks"
+      ],
+      "type": "object"
+    },
+    "WorkspaceRef": {
+      "description": "Another workspace a record refers to.",
+      "properties": {
+        "branch": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "branch"
+      ],
+      "type": "object"
+    },
+    "WorkspaceState": {
+      "anyOf": [
+        {
+          "enum": [
+            "preparing",
+            "ready",
+            "stopping",
+            "removing",
+            "reconciling",
+            "restoring",
+            "updating",
+            "failed"
+          ]
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "frames": {
+    "event": {
+      "$ref": "#/$defs/Event"
+    },
+    "handshake_reply": {
+      "$ref": "#/$defs/HandshakeReply"
+    },
+    "opening": {
+      "$ref": "#/$defs/Opening"
+    },
+    "record": {
+      "$ref": "#/$defs/Record"
+    },
+    "record_key": {
+      "$ref": "#/$defs/RecordKey"
+    },
+    "request": {
+      "$ref": "#/$defs/Request"
+    },
+    "response": {
+      "$ref": "#/$defs/Response"
+    }
+  },
+  "methods": {
+    "agent.queue": {
+      "params": {
+        "$ref": "#/$defs/QueueAgent"
+      },
+      "result": {
+        "$ref": "#/$defs/QueuedAgent"
+      }
+    },
+    "agent.stop": {
+      "params": {
+        "$ref": "#/$defs/StopAgent"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "approval.decide": {
+      "params": {
+        "$ref": "#/$defs/DecideApproval"
+      },
+      "result": {
+        "$ref": "#/$defs/Approval"
+      }
+    },
+    "hold.acquire": {
+      "params": {
+        "$ref": "#/$defs/AcquireHold"
+      },
+      "result": {
+        "$ref": "#/$defs/Hold"
+      }
+    },
+    "hold.release": {
+      "params": {
+        "$ref": "#/$defs/ReleaseHold"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "link.add": {
+      "params": {
+        "$ref": "#/$defs/AddLink"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "link.remove": {
+      "params": {
+        "$ref": "#/$defs/RemoveLink"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "question.answer": {
+      "params": {
+        "$ref": "#/$defs/AnswerQuestion"
+      },
+      "result": {
+        "$ref": "#/$defs/Question"
+      }
+    },
+    "repositories.list": {
+      "params": {
+        "$ref": "#/$defs/ListRepositories"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/Repository"
+        },
+        "type": "array"
+      }
+    },
+    "repository.sync": {
+      "params": {
+        "$ref": "#/$defs/SyncRepository"
+      },
+      "result": {
+        "$ref": "#/$defs/SyncedRepository"
+      }
+    },
+    "simulator.acquire": {
+      "params": {
+        "$ref": "#/$defs/AcquireSimulator"
+      },
+      "result": {
+        "$ref": "#/$defs/SimulatorLease"
+      }
+    },
+    "simulator.release": {
+      "params": {
+        "$ref": "#/$defs/ReleaseSimulator"
+      },
+      "result": {
+        "type": "null"
+      }
+    },
+    "subscribe": {
+      "events": {
+        "$ref": "#/$defs/Event"
+      },
+      "params": {
+        "$ref": "#/$defs/Subscribe"
+      }
+    },
+    "workspace.done": {
+      "params": {
+        "$ref": "#/$defs/MarkDone"
+      },
+      "result": {
+        "$ref": "#/$defs/Completion"
+      }
+    },
+    "workspace.get": {
+      "params": {
+        "$ref": "#/$defs/GetWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/Workspace"
+      }
+    },
+    "workspace.remove": {
+      "params": {
+        "$ref": "#/$defs/RemoveWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/Removal"
+      }
+    },
+    "workspace.rename": {
+      "params": {
+        "$ref": "#/$defs/RenameWorkspace"
+      },
+      "result": {
+        "$ref": "#/$defs/Workspace"
+      }
+    },
+    "workspace.undo_done": {
+      "params": {
+        "$ref": "#/$defs/UndoDone"
+      },
+      "result": {
+        "type": "null"
+      }
+    }
+  },
+  "title": "Shoal client API",
+  "version": "1.0.0"
+}

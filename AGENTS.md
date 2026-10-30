@@ -37,6 +37,10 @@ when behavior changes, distinguishing decisions from proposals.
   code; it takes the account to act as, while scope, approvals, identity choice
   and workspace records stay in the daemon. What one forge does its own way
   belongs in its `Backend` implementation, never in a match on the forge kind.
+- The client API lives in `crates/shoal-client`, which depends on no other Shoal
+  code; its checked-in schema keeps every name within a major version. Its
+  daemon side runs the daemon's existing operations under their scope checks
+  and gives refusals typed reasons; the CLI stays on the internal protocol.
 - Repository TOML lives at `.shoal.toml` or `.shoal/config.toml`; reject both
   together. `setup_cmd` is tracked and gates
   readiness; hooks are untracked user processes with workspace identity and no
@@ -74,7 +78,7 @@ when behavior changes, distinguishing decisions from proposals.
   sync, listing, opening and changing issues and PRs of the own repository, opening issues
   in other repositories as `[issue] other_repositories` allows, rerunning
   or cancelling their CI jobs, starting, rerunning or cancelling CI runs of their own branch and reading the own repository's, and GET requests to the own repository's forge API, or
-  others where `[api] agent_writes` allows them, are allowed, except merging a PR or approving or requesting changes on one.
+  others where `[api] agent_writes` allows them, are allowed, except merging a PR, approving or requesting changes on one, or approving CI runs.
   Scope is cooperative, not a boundary against hostile same-user processes.
 - Notifications are daemon records the CLI shows: record them where the daemon
   decides (busy resources, port conflicts, agent-shortcut exits, its own

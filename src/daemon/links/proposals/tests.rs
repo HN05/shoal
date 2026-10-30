@@ -158,7 +158,11 @@ async fn a_duplicate_decision_refuses_a_number_reused_while_it_waited() {
     assert!(unchanged.proposed_issue().unwrap().duplicates.is_empty());
 }
 
-async fn store_issue_proposal(manager: &Manager, workspace: &Workspace) -> ApprovalRequest {
+/// A pending issue proposal from `workspace`.
+pub(crate) async fn store_issue_proposal(
+    manager: &Manager,
+    workspace: &Workspace,
+) -> ApprovalRequest {
     let specification = Specification::Issue(IssueSpecification {
         issue: NewIssue {
             title: format!("Flaky in {}", workspace.name),

@@ -1,5 +1,6 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
 //! as the workspace's agent account.
+pub mod approval;
 pub mod checks;
 pub mod run;
 pub mod run_action;
@@ -150,7 +151,7 @@ impl ForgeRepo {
         self.kind.locate_job(self, target)
     }
 
-    async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
+    pub(crate) async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
         let pull = self.read(account, ItemKind::Pr, number).await?;
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")

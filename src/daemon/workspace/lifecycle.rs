@@ -1,5 +1,6 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
@@ -273,14 +274,24 @@ impl<'a> Removal<'a> {
             ),
             (Removal::Manual { unsaved, .. }, Stage::Initial) => ensure!(
                 unsaved.uncovered(check).is_empty(),
-                "removal would delete {}; confirm it or pass --yes",
-                unsaved.uncovered(check).join(" and ")
+                Refusal::new(
+                    Reason::UnsavedWork,
+                    format!(
+                        "removal would delete {}; confirm it or pass --yes",
+                        unsaved.uncovered(check).join(" and ")
+                    )
+                )
             ),
             (Removal::Manual { unsaved, .. }, _) => ensure!(
                 unsaved.uncovered(check).is_empty(),
-                "workspace changed {}; removal would delete {} as well",
-                stage.change(),
-                unsaved.uncovered(check).join(" and ")
+                Refusal::new(
+                    Reason::UnsavedWork,
+                    format!(
+                        "workspace changed {}; removal would delete {} as well",
+                        stage.change(),
+                        unsaved.uncovered(check).join(" and ")
+                    )
+                )
             ),
             (Removal::Deleted | Removal::Parent { .. } | Removal::UnderCompleted { .. }, _) => {}
         }

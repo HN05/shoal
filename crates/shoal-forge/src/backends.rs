@@ -32,7 +32,7 @@ use crate::{
         item::{Current, Item, ItemState},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
         revert::NewRevert,
     },
     repo::locator::ItemRoute,
@@ -512,6 +512,15 @@ pub(crate) trait Backend {
     /// reactions at `endpoint`.
     fn remove_reaction(&self, endpoint: String, own: &Listed) -> Result<Request>;
 
+    /// The reactions the forge allows; by default GitHub's, and only those.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(false))
+    }
+
     /// Each check's latest attempt on `head`.
     async fn ci_checks(
         &self,
@@ -592,6 +601,14 @@ pub(crate) trait Backend {
     /// newest first.
     fn runs_path(&self, filter: &RunFilter) -> Result<String>;
 
+    /// The path under the repository that lists page `page` of the runs on
+    /// the commit `head` that may wait for approval,
+    /// [`crate::ci::approval::RUNS_PAGE`] to a page, or `None` where the forge
+    /// holds no runs for it.
+    fn waiting_runs_path(&self, _head: &str, _page: u32) -> Option<String> {
+        None
+    }
+
     /// The runs a read of the list path returned.
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
         value["workflow_runs"].as_array().map(Vec::as_slice)
@@ -619,6 +636,15 @@ pub(crate) trait Backend {
     /// The endpoint under the repository that applies `action` to `run`;
     /// `failed` reruns only its failed jobs.
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String>;
+
+    /// The endpoint under the repository that approves `run`, where the
+    /// forge approves runs.
+    fn approve_endpoint(&self, _run: &Run) -> Result<String> {
+        Err(crate::capability::unsupported(
+            self,
+            Capability::ApproveRuns,
+        ))
+    }
 
     /// `log`, a job log as the forge serves it, as plain text.
     fn plain_log(&self, log: &str) -> String {
@@ -1173,6 +1199,14 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.remove_reaction(endpoint, own))
     }
 
+    async fn allowed_reactions(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+    ) -> Result<AllowedReactions> {
+        dispatch!(self, backend => backend.allowed_reactions(repo, account).await)
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -1248,6 +1282,10 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.runs_path(filter))
     }
 
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
+        dispatch!(self, backend => backend.waiting_runs_path(head, page))
+    }
+
     fn listed_runs<'a>(&self, value: &'a Value) -> Option<&'a [Value]> {
         dispatch!(self, backend => backend.listed_runs(value))
     }
@@ -1272,6 +1310,10 @@ impl Backend for ForgeKind {
 
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
         dispatch!(self, backend => backend.run_endpoint(run, action, failed))
+    }
+
+    fn approve_endpoint(&self, run: &Run) -> Result<String> {
+        dispatch!(self, backend => backend.approve_endpoint(run))
     }
 
     fn plain_log(&self, log: &str) -> String {

@@ -2,6 +2,7 @@
 mod intent;
 
 use super::Manager;
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{daemon::store, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Result, bail, ensure};
 use intent::RenameIntent;
@@ -43,7 +44,10 @@ impl Manager {
         }
         ensure!(
             !git::ref_exists(&repo.path, &git::local_ref(branch), git::isolated_command).await?,
-            "local branch already exists: {branch}"
+            Refusal::new(
+                Reason::NameTaken,
+                format!("local branch already exists: {branch}")
+            )
         );
         self.reserve_workspace_rename(&workspace, branch, caller_execution)
             .await?;
@@ -75,7 +79,7 @@ impl Manager {
     ) -> Result<()> {
         ensure!(
             workspace.state == crate::state::WorkspaceState::Ready,
-            "workspace is not ready"
+            Refusal::new(Reason::NotReady, "workspace is not ready")
         );
         self.verify_worktree(workspace).await?;
         let actual = git::head_branch(&workspace.path, true, git::run_isolated).await?;

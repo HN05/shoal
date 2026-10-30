@@ -198,7 +198,7 @@ pub struct LinkEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemEvent {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     /// The action's name, such as `edit` or `merge`.
     pub action: String,
@@ -330,10 +330,11 @@ pub(crate) fn record_link(
 pub(crate) fn record_item(
     db: &Connection,
     id: &str,
-    kind: crate::forge::items::link::ItemKind,
+    kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
     action: &str,
 ) -> Result<()> {
+    let kind = kind.into();
     db.execute(
         "INSERT INTO workspace_events(record)
          SELECT json_object('kind',?2,'workspace_id',id,'repository_id',repository_id,

@@ -21,6 +21,7 @@ use crate::{
     capability::{Capability, Support},
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
+        approval::RUNS_PAGE,
         checks::plain,
         id,
         run::{NewRun, workflow_segment},
@@ -91,6 +92,7 @@ impl Backend for GitHub {
             | Capability::StartRuns
             | Capability::ReadRuns
             | Capability::ReadJobLogs
+            | Capability::ApproveRuns
             | Capability::ReopenPrs
             | Capability::Labels
             | Capability::DraftPrs
@@ -760,6 +762,7 @@ impl Backend for GitHub {
             branch: text(&value["head_branch"]),
             workflow: path.map(|path| path.rsplit('/').next().unwrap_or_default().into()),
             state: actions::state(value)?,
+            waiting: value["conclusion"] == "action_required",
         })
     }
 
@@ -776,6 +779,18 @@ impl Backend for GitHub {
             path.push_str(&format!("&head_sha={}", encode(commit, false)));
         }
         Ok(path)
+    }
+
+    fn approve_endpoint(&self, run: &Run) -> Result<String> {
+        Ok(format!("actions/runs/{}/approve", run.id))
+    }
+
+    /// GitHub filters the runs that wait for approval itself.
+    fn waiting_runs_path(&self, head: &str, page: u32) -> Option<String> {
+        Some(format!(
+            "actions/runs?head_sha={}&status=action_required&per_page={RUNS_PAGE}&page={page}",
+            encode(head, false)
+        ))
     }
 
     fn run_jobs_path(&self, run: &Run, page: u32) -> Option<String> {

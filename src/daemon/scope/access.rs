@@ -1,5 +1,6 @@
 //! The named checks and views that confine a scoped caller to what its
 //! scope allows.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 
 use super::Caller;
@@ -131,10 +132,9 @@ impl Manager {
         caller: &Caller,
         id: i64,
     ) -> Result<ApprovalRequest> {
-        let request = self
-            .approval_request(id)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("unknown approval request {id}"))?;
+        let request = self.approval_request(id).await?.ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
+        })?;
         ensure!(
             request.decider.as_deref() == Some(caller.workspace_id.as_str()),
             "workspace processes decide only the approval requests routed to them; ask the user to run this command"

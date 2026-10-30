@@ -7,6 +7,7 @@ use super::{
     },
     paths::matches_recorded_worktree_path,
 };
+use crate::daemon::refusal::{Reason, Refusal};
 use crate::{git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
@@ -131,6 +132,12 @@ impl Manager {
     }
 
     pub(crate) async fn verify_worktree(&self, workspace: &Workspace) -> Result<()> {
+        self.verify_worktree_identity(workspace)
+            .await
+            .map_err(|error| Refusal::wrap(Reason::NotReady, error))
+    }
+
+    async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
         let actual_git_dir = self.linked_git_dir(workspace).await?;
         verify_owner(
             &actual_git_dir,

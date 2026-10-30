@@ -92,6 +92,7 @@ fn jobs_are_read_with_their_state_and_page() -> Result<()> {
         branch: None,
         workflow: None,
         state: JobState::Failed,
+        waiting: false,
     };
     let jobs = github.kind.run_jobs(
         &run,
@@ -148,6 +149,7 @@ fn jobs_are_selected_by_id_or_by_a_name_no_other_job_has() -> Result<()> {
         branch: None,
         workflow: None,
         state: JobState::Failed,
+        waiting: false,
     };
     let job = |id, name: &str| RunJob {
         id,

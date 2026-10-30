@@ -26,7 +26,7 @@ use crate::{
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
         list,
-        reaction::{Listed, Subject},
+        reaction::{Listed, Subject, allowed::AllowedReactions},
     },
     repo::locator::ItemRoute,
     review::{
@@ -91,6 +91,8 @@ impl Backend for GitLab {
             Capability::UpdateByMerge => Support::Unsupported(Some(
                 "GitLab only rebases a merge request's branch, so use rebase",
             )),
+            // GitLab holds no pipeline for approval.
+            Capability::ApproveRuns => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
@@ -698,6 +700,15 @@ impl Backend for GitLab {
         reactions::remove(endpoint, own)
     }
 
+    /// Any emoji GitLab knows, so GitHub's reactions are suggestions.
+    async fn allowed_reactions(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+    ) -> Result<AllowedReactions> {
+        Ok(AllowedReactions::github(true))
+    }
+
     async fn ci_checks(
         &self,
         repo: &ForgeRepo,
@@ -782,6 +793,7 @@ impl Backend for GitLab {
             branch: text(&value["ref"]).filter(|_| value["tag"] != true),
             workflow: None,
             state: status_state(&value["status"])?,
+            waiting: false,
         })
     }
 
