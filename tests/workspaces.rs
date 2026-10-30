@@ -2187,7 +2187,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         .unwrap();
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass it explicitly"),
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass <workspace>"),
         "{output:?}"
     );
 }
@@ -2353,9 +2353,7 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
     }
     let missing = fixture.run(&["status"]);
     assert!(!missing.status.success());
-    assert!(
-        String::from_utf8_lossy(&missing.stderr).contains("missing workspace; pass it explicitly")
-    );
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("missing workspace; pass <target>"));
 
     for target in [
         vec!["pr", "7"],
@@ -6472,8 +6470,8 @@ fn workspace_commands_select_from_a_deleted_current_directory() {
 fn noninteractive_missing_targets_do_not_open_pickers() {
     let fixture = Fixture::new();
     fixture.add("available");
-    let workspace = "missing workspace; pass it explicitly";
-    let workspaces = "missing workspaces; pass it explicitly";
+    let workspace = "missing workspace; pass <workspace>";
+    let workspaces = "missing workspaces; pass <workspace>";
     for (args, refusal) in [
         (
             &["add"][..],
@@ -6481,10 +6479,10 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         ),
         (
             &["run", "--", "true"],
-            "missing workspace; pass it explicitly",
+            "missing workspace; pass --workspace <workspace>",
         ),
         (&["rm"], workspaces),
-        (&["status"], "missing workspace; pass it explicitly"),
+        (&["status"], "missing workspace; pass <target>"),
         (&["stop"], workspaces),
         (&["diff"], workspace),
         (&["done"], workspace),
@@ -10331,8 +10329,8 @@ fn omitted_repositories_come_from_the_current_checkout() {
     let output = run(&["--json", "add", "--existing", "topic"]);
     assert!(output.status.success(), "{output:?}");
     for (args, refusal) in [
-        (&["add"][..], "missing branch name; pass it explicitly"),
-        (&["repo", "rename"], "missing new name; pass it explicitly"),
+        (&["add"][..], "missing branch; pass <branch>"),
+        (&["repo", "rename"], "missing new name; pass <name>"),
     ] {
         let output = run(args);
         assert!(!output.status.success(), "{args:?}");
@@ -10690,7 +10688,7 @@ fn cd_always_picks_even_inside_a_workspace_and_cancel_does_not_navigate() {
         .unwrap();
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass it explicitly"),
+        String::from_utf8_lossy(&output.stderr).contains("missing workspace; pass <workspace>"),
         "{output:?}"
     );
 }

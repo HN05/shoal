@@ -286,6 +286,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
         .filter(|name| agents::installed(name, &settings.commands, &search_path))
         .collect();
     ensure!(!names.is_empty(), "no agent is installed");
+    ui::require_argument(ctx, "agent", "agent")?;
     let choices: Vec<_> = names
         .iter()
         .map(|name| (name.clone(), name.as_str()))

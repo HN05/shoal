@@ -91,6 +91,7 @@ async fn pick(ctx: &Context, workspace: &str) -> Result<String> {
             (hold.name, label)
         })
         .collect();
+    ui::require_argument(ctx, "hold", "name")?;
     ui::pick(ctx, "Hold> ", entries)
 }
 

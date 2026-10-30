@@ -97,14 +97,17 @@ pub(super) async fn install(
 pub(super) fn packaged_config(ctx: &Context, name: Option<String>) -> Result<String> {
     match name {
         Some(name) => Ok(name),
-        None => ui::pick(
-            ctx,
-            "Config> ",
-            crate::config::PACKAGED
-                .iter()
-                .map(|(name, _)| ((*name).to_owned(), (*name).to_owned()))
-                .collect(),
-        ),
+        None => {
+            ui::require_argument(ctx, "packaged config", "name")?;
+            ui::pick(
+                ctx,
+                "Config> ",
+                crate::config::PACKAGED
+                    .iter()
+                    .map(|(name, _)| ((*name).to_owned(), (*name).to_owned()))
+                    .collect(),
+            )
+        }
     }
 }
 

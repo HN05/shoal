@@ -10,21 +10,30 @@ use anyhow::{Context as _, Result, ensure};
 use crate::cli::{
     context::Context,
     output::{Palette, Style},
+    usage,
 };
 
-/// Refuse to ask for `argument` without a terminal, naming the `option` that
-/// supplies it instead.
-pub fn require_argument(ctx: &Context, argument: &str, option: &str) -> Result<()> {
-    ensure!(
-        ctx.interactive(),
-        "missing {argument}; pass {option} in non-interactive mode"
-    );
-    Ok(())
+/// Refuse to ask for `what` without a terminal, naming how the command line
+/// supplies it: `argument` is the ID or value name of the command's argument.
+pub fn require_argument(ctx: &Context, what: &str, argument: &str) -> Result<()> {
+    if ctx.interactive() {
+        return Ok(());
+    }
+    let option = usage::of(&ctx.command, argument);
+    Err(refusal(what, option.as_deref().unwrap_or("it explicitly")))
 }
 
-/// [`require_argument`] for what `prompt` asks, when its caller names no option.
+/// Refuse to ask what `prompt` asks without a terminal, when its caller
+/// names no argument that supplies it.
 pub(super) fn require_interactive(ctx: &Context, prompt: &str) -> Result<()> {
-    require_argument(ctx, &prompted_argument(prompt), "it explicitly")
+    if ctx.interactive() {
+        return Ok(());
+    }
+    Err(refusal(&prompted_argument(prompt), "it explicitly"))
+}
+
+fn refusal(what: &str, option: &str) -> anyhow::Error {
+    anyhow::anyhow!("missing {what}; pass {option} in non-interactive mode")
 }
 
 /// What a prompt such as `Repository> ` asks for, as in `repository`.

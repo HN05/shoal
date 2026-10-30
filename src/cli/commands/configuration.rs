@@ -140,6 +140,6 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         .max_by_key(|repository| repository.path.components().count());
     Ok(match repository {
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
-        None => ConfigTarget::Workspace(ui::pick_workspace(ctx, workspaces).await?),
+        None => ConfigTarget::Workspace(ui::pick_workspace(ctx, workspaces, "workspace").await?),
     })
 }

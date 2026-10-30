@@ -5,8 +5,8 @@ use std::{collections::HashSet, io};
 use anyhow::{Result, ensure};
 
 use super::{
-    Cell, Entries, chat_entries, pick, pick_many, picker_width, require_interactive,
-    rows_with_status, status_cell,
+    Cell, Entries, chat_entries, pick, pick_many, picker_width, require_argument, rows_with_status,
+    status_cell,
 };
 use crate::{
     cli::{
@@ -75,7 +75,7 @@ pub async fn choose_workspace(
 ) -> Result<String> {
     Ok(match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Workspace(id) => id,
-        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces).await?,
+        Resolution::Picker(workspaces) => pick_workspace(ctx, workspaces, WORKSPACE).await?,
     })
 }
 
@@ -161,6 +161,7 @@ pub async fn select_stopped_workspaces(
     let Some(entries) = resume_entries(ctx, workspaces) else {
         return Ok(None);
     };
+    require_argument(ctx, "workspaces", WORKSPACE)?;
     pick_many(ctx, "Workspaces> ", entries).map(Some)
 }
 
@@ -246,6 +247,7 @@ async fn pick_workspace_or_all(
 ) -> Result<Option<String>> {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
     entries.push((ALL_ID.to_owned(), ALL_WORKSPACES.to_owned()));
+    require_argument(ctx, "workspace", WORKSPACE)?;
     let id = pick(ctx, "Workspace> ", entries)?;
     Ok((id != ALL_ID).then_some(id))
 }
@@ -306,12 +308,22 @@ pub fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>>
 
 /// Always run the picker, including for scoped callers (whose list is filtered).
 pub async fn workspace_picker(ctx: &Context) -> Result<String> {
-    pick_workspace(ctx, client::workspaces(&ctx.paths).await?).await
+    pick_workspace(ctx, client::workspaces(&ctx.paths).await?, WORKSPACE).await
 }
 
-pub async fn pick_workspace(ctx: &Context, workspaces: Vec<Workspace>) -> Result<String> {
+/// The command's argument that names the workspace it acts on.
+const WORKSPACE: &str = "workspace";
+
+/// Pick one of `workspaces` for the command's `argument`, the ID or value
+/// name that a refusal without a terminal names.
+pub async fn pick_workspace(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    argument: &str,
+) -> Result<String> {
     let entries = workspace_entries(ctx, workspaces, true).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    require_argument(ctx, "workspace", argument)?;
     pick(ctx, "Workspace> ", entries)
 }
 
@@ -329,6 +341,7 @@ pub async fn pick_workspace_or_chat(
         picker_width(),
     ));
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    require_argument(ctx, "workspace or chat", WORKSPACE)?;
     pick(ctx, "Workspace or chat> ", entries)
 }
 
@@ -336,11 +349,12 @@ pub async fn pick_workspace_or_chat(
 pub fn pick_chat(ctx: &Context, chats: &[Chat]) -> Result<String> {
     let entries = chat_entries(chats, Palette::stderr(ctx.json), picker_width());
     ensure!(!entries.is_empty(), "no chat is running");
+    require_argument(ctx, "chat", "chat")?;
     pick(ctx, "Chat> ", entries)
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
-    require_interactive(ctx, "Workspaces")?;
+    require_argument(ctx, "workspaces", WORKSPACE)?;
     let entries = workspace_entries(ctx, workspaces, false).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick_many(ctx, "Workspaces> ", entries)

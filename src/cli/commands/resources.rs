@@ -183,10 +183,17 @@ pub(super) fn render_catalog(catalog: &Catalog, palette: Palette) {
     }
 }
 
-/// Choose a configured pool with `members` for the workspace.
-pub(super) async fn pick_pool(ctx: &Context, workspace: &str, members: Members) -> Result<String> {
+/// Choose a configured pool with `members` for the workspace, standing in
+/// for the command's `argument`.
+pub(super) async fn pick_pool(
+    ctx: &Context,
+    workspace: &str,
+    members: Members,
+    argument: &str,
+) -> Result<String> {
     let overview = fetch_overview(ctx, workspace.to_owned(), members).await?;
     ensure!(!overview.pools.is_empty(), "no configured resources");
+    ui::require_argument(ctx, "resource", argument)?;
     let entries = overview
         .pools
         .into_iter()

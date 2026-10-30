@@ -137,6 +137,7 @@ pub(super) async fn pick_configured(ctx: &Context, workspace: &str) -> Result<St
             (name, label)
         })
         .collect();
+    ui::require_argument(ctx, "port", "name")?;
     ui::pick(ctx, "Port> ", entries)
 }
 

@@ -291,7 +291,7 @@ pub(super) async fn run_defined(
             ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?
         }
         Definition::Workspace(workspace) => workspace,
-        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining).await?,
+        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining, "workspace").await?,
     };
     recent::record(ctx, &workspace).await;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;

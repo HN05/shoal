@@ -96,6 +96,7 @@ pub(super) async fn select_add_creation(
     if let Some(issue) = issue {
         return issue_creation(ctx, target, creation, issue.branch_name(), &issue.url).await;
     }
+    ui::require_argument(ctx, "branch", "branch")?;
     // Check here so a typo can be corrected before creating work.
     creation.branch = Some(loop {
         let name = ui::input(ctx, "Branch name")?;
