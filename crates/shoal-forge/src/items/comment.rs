@@ -26,10 +26,18 @@ impl CommentEdit {
     }
 }
 
-/// A comment of an item, and who wrote it.
+/// A comment of an item as its view shows it.
+pub(crate) struct Shown<'a> {
+    pub subject: Subject,
+    pub author: &'a str,
+    pub body: &'a str,
+}
+
+/// A comment of an item, who wrote it and what it says.
 pub(crate) struct Found {
     pub subject: Subject,
     pub author: String,
+    pub body: String,
 }
 
 impl ForgeRepo {
@@ -52,13 +60,14 @@ impl ForgeRepo {
             .kind
             .view_discussion(self, account, kind, number, &mut details, &mut errors)
             .await?;
-        let found = comments(&details).find(|(subject, _)| {
-            matches!(subject, Subject::Comment(id) | Subject::ReviewComment(id) if *id == comment)
+        let found = comments(&details).find(|shown| {
+            matches!(shown.subject, Subject::Comment(id) | Subject::ReviewComment(id) if id == comment)
         });
         match (found, errors.as_slice()) {
-            (Some((subject, author)), _) => Ok(Found {
-                subject,
-                author: author.to_owned(),
+            (Some(shown), _) => Ok(Found {
+                subject: shown.subject,
+                author: shown.author.to_owned(),
+                body: shown.body.to_owned(),
             }),
             (None, []) => bail!("#{number} has no comment {comment}"),
             (None, errors) => bail!(
@@ -71,7 +80,9 @@ impl ForgeRepo {
     /// Replace the body of a comment of item `number` that the login of
     /// `account` wrote, and return the item, which the edit does not
     /// change, with the comment's activity key. The item, the comment and
-    /// its author are checked before anything is sent.
+    /// its author are checked before anything is sent, and a comment that
+    /// already says `edit.body` is left unchanged, so its key does not
+    /// wait for a change that never comes.
     pub(crate) async fn edit_own_comment(
         &self,
         account: &Account,
@@ -85,21 +96,13 @@ impl ForgeRepo {
             .await?;
         self.ensure_own(account, kind, number, &found, edit.comment)
             .await?;
-        let request = self
-            .kind
-            .edit_comment(self, kind, number, found.subject, &edit.body)?
-            .repeatable();
-        let response = self.send(account, &request).await?;
-        let key = match found.subject {
-            Subject::ReviewComment(_) => self.kind.reply_key(),
-            _ => self.kind.comment_key(),
+        let authored = if found.body == edit.body {
+            Vec::new()
+        } else {
+            self.replace_body(account, kind, number, &found, &edit.body)
+                .await?
         };
-        Ok(Acted {
-            item,
-            authored: crate::updates::posted_key(key, &response)
-                .into_iter()
-                .collect(),
-        })
+        Ok(Acted { item, authored })
     }
 
     /// Refuse a comment that the login of `account` did not write, which
@@ -119,22 +122,49 @@ impl ForgeRepo {
         );
         Ok(())
     }
+
+    /// Send `body` as the new body of comment `found`, returning the
+    /// activity key of the edited comment where the response names it.
+    async fn replace_body(
+        &self,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        found: &Found,
+        body: &str,
+    ) -> Result<Vec<String>> {
+        let request = self
+            .kind
+            .edit_comment(self, kind, number, found.subject, body)?
+            .repeatable();
+        let response = self.send(account, &request).await?;
+        let key = match found.subject {
+            Subject::ReviewComment(_) => self.kind.reply_key(),
+            _ => self.kind.comment_key(),
+        };
+        Ok(crate::updates::posted_key(key, &response)
+            .into_iter()
+            .collect())
+    }
 }
 
-/// The comments and inline comments of `details`, in that order, with
-/// their authors.
-pub(crate) fn comments(details: &Details) -> impl Iterator<Item = (Subject, &str)> {
-    let comments = details
-        .comments
-        .iter()
-        .flatten()
-        .map(|comment| (Subject::Comment(comment.id), comment.author.as_str()));
+/// The comments and inline comments of `details`, in that order.
+pub(crate) fn comments(details: &Details) -> impl Iterator<Item = Shown<'_>> {
+    let comments = details.comments.iter().flatten().map(|comment| Shown {
+        subject: Subject::Comment(comment.id),
+        author: &comment.author,
+        body: &comment.body,
+    });
     let review_comments = details
         .reviews
         .iter()
         .flatten()
         .flat_map(|review| &review.comments)
-        .map(|comment| (Subject::ReviewComment(comment.id), comment.author.as_str()));
+        .map(|comment| Shown {
+            subject: Subject::ReviewComment(comment.id),
+            author: &comment.author,
+            body: &comment.body,
+        });
     comments.chain(review_comments)
 }
 

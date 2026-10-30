@@ -200,7 +200,7 @@ impl ForgeRepo {
 /// The item, its comments and its reviews' inline comments, in that order.
 fn subjects(details: &Details) -> Vec<Subject> {
     std::iter::once(Subject::Item)
-        .chain(comment::comments(details).map(|(subject, _)| subject))
+        .chain(comment::comments(details).map(|shown| shown.subject))
         .collect()
 }
 

@@ -2820,8 +2820,9 @@ asked is left unchanged. Bitbucket has no reactions.
 `comment --edit ID` replaces the body of a comment, or on a PR an inline
 comment, as `shoal view` shows its ID, with `--body` or `--body-file`; it takes
 no `--attach`. The comment must belong to the item and be written by the login
-Shoal acts as, which is checked before anything is sent, and watches do not
-report a workspace process's edit back.
+Shoal acts as, which is checked before anything is sent; a comment that
+already has the new body is left unchanged. Watches do not report a workspace
+process's edit back.
 `update` brings an open PR's branch up to date with its base on the forge,
 `--method merge` (the default) by merging the base in and `--method rebase` by
 rebasing onto it; workspace processes may update, and then pull the branch

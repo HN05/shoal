@@ -1296,6 +1296,10 @@ fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back()
         String::from_utf8_lossy(&missing.stderr).contains("#8 has no comment 99"),
         "{missing:?}"
     );
+    // A comment that already says the body is left unchanged.
+    fs::write(&note, "Fixd").unwrap();
+    let unchanged = edit("2");
+    assert!(unchanged.status.success(), "{unchanged:?}");
     assert_eq!(
         writes(&fixture),
         [json!(["PATCH repos/team/project/issues/comments/2", {"body": "Fixed"}])]

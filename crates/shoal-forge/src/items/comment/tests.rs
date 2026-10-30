@@ -2,12 +2,12 @@ use super::*;
 use crate::review::view::{Comment, Review, ReviewComment};
 
 #[test]
-fn comments_list_discussion_then_inline_comments_with_their_authors() {
+fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies() {
     let comment = |id, author: &str| Comment {
         id,
         author: author.into(),
         created_at: String::new(),
-        body: String::new(),
+        body: format!("comment {id}"),
         reactions: Vec::new(),
     };
     let review_comment = |id, author: &str| ReviewComment {
@@ -17,7 +17,7 @@ fn comments_list_discussion_then_inline_comments_with_their_authors() {
         created_at: String::new(),
         path: String::new(),
         line: None,
-        body: String::new(),
+        body: format!("comment {id}"),
         resolved: None,
         reactions: Vec::new(),
     };
@@ -40,12 +40,15 @@ fn comments_list_discussion_then_inline_comments_with_their_authors() {
         }]),
         reactions: Vec::new(),
     };
+    let listed: Vec<_> = comments(&details)
+        .map(|shown| (shown.subject, shown.author, shown.body))
+        .collect();
     assert_eq!(
-        comments(&details).collect::<Vec<_>>(),
+        listed,
         [
-            (Subject::Comment(10), "bob"),
-            (Subject::ReviewComment(20), "bot"),
-            (Subject::ReviewComment(21), "me"),
+            (Subject::Comment(10), "bob", "comment 10"),
+            (Subject::ReviewComment(20), "bot", "comment 20"),
+            (Subject::ReviewComment(21), "me", "comment 21"),
         ]
     );
 }
