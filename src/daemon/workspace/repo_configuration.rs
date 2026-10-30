@@ -21,13 +21,15 @@ impl Manager {
         selector: impl Into<crate::repository::Selector>,
     ) -> Result<PathBuf> {
         let repo = self.repository(selector).await?;
-        if let Some(directory) = &repo.workspaces_dir {
-            return Ok(config::repo::local_config_path(directory));
-        }
-        let _git = self.gates.lock_git(&repo.id).await;
-        self.ensure_repository_available(&repo.id).await?;
-        let directory = self.workspaces_dir(&repo).await?;
-        Ok(config::repo::local_config_path(&directory))
+        let directory = match &repo.workspaces_dir {
+            Some(directory) => directory.clone(),
+            None => {
+                let _git = self.gates.lock_git(&repo.id).await;
+                self.ensure_repository_available(&repo.id).await?;
+                self.workspaces_dir(&repo).await?
+            }
+        };
+        local_config_outside_checkout(&repo, &directory)
     }
 
     /// Apply `changes` to the repository's local config, saving only a valid
@@ -45,7 +47,7 @@ impl Manager {
             let _git = self.gates.lock_git(&repo.id).await;
             self.workspaces_dir(&repo).await?
         };
-        let path = config::repo::local_config_path(&directory);
+        let path = local_config_outside_checkout(&repo, &directory)?;
         let (config, backup) = tokio::task::spawn_blocking(move || {
             config::file::edit(path, &changes, |edited| {
                 config::repo::parse(edited)
@@ -121,9 +123,13 @@ impl Manager {
         worktree_file: RepoConfig,
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
+        // A checkout registered where the local config belongs is tracked
+        // files, never local settings.
         let local_config = match &repository.workspaces_dir {
-            Some(directory) => config::repo::load_local(directory)?,
-            None => RepoConfig::default(),
+            Some(directory) if local_config_outside_checkout(&repository, directory).is_ok() => {
+                config::repo::load_local(directory)?
+            }
+            _ => RepoConfig::default(),
         };
         Ok(ConfigLayers {
             worktree_file,
@@ -184,4 +190,19 @@ impl Manager {
             &caches,
         ))
     }
+}
+
+/// The local config file of `repo`, whose directory is `directory`, unless
+/// the checkout itself was registered where that file's directory belongs.
+fn local_config_outside_checkout(
+    repo: &crate::model::Repository,
+    directory: &std::path::Path,
+) -> Result<PathBuf> {
+    let local = directory.join(config::repo::LOCAL_DIR);
+    anyhow::ensure!(
+        !repo.path.starts_with(&local),
+        "the checkout {} is where the local config belongs; register it in another directory",
+        repo.path.display()
+    );
+    Ok(config::repo::local_config_path(directory))
 }

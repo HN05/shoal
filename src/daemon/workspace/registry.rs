@@ -324,9 +324,11 @@ async fn local_checkout_location(
     let root = prepare_root(root, state, recorded, Some(&path)).await?;
     let repositories = recorded.repositories;
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
-    // directory, unless `<x>` is itself a checkout or another repository's.
+    // directory, unless `<x>` is itself a checkout or another repository's,
+    // or the checkout sits where `<x>`'s local config belongs.
     let placed = path
         .parent()
+        .filter(|_| path.file_name() != Some(std::ffi::OsStr::new(crate::config::repo::LOCAL_DIR)))
         .filter(|parent| parent.parent() == Some(root.as_path()))
         .filter(|parent| !parent.join(".git").exists())
         .filter(|parent| {

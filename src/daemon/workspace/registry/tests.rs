@@ -143,3 +143,20 @@ fn nothing() -> super::Recorded<'static> {
         workspaces: &[],
     }
 }
+
+#[tokio::test]
+async fn a_checkout_where_the_local_config_belongs_gets_its_own_directory() {
+    let (_root, manager) = crate::test_support::manager().await;
+    let root = crate::config::Config::default()
+        .root_dir(&manager.paths)
+        .unwrap();
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let checkout = crate::test_support::repository(&root.join("project"), ".shoal");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let local = manager.local_config_path(&repo.id).await.unwrap();
+    let checkout = std::fs::canonicalize(&checkout).unwrap();
+    assert!(!local.starts_with(&checkout), "{}", local.display());
+}
