@@ -910,3 +910,50 @@ fn commit_file(path: &std::path::Path, name: &str) {
     fs::write(&file, format!("{revision}x")).unwrap();
     commit(path, name);
 }
+
+#[tokio::test]
+async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cleanup() {
+    let (_root, manager, parent) = fixture().await;
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&parent.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .mark_done(&other.id, false, false, Vec::new())
+        .await
+        .unwrap();
+    let id = parent.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'not json')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = manager.sweep_completed().await.unwrap_err();
+    assert!(error.to_string().contains("child: "), "{error:#}");
+    assert!(!other.path.exists());
+    assert!(child.path.exists() && parent.path.exists());
+    // The unreadable record stays for diagnosis.
+    let id = parent.id.clone();
+    let record: String = manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(record, "not json");
+}

@@ -218,51 +218,62 @@ impl Manager {
     /// Each workspace's PR gate is held only while that workspace is handled.
     /// A workspace below a completed one goes by that completion.
     pub async fn sweep_completed(&self) -> Result<()> {
+        // A failure in one workspace, such as an unreadable completion of
+        // its ancestor, does not skip the others.
+        let mut failed = Vec::new();
         for listed in self.list_workspaces().await? {
-            // An ancestor's completion that takes the workspace changes under
-            // the ancestor's gate, so that one is held too.
-            let gated = self.completed_ancestor(&listed).await?;
-            let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
-            let _guard = self.gates.lock_prs(gates).await;
-            let Some(workspace) = self.find_workspace(&listed.id).await? else {
-                continue;
-            };
-            if workspace.state != WorkspaceState::Ready {
-                continue;
+            if let Err(error) = self.sweep_completed_workspace(&listed).await {
+                failed.push(format!("{}: {error:#}", listed.name));
             }
-            if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
-                // Another ancestor's completion waits for the next sweep,
-                // which holds its gate.
-                if gated.is_some_and(|gated| gated.id == ancestor.id) {
-                    self.sweep_under_completed(&workspace, &ancestor).await?;
-                }
-                continue;
+        }
+        ensure!(failed.is_empty(), "{}", failed.join("; "));
+        Ok(())
+    }
+
+    /// Remove `listed` for its own completion or a completed ancestor's.
+    async fn sweep_completed_workspace(&self, listed: &Workspace) -> Result<()> {
+        // An ancestor's completion that takes the workspace changes under
+        // the ancestor's gate, so that one is held too.
+        let gated = self.completed_ancestor(listed).await?;
+        let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
+        let _guard = self.gates.lock_prs(gates).await;
+        let Some(workspace) = self.find_workspace(&listed.id).await? else {
+            return Ok(());
+        };
+        if workspace.state != WorkspaceState::Ready {
+            return Ok(());
+        }
+        if let Some(ancestor) = self.completed_ancestor(&workspace).await? {
+            // Another ancestor's completion waits for the next sweep, which
+            // holds its gate.
+            if gated.is_some_and(|gated| gated.id == ancestor.id) {
+                self.sweep_under_completed(&workspace, &ancestor).await?;
             }
-            let result = self.cleanup_completed(&workspace).await;
-            match result {
-                Ok(true) => {
-                    self.notify(
-                        Some(&workspace.name),
-                        NotificationKind::WorkspaceRemoved,
-                        super::removal_notice(
-                            &workspace.name,
-                            "removed after the assignment was marked done",
-                        ),
-                    )
-                    .await
-                }
-                Ok(false) => {}
-                Err(error) => {
-                    let cause = self.completion_cause(&workspace.id).await?;
-                    self.record_retained(&workspace.id, cause, &error).await?;
-                    self.record_completion_error(&workspace.id, &error).await?;
-                    self.notify(
-                        Some(&workspace.name),
-                        NotificationKind::CleanupFailed,
-                        format!("completion cleanup retained the workspace: {error:#}"),
-                    )
-                    .await;
-                }
+            return Ok(());
+        }
+        match self.cleanup_completed(&workspace).await {
+            Ok(true) => {
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::WorkspaceRemoved,
+                    super::removal_notice(
+                        &workspace.name,
+                        "removed after the assignment was marked done",
+                    ),
+                )
+                .await
+            }
+            Ok(false) => {}
+            Err(error) => {
+                let cause = self.completion_cause(&workspace.id).await?;
+                self.record_retained(&workspace.id, cause, &error).await?;
+                self.record_completion_error(&workspace.id, &error).await?;
+                self.notify(
+                    Some(&workspace.name),
+                    NotificationKind::CleanupFailed,
+                    format!("completion cleanup retained the workspace: {error:#}"),
+                )
+                .await;
             }
         }
         Ok(())
