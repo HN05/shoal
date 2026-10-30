@@ -16,6 +16,8 @@ use crate::{
 /// How long output keeps arriving after the worker exited, from processes
 /// it left behind, before the operation ends without it.
 const DRAIN: Duration = Duration::from_secs(1);
+/// The longest output line an event holds, so every event fits a frame.
+const LINE_BYTES: usize = 8 * 1024;
 
 type Output = Box<dyn AsyncRead + Send + Unpin>;
 /// Interrupts a worker that has not exited.
@@ -135,9 +137,29 @@ pub(super) async fn supervise(entry: Arc<Entry>, worker: Worker) {
 }
 
 /// Record each line `output` holds as written to `stream`, until it closes.
+/// A line longer than [`LINE_BYTES`] arrives in parts of that size, so an
+/// unterminated one cannot grow without bound.
 async fn relay(entry: Arc<Entry>, output: Output, stream: Stream) {
-    let mut lines = BufReader::new(output).split(b'\n');
-    while let Ok(Some(line)) = lines.next_segment().await {
+    let mut output = BufReader::new(output);
+    let mut line = Vec::new();
+    loop {
+        let read = match output.fill_buf().await {
+            Ok([]) | Err(_) => break,
+            Ok(read) => read,
+        };
+        let room = LINE_BYTES - line.len();
+        let (taken, ended) = match read.iter().take(room).position(|byte| *byte == b'\n') {
+            Some(end) => (end + 1, true),
+            None => (read.len().min(room), line.len() + read.len() >= LINE_BYTES),
+        };
+        line.extend_from_slice(&read[..taken]);
+        output.consume(taken);
+        if ended {
+            entry.output(stream, &line);
+            line.clear();
+        }
+    }
+    if !line.is_empty() {
         entry.output(stream, &line);
     }
 }

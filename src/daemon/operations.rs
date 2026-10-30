@@ -30,8 +30,6 @@ pub(crate) use worker::fake;
 const RETAIN: Duration = Duration::from_secs(600);
 /// The most events an operation keeps; older output goes first.
 const KEPT_EVENTS: usize = 10_000;
-/// The longest output line an event holds, so every event fits a frame.
-const LINE_BYTES: usize = 8 * 1024;
 
 #[derive(Default)]
 pub(crate) struct Operations {
@@ -100,12 +98,9 @@ impl Entry {
 
     /// Record a line the worker's processes wrote to `stream`.
     fn output(&self, stream: Stream, line: &[u8]) {
+        let line = line.strip_suffix(b"\n").unwrap_or(line);
         let line = line.strip_suffix(b"\r").unwrap_or(line);
-        let mut line = String::from_utf8_lossy(line).into_owned();
-        if line.len() > LINE_BYTES {
-            line.truncate(line.floor_char_boundary(LINE_BYTES));
-            line.push('…');
-        }
+        let line = String::from_utf8_lossy(line).into_owned();
         self.push(Progress::Output { stream, line });
     }
 

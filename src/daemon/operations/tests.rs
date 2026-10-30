@@ -169,3 +169,29 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         Some(crate::daemon::refusal::Reason::NotFound)
     );
 }
+
+#[tokio::test]
+async fn a_long_line_arrives_in_parts_of_bounded_size() {
+    let (root, manager) = manager().await;
+    let repository = registered(root.path(), &manager).await;
+    let workspace = workspace(&manager, &repository, "api").await;
+    let id = manager
+        .start_operation(setup(&workspace), None, None)
+        .await
+        .unwrap();
+    let mut worker = fake::take(&id);
+    worker.stdout(&"x".repeat(2 * 8 * 1024 + 10)).await;
+    worker.exit(0);
+    let entry = manager.operation(&id, None).await.unwrap();
+    until(&entry, |_, ended| ended).await;
+    let lengths: Vec<_> = entry
+        .since(0)
+        .0
+        .into_iter()
+        .map(|event| match event.progress {
+            Progress::Output { line, .. } => line.len(),
+            progress => panic!("expected output: {progress:?}"),
+        })
+        .collect();
+    assert_eq!(lengths, [8 * 1024, 8 * 1024, 10]);
+}
