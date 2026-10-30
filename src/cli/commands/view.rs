@@ -347,7 +347,7 @@ fn render(view: &ItemView, palette: Palette, emoji: bool) {
             let heading = format!("{kind} #{}: {}", details.number, details.title);
             outln!("{}", palette.paint(Style::Heading, heading));
             outln!("URL:      {}", view.url);
-            render_details(details, palette, emoji);
+            render_details(&view.url, details, palette, emoji);
         }
         None => {
             outln!("{}", palette.paint(Style::Heading, kind));
@@ -363,9 +363,9 @@ fn render(view: &ItemView, palette: Palette, emoji: bool) {
     }
 }
 
-fn render_details(details: &Details, palette: Palette, emoji: bool) {
+fn render_details(url: &str, details: &Details, palette: Palette, emoji: bool) {
     match &details.pr {
-        Some(pr) => render_pr(&details.state, pr, palette),
+        Some(pr) => render_pr(url, &details.state, pr, palette),
         None => outln!("State:    {}", details.state),
     }
     outln!("Author:   {}", details.author);
@@ -401,7 +401,7 @@ fn render_details(details: &Details, palette: Palette, emoji: bool) {
     }
 }
 
-fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
+fn render_pr(url: &str, state: &str, pr: &PrDetails, palette: Palette) {
     let conflicts = match pr.merge_conflicts {
         Some(true) => format!(", {}", palette.paint(Style::Error, "merge conflicts")),
         Some(false) => ", no merge conflicts".into(),
@@ -429,6 +429,10 @@ fn render_pr(state: &str, pr: &PrDetails, palette: Palette) {
     outln!("Checks:   {}", pr.checks.len());
     for check in &pr.checks {
         outln!("  {}: {}", check.name, palette.check_result(&check.result));
+    }
+    if !pr.waiting_runs.is_empty() {
+        let line = ci::waiting_runs_line(url, pr.waiting_runs.len());
+        outln!("{}", palette.paint(Style::Warning, &line));
     }
 }
 

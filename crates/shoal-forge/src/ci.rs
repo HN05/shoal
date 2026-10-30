@@ -151,7 +151,7 @@ impl ForgeRepo {
         self.kind.locate_job(self, target)
     }
 
-    async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
+    pub(crate) async fn open_head(&self, account: &Account, number: u64) -> Result<String> {
         let pull = self.read(account, ItemKind::Pr, number).await?;
         ensure!(pull.item.state == ItemState::Open, "#{number} is not open");
         pull.head_sha.context("PR has no head commit")

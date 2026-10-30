@@ -2,7 +2,7 @@
 use super::StatusView;
 use crate::{
     cli::{
-        commands::{base, links, resources, split},
+        commands::{base, ci, links, resources, split},
         output::{Palette, Style},
         ui,
     },
@@ -286,6 +286,10 @@ fn render_pr(pr: &PrStatus, palette: Palette) {
             check.name,
             palette.check_result(&check.result)
         );
+    }
+    if !pr.waiting_runs.is_empty() {
+        let line = ci::waiting_runs_line(&pr.url, pr.waiting_runs.len());
+        outln!("  {}", palette.paint(Style::Warning, &line));
     }
     for error in &pr.errors {
         outln!("  {}", palette.paint(Style::Warning, error));

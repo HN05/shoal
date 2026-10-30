@@ -1,4 +1,5 @@
-//! Arguments of `shoal ci`: listing, starting, rerunning and cancelling CI runs.
+//! Arguments of `shoal ci`: listing, starting, rerunning, cancelling and
+//! approving CI runs.
 use clap::{Args, Subcommand};
 
 use crate::cli::args::item_reference;
@@ -27,22 +28,38 @@ pub enum CiCommand {
         #[command(flatten)]
         target: Target,
     },
+    /// Approve a run that waits for approval, or every waiting run on a PR's
+    /// head, with your own login; workspace processes cannot.
+    ///
+    /// Forges hold the runs of PRs from forks and first-time contributors
+    /// until a maintainer approves them.
+    Approve {
+        #[command(flatten)]
+        subject: Subject,
+    },
 }
 
 // A run, or a PR and the checks on its head, to act on.
 #[derive(Debug, Args)]
 pub struct Target {
-    /// The run's web URL, as `shoal ci run` or a check links it, or the number
-    /// in it; omit it to act on a PR's checks.
-    pub run: Option<String>,
-    /// Act on the checks on this PR's head, by number or URL; defaults to the
-    /// linked PR.
-    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = item_reference)]
-    pub pr: Option<String>,
+    #[command(flatten)]
+    pub subject: Subject,
     /// Act only on this check of the PR, as `shoal view` names it; repeat for
     /// more. Defaults to every failed or running check.
     #[arg(long = "check", value_name = "NAME", conflicts_with = "run")]
     pub checks: Vec<String>,
+}
+
+// A run, or else a PR, to act on.
+#[derive(Debug, Args)]
+pub struct Subject {
+    /// The run's web URL, as `shoal ci run` or a check links it, or the number
+    /// in it; omit it to act on a PR's runs.
+    pub run: Option<String>,
+    /// Act on the runs on this PR's head, by number or URL; defaults to the
+    /// linked PR.
+    #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = item_reference)]
+    pub pr: Option<String>,
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,

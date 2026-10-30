@@ -627,6 +627,15 @@ pub(crate) trait Backend {
     /// `failed` reruns only its failed jobs.
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String>;
 
+    /// The endpoint under the repository that approves `run`, where the
+    /// forge approves runs.
+    fn approve_endpoint(&self, _run: &Run) -> Result<String> {
+        Err(crate::capability::unsupported(
+            self,
+            Capability::ApproveRuns,
+        ))
+    }
+
     /// `log`, a job log as the forge serves it, as plain text.
     fn plain_log(&self, log: &str) -> String {
         plain::readable(log)
@@ -1283,6 +1292,10 @@ impl Backend for ForgeKind {
 
     fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
         dispatch!(self, backend => backend.run_endpoint(run, action, failed))
+    }
+
+    fn approve_endpoint(&self, run: &Run) -> Result<String> {
+        dispatch!(self, backend => backend.approve_endpoint(run))
     }
 
     fn plain_log(&self, log: &str) -> String {

@@ -1855,6 +1855,12 @@ PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
 Run numbers overlap issue and PR numbers, so only a number after `ci` names a
 run. Workspace processes act only on runs of their own branch, which
 the daemon reads from the run before acting, and read any run of their repository.
+Forges hold the runs of fork and first-time contributors' PRs for approval, which
+leaves such a PR without checks; `view` and `status` report the waiting runs
+beside the checks, which stay exactly what the forge reports, so watches and
+their wake-ups do not change. Approving lets outside code run, so like merging it
+uses the user's login and is refused to workspace processes. Only GitHub has an
+approve API; Forgejo approves through a web UI route, which Shoal does not use.
 Viewing a run reads every page of its jobs; the daemon sends them, and listed
 runs, in frame-sized pages, and each failed job's log, named by job ID, as one
 request, like a PR's, so no response outgrows a protocol frame.

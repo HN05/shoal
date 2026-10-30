@@ -114,7 +114,7 @@ instead of the PR delivery guidance below.
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
   GET requests to the own repository's forge API, or others where `[api] agent_writes`
   allows them, own-repository sync and
-  effective-configuration reads are allowed;
+  effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or
   workspace removal, without execution tracking or cleanup protection.

@@ -524,6 +524,7 @@ response_bodies! {
     CiActed(crate::forge::ci::CiActed),
     CiRunStarted(crate::forge::ci::run::StartedRun),
     CiRunActed(crate::forge::ci::run_action::RunActed),
+    CiRunsApproved(crate::forge::ci::approval::RunsApproved),
     CiRun(crate::forge::ci::run_action::Run),
     CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
     CiRuns(Vec<crate::forge::ci::run_action::Run>),

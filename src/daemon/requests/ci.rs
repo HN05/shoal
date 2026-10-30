@@ -1,7 +1,7 @@
 //! The daemon's answers to [`CiMethod`] requests, and who may send them.
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use super::super::{
     answer::Answer,
@@ -49,6 +49,9 @@ pub(super) async fn handle(
                 .ci_run_action(&workspace, run, action, failed, caller.is_some())
                 .await?,
         ),
+        CiMethod::ApproveCiRuns { workspace, run, pr } => {
+            Body::CiRunsApproved(manager.approve_ci_runs(&workspace, run, pr).await?)
+        }
         CiMethod::ViewCiRun { workspace, run } => {
             Body::CiRun(manager.view_ci_run(&workspace, run).await?)
         }
@@ -73,6 +76,9 @@ pub(super) async fn handle(
 impl Scoped for CiMethod {
     async fn scope(&mut self, manager: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
+            CiMethod::ApproveCiRuns { .. } => {
+                bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
+            }
             CiMethod::CheckLog { workspace, .. }
             | CiMethod::CiAction { workspace, .. }
             | CiMethod::CiRunAction { workspace, .. }

@@ -780,6 +780,10 @@ impl Backend for GitHub {
         Ok(path)
     }
 
+    fn approve_endpoint(&self, run: &Run) -> Result<String> {
+        Ok(format!("actions/runs/{}/approve", run.id))
+    }
+
     /// GitHub filters the runs that wait for approval itself.
     fn waiting_runs_path(&self, head: &str) -> Option<String> {
         Some(format!(

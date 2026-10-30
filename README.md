@@ -230,6 +230,7 @@ shoal view pr 44 --no-comments  # One PR, linked or not, without its discussion
 shoal view pr 44 --check rust   # Show only this failed CI check's log
 shoal ci rerun --check rust   # Rerun a failed check on the linked PR; cancel stops running ones
 shoal ci rerun 2765 --failed  # Rerun one run's failed jobs
+shoal ci approve --pr 44      # Approve a fork PR's runs waiting for approval; agents cannot
 shoal ready                   # Mark linked items ready for review at HEAD
 shoal unlink pr 43 assigned   # Cancel one assigned PR
 shoal unlink pr assigned      # Cancel assigned PRs

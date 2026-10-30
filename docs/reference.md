@@ -2986,6 +2986,7 @@ shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
+shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
@@ -3042,8 +3043,15 @@ of those it could not.
 Forges hold the runs of PRs from forks and first-time contributors until a
 maintainer approves them, and until then those runs report no checks. `shoal
 view` and `shoal status` list an open PR's waiting runs in `waiting_runs`, each
-with its `url` and `workflow`. GitHub reports the runs it holds; Forgejo and
-Gitea mark them among the head commit's runs; GitLab and Bitbucket hold none.
+with its `url` and `workflow`, and the text names how to approve them. GitHub
+reports the runs it holds; Forgejo and Gitea mark them among the head commit's
+runs; GitLab and Bitbucket hold none. `shoal ci approve` approves one run, which
+must be waiting, or with `--pr`, or neither for the linked PR, every waiting run
+on the PR's head, failing when none waits. It uses your login, as merging does,
+and records an `item_changed` event; workspace processes cannot approve. Only
+GitHub approves through its API: Forgejo and Gitea approve in the web UI, so
+there the command fails before any request. `--json` returns the `approved`
+runs' URLs.
 
 #### Forge API requests
 
