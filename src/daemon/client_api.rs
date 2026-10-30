@@ -34,9 +34,20 @@ pub(super) struct Session {
 
 type Reader = FrameReader<OwnedReadHalf>;
 
+/// [`serve_connection`] on the heap, so serving a client API connection
+/// adds nothing to the stack of the internal protocol's requests, which
+/// share the function that reads a connection's first frame.
+pub(super) fn serve(
+    stream: UnixStream,
+    server: Server,
+    hello: serde_json::Value,
+) -> futures_util::future::BoxFuture<'static, Result<()>> {
+    Box::pin(serve_connection(stream, server, hello))
+}
+
 /// Serve a client API connection, whose first frame held `hello`: its
 /// handshake, then its requests until it hangs up or subscribes.
-pub(super) async fn serve(
+async fn serve_connection(
     stream: UnixStream,
     server: Server,
     hello: serde_json::Value,
