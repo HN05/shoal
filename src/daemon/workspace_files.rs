@@ -502,14 +502,11 @@ impl Manager {
         let guard = self.gates.lock_message_files(&repo.id).await;
         // A move may have finished while this waited; the chat's end takes
         // no gate, so a chat ending from here on records nothing.
-        let id = owner.id.clone();
-        let running = self
-            .store
-            .run(move |db| {
-                crate::daemon::store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [&id])
-            })
-            .await?;
-        ensure!(running, "chat {} has ended", owner.name);
+        ensure!(
+            self.chat_recorded(&owner.id).await?,
+            "chat {} has ended",
+            owner.name
+        );
         let repo = self.repository(&repo.id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         Ok((layout, guard))

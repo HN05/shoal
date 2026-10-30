@@ -148,6 +148,58 @@ async fn new_work_is_refused_once_a_contribution_removal_begins() {
 }
 
 #[tokio::test]
+async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
+    let (root, manager) = manager().await;
+    let repo = contribution(&manager, root.path()).await;
+    let mut process = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let report = root.path().join("report.md");
+    std::fs::write(&report, "No leaks").unwrap();
+    manager
+        .add_attached_files(
+            "talk",
+            vec![report.into()],
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    process.kill().unwrap();
+    process.wait().unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    // Before the expiry is stamped and after, the files keep it.
+    for stamped in [false, true] {
+        if stamped {
+            manager.expire_kept_files().await.unwrap();
+        }
+        manager.sweep_contributions().await.unwrap();
+        assert!(registered(&manager, &repo).await, "stamped: {stamped}");
+    }
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE attached_files SET expires_at=0", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager.sweep_contributions().await.unwrap();
+    assert!(!registered(&manager, &repo).await);
+}
+
+#[tokio::test]
 async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;

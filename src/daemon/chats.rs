@@ -148,6 +148,15 @@ impl Manager {
         self.store.run(|db| running(db)).await
     }
 
+    /// Whether the chat `id` is still recorded, without first ending chats
+    /// whose process exited.
+    pub(crate) async fn chat_recorded(&self, id: &str) -> Result<bool> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| store::exists(db, "SELECT 1 FROM chats WHERE id=?1", [&id]))
+            .await
+    }
+
     /// The running chat with the ID or name `selector`, if any.
     pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
         let chats = self.chats().await?;
