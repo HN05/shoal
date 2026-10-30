@@ -64,8 +64,12 @@ impl Manager {
     ) -> Result<Allocation<WorkspaceHold>> {
         validate::name("hold", &name)?;
         let workspace = self.workspace(selector).await?;
-        if let Some(hold) = workspace.holds.iter().find(|hold| hold.name == name) {
-            return Ok(Allocation::Granted(hold.clone()));
+        // Acquiring returns the held one, with every check acquisition makes.
+        if workspace.holds.iter().any(|hold| hold.name == name) {
+            return Ok(Allocation::Granted(
+                self.acquire_hold(&workspace.id, name, reason, HoldPlacer::Agent)
+                    .await?,
+            ));
         }
         let request = ApprovalRequest::new(
             &workspace.id,

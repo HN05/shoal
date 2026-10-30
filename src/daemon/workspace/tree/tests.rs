@@ -1686,6 +1686,19 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         panic!("the approved hold is placed");
     };
     assert_eq!(hold, holds[0]);
+    // Asking again makes every acquisition check, such as for a running
+    // resource hook.
+    let hook = manager
+        .gates
+        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .unwrap();
+    assert!(
+        manager
+            .request_hold(&child.id, "review".into(), None)
+            .await
+            .is_err()
+    );
+    drop(hook);
     // Releasing it ends the approval, so holding it again asks again.
     manager
         .release_hold(&child.id, "review".into(), HoldPlacer::Agent)
