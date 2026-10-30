@@ -43,14 +43,10 @@ pub(super) async fn handle(
             workspace,
             deliveries,
             messages,
-            attached,
         } => {
             manager
                 .acknowledge_agent_delivery(&workspace, deliveries, messages)
                 .await?;
-            manager
-                .told_attached(execution(caller).as_deref(), attached)
-                .await;
             Body::Ok
         }
         AgentMethod::SetAgentState {
@@ -162,12 +158,7 @@ pub(super) async fn handle(
             Body::AgentMessages(manager.agent_messages(&workspace).await?)
         }
         AgentMethod::AgentUpdates { workspace } => {
-            let execution = execution(caller);
-            Body::PrUpdates(
-                manager
-                    .agent_updates_for(&workspace, execution.as_deref())
-                    .await?,
-            )
+            Body::PrUpdates(manager.agent_updates(&workspace).await?)
         }
         AgentMethod::MarkAgentMessagesDelivered { workspace, ids } => {
             manager

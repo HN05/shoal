@@ -217,11 +217,6 @@ with a `messages` array, and `shoal messages` shows new ones. Each
 message is shown once. Follow it. A message lists each file attached to it,
 such as a screenshot, as an `Attached file:` path you can read.
 
-Claude Code and Codex also hear whether the user is attached to your session,
-when that changes. While the user is attached, ask questions and report status
-in the chat instead of with `shoal questions ask` and `shoal alerts send`, and
-end your turn to wait for a reply.
-
 ## Questions
 
 When you need the user to decide something, ask a question rather than

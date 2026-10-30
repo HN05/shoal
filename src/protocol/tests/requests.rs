@@ -128,7 +128,7 @@ const REQUESTS: &[&str] = &[
     r#"{"set_pr":{"workspace":"fix","url":"7","clear":false}}"#,
     r#"{"pr_wait":{"workspace":"fix","timeout_secs":60}}"#,
     r#"{"watch_items":{"workspace":"fix","selection":{"kind":null,"input":"7"},"timeout_secs":null}}"#,
-    r#"{"acknowledge_pr_updates":{"workspace":"fix","deliveries":["d1"],"messages":[3],"attached":true}}"#,
+    r#"{"acknowledge_pr_updates":{"workspace":"fix","deliveries":["d1"],"messages":[3]}}"#,
     r#"{"open_pull":{"workspace":"fix","options":{"title":null,"body":null,"base":null,"draft":true,"labels":[],"reviewers":[],"attachments":[]}}}"#,
     r#"{"revert_pull":{"workspace":"fix","item":"42","options":{"title":null,"body":null,"base":null,"draft":null,"labels":[],"reviewers":[],"attachments":[]}}}"#,
     r#"{"merged_pull":{"workspace":"fix","item":null}}"#,

@@ -61,7 +61,6 @@ pub(in crate::cli::commands) async fn watch_items(
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
-            attached: None,
         },
     )
     .await?;
@@ -95,7 +94,6 @@ pub(in crate::cli::commands) async fn wait_for_items(
             messages: Vec::new(),
             timed_out: true,
             superseded: false,
-            attached: None,
         })),
     }
 }

@@ -6,7 +6,7 @@ use crate::{
 };
 
 #[tokio::test]
-async fn hooks_hear_each_change_of_attachment_once() {
+async fn only_the_agents_workspace_reports_its_attachment() {
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -36,23 +36,22 @@ async fn hooks_hear_each_change_of_attachment_once() {
             Duration::ZERO,
         )
         .await;
-    assert_eq!(manager.attachment_news(&id).await, None);
+    let attached = async || {
+        manager
+            .executions
+            .with_agent(&id, |agent| agent.attached)
+            .await
+    };
+    assert_eq!(attached().await, Some(None));
     // Another workspace cannot report for the agent.
     manager
         .report_attached(&other.name, &id, true)
         .await
         .unwrap();
-    assert_eq!(manager.attachment_news(&id).await, None);
+    assert_eq!(attached().await, Some(None));
     manager
         .report_attached(&workspace.name, &id, true)
         .await
         .unwrap();
-    assert_eq!(manager.attachment_news(&id).await, Some(true));
-    manager.told_attached(Some(&id), Some(true)).await;
-    assert_eq!(manager.attachment_news(&id).await, None);
-    manager
-        .report_attached(&workspace.name, &id, false)
-        .await
-        .unwrap();
-    assert_eq!(manager.attachment_news(&id).await, Some(false));
+    assert_eq!(attached().await, Some(Some(true)));
 }

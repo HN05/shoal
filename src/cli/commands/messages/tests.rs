@@ -22,7 +22,6 @@ fn attached_files_follow_the_message_text() {
         messages: vec![message("See the crash"), message("")],
         timed_out: false,
         superseded: false,
-        attached: None,
     };
     assert_eq!(
         Inbox::Workspace("worker".into()).hook_context(&updates),
@@ -92,7 +91,6 @@ fn hook_output_names_the_event_it_answers() {
         }],
         timed_out: false,
         superseded: false,
-        attached: None,
     };
     let context = Inbox::Workspace("worker".into()).hook_context(&updates);
     assert_eq!(
@@ -109,26 +107,6 @@ fn hook_output_names_the_event_it_answers() {
     assert_eq!(output["hookSpecificOutput"]["hookEventName"], "PostToolUse");
     assert_eq!(output["hookSpecificOutput"]["additionalContext"], context);
     assert_eq!(hook_output("", &context), context);
-}
-
-#[test]
-fn hook_context_tells_the_agent_whether_the_user_is_attached() {
-    let attached = |attached| Updates {
-        updates: Vec::new(),
-        messages: Vec::new(),
-        timed_out: false,
-        superseded: false,
-        attached: Some(attached),
-    };
-    let inbox = Inbox::Workspace("worker".into());
-    assert_eq!(
-        inbox.hook_context(&attached(true)),
-        "The user is attached to this session."
-    );
-    assert_eq!(
-        inbox.hook_context(&attached(false)),
-        "The user is not attached to this session."
-    );
 }
 
 #[test]

@@ -58,7 +58,6 @@ async fn item_wait_continues_on_the_replacement_daemon() {
             messages: Vec::new(),
             timed_out: true,
             superseded: false,
-            attached: None,
         };
         protocol::write(
             &mut stream,
