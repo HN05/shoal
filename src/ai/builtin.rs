@@ -3,7 +3,6 @@ use std::{
     collections::BTreeMap,
     ffi::OsString,
     path::{Path, PathBuf},
-    time::Duration,
 };
 
 use anyhow::Result;
@@ -22,9 +21,6 @@ pub struct Provider {
     pub(super) resume_latest: Option<&'static [&'static str]>,
     pub(super) fork: Option<&'static [&'static str]>,
     pub(super) add_dir: Option<&'static [&'static str]>,
-    /// How long its prompt cache lives after its last request, for a tool
-    /// that cannot tell Shoal from its own settings.
-    pub(super) prompt_cache: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,9 +68,6 @@ pub const PROVIDERS: &[Provider] = &[
         // told where to work.
         fork: Some(&["fork", "{session}", "--cd", "{directory}"]),
         add_dir: Some(&["--add-dir", "{directory}"]),
-        // The least OpenAI keeps a GPT-5.6 or later cache, which each read
-        // renews; Codex has no setting for it.
-        prompt_cache: Some(Duration::from_secs(30 * 60)),
     },
     Provider {
         name: "claude",
@@ -88,8 +81,6 @@ pub const PROVIDERS: &[Provider] = &[
         // `--add-dir` takes every following argument up to the next option,
         // which would include a prompt; the joined form takes one.
         add_dir: Some(&["--add-dir={directory}"]),
-        // Its settings decide, which its hooks report.
-        prompt_cache: None,
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -102,7 +93,6 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
-        prompt_cache: None,
     },
     Provider {
         name: "pi",
@@ -114,7 +104,6 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
-        prompt_cache: None,
     },
     Provider {
         name: "grok",
@@ -126,7 +115,6 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
-        prompt_cache: None,
     },
 ];
 

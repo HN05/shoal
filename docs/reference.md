@@ -472,7 +472,9 @@ repository may set, any idle agent. Only an agent idle with no processes running
 outside its process group, with a restore command, and whose
 [prompt cache](#agent-state) has expired stops: a resumed agent's first request
 writes most of its cache again, which an expired cache costs anyway. An agent
-whose AI tool has no known [cache lifetime](#agents) counts as expired. The stop saves the agent as
+idle without having ended a turn, such as one that has not worked since it
+started, counts as expired; one that ended a turn has the
+[cache lifetime](#agents) of its AI tool. The stop saves the agent as
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
 assignment is done and whatever `[overload.recovery]` says. Timers the agent
@@ -1047,8 +1049,9 @@ turns ends normally. A pending retry outlasts a daemon restart;
 request, which `status` uses to show when an idle agent's
 [cache expires](#agent-state); a tool's launch profiles inherit it unless they
 set their own. Without it, Claude Code's is what its environment and settings
-give, Codex's is 30 minutes, the least OpenAI keeps a GPT-5.6 or later cache,
-and other tools have none.
+give, and every other tool's is 30 minutes, the least OpenAI keeps a GPT-5.6 or
+later cache, so that [`[idle_stop]`](#idle-agents) does not stop an agent the
+moment its turn ends.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
@@ -3221,7 +3224,7 @@ agent waits for the user or for activity that [wakes it](#agent-messages); `stat
 lifetime: until the agent works again, `status` shows `Prompt cache` with when
 the cache expires, and the JSON adds `prompt_cache_expires_at` in Unix seconds.
 The lifetime is the AI tool's [`prompt_cache_minutes`](#agents), else what the
-agent's own settings give, else the built-in tool's; without one, none shows. A state
+agent's own settings give, else 30 minutes. A state
 reported from a tracked execution shows only while that execution runs, so an
 agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next

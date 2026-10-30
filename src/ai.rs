@@ -15,7 +15,7 @@ mod validate;
 
 pub use builtin::{PROVIDERS, default_commands};
 pub use launch::{Arguments, Environment};
-pub use resolve::{IntegrationKind, LaunchProfile, Tools, inherit_launchers};
+pub use resolve::{DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers};
 pub use validate::validate;
 
 pub type Agents = BTreeMap<String, Agent>;

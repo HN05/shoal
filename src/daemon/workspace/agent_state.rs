@@ -146,7 +146,7 @@ impl Manager {
         turn_end: TurnEnd,
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
-            prompt_cache: self.prompt_cache(execution.as_deref(), turn_end).await,
+            prompt_cache: Some(self.prompt_cache(execution.as_deref(), turn_end).await),
             ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)
@@ -187,9 +187,10 @@ impl Manager {
     ) -> Result<AgentStatus> {
         let ending = TurnEnding {
             interrupted: true,
-            prompt_cache: self
-                .prompt_cache(Some(&execution), TurnEnd::default())
-                .await,
+            prompt_cache: Some(
+                self.prompt_cache(Some(&execution), TurnEnd::default())
+                    .await,
+            ),
             ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, Some(execution), None, ending)
@@ -198,8 +199,8 @@ impl Manager {
 
     /// How long the prompt cache of the agent `execution` runs lives after
     /// the turn `turn_end` reports: as its AI tool resolves it, or as
-    /// reported for an agent without one.
-    async fn prompt_cache(&self, execution: Option<&str>, turn_end: TurnEnd) -> Option<Duration> {
+    /// reported for an agent without one, else the default lifetime.
+    async fn prompt_cache(&self, execution: Option<&str>, turn_end: TurnEnd) -> Duration {
         let reported = turn_end.prompt_cache_secs.map(Duration::from_secs);
         let agent = match execution {
             Some(execution) => self.agent_name(execution).await,
@@ -208,7 +209,7 @@ impl Manager {
         let config = self.config();
         match agent.and_then(|agent| config.ai.tools.get(&agent)) {
             Some(tool) => tool.prompt_cache(reported),
-            None => reported,
+            None => reported.unwrap_or(crate::ai::DEFAULT_PROMPT_CACHE),
         }
     }
 
@@ -263,7 +264,7 @@ impl Manager {
         }
         let ending = TurnEnding {
             failed: true,
-            prompt_cache: self.prompt_cache(execution.as_deref(), turn_end).await,
+            prompt_cache: Some(self.prompt_cache(execution.as_deref(), turn_end).await),
             ..TurnEnding::ended()
         };
         self.record_agent_state(selector, AgentState::Idle, execution, session, ending)

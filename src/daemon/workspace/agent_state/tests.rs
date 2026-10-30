@@ -314,12 +314,12 @@ async fn an_ended_turn_starts_the_prompt_cache_lifetime_until_the_agent_works_ag
             .unwrap();
         assert_eq!(status.prompt_cache_expires_at, None, "{state:?}");
     }
-    // A turn whose agent knows no lifetime leaves it unknown.
+    // A turn whose agent knows no lifetime gets the default one.
     let unknown = manager
         .end_agent_turn(&workspace.name, None, None, TurnEnd::default())
         .await
         .unwrap();
-    assert_eq!(unknown.prompt_cache_expires_at, None);
+    assert_eq!(unknown.prompt_cache_expires_at, Some(unknown.since + 1800));
 }
 
 #[tokio::test]

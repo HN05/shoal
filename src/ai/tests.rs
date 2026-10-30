@@ -355,23 +355,30 @@ fn launch_profiles_need_a_reachable_base_and_valid_variables() {
 }
 
 #[test]
-fn prompt_cache_lifetime_prefers_configured_then_reported_then_built_in() {
+fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
     let agents = parse(
         "[ai.claude-short]\nbase = 'claude'\nprompt_cache_minutes = 5\n\
          [ai.claude-shorter]\nbase = 'claude-short'\n\
          [ai.codex-long]\nbase = 'codex'\nprompt_cache_minutes = 720\n",
     )
     .unwrap();
-    let minutes = |minutes: u64| Some(Duration::from_secs(minutes * 60));
-    assert_eq!(agents["claude"].prompt_cache(None), None);
-    assert_eq!(agents["claude"].prompt_cache(minutes(60)), minutes(60));
+    let minutes = |minutes: u64| Duration::from_secs(minutes * 60);
+    assert_eq!(agents["claude"].prompt_cache(None), minutes(30));
     assert_eq!(
-        agents["claude-shorter"].prompt_cache(minutes(60)),
+        agents["claude"].prompt_cache(Some(minutes(60))),
+        minutes(60)
+    );
+    assert_eq!(
+        agents["claude-shorter"].prompt_cache(Some(minutes(60))),
         minutes(5)
     );
     assert_eq!(agents["codex"].prompt_cache(None), minutes(30));
     assert_eq!(agents["codex-long"].prompt_cache(None), minutes(720));
-    assert_eq!(agents["pi"].prompt_cache(None), None);
+    // Every tool has a lifetime, so idle stop never takes a cache for gone
+    // the moment a turn ends.
+    for tool in ["pi", "opencode", "grok"] {
+        assert_eq!(agents[tool].prompt_cache(None), minutes(30), "{tool}");
+    }
     for (config, message) in [
         (
             "[ai.notes]\nprompt_cache_minutes = 5\n",

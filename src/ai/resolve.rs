@@ -44,9 +44,13 @@ pub struct Tool {
     pub proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.
     configured_prompt_cache: Option<Duration>,
-    /// The built-in tool's prompt cache lifetime.
-    default_prompt_cache: Option<Duration>,
 }
+
+/// How long an agent's prompt cache lives after a turn when neither its AI
+/// tool's configuration nor its own settings say: the least OpenAI keeps a
+/// GPT-5.6 or later cache, which Codex has no setting for, and a guess for
+/// other tools that keeps idle stop from treating their caches as expired.
+pub const DEFAULT_PROMPT_CACHE: Duration = Duration::from_secs(30 * 60);
 
 /// What a tool's launcher takes besides its command, which `[commands]` may
 /// replace per repository.
@@ -77,11 +81,11 @@ enum SkillDir {
 impl Tool {
     /// How long its prompt cache lives after a turn whose agent `reported`
     /// the lifetime its own settings give: as configured, else as reported,
-    /// else the built-in tool's.
-    pub fn prompt_cache(&self, reported: Option<Duration>) -> Option<Duration> {
+    /// else [`DEFAULT_PROMPT_CACHE`].
+    pub fn prompt_cache(&self, reported: Option<Duration>) -> Duration {
         self.configured_prompt_cache
             .or(reported)
-            .or(self.default_prompt_cache)
+            .unwrap_or(DEFAULT_PROMPT_CACHE)
     }
 
     /// The tool's user-level skill directory for a launch from this process;
@@ -161,7 +165,6 @@ fn tool(entries: &Agents, name: &str) -> Tool {
             .iter()
             .find_map(|agent| agent.prompt_cache_minutes)
             .map(|minutes| Duration::from_secs(minutes * 60)),
-        default_prompt_cache: builtin.and_then(|provider| provider.prompt_cache),
     }
 }
 
