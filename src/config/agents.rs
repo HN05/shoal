@@ -63,12 +63,11 @@ pub struct MachineAgent {
     pub proxy: Option<String>,
 }
 
-/// One layer's agents on their own: names and the commands they run.
-/// Bases and the rest resolve across layers, which [`crate::ai::validate`]
-/// checks once they combine.
+/// One layer's agents on their own: each entry's names, commands, argument
+/// templates and variables. Bases and the rest resolve across layers, which
+/// [`crate::ai::validate`] checks once they combine.
 pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
     for (name, agent) in agents {
-        crate::validate::name("agent", name)?;
         for argv in [&agent.command, &agent.resume_command]
             .into_iter()
             .flatten()
@@ -77,6 +76,10 @@ pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
             crate::config::named_commands::validate(&command)
                 .with_context(|| format!("agents.{name}"))?;
         }
+    }
+    let resolved = crate::config::options::resolve_sections(agents.clone(), "agents")?;
+    for (name, agent) in describe(&resolved, &BTreeMap::new()) {
+        crate::ai::validate::entry(&name, &agent)?;
     }
     Ok(())
 }

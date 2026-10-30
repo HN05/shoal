@@ -14,11 +14,7 @@ use crate::config::named_commands::{self, Commands};
 /// workspace shortcuts, must not name one.
 pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
     for (name, agent) in agents {
-        crate::validate::name("AI tool", name)?;
-        ensure!(
-            name != "all",
-            "AI tool name 'all' is reserved for skill installation"
-        );
+        entry(name, agent)?;
         if let Some(argv) = &agent.command {
             validate_command(name, argv, commands)
                 .with_context(|| format!("agents.{name}.command"))?;
@@ -27,7 +23,10 @@ pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
             validate_launcher_name(name, commands).with_context(|| format!("agents.{name}"))?;
             validate_base(agents, name, base).with_context(|| format!("agents.{name}.base"))?;
         }
-        validate_environment(agents, name, agent).with_context(|| format!("agents.{name}"))?;
+        ensure!(
+            (agent.env.is_empty() && agent.env_remove.is_empty()) || runs_as_agent(agents, name),
+            "agents.{name}: env and env_remove need a command or base, or a built-in AI tool"
+        );
         ensure!(
             agent.retry.is_none() || runs_as_agent(agents, name),
             "agents.{name}.retry needs a command or base, or a built-in AI tool"
@@ -36,30 +35,42 @@ pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
             agent.prompt_cache_minutes.is_none() || runs_as_agent(agents, name),
             "agents.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
         );
-        ensure!(
-            agent.prompt_cache_minutes != Some(0),
-            "agents.{name}.prompt_cache_minutes must be at least 1"
-        );
-        for (key, argv, placeholders) in [
-            (
-                "instructions",
-                &agent.instructions,
-                &["{instructions}", "{instructions_toml}"][..],
-            ),
-            ("resume", &agent.resume, &["{session}"][..]),
-            ("resume_latest", &agent.resume_latest, &[][..]),
-            ("fork", &agent.fork, &["{session}"][..]),
-        ] {
-            if let Some(argv) = argv {
-                validate_arguments(argv, placeholders)
-                    .with_context(|| format!("agents.{name}.{key}"))?;
-            }
+    }
+    Ok(())
+}
+
+/// What one tool's description must hold whatever the other tools are, so a
+/// single layer can be checked before it is saved.
+pub fn entry(name: &str, agent: &Agent) -> Result<()> {
+    crate::validate::name("AI tool", name)?;
+    ensure!(
+        name != "all",
+        "AI tool name 'all' is reserved for skill installation"
+    );
+    ensure!(
+        agent.prompt_cache_minutes != Some(0),
+        "agents.{name}.prompt_cache_minutes must be at least 1"
+    );
+    environment(agent).with_context(|| format!("agents.{name}"))?;
+    for (key, argv, placeholders) in [
+        (
+            "instructions",
+            &agent.instructions,
+            &["{instructions}", "{instructions_toml}"][..],
+        ),
+        ("resume", &agent.resume, &["{session}"][..]),
+        ("resume_latest", &agent.resume_latest, &[][..]),
+        ("fork", &agent.fork, &["{session}"][..]),
+    ] {
+        if let Some(argv) = argv {
+            validate_arguments(argv, placeholders)
+                .with_context(|| format!("agents.{name}.{key}"))?;
         }
-        // An empty `add_dir` turns the built-in one off.
-        if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
-            validate_arguments(argv, &["{directory}"])
-                .with_context(|| format!("agents.{name}.add_dir"))?;
-        }
+    }
+    // An empty `add_dir` turns the built-in one off.
+    if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
+        validate_arguments(argv, &["{directory}"])
+            .with_context(|| format!("agents.{name}.add_dir"))?;
     }
     Ok(())
 }
@@ -108,14 +119,7 @@ fn validate_base(agents: &Agents, name: &str, base: &str) -> Result<()> {
 
 /// Variables follow `[env]`'s naming rules. Shoal reads where an agent keeps
 /// its config from the variables it sets, so those can be set, not removed.
-fn validate_environment(agents: &Agents, name: &str, agent: &Agent) -> Result<()> {
-    if agent.env.is_empty() && agent.env_remove.is_empty() {
-        return Ok(());
-    }
-    ensure!(
-        runs_as_agent(agents, name),
-        "env and env_remove need a command or base, or a built-in AI tool"
-    );
+fn environment(agent: &Agent) -> Result<()> {
     for (variable, value) in &agent.env {
         crate::env::validate_configured_name("env", variable)?;
         ensure!(
