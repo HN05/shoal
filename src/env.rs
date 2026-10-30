@@ -459,6 +459,13 @@ pub fn chat() -> Option<String> {
     std::env::var(CHAT).ok().filter(|chat| !chat.is_empty())
 }
 
+/// The chat this process acts for: the one its agent runs under, unless the
+/// process runs in a workspace's scope, as a command the chat started there
+/// does, where the workspace comes first.
+pub fn acting_chat() -> Option<String> {
+    chat().filter(|_| !is_scoped())
+}
+
 /// True when this process or an ancestor carries scope for the `state`
 /// directory, so clearing Shoal variables in a child does not lift its
 /// execution's limits. Tracked executions record their processes; an exported

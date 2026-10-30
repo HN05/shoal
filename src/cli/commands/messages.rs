@@ -63,7 +63,7 @@ async fn send_to_workspace(
             workspace,
             message,
             attachments,
-            from_chat: crate::env::chat(),
+            from_chat: crate::env::acting_chat(),
         },
     )
     .await?;
@@ -89,7 +89,7 @@ async fn send_to_repository(
             repository: chosen_repository(ctx, repository).await?,
             message,
             attachments,
-            from_chat: crate::env::chat(),
+            from_chat: crate::env::acting_chat(),
         },
     )
     .await?;
@@ -390,9 +390,7 @@ enum Inbox {
 
 impl Inbox {
     async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
-        if !crate::env::is_scoped()
-            && let Some(chat) = crate::env::chat()
-        {
+        if let Some(chat) = crate::env::acting_chat() {
             return Ok(Self::Chat(chat));
         }
         Ok(Self::Workspace(

@@ -70,7 +70,7 @@ pub(super) async fn add(ctx: &Context, owner: Option<String>, files: Vec<String>
     let method = FileMethod::AddFiles {
         owner,
         files,
-        from_chat: crate::env::chat(),
+        from_chat: crate::env::acting_chat(),
     };
     let added = client::pages::<AttachedFile>(&ctx.paths, method).await?;
     ctx.show(&added, |added| {
@@ -130,9 +130,9 @@ async fn select_owner(ctx: &Context, owner: Option<String>) -> Result<String> {
     }
 }
 
-/// The chat this runs under, when `owner` names none.
+/// The chat this acts for, when `owner` names none.
 fn own_chat(owner: &Option<String>) -> Option<String> {
-    owner.is_none().then(crate::env::chat).flatten()
+    owner.is_none().then(crate::env::acting_chat).flatten()
 }
 
 /// Refuse names and records the owner's files do not have before asking
@@ -180,7 +180,7 @@ async fn confirmation(ctx: &Context, owner: Option<&str>) -> Result<Option<Strin
     Ok(chats
         .iter()
         .find(|chat| chat.id == owner || chat.name == owner)
-        .filter(|chat| crate::env::chat().as_deref() != Some(chat.id.as_str()))
+        .filter(|chat| crate::env::acting_chat().as_deref() != Some(chat.id.as_str()))
         .map(|chat| format!("Chat {} runs. Delete its attached files", chat.name)))
 }
 

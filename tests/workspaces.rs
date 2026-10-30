@@ -24487,11 +24487,11 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     fs::write(home.join("report.md"), "No leaks").unwrap();
     fs::write(home.join("draft.md"), "Draft").unwrap();
     // The chat's agent attaches two files to its chat, deletes one and lists
-    // the rest.
+    // the rest. A command it runs in a workspace acts on that workspace.
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json files add \"$HOME/report.md#Audit findings\" \"$HOME/draft.md\" > \"$HOME/chat-added\"\n\"$shoal\" --json files rm draft.md > \"$HOME/chat-deleted\"\n\"$shoal\" --json files > \"$HOME/chat-files\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json files add \"$HOME/report.md#Audit findings\" \"$HOME/draft.md\" > \"$HOME/chat-added\"\n\"$shoal\" --json files rm draft.md > \"$HOME/chat-deleted\"\n\"$shoal\" --json files > \"$HOME/chat-files\"\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" run --workspace chat-worker -- \"$shoal\" --json files add \"$HOME/draft.md\" </dev/null > \"$HOME/worker-added\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -24537,6 +24537,12 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
         serde_json::json!({"kind": "chat", "agent": "claude", "chat": chat})
     );
     assert_eq!(file["expires_at"], Value::Null);
+    let worker = read("worker-added");
+    assert_eq!(
+        (&worker[0]["workspace"], &worker[0]["chat"]),
+        (&"chat-worker".into(), &Value::Null),
+        "{worker}"
+    );
 
     // Once the chat has ended, its file stays, listed by the chat's name
     // with when it goes.
