@@ -238,7 +238,7 @@ async fn selected_workspace<'a>(
 }
 
 /// The workspace of the current directory, else the caller's scope.
-fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
+pub(in crate::cli) fn current_workspace(workspaces: &[Workspace]) -> Result<Option<&Workspace>> {
     let current = ui::current_directory()?;
     let context = WorkspaceContext::from_directory(workspaces, current.as_deref());
     Ok(context.resolve(None, crate::env::is_scoped(), ScopeOrder::AfterDirectory))

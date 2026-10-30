@@ -419,21 +419,17 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
     Ok(crate::ai::agents(&tools).any(|agent| agent == name))
 }
 
-/// The workspace `workspace` names, else the caller's own or the one around
-/// the current directory.
+/// The workspace `workspace` names, else the one running a command would
+/// select: the current directory's, then the caller's scope.
 async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<ConfigTarget>> {
     if let Some(workspace) = workspace {
         return Ok(Some(ConfigTarget::Workspace(workspace.to_owned())));
     }
-    if let Some(own) =
-        std::env::var_os(crate::env::WORKSPACE_ID).filter(|_| crate::env::is_scoped())
-    {
-        return Ok(Some(ConfigTarget::Workspace(
-            own.to_string_lossy().into_owned(),
-        )));
-    }
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    let current = crate::cli::ui::current_workspace(&workspaces)?;
+    // Without a daemon there is no workspace context, only the machine's.
+    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+        return Ok(None);
+    };
+    let current = configured::current_workspace(&workspaces)?;
     Ok(current.map(|workspace| ConfigTarget::Workspace(workspace.id.clone())))
 }
 
