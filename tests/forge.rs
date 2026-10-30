@@ -4938,6 +4938,23 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("`.` or `..` segments"), "{stderr}");
 
+    // `{owner}` and `{repo}` name the repository `--repo` names.
+    fixture.respond(json!({"GET repos/team/tool": {"body": {"name": "tool"}}}));
+    let other = [
+        "forge",
+        "api",
+        "repos/{owner}/{repo}",
+        "--repo",
+        "team/tool",
+        "--workspace",
+        "topic",
+    ];
+    assert_eq!(fixture.ok(&other), json!({"name": "tool"}));
+    assert_eq!(
+        fixture.requests(),
+        [json!(["GET repos/team/tool", null, "token usertoken"])]
+    );
+
     // curl sends braces and brackets as given instead of expanding them.
     fixture.respond(json!({"GET repos/team/project/{a,b}[1-2]": {"body": {"one": true}}}));
     let globbed = fixture.ok(&[

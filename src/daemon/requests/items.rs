@@ -64,9 +64,10 @@ pub(super) async fn handle(
         ItemMethod::ForgeApi {
             workspace,
             request: raw,
+            repository,
         } => {
             let response = manager
-                .forge_api(&workspace, &raw, caller.is_some())
+                .forge_api(&workspace, &raw, repository.as_deref(), caller.is_some())
                 .await
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));

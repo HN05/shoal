@@ -87,12 +87,13 @@ pub enum ItemMethod {
         search: crate::forge::items::list::Search,
         repository: Option<String>,
     },
-    /// A request to the workspace repository's forge API, answered with
-    /// the response's JSON text in one or more `api_response` frames and
-    /// then `ok`.
+    /// A request to the forge API of the workspace's repository, or the one
+    /// `repository` names, answered with the response's JSON text in one or
+    /// more `api_response` frames and then `ok`.
     ForgeApi {
         workspace: String,
         request: crate::forge::raw::RawRequest,
+        repository: Option<String>,
     },
     /// Linked items, or an explicit one, for the CLI to look up.
     SelectItems {

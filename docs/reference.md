@@ -3140,11 +3140,13 @@ runs' URLs.
 ```sh
 shoal forge api 'repos/{owner}/{repo}/branches'   # GET a path of the forge's API
 shoal forge api 'repos/{owner}/{repo}' -X PATCH --input body.json
+shoal forge api 'repos/{owner}/{repo}/labels' --repo team/review-bot  # another repository
 ```
 
 `shoal forge api` sends a request to a path under the workspace repository's forge API
 root, such as `/api/v1` on Forgejo, and prints the JSON response, which `--json`
-prints on one line. `{owner}` and `{repo}` fill in the repository; on GitLab
+prints on one line. `{owner}` and `{repo}` fill in the repository, or the one
+`--repo` names as for `issue open --repo`; on GitLab
 `{owner}` is the encoded group path, so `projects/{owner}%2F{repo}` names a
 nested project. A path that names another host or has a `.` or `..` segment is
 refused. The request is a GET, or a POST with `--input`, a JSON body from a file
@@ -3153,8 +3155,9 @@ rate limits and 64 MiB response bound of other forge requests. On Forgejo, a
 GET whose query sets `limit` without `page` reads the first page, since
 Forgejo's Actions lists otherwise ignore `limit` and return every run.
 Processes inside a workspace send it as the [agent account](#agent-accounts),
-and only GET unless `[permissions] api_writes` lets agents send other methods, which
-could merge, approve or skip required labels around Shoal's checks; anyone
+and only GET unless `[permissions] api_writes` lets agents send other methods to
+the workspace's repository, which could merge, approve or skip required labels
+around Shoal's checks; to another repository they send only GET. Anyone
 else sends any request with your own logins.
 
 ```toml

@@ -1,5 +1,5 @@
-//! `shoal forge api`: any request to the workspace repository's forge API, for
-//! what no other command reads.
+//! `shoal forge api`: any request to the forge API of the workspace's
+//! repository or another one, for what no other command reads.
 use std::{io::Read, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -29,7 +29,7 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
     let response = ctx
         .progress(
             "Requesting",
-            client::forge_api(&ctx.paths, workspace, request),
+            client::forge_api(&ctx.paths, workspace, request, args.repo),
         )
         .await?;
     ctx.show(&response, |response| {

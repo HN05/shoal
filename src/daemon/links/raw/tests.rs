@@ -42,12 +42,12 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     };
 
     let read = manager
-        .forge_api(&workspace.id, &request(HttpMethod::Get), true)
+        .forge_api(&workspace.id, &request(HttpMethod::Get), None, true)
         .await
         .unwrap();
     assert_eq!(read, json!({"ok": true}));
     let error = manager
-        .forge_api(&workspace.id, &request(HttpMethod::Patch), true)
+        .forge_api(&workspace.id, &request(HttpMethod::Patch), None, true)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("api_writes"), "{error:#}");
@@ -63,9 +63,37 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap();
     manager
-        .forge_api(&workspace.id, &request(HttpMethod::Patch), true)
+        .forge_api(&workspace.id, &request(HttpMethod::Patch), None, true)
         .await
         .unwrap();
     let sent = std::fs::read_to_string(&log).unwrap();
     assert!(sent.contains("-X PATCH repos/team/repo"), "{sent}");
+
+    // Another repository is only read, whatever the workspace's allows.
+    let read = manager
+        .forge_api(
+            &workspace.id,
+            &request(HttpMethod::Get),
+            Some("team/tool"),
+            true,
+        )
+        .await
+        .unwrap();
+    assert_eq!(read, json!({"ok": true}));
+    let error = manager
+        .forge_api(
+            &workspace.id,
+            &request(HttpMethod::Patch),
+            Some("team/tool"),
+            true,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("GET requests to another repository"),
+        "{error:#}"
+    );
+    let sent = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(sent.lines().count(), 3, "{sent}");
+    assert!(sent.contains("-X GET repos/team/tool"), "{sent}");
 }

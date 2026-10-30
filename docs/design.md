@@ -1453,8 +1453,9 @@ the repository's forge API root through the daemon the same way, for reads no
 command models, since fj has no API passthrough to fall back to. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
 unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
-required labels; the path stays under the API root, so the login reaches only
-its own forge's API. Forgejo's issue search lists PRs
+required labels, and only GET in another repository, which that setting does
+not speak for; the path stays under the API root, so the login reaches only
+the API of the forge its repository is on. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a

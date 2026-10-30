@@ -116,11 +116,11 @@ instead of the PR delivery guidance below.
   except what a process causes in a child without an agent of its own. Own-workspace setup, rename, base workspace, PR registration,
   linking and watching CI runs of the own repository,
   merge acknowledgements, messages to the user, reading their own agent messages, ready-for-review marks,
-  assignment completion and its withdrawal, listing, opening and changing issues and PRs
-  of the own repository except merging, deleting a PR's branch, approving or requesting changes, rerunning or cancelling their CI jobs,
+  assignment completion and its withdrawal, listing issues and PRs of any repository, opening and changing
+  those of the own repository except merging, deleting a PR's branch, approving or requesting changes, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
-  GET requests to the own repository's forge API, or others where `[permissions] api_writes`
-  allows them, own-repository sync and
+  GET requests to any repository's forge API, or other methods to the own repository's where
+  `[permissions] api_writes` allows them, own-repository sync and
   effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
   only unscoped callers export or revoke environment tokens. Export requires a
   ready, verified worktree; tokens persist across restart until revocation or

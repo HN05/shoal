@@ -225,8 +225,14 @@ pub async fn forge_api(
     paths: &Paths,
     workspace: String,
     request: crate::forge::raw::RawRequest,
+    repository: Option<String>,
 ) -> Result<serde_json::Value> {
-    let pieces = pages::<String>(paths, ItemMethod::ForgeApi { workspace, request }).await?;
+    let method = ItemMethod::ForgeApi {
+        workspace,
+        request,
+        repository,
+    };
+    let pieces = pages::<String>(paths, method).await?;
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
