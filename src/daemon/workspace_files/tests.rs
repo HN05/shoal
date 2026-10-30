@@ -699,3 +699,48 @@ async fn an_earlier_copy_that_cannot_be_read_is_recorded_on_a_later_pass() {
     assert_eq!(files[0].path, copy);
     reopened.store.shutdown().await;
 }
+
+#[tokio::test]
+async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
+    use std::os::unix::fs::PermissionsExt;
+    if !permissions_bind() {
+        return;
+    }
+    let (temp, manager) = manager().await;
+    let workspace = workspace(&temp, &manager).await;
+    let file = temp.path().join("crash.log");
+    std::fs::write(&file, "panic").unwrap();
+    manager
+        .send_agent_message(&workspace.name, "See".into(), vec![file])
+        .await
+        .unwrap();
+    manager
+        .store
+        .run(|db| {
+            db.execute_batch("DROP TABLE workspace_files; PRAGMA user_version=87;")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let reopened = Manager::open(manager.paths.clone()).await.unwrap();
+    let repo = reopened.repository(&workspace.repository_id).await.unwrap();
+    let marker = repo
+        .workspaces_dir
+        .unwrap()
+        .join(".attachments")
+        .join(crate::fsutil::OWNER_MARKER);
+    std::fs::set_permissions(&marker, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let failed = reopened.record_earlier_files().await;
+    std::fs::set_permissions(&marker, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(failed.is_err(), "an unreadable marker fails the pass");
+    reopened.record_earlier_files().await.unwrap();
+    assert_eq!(
+        reopened
+            .workspace_files(&workspace.name)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    reopened.store.shutdown().await;
+}

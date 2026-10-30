@@ -245,9 +245,19 @@ pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
 /// creates or deletes there is reached through a symlink or belongs to anyone
 /// else.
 pub fn is_marked_dir(root: &Path, owner: &str) -> bool {
-    fs::symlink_metadata(root).is_ok_and(|metadata| metadata.is_dir())
-        && fs::read_to_string(root.join(OWNER_MARKER))
-            .is_ok_and(|marked| marked.trim_end() == owner)
+    check_marked_dir(root, owner).unwrap_or(false)
+}
+
+/// [`is_marked_dir`], failing when `root` or its marker exists but cannot be
+/// read, rather than taking that for a directory Shoal did not create.
+pub fn check_marked_dir(root: &Path, owner: &str) -> io::Result<bool> {
+    match fs::symlink_metadata(root) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => return Ok(false),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error),
+    }
+    Ok(read_optional(&root.join(OWNER_MARKER))?.is_some_and(|marked| marked.trim_end() == owner))
 }
 
 /// Space unprivileged processes may still write on the filesystem holding `path`.

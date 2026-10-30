@@ -12,7 +12,7 @@ use anyhow::{Context, Result, ensure};
 use crate::{
     daemon::file_copies::{incomplete_copies, keep_copies},
     forge::items::attach::Attachment,
-    fsutil::{create_marked_dir, is_marked_dir},
+    fsutil::{check_marked_dir, create_marked_dir, is_marked_dir},
     model::Repository,
 };
 
@@ -158,7 +158,9 @@ impl Layout {
     /// one per file within it. A hidden message directory holds copies still
     /// being made; the files themselves may have any name.
     pub(crate) fn workspace_copies(&self, workspace_id: &str) -> Result<Vec<PathBuf>> {
-        if !is_marked_dir(&self.root, &self.owner) {
+        let ours = check_marked_dir(&self.root, &self.owner)
+            .with_context(|| format!("read {}", self.root.display()))?;
+        if !ours {
             return Ok(Vec::new());
         }
         let staging = |path: &PathBuf| {
