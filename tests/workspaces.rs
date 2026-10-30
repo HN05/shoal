@@ -22415,6 +22415,13 @@ import fcntl, json, os, subprocess, sys, time
 from pathlib import Path
 root = Path(os.environ.get('ZMX_TEST_ROOT', os.environ['HOME']))
 args = sys.argv[1:]
+def rewrite_sessions(lines):
+    # Replace the listing whole, as zmx's server answers: a list run
+    # meanwhile must never find it truncated, which reads as no sessions.
+    sessions = root / 'zmx-sessions'
+    staged = sessions.with_name(f'zmx-sessions.{os.getpid()}')
+    staged.write_text(''.join(line + '\n' for line in lines))
+    os.replace(staged, sessions)
 if args[:1] == ['worker']:
     # Keep a readable parent for macOS's hidden shell environment, so other
     # fixtures can attribute it while verifying their setup processes.
@@ -22444,11 +22451,10 @@ if args[:1] == ['set'] and (root / 'zmx-keep-sessions').exists():
         lines.append(line)
     if not found:
         sys.exit('session not found')
-    sessions.write_text(''.join(line + '\n' for line in lines))
+    rewrite_sessions(lines)
 elif args[:1] == ['kill'] and (root / 'zmx-close-removes-session').exists():
-    sessions = root / 'zmx-sessions'
-    sessions.write_text(''.join(line + '\n' for line in sessions.read_text().splitlines()
-        if not any(field == f'name={args[1]}' for field in line.strip().split('\t'))))
+    rewrite_sessions(line for line in (root / 'zmx-sessions').read_text().splitlines()
+        if not any(field == f'name={args[1]}' for field in line.strip().split('\t')))
 elif args[:1] in (['set'], ['kill']):
     pass
 elif args[:1] == ['run']:
@@ -22492,9 +22498,8 @@ elif args[:1] == ['attach']:
     if args[:1] == ['--labels']:
         args = args[2:]
     if (root / 'zmx-attach-ends-session').exists():
-        sessions = root / 'zmx-sessions'
-        sessions.write_text(''.join(line + '\n' for line in sessions.read_text().splitlines()
-            if not any(field == f'name={args[0]}' for field in line.strip().split('\t'))))
+        rewrite_sessions(line for line in (root / 'zmx-sessions').read_text().splitlines()
+            if not any(field == f'name={args[0]}' for field in line.strip().split('\t')))
     if len(args) > 1:
         os.environ['ZMX_SESSION'] = args[0]
         if os.environ.get('ZMX_TEST_LEAK_INPUT_MODE'):
