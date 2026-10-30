@@ -1,7 +1,7 @@
 //! The handshake: whether this daemon serves the client's major version,
 //! and as whom the connection calls.
 use shoal_client::{
-    ApiError, Call, ErrorCode,
+    ApiError, Call, ErrorCode, Topic,
     wire::{self, HandshakeReply, Hello, Welcome},
 };
 
@@ -47,13 +47,14 @@ pub(super) async fn accept(server: &Server, hello: serde_json::Value) -> Result<
 
 /// The reply that admits a session.
 pub(super) fn welcome() -> HandshakeReply {
+    let topics = Topic::KNOWN.iter().map(|topic| format!("topic:{topic}"));
     HandshakeReply::Welcome(Welcome {
         version: shoal_client::VERSION.into(),
         supported_majors: SUPPORTED_MAJORS.to_vec(),
         features: Call::NAMES
             .iter()
-            .filter(|name| **name != "subscribe")
             .map(|name| (*name).to_owned())
+            .chain(topics)
             .collect(),
     })
 }

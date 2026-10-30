@@ -161,6 +161,8 @@ async fn the_handshake_names_what_the_daemon_serves() {
     assert_eq!(welcome.version, shoal_client::VERSION);
     assert_eq!(welcome.supported_majors, [1]);
     assert!(welcome.offers("workspace.get"), "{welcome:?}");
+    assert!(welcome.offers("subscribe"), "{welcome:?}");
+    assert!(welcome.offers("topic:notifications"), "{welcome:?}");
 }
 
 #[tokio::test]
