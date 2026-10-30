@@ -148,6 +148,17 @@
         "id": {
           "format": "int64",
           "type": "integer"
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Question"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The question as shown. When given, a question that no longer matches\nit, such as a later one reusing its number, is refused with `not_found`."
         }
       },
       "required": [
@@ -293,6 +304,17 @@
         "id": {
           "format": "int64",
           "type": "integer"
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Approval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The request as shown. When given, a request that no longer matches\nit, such as a later one reusing its number, is refused with `not_found`."
         }
       },
       "required": [

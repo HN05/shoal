@@ -294,12 +294,20 @@ pub struct StopAgent {
 pub struct AnswerQuestion {
     pub id: i64,
     pub answer: String,
+    /// The question as shown. When given, a question that no longer matches
+    /// it, such as a later one reusing its number, is refused with `not_found`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<Question>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DecideApproval {
     pub id: i64,
     pub approve: bool,
+    /// The request as shown. When given, a request that no longer matches
+    /// it, such as a later one reusing its number, is refused with `not_found`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shown: Option<Approval>,
 }
 
 open_enum! {

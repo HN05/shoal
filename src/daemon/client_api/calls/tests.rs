@@ -258,13 +258,24 @@ async fn questions_are_answered_and_an_unknown_one_is_not_found() {
         .await
         .unwrap();
     let client = daemon.client().await;
-    let answer = |id| AnswerQuestion {
+    let answer = |id, shown| AnswerQuestion {
         id,
         answer: "Postgres".into(),
+        shown,
     };
-    let answered = client.call(answer(question.id)).await.unwrap();
+    let mut stale = super::super::records::question(question.clone());
+    stale.question = "Which cache?".into();
+    assert_eq!(
+        code(client.call(answer(question.id, Some(stale))).await),
+        ErrorCode::NotFound
+    );
+    let shown = super::super::records::question(question.clone());
+    let answered = client.call(answer(question.id, Some(shown))).await.unwrap();
     assert_eq!(answered.question, "Which database?");
-    assert_eq!(code(client.call(answer(999)).await), ErrorCode::NotFound);
+    assert_eq!(
+        code(client.call(answer(999, None)).await),
+        ErrorCode::NotFound
+    );
 }
 
 #[tokio::test]
@@ -290,14 +301,28 @@ async fn only_the_user_decides_approvals() {
         .await
         .unwrap()
         .unwrap();
-    let decide = |id| DecideApproval { id, approve: true };
+    let decide = |id, shown| DecideApproval {
+        id,
+        approve: true,
+        shown,
+    };
     let scoped = daemon.scoped(&workspace).await;
     assert_eq!(
-        code(scoped.call(decide(pending.id)).await),
+        code(scoped.call(decide(pending.id, None)).await),
         ErrorCode::ScopeDenied
     );
     let client = daemon.client().await;
-    let decided = client.call(decide(pending.id)).await.unwrap();
+    let mut stale = super::super::records::approval(pending.clone());
+    stale.reason = "another reason".into();
+    assert_eq!(
+        code(client.call(decide(pending.id, Some(stale))).await),
+        ErrorCode::NotFound
+    );
+    let shown = super::super::records::approval(pending.clone());
+    let decided = client.call(decide(pending.id, Some(shown))).await.unwrap();
     assert_eq!(decided.status, ApprovalStatus::Approved);
-    assert_eq!(code(client.call(decide(999)).await), ErrorCode::NotFound);
+    assert_eq!(
+        code(client.call(decide(999, None)).await),
+        ErrorCode::NotFound
+    );
 }
