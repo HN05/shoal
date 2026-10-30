@@ -94,9 +94,27 @@ pub fn validate(
                 .with_context(|| format!("agents.{name}"))?;
         }
     }
+    for name in agents.keys() {
+        ensure_no_cycle(agents, name)?;
+    }
     let resolved = crate::config::options::resolve_sections(agents.clone(), "agents")?;
     for (name, agent) in describe(&resolved, &BTreeMap::new()) {
         crate::ai::validate::entry(&name, &agent)?;
+    }
+    Ok(())
+}
+
+/// Following bases within this layer from `name` never comes back to it; a
+/// base in another layer ends the walk, and the combined layers check it.
+fn ensure_no_cycle(agents: &BTreeMap<String, AgentToolConfig>, name: &str) -> Result<()> {
+    let mut seen = std::collections::BTreeSet::from([name]);
+    let mut next = agents.get(name).and_then(|agent| agent.base.as_deref());
+    while let Some(base) = next {
+        anyhow::ensure!(
+            seen.insert(base),
+            "agents.{name}.base: bases of {name:?} form a cycle through {base:?}"
+        );
+        next = agents.get(base).and_then(|agent| agent.base.as_deref());
     }
     Ok(())
 }
