@@ -1,4 +1,5 @@
 //! Persist issue associations.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -162,7 +163,7 @@ fn unlink(db: &Connection, id: &str, selected: Option<&str>) -> Result<()> {
     if let Some(url) = selected {
         ensure!(
             existing.as_deref() == Some(url),
-            "issue is not linked: {url}"
+            Refusal::new(Reason::NotFound, format!("issue is not linked: {url}"))
         );
     }
     if let Some(url) = existing {

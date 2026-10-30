@@ -143,6 +143,14 @@ async fn links_are_added_and_removed_and_a_missing_one_is_not_found() {
     };
     client.call(remove()).await.unwrap();
     assert_eq!(code(client.call(remove()).await), ErrorCode::NotFound);
+    for kind in [ItemKind::Issue, ItemKind::Pr] {
+        let assigned = RemoveLink {
+            relation: Relation::Assigned,
+            kind,
+            ..remove()
+        };
+        assert_eq!(code(client.call(assigned).await), ErrorCode::NotFound);
+    }
     let unknown = client
         .call(AddLink {
             relation: Relation::Unknown("blocking".into()),

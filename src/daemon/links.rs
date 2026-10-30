@@ -226,9 +226,14 @@ impl Manager {
             kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(&id).await, Ok(None));
         ensure!(
             issue || pr,
-            "{} linked as {}",
-            nothing(kind.map(Into::into)),
-            Relation::Assigned
+            Refusal::new(
+                Reason::NotFound,
+                format!(
+                    "{} linked as {}",
+                    nothing(kind.map(Into::into)),
+                    Relation::Assigned
+                )
+            )
         );
         Ok(())
     }

@@ -1,4 +1,5 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
+use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -292,9 +293,12 @@ impl Manager {
             ..
         }) = self.pr_registration(&workspace.id).await?
         else {
-            anyhow::bail!("PR is not watched: {url}");
+            return Err(Refusal::new(Reason::NotFound, format!("PR is not watched: {url}")).into());
         };
-        ensure!(urls.contains(&url), "PR is not watched: {url}");
+        ensure!(
+            urls.contains(&url),
+            Refusal::new(Reason::NotFound, format!("PR is not watched: {url}"))
+        );
         urls.retain(|watched| watched != &url);
         Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
     }
