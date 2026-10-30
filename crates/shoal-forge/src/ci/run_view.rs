@@ -10,6 +10,7 @@ use crate::{
     capability::Capability,
     ci::{JobState, checks::CheckLog, run_action::Run},
     transport::api::Request,
+    updates::{FailedJob, Snapshot},
 };
 
 /// The most runs one list returns.
@@ -130,6 +131,34 @@ impl ForgeRepo {
             Some(url) => log.with_job(url.clone()),
             None => log,
         })
+    }
+
+    /// The activity of the run `input` names: its state and, once it failed,
+    /// its failed jobs with the steps that failed where their logs say.
+    pub async fn run_activity(&self, account: &Account, input: &str) -> Result<Snapshot> {
+        let run = self.view_run(account, input).await?;
+        let mut snapshot = Snapshot::new(run.state.as_str());
+        if run.state == JobState::Failed {
+            let jobs = self.jobs_of(account, &run).await?;
+            for job in jobs.iter().filter(|job| job.state == JobState::Failed) {
+                let step = self.failed_job_step(account, &run, job).await;
+                snapshot.failed_jobs.push(FailedJob {
+                    name: job.name.clone(),
+                    step,
+                });
+            }
+        }
+        Ok(snapshot)
+    }
+
+    /// The step that failed in `job`, where the forge reads its log and the
+    /// log names one.
+    async fn failed_job_step(&self, account: &Account, run: &Run, job: &RunJob) -> Option<String> {
+        if !self.supports(Capability::ReadJobLogs) {
+            return None;
+        }
+        let log = self.kind.run_job_log(self, account, run, job).await.ok()?;
+        self.kind.failed_step(&log)
     }
 
     /// Every job of `run`, reading page after page while pages are full.

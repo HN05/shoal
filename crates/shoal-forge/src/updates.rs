@@ -1,4 +1,5 @@
-//! Issue and PR activity as snapshots, and the updates between two of them.
+//! Issue, PR and CI run activity as snapshots, and the updates between two
+//! of them.
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
@@ -85,6 +86,9 @@ pub struct Snapshot {
     #[serde(skip)]
     pub(crate) conflict_exact: bool,
     pub(crate) state: String,
+    /// A failed run's failed jobs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) failed_jobs: Vec<FailedJob>,
     pub(crate) errors: BTreeMap<String, String>,
     /// Unix seconds when each failing source was last reported.
     #[serde(default)]
@@ -93,6 +97,14 @@ pub struct Snapshot {
     /// incomplete without that source having failed.
     #[serde(skip)]
     pub(crate) limited: Option<RateLimited>,
+}
+
+/// A failed job of a run, with the step that failed where its log names one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct FailedJob {
+    pub(crate) name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) step: Option<String>,
 }
 
 /// The commits a merge check compares; empty when the forge does not say.
@@ -199,6 +211,15 @@ impl Snapshot {
                     emit(UpdateKind::Reopened, "Item reopened".into(), None)
                 }
                 "merged" => emit(UpdateKind::Merged, "PR merged".into(), None),
+                "failed" | "finished" => emit(
+                    UpdateKind::CiCompleted,
+                    format!(
+                        "Run {}{}; read it with shoal view ci {url}",
+                        next.state,
+                        failed_jobs_text(&next.failed_jobs)
+                    ),
+                    None,
+                ),
                 _ => {}
             }
         }
@@ -214,6 +235,11 @@ impl Snapshot {
             }
         }
         updates
+    }
+
+    /// Whether the snapshot shows a finished run, whose activity has ended.
+    pub fn run_finished(&self) -> bool {
+        matches!(self.state.as_str(), "failed" | "finished")
     }
 
     /// The message for a conflict `next` reports that `self` had not.
@@ -363,6 +389,21 @@ impl Snapshot {
             None => Ok(self),
         }
     }
+}
+
+/// The failed jobs of a run and the steps that failed, after a colon.
+fn failed_jobs_text(jobs: &[FailedJob]) -> String {
+    if jobs.is_empty() {
+        return String::new();
+    }
+    let jobs = jobs
+        .iter()
+        .map(|job| match &job.step {
+            Some(step) => format!("{} (failed step: {step})", job.name),
+            None => job.name.clone(),
+        })
+        .collect::<Vec<_>>();
+    format!(": {}", jobs.join(", "))
 }
 
 /// A forge ID as text: strings without JSON quotes, numbers as digits.

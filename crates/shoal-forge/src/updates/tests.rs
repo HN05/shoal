@@ -515,3 +515,35 @@ fn forgejo_drafts_report_no_conflicts() {
     snapshot.record_checks(&pull, Ok(Vec::new()));
     assert!(Snapshot::default().changes(&snapshot, "pr").is_empty());
 }
+
+#[test]
+fn a_run_reports_once_when_it_finishes_with_its_failed_steps() {
+    let url = "https://forge.example/team/repo/actions/runs/2765";
+    let running = Snapshot::new("running");
+    assert!(Snapshot::default().changes(&running, url).is_empty());
+    let mut failed = Snapshot::new("failed");
+    failed.failed_jobs = vec![
+        FailedJob {
+            name: "audit".into(),
+            step: Some("Audit".into()),
+        },
+        FailedJob {
+            name: "lint".into(),
+            step: None,
+        },
+    ];
+    let updates = running.changes(&failed, url);
+    assert_eq!(updates.len(), 1, "{updates:?}");
+    assert_eq!(updates[0].kind, UpdateKind::CiCompleted);
+    assert_eq!(
+        updates[0].message,
+        format!("Run failed: audit (failed step: Audit), lint; read it with shoal view ci {url}")
+    );
+    assert!(failed.run_finished());
+    assert!(failed.changes(&failed, url).is_empty());
+    let finished = Snapshot::new("finished");
+    assert_eq!(
+        Snapshot::default().changes(&finished, url)[0].message,
+        format!("Run finished; read it with shoal view ci {url}")
+    );
+}

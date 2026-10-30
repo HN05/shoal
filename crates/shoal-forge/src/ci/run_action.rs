@@ -7,11 +7,19 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ForgeRepo,
     account::Account,
-    backends::Backend,
-    capability::Capability,
+    backends::{Backend, ForgeKind},
+    capability::{self, Capability},
     ci::{CiAction, JobState, id},
+    hosts::HostTypes,
     transport::api::{HttpMethod, Request},
 };
+
+/// What precedes a run's number in its web URL, and the forge that alone
+/// uses it; GitHub, Forgejo and Gitea share theirs.
+const RUN_ROUTES: &[(&str, Option<ForgeKind>)] = &[
+    ("/-/pipelines/", Some(ForgeKind::GitLab)),
+    ("/actions/runs/", None),
+];
 
 /// A workflow run in the repository, as its forge reports it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +54,32 @@ pub fn validate_run_reference(input: &str) -> Result<()> {
 }
 
 impl ForgeRepo {
+    /// The repository a run's web URL belongs to.
+    pub fn from_run_url(url: &str) -> Result<Self> {
+        let (repository, forge) = run_repository(url)?;
+        Self::parse_linked(repository, forge)
+    }
+
+    /// The repository a run's web URL belongs to, on the forge `hosts` says
+    /// its host serves.
+    pub async fn resolve_run_url(url: &str, hosts: &impl HostTypes) -> Result<Self> {
+        Self::resolve(run_repository(url)?.0, hosts).await
+    }
+
+    /// The number of the run `input`, its web URL or the number in it, names,
+    /// and the run's web URL without a job.
+    pub fn run(&self, input: &str) -> Result<(u64, String)> {
+        validate_run_reference(input)?;
+        let number = id(input)
+            .or_else(|| self.kind.locate_run(self, input))
+            .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
+        let path = self
+            .kind
+            .run_web_path(number)
+            .ok_or_else(|| capability::unsupported(&self.kind, Capability::ReadRuns))?;
+        Ok((number, format!("{}/{path}", self.repository_url())))
+    }
+
     /// The run `input`, its web URL or the number in it, names, once the
     /// forge is known to apply `action` to runs.
     pub async fn find_run(&self, account: &Account, input: &str, action: CiAction) -> Result<Run> {
@@ -55,10 +89,7 @@ impl ForgeRepo {
 
     /// The run `input`, its web URL or the number in it, names.
     pub(crate) async fn read_run(&self, account: &Account, input: &str) -> Result<Run> {
-        validate_run_reference(input)?;
-        let number = id(input)
-            .or_else(|| self.kind.locate_run(self, input))
-            .with_context(|| format!("{input} is not a CI run of {}", self.repository_url()))?;
+        let (number, _) = self.run(input)?;
         let read = Request::get(self.repo_endpoint(&self.kind.run_path(number)));
         let value = self.send(account, &read).await?;
         self.kind.run(self, number, &value)
@@ -80,6 +111,15 @@ impl ForgeRepo {
             action,
         })
     }
+}
+
+/// The repository URL of a run's web URL, and the forge whose runs alone use
+/// its route.
+fn run_repository(url: &str) -> Result<(&str, Option<ForgeKind>)> {
+    RUN_ROUTES
+        .iter()
+        .find_map(|&(marker, forge)| Some((url.rsplit_once(marker)?.0, forge)))
+        .context("expected a CI run URL")
 }
 
 #[cfg(test)]

@@ -756,6 +756,10 @@ impl Backend for GitLab {
         format!("pipelines/{number}")
     }
 
+    fn run_web_path(&self, number: u64) -> Option<String> {
+        Some(format!("-/pipelines/{number}"))
+    }
+
     /// A tag's pipeline ran on no branch, and a branch has one pipeline,
     /// so none names a workflow.
     fn run_item(&self, _repo: &ForgeRepo, value: &Value) -> Result<Run> {

@@ -630,6 +630,10 @@ impl Backend for Bitbucket {
         format!("pipelines/{number}")
     }
 
+    fn run_web_path(&self, _number: u64) -> Option<String> {
+        None
+    }
+
     /// Shoal reads no Pipelines run, which the capabilities refuse first.
     fn run_item(&self, _repo: &ForgeRepo, _value: &Value) -> Result<Run> {
         Err(capability::unsupported(self, Capability::ReadRuns))

@@ -557,6 +557,12 @@ pub(crate) trait Backend {
     /// in its web URL.
     fn run_path(&self, number: u64) -> String;
 
+    /// The path under the repository's web URL that shows the run numbered
+    /// `number`, or `None` where Shoal reads no runs.
+    fn run_web_path(&self, number: u64) -> Option<String> {
+        Some(format!("actions/runs/{number}"))
+    }
+
     /// The run numbered `number` that a read of its path returned as `value`.
     fn run(&self, repo: &ForgeRepo, _number: u64, value: &Value) -> Result<Run> {
         self.run_item(repo, value)
@@ -1193,6 +1199,10 @@ impl Backend for ForgeKind {
 
     fn run_path(&self, number: u64) -> String {
         dispatch!(self, backend => backend.run_path(number))
+    }
+
+    fn run_web_path(&self, number: u64) -> Option<String> {
+        dispatch!(self, backend => backend.run_web_path(number))
     }
 
     fn run(&self, repo: &ForgeRepo, number: u64, value: &Value) -> Result<Run> {
