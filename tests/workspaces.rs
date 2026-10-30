@@ -6101,6 +6101,83 @@ fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
 }
 
 #[test]
+fn export_carries_session_files_that_import_puts_back() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("transcript");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "session=moved-session\n\
+             if [ \"$1\" = --resume ]; then printf '%s' \"$2\" > resumed; session=$2; fi\n\
+             printf '{{\"session_id\":\"%s\"}}' \"$session\" | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude", "transcript"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    // Claude Code keeps the transcript in its project's directory, beside a
+    // directory of the session's subagents, and another session's files.
+    let projects = fixture.root.path().join(".claude/projects");
+    let project = projects.join("-elsewhere");
+    fs::create_dir_all(project.join("moved-session/subagents")).unwrap();
+    fs::write(project.join("moved-session.jsonl"), "{\"turn\":1}\n").unwrap();
+    fs::write(project.join("moved-session/subagents/a.jsonl"), "sub\n").unwrap();
+    fs::write(project.join("other-session.jsonl"), "other\n").unwrap();
+
+    let file = fixture.root.path().join("transcript.shoal");
+    let file = file.to_str().unwrap();
+    let exported = fixture.ok(&["move", "export", "transcript", "-o", file]);
+    let carried: Vec<_> = exported["manifest"]["session_files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        carried,
+        [
+            "-elsewhere/moved-session.jsonl",
+            "-elsewhere/moved-session/subagents/a.jsonl"
+        ],
+        "{exported}"
+    );
+
+    // The importing machine has none of them; the import puts them back, and
+    // the agent continues its session.
+    fs::remove_dir_all(&projects).unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    fixture.ok(&["move", "import", file, "--repo", repo]);
+    assert_eq!(
+        fs::read_to_string(project.join("moved-session.jsonl")).unwrap(),
+        "{\"turn\":1}\n"
+    );
+    assert_eq!(
+        fs::read_to_string(project.join("moved-session/subagents/a.jsonl")).unwrap(),
+        "sub\n"
+    );
+    assert!(!project.join("other-session.jsonl").exists());
+    let output = fixture
+        .command()
+        .current_dir(path)
+        .arg("resume")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        fs::read_to_string(path.join("resumed")).unwrap(),
+        "moved-session"
+    );
+}
+
+#[test]
 fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("quarantined");

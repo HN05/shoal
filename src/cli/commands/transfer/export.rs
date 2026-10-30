@@ -177,7 +177,9 @@ async fn export_removed(
         unsaved: UnsavedWork::default(),
         file: output.file(),
     };
-    request::<ExportedWorkspace>(&ctx.paths, method).await
+    let exported = request::<ExportedWorkspace>(&ctx.paths, method).await?;
+    warn(&exported);
+    Ok(exported)
 }
 
 /// Export the workspace to `output` once its checkpoint can keep every
@@ -223,7 +225,15 @@ async fn export_checked(
     {
         eprintln!("warning: {error}");
     }
+    warn(&exported);
     Ok(exported)
+}
+
+/// Show what the export left out.
+fn warn(exported: &ExportedWorkspace) {
+    for warning in &exported.warnings {
+        eprintln!("warning: {warning}");
+    }
 }
 
 async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {

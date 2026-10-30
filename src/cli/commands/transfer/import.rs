@@ -1,6 +1,7 @@
 //! `shoal move import`: open workspaces again from the files `shoal move
 //! export` wrote.
 use std::{
+    collections::BTreeSet,
     io::BufReader,
     path::{Path, PathBuf},
 };
@@ -10,6 +11,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
+        agents,
         client::request,
         context::Context,
         output::{Palette, Style},
@@ -76,11 +78,33 @@ async fn import_workspace(
         prerequisite: import.manifest.prerequisite.clone(),
         workspace: Box::new(workspace_here(&import.manifest, options.sessions)),
     };
-    ctx.progress(
-        "Importing workspace",
-        request::<RestoredWorkspace>(&ctx.paths, method),
-    )
-    .await
+    let restored = ctx
+        .progress(
+            "Importing workspace",
+            request::<RestoredWorkspace>(&ctx.paths, method),
+        )
+        .await?;
+    let kept = kept_sessions(&restored.removed);
+    let carried: Vec<_> = import
+        .sessions
+        .into_iter()
+        .filter(|imported| kept.contains(imported.file.session.as_str()))
+        .collect();
+    agents::install_session_files(ctx, &restored.opened.workspace, &carried).await;
+    Ok(restored)
+}
+
+/// The sessions the agents of the imported record `removed` continue.
+fn kept_sessions(removed: &RemovedWorkspace) -> BTreeSet<&str> {
+    let stopped = removed
+        .agents
+        .iter()
+        .filter_map(|agent| agent.record.session.as_deref());
+    let last = removed
+        .last_sessions
+        .iter()
+        .filter_map(|last| last.session.as_deref());
+    stopped.chain(last).collect()
 }
 
 /// The export files `files` names, with each directory among them replaced

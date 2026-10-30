@@ -16,7 +16,7 @@ use crate::{
     },
     removal::{InspectionPolicy, UnsavedWork},
     time::unix_seconds,
-    transfer::ExportedWorkspace,
+    transfer::{ExportedWorkspace, SessionSource},
 };
 
 impl Manager {
@@ -193,10 +193,59 @@ impl Manager {
             removed.name
         );
         let repo = self.repository(&removed.repository_id).await?;
+        let (sessions, warnings) = self.session_sources(&repo, &removed).await;
         Ok(ExportedWorkspace {
-            manifest: crate::transfer::export(&repo, removed, file).await?,
+            manifest: crate::transfer::export(&repo, removed, sessions, file).await?,
             removal: removal.map(|(_, removal)| removal),
+            warnings,
         })
+    }
+
+    /// The files of the sessions the agents of `removed` reported, wherever
+    /// they ran, with a warning for each session left out, which then starts
+    /// over on the importing machine.
+    async fn session_sources(
+        &self,
+        repo: &Repository,
+        removed: &RemovedWorkspace,
+    ) -> (Vec<SessionSource>, Vec<String>) {
+        let settings = match self.repository_settings(&repo.id).await {
+            Ok(settings) => settings,
+            Err(error) => {
+                return (
+                    Vec::new(),
+                    vec![format!(
+                        "cannot export the agents' session files: {error:#}"
+                    )],
+                );
+            }
+        };
+        let mut warnings = Vec::new();
+        let environments = self
+            .agent_environments(&repo.id)
+            .await
+            .unwrap_or_else(|error| {
+                warnings.push(format!(
+                    "agents' session files are looked up in the default places only: {error:#}"
+                ));
+                Vec::new()
+            });
+        let home = self.paths.home.clone();
+        let removed = removed.clone();
+        let found = tokio::task::spawn_blocking(move || {
+            crate::cli::agents::session_sources(&settings, &home, &environments, &removed)
+        })
+        .await;
+        match found {
+            Ok((sessions, more)) => {
+                warnings.extend(more);
+                (sessions, warnings)
+            }
+            Err(error) => {
+                warnings.push(format!("cannot export the agents' session files: {error}"));
+                (Vec::new(), warnings)
+            }
+        }
     }
 
     /// Open a workspace another Shoal exported: record it as removed here

@@ -2542,11 +2542,13 @@ workspace it opened and exits 1 naming each file it could not import or whose
 `hooks.post_setup` failed. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal work restore` does; when that restore fails,
-`shoal work restore <workspace>` retries it. On the machine that exported it, `shoal
-resume` continues each agent's reported session by ID, which Claude Code and
-Codex find from any directory; Shoal leaves the agents' session files alone.
-`--keep-sessions` keeps the sessions on any machine, such as one they were
-copied to, and `--new-sessions` on none. Every reopen, by import or
+`shoal work restore <workspace>` retries it. The export carries the files of each
+session the agents reported, such as Claude Code's and Codex's transcripts, and
+the import puts them where the agent looks for them, keeping a file already
+there, so `shoal resume` continues each session by ID on any machine; a session
+whose files the export could not read is left out with a warning, and continues
+only on the machine that exported it. `--keep-sessions` keeps every session,
+such as one whose files were copied by hand, and `--new-sessions` none. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running

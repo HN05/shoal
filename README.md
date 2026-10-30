@@ -421,9 +421,9 @@ workspace's HEAD and unsaved files in a checkpoint, as `shoal work checkpoint` d
 Shoal does when an agent exits or is stopped; `shoal work restore <workspace> <number>`
 returns an existing workspace to one of them. `shoal move export <workspace> -o <file>`
 removes a workspace and writes that checkpoint and record to a file, and `shoal
-move import <file>` opens it on another machine, where its agents start new sessions, or
-on the same one, where `shoal resume` continues their sessions; `--keep-sessions`
-and `--new-sessions` choose either.
+move import <file>` opens it on another machine or the same one, where `shoal resume`
+continues its agents' sessions from the transcripts the file carries;
+`--new-sessions` starts them over.
 An app hosting an external session can hold its workspace while the session is open:
 
 ```sh

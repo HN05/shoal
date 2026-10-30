@@ -2,7 +2,10 @@
 //! wakes it by typing a prompt into its session, `config.toml` records the
 //! directories it trusts, and `codex app` opens a workspace in the Codex
 //! app.
-use std::ffi::OsString;
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use serde_json::Value;
@@ -66,6 +69,28 @@ impl Integration for Codex {
 
     fn trust_file(&self) -> Option<&'static TrustFile> {
         Some(&CODEX)
+    }
+
+    /// `sessions` in its home, with a directory per day.
+    fn session_dir(&self, environment: &AgentEnvironment) -> Result<Option<PathBuf>> {
+        let home = crate::env::codex_home_with(environment.configured)?
+            .unwrap_or_else(|| environment.home.join(".codex"));
+        Ok(Some(home.join("sessions")))
+    }
+
+    /// The transcript `rollout-<time>-<id>.jsonl` in the directory of the
+    /// day it started.
+    fn session_files(&self, directory: &Path, id: &str) -> std::io::Result<Vec<PathBuf>> {
+        let suffix = format!("-{id}.jsonl");
+        let files = super::sessions::files_under(directory, directory, true)?;
+        Ok(files
+            .into_iter()
+            .filter(|file| {
+                file.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("rollout-") && name.ends_with(&suffix))
+            })
+            .collect())
     }
 
     fn wakes(&self) -> Wake {

@@ -2,7 +2,11 @@
 //! when idle and make the worktrees it creates child workspaces,
 //! `.claude.json` records the directories it trusts, and a `claude://` link
 //! opens a workspace in the Claude app.
-use std::{ffi::OsString, os::unix::ffi::OsStrExt as _, path::Path};
+use std::{
+    ffi::OsString,
+    os::unix::ffi::OsStrExt as _,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Result, ensure};
 use serde_json::{Value, json};
@@ -94,6 +98,34 @@ impl Integration for Claude {
 
     fn app(&self) -> Option<&'static App> {
         Some(&APP)
+    }
+
+    /// Its config directory's `projects` holds a directory per working
+    /// directory.
+    fn session_dir(&self, environment: &AgentEnvironment) -> Result<Option<PathBuf>> {
+        let config = crate::env::claude_config_dir_with(environment.configured)?
+            .unwrap_or_else(|| environment.home.join(".claude"));
+        Ok(Some(config.join("projects")))
+    }
+
+    /// The transcript `<id>.jsonl` in a project's directory, and the
+    /// directory `<id>` beside it with its subagents' transcripts and large
+    /// tool results.
+    fn session_files(&self, directory: &Path, id: &str) -> std::io::Result<Vec<PathBuf>> {
+        let mut files = Vec::new();
+        for project in super::sessions::files_under(directory, directory, false)? {
+            let project = directory.join(project);
+            let transcript = project.join(format!("{id}.jsonl"));
+            if transcript.is_file() {
+                files.extend(transcript.strip_prefix(directory).ok().map(Path::to_owned));
+            }
+            files.extend(super::sessions::files_under(
+                directory,
+                &project.join(id),
+                true,
+            )?);
+        }
+        Ok(files)
     }
 
     /// `StopFailure` names Claude Code's error kind; a gateway such as a

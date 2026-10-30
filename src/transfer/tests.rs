@@ -264,10 +264,65 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 fn import_refuses_other_files_and_newer_formats() {
     let error = Import::read(&mut &b"not an export\n"[..]).err().unwrap();
     assert_eq!(error.to_string(), "not a Shoal workspace export");
-    let error = Import::read(&mut &b"shoal workspace 2\n{}\n"[..])
+    let error = Import::read(&mut &b"shoal workspace 3\n{}\n"[..])
         .err()
         .unwrap();
     assert!(error.to_string().contains("newer format"), "{error}");
+}
+
+/// The bytes of an export of `manifest`'s format carrying `contents` for its
+/// session files.
+fn export_bytes(header: &str, manifest: &Manifest, contents: &[&str]) -> Vec<u8> {
+    let mut bytes = format!("{header}\n{}\n", serde_json::to_string(manifest).unwrap());
+    for content in contents {
+        bytes.push_str(content);
+    }
+    bytes.into_bytes()
+}
+
+fn session_file(path: &str, size: u64) -> SessionFile {
+    SessionFile {
+        agent: "claude".into(),
+        session: "s1".into(),
+        path: path.into(),
+        size,
+    }
+}
+
+#[test]
+fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
+    let mut manifest = manifest_with_sessions();
+    manifest.session_files = vec![session_file("p/s1.jsonl", 3), session_file("p/s1/a", 2)];
+    let bytes = export_bytes(HEADER, &manifest, &["abc", "de"]);
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    let read: Vec<_> = import
+        .sessions
+        .iter()
+        .map(|imported| {
+            let contents = fs::read_to_string(imported.contents.path()).unwrap();
+            (imported.file.path.to_str().unwrap().to_owned(), contents)
+        })
+        .collect();
+    assert_eq!(
+        read,
+        [
+            ("p/s1.jsonl".to_owned(), "abc".to_owned()),
+            ("p/s1/a".to_owned(), "de".to_owned())
+        ]
+    );
+    let short = export_bytes(HEADER, &manifest, &["abc", "d"]);
+    let error = Import::read(&mut &short[..]).err().unwrap();
+    assert!(error.to_string().contains("ends inside"), "{error}");
+    for path in ["../escape", "/absolute"] {
+        manifest.session_files = vec![session_file(path, 1)];
+        let bytes = export_bytes(HEADER, &manifest, &["x"]);
+        let error = Import::read(&mut &bytes[..]).err().unwrap();
+        assert!(error.to_string().contains("outside"), "{error}");
+    }
+    // A version 1 export has no session files, whatever its manifest says.
+    manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
+    let bytes = export_bytes(HEADER_WITHOUT_SESSION_FILES, &manifest, &[]);
+    assert!(Import::read(&mut &bytes[..]).unwrap().sessions.is_empty());
 }
 
 /// An export's manifest with one stopped agent and a last session, both with
@@ -331,6 +386,7 @@ fn manifest_with_sessions() -> Manifest {
             last_sessions: workspace.last_sessions.clone(),
         }),
         workspace: moved(workspace),
+        session_files: Vec::new(),
     }
 }
 
@@ -378,6 +434,16 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     let kept = manifest.workspace_on(None, Some(true));
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.origin, None);
+
+    // Another machine keeps a session whose files the export carries.
+    manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
+    let carried = manifest.workspace_on(Some("m2"), None);
+    assert_eq!(carried.agents[0].record.session.as_deref(), Some("s1"));
+    assert_eq!(carried.agents[0].record.origin, None);
+    assert!(carried.last_sessions[0].moved);
+    let new = manifest.workspace_on(Some("m2"), Some(false));
+    assert!(new.agents[0].record.moved);
+    manifest.session_files.clear();
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();

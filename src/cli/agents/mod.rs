@@ -12,6 +12,7 @@ mod detached;
 #[cfg(feature = "happy")]
 mod happy;
 mod launch;
+mod sessions;
 mod shortcuts;
 mod trust;
 
@@ -40,6 +41,8 @@ pub(in crate::cli) use claude::APP as CLAUDE_APP;
 pub(in crate::cli) use codex::APP as CODEX_APP;
 pub(in crate::cli) use desktop::{App, T3};
 pub(in crate::cli) use launch::input;
+pub(in crate::cli) use sessions::install_session_files;
+pub(crate) use sessions::session_sources;
 #[cfg(feature = "happy")]
 pub(super) use shortcuts::happy;
 pub(in crate::cli) use shortcuts::{Installed, happy_agents, shortcuts};
@@ -158,6 +161,19 @@ pub(in crate::cli) trait Integration: Sync {
     /// workspace launches to.
     fn app(&self) -> Option<&'static desktop::App> {
         None
+    }
+
+    /// The directory the agent keeps its sessions' files in, running in
+    /// `environment`; `None` for an agent whose sessions cannot move to
+    /// another machine.
+    fn session_dir(&self, _environment: &AgentEnvironment) -> Result<Option<PathBuf>> {
+        Ok(None)
+    }
+
+    /// The files of session `id` in `directory`, which [`Self::session_dir`]
+    /// gave, relative to it.
+    fn session_files(&self, _directory: &Path, _id: &str) -> std::io::Result<Vec<PathBuf>> {
+        Ok(Vec::new())
     }
 }
 

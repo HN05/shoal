@@ -1965,11 +1965,16 @@ bundle builds on, since that branch only advances. Repositories match by origin.
 Exporting every workspace of a repository checks each one before removing any, so
 one that cannot leave refuses the set while all stay; a failure once removals
 begin leaves the exported ones moved and the rest in place, each reported.
-Agent conversations are the agent tools' private files, and Shoal neither
-stores nor touches them. The export records the agents' sessions, with the
+Agent conversations are the agent tools' private files, which Shoal never
+reads or changes. An export copies each reported session's files unread, found
+by ID where the agent's integration says its tool keeps them, under the
+daemon's environment or one its agents ran with, and an import puts them at the
+same path under the importing agent's session directory, never replacing a file
+there; a session whose files cannot be read is left out with a warning and
+starts over. The export records the agents' sessions, with the
 exporting machine's ID when it has one, beside the moved records, which older
-importers read. An import on that machine, or one told to keep sessions, keeps
-the session IDs, which the agents resume from any directory, dropping another
+importers read. An import on that machine, one that received the session's
+files, or one told to keep sessions, keeps the session IDs, which the agents resume from any directory, dropping another
 machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust
 setup. Otherwise moved recovery records drop their session, place and wrapper,

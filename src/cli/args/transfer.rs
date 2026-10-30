@@ -11,7 +11,8 @@ pub enum MoveCommand {
     /// Remove a workspace and write it to a file that shoal move import opens on another machine.
     ///
     /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
-    /// default branch, and the workspace's base, links and stopped agents. A removed workspace
+    /// default branch, the workspace's base, links and stopped agents, and the files of the
+    /// agents' sessions, such as their transcripts. A removed workspace
     /// is exported without another removal. Without -o, or with `-`, it writes to standard
     /// output, which must not be a terminal. When -o names a directory, several workspaces, or
     /// with --all every workspace of the repository, go to a file each in it, once each one can
@@ -19,10 +20,10 @@ pub enum MoveCommand {
     Export(ExportArgs),
     /// Open workspaces shoal move export wrote, in the repository with the same origin.
     ///
-    /// Fetches the default branch when a file builds on commits the repository lacks. On the
-    /// machine that exported it, shoal resume continues the stopped agents' sessions; elsewhere,
-    /// it starts new sessions, since the sessions stayed on the other machine. --keep-sessions
-    /// and --new-sessions override that. Without a file, or with `-`, it reads from standard
+    /// Fetches the default branch when a file builds on commits the repository lacks. It puts
+    /// the agents' session files where the agents look for them, so shoal resume continues
+    /// their sessions; one the file lacks continues only on the machine that exported it.
+    /// --keep-sessions and --new-sessions override that. Without a file, or with `-`, it reads from standard
     /// input, which must not be a terminal. A directory imports each .shoal file in it.
     Import(ImportArgs),
     /// Move every repository directory, with its workspaces and clone, into root_dir.
@@ -65,8 +66,7 @@ pub struct ImportArgs {
     /// Repository to import into, when it does not share the exported repository's origin.
     #[arg(long = "repo")]
     pub repository: Option<String>,
-    /// Continue the stopped agents' sessions on any machine, such as one the agents'
-    /// sessions were copied to.
+    /// Continue every stopped agent's session, such as one whose files were copied by hand.
     #[arg(long, conflicts_with = "new_sessions")]
     pub keep_sessions: bool,
     /// Start new sessions even on the machine that exported the workspace.
