@@ -21,7 +21,12 @@ async fn idle_in_held_done_workspace(
         .await
         .unwrap();
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager

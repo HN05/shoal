@@ -434,7 +434,12 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     );
     // A hold, not the withdrawn completion, keeps a merged workspace.
     manager
-        .acquire_hold(&workspace.id, "review".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
@@ -444,7 +449,11 @@ async fn undone_withdraws_completion_without_blocking_cleanup() {
     manager.sweep_prs().await.unwrap();
     assert!(workspace.path.exists());
     manager
-        .release_hold(&workspace.id, "review".into())
+        .release_hold(
+            &workspace.id,
+            "review".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager.sweep_prs().await.unwrap();
@@ -553,7 +562,12 @@ async fn issue_and_watch_completion_wait_for_explicit_done() {
 async fn holds_retain_completion_without_turning_it_into_an_error() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let completed = manager
@@ -567,7 +581,7 @@ async fn holds_retain_completion_without_turning_it_into_an_error() {
     assert!(completion.error.is_none());
     assert!(workspace.path.exists());
     manager
-        .release_hold(&workspace.id, "app".into())
+        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -709,7 +723,12 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
     fs::write(workspace.path.join("new-work"), "keep").unwrap();
     commit(&workspace.path, "new-work");
     manager
-        .acquire_hold(&workspace.id, "app".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "app".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     manager
@@ -722,7 +741,7 @@ async fn plain_done_returns_an_integrated_completion_to_normal_retention() {
         .unwrap();
     assert!(!completion.integrated);
     manager
-        .release_hold(&workspace.id, "app".into())
+        .release_hold(&workspace.id, "app".into(), crate::model::HoldPlacer::User)
         .await
         .unwrap();
     manager.sweep_completed().await.unwrap();
@@ -777,4 +796,164 @@ fn a_notice_names_the_first_results_and_counts_the_rest() {
         "report.md, repro.sh, trace.log and 2 more"
     );
     assert_eq!(results_preview(&results[..2]), "report.md, repro.sh");
+}
+
+#[tokio::test]
+async fn a_parents_completion_takes_its_unheld_children_whatever_their_work() {
+    let (_root, manager, parent) = fixture().await;
+    // The parent's own unpushed commit keeps it, but not its children.
+    commit_file(&parent.path, "parent-work");
+    let split = |name: &'static str, parent: String| {
+        let manager = manager.clone();
+        async move {
+            manager
+                .split_workspace(&parent, name.into(), None)
+                .await
+                .unwrap()
+        }
+    };
+    let dirty = split("dirty", parent.id.clone()).await;
+    commit_file(&dirty.path, "child-work");
+    fs::write(dirty.path.join("draft"), "draft").unwrap();
+    let held = split("held", parent.id.clone()).await;
+    manager
+        .acquire_hold(
+            &held.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
+        .await
+        .unwrap();
+    let nested = split("nested", parent.id.clone()).await;
+    let leaf = split("leaf", nested.id.clone()).await;
+
+    manager
+        .mark_done(&parent.id, false, false, Vec::new())
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.cleanup_reason(&dirty).await,
+        CleanupReason::AncestorCompleted {
+            workspace: "finished".into()
+        }
+    );
+    assert_eq!(manager.cleanup_reason(&held).await, CleanupReason::Held);
+    // The leaf goes first, then the workspace it was split from.
+    manager.sweep_completed().await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    for gone in [&dirty, &nested, &leaf] {
+        assert!(manager.find_workspace(&gone.id).await.unwrap().is_none());
+        assert!(!gone.path.exists(), "{}", gone.name);
+    }
+    // Its commit stays on the kept branch, its unsaved file in a checkpoint.
+    let repo = manager.repository(&parent.repository_id).await.unwrap();
+    assert_eq!(
+        git(&repo.path, &["branch", "--list", "dirty"]).trim(),
+        "dirty"
+    );
+    let removed = manager.removed_workspaces().await.unwrap();
+    assert!(removed.iter().any(|removed| removed.name == "dirty"));
+    assert!(held.path.exists());
+    assert!(parent.path.exists());
+    assert_error(&manager, &parent, "neither pushed").await;
+}
+
+#[tokio::test]
+async fn children_stay_while_their_parents_completion_does_not_stand() {
+    let (_root, manager, parent) = fixture().await;
+    commit_file(&parent.path, "parent-work");
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    // Without cleanup the completion leaves them.
+    manager
+        .set_repository_config(
+            &parent.repository_id,
+            Some("[cleanup.done]\nenabled = false\n".into()),
+        )
+        .await
+        .unwrap();
+    manager
+        .mark_done(&parent.id, false, false, Vec::new())
+        .await
+        .unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    // Nor once it is withdrawn.
+    manager
+        .mark_done(&parent.id, true, false, Vec::new())
+        .await
+        .unwrap();
+    manager.undo_done(&parent.id).await.unwrap();
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    // Nor once the parent committed after it.
+    manager
+        .mark_done(&parent.id, true, false, Vec::new())
+        .await
+        .unwrap();
+    commit_file(&parent.path, "parent-work");
+    manager.sweep_completed().await.unwrap();
+    assert!(child.path.exists());
+    assert_eq!(
+        manager.cleanup_reason(&child).await,
+        CleanupReason::Idle { minutes: 10 }
+    );
+}
+
+/// Commit a new revision of the file `name` in `path`.
+fn commit_file(path: &std::path::Path, name: &str) {
+    let file = path.join(name);
+    let revision = fs::read_to_string(&file).unwrap_or_default();
+    fs::write(&file, format!("{revision}x")).unwrap();
+    commit(path, name);
+}
+
+#[tokio::test]
+async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cleanup() {
+    let (_root, manager, parent) = fixture().await;
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let other = manager
+        .create_workspace(&parent.repository_id, "other".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .mark_done(&other.id, false, false, Vec::new())
+        .await
+        .unwrap();
+    let id = parent.id.clone();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO workspace_completion(workspace_id,record) VALUES (?1,'not json')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let error = manager.sweep_completed().await.unwrap_err();
+    assert!(error.to_string().contains("child: "), "{error:#}");
+    assert!(!other.path.exists());
+    assert!(child.path.exists() && parent.path.exists());
+    // The unreadable record stays for diagnosis.
+    let id = parent.id.clone();
+    let record: String = manager
+        .store
+        .run(move |db| {
+            Ok(db.query_row(
+                "SELECT record FROM workspace_completion WHERE workspace_id=?1",
+                [id],
+                |row| row.get(0),
+            )?)
+        })
+        .await
+        .unwrap();
+    assert_eq!(record, "not json");
 }

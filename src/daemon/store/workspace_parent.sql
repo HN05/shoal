@@ -1,6 +1,7 @@
 -- A child workspace was split from its parent, whose agent works on it or
 -- coordinates its agent. Writers name a recorded workspace in the same
--- repository, and removal moves children up before the row goes.
+-- repository. Removal moved children up until migration 91 dropped
+-- `workspace_parent_removed`; it now removes them first.
 ALTER TABLE workspaces ADD COLUMN parent_workspace_id TEXT;
 CREATE INDEX IF NOT EXISTS workspaces_parent ON workspaces(parent_workspace_id);
 

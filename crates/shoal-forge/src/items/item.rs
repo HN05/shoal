@@ -62,6 +62,9 @@ pub struct Current {
     pub head_sha: Option<String>,
     /// The commit a PR's base branch points to, where the forge reports it.
     pub base_sha: Option<String>,
+    /// The commit a merged PR's merge left at the tip of its base branch: a
+    /// merge commit, its squashed commit, or the last of its rebased ones.
+    pub merge_commit: Option<String>,
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,

@@ -85,6 +85,7 @@ impl Backend for Forgejo {
     /// and reruns jobs.
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
             Capability::RerunJobs => Support::Unsupported(Some(
                 "rerun them from the web UI, push a fix, or start a new run with shoal ci run",
@@ -138,6 +139,10 @@ impl Backend for Forgejo {
 
     fn commit_field(&self) -> &'static str {
         "sha"
+    }
+
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/pull/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {

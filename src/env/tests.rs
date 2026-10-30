@@ -96,8 +96,14 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
         ("EMPTY".into(), "".into()),
     ]);
     let caches = BTreeMap::from([("go".into(), PathBuf::from("/tmp/.caches/{cache.go}"))]);
-    let rendered =
-        render_configured_environment(&values, &workspace, "project-{workspace}", &ports, &caches);
+    let rendered = render_configured_environment(
+        &values,
+        &workspace,
+        "project-{workspace}",
+        &ports,
+        &caches,
+        None,
+    );
     assert_eq!(
         rendered["SESSION"],
         "project-{workspace}:task-{branch}:feature/session"
@@ -116,6 +122,31 @@ fn configured_values_render_identity_and_only_reserved_ports_once() {
 }
 
 #[test]
+fn the_temporary_directory_is_tmpdir_unless_env_sets_it() {
+    let workspace = Workspace::new_record(
+        "repo".into(),
+        "worker".into(),
+        PathBuf::from("/work"),
+        "worker".into(),
+        crate::state::WorkspaceState::Ready,
+    );
+    let tmp_dir = Path::new("/root/repo/.tmp/id");
+    let render = |values: &BTreeMap<String, String>| {
+        render_configured_environment(
+            values,
+            &workspace,
+            "repo",
+            &[],
+            &BTreeMap::new(),
+            Some(tmp_dir),
+        )
+    };
+    assert_eq!(render(&BTreeMap::new())[TMPDIR], tmp_dir.as_os_str());
+    let configured = BTreeMap::from([(TMPDIR.into(), "{workspace_path}/tmp".into())]);
+    assert_eq!(render(&configured)[TMPDIR], "/work/tmp");
+}
+
+#[test]
 fn configured_paths_preserve_non_utf8_bytes() {
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
     let workspace = Workspace::new_record(
@@ -127,7 +158,7 @@ fn configured_paths_preserve_non_utf8_bytes() {
     );
     let values = BTreeMap::from([("PROFILE".into(), "{workspace_path}/profile".into())]);
     let rendered =
-        render_configured_environment(&values, &workspace, "repo", &[], &BTreeMap::new());
+        render_configured_environment(&values, &workspace, "repo", &[], &BTreeMap::new(), None);
     assert_eq!(
         rendered["PROFILE"].as_os_str(),
         OsStr::from_bytes(b"/tmp/\xff/profile")

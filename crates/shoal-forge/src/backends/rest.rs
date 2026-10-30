@@ -288,7 +288,7 @@ fn branches(repo: &ForgeRepo, pull: Current) -> Result<(String, String, String)>
 }
 
 /// Full commit IDs, refusing anything else so cleanup never matches a prefix.
-fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
+pub(crate) fn commit_shas(commits: &[Value], field: &str) -> Result<Vec<String>> {
     commits
         .iter()
         .map(|commit| {

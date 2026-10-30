@@ -193,7 +193,6 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "workspace_completed_again",
         "workspace_undone",
         "workspace_base_removed",
-        "workspace_parent_removed",
         "demo_started",
         "demo_stopped",
         "simulator_acquired",
@@ -206,6 +205,7 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     // Later migrations add these columns and tables again when the emulated
     // database upgrades.
     db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN from_continuation;")?;
+    db.execute_batch("ALTER TABLE workspace_holds DROP COLUMN placed_by;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN workspace_id;")?;
     db.execute_batch("ALTER TABLE notifications DROP COLUMN subject;")?;
     db.execute_batch("ALTER TABLE chat_messages DROP COLUMN workspace_id;")?;

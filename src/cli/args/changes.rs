@@ -134,6 +134,17 @@ pub enum PrCommand {
         #[command(flatten)]
         pull: OpenPullArgs,
     },
+    /// Open a PR that reverts a merged PR.
+    ///
+    /// The forge opens it where it reverts PRs, as shoal forge capabilities
+    /// shows; otherwise Shoal reverts the merge with git revert on a new
+    /// branch in a new workspace, which goes once the revert merges.
+    Revert {
+        #[command(flatten)]
+        item: ItemSelector,
+        #[command(flatten)]
+        revert: RevertArgs,
+    },
     /// Change a PR's title, description, base, labels, reviewers or draft state.
     Edit {
         #[command(flatten)]
@@ -370,6 +381,30 @@ pub struct OpenPullArgs {
     #[arg(long, overrides_with = "draft")]
     pub no_draft: bool,
     /// Add a label; repeat for more.
+    #[arg(long = "label", value_name = "LABEL")]
+    pub labels: Vec<String>,
+    /// Request a review; repeat for more.
+    #[arg(long = "reviewer", value_name = "LOGIN")]
+    pub reviewers: Vec<String>,
+}
+
+// What the PR that reverts a merged one is opened with.
+#[derive(Debug, Args)]
+pub struct RevertArgs {
+    /// PR title; defaults to Revert "<title of the reverted PR>".
+    #[arg(long)]
+    pub title: Option<String>,
+    #[command(flatten)]
+    pub body: BodyArgs,
+    #[command(flatten)]
+    pub files: AttachArgs,
+    /// Open the PR as a draft, overriding [pr] draft.
+    #[arg(long, overrides_with = "no_draft")]
+    pub draft: bool,
+    /// Open the PR ready for review, overriding [pr] draft.
+    #[arg(long, overrides_with = "draft")]
+    pub no_draft: bool,
+    /// Add a label, instead of the reverted PR's labels; repeat for more.
     #[arg(long = "label", value_name = "LABEL")]
     pub labels: Vec<String>,
     /// Request a review; repeat for more.

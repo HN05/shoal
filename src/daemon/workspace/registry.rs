@@ -254,6 +254,18 @@ impl Manager {
         Ok(directory)
     }
 
+    /// The repository `id`, reserving its directory under `root_dir` first
+    /// when its registration predates it. Callers hold no Git gate.
+    pub(crate) async fn reserve_repository_directory(&self, id: &str) -> Result<Repository> {
+        let repo = self.repository(id).await?;
+        if repo.workspaces_dir.is_some() {
+            return Ok(repo);
+        }
+        let (repo, _git) = self.lock_repository(id).await?;
+        self.workspaces_dir(&repo).await?;
+        self.repository(id).await
+    }
+
     pub async fn rename_repository(
         &self,
         selector: impl Into<crate::repository::Selector>,

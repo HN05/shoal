@@ -76,7 +76,7 @@ pub enum RepoCommand {
     },
     /// Show or replace repository configuration stored locally by Shoal.
     Config {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// Import TOML as the complete config for all this repository's workspaces.
         #[arg(long, conflicts_with = "clear", value_hint = clap::ValueHint::FilePath)]
@@ -95,14 +95,14 @@ pub enum RepoCommand {
         path: Option<PathBuf>,
     },
     Rename {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// New name; omit to enter one.
         name: Option<String>,
     },
     /// Have an agent write the repository's Shoal config in a shoal-setup workspace.
     Setup {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
@@ -127,7 +127,7 @@ pub enum RepoCommand {
     /// Uncommitted and unpushed work is permanently lost.
     #[command(alias = "remove")]
     Rm {
-        /// Registered repository; omit to choose one.
+        /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
         #[command(flatten)]
         confirmation: ConfirmationArgs,

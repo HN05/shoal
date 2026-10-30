@@ -37,6 +37,7 @@ use crate::{
         link::ItemKind,
         list,
         reaction::{Listed, Subject},
+        revert::NewRevert,
     },
     repo::locator::ItemRoute,
     review::{
@@ -105,7 +106,8 @@ impl Backend for GitHub {
             | Capability::LineComments
             | Capability::ApprovePrs
             | Capability::RequestChanges
-            | Capability::Reactions => Support::Supported,
+            | Capability::Reactions
+            | Capability::RevertPrs => Support::Supported,
         }
     }
 
@@ -135,6 +137,10 @@ impl Backend for GitHub {
 
     fn commit_field(&self) -> &'static str {
         "sha"
+    }
+
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/pull/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {
@@ -446,6 +452,19 @@ impl Backend for GitHub {
                 "variables": { "id": id, "head": head, "method": method },
             })),
         )])
+    }
+
+    async fn revert(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+        revert: &NewRevert,
+    ) -> Result<(u64, String)> {
+        let response = repo
+            .send(account, &revert_request(current, revert)?)
+            .await?;
+        reverted(&response)
     }
 
     /// GitHub reads discussion comments by GraphQL node ID, which REST
@@ -1075,6 +1094,40 @@ fn auto_merge_request(current: &Current, method: Option<MergeMethod>) -> Result<
         "graphql".into(),
         Some(json!({ "query": query, "variables": variables })),
     ))
+}
+
+/// GitHub reverts a PR only through GraphQL, opening the revert from a
+/// branch it creates.
+fn revert_request(current: &Current, revert: &NewRevert) -> Result<Request> {
+    let id = current
+        .node_id
+        .as_deref()
+        .context("GitHub did not report the PR's node ID")?;
+    Ok(Request::new(
+        HttpMethod::Post,
+        "graphql".into(),
+        Some(json!({
+            "query": REVERT_PULL,
+            "variables": {
+                "id": id,
+                "title": revert.title,
+                "body": revert.body,
+                "draft": revert.draft,
+            },
+        })),
+    ))
+}
+
+const REVERT_PULL: &str = "mutation($id: ID!, $title: String!, $body: String!, $draft: Boolean!) { revertPullRequest(input: {pullRequestId: $id, title: $title, body: $body, draft: $draft}) { revertPullRequest { number headRefName } } }";
+
+/// The number and head branch of the PR a revert's response reports.
+fn reverted(response: &Value) -> Result<(u64, String)> {
+    let pull = &response["data"]["revertPullRequest"]["revertPullRequest"];
+    let number = pull["number"]
+        .as_u64()
+        .context("GitHub did not report the revert's number")?;
+    let head = text(&pull["headRefName"]).context("GitHub did not report the revert's branch")?;
+    Ok((number, head))
 }
 
 /// The messages of a GraphQL response's `errors`, when it has any.

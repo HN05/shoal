@@ -186,6 +186,7 @@ async fn serve_attach_targets(listener: UnixListener, root: &std::path::Path) ->
                 pid: 1,
                 started_at: 0,
                 origin: Some(Origin::created(HostName::Zmx, "chat-session".into())),
+                tmp_dir: None,
             }])
         } else {
             assert!(matches!(

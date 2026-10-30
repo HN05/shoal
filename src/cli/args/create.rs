@@ -20,7 +20,8 @@ pub enum CreateCommand {
         /// its agent starts now, as with --now.
         #[arg(long, conflicts_with = "here")]
         focus: bool,
-        /// Registered repository, or an issue, PR or branch URL.
+        /// Registered repository, or an issue, PR or branch URL; defaults to the
+        /// current checkout or workspace, else a picker.
         #[arg(value_parser = item_reference)]
         repository: Option<String>,
         /// Repository for an issue number or a pasted link.

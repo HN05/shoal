@@ -201,7 +201,12 @@ impl ForgeRepo {
     /// Finish the item that was just posted, keeping it as posted when that
     /// fails: it exists, so the caller records it instead of failing, and a
     /// retry cannot open another.
-    async fn finish_posted(&self, account: &Account, posted: Item, follow_up: &Edit) -> Created {
+    pub(crate) async fn finish_posted(
+        &self,
+        account: &Account,
+        posted: Item,
+        follow_up: &Edit,
+    ) -> Created {
         match (self.finish_item(account, posted.kind, posted.number, follow_up)).await {
             Ok(item) => Created {
                 item,
@@ -305,7 +310,7 @@ impl ForgeRepo {
 }
 
 /// The edit that attaches the files of a new item once it exists.
-fn pending_edit(pending: Option<Pending>) -> Edit {
+pub(crate) fn pending_edit(pending: Option<Pending>) -> Edit {
     match pending {
         Some(pending) => Edit {
             body: Some(pending.body),

@@ -33,7 +33,7 @@ async fn removal_waits_for_queued_workspace_creation() {
     });
     test_support::assert_pending(&mut creating).await;
 
-    // Shared caches go with the repository directory.
+    // Shared caches and temporary directories go with the repository directory.
     let caches = std::collections::BTreeMap::from([(
         "go".to_owned(),
         crate::config::repo::Cache {
@@ -41,6 +41,7 @@ async fn removal_waits_for_queued_workspace_creation() {
         },
     )]);
     crate::caches::directories(&repo, &caches).unwrap();
+    crate::tmp_dirs::directory(&repo, "chat-id").unwrap();
     let mut removing = Box::pin(manager.remove_repository(&repo.id));
     test_support::assert_pending(&mut removing).await;
     drop(gate);
