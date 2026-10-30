@@ -411,3 +411,18 @@ async fn a_wrapper_waiting_to_restore_its_agent_shows_it_as_stopped() {
     assert_eq!(agent.state, AgentState::Stopped);
     assert_eq!(agent.agent.as_deref(), Some("claude"));
 }
+
+#[tokio::test]
+async fn an_untracked_agent_shows_the_turn_state_it_reports() {
+    let daemon = TestDaemon::start().await;
+    let workspace = daemon.workspace("exported").await;
+    daemon
+        .manager
+        .set_agent_state(&workspace.id, crate::state::AgentState::Waiting, None, None)
+        .await
+        .unwrap();
+    let client = daemon.client().await;
+    let agent = client.call(get("exported")).await.unwrap().agent.unwrap();
+    assert_eq!(agent.state, AgentState::Waiting);
+    assert_eq!(agent.agent, None);
+}

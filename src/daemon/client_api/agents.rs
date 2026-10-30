@@ -27,14 +27,24 @@ pub(super) struct Agents {
 }
 
 impl Agents {
-    /// The workspace's agent: running or unconfirmed, else queued, else
-    /// stopped with a session to restore or a wrapper waiting to restore it.
+    /// The workspace's agent: running or unconfirmed, else one reporting its
+    /// turns untracked, else queued, else stopped with a session to restore
+    /// or a wrapper waiting to restore it.
     pub(super) fn status(&self, workspace: &Workspace) -> Option<api::AgentStatus> {
         let execution = self.executions.get(&workspace.id);
         if let Some(execution) = execution
             .filter(|execution| execution.started || execution.state == ExecutionState::Unknown)
         {
             return Some(running(execution, workspace));
+        }
+        // An agent started from an exported workspace environment reports
+        // its turns without a tracked execution.
+        if let (None, Some(status)) = (execution, workspace.agent_state) {
+            return Some(api::AgentStatus {
+                state: agent_state(status.state),
+                agent: None,
+                since: Some(status.since),
+            });
         }
         if let Some(entry) = self.queued.get(&workspace.id) {
             return Some(api::AgentStatus {
