@@ -92,9 +92,14 @@ pub(super) async fn relabel(place: &Origin, old: &str, new: &str) -> Result<()> 
     if tab.result.tab.label.as_deref() != Some(old) {
         return Ok(());
     }
-    run_on(super::herdr(place), ["tab", "rename", &pane.tab_id, new])
+    rename_tab(place, &pane.tab_id, new).await
+}
+
+/// Name `tab`, on the server `place` records, `label`.
+async fn rename_tab(place: &Origin, tab: &str, label: &str) -> Result<()> {
+    run_on(super::herdr(place), ["tab", "rename", tab, label])
         .await
-        .with_context(|| format!("cannot rename Herdr tab {}", pane.tab_id))
+        .with_context(|| format!("cannot rename Herdr tab {tab}"))
 }
 
 async fn run<const N: usize>(args: [&str; N]) -> Result<()> {
