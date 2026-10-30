@@ -1,6 +1,6 @@
 use super::*;
-use crate::test_support::{commit, git, manager, repository};
-use std::{os::unix::fs::PermissionsExt as _, path::PathBuf};
+use crate::test_support::{commit, git, install_test_script, manager, repository};
+use std::path::PathBuf;
 
 fn modified(path: &Path) -> std::time::SystemTime {
     fs::metadata(path).unwrap().modified().unwrap()
@@ -21,12 +21,10 @@ async fn new_workspaces_start_from_the_default_branch_build() {
     let checkout = repository(temp.path(), "repo");
     // The build edits a tracked file, which must not lend its time.
     let script = checkout.join("seed.sh");
-    fs::write(
-            &script,
-            "#!/bin/sh\ntouch \"$GOCACHE/seed\" || exit 1\nmkdir -p out\ncat other > out/built\necho edit >> tracked\n",
-        )
-        .unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &script,
+        "#!/bin/sh\ntouch \"$GOCACHE/seed\" || exit 1\nmkdir -p out\ncat other > out/built\necho edit >> tracked\n",
+    );
     fs::write(
             checkout.join(".shoal.toml"),
             "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n[env]\nGOCACHE = '{cache.go}'\n[caches.go]\nscope = 'shared'\n",
@@ -111,8 +109,7 @@ async fn a_failed_build_is_reported_once_per_commit() {
     configure(&manager, NO_PRESSURE).await;
     let checkout = repository(temp.path(), "repo");
     let script = checkout.join("seed.sh");
-    fs::write(&script, "#!/bin/sh\necho broken\nexit 3\n").unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&script, "#!/bin/sh\necho broken\nexit 3\n");
     fs::write(
         checkout.join(".shoal.toml"),
         "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",
@@ -221,8 +218,7 @@ async fn a_preset_builds_and_keeps_its_tool_outputs() {
 async fn seeded(manager: &Manager, root: &Path, script: &str) -> (PathBuf, Repository) {
     let checkout = repository(root, "repo");
     let path = checkout.join("seed.sh");
-    fs::write(&path, script).unwrap();
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&path, script);
     fs::write(
         checkout.join(".shoal.toml"),
         "[setup.seed]\ncommand = 'seed.sh'\npaths = ['out']\n",

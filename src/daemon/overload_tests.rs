@@ -6,7 +6,7 @@ use crate::{
         workspace_files::Attacher,
     },
     protocol::RemovalMethod,
-    test_support::{manager, repository},
+    test_support::{install_test_script, manager, repository},
 };
 use std::{
     fs::{self, OpenOptions},
@@ -77,8 +77,7 @@ async fn fixture() -> (
         .await
         .unwrap();
     let script = workspace.path.join("resume.sh");
-    fs::write(&script, "#!/bin/sh\nprintf restored > restored\n").unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&script, "#!/bin/sh\nprintf restored > restored\n");
     fs::write(
         workspace.path.join(".shoal.toml"),
         "[agents.fixture]\nresume_command = ['./resume.sh']\n",

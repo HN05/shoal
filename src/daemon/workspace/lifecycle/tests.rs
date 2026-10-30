@@ -3,9 +3,9 @@ use crate::{
     daemon::workspace_files::Attacher,
     model::Workspace,
     process::identity,
-    test_support::{git, manager, repository},
+    test_support::{git, install_test_script, manager, repository},
 };
-use std::{fs, os::unix::fs::PermissionsExt, sync::Arc};
+use std::{fs, sync::Arc};
 
 async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
@@ -34,8 +34,7 @@ async fn fixture_with_hook(
     let path = repository(root.path(), "repo");
     let hook = root.path().join("remove-hook.sh");
     let script = script(root.path());
-    fs::write(&hook, format!("#!/bin/sh\nset -eu\n{script}\n")).unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&hook, &format!("#!/bin/sh\nset -eu\n{script}\n"));
     fs::write(
         path.join(".shoal.toml"),
         format!("{key} = '{}'\n", hook.display()),

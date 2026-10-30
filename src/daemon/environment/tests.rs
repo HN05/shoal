@@ -1,5 +1,6 @@
 use super::*;
-use std::{fs, os::unix::fs::PermissionsExt};
+use crate::test_support::install_test_script;
+use std::fs;
 
 #[tokio::test]
 async fn root_dir_reports_whether_the_daemon_can_write_there() {
@@ -25,8 +26,7 @@ async fn root_dir_reports_whether_the_daemon_can_write_there() {
 #[test]
 fn dependencies_require_executable_files_on_the_supplied_path() {
     let root = tempfile::tempdir().unwrap();
-    fs::write(root.path().join("git"), "#!/bin/sh\n").unwrap();
-    fs::set_permissions(root.path().join("git"), fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&root.path().join("git"), "#!/bin/sh\n");
     fs::write(root.path().join("wt"), "not executable").unwrap();
     fs::create_dir(root.path().join("lsof")).unwrap();
     let checks = dependencies(Some(root.path().as_os_str()));

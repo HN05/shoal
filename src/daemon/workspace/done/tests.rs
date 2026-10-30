@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     daemon::{links::pr::Action, workspace_files::Attacher},
     model::CleanupReason,
-    test_support::{commit, git, manager, repository},
+    test_support::{commit, git, install_test_script, manager, repository},
 };
 use std::{fs, sync::Arc};
 
@@ -179,16 +179,13 @@ async fn repeating_an_unchanged_completion_is_refused() {
 
 #[tokio::test]
 async fn repeating_a_completion_reruns_a_configured_hook() {
-    use std::os::unix::fs::PermissionsExt;
     let (root, manager, workspace) = fixture().await;
     let runs = root.path().join("runs");
     let hook = root.path().join("post-done");
-    fs::write(
+    install_test_script(
         &hook,
-        format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", runs.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        &format!("#!/bin/sh\nprintf x >> '{}'\nexit 1\n", runs.display()),
+    );
     manager
         .write_local_config(
             &workspace.repository_id,
@@ -328,11 +325,9 @@ async fn assert_error(manager: &Manager, workspace: &Workspace, expected: &str) 
 
 #[tokio::test]
 async fn completion_rechecks_work_after_removal_hooks() {
-    use std::os::unix::fs::PermissionsExt;
     let (root, manager, workspace) = fixture().await;
     let hook = root.path().join("modify-work");
-    fs::write(&hook, "#!/bin/sh\nprintf 'preserve me' > new-work\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&hook, "#!/bin/sh\nprintf 'preserve me' > new-work\n");
     manager
         .write_local_config(
             &workspace.repository_id,
@@ -354,7 +349,6 @@ async fn completion_rechecks_work_after_removal_hooks() {
 
 #[tokio::test]
 async fn a_removal_holds_only_its_own_workspaces_gate() {
-    use std::os::unix::fs::PermissionsExt;
     let (root, manager, workspace) = fixture().await;
     let other = manager
         .create_workspace(&workspace.repository_id, "other".into(), None, None, None)
@@ -362,16 +356,14 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
         .unwrap();
     let (started, release) = (root.path().join("started"), root.path().join("release"));
     let hook = root.path().join("wait-for-release");
-    fs::write(
+    install_test_script(
         &hook,
-        format!(
+        &format!(
             "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
             started.display(),
             release.display()
         ),
-    )
-    .unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     manager
         .write_local_config(
             &workspace.repository_id,

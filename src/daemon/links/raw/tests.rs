@@ -1,10 +1,8 @@
-use std::os::unix::fs::PermissionsExt;
-
 use serde_json::json;
 
 use crate::{
     forge::raw::{HttpMethod, RawRequest},
-    test_support::{git, manager, repository},
+    test_support::{git, install_test_script, manager, repository},
 };
 
 #[tokio::test]
@@ -25,15 +23,13 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     );
     let gh = root.path().join("gh-agent");
     let log = root.path().join("log");
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             "#!/bin/sh\necho \"$*\" >> '{}'\nprintf 'HTTP/2.0 200 OK\\n\\n{{\"ok\":true}}'\n",
             log.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let auth = format!("[agent.forge_clis]\ngh = '{}'\n", gh.display());
     manager
         .write_local_config(&repo.id, Some(auth.clone()))

@@ -1,15 +1,14 @@
-use std::os::unix::fs::PermissionsExt;
-
 use super::*;
+use crate::test_support::install_test_script;
 
 /// A fake `rex` that records its arguments and answers from `answers`, a
 /// Python dict from the first arguments to (exit status, stdout).
 fn fake(answers: &str) -> (tempfile::TempDir, Rex) {
     let root = tempfile::tempdir().unwrap();
     let program = root.path().join("rex");
-    std::fs::write(
+    install_test_script(
         &program,
-        format!(
+        &format!(
             r#"#!/usr/bin/env python3
 import json, sys
 args = sys.argv[1:]
@@ -24,9 +23,7 @@ for prefix, (status, out) in answers.items():
 sys.exit(9)
 "#
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let rex = Rex {
         program,
         server: Some("unix:///rex.sock".into()),

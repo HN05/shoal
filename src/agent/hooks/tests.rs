@@ -1,6 +1,7 @@
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{fs, process::Command};
 
 use super::*;
+use crate::test_support::install_test_script;
 
 #[test]
 fn state_hooks_report_each_state_and_never_fail() {
@@ -8,12 +9,10 @@ fn state_hooks_report_each_state_and_never_fail() {
     // A stand-in Shoal that records its arguments, then fails.
     let log = directory.path().join("calls");
     let shoal = directory.path().join("shoal it's");
-    fs::write(
+    install_test_script(
         &shoal,
-        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&shoal, fs::Permissions::from_mode(0o755)).unwrap();
+        &format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 2\n", log.display()),
+    );
     let quoted = crate::shell::quote(&[shoal.to_str().unwrap()]);
     for (agent_state, spelling) in [
         (AgentState::Working, "working"),

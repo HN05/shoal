@@ -1,6 +1,7 @@
 use super::*;
 use crate::test_support::assert_pending;
-use std::{fs, os::unix::fs::PermissionsExt, time::Duration};
+use crate::test_support::install_test_script;
+use std::{fs, time::Duration};
 
 fn owned_daemon(root: &std::path::Path) -> Result<(Paths, File)> {
     let paths = Paths::for_test(root);
@@ -97,7 +98,7 @@ async fn legacy_service_child() -> Result<()> {
     fs::create_dir(root.join("bin"))?;
     for name in ["launchctl", "systemctl"] {
         let script = root.join("bin").join(name);
-        fs::write(
+        install_test_script(
             &script,
             r#"#!/usr/bin/env python3
 import sys
@@ -115,8 +116,7 @@ elif args[0] in ('bootout', 'stop'):
     if not Path('drained').exists():
         sys.exit('legacy service deadline cut the daemon drain short')
 "#,
-        )?;
-        fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
+        );
     }
     for platform in [Platform::Mac, Platform::Linux] {
         let (paths, owner) = owned_daemon(&root)?;

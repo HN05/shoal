@@ -51,16 +51,14 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     let home = &manager.paths.home;
     let (started, release) = (home.join("hook-started"), home.join("release"));
     let hook = home.join("wait-for-release");
-    fs::write(
+    install_test_script(
         &hook,
-        format!(
+        &format!(
             "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.01; done\n",
             started.display(),
             release.display()
         ),
-    )
-    .unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    );
     manager
         .write_local_config(
             &workspace.repository_id,

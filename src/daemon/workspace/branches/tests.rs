@@ -1,4 +1,4 @@
-use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use crate::{
     daemon::{
@@ -8,7 +8,7 @@ use crate::{
     paths::Paths,
     protocol::{DaemonMethod, ExecutionMethod, Operation, RemovalMethod, WorkspaceMethod},
     removal::InspectionPolicy,
-    test_support::{commit, git, manager, repository},
+    test_support::{commit, git, install_test_script, manager, repository},
 };
 
 struct Fixture {
@@ -1738,8 +1738,7 @@ async fn land_pushes_the_default_branch_to_its_upstream() {
     );
     // A rejected push keeps the landing and says so.
     let hook = origin.join("hooks/pre-receive");
-    fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&hook, "#!/bin/sh\nexit 1\n");
     fs::write(workspace.path.join("feature"), "more\n").unwrap();
     commit(&workspace.path, "feature");
     let expected = git(&workspace.path, &["rev-parse", "HEAD"]);

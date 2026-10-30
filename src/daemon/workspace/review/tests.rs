@@ -6,7 +6,7 @@ use crate::{
     },
     forge::ForgeRepo,
     protocol::AssignmentMethod,
-    test_support::{commit, git, manager, repository},
+    test_support::{commit, git, install_test_script, manager, repository},
 };
 
 const REMOTE: &str = "https://github.com/acme/widgets.git";
@@ -283,7 +283,6 @@ async fn scoped_callers_mark_only_their_own_workspace() {
 
 #[tokio::test]
 async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
-    use std::os::unix::fs::PermissionsExt;
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
     let repo = manager
@@ -296,15 +295,13 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
         .unwrap();
     let record = temp.path().join("marks");
     let hook = temp.path().join("post-ready");
-    std::fs::write(
+    install_test_script(
         &hook,
-        format!(
+        &format!(
             "#!/bin/sh\nprintf '%s %s' \"$SHOAL_HOOK\" \"$SHOAL_REVIEW_MARKS\" > '{}'\nexit 3\n",
             record.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     manager
         .write_local_config(
             &repo.id,
@@ -340,14 +337,13 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
 /// and no labels, and the repository's one label; changes draft state
 /// through GraphQL, and fails while `fail` exists.
 fn fake_gh(dir: &std::path::Path) -> std::path::PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let gh = dir.join("gh-agent");
     let state = dir.join("state");
     let fail = dir.join("fail");
     let log = dir.join("log");
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             r#"#!/bin/sh
 input=$(cat)
 echo "$*" >> '{log}'
@@ -370,9 +366,7 @@ esac
             fail = fail.display(),
             state = state.display(),
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     std::fs::write(&state, "true\n").unwrap();
     gh
 }

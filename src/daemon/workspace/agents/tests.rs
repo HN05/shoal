@@ -1,13 +1,13 @@
 use super::*;
 use crate::{
     daemon::{ports::PortRequest, workspace::ExecutionKind, workspace_files::Attacher},
-    test_support::{manager, repository},
+    test_support::{install_test_script, manager, repository},
 };
 use futures_util::FutureExt;
 
 #[tokio::test]
 async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
-    use std::{fs, os::unix::fs::PermissionsExt};
+    use std::fs;
     let (root, manager) = manager().await;
     let repo = repository(root.path(), "repo");
     let repo = manager
@@ -19,8 +19,10 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
         .await
         .unwrap();
     let hook = workspace.path.join("exited");
-    fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" >> exits\n").unwrap();
-    fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(
+        &hook,
+        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" >> exits\n",
+    );
     manager
         .write_local_config(
             &repo.id,

@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::install_test_script;
 
 const CHECKSUMS: &str = "\
 486f  shoal-v0.9.6-linux-arm64.tar.gz
@@ -45,8 +46,7 @@ fn publish(root: &Path, version: &str, platform: &str) -> Result<String> {
     let build = root.join("build");
     fs::create_dir_all(&build)?;
     let script = build.join("shoal");
-    fs::write(&script, format!("#!/bin/sh\necho 'shoal {version}'\n"))?;
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755))?;
+    install_test_script(&script, &format!("#!/bin/sh\necho 'shoal {version}'\n"));
     let archive = format!("shoal-v{version}-{platform}.tar.gz");
     let assets = root.join(format!("releases/download/v{version}"));
     fs::create_dir_all(&assets)?;

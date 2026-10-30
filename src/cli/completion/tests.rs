@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::install_test_script;
 use crate::{
     config::repo::ConfigLayers,
     model::{Chat, OwnedPlace, RunningAgent},
@@ -8,7 +9,7 @@ use crate::{
     sessions::{HostName, Origin},
     state::WorkspaceState,
 };
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::fs;
 use tokio::net::UnixListener;
 
 #[tokio::test(start_paused = true)]
@@ -61,23 +62,21 @@ fn install_session_fixture(root: &std::path::Path) -> Result<()> {
     // Only `retained` is open: the records of `gone` and `stale` outlive
     // their sessions.
     let script = bin.join("zmx");
-    fs::write(
+    install_test_script(
         &script,
-        format!(
+        &format!(
             "#!/bin/sh\n[ \"$*\" = list ] || exit 1\necho list >> '{}'\nprintf '  name=retained\\tpid=3\\tclients=0\\n'\n",
             root.join("zmx-lists").display()
         ),
-    )?;
-    fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
+    );
     let herdr = bin.join("herdr");
-    fs::write(
+    install_test_script(
         &herdr,
-        format!(
+        &format!(
             "#!/bin/sh\necho \"$*\" >> '{}'\necho unavailable\nexit 1\n",
             root.join("herdr-calls").display()
         ),
-    )?;
-    fs::set_permissions(herdr, fs::Permissions::from_mode(0o755))?;
+    );
     Ok(())
 }
 

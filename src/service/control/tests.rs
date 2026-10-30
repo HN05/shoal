@@ -1,5 +1,6 @@
 use super::*;
-use std::{fs, os::unix::fs::PermissionsExt};
+use crate::test_support::install_test_script;
+use std::fs;
 
 #[tokio::test]
 async fn synchronous_service_stops_allow_the_daemon_drain() -> Result<()> {
@@ -31,7 +32,7 @@ async fn slow_service_manager_child() -> Result<()> {
     fs::create_dir(root.join("bin"))?;
     for name in ["launchctl", "systemctl"] {
         let script = root.join("bin").join(name);
-        fs::write(
+        install_test_script(
             &script,
             r#"#!/usr/bin/env python3
 import time
@@ -40,8 +41,7 @@ Path('ready').touch()
 while not Path('release').exists():
     time.sleep(0.01)
 "#,
-        )?;
-        fs::set_permissions(script, fs::Permissions::from_mode(0o755))?;
+        );
     }
     for (tool, args) in [
         (Tool::Launchctl, &["bootout", "test-service"][..]),

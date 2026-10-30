@@ -1,6 +1,6 @@
 use super::*;
-use crate::test_support::{manager, repository};
-use std::{fs, future::Future, os::unix::fs::PermissionsExt, sync::Arc};
+use crate::test_support::{install_test_script, manager, repository};
+use std::{fs, future::Future, sync::Arc};
 
 async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     let (root, manager) = manager().await;
@@ -19,8 +19,7 @@ async fn fixture(hook: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
     )
     .unwrap();
     let script = workspace.path.join("before.sh");
-    fs::write(&script, format!("#!/bin/sh\nset -eu\n{hook}\n")).unwrap();
-    fs::set_permissions(script, fs::Permissions::from_mode(0o755)).unwrap();
+    install_test_script(&script, &format!("#!/bin/sh\nset -eu\n{hook}\n"));
     (root, manager, workspace)
 }
 

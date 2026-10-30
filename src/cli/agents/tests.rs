@@ -1,15 +1,14 @@
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::fs;
 
 use super::*;
-use crate::config::named_commands;
+use crate::{config::named_commands, test_support::install_test_script};
 
 #[test]
 fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     let bin = tempfile::tempdir().unwrap();
     for program in ["claude", "probe"] {
         let path = bin.path().join(program);
-        fs::write(&path, "#!/bin/sh\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        install_test_script(&path, "#!/bin/sh\n");
     }
     let mut commands = named_commands::defaults();
     for (name, program) in [
@@ -29,7 +28,7 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
     #[cfg(feature = "happy")]
     {
         assert!(!installed("happy-claude"));
-        fs::copy(bin.path().join("claude"), bin.path().join("happy")).unwrap();
+        install_test_script(&bin.path().join("happy"), "#!/bin/sh\n");
         assert!(installed("happy-claude"));
         assert!(!installed("happy-codex"));
     }
