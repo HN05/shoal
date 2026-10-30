@@ -8,6 +8,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
+    config::Effective,
     daemon::events::EventCause,
     git,
     model::{
@@ -170,13 +171,16 @@ impl Manager {
         file: std::path::PathBuf,
     ) -> Result<ExportedWorkspace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let removal = match self.workspace(selector).await {
-            Ok(workspace) => Some((
-                workspace.id.clone(),
-                self.remove_workspace(&workspace.id, unsaved, inspection)
-                    .await?,
-            )),
-            Err(_) => None,
+        let (removal, settings) = match self.workspace(selector).await {
+            Ok(workspace) => {
+                // Its own config may describe its agents, and goes with it.
+                let settings = self.workspace_settings(&workspace).await;
+                let removal = self
+                    .remove_workspace(&workspace.id, unsaved, inspection)
+                    .await?;
+                (Some((workspace.id.clone(), removal)), Some(settings))
+            }
+            Err(_) => (None, None),
         };
         let removed = self
             .removed_workspaces()
@@ -193,7 +197,11 @@ impl Manager {
             removed.name
         );
         let repo = self.repository(&removed.repository_id).await?;
-        let (sessions, mut warnings) = self.session_sources(&repo, &removed).await;
+        let settings = match settings {
+            Some(settings) => settings,
+            None => self.repository_settings(&repo.id).await,
+        };
+        let (sessions, mut warnings) = self.session_sources(&repo, settings, &removed).await;
         let (manifest, left_out) = crate::transfer::export(&repo, removed, sessions, file).await?;
         warnings.extend(left_out);
         Ok(ExportedWorkspace {
@@ -203,15 +211,17 @@ impl Manager {
         })
     }
 
-    /// The files of the sessions the agents of `removed` reported, wherever
-    /// they ran, with a warning for each session left out, which then starts
-    /// over on the importing machine.
+    /// The files of the sessions the agents of `removed` reported, as
+    /// `settings` describes the agents, wherever they ran, with a warning for
+    /// each session left out, which then starts over on the importing
+    /// machine.
     async fn session_sources(
         &self,
         repo: &Repository,
+        settings: Result<Effective>,
         removed: &RemovedWorkspace,
     ) -> (Vec<SessionSource>, Vec<String>) {
-        let settings = match self.repository_settings(&repo.id).await {
+        let settings = match settings {
             Ok(settings) => settings,
             Err(error) => {
                 return (

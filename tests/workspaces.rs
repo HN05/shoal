@@ -6390,6 +6390,45 @@ fn export_carries_session_files_that_import_puts_back() {
 }
 
 #[test]
+fn export_finds_the_sessions_of_a_profile_only_the_workspace_defines() {
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
+    let workspace = fixture.add("profiled");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    // Only the workspace's own config, which its removal deletes, names the
+    // profile.
+    fs::write(
+        path.join(".shoal.toml"),
+        "[agents.claude-moving]\nbase = 'claude'\n",
+    )
+    .unwrap();
+    fs::write(
+        path.join("agent.sh"),
+        format!(
+            "printf '{{\"session_id\":\"profiled-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let output = fixture
+        .command()
+        .args(["claude-moving", "profiled"])
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let project = fixture.root.path().join(".claude/projects/-elsewhere");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("profiled-session.jsonl"), "{}\n").unwrap();
+
+    let file = fixture.root.path().join("profiled.shoal");
+    let exported = fixture.ok(&["move", "export", "profiled", "-o", file.to_str().unwrap()]);
+    assert_eq!(
+        exported["manifest"]["session_files"][0]["path"], "-elsewhere/profiled-session.jsonl",
+        "{exported}"
+    );
+}
+
+#[test]
 fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     let mut fixture = Fixture::new();
     let workspace = fixture.add("quarantined");
