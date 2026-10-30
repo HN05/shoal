@@ -44,7 +44,7 @@ async fn association_is_persistent_idempotent_and_bound_to_the_origin() {
         })
         .collect();
     assert_eq!(linked.len(), 1);
-    assert_eq!(linked[0].kind, crate::forge::items::link::ItemKind::Issue);
+    assert_eq!(linked[0].kind, crate::forge::items::link::LinkKind::Issue);
     assert_eq!(linked[0].url, url);
     assert!(manager.set_issue(&workspace.id, "317", None).await.is_err());
     assert!(

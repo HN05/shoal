@@ -103,7 +103,7 @@ pub struct EventDetails {
         with = "present_or_null"
     )]
     pub parent_workspace: Option<Option<crate::model::WorkspaceRef>>,
-    /// The issue or PR link changed.
+    /// The issue, PR or CI run link changed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Box<LinkEvent>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -183,7 +183,7 @@ pub struct AgentStateEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkEvent {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     /// Absent from events recorded before relations existed, which were assignments.
     #[serde(default)]
@@ -200,7 +200,7 @@ pub struct ItemEvent {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemActivityEvent {
-    pub kind: crate::forge::items::link::ItemKind,
+    pub kind: crate::forge::items::link::LinkKind,
     pub url: String,
     pub update: ItemActivityUpdate,
 }

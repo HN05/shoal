@@ -259,3 +259,54 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("DROP TABLE earlier_attached_files;")?;
     Ok(())
 }
+
+#[test]
+fn run_link_and_activity_events_read_back() -> Result<()> {
+    use crate::{daemon::events::EventDetails, forge::items::link::LinkKind};
+    let mut db = Connection::open_in_memory()?;
+    migrate(&mut db)?;
+    db.execute(
+        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
+        [],
+    )?;
+    db.execute(
+        "INSERT INTO workspaces(id,repository_id,name,path,branch,state,observed_branch)
+         VALUES ('w','repo','worker','/work','worker','ready','worker')",
+        [],
+    )?;
+    let url = "https://forge.example/team/repo/actions/runs/2765";
+    crate::daemon::events::record_link(
+        &db,
+        "w",
+        crate::daemon::events::EventKind::Linked,
+        crate::model::Relation::Related,
+        LinkKind::Ci,
+        url,
+    )?;
+    let update = crate::forge::updates::Update {
+        url: url.into(),
+        kind: crate::forge::updates::UpdateKind::CiCompleted,
+        message: "Run finished".into(),
+        delivery: String::new(),
+        check: None,
+        workspace: None,
+    };
+    crate::daemon::events::record_item_activity(&db, "w", LinkKind::Ci, url, &update)?;
+    let records = db
+        .prepare("SELECT record FROM workspace_events ORDER BY id")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let events = records
+        .iter()
+        .map(|record| serde_json::from_str::<EventDetails>(record))
+        .collect::<serde_json::Result<Vec<_>>>()?;
+    let kinds = events
+        .iter()
+        .filter_map(|event| {
+            let link = event.link.as_ref().map(|link| link.kind);
+            link.or(event.item_activity.as_ref().map(|activity| activity.kind))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(kinds, [LinkKind::Ci, LinkKind::Ci]);
+    Ok(())
+}

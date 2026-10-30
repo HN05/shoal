@@ -266,7 +266,7 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
         _ => None,
     });
     let activity = activity.expect("background activity event");
-    assert_eq!(activity.kind, ItemKind::Pr);
+    assert_eq!(activity.kind, LinkKind::Pr);
     assert_eq!(activity.url, "pr");
     assert_eq!(activity.update.kind, UpdateKind::Comment);
 }
