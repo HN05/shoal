@@ -124,13 +124,14 @@ impl Manager {
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
         // A checkout registered where the local config belongs is tracked
-        // files, never local settings.
-        let repositories = self.repositories().await?;
+        // files, never local settings, and the settings it would hold, such
+        // as hooks, are not dropped silently.
         let local_config = match &repository.workspaces_dir {
-            Some(directory) if local_config_outside_checkouts(&repositories, directory).is_ok() => {
+            Some(directory) => {
+                local_config_outside_checkouts(&self.repositories().await?, directory)?;
                 config::repo::load_local(directory)?
             }
-            _ => RepoConfig::default(),
+            None => RepoConfig::default(),
         };
         Ok(ConfigLayers {
             worktree_file,

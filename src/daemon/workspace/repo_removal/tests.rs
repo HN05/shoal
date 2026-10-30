@@ -153,17 +153,8 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
         .await
         .unwrap();
     let nested = directory.join("nested");
-    std::fs::rename(&elsewhere, &nested).unwrap();
-    let (id, path) = (registered.id.clone(), nested.clone());
     manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE repositories SET path=?2 WHERE id=?1",
-                rusqlite::params![id, path.to_str()],
-            )?;
-            Ok(())
-        })
+        .move_checkout(&registered.id, &nested)
         .await
         .unwrap();
     // Its tracked files are neither read nor edited as the local config.

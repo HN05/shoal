@@ -181,4 +181,17 @@ async fn no_checkout_registers_where_another_repositorys_local_config_belongs() 
         format!("{error:#}").contains("another repository's local config"),
         "{error:#}"
     );
+    let error = manager
+        .register_repository(
+            "https://example.test/team/other.git".into(),
+            None,
+            Some(directory.join("clone")),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("another repository's local config"),
+        "{error:#}"
+    );
+    assert!(!directory.join("clone").exists());
 }

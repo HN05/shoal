@@ -206,6 +206,23 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
 }
 
 impl Manager {
+    /// Move the repository's checkout to `path` and record it there, as an
+    /// earlier version may have registered it.
+    pub async fn move_checkout(&self, id: &str, path: &Path) -> anyhow::Result<()> {
+        let repo = self.repository(id).await?;
+        fs::rename(&repo.path, path)?;
+        let (id, path) = (repo.id, path.to_path_buf());
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE repositories SET path=?2 WHERE id=?1",
+                    rusqlite::params![id, path.to_str()],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
     /// Write the repository's local config file, or remove it for `None`.
     pub async fn write_local_config(
         &self,

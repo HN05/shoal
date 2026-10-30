@@ -323,17 +323,7 @@ async fn local_checkout_location(
     let path = fs::canonicalize(toplevel.trim())?;
     let root = prepare_root(root, state, recorded, Some(&path)).await?;
     let repositories = recorded.repositories;
-    for directory in repositories
-        .iter()
-        .filter_map(|repo| repo.workspaces_dir.as_deref())
-    {
-        let local = directory.join(crate::config::repo::LOCAL_DIR);
-        ensure!(
-            !path.starts_with(&local),
-            "{} is where another repository's local config belongs; register a checkout elsewhere",
-            path.display()
-        );
-    }
+    outside_local_configs(&path, repositories)?;
     // A checkout already placed as `<root>/<x>/<checkout>` keeps that
     // directory, unless `<x>` is itself a checkout or another repository's,
     // or the checkout sits where `<x>`'s local config belongs.
@@ -353,6 +343,23 @@ async fn local_checkout_location(
         None => reserve_directory(&root, directory_name, repositories, &[])?,
     };
     Ok((path, workspaces_dir))
+}
+
+/// A checkout at `path` would not lie where a repository's local config
+/// belongs.
+fn outside_local_configs(path: &Path, repositories: &[Repository]) -> Result<()> {
+    for directory in repositories
+        .iter()
+        .filter_map(|repo| repo.workspaces_dir.as_deref())
+    {
+        let local = directory.join(crate::config::repo::LOCAL_DIR);
+        ensure!(
+            !path.starts_with(&local),
+            "{} is where another repository's local config belongs; register a checkout elsewhere",
+            path.display()
+        );
+    }
+    Ok(())
 }
 
 /// Reserve a repository directory, clone into it, and release the reservation
@@ -388,6 +395,12 @@ async fn clone_into_reserved_directory(
         "repository path does not exist: {source}"
     );
     let root = prepare_root(root, state, recorded, None).await?;
+    if let Some(path) = &cloning.path {
+        outside_local_configs(
+            &super::paths::canonical_with_missing_tail(path)?,
+            repositories,
+        )?;
+    }
     if let Some(parent) = cloning.path.as_deref().and_then(Path::parent) {
         crate::daemon::access::ensure_writable(parent).await?;
     }
