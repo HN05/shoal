@@ -15,13 +15,14 @@ use crate::{
 const DEFAULT_LEASE: &str = "default";
 
 pub(super) async fn acquire_hold(session: &Session, params: AcquireHold) -> Result<Hold, ApiError> {
-    let hold: WorkspaceHold = session
-        .ask(HoldMethod::HoldAcquire {
+    let body = session
+        .run(HoldMethod::HoldAcquire {
             workspace: params.workspace,
             name: params.name,
             reason: params.reason,
         })
         .await?;
+    let hold = WorkspaceHold::try_from(errors::granted(body)?).map_err(errors::unexpected)?;
     Ok(records::hold(hold))
 }
 

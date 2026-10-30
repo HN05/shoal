@@ -166,7 +166,7 @@ async fn links_are_added_and_removed_and_a_missing_one_is_not_found() {
 }
 
 #[tokio::test]
-async fn holds_belong_to_the_user() {
+async fn a_scoped_client_needs_approval_to_hold_its_workspace() {
     let daemon = TestDaemon::start().await;
     let workspace = daemon.workspace("held").await;
     let client = daemon.client().await;
@@ -179,7 +179,13 @@ async fn holds_belong_to_the_user() {
     assert_eq!(hold.name, "quay");
     assert_eq!(client.call(get("held")).await.unwrap().holds, [hold]);
     let scoped = daemon.scoped(&workspace).await;
-    assert_eq!(code(scoped.call(acquire()).await), ErrorCode::ScopeDenied);
+    let own = scoped
+        .call(AcquireHold {
+            name: "review".into(),
+            ..acquire()
+        })
+        .await;
+    assert_eq!(code(own), ErrorCode::ApprovalPending);
     client
         .call(ReleaseHold {
             workspace: "held".into(),
