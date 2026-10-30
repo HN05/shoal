@@ -22584,7 +22584,9 @@ elif args[1:2] == ['get']:
     if kind == 'pane':
         print(json.dumps({'result': {'pane': {'pane_id': id, 'tab_id': tab}}}))
     else:
-        print(json.dumps({'result': {'tab': {'tab_id': id, 'label': 'tab ' + id}}}))
+        path = root / 'herdr-tab-labels'
+        labels = json.loads(path.read_text()) if path.exists() else {}
+        print(json.dumps({'result': {'tab': {'tab_id': id, 'label': labels.get(id, 'tab ' + id)}}}))
 elif args[:2] == ['workspace', 'list']:
     with (root / 'herdr-list-sessions').open('a') as sessions:
         sessions.write(os.environ.get('HERDR_SESSION', '') + '\n')
@@ -25673,6 +25675,38 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");
     assert_eq!(names(), ["picked", "repo-plan-8", "calm"]);
+}
+
+#[test]
+fn chat_rename_relabels_a_herdr_tab_that_still_shows_the_old_name() {
+    let fixture = Fixture::new();
+    install_fake_herdr(&fixture);
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The chats last while this test's process runs.
+    let start = |name: &str, pane: &str| {
+        let response = fixture.request(serde_json::json!({"start_chat":{
+            "repository": repository["id"], "name": name, "agent": "claude",
+            "pid": std::process::id(), "origin": {"host": "herdr", "place": pane}
+        }}));
+        assert_eq!(response["type"], "chat", "{response}");
+    };
+    // Shoal opened `talk`'s tab under its name; `mine` runs in a tab the
+    // user named.
+    start("talk", "w1:p3");
+    start("mine", "w1:p4");
+    fs::write(
+        fixture.root.path().join("herdr-tab-labels"),
+        serde_json::json!({"w1:t3": "talk", "w1:t4": "notes"}).to_string(),
+    )
+    .unwrap();
+
+    fixture.ok(&["chat", "rename", "talk", "topic"]);
+    fixture.ok(&["chat", "rename", "mine", "other"]);
+    let renames: Vec<_> = herdr_calls(&fixture)
+        .into_iter()
+        .filter(|call| call.starts_with(&["tab".to_owned(), "rename".to_owned()]))
+        .collect();
+    assert_eq!(renames, [["tab", "rename", "w1:t3", "topic"]]);
 }
 
 /// A Claude that waits to be stopped, running for a workspace inside a fake

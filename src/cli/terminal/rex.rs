@@ -128,6 +128,15 @@ impl Places for Rex {
             }
         })
     }
+
+    fn relabel_place<'a>(
+        &'a self,
+        place: &'a Origin,
+        old: &'a str,
+        new: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(relabel_block(place, old, new))
+    }
 }
 
 /// A block carries no ownership, so only the daemon's record closes it: Rex
@@ -357,6 +366,19 @@ async fn rename_block(place: &str, label: &str) -> Result<()> {
         return Ok(());
     };
     server.rename(place, &block, label).await
+}
+
+/// Name the block at `place` `new` while it shows `old`, on the server
+/// `place` records; a block that is gone leaves nothing to rename.
+async fn relabel_block(place: &Origin, old: &str, new: &str) -> Result<()> {
+    let server = Server::recorded(&place.data)?;
+    let Some(block) = server.block(place.id()).await? else {
+        return Ok(());
+    };
+    if server.name(place.id(), &block).await?.as_deref() != Some(old) {
+        return Ok(());
+    }
+    server.rename(place.id(), &block, new).await
 }
 
 #[cfg(test)]

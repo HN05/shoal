@@ -145,6 +145,18 @@ pub(in crate::cli) trait Places: Sync {
         Box::pin(async {})
     }
 
+    /// Show `new` as the name of `place`, recorded where a chat runs, while
+    /// the place still shows `old`, on the server the place records. A place
+    /// that is gone or shows another name keeps it.
+    fn relabel_place<'a>(
+        &'a self,
+        _place: &'a Origin,
+        _old: &'a str,
+        _new: &'a str,
+    ) -> BoxFuture<'a, Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Whether a place this host opens for an addition keeps a shell that
     /// enters the workspace afterwards.
     fn places_keep_shells(&self) -> bool {

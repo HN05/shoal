@@ -39,7 +39,7 @@ pub(in crate::cli) use launch::{
     ensure_background, keeps_agents_in_sessions, launcher_program, rerun_where_stopped,
     restore_queued, run_agent, run_in_background, start_add, start_chat, start_queued,
 };
-pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_places};
+pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_chat, relabel_places};
 pub(crate) use prompts::PromptSession;
 pub(in crate::cli) use prompts::{agents_can_be_prompted, send_keys, submit_prompt};
 pub(crate) use sessions::Attachment;

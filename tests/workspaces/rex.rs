@@ -272,6 +272,43 @@ fn split_placement_opens_additions_and_chats_beside_the_callers_block() {
 }
 
 #[test]
+fn chat_rename_relabels_a_block_that_still_shows_the_old_name() {
+    let fixture = Fixture::new();
+    let Some(rex) = RexServer::start(&fixture) else {
+        return;
+    };
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    let (session, block) = rex.session("caller", &fixture.repo);
+    let window = rex.json(&["window", "ls", "-s", &session, "--json"])["windows"][0]["window_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // The block is alone in its window, which shows its name.
+    let label = |label: &str| {
+        let input = serde_json::json!({"session_id": session, "window_id": window, "label": label})
+            .to_string();
+        rex.json(&["api", "call", "session.set_window_label", &input]);
+    };
+    // The chat lasts while this test's process runs.
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "talk", "agent": "claude",
+        "pid": std::process::id(), "origin": {
+            "host": "rex", "group": session, "place": block,
+            "data": {"server": rex.socket, "bin_dir": rex.program.parent().unwrap()}
+        }
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+
+    label("talk");
+    fixture.ok(&["chat", "rename", "talk", "topic"]);
+    assert_eq!(rex.windows(&session), ["topic"]);
+    // A name the user gave stays.
+    label("notes");
+    fixture.ok(&["chat", "rename", "topic", "other"]);
+    assert_eq!(rex.windows(&session), ["notes"]);
+}
+
+#[test]
 fn demos_fall_back_to_the_configured_session_and_take_input() {
     let fixture = Fixture::with_config(Some("[terminal.rex]\nsession_name = 'demos'\n"));
     let Some(rex) = RexServer::start(&fixture) else {

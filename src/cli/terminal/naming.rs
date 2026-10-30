@@ -2,7 +2,8 @@
 //! template with the repository, branch, issue and title filled in,
 //! otherwise the title the workspace's agent gave it, otherwise
 //! `<repo>#<number>` for an issue, otherwise the branch. Hosts that show
-//! names apply the label they are given.
+//! names apply the label they are given, and show a renamed chat's new name
+//! where its place still shows the old one.
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +17,7 @@ use crate::{
         },
         context::Context,
     },
-    model::{OwnedPlace, Repository, Workspace},
+    model::{Chat, OwnedPlace, Repository, Workspace},
     protocol::{ConfigTarget, WorkspaceMethod},
     sessions::Origin,
 };
@@ -183,6 +184,26 @@ pub(in crate::cli) async fn relabel_places(ctx: &Context, workspace: &Workspace)
         }
     }
     Ok(())
+}
+
+/// Show `chat`'s name on the place it runs in, where that place still shows
+/// `old`, the name it had before, and its host shows place names.
+pub(in crate::cli) async fn relabel_chat(ctx: &Context, old: &str, chat: &Chat) -> Result<()> {
+    let Some(place) = chat.origin.as_ref().filter(|_| chat.name != old) else {
+        return Ok(());
+    };
+    let settings = client::settings(
+        &ctx.paths,
+        ConfigTarget::Repository(chat.repository_id.clone().into()),
+    )
+    .await?;
+    let host_places = Configured::all(&settings)
+        .filter(|host| host.options.enabled && host.host.name() == place.host)
+        .find_map(|host| host.host.places().filter(|p| p.names_places()));
+    match host_places {
+        Some(host_places) => host_places.relabel_place(place, old, &chat.name).await,
+        None => Ok(()),
+    }
 }
 
 /// The places of `places` on the host and server of `here`.

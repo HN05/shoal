@@ -1,11 +1,16 @@
 //! The tab holding a Herdr place. A place is a pane, while Herdr closes and
 //! renames tabs; a watcher of an earlier release names the tab itself. These
-//! reach the server this process runs under, as the watcher it serves does.
+//! reach the server this process runs under, as the watcher it serves does,
+//! except a chat's relabel, which reaches the server its place records.
 use anyhow::{Context as _, Result};
 use tokio::process::Command;
 
 use super::{AgentStatus, TabInfo, pane, query};
-use crate::{cli::terminal::PlaceState, sessions::herdr, subprocess::Run};
+use crate::{
+    cli::terminal::PlaceState,
+    sessions::{Origin, herdr},
+    subprocess::Run,
+};
 
 /// The tab holding a place, with the agent status Herdr shows for the place.
 struct Holding {
@@ -75,8 +80,29 @@ pub(super) async fn rename(place: &str, label: &str) {
     }
 }
 
+/// Name the tab holding `place` `new` while it shows `old`, on the server
+/// `place` records; a place that is gone leaves nothing to rename.
+pub(super) async fn relabel(place: &Origin, old: &str, new: &str) -> Result<()> {
+    let Some(pane) = pane(super::herdr(place), place.id()).await? else {
+        return Ok(());
+    };
+    let Some(tab) = query::<TabInfo>(super::herdr(place), "tab", &pane.tab_id).await? else {
+        return Ok(());
+    };
+    if tab.result.tab.label.as_deref() != Some(old) {
+        return Ok(());
+    }
+    run_on(super::herdr(place), ["tab", "rename", &pane.tab_id, new])
+        .await
+        .with_context(|| format!("cannot rename Herdr tab {}", pane.tab_id))
+}
+
 async fn run<const N: usize>(args: [&str; N]) -> Result<()> {
-    let mut command = here();
+    run_on(here(), args).await
+}
+
+/// Run `herdr` with `args`, failing unless it succeeds.
+async fn run_on<const N: usize>(mut command: Command, args: [&str; N]) -> Result<()> {
     command.args(args);
     Run::new(command).checked().await?;
     Ok(())
