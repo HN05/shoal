@@ -728,7 +728,7 @@ numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
 hide the decision being made.
 
-`herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
+`terminal.herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
 plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
@@ -736,7 +736,7 @@ allocated workspace branch by default. An issue number or branch says little abo
 the work, so its agent names it with a workspace title, which replaces that
 default and fills a template's `{title}`; setting one relabels the places Shoal
 created for the workspace that the caller's host server reaches, while other
-places take it when they next open. An optional `herdr.tab_name` template
+places take it when they next open. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
 with the launch plan so the worker preserves the caller's naming choice. Shoal
@@ -812,7 +812,7 @@ every state directory using that server. Finding sessions needs neither: the
 labels and the lock exist only for cleanup.
 
 Rex is a terminal host as Herdr is: inside a Rex block, Shoal opens a window in
-the caller's session, or with `rex.placement = "split"` splits the caller's
+the caller's session, or with `terminal.rex.placement = "split"` splits the caller's
 block, and runs agents in place in their block, since Rex keeps sessions
 running without a connected client. Generic code decides a split: only a start
 from the caller's own place passes it to the host, so queued starts and starts
@@ -820,8 +820,8 @@ without one open windows. A block beside others carries its own label, and
 Shoal renames a window only while the block it opened is alone there, so a
 split never renames the user's window. A terminal no host
 serves goes to `terminal.default_host`, zmx unless set to Herdr or Rex, whose places
-then join the group the host's config names, `herdr.workspace_name` or
-`rex.session_name`; generic code reads the setting and renders the name, and a
+then join the group the host's config names, `terminal.herdr.workspace_name` or
+`terminal.rex.session_name`; generic code reads the setting and renders the name, and a
 host only finds or creates a group by label. A host opens a place for a
 start and shows a place; generic code decides the rest: whether a start stays
 in this terminal, whether an agent runs in place, which host takes a queued
@@ -1207,7 +1207,7 @@ succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
 tracking or scope; external hosts can hold a workspace while their session is open.
 Happy sessions are an optional integration behind a default Cargo feature and
-the `happy.enabled` setting, off by default, so its encrypted client stays out of
+the `terminal.happy.enabled` setting, off by default, so its encrypted client stays out of
 core. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so

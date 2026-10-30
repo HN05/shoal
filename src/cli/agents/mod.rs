@@ -404,8 +404,10 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
     if added(name).is_some() {
         return Ok(true);
     }
+    let target = agent_target(ctx, workspace).await?;
+    let in_workspace = target.is_some();
     // A workspace that does not resolve is the command's own error to report.
-    let settings = match agent_target(ctx, workspace).await? {
+    let settings = match target {
         Some(target) => client::settings(&ctx.paths, target).await.ok(),
         None => None,
     };
@@ -413,7 +415,29 @@ pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>)
         Some(settings) => settings.tools,
         None => Config::load(&ctx.paths)?.tools()?,
     };
-    Ok(crate::ai::agents(&tools).any(|agent| agent == name))
+    if crate::ai::agents(&tools).any(|agent| agent == name) {
+        return Ok(true);
+    }
+    // Outside every workspace, a repository's own agent runs in one picked
+    // for it, as a repository's command does.
+    Ok(!in_workspace && agent_elsewhere(ctx, name).await)
+}
+
+/// Whether a workspace's settings resolve `name` as an agent.
+async fn agent_elsewhere(ctx: &Context, name: &str) -> bool {
+    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+        return false;
+    };
+    for workspace in workspaces {
+        let target = ConfigTarget::Workspace(workspace.id);
+        // A workspace whose configuration cannot load has no agents.
+        if let Ok(settings) = client::settings(&ctx.paths, target).await
+            && crate::ai::agents(&settings.tools).any(|agent| agent == name)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// The workspace `workspace` names, else the one running a command would

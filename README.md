@@ -97,7 +97,7 @@ shoal watch pr 505                         # Watch an explicit PR
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
 to run in the current pane, `--focus` to switch to the new tab, or
-`herdr.enabled = false` to treat Herdr as a plain terminal. Inside
+`terminal.herdr.enabled = false` to treat Herdr as a plain terminal. Inside
 [Rex](https://www.superlogical.com/rex), `add` opens a window in the current
 session instead. `[terminal] default_host = "herdr"` or `"rex"` sends launches from other
 terminals there too. Elsewhere, an agent that starts with an issue or arguments

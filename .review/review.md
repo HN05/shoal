@@ -325,7 +325,7 @@ instead of the PR delivery guidance below.
 - Herdr handoffs belong to the CLI after interactive choices, preserving resolved
   choices, literal arguments and state/config selection; tab labels use
   `<repo>#<number>` for issues and the allocated workspace branch otherwise by
-  default. Optional `herdr.tab_name` templates follow config precedence, substitute
+  default. Optional `terminal.herdr.tab_name` templates follow config precedence, substitute
   fields once and travel with the plan; branch fields update after allocation.
   Preparation failures keep the tab readable; agent exits keep the tab open,
   and completion or workspace removal closes it.

@@ -413,10 +413,10 @@ agent restores only when its workspace is named.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive Herdr pane with `herdr.enabled` or Rex block with `rex.enabled`, it
+interactive Herdr pane with `terminal.herdr.enabled` or Rex block with `terminal.rex.enabled`, it
 restores each agent in the pane or block it stopped in once that is back at its
 prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
-per agent where `herdr.new_tab` allows, labelled as `shoal add` labels it, or a
+per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
 start in the background, such as without a terminal, it restores a single agent
 here and lists several as `shoal resume --focus` commands to run in separate
@@ -820,8 +820,8 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
-zmx session (`ZMX_SESSION` is set), in a Herdr pane with `herdr.enabled` or in a
-Rex block with `rex.enabled` runs in place. On a terminal outside zmx, a missing
+zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled` or in a
+Rex block with `terminal.rex.enabled` runs in place. On a terminal outside zmx, a missing
 zmx refuses the agent as a missing agent executable does. The top-level
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
 [Rex](#rex) instead. With that host turned off they run in place, a queued
@@ -921,7 +921,7 @@ terminal's `herdr` reaches, which must be running; `{repo}` is the only
 placeholder, and Shoal reuses the first workspace with that label or creates
 it. A focused start, a chat or an agent launch then attaches the terminal to
 the Herdr session holding its tab, as `shoal attach` does, until you detach; a
-background start says where it went. With `herdr.enabled = false` these
+background start says where it went. With `terminal.herdr.enabled = false` these
 launches run in place, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
 tab in the workspace it was queued from, then falls back to the
 `workspace_name` workspace on the same server, then to `terminal.default_host`.
@@ -959,7 +959,7 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 With `[terminal] default_host = "rex"`, launches from a terminal outside Herdr and Rex
 open their windows in the `session_name` session on the local Rex server; `{repo}` is the only
 placeholder, and Shoal reuses the oldest session with that label or creates it;
-with `rex.enabled = false` these launches run in place, and `new_window = false`
+with `terminal.rex.enabled = false` these launches run in place, and `new_window = false`
 keeps queued ones out of Rex.
 Rex has no terminal client, so a focused start there selects the window in the
 connected Mac Rex app and gives the terminal its shell back; without a
@@ -1192,7 +1192,7 @@ launches add no agent flags and provide no execution tracking, scope token, port
 variables or output default (so automatic cleanup cannot see their activity);
 T3's app must already be running.
 
-Happy sessions are an optional integration: off until `happy.enabled = true` in
+Happy sessions are an optional integration: off until `terminal.happy.enabled = true` in
 global or repository config, and absent from builds without the default `happy`
 Cargo feature (`cargo build --no-default-features`), which also drops its
 encryption dependencies. While off, pickers and completion leave Happy out and
@@ -1310,7 +1310,7 @@ default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
 On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
 where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
-opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
+opens a focused tab labelled with the name regardless of `terminal.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
 window; on a terminal it runs in a zmx
 session named after the chat, which [`shoal attach <name>`](#agents)
@@ -1454,7 +1454,7 @@ update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
 The daemon
 starts it as it starts a queued launch: in the Herdr pane or Rex block the agent
 stopped in once that is back at its prompt, otherwise in a background tab or
-window where `herdr.new_tab` or `rex.new_window` allows, otherwise where
+window where `terminal.herdr.new_tab` or `terminal.rex.new_window` allows, otherwise where
 `terminal.default_host` puts it. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment

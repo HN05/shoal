@@ -18792,6 +18792,16 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
         assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
         assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
     }
+    // Outside every workspace it is still an agent, which needs a workspace.
+    let outside = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["repo-only"])
+        .output()
+        .unwrap();
+    assert!(!outside.status.success());
+    let stderr = String::from_utf8_lossy(&outside.stderr);
+    assert!(!stderr.contains("unknown command"), "{stderr}");
 
     // Built-in providers without specialized launchers place the prompt the
     // same way.
