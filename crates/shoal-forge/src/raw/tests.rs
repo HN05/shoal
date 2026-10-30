@@ -1,10 +1,11 @@
-use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+use std::path::PathBuf;
 
 use serde_json::json;
 use tokio::process::Command;
 
 use super::*;
 use crate::account::{AgentLogins, Launch};
+use crate::test_support::install_test_script;
 
 /// Finds the CLIs only in one directory.
 struct Bin(PathBuf);
@@ -19,18 +20,16 @@ impl Launch for Bin {
 async fn requests_carry_their_method_and_body_and_return_the_json() {
     let dir = tempfile::tempdir().unwrap();
     let gh = dir.path().join("gh");
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             // PATH holds only this script, so it reads its input with builtins.
             "#!/bin/sh\necho \"$*\" > '{0}/args'\nIFS= read -r body\n\
                  printf '%s' \"$body\" > '{0}/input'\n\
                  printf 'HTTP/2.0 200 OK\\n\\n{{\"sent\":true}}'\n",
             dir.path().display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
         fj_home: None,

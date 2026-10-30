@@ -1,5 +1,5 @@
 use super::*;
-use std::os::unix::fs::PermissionsExt;
+use crate::test_support::install_test_script;
 
 /// An agent with `fj_home`, whose fj has a login for `fj.example` only,
 /// and a `tea` wrapper with a login for `tea.example` only.
@@ -15,12 +15,10 @@ fn agent(root: &std::path::Path) -> Account {
     let bin = root.join("bin");
     std::fs::create_dir(&bin).unwrap();
     let tea = bin.join("tea");
-    std::fs::write(
+    install_test_script(
         &tea,
         "#!/bin/sh\necho '[{\"name\":\"agent\",\"url\":\"https://tea.example\"}]'\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(&tea, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let logins = AgentLogins {
         launch: Box::new(Bin(bin)),
         fj_home: Some(home),

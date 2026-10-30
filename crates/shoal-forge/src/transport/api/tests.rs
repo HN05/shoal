@@ -1,5 +1,6 @@
 use super::*;
 use crate::account::{AgentLogins, Launch};
+use crate::test_support::install_test_script;
 
 /// Finds the CLIs only in one directory.
 struct Bin(PathBuf);
@@ -12,14 +13,13 @@ impl Launch for Bin {
 
 #[tokio::test]
 async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {
-    use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("log");
     // Like gh, a 304 prints its head and exits with an error.
     let gh = dir.path().join("gh");
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             r#"#!/bin/sh
 echo "$*" >> '{log}'
 case "$*" in
@@ -29,9 +29,7 @@ printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
 "#,
             log = log.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let agent = || {
         let logins = AgentLogins {
             launch: Box::new(Bin(dir.path().to_owned())),

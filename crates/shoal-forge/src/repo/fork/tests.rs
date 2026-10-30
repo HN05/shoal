@@ -1,6 +1,7 @@
 use super::*;
 use crate::account::{AgentLogins, Launch};
-use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+use crate::test_support::install_test_script;
+use std::path::PathBuf;
 use tokio::process::Command;
 
 /// Finds the CLIs only in one directory.
@@ -56,9 +57,9 @@ async fn github_reads_push_access_and_forks_into_the_account() {
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("log");
     let gh = dir.path().join("gh");
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             r#"#!/bin/sh
 echo "$*" >> '{log}'
 case "$*" in
@@ -68,9 +69,7 @@ esac
 "#,
             log = log.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
         fj_home: None,

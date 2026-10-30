@@ -1,10 +1,11 @@
 use super::*;
+use crate::test_support::install_test_script;
 use crate::{
     account::{AgentLogins, Launch},
     transport::{api::HttpMethod, memory::Memory},
 };
 use serde_json::json;
-use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+use std::path::PathBuf;
 use tokio::process::Command;
 
 /// Finds the CLIs only in one directory.
@@ -22,18 +23,16 @@ async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
     let log = dir.path().join("log");
     let gh = dir.path().join("gh");
     // Posting spends the account's last request until the limit resets.
-    std::fs::write(
+    install_test_script(
         &gh,
-        format!(
+        &format!(
             r#"#!/bin/sh
 echo "$*" >> '{log}'
 printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n\n{{"number":7}}'
 "#,
             log = log.display()
         ),
-    )
-    .unwrap();
-    std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
+    );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
         fj_home: None,
