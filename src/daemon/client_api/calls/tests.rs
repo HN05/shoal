@@ -329,3 +329,20 @@ async fn a_workspace_agent_cannot_decide_a_request_not_passed_to_it() {
         ErrorCode::NotFound
     );
 }
+
+#[tokio::test]
+async fn an_agent_stopped_with_a_session_to_resume_shows_as_stopped() {
+    let daemon = TestDaemon::start().await;
+    let workspace = daemon.workspace("paused").await;
+    crate::execution::recovery::LastSession::save(
+        &daemon.manager.paths,
+        &workspace.id,
+        "claude",
+        "execution",
+    )
+    .unwrap();
+    let client = daemon.client().await;
+    let agent = client.call(get("paused")).await.unwrap().agent.unwrap();
+    assert_eq!(agent.state, AgentState::Stopped);
+    assert_eq!(agent.agent.as_deref(), Some("claude"));
+}

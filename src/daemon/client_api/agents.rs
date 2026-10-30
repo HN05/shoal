@@ -84,12 +84,25 @@ async fn queued(manager: &Manager) -> Result<HashMap<String, QueueEntry>> {
     Ok(queued)
 }
 
-/// The agent of the first stopped agent record of each of `workspaces`.
+/// The agent each of `workspaces` can resume: its first stopped agent,
+/// which protection or a restart stopped, or else its first last session,
+/// which a normal stop or exit keeps.
 fn stopped(manager: &Manager, workspaces: &[Workspace]) -> Result<HashMap<String, String>> {
     let mut stopped = HashMap::new();
     for workspace in workspaces {
-        if let Some(agent) = recovery::stopped_agents(&manager.paths, &workspace.id)?.first() {
-            stopped.insert(workspace.id.clone(), agent.record.agent.clone());
+        let paths = &manager.paths;
+        let agent = match recovery::stopped_agents(paths, &workspace.id)?
+            .into_iter()
+            .next()
+        {
+            Some(agent) => Some(agent.record.agent),
+            None => recovery::LastSession::all(paths, &workspace.id)?
+                .into_iter()
+                .next()
+                .map(|last| last.agent),
+        };
+        if let Some(agent) = agent {
+            stopped.insert(workspace.id.clone(), agent);
         }
     }
     Ok(stopped)
