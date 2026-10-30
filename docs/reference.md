@@ -2076,7 +2076,7 @@ is aborted: run `shoal merge <default>` in the workspace, resolve there, and lan
 again. Landed commits count as pushed for `rm` and automatic cleanup.
 
 An agent's scoped `shoal land` needs the user's approval for the branch at its
-current commit unless `[permissions] land = false`. The first run records a
+current commit unless `[permissions] land = "direct"`. The first run records a
 `land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 after approval, running it again lands that commit with every check above. A new
 commit replaces the request with one for the new commit, approving a request
@@ -2262,7 +2262,7 @@ from, so a branch rebuilds only what it changed and shares the rest on disk:
 
 ```toml
 [setup.seed]
-cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
+command = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
 paths = ["target"]       # Optional build outputs, relative to the worktree, new workspaces start with
 ```
 

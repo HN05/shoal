@@ -695,7 +695,7 @@ Creation other than splitting a child, removal other than of a descendant withou
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `land` is an
 approval request bound to the branch and its HEAD unless `[permissions] land`
-is off; approval lets the agent's retry land that commit through the normal checks,
+is `"direct"`; approval lets the agent's retry land that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.

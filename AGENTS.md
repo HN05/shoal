@@ -138,7 +138,7 @@ when behavior changes, distinguishing decisions from proposals.
   removal according to configuration. Never bypass existing allocation rules.
   A scoped land
   is a request bound to the branch HEAD unless `[permissions] land` is
-  false; approval lets the retried land proceed under every landing check.
+  `"direct"`; approval lets the retried land proceed under every landing check.
   `[permissions] issue_open`/`pr_open = "propose"` make a scoped `issue open` or
   `pr open` an approval request the user may edit, deny or mark as a duplicate;
   approval opens it through the normal open path, a PR only at its recorded

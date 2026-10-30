@@ -179,7 +179,7 @@ async fn restart_refuses_agents_it_cannot_restore_without_stopping_them() {
         .restart_agent(&custom.plan.id, None)
         .await
         .unwrap_err();
-    assert!(format!("{error}").contains(""), "{error}");
+    assert!(format!("{error}").contains("resume_command"), "{error}");
     assert!(!*custom.stop.borrow());
     // A refused restart saves no handoff.
     assert!(!recovery::record_path(&manager.paths, &workspace.id, &custom.plan.id).exists());

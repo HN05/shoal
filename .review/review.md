@@ -159,7 +159,7 @@ instead of the PR delivery guidance below.
   parent, checked when the child is recorded; `done` closes the workspace's open
   questions for good. A scoped land
   is an approval request bound to the branch HEAD unless `[permissions] land`
-  is false; approval never skips a landing check and lands only the approved commit.
+  is `"direct"`; approval never skips a landing check and lands only the approved commit.
   Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
