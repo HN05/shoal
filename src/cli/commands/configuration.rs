@@ -46,21 +46,17 @@ pub(super) async fn edit(
 ) -> Result<i32> {
     if let Some(repository) = repository {
         let repository = crate::cli::ui::repository_selector(repository)?;
-        let path = crate::cli::client::request::<std::path::PathBuf>(
+        // The daemon edits the file, holding off moves and removal; it reads
+        // the file on each request, so nothing reloads.
+        let edit = crate::cli::client::request::<crate::model::LocalConfigEdit>(
             &ctx.paths,
-            crate::protocol::RepositoryMethod::LocalConfigPath { repository },
+            crate::protocol::RepositoryMethod::EditLocalConfig {
+                repository,
+                changes,
+            },
         )
         .await?;
-        // The daemon reads the file on each request, so nothing reloads.
-        let (path, backup) = config::file::edit(path, &changes, |edited| {
-            config::repo::parse(edited)
-                .map(drop)
-                .context("invalid edited local config")
-        })?;
-        ctx.emit(
-            &format!("Updated {}", path.display()),
-            serde_json::json!({"config": path, "backup": backup}),
-        )?;
+        ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
         return Ok(0);
     }
     let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;

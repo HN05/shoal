@@ -17,6 +17,7 @@ const REQUESTS: &[&str] = &[
     r#"{"register_contribution":{"source":"https://forge.example/team/app","name":"app"}}"#,
     r#"{"rename_repository":{"repository":{"value":".","path":"/work/app"},"name":"web"}}"#,
     r#"{"local_config_path":{"repository":"app"}}"#,
+    r#"{"edit_local_config":{"repository":"app","changes":[{"key":"setup.command","value":null}]}}"#,
     r#"{"remove_repository":{"repository":"app"}}"#,
     r#"{"plan_repository_moves":{"root":"/work","regular_dir":false}}"#,
     r#"{"move_repositories":{"regular_dir":true}}"#,

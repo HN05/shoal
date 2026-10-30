@@ -23,6 +23,10 @@ pub enum RepositoryMethod {
     LocalConfigPath {
         repository: crate::repository::Selector,
     },
+    EditLocalConfig {
+        repository: crate::repository::Selector,
+        changes: Vec<crate::config::edit::Change>,
+    },
     RemoveRepository {
         repository: crate::repository::Selector,
     },

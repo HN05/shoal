@@ -38,6 +38,10 @@ pub(super) async fn handle(
         RepositoryMethod::LocalConfigPath { repository } => {
             Body::LocalConfigPath(manager.local_config_path(&repository).await?)
         }
+        RepositoryMethod::EditLocalConfig {
+            repository,
+            changes,
+        } => Body::LocalConfigEdit(manager.edit_local_config(&repository, changes).await?),
         RepositoryMethod::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
@@ -91,6 +95,7 @@ impl Scoped for RepositoryMethod {
             | RepositoryMethod::RegisterContribution { .. }
             | RepositoryMethod::RenameRepository { .. }
             | RepositoryMethod::LocalConfigPath { .. }
+            | RepositoryMethod::EditLocalConfig { .. }
             | RepositoryMethod::RemoveRepository { .. }
             | RepositoryMethod::PlanRepositoryMoves { .. }
             | RepositoryMethod::MoveRepositories { .. }

@@ -1596,8 +1596,9 @@ own directory beside its workspaces and `.checkout`: outside every Git tree, so
 nothing has to ignore it, and read in place on every request, so an edit reaches
 every workspace without copying or a restart. As a file, the user can edit it
 with any tool, back it up and keep its scripts beside it: its relative hook and
-setup paths name scripts there, made absolute when it loads. Key edits hold the file's lock, keep a backup and
-save only a valid result, as global edits do; unset restores lower-layer values.
+setup paths name scripts there, made absolute when it loads. Key edits run in the daemon, serialized with moves
+and removal, hold the file's lock, keep a backup and save only a valid result,
+as global edits do; unset restores lower-layer values.
 It moves with the repository's directory and is deleted with the registration.
 Every option that does not describe the machine may be set at either level and
 resolves per option: local config, worktree file, global config, then the

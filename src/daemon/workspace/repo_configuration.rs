@@ -7,15 +7,15 @@ use crate::{
         repo::{ConfigLayers, RepoConfig},
     },
     hooks::{HookDirectory, HookKind},
-    model::Workspace,
+    model::{LocalConfigEdit, Workspace},
     protocol::ConfigTarget,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::{collections::BTreeMap, path::PathBuf};
 
 impl Manager {
-    /// The repository's local config file, which the CLI edits in place;
-    /// its directory is reserved when the repository has none yet.
+    /// The repository's local config file; its directory is reserved when
+    /// the repository has none yet.
     pub async fn local_config_path(
         &self,
         selector: impl Into<crate::repository::Selector>,
@@ -28,6 +28,33 @@ impl Manager {
         self.ensure_repository_available(&repo.id).await?;
         let directory = self.workspaces_dir(&repo).await?;
         Ok(config::repo::local_config_path(&directory))
+    }
+
+    /// Apply `changes` to the repository's local config, saving only a valid
+    /// result. It holds the gate moves and removal take, so the file stays
+    /// where the edit found it.
+    pub async fn edit_local_config(
+        &self,
+        selector: impl Into<crate::repository::Selector>,
+        changes: Vec<config::edit::Change>,
+    ) -> Result<LocalConfigEdit> {
+        let _registry = self.gates.lock_registry().await;
+        let repo = self.repository(selector).await?;
+        self.ensure_repository_available(&repo.id).await?;
+        let directory = {
+            let _git = self.gates.lock_git(&repo.id).await;
+            self.workspaces_dir(&repo).await?
+        };
+        let path = config::repo::local_config_path(&directory);
+        let (config, backup) = tokio::task::spawn_blocking(move || {
+            config::file::edit(path, &changes, |edited| {
+                config::repo::parse(edited)
+                    .map(drop)
+                    .context("invalid edited local config")
+            })
+        })
+        .await??;
+        Ok(LocalConfigEdit { config, backup })
     }
 
     /// [`Self::workspace_hook`] of the workspace `selector` names.

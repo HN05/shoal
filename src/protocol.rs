@@ -482,6 +482,7 @@ response_bodies! {
     Repositories(Vec<Repository>),
     Repository(Repository),
     LocalConfigPath(std::path::PathBuf),
+    LocalConfigEdit(crate::model::LocalConfigEdit),
     RepositoryRemoved(RepositoryRemoval),
     RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),

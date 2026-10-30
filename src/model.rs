@@ -27,6 +27,13 @@ pub struct Repository {
     pub contribution: bool,
 }
 
+/// A saved edit of a repository's local config and the backup it kept.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LocalConfigEdit {
+    pub config: PathBuf,
+    pub backup: Option<PathBuf>,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RepositoryRemoval {
     pub removed: bool,
