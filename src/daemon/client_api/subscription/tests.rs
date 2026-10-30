@@ -329,6 +329,27 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn discarding_a_stopped_session_reaches_a_subscription() {
+        let daemon = TestDaemon::start().await;
+        let workspace = daemon.workspace("paused").await;
+        let paths = &daemon.manager.paths;
+        crate::execution::recovery::LastSession::save(paths, &workspace.id, "claude", "execution")
+            .unwrap();
+        let client = daemon.client().await;
+        let mut subscription = client.subscribe(vec![Topic::Workspaces]).await.unwrap();
+        subscription.next().await.unwrap();
+        daemon
+            .manager
+            .discard_stopped_work(&workspace.id, None)
+            .await
+            .unwrap();
+        until(&mut subscription, |update| {
+            matches!(update, Update::Changed(shoal_client::Record::Workspace(w)) if w.agent.is_none())
+        })
+        .await;
+    }
+
+    #[tokio::test]
     async fn a_large_snapshot_arrives_in_pages() {
         use shoal_client::wire::{self, Event, HandshakeReply, Reply, Response};
         let daemon = TestDaemon::start().await;
