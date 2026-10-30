@@ -24370,7 +24370,7 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" --text status chat-worker > \"$HOME/chat-status\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" --json add \"$PWD\" chat-worker </dev/null > \"$HOME/chat-add\"\n\"$shoal\" --text work > \"$HOME/chat-work\"\n\"$shoal\" --json work --chats > \"$HOME/chat-chats\"\n\"$shoal\" --text status chat-worker > \"$HOME/chat-status\"\nprintf '%s' \"$TMPDIR\" > \"$HOME/chat-tmpdir\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
@@ -24409,8 +24409,8 @@ fn workspaces_belong_to_the_chat_that_opened_them() {
         serde_json::from_str(&fs::read_to_string(home.join("chat-chats")).unwrap()).unwrap();
     let mut listed = started["chat"].clone();
     listed["origin"] = serde_json::json!({"host": "zmx", "place": "outer"});
-    // The listing names the chat's own temporary directory.
-    let tmp_dir = chats[0]["tmp_dir"].as_str().unwrap().to_owned();
+    // The agent ran with its own temporary directory, which the listing names.
+    let tmp_dir = fs::read_to_string(home.join("chat-tmpdir")).unwrap();
     assert!(
         tmp_dir.ends_with(&format!("/.tmp/{}", chat.as_str().unwrap())),
         "{tmp_dir}"

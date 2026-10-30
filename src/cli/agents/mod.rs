@@ -30,7 +30,7 @@ use crate::{
     config::{Config, Effective, named_commands::Commands},
     execution::recovery,
     fsutil,
-    model::{RemovedWorkspace, Repository, Workspace},
+    model::{Chat, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, RepositoryMethod},
     tools::Tool,
@@ -753,6 +753,23 @@ pub(crate) fn agent_dir_args(settings: &Effective, name: &str, home: &Path) -> V
         .iter()
         .flat_map(|directory| arguments.add_dir_args(directory))
         .collect()
+}
+
+/// The arguments that give agent `name` of `chat` the configured agent
+/// directories and the chat's temporary directory as other working
+/// directories.
+pub(in crate::cli) fn chat_dir_args(
+    settings: &Effective,
+    name: &str,
+    home: &Path,
+    chat: &Chat,
+) -> Vec<OsString> {
+    let mut args = agent_dir_args(settings, name, home);
+    if let Some(directory) = &chat.tmp_dir {
+        let directory = std::fs::canonicalize(directory).unwrap_or_else(|_| directory.clone());
+        args.extend(settings.launch(name).arguments.add_dir_args(&directory));
+    }
+    args
 }
 
 /// The configured agent directories, `~/` naming a path under `home`,

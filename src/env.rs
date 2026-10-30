@@ -363,13 +363,16 @@ fn workspace_identity(workspace: &Workspace, paths: &Paths) -> BTreeMap<String, 
 }
 
 /// A chat agent's identity: its chat, and the state directory whose daemon
-/// recorded it, which the agent's own Shoal commands must reach; and the
-/// agents' output default.
+/// recorded it, which the agent's own Shoal commands must reach; its
+/// temporary directory; and the agents' output default.
 pub fn chat_environment(chat: &crate::model::Chat, paths: &Paths) -> BTreeMap<String, OsString> {
     let mut values = BTreeMap::from([
         (CHAT.into(), chat.id.clone().into()),
         (STATE_DIR.into(), paths.state.as_os_str().to_owned()),
     ]);
+    if let Some(directory) = &chat.tmp_dir {
+        values.insert(TMPDIR.into(), directory.as_os_str().to_owned());
+    }
     values.extend(agent_output().map(|(name, value)| (name.into(), value.into())));
     values
 }
