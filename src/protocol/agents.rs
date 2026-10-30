@@ -95,6 +95,14 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::daemon::workspace_files::NewFile>,
     },
+    /// [`Self::SendAgentMessage`] to every workspace of the repository with
+    /// a running agent, answered with the workspaces it reached.
+    SendRepositoryAgentMessage {
+        repository: crate::repository::Selector,
+        message: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        attachments: Vec<crate::daemon::workspace_files::NewFile>,
+    },
     /// The workspace's undelivered agent messages, oldest first.
     AgentMessages {
         workspace: String,

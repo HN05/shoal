@@ -222,17 +222,16 @@ impl Manager {
         Ok(question)
     }
 
-    /// The caller's own repository, which `repository` must select.
+    /// The caller's own repository, which `repository` must select;
+    /// `refusal` says why another is refused.
     pub(in crate::daemon) async fn own_repository(
         &self,
         caller: &Caller,
         repository: &Selector,
+        refusal: &str,
     ) -> Result<Selector> {
         let own = self.workspace(&caller.workspace_id).await?.repository_id;
-        ensure!(
-            self.repository(repository).await?.id == own,
-            "workspace processes can only sync their own repository"
-        );
+        ensure!(self.repository(repository).await?.id == own, "{refusal}");
         Ok(own.into())
     }
 }

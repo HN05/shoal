@@ -158,6 +158,7 @@ const REQUESTS: &[&str] = &[
     r#"{"send_message":{"workspace":"fix","message":"done"}}"#,
     r#"{"withdraw_message":{"workspace":"fix","id":4}}"#,
     r#"{"send_agent_message":{"workspace":"part","message":"rebase","attachments":[{"path":"/work/log.txt","title":"Crash log"},{"path":"/work/shot.png"}]}}"#,
+    r#"{"send_repository_agent_message":{"repository":"app","message":"rebase"}}"#,
     r#"{"agent_messages":{"workspace":"fix"}}"#,
     r#"{"mark_agent_messages_delivered":{"workspace":"fix","ids":[5]}}"#,
     r#"{"agent_updates":{"workspace":"fix"}}"#,

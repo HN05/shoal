@@ -88,7 +88,13 @@ impl Scoped for RepositoryMethod {
         Ok(match self {
             RepositoryMethod::ListRepositories => None,
             RepositoryMethod::SyncRepository { repository } => {
-                *repository = manager.own_repository(caller, repository).await?;
+                *repository = manager
+                    .own_repository(
+                        caller,
+                        repository,
+                        "workspace processes can only sync their own repository",
+                    )
+                    .await?;
                 None
             }
             RepositoryMethod::RegisterRepository { .. }

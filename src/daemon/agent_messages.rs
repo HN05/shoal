@@ -5,7 +5,7 @@
 //! workspace is removed (see [`crate::daemon::workspace_files`]).
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, ensure};
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,8 @@ use crate::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
+    model::Workspace,
+    repository::Selector,
     state::WorkspaceState,
 };
 
@@ -201,6 +203,60 @@ impl Manager {
             workspace_files::discard(kept).await;
         }
         queued
+    }
+
+    /// [`Self::send_agent_message`] to every workspace of `repository` with
+    /// a running agent, or only to those below `below`, the sender's own
+    /// workspace; the workspaces it reached. Identical unread messages
+    /// collapse, so sending again after a failure reaches only the rest.
+    pub async fn send_repository_agent_message(
+        &self,
+        repository: &Selector,
+        message: String,
+        attachments: Vec<NewFile>,
+        attacher: &Attacher,
+        below: Option<&str>,
+    ) -> Result<Vec<Workspace>> {
+        let recipients = self.agent_recipients(repository, below).await?;
+        for workspace in &recipients {
+            self.send_agent_message(
+                &workspace.id,
+                message.clone(),
+                attachments.clone(),
+                attacher,
+            )
+            .await
+            .with_context(|| format!("message {}", workspace.name))?;
+        }
+        Ok(recipients)
+    }
+
+    /// The workspaces of `repository` with a running agent, by name, except
+    /// those being removed; only those below `below` when it names one.
+    async fn agent_recipients(
+        &self,
+        repository: &Selector,
+        below: Option<&str>,
+    ) -> Result<Vec<Workspace>> {
+        let repository = self.repository(repository.clone()).await?.id;
+        // The subtree lists `below` itself first.
+        let below: Option<Vec<String>> = match below {
+            Some(below) => Some(self.subtree(below).await?.into_iter().skip(1).collect()),
+            None => None,
+        };
+        let mut recipients = Vec::new();
+        for id in self.running_agent_workspaces().await {
+            if below.as_ref().is_some_and(|below| !below.contains(&id)) {
+                continue;
+            }
+            let workspace = self.workspace(&id).await?;
+            if workspace.repository_id == repository && workspace.state != WorkspaceState::Removing
+            {
+                recipients.push(workspace);
+            }
+        }
+        recipients.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(recipients)
     }
 
     pub(crate) async fn queue_agent_message(

@@ -227,6 +227,117 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
     );
 }
 
+/// Start a tracked agent in `workspace`; it runs while the returned
+/// execution lives.
+async fn run_agent(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> crate::daemon::workspace::StartedExecution {
+    let execution = manager
+        .begin_execution(&workspace.id, None, ExecutionKind::Command, None)
+        .await
+        .unwrap();
+    manager
+        .track_agent(
+            &execution.plan.id,
+            "claude",
+            &workspace.id,
+            &workspace.name,
+            false,
+            std::time::Duration::ZERO,
+        )
+        .await;
+    execution
+}
+
+#[tokio::test]
+async fn a_repository_message_reaches_its_running_agents_below_the_sender() {
+    let (temp, manager) = manager().await;
+    let parent = workspace(&temp, &manager, "parent").await;
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let sibling = manager
+        .create_workspace(&parent.repository_id, "sibling".into(), None, None, None)
+        .await
+        .unwrap();
+    let idle = manager
+        .create_workspace(&parent.repository_id, "idle".into(), None, None, None)
+        .await
+        .unwrap();
+    let elsewhere = repository(temp.path(), "elsewhere");
+    let elsewhere = manager
+        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let outside = manager
+        .create_workspace(&elsewhere.id, "outside".into(), None, None, None)
+        .await
+        .unwrap();
+    let mut running = Vec::new();
+    for workspace in [&parent, &child, &sibling, &outside] {
+        running.push(run_agent(&manager, workspace).await);
+    }
+    let send = |below: Option<String>| {
+        let manager = &manager;
+        let repository = parent.repository_id.clone();
+        async move {
+            let reached = manager
+                .send_repository_agent_message(
+                    &repository.into(),
+                    "Rebase onto main".into(),
+                    Vec::new(),
+                    &Attacher::User,
+                    below.as_deref(),
+                )
+                .await
+                .unwrap();
+            reached.into_iter().map(|w| w.name).collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(send(None).await, ["child", "parent", "sibling"]);
+    for workspace in [&parent, &child, &sibling] {
+        let messages = manager.agent_messages(&workspace.id).await.unwrap();
+        assert_eq!(messages.len(), 1, "{}", workspace.name);
+    }
+    for workspace in [&idle, &outside] {
+        assert!(
+            manager
+                .agent_messages(&workspace.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+    assert_eq!(send(Some(parent.id.clone())).await, ["child"]);
+    assert!(send(Some(child.id.clone())).await.is_empty());
+    // A workspace process names only its own repository.
+    manager
+        .executions
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    for (repository, allowed) in [(&parent.repository_id, true), (&elsewhere.id, false)] {
+        let mut method = AgentMethod::SendRepositoryAgentMessage {
+            repository: repository.clone().into(),
+            message: "Rebase onto main".into(),
+            attachments: Vec::new(),
+        };
+        assert_eq!(
+            scope::authorize(&manager, Some("scope"), &mut method)
+                .await
+                .is_ok(),
+            allowed
+        );
+    }
+}
+
 #[tokio::test]
 async fn attached_files_are_copied_beside_the_workspaces_until_removal() {
     let (temp, manager) = manager().await;

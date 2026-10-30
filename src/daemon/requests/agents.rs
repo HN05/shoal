@@ -139,6 +139,25 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        AgentMethod::SendRepositoryAgentMessage {
+            repository,
+            message,
+            attachments,
+        } => {
+            let attacher = manager.attacher(caller).await;
+            let below = caller.map(|caller| caller.workspace_id.as_str());
+            Body::Workspaces(
+                manager
+                    .send_repository_agent_message(
+                        &repository,
+                        message,
+                        attachments,
+                        &attacher,
+                        below,
+                    )
+                    .await?,
+            )
+        }
         AgentMethod::AgentMessages { workspace } => {
             Body::AgentMessages(manager.agent_messages(&workspace).await?)
         }
@@ -213,6 +232,18 @@ impl Scoped for AgentMethod {
                     )
                     .await?,
             ),
+            // The handler narrows the recipients to the workspaces below
+            // the caller's.
+            AgentMethod::SendRepositoryAgentMessage { repository, .. } => {
+                *repository = manager
+                    .own_repository(
+                        caller,
+                        repository,
+                        "workspace processes send agent messages only to the workspaces below theirs",
+                    )
+                    .await?;
+                None
+            }
         })
     }
 }
