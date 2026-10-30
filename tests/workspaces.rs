@@ -10330,8 +10330,11 @@ fn omitted_repositories_come_from_the_current_checkout() {
     let output = run(&["--json", "add", "--existing", "topic"]);
     assert!(output.status.success(), "{output:?}");
     for (args, refusal) in [
-        (&["add"][..], "missing branch; pass <branch>"),
-        (&["repo", "rename"], "missing new name; pass <name>"),
+        (&["add"][..], "missing branch; pass <repository> <branch>"),
+        (
+            &["repo", "rename"],
+            "missing new name; pass <repository> <name>",
+        ),
     ] {
         let output = run(args);
         assert!(!output.status.success(), "{args:?}");
@@ -10340,7 +10343,14 @@ fn omitted_repositories_come_from_the_current_checkout() {
             "{args:?}: {output:?}"
         );
     }
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    // Following the hints passes the branch and the name, not a repository.
+    let repo = fixture.repo.to_str().unwrap();
+    let output = run(&["--json", "add", repo, "fresh"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 2);
+    let output = run(&["repo", "rename", repo, "renamed"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(fixture.ok(&["repo", "ls"])[0]["name"], "renamed");
 }
 
 #[test]
