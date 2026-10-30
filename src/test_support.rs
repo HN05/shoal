@@ -89,14 +89,14 @@ pub async fn configure(manager: &Manager, text: &str) {
 
 /// Global config `text` as a published config, read like [`configure`]'s.
 pub fn global_config(text: &str) -> crate::config::Config {
-    toml::from_str(&format!("{BASE_CONFIG}{text}")).unwrap()
+    crate::config::Config::from_toml(&format!("{BASE_CONFIG}{text}")).unwrap()
 }
 
 /// Global config always turns off `copy_ignored`: only the CLI runs the
 /// tracked setup it needs, so workspaces created here are ready at once. It
 /// delivers each agent message at once, so a test reads it without waiting
 /// for a run of them to settle.
-const BASE_CONFIG: &str = "copy_ignored = false\nmessages.settle_seconds = 0\n";
+const BASE_CONFIG: &str = "setup.copy_ignored = false\nmessages.settle_seconds = 0\n";
 
 fn write_global_config(paths: &Paths, text: &str) {
     let config = crate::config::Config::path(paths);
@@ -116,6 +116,9 @@ pub fn isolated_test(root: &Path, name: &str) -> tokio::process::Command {
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("SHOAL_TEST_HELPER", "1")
+        // The helper runs CLI handlers in-process; give its test thread the
+        // stack the CLI's runtime threads get, which Linux debug builds need.
+        .env("RUST_MIN_STACK", crate::WORKER_STACK.to_string())
         .current_dir(root)
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
@@ -228,4 +231,46 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
     command
+}
+
+impl Manager {
+    /// Move the repository's checkout to `path` and record it there, as an
+    /// earlier version may have registered it.
+    pub async fn move_checkout(&self, id: &str, path: &Path) -> anyhow::Result<()> {
+        let repo = self.repository(id).await?;
+        fs::rename(&repo.path, path)?;
+        let (id, path) = (repo.id, path.to_path_buf());
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE repositories SET path=?2 WHERE id=?1",
+                    rusqlite::params![id, path.to_str()],
+                )?;
+                Ok(())
+            })
+            .await
+    }
+
+    /// Write the repository's local config file, or remove it for `None`.
+    pub async fn write_local_config(
+        &self,
+        selector: &str,
+        toml: Option<String>,
+    ) -> anyhow::Result<std::path::PathBuf> {
+        let path = self.local_config_path(selector).await?;
+        match toml {
+            Some(text) => {
+                crate::config::repo::parse(&text)?;
+                fs::create_dir_all(path.parent().unwrap())?;
+                fs::write(&path, text)?;
+            }
+            None => match fs::remove_file(&path) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error.into());
+                }
+                _ => {}
+            },
+        }
+        Ok(path)
+    }
 }

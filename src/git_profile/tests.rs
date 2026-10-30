@@ -84,8 +84,7 @@ async fn incompatible_shared_layout_is_not_changed() {
 #[test]
 fn profiles_are_looked_up_by_portable_name() {
     let git: Git =
-        toml::from_str("[profiles.work]\nuser.email = 'w@x'\n[profiles.oss]\nuser.email = 'o@x'\n")
-            .unwrap();
+        toml::from_str("[work]\nuser.email = 'w@x'\n[oss]\nuser.email = 'o@x'\n").unwrap();
     git.validate().unwrap();
     assert_eq!(git.profile("work").unwrap().settings().unwrap()[0].1, "w@x");
     let error = git.profile("home").unwrap_err().to_string();
@@ -95,13 +94,9 @@ fn profiles_are_looked_up_by_portable_name() {
             .profile("home")
             .unwrap_err()
             .to_string()
-            .contains("[git.profiles.home]")
+            .contains("[machine.git_profiles.home]")
     );
-    for text in [
-        "[profiles.'bad name']\nuser.email = 'x'\n",
-        "[profiles.empty]\n",
-        "[profile.work]\nuser.email = 'x'\n",
-    ] {
+    for text in ["['bad name']\nuser.email = 'x'\n", "[empty]\n"] {
         let parsed = toml::from_str::<Git>(text)
             .map_err(anyhow::Error::from)
             .and_then(|git| git.validate());

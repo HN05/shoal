@@ -140,7 +140,7 @@ async fn command(
         ..
     } = launch;
     let instructions = templates::instructions(
-        settings.worker_template.as_deref(),
+        settings.agent.templates.worker.as_deref(),
         workspace,
         delivery(integration, settings),
     );
@@ -155,7 +155,7 @@ async fn command(
     let args = fork.iter().cloned().chain(args).collect();
     configured::expand_with_fields(
         &ctx.paths,
-        &settings.commands,
+        &settings.launchers,
         name,
         workspace,
         args,
@@ -191,7 +191,7 @@ pub(in crate::cli) fn input(
         .instruction_args(&instructions);
     let (instruction_args, prompt) = separate_instructions(instruction_args, instructions, prompt);
     let takes_prompt = settings
-        .commands
+        .launchers
         .get(name)
         .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
     if !prompt.is_empty() && !takes_prompt {

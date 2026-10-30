@@ -59,7 +59,7 @@ impl Manager {
         Ok(completion)
     }
 
-    /// `cleanup` requests cleanup even when `[done] cleanup` is false;
+    /// `cleanup` requests cleanup even when `[cleanup.done] enabled` is false;
     /// `integrated` records that another branch has HEAD's work under other
     /// commits; copies of the files `results` are handed back, which the
     /// workspace's attached files keep after its removal.
@@ -95,7 +95,7 @@ impl Manager {
         self.verify_worktree(workspace).await?;
         let completion = Completion {
             head,
-            cleanup: cleanup || settings.done.cleanup,
+            cleanup: cleanup || settings.cleanup.done.enabled,
             integrated,
             results,
             error: None,
@@ -159,7 +159,7 @@ impl Manager {
         Ok(persisted)
     }
 
-    /// The configured `post_done_cmd`, holding off permit and lifecycle changes
+    /// The configured `hooks.post_done`, holding off permit and lifecycle changes
     /// until it has run.
     async fn done_hook(
         &self,

@@ -765,18 +765,17 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert!(
         fs::read_to_string(&config)
             .unwrap()
-            .contains("# default_agent = \"codex\"")
+            .contains("# default = \"codex\"")
     );
     let template = config.with_file_name("chat-template.md");
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
         include_str!("../src/config/templates/chat.md")
     );
-    assert!(!config.with_file_name("issue-template.md").exists());
     fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
     assert!(!config.with_file_name("worker-template.md").exists());
-    fs::write(&config, "default_agent = 'claude'\n").unwrap();
+    fs::write(&config, "agent.default = 'claude'\n").unwrap();
     let output: Value =
         serde_json::from_slice(&run(&["--json", "daemon", "install"]).stdout).unwrap();
     assert_eq!(output["config_created"], false);
@@ -786,7 +785,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     );
     assert_eq!(
         fs::read_to_string(&config).unwrap(),
-        "default_agent = 'claude'\n"
+        "agent.default = 'claude'\n"
     );
     assert_eq!(fs::read_to_string(&pid_path).unwrap(), original);
     // `config reset` needs no confirmation: the edited file becomes the backup.
@@ -796,12 +795,12 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     assert_eq!(output["backup"], backup.to_str().unwrap());
     assert_eq!(
         fs::read_to_string(&backup).unwrap(),
-        "default_agent = 'claude'\n"
+        "agent.default = 'claude'\n"
     );
     assert!(
         fs::read_to_string(&config)
             .unwrap()
-            .contains("# default_agent = \"codex\"")
+            .contains("# default = \"codex\"")
     );
 
     // A changed executable path must update the definition without breaking an
@@ -959,6 +958,16 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "failed: detail",
         ),
         (
+            vec!["--json", "repo", "ls"],
+            json!({"type": "error", "data": {"code": "name_taken", "message": "name taken: worker"}}),
+            "name taken: worker",
+        ),
+        (
+            vec!["repo", "ls"],
+            json!({"type": "error", "data": {"code": "not_found", "message": "unknown workspace: gone"}}),
+            "unknown workspace: gone",
+        ),
+        (
             vec!["run", "--workspace", "worker", "--", "true"],
             json!({"type": "error", "data": {"code": "execution_failed", "message": "failed: detail"}}),
             "execution_failed: failed: detail",
@@ -969,6 +978,12 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
             "future_code: failed: detail",
         ),
     ] {
+        // `operation_failed` is the daemon's failure without a specific code.
+        let code = match body["data"]["code"].as_str() {
+            None | Some("operation_failed") => "command_failed",
+            Some(code) => code,
+        }
+        .to_owned();
         let root = tempfile::tempdir_in("/tmp").unwrap();
         let listener = support::fake_daemon::bind_fake_daemon(root.path());
         listener.set_nonblocking(true).unwrap();
@@ -1000,7 +1015,7 @@ fn cli_typed_response_errors_preserve_output_and_exit_contracts() {
         if args.contains(&"--json") {
             assert_eq!(
                 serde_json::from_str::<Value>(&stderr).unwrap(),
-                json!({"error": {"code": "command_failed", "message": expected}})
+                json!({"error": {"code": code, "message": expected}})
             );
         } else {
             assert!(stderr.contains(expected), "{args:?}: {stderr}");

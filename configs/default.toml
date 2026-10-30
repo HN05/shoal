@@ -1,34 +1,30 @@
-# Shoal machine configuration. Values shown are the defaults; edit them in place.
+# Shoal configuration. Values shown are the defaults; edit them in place.
 # The daemon reads this file when it starts, so changes take effect after
 # `shoal daemon restart`, except agent settings, which the CLI reads on every
-# command. Commented blocks
-# are examples, not defaults: uncomment a whole block and adapt it. A repository's
-# .shoal.toml (or the config saved with `shoal repo config`) holds its named
-# ports, setup and hook commands and resource pools, and may set any value below
-# for that repository except root_dir, AI skill directories, the simulator limits and profiles, Git profile definitions, and
-# the shared resources, load, keep_awake and overload protection.
+# command. Commented blocks are examples, not defaults: uncomment a whole block
+# and adapt it.
+#
+# The [machine] table describes this machine. Everything outside it follows the
+# schema of a repository's .shoal.toml (or its local config, which
+# `shoal repo config` shows), which may set any of it for that repository and
+# adds the repository's setup command and seed.
 
+# Git identity for new worktrees (no default); may also be set per repository.
+# git_profile = "work"
+
+[machine]
 # Parent of every repository's workspaces and URL clones.
 root_dir = "~/shoal"
-
-# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
-# A built-in launcher or a name defined in [commands].
-# default_agent = "codex"
-
-# Directories every agent and chat may read without a permission prompt, as
-# other working directories. Entries are absolute or start with ~/.
-agent_dirs = ["/tmp"]
 
 # Agents that run at once; by default `dynamic` starts them one at a time while
 # measured load stays below the warning thresholds `load` sets. `shoal add`
 # queues the rest and starts them as slots free. Set a positive number for a
-# fixed limit or `none` for unlimited admission. A repository's value limits
-# its own agents.
+# fixed limit or `none` for unlimited admission.
 # max_agents = 3
 
 # How hard Shoal may load this machine: "light" for a computer you work on,
 # "balanced", or "full" for one that only runs agents. It sets the default
-# CPU and memory thresholds in [overload] and dynamic agent admission.
+# CPU and memory thresholds in [machine.overload] and dynamic agent admission.
 # load = "balanced"
 
 # Keep the machine from sleeping, including when a laptop's lid closes, while
@@ -36,142 +32,53 @@ agent_dirs = ["/tmp"]
 # closed lid without an external display.
 # keep_awake = false
 
-# `shoal add` focuses workspace shells and agents waiting for a prompt, and
-# starts agents with input in the background: a background Herdr tab, or a
-# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
-# focus = true
-
-# Close the Herdr tab or zmx session Shoal opened for a workspace once the
-# workspace is removed, or once `done` keeps it and the agent finishes its turn.
-close_when_done = true
-
-# Where launches from a terminal outside Herdr and Rex run: detached zmx
-# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
-# local Rex server ("rex").
-default_host = "zmx"
-
-# Prompt templates normally live beside this file as worker-template.md and
-# chat-template.md. Inline text takes precedence over the corresponding file.
-# worker_template = "Follow repository instructions in {workspace} at {path}."
-# chat_template = "Discuss the {repo} repository at {path} without changing it."
-
-# Git identity for new worktrees (no default); may also be set per repository.
-# git_profile = "work"
-
-# Optional untracked lifecycle hooks; repository values replace these commands.
-# Each value is one executable path, relative to the worktree or absolute.
-# post_setup_cmd = "/path/to/attach" # After readiness, in the CLI with a terminal.
-# pre_remove_cmd = "/path/to/detach" # Before removal, in the daemon without a terminal.
-
 # Named Git settings; omitted keys keep their normal Git values.
-# [git.profiles.work]
+# [machine.git_profiles.work]
 # user.name = "Your Name"
 # user.email = "you@example.com"
 # commit.gpgsign = false
-# [git.profiles.agent]
+# [machine.git_profiles.agent]
 # user.name = "Agent Name"
 # user.email = "agent@example.com"
 # core.sshCommand = "ssh -i ~/.ssh/agent_key -o IdentitiesOnly=yes"
 
-# Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
-[commands]
-claude = ["claude"]
-codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
-# check = ["cargo", "test"]
-# Custom agents: shoal add <repository> <branch> --agent pi
-# pi = ["pi", "{args}"]
-# opencode = ["opencode", "--prompt", "{prompt}", "{args}"]
-# Local committed-change review, with tuicr installed on PATH:
-# review = ["tuicr", "-r", "{diff_base}..HEAD"]
-
-# Resume commands must restore a session rather than repeat its initial prompt.
-# Optional, with the same argument substitutions and repository layering as commands.
-# [agent_resume]
-# my-agent = ["my-agent", "resume", "{path}"]
-
-# A separate account for tracked agents: user-owned forge executable wrappers
-# and a Git profile from [git.profiles] for the agent's Git commands.
-# See docs/reference.md#agent-accounts for setup.
-# [agent_auth]
-# fj = "~/bin/fj-agent"
-# gh = "~/bin/gh-agent"
-# git_profile = "agent"
-
 # Bitbucket Cloud credentials: a command that prints an access token, or an
 # Atlassian API token with its account email. Without them only public
 # repositories are readable. See docs/reference.md#forges.
-# [bitbucket]
+# [machine.bitbucket]
 # token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
 # email = "you@example.com"
 
 # The API a forge host serves, set instead of letting the daemon ask the host
 # once: "github", "gitlab", "forgejo" (also Gitea) or "bitbucket".
 # See docs/reference.md#forges.
-# [forges."git.example.com"]
+# [machine.forges."git.example.com"]
 # type = "gitlab"
 
-# Additional AI tools: command runs one as `shoal droid`, and
-# shoal skill install adds <skill>/SKILL.md beneath skill_dir.
-# [ai.droid]
-# command = ["droid", "{args}"]
+# Where shoal skill install adds <skill>/SKILL.md for an AI tool, and the
+# proxy under machine.proxies its tracked agents reach their API through.
+# [machine.agents.droid]
 # skill_dir = "~/.factory/skills"
 
-[herdr]
-# Use Herdr tabs and panes; false runs as in a plain terminal.
-enabled = true
-# Run issue/add in a new tab inside Herdr, after interactive choices.
-new_tab = true
-# The workspace for tabs Shoal opens outside a Herdr pane.
-workspace_name = "{repo}"
-# Override the top-level close_when_done for Herdr tabs.
-# close_when_done = true
-# tab_name = "{repo}: {branch}"
-
-[rex]
-# Use Rex windows and blocks; false runs as in a plain terminal.
-enabled = true
-# Run issue/add in a new window inside Rex, after interactive choices.
-new_window = true
-# Open that place as a new window ("window") or a split beside the caller's
-# block ("split").
-placement = "window"
-# The session for windows Shoal opens outside a Rex session.
-session_name = "{repo}"
-# Override the top-level close_when_done for Rex windows.
-# close_when_done = true
-# window_name = "{repo}: {branch}"
-
-[happy]
-# Offer happy-claude and happy-codex, which start detached Happy sessions.
-enabled = false
-
-[claude]
-# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
-default_mode = "cli"
-
-[codex]
-# `shoal codex` without --cli/--app: "cli" or "app".
-default_mode = "cli"
-
-[overload]
+[machine.overload]
 # Machine-wide agent protection; allow stop requests to free memory before retrying.
 # Commented CPU and memory percentages are the balanced defaults of `load`.
 poll_seconds = 2
 cooldown_seconds = 5
 
-[overload.memory]
+[machine.overload.memory]
 enabled = true
 # Linux usage excludes reclaimable cache; macOS uses native critical pressure.
 # used_percent = 95
 sustained_seconds = 0
 
-[overload.cpu]
+[machine.overload.cpu]
 # Optional aggregate CPU protection, sustained for five minutes.
 enabled = false
 # used_percent = 90
 sustained_seconds = 300
 
-[overload.disk]
+[machine.overload.disk]
 # Available space on filesystems holding workspaces or daemon state, in GiB.
 enabled = true
 # Remove workspaces idle cleanup would remove, without waiting for the delay.
@@ -179,15 +86,15 @@ cleanup_free_gib = 5
 # Stop tracked executions when cleanup cannot free enough space.
 stop_free_gib = 2
 
-[overload.recovery]
-# Automatically restore agents with a configured [agent_resume] command.
+[machine.overload.recovery]
+# Automatically restore agents with a resume command or built-in resume arguments.
 enabled = true
 # Require headroom for a full minute; restart agents one at a time.
 # memory_used_percent = 80
 # cpu_used_percent = 75
 sustained_seconds = 60
 
-[overload.warning]
+[machine.overload.warning]
 # Message running agents to reduce load before an enabled protection stops them.
 enabled = true
 # Linux usage; macOS warns at native warning pressure.
@@ -197,6 +104,118 @@ cpu_sustained_seconds = 60
 disk_free_gib = 10
 # Least time between repeated warnings about one signal to one workspace.
 repeat_minutes = 30
+
+[machine.simulators]
+# Xcode simulator leases (macOS).
+max_booted = 2
+max_devices = 4
+idle_seconds = 120
+allow_any = false
+# Example profile; `default` must name a profile defined below it.
+# default = "phone"
+# [machine.simulators.profiles.phone]
+# device = "iPhone 17"
+# runtime = "iOS 26"
+
+[agent]
+# Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
+# a built-in AI tool or one defined under [agents].
+# default = "codex"
+# Directories every agent and chat may read without a permission prompt, as
+# other working directories. Entries are absolute or start with ~/.
+dirs = ["/tmp"]
+# Agents of one repository that run at once, as a positive number; by default
+# only [machine] max_agents limits them.
+# max_running = 3
+# The Git profile from [machine.git_profiles] for tracked agents' Git commands.
+# git_profile = "agent"
+
+# A separate account for tracked agents: user-owned forge executable wrappers.
+# See docs/reference.md#agent-accounts for setup.
+# [agent.forge_clis]
+# fj = "~/bin/fj-agent"
+# gh = "~/bin/gh-agent"
+
+# Prompt templates normally live beside this file as worker-template.md and
+# chat-template.md. Inline text takes precedence over the corresponding file.
+# [agent.templates]
+# worker = "Follow repository instructions in {workspace} at {path}."
+# chat = "Discuss the {repo} repository at {path} without changing it."
+
+# Each AI tool's launch settings, merged option by option with a repository's.
+[agents.claude]
+command = ["claude"]
+# `shoal claude` without --cli/--app: "cli" or "app" (the Claude app, macOS only).
+default_mode = "cli"
+
+[agents.codex]
+command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+# `shoal codex` without --cli/--app: "cli" or "app".
+default_mode = "cli"
+
+# A custom agent: shoal add <repository> <branch> --agent droid. Its resume
+# command must restore a session rather than repeat the initial prompt.
+# [agents.droid]
+# command = ["droid", "{args}"]
+# resume_command = ["droid", "resume", "{path}"]
+
+# Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
+# [commands]
+# check = ["cargo", "test"]
+# Local committed-change review, with tuicr installed on PATH:
+# review = ["tuicr", "-r", "{diff_base}..HEAD"]
+
+[terminal]
+# `shoal add` focuses workspace shells and agents waiting for a prompt, and
+# starts agents with input in the background: a background Herdr tab, or a
+# detached zmx session outside Herdr. Set to always (true) or never (false) focus.
+# focus = true
+# Close the Herdr tab or zmx session Shoal opened for a workspace once the
+# workspace is removed, or once `done` keeps it and the agent finishes its turn.
+close_when_done = true
+# Where launches from a terminal outside Herdr and Rex run: detached zmx
+# sessions ("zmx"), tabs on the local Herdr server ("herdr"), or windows on the
+# local Rex server ("rex").
+default_host = "zmx"
+
+[terminal.herdr]
+# Use Herdr tabs and panes; false runs as in a plain terminal.
+enabled = true
+# Run issue/add in a new tab inside Herdr, after interactive choices.
+new_tab = true
+# The workspace for tabs Shoal opens outside a Herdr pane.
+workspace_name = "{repo}"
+# Override [terminal] close_when_done for Herdr tabs.
+# close_when_done = true
+# tab_name = "{repo}: {branch}"
+
+[terminal.rex]
+# Use Rex windows and blocks; false runs as in a plain terminal.
+enabled = true
+# Run issue/add in a new window inside Rex, after interactive choices.
+new_window = true
+# Open that place as a new window ("window") or a split beside the caller's
+# block ("split").
+placement = "window"
+# The session for windows Shoal opens outside a Rex session.
+session_name = "{repo}"
+# Override [terminal] close_when_done for Rex windows.
+# close_when_done = true
+# window_name = "{repo}: {branch}"
+
+[terminal.happy]
+# Offer happy-claude and happy-codex, which start detached Happy sessions.
+enabled = false
+
+[setup]
+# Copy the main checkout's ignored files into the worktree before setup.
+copy_ignored = true
+
+# Optional untracked lifecycle hooks; repository values replace these commands.
+# Each value is one executable path, relative to the worktree or absolute.
+# [hooks]
+# post_setup = "/path/to/attach" # After readiness, in the CLI with a terminal.
+# pre_remove = "/path/to/detach" # Before removal, in the daemon without a terminal.
 
 [cleanup.auto]
 # Remove idle, clean, pushed or landed workspaces automatically.
@@ -242,18 +261,6 @@ end = 65535
 # preset = "web"
 # cmd = ["npm", "run", "dev"]
 
-[simulators]
-# Xcode simulator leases (macOS).
-max_booted = 2
-max_devices = 4
-idle_seconds = 120
-allow_any = false
-# Example profile; `default` must name a profile defined below it.
-# default = "phone"
-# [simulators.profiles.phone]
-# device = "iPhone 17"
-# runtime = "iOS 26"
-
 # Example permits shared across repositories; see the command reference.
 # [resources.signing]
 # capacity = 1
@@ -264,8 +271,8 @@ allow_any = false
 # capacity = 1
 
 # Clean up when an agent marks its workspace done; false keeps it for review.
-[done]
-cleanup = true
+[cleanup.done]
+enabled = true
 
 # Agent reviews of PRs and issues post their findings; --post and --no-post override it.
 [review]
@@ -280,16 +287,15 @@ settle_seconds = 5
 [land]
 push = false
 
-# Whether agents may open issues in repositories other than their workspace's:
-# "deny", "propose" (wait for your approval) or "direct".
-[issue]
-other_repositories = "propose"
-
-# Whether issues and PRs agents open wait for your approval: "direct" or "propose".
-[approvals]
+# What agents may do: "direct" at once, "propose" after your approval, or
+# "deny" where it applies. Issues and PRs in the workspace's repository:
+[permissions]
 issue_open = "direct"
 pr_open = "direct"
-
-# Whether shoal forge api sends agents' requests that are not reads; you may always send them.
-[api]
-agent_writes = false
+# Issues in other repositories than the workspace's: "deny", "propose" or "direct".
+issue_other_repositories = "propose"
+# shoal land: "propose" or "direct".
+land = "propose"
+# Requests through shoal forge api that are not reads, which you may always
+# send: "deny" or "direct".
+api_writes = "deny"

@@ -53,6 +53,7 @@ impl Manager {
         let secrets = self
             .workspace_settings(&workspace)
             .await?
+            .into_settings()
             .secrets
             .into_iter()
             .map(|(name, secret)| CatalogSecret {
@@ -134,6 +135,7 @@ impl Manager {
         let secret = self
             .workspace_settings(workspace)
             .await?
+            .into_settings()
             .secrets
             .remove(name)
             .ok_or_else(|| anyhow!("secrets.{name} is not configured for this workspace"))?;

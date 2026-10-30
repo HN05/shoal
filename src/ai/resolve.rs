@@ -1,5 +1,5 @@
-//! Each AI tool resolved once from the `[ai]` entries along its `base`
-//! lineage, which nothing else walks.
+//! Each AI tool resolved from its description along its `base` lineage,
+//! which nothing else walks.
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -27,8 +27,8 @@ pub struct Tool {
     /// built in, or configured with a launcher or a base. A tool with only
     /// a skill directory or argument templates is not one.
     pub runs_as_agent: bool,
-    /// What its launcher takes, including that of a `[commands]` agent
-    /// whose `[ai]` entry only describes arguments.
+    /// What its launcher takes: the argument templates of its
+    /// `[agents.<name>]` entry and its bases.
     pub launch: LaunchProfile,
     /// Which Shoal integration it runs with.
     pub integration: IntegrationKind,
@@ -39,7 +39,7 @@ pub struct Tool {
     /// Whether Shoal retries a turn an API failure ended; on by default for
     /// the Claude integration.
     pub retry: bool,
-    /// The `[proxy.<name>]` its tracked agents reach their API through: the
+    /// The `[machine.proxies.<name>]` its tracked agents reach their API through: the
     /// one named nearest in its lineage.
     pub proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.
@@ -103,7 +103,7 @@ impl Tool {
 }
 
 /// Every built-in tool and every configured one, resolved.
-pub(super) fn tools(entries: &Agents) -> Tools {
+pub fn tools(entries: &Agents) -> Tools {
     builtin::PROVIDERS
         .iter()
         .map(|provider| provider.name)

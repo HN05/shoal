@@ -74,7 +74,7 @@ impl Manager {
     /// The forge `host` serves and what decided it, asking it over
     /// `scheme` when nothing says.
     pub(crate) async fn host_type(&self, host: &str, scheme: &'static str) -> Result<HostType> {
-        if let Some(kind) = self.config().forges.settled(host) {
+        if let Some(kind) = self.config().machine.forges.settled(host) {
             return Ok(HostType::Settled(kind));
         }
         if let Some(kind) = self.recorded_forge_type(host).await? {
@@ -195,7 +195,7 @@ impl Manager {
         recorded: ForgeKind,
         scheme: &str,
     ) -> Option<Change> {
-        if self.config().forges.pinned(host).is_some() {
+        if self.config().machine.forges.pinned(host).is_some() {
             return None;
         }
         let scheme = if scheme == "http" { "http" } else { "https" };

@@ -10,9 +10,9 @@ use std::{fs, sync::Arc};
 async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -25,9 +25,9 @@ async fn completion_without_a_hook_allows_concurrent_resource_hooks() {
         .await
         .unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some("post_done_cmd = '/usr/bin/true'\n[done]\ncleanup = false\n".into()),
+            Some("hooks.post_done = '/usr/bin/true'\n[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -70,7 +70,7 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
             .cleanup
     );
     manager
-        .set_repository_config(&repo.id, Some("[done]\ncleanup=false\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup.done]\nenabled=false\n".into()))
         .await
         .unwrap();
     assert!(
@@ -116,9 +116,9 @@ async fn completion_persists_and_cleanup_overrides_the_repository_default() {
 async fn repeating_an_unchanged_completion_is_refused() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -190,10 +190,10 @@ async fn repeating_a_completion_reruns_a_configured_hook() {
     .unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
             Some(format!(
-                "post_done_cmd = '{}'\n[done]\ncleanup = false\n",
+                "hooks.post_done = '{}'\n[cleanup.done]\nenabled = false\n",
                 hook.display()
             )),
         )
@@ -229,9 +229,9 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 async fn completion_without_cleanup_blocks_idle_and_pr_cleanup_until_requested() {
     let (_root, manager, workspace) = fixture().await;
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();
@@ -334,9 +334,9 @@ async fn completion_rechecks_work_after_removal_hooks() {
     fs::write(&hook, "#!/bin/sh\nprintf 'preserve me' > new-work\n").unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
         .unwrap();
@@ -373,9 +373,9 @@ async fn a_removal_holds_only_its_own_workspaces_gate() {
     .unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
         .unwrap();
@@ -869,9 +869,9 @@ async fn children_stay_while_their_parents_completion_does_not_stand() {
         .unwrap();
     // Without cleanup the completion leaves them.
     manager
-        .set_repository_config(
+        .write_local_config(
             &parent.repository_id,
-            Some("[done]\ncleanup = false\n".into()),
+            Some("[cleanup.done]\nenabled = false\n".into()),
         )
         .await
         .unwrap();

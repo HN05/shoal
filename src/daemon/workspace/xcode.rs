@@ -220,6 +220,7 @@ impl Manager {
 
 fn uses_xcode(settings: &Effective) -> bool {
     settings
+        .setup
         .presets
         .as_deref()
         .unwrap_or_default()

@@ -126,8 +126,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.pi]\nskill_dir = '~/pi-skills'\n\
-         [ai.droid]\ncommand = ['droid']\n[happy]\nenabled = true\n",
+        "[commands]\nreview = ['tuicr']\n[terminal.happy]\nenabled = true\n[agents.droid]\ncommand = ['droid']\n[machine.agents.pi]\nskill_dir = '~/pi-skills'\n",
     )
     .unwrap();
     install_programs(
@@ -171,7 +170,6 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "config", "s"], "show"),
         (vec!["shoal", "config", "install", "d"], "default"),
         (vec!["shoal", "repo", "c"], "config"),
-        (vec!["shoal", "repo", "config", "--f"], "--file"),
         (vec!["shoal", "repo", "rm", "--y"], "--yes"),
         (vec!["shoal", "catalog", "s"], "sim"),
         (vec!["shoal", "history", "s"], "sim"),
@@ -221,8 +219,7 @@ fn agents_without_installed_executables_are_not_completed() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[commands]\nreview = ['tuicr']\n[ai.droid]\ncommand = ['droid']\n\
-         [ai.claude-direct]\nbase = 'claude'\n[ai.droid-direct]\nbase = 'droid'\n",
+        "[commands]\nreview = ['tuicr']\n[agents.droid]\ncommand = ['droid']\n[agents.claude-direct]\nbase = 'claude'\n[agents.droid-direct]\nbase = 'droid'\n",
     )
     .unwrap();
     // Only the fixture's bin, so agents installed on this machine stay out.
@@ -283,7 +280,7 @@ fn happy_completes_only_with_an_installed_agent_to_run() {
     fs::create_dir_all(home.path().join(".config/shoal")).unwrap();
     fs::write(
         home.path().join(".config/shoal/config.toml"),
-        "[happy]\nenabled = true\n",
+        "[terminal.happy]\nenabled = true\n",
     )
     .unwrap();
     let path = format!("{}:/usr/bin:/bin", home.path().join("bin").display());

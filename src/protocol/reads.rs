@@ -46,7 +46,6 @@ impl Operation {
                 )
                 | Self::Repository(
                     RepositoryMethod::ListRepositories
-                        | RepositoryMethod::RepositoryConfig { .. }
                         | RepositoryMethod::ListBranches { .. }
                         | RepositoryMethod::KeptBranches { .. }
                         | RepositoryMethod::AgentEnvironments { .. }

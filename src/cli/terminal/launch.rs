@@ -48,7 +48,7 @@ pub(in crate::cli) async fn start_add(
         "workspace processes cannot allocate workspaces"
     );
     let host = beside(ctx, settings);
-    let focus = focus.then_some(true).or(settings.focus);
+    let focus = focus.then_some(true).or(settings.terminal.focus);
     let placement = Placement::choose(focus, !plan.runs_unattended());
     naming::name_plan(ctx, host.options.name_template.clone(), plan, issue).await?;
     let Some(places) = host.places() else {
@@ -253,7 +253,7 @@ pub(crate) fn start_environment() -> BTreeMap<String, String> {
 
 /// The variables of a start that comes from no terminal, such as one an
 /// app queues through the client API: no origin and every host's server
-/// unset, so it opens in `default_host` whatever the daemon's own
+/// unset, so it opens in `terminal.default_host` whatever the daemon's own
 /// environment names.
 pub(crate) fn detached_start_environment() -> BTreeMap<String, String> {
     let mut env = BTreeMap::from([env::output_setting()]);

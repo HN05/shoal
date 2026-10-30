@@ -13,9 +13,10 @@ use crate::{
     capability::Capability,
     items::{
         attach::{Attachment, Holder, Pending},
+        comment::CommentEdit,
         item::{Current, Item, ItemState},
         link::ItemKind,
-        reaction::ReactionChange,
+        reaction::{ReactionChange, Subject},
     },
     review::submit::{NewReview, ReviewVerdict},
     transport::api::Request,
@@ -66,6 +67,8 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<Attachment>,
     },
+    /// Replace the body of a comment the acting login wrote.
+    EditComment(CommentEdit),
     Close,
     Reopen,
     Merge {
@@ -131,6 +134,7 @@ impl Action {
         match self {
             Self::Edit(_) => "edit",
             Self::Comment { .. } => "comment",
+            Self::EditComment(_) => "edit_comment",
             Self::Close => "close",
             Self::Reopen => "reopen",
             Self::Merge { .. } => "merge",
@@ -215,6 +219,7 @@ impl Action {
                 !body.trim().is_empty() || !attachments.is_empty(),
                 "the comment is empty"
             ),
+            Self::EditComment(edit) => edit.validate()?,
             Self::Merge { .. } | Self::AutoMerge { .. } | Self::CancelAutoMerge => {
                 pr_only("merge")?;
             }
@@ -324,6 +329,9 @@ impl ForgeRepo {
             Action::React(change) => {
                 return Box::pin(self.react(account, kind, number, change)).await;
             }
+            Action::EditComment(edit) => {
+                return Box::pin(self.edit_own_comment(account, kind, number, edit)).await;
+            }
             _ => {}
         }
         let per_item = self.check_uploads(account, action.attachments()).await?;
@@ -345,7 +353,7 @@ impl ForgeRepo {
             }
         }
         if let (Some(pending), Some(comment)) = (pending, &first) {
-            self.attach_to_comment(account, comment, pending)
+            self.attach_to_comment(account, kind, number, comment, pending)
                 .await
                 .context("the comment was posted, but attaching its files failed")
                 .map_err(|error| after_post(error, first.is_some(), &authored))?;
@@ -401,10 +409,13 @@ impl ForgeRepo {
         }
     }
 
-    /// Upload a posted comment's files to it and embed them in its body.
+    /// Upload the files of a comment posted on item `number` to it and
+    /// embed them in its body.
     async fn attach_to_comment(
         &self,
         account: &Account,
+        kind: ItemKind,
+        number: u64,
         comment: &serde_json::Value,
         pending: Pending,
     ) -> Result<()> {
@@ -413,7 +424,10 @@ impl ForgeRepo {
         let body = self
             .attach(account, holder, &pending.body, &pending.attachments)
             .await?;
-        let edit = self.kind.edit_comment(self, id, &body)?.repeatable();
+        let edit = self
+            .kind
+            .edit_comment(self, kind, number, Subject::Comment(id), &body)?
+            .repeatable();
         self.send(account, &edit).await?;
         Ok(())
     }
@@ -525,6 +539,7 @@ impl ForgeRepo {
             Action::React(_) => {
                 anyhow::bail!("a reaction is planned from the reactions it changes")
             }
+            Action::EditComment(_) => anyhow::bail!("a comment's edit is planned from the comment"),
         })
     }
 }

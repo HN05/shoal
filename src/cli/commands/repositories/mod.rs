@@ -19,11 +19,7 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
     match command {
         RepoCommand::Labels(repository) => super::labels::labels(ctx, repository.workspace).await,
         RepoCommand::Sync { repository } => sync::sync(ctx, repository).await,
-        RepoCommand::Config {
-            repository,
-            file,
-            clear,
-        } => configuration::configure(ctx, repository, file, clear).await,
+        RepoCommand::Config { repository } => configuration::show(ctx, repository).await,
         RepoCommand::Add { source, name, path } => registration::add(ctx, source, name, path).await,
         RepoCommand::Ls => listing::list(ctx).await,
         RepoCommand::Rename { repository, name } => naming::rename(ctx, repository, name).await,

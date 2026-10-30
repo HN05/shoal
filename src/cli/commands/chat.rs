@@ -44,7 +44,7 @@ pub(super) async fn start(
 
 /// How the command line starts a chat.
 pub(super) struct Options {
-    /// Agent to start; defaults to `default_agent`, otherwise a picker.
+    /// Agent to start; defaults to `agent.default`, otherwise a picker.
     pub agent: Option<Agent>,
     /// Run in the current pane or terminal instead of beside it.
     pub here: bool,
@@ -260,7 +260,7 @@ pub(super) async fn chosen(ctx: &Context, repository: Option<String>) -> Result<
     Ok(repository::select(&repos, selector).await?.clone())
 }
 
-/// `--agent`, else `default_agent`, else a picker of the installed agents.
+/// `--agent`, else `agent.default`, else a picker of the installed agents.
 fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Result<Agent> {
     match named_agent(settings, agent)? {
         Some(agent) => Ok(agent),
@@ -268,10 +268,10 @@ fn chat_agent(ctx: &Context, settings: &Effective, agent: Option<Agent>) -> Resu
     }
 }
 
-/// `--agent`, else `default_agent`, refused when unavailable; `None` when
+/// `--agent`, else `agent.default`, refused when unavailable; `None` when
 /// neither names one.
 pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<Option<Agent>> {
-    let Some(agent) = agent.or_else(|| settings.default_agent.clone()) else {
+    let Some(agent) = agent.or_else(|| settings.agent.default.clone()) else {
         return Ok(None);
     };
     agents::ensure_available(agent.name(), settings)?;
@@ -282,7 +282,7 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let names: Vec<_> = agents::names(settings)
         .into_iter()
-        .filter(|name| agents::installed(name, &settings.commands, &search_path))
+        .filter(|name| agents::installed(name, &settings.launchers, &search_path))
         .collect();
     ensure!(!names.is_empty(), "no agent is installed");
     ui::require_argument(ctx, "agent", "agent")?;
@@ -354,7 +354,7 @@ fn command(
         args,
     );
     configured::expand_outside_workspace(
-        &settings.commands,
+        &settings.launchers,
         name,
         &[
             ("{path}", repo.path.as_os_str()),
@@ -367,7 +367,7 @@ fn command(
 /// The resolved chat template with the repository's name and checkout.
 fn instructions(settings: &Effective, repo: &Repository) -> String {
     templates::render(
-        settings.chat_template.as_deref().unwrap_or_default(),
+        &settings.agent.templates.chat,
         &[
             ("{repo}", repository::name(repo)),
             ("{path}", &repo.path.to_string_lossy()),

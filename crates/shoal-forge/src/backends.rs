@@ -28,6 +28,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
+        comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState},
         link::ItemKind,
@@ -498,6 +499,20 @@ pub(crate) trait Backend {
     /// anonymously.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>>;
 
+    /// Whether the login of `account` wrote `comment` of item `number`.
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        _kind: ItemKind,
+        _number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        let login = (self.own_login(repo, account).await?)
+            .context("editing a comment needs a login on the forge")?;
+        Ok(comment.author.eq_ignore_ascii_case(&login))
+    }
+
     /// The content [`Self::listed_reaction`] reports for a reaction the
     /// forge names `name`; by default the name itself.
     fn reaction_content(&self, name: &str) -> String {
@@ -704,11 +719,16 @@ pub(crate) trait Backend {
         }
     }
 
-    /// The request that replaces the body of the discussion comment `id`,
-    /// where the forge keeps uploads with comments.
-    fn edit_comment(&self, _repo: &ForgeRepo, _id: u64, _body: &str) -> Result<Request> {
-        anyhow::bail!("this forge keeps attached files with the repository")
-    }
+    /// The request that replaces the body of the comment `subject` of item
+    /// `number`.
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request>;
 
     /// Where the forge looks for the description templates of a new item
     /// of `kind`, in its lookup order.
@@ -1187,6 +1207,17 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.own_login(repo, account).await)
     }
 
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        dispatch!(self, backend => backend.wrote(repo, account, kind, number, comment).await)
+    }
+
     fn reaction_content(&self, name: &str) -> String {
         dispatch!(self, backend => backend.reaction_content(name))
     }
@@ -1359,8 +1390,15 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.markup(attachment, alt, url))
     }
 
-    fn edit_comment(&self, repo: &ForgeRepo, id: u64, body: &str) -> Result<Request> {
-        dispatch!(self, backend => backend.edit_comment(repo, id, body))
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        dispatch!(self, backend => backend.edit_comment(repo, kind, number, subject, body))
     }
 
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {

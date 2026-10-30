@@ -161,6 +161,7 @@ impl Scoped for ItemMethod {
                 action:
                     Action::Edit(_)
                     | Action::Comment { .. }
+                    | Action::EditComment(_)
                     | Action::Thread(_)
                     | Action::Review(_)
                     | Action::React(_)

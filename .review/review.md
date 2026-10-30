@@ -73,7 +73,7 @@ instead of the PR delivery guidance below.
   and untracked files with Git status codes, bounding the preview and reporting omitted
   entries. Environment checks and the untracked-worktree listing only report,
   as alerts and inbox items; dependency checks use the shared executable catalog.
-- `[env]` layers per variable from saved repository config, worktree, global,
+- `[env]` layers per variable from local config, worktree, global,
   then default. Tracked executions, hooks and workspace exports substitute known
   workspace and reserved-port fields once without shell or recursive expansion;
   `SHOAL_*` names stay reserved and port exports win collisions. Desktop handoffs
@@ -116,7 +116,7 @@ instead of the PR delivery guidance below.
   assignment completion and its withdrawal, listing, opening and changing issues and PRs
   of the own repository except merging, approving or requesting changes, rerunning or cancelling their CI jobs,
   starting, rerunning or cancelling CI runs of their own branch and reading the own repository's,
-  GET requests to the own repository's forge API, or others where `[api] agent_writes`
+  GET requests to the own repository's forge API, or others where `[permissions] api_writes`
   allows them, own-repository sync and
   effective-configuration reads are allowed, but approving CI runs that wait for approval is not;
   only unscoped callers export or revoke environment tokens. Export requires a
@@ -137,7 +137,7 @@ instead of the PR delivery guidance below.
   writes to a terminal. Workspace events are an unscoped, durable lifecycle
   stream with replay gaps, independent of notification read state. Ready-for-review
   marks bind to HEAD, cover only linked items or the unlinked workspace, record
-  journal events, and never notify, complete, or change cleanup; `post_ready_cmd`
+  journal events, and never notify, complete, or change cleanup; `hooks.post_ready`
   failure keeps them. Only explicit
   done completes an assignment. PR cleanup
   defaults on and removes a completed workspace only after every watched PR merges
@@ -166,13 +166,13 @@ instead of the PR delivery guidance below.
   and a child that fails retains the parent. A standing completion with cleanup
   removes the workspaces below it that nothing of their own keeps, whatever
   their work, after the grace period. A scoped land
-  is an approval request bound to the branch HEAD unless `[land] requires_approval`
-  is false; approval never skips a landing check and lands only the approved commit.
-  Under `[approvals] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
+  is an approval request bound to the branch HEAD unless `[permissions] land`
+  is `"direct"`; approval never skips a landing check and lands only the approved commit.
+  Under `[permissions] issue_open`/`pr_open = "propose"`, a scoped `issue open` or
   `pr open` records a proposal instead of opening; approval opens it as the agent
   account through the normal open path, a PR only at its recorded commit, and an
   issue proposal belongs to the repository and outlives its workspace.
-  `[issue] other_repositories` governs a scoped issue in another repository the same
+  `[permissions] issue_other_repositories` governs a scoped issue in another repository the same
   way (`"propose"` by default) or refuses it with `"deny"`; it is never linked. This is cooperative,
   not a security boundary, so judge it as such.
 - Simulator plans never authorize mutations by themselves: the executor rechecks
@@ -221,9 +221,9 @@ instead of the PR delivery guidance below.
   requests use fj's saved token for the repository's own host, validated, passed
   to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
   through `tea api`; GitLab requests go through `glab api`. Bitbucket requests
-  send the token `[bitbucket] token_command` prints, validated, only to
+  send the token `[machine.bitbucket] token_command` prints, validated, only to
   api.bitbucket.org on curl's stdin, never stored or logged. The forge is chosen
-  by a pinned `[forges."<host>"] type`, a well-known host name, or else the
+  by a pinned `[machine.forges."<host>"] type`, a well-known host name, or else the
   host's own answer to each forge's version or metadata endpoint, asked with
   only the logins saved for that host and never gh's or glab's environment
   tokens, which the daemon records so the host is asked once and asks again
@@ -293,12 +293,12 @@ instead of the PR delivery guidance below.
   README on each host; reruns synchronize notes without replacing
   complete asset sets. Homebrew releases install checksummed binaries after
   both release hosts publish assets; the formula has no head channel.
-- Prompt templates append the selected saved/worktree repository value to global
+- Prompt templates append the selected local/worktree repository value to global
   guidance, falling back to the bundled chat template for an omitted global base.
   Empty repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.
   Shoal's built-in agent guidance precedes every worker template, which holds
-  only additions; the former `agent_template` name still loads with a warning. `install` preserves existing template files; substitutions never evaluate or
+  only additions. `install` preserves existing template files; substitutions never evaluate or
   recursively expand inserted text.
 - Issue numbers use an explicit repository, the current registered checkout or
   managed workspace, or an interactive picker. Issue URLs must match the selected
@@ -334,7 +334,7 @@ instead of the PR delivery guidance below.
 - Herdr handoffs belong to the CLI after interactive choices, preserving resolved
   choices, literal arguments and state/config selection; tab labels use
   `<repo>#<number>` for issues and the allocated workspace branch otherwise by
-  default. Optional `herdr.tab_name` templates follow config precedence, substitute
+  default. Optional `terminal.herdr.tab_name` templates follow config precedence, substitute
   fields once and travel with the plan; branch fields update after allocation.
   Preparation failures keep the tab readable; agent exits keep the tab open,
   and completion or workspace removal closes it.
@@ -351,7 +351,7 @@ instead of the PR delivery guidance below.
   not on PATH is refused before any work and left out of pickers, the workspace
   menu and completion.
 - Commands never name an agent or terminal host. What configuration can say about
-  an agent lives in its `[ai.<name>]` description; tool-specific code lives in an
+  an agent lives in its `[agents.<name>]` description; tool-specific code lives in an
   `Integration` keyed by agent name under `cli/agents/`, and terminal-specific code
   in a `Host` under `cli/terminal/`. Optional integrations stay behind their Cargo
   feature and setting.
@@ -382,7 +382,7 @@ instead of the PR delivery guidance below.
   and timing; retain work and leases, notify with the pressure reason and recovery
   path, distinguish automatic recovery from manual or unavailable recovery, and never select disconnected
   executions. Failed readings reset the sustained timer and authorize no stop.
-  Below each enabled protection's stop threshold, `[overload.warning]` queues an
+  Below each enabled protection's stop threshold, `[machine.overload.warning]` queues an
   agent message for every workspace with a running agent, at most once per signal
   and workspace per repeat interval; warnings never stop, clean up or notify.
   A memory or CPU warning wakes an idle agent only while something besides the
@@ -446,10 +446,10 @@ configured command for another agent, plus proven child
   Repository-only commands require a current or explicit workspace; unknown names
   report command errors with built-in suggestions without opening a picker.
   `{diff_base}` resolves lazily through the shared daemon diff-base lookup.
-  AI tools (built-in providers and global `[ai.<name>]` entries) are agents:
-  an `[ai]` `command` joins the global command layer, and `shoal <name>` and
-  `run` launch it as `shoal claude` does; pickers and completion offer AI tools
-  only. Custom agent names select named commands and run as tracked agents. Their
+  AI tools (built-in providers and `[agents.<name>]` entries with a `command`
+  or `base`) are agents: `shoal <name>` and `run` launch them as `shoal claude`
+  does, as tracked agents, and pickers and completion offer AI tools only.
+  `[commands]` holds only workspace shortcuts and never names an agent. Their
   `{prompt}` combines general instructions and issue context, prepended to
   forwarded arguments when no prompt placeholder is configured.
   Plain command invocations expand `{prompt}` to an empty string.

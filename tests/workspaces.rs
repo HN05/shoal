@@ -59,7 +59,7 @@ const NO_GRACE: &str = "cleanup.grace_minutes = 0\n";
 const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
-const FORGEJO_HOST: &str = "forges.\"forge.example\".type = \"forgejo\"\n";
+const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -136,6 +136,29 @@ impl Fixture {
             self.root.path(),
             &serde_json::json!({"protocol": protocol, "id": id, "method": method}),
         )
+    }
+
+    /// Write `file`'s contents as repository `repository`'s local config, as
+    /// a user edits it, and return what `repo config` then shows.
+    fn save_local_config(&self, repository: &str, file: &Path) -> Value {
+        let path = PathBuf::from(
+            self.ok(&["repo", "config", repository])["path"]
+                .as_str()
+                .unwrap(),
+        );
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::copy(file, &path).unwrap();
+        self.ok(&["repo", "config", repository])
+    }
+
+    /// Remove repository `repository`'s local config file.
+    fn clear_local_config(&self, repository: &str) -> Value {
+        let shown = self.ok(&["repo", "config", repository]);
+        let path = Path::new(shown["path"].as_str().unwrap());
+        if path.exists() {
+            fs::remove_file(path).unwrap();
+        }
+        self.ok(&["repo", "config", repository])
     }
 
     fn rename(&self, workspace: &str, branch: &str) -> Value {
@@ -422,12 +445,15 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         "original",
         "--",
         binary,
+        "--json",
         "branch",
         "rename",
         "other",
         "stolen",
     ]);
     assert!(!denied.status.success());
+    let error: Value = serde_json::from_slice(&denied.stderr).unwrap();
+    assert_eq!(error["error"]["code"], "scope_denied", "{error}");
     assert_eq!(
         fixture.ok(&["status", "other"])["workspace"]["branch"],
         "other"
@@ -462,6 +488,19 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
     );
     let explicit = fixture.ok(&["branch", "rename", "by-directory", "explicit"]);
     assert_eq!(explicit["name"], "explicit");
+    // JSON errors name the refusal, so programs need not read the message.
+    for (args, code) in [
+        (
+            &["--json", "branch", "rename", "explicit", "other"][..],
+            "name_taken",
+        ),
+        (&["--json", "status", "missing"], "not_found"),
+    ] {
+        let output = fixture.run(args);
+        assert!(!output.status.success(), "{args:?}");
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["error"]["code"], code, "{args:?}: {error}");
+    }
     assert!(!fixture.run(&["branch", "rename"]).status.success());
     let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
     db.execute(
@@ -490,7 +529,8 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
 
 #[test]
 fn workspace_rename_preserves_work_ownership_and_diff_bases() {
-    let mut fixture = Fixture::with_config(Some("[resources.lock]\n[done]\ncleanup = false\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[resources.lock]\n[cleanup.done]\nenabled = false\n"));
     let workspace = fixture.add("original");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let id = workspace["id"].as_str().unwrap();
@@ -580,7 +620,7 @@ fn workspace_rename_preserves_work_ownership_and_diff_bases() {
 
 #[test]
 fn workspace_rename_issue_reopens_the_associated_workspace() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
         fixture.root.path().join("bin/gh"),
@@ -884,7 +924,7 @@ fn cleanup_removes_idle_candidates_on_request() {
 #[test]
 fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
     let workspace = fixture.add("moving");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -1023,7 +1063,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
             armed.display()
         ),
     );
-    commit_resource_config(&fixture.repo, "post_setup_cmd = 'post-setup.sh'\n");
+    commit_resource_config(&fixture.repo, "hooks.post_setup = 'post-setup.sh'\n");
     let paths: Vec<_> = ["first", "second"]
         .into_iter()
         .map(|name| {
@@ -1141,7 +1181,7 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
         imported["failed"][1]["error"]
             .as_str()
             .unwrap()
-            .contains("imported second, but its post_setup_cmd failed"),
+            .contains("imported second, but its hooks.post_setup failed"),
         "{imported}"
     );
     for (path, name) in paths.iter().zip(["first", "second"]) {
@@ -1271,7 +1311,7 @@ fn streaming_export_refuses_a_herdr_tab_that_closes_with_the_workspace() {
 fn export_finishes_when_its_terminal_ends_after_the_removal() {
     // The removal hook holds the daemon between removal and the export, as
     // long as closing a workspace's Herdr tab would take.
-    let fixture = Fixture::with_config(Some("post_remove_cmd = 'hold.sh'\n"));
+    let fixture = Fixture::with_config(Some("hooks.post_remove = 'hold.sh'\n"));
     install_test_script(
         fixture.repo.join("hold.sh"),
         "#!/bin/sh\ntouch removed\ni=0\nwhile [ ! -e go ] && [ $i -lt 50 ]; do sleep 1; i=$((i + 1)); done\n",
@@ -1435,7 +1475,7 @@ fn restore_pickers_reopen_the_picked_workspace_and_return_to_the_picked_checkpoi
 #[test]
 fn resume_continues_the_agent_a_removal_stopped_once_restored() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh']\n",
     ));
     let workspace = fixture.add("removed");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
@@ -1673,7 +1713,7 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
             "set",
             "--repo",
             "saldoir-server",
-            "done.cleanup",
+            "cleanup.done.enabled",
             "false",
         ],
         vec!["add", "saldoir-server", "collision"],
@@ -1685,14 +1725,14 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
             String::from_utf8_lossy(&output.stderr)
         );
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(
-            result[if args[0] == "repo" && args[1] == "add" {
-                "id"
-            } else {
-                "repository_id"
-            }],
-            named["id"]
-        );
+        let local =
+            || fixture.ok(&["repo", "config", named["id"].as_str().unwrap()])["path"].clone();
+        match (args[0], args[1]) {
+            ("repo", "add") => assert_eq!(result["id"], named["id"]),
+            ("repo", "config") => assert_eq!(result["path"], local()),
+            ("config", _) => assert_eq!(result["config"], local()),
+            _ => assert_eq!(result["repository_id"], named["id"]),
+        }
     }
     let other = fixture.ok(&[
         "repo",
@@ -1721,7 +1761,10 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
         String::from_utf8_lossy(&output.stderr)
     );
     let config: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(config["repository_id"], other["id"]);
+    assert_eq!(
+        config["path"],
+        fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["path"]
+    );
     // Replace the second registration with an unrelated directory to exercise
     // removal by the displayed name.
     fixture.ok(&["repo", "rm", other["id"].as_str().unwrap(), "--yes"]);
@@ -2161,7 +2204,7 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
     }
     for (args, refusal) in [
         (vec!["status", "context-other"], "scope"),
-        (vec!["status", "missing"], "scope"),
+        (vec!["status", "missing"], "unknown workspace: missing"),
         (vec!["stop"], "stop only the workspaces below theirs"),
         (vec!["stop", "context-other"], "scope"),
         (vec!["config", "show", "context-other"], "scope"),
@@ -2563,7 +2606,7 @@ fn root_directory_inside_state_or_a_checkout_is_refused() {
             vec![&outer],
         ),
     ] {
-        fs::write(&config, format!("root_dir = {root:?}\n")).unwrap();
+        fs::write(&config, format!("machine.root_dir = {root:?}\n")).unwrap();
         fixture.restart();
         for source in sources {
             let output = fixture.run(&["repo", "add", source]);
@@ -2594,7 +2637,7 @@ fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
     )));
     let config = fixture.root.path().join(".config/shoal/config.toml");
     fs::create_dir_all(config.parent().unwrap()).unwrap();
-    fs::write(&config, "root_dir = \"~/file\"\n").unwrap();
+    fs::write(&config, "machine.root_dir = \"~/file\"\n").unwrap();
     fixture.restart();
     let output = fixture.run(&["repo", "add", &url]);
     assert!(!output.status.success());
@@ -2608,7 +2651,7 @@ fn root_and_clone_directories_the_daemon_cannot_write_are_refused() {
 
 #[test]
 fn root_directory_normalizes_missing_components_before_creation() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/missing/../clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/missing/../clones\"\n"));
     let workspace = fixture.add("normalized-root");
     let root = fs::canonicalize(fixture.root.path()).unwrap();
     assert!(Path::new(workspace["path"].as_str().unwrap()).starts_with(root.join("clones")));
@@ -2649,7 +2692,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
     let config = fs::read_to_string(fixture.root.path().join(".config/shoal/config.toml")).unwrap();
     assert!(
         config.contains(&format!(
-            "root_dir = {:?}",
+            "machine.root_dir = {:?}",
             fixture.root.path().join("moved")
         )),
         "{config}"
@@ -2685,7 +2728,7 @@ fn migrate_moves_workspaces_into_a_saved_root() {
 #[test]
 fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
     let fixture = Fixture::with_config(Some(
-        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agent_resume]\nclaude = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'touch started; trap \"exit 0\" TERM; while :; do sleep 1; done']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let claude_config = fixture.root.path().join(".claude.json");
@@ -2771,7 +2814,7 @@ fn migrate_stops_running_agents_and_resumes_them_after_the_move() {
 
 #[test]
 fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/clones\"\n"));
     let directory = fixture.root.path().join("clones");
     fs::write(directory.join("project"), "keep this file").unwrap();
     std::os::unix::fs::symlink("missing-target", directory.join("project-2")).unwrap();
@@ -2832,7 +2875,7 @@ fn clone_directories_use_repo_names_and_suffix_occupied_or_recorded_paths() {
 #[test]
 fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
     let shared = tempfile::tempdir_in("/tmp").unwrap();
-    let config = format!("root_dir = {:?}", shared.path().to_str().unwrap());
+    let config = format!("machine.root_dir = {:?}", shared.path().to_str().unwrap());
     let first = Fixture::with_config(Some(&config));
     let second = Fixture::with_config(Some(&config));
     let clone = |fixture: &Fixture| {
@@ -2864,8 +2907,9 @@ fn clone_name_allocation_is_atomic_across_daemons_sharing_a_directory() {
 
 #[test]
 fn configured_root_directory_affects_new_repositories_and_preserves_existing_paths() {
-    let mut fixture =
-        Fixture::with_config(Some("root_dir = \"~/clones with ' quotes & $literal\"\n"));
+    let mut fixture = Fixture::with_config(Some(
+        "machine.root_dir = \"~/clones with ' quotes & $literal\"\n",
+    ));
     let url = format!("file://{}", fixture.repo.display());
     let repo = fixture.ok(&["repo", "add", &url]);
     let path = Path::new(repo["path"].as_str().unwrap());
@@ -2877,7 +2921,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
     let new_root = fixture.root.path().join("new clones");
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        format!("root_dir = {:?}\n", new_root.to_str().unwrap()),
+        format!("machine.root_dir = {:?}\n", new_root.to_str().unwrap()),
     )
     .unwrap();
     fixture.restart();
@@ -2908,7 +2952,7 @@ fn configured_root_directory_affects_new_repositories_and_preserves_existing_pat
 
 #[test]
 fn repository_clone_path_overrides_default_and_resolves_in_callers_directory() {
-    let fixture = Fixture::with_config(Some("root_dir = \"~/default-clones\"\n"));
+    let fixture = Fixture::with_config(Some("machine.root_dir = \"~/default-clones\"\n"));
     let url = format!("file://{}", fixture.repo.display());
     let relative = "projects/a repo with ' quotes & $literal";
     let output = fixture
@@ -3625,7 +3669,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
 #[test]
 fn review_runs_the_configured_command_or_prompts_an_agent() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\nreviewer = ['printf', '%s|', '{prompt}', '{args}']\n",
+        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n",
     ));
     fixture.add("changes");
     let output = fixture.run(&["review", "changes"]);
@@ -3653,7 +3697,7 @@ fn review_runs_the_configured_command_or_prompts_an_agent() {
     }
     // Without a configured review command, the default agent reviews.
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     fixture.add("agent-only");
     let output = fixture.run(&["review", "agent-only"]);
@@ -3693,7 +3737,7 @@ fn forge_origin(fixture: &Fixture) -> PathBuf {
 #[test]
 fn review_refines_an_issue_in_the_workspace_add_continues() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
@@ -3784,7 +3828,7 @@ fn review_refines_an_issue_in_the_workspace_add_continues() {
 #[test]
 fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     forge_origin(&fixture);
     let bin = fixture.root.path().join("issue-bin");
@@ -3824,7 +3868,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
 #[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'reviewer'\n[commands]\nreviewer = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     let author = forge_origin(&fixture);
     let commit = |message: &str| {
@@ -3997,13 +4041,7 @@ fn repository_config_sets_the_automatic_port_range() {
     let saved = fixture.root.path().join("saved.toml");
     let save = |text: &str| {
         fs::write(&saved, text).unwrap();
-        fixture.ok(&[
-            "repo",
-            "config",
-            fixture.repo.to_str().unwrap(),
-            "--file",
-            saved.to_str().unwrap(),
-        ]);
+        fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     };
     save(&format!("[ports]\nstart={second}\nend={second}\n"));
     assert_eq!(
@@ -4020,7 +4058,7 @@ fn repository_config_sets_the_automatic_port_range() {
 #[test]
 fn config_show_reports_effective_values_and_their_layers() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'claude'\n[commands]\nglobal = ['global']\nshared = ['global']\n\
+        "agent.default = 'claude'\n[commands]\nglobal = ['global']\nshared = ['global']\n\
          [cleanup.auto]\nenabled = false\n[ports]\nstart = 2000\nend = 6000\n",
     ));
 
@@ -4028,7 +4066,7 @@ fn config_show_reports_effective_values_and_their_layers() {
     // worktree layer for the current-directory target.
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "post_setup_cmd = 'checkout/attach'\n",
+        "hooks.post_setup = 'checkout/attach'\n",
     )
     .unwrap();
     let checkout = fixture
@@ -4043,7 +4081,7 @@ fn config_show_reports_effective_values_and_their_layers() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|entry| entry["key"] == "post_setup_cmd")
+        .find(|entry| entry["key"] == "hooks.post_setup")
         .unwrap();
     assert_eq!(checkout_entry["value"], "checkout/attach");
     assert_eq!(checkout_entry["layer"], "worktree_file");
@@ -4053,23 +4091,17 @@ fn config_show_reports_effective_values_and_their_layers() {
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(
         path.join(".shoal.toml"),
-        "setup_cmd = 'scripts/setup'\n[commands]\nworktree = ['worktree']\nshared = ['worktree']\n\
+        "setup.command = 'scripts/setup'\n[commands]\nworktree = ['worktree']\nshared = ['worktree']\n\
          [ports]\nstart = 3000\n[ports.web]\nenv = 'WORKTREE_PORT'\n",
     )
     .unwrap();
     let saved = fixture.root.path().join("saved-config.toml");
     fs::write(
         &saved,
-        "default_agent = 'codex'\n[commands]\nshared = ['saved']\n[ports]\nend = 4000\n",
+        "agent.default = 'codex'\n[commands]\nshared = ['saved']\n[ports]\nend = 4000\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
     let report = fixture.ok(&["config", "show", "layered-config"]);
     let entry = |key: &str| {
@@ -4081,15 +4113,11 @@ fn config_show_reports_effective_values_and_their_layers() {
             .unwrap()
     };
     for (key, value, layer) in [
-        (
-            "default_agent",
-            serde_json::json!("codex"),
-            "saved_repository_config",
-        ),
+        ("agent.default", serde_json::json!("codex"), "local_config"),
         (
             "commands.shared",
             serde_json::json!(["saved"]),
-            "saved_repository_config",
+            "local_config",
         ),
         (
             "commands.worktree",
@@ -4097,16 +4125,12 @@ fn config_show_reports_effective_values_and_their_layers() {
             "worktree_file",
         ),
         (
-            "setup_cmd",
+            "setup.command",
             serde_json::json!("scripts/setup"),
             "worktree_file",
         ),
         ("ports.start", serde_json::json!(3000), "worktree_file"),
-        (
-            "ports.end",
-            serde_json::json!(4000),
-            "saved_repository_config",
-        ),
+        ("ports.end", serde_json::json!(4000), "local_config"),
         (
             "commands.global",
             serde_json::json!(["global"]),
@@ -4118,7 +4142,7 @@ fn config_show_reports_effective_values_and_their_layers() {
             "global_config",
         ),
         (
-            "codex.default_mode",
+            "agents.codex.default_mode",
             serde_json::json!("cli"),
             "built_in_default",
         ),
@@ -4138,7 +4162,7 @@ fn config_show_reports_effective_values_and_their_layers() {
     assert!(human.status.success());
     let human = String::from_utf8(human.stdout).unwrap();
     assert!(human.contains("ports.start = 3000 (worktree file)"));
-    assert!(human.contains("default_agent = \"codex\" (saved repository config)"));
+    assert!(human.contains("agent.default = \"codex\" (local config)"));
 }
 
 #[test]
@@ -4276,7 +4300,8 @@ fn branch_names_are_preserved_with_portable_workspace_names() {
 
 #[test]
 fn split_refuses_a_detached_agent_without_zmx_before_creating_the_child() {
-    let fixture = Fixture::with_config(Some("[ai.droid]\ncommand = ['fake-droid', '{args}']\n"));
+    let fixture =
+        Fixture::with_config(Some("[agents.droid]\ncommand = ['fake-droid', '{args}']\n"));
     let bin = fixture.root.path().join("bin");
     install_test_script_with_mode(bin.join("fake-droid"), "#!/bin/sh\nexit 0\n", 0o700);
     fixture.add("parent");
@@ -4340,7 +4365,7 @@ fn split_refuses_a_fork_without_a_running_parent_agent_before_creating_the_child
 #[test]
 fn split_starts_the_childs_agent_from_a_fork_of_the_parents_session() {
     let fixture = Fixture::with_config(Some(
-        "[overload.disk]\nenabled = false\n[commands]\nclaude = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
+        "[machine.overload.disk]\nenabled = false\n[agents.claude]\ncommand = ['sh', '-c', 'exec sh \"$HOME/agent.sh\" \"$@\"', 'claude']\n",
     ));
     // The daemon's worker starts the child's agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -4500,7 +4525,7 @@ while True:
     fs::write(
         Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
         format!(
-            "setup_cmd = 'setup.sh'\npost_setup_cmd = '{}'\n",
+            "setup.command = 'setup.sh'\nhooks.post_setup = '{}'\n",
             agent.display()
         ),
     )
@@ -4755,7 +4780,7 @@ fn configured_environment_renders_for_tracked_commands() {
 
 #[test]
 fn add_starts_agents_only_after_creation_and_preserves_workspace_on_exit() {
-    let fixture = Fixture::with_config(Some("max_agents = 'none'"));
+    let fixture = Fixture::with_config(Some("machine.max_agents = 'none'"));
     let bin = fixture.root.path().join("add-agent-bin");
     fs::create_dir(&bin).unwrap();
     let inspection = fixture.root.path().join("agent-inspection.json");
@@ -4783,7 +4808,7 @@ exit 7
     ] {
         fs::write(
             config_dir.join("config.toml"),
-            format!("[codex]\ndefault_mode = '{mode}'"),
+            format!("[agents.codex]\ndefault_mode = '{mode}'\n"),
         )
         .unwrap();
         let output = fixture
@@ -4881,7 +4906,7 @@ exit 7
     // A launch that fails only once it starts leaves the worktree for retry.
     fs::write(
         config_dir.join("config.toml"),
-        "[commands]\ncodex = ['{path}/missing-codex']\n",
+        "[agents.codex]\ncommand = ['{path}/missing-codex']\n",
     )
     .unwrap();
     let output = add("failed-agent");
@@ -4916,7 +4941,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
 
     let config_dir = fixture.root.path().join(".config/shoal");
     fs::create_dir_all(&config_dir).unwrap();
-    for config in ["", "[codex]\ndefault_mode = 'app'"] {
+    for config in ["", "[agents.codex]\ndefault_mode = 'app'\n"] {
         // Change the default while the daemon remains running.
         fs::write(config_dir.join("config.toml"), config).unwrap();
         for mode in [None, Some("--cli"), Some("--app")] {
@@ -4964,7 +4989,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
     fs::write(config_dir.join("config.toml"), "").unwrap();
     fs::write(
         Path::new(path).join(".shoal.toml"),
-        "[codex]\ndefault_mode = 'app'\n",
+        "[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let output = fixture
@@ -5018,7 +5043,7 @@ fn claude_app_opens_a_new_session_link_for_the_workspace() {
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(
         config_dir.join("config.toml"),
-        "[claude]\ndefault_mode = 'app'\n",
+        "[agents.claude]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     for args in [vec!["claude", "--app", "claude-app"], vec!["claude"]] {
@@ -5133,7 +5158,7 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
     fs::create_dir(&agent_tmp).unwrap();
     let config = fixture.root.path().join(".config/shoal/config.toml");
     let text = fs::read_to_string(&config).unwrap();
-    let text = format!("agent_dirs = ['/tmp', '{}']\n{text}", agent_tmp.display());
+    let text = format!("agent.dirs = ['/tmp', '{}']\n{text}", agent_tmp.display());
     fs::write(&config, text).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     let agent_tmp = format!(
@@ -5224,18 +5249,12 @@ fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
             fs::write(
                 &local,
                 format!(
-                    "worker_template = {}",
+                    "agent.templates.worker = {}",
                     toml::Value::String(expected.clone())
                 ),
             )
             .unwrap();
-            fixture.ok(&[
-                "repo",
-                "config",
-                fixture.repo.to_str().unwrap(),
-                "--file",
-                local.to_str().unwrap(),
-            ]);
+            fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
         }
         let expected = if index == 4 {
             String::new()
@@ -5544,7 +5563,7 @@ fn a_parent_discards_only_the_stopped_work_of_its_children() {
 #[test]
 fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -5611,7 +5630,7 @@ fn a_parent_stops_its_children_and_resumes_only_what_it_stopped() {
 #[test]
 fn stopping_a_workspace_stops_the_workspaces_below_it() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 'none'\n[overload.disk]\nenabled = false\n[overload.memory]\nenabled = false\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 'none'\n[machine.overload.disk]\nenabled = false\n[machine.overload.memory]\nenabled = false\n[agents.waiter]\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     fixture.add("parent");
@@ -5706,7 +5725,7 @@ fn a_parent_removes_a_child_an_interrupted_split_left_preparing() {
 #[test]
 fn claude_worktree_hooks_split_and_finish_a_child_workspace() {
     // Completion without cleanup keeps the finished child to inspect.
-    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     let parent = fixture.add("parent");
     let hook = |command: &str, input: Value| scoped_hook(&fixture, "parent", command, input);
     let created = hook(
@@ -5776,7 +5795,7 @@ fn a_starting_subagent_learns_which_workspace_it_works_in() {
 #[test]
 fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nclaude = ['sh', './agent.sh']\n[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
+        "[agents.claude]\ncommand = ['sh', './agent.sh']\nresume_command = ['sh', './resume.sh', '{prompt}']\n",
     ));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -5951,7 +5970,7 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
 
 #[test]
 fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_restore() {
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("quit");
     let path = Path::new(workspace["path"].as_str().unwrap());
     // The agent reports its session as Claude Code's hooks do, then quits.
@@ -6001,7 +6020,7 @@ fn resume_continues_the_session_of_an_agent_that_exited_on_its_own_after_a_resto
 
 #[test]
 fn import_on_the_exporting_machine_continues_the_session_unless_told_not_to() {
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("carried");
     let path = Path::new(workspace["path"].as_str().unwrap());
     // The agent reports its session as Claude Code's hooks do, also when it
@@ -6090,7 +6109,7 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     .unwrap();
     fs::write(
         path.join(".shoal.toml"),
-        "[agent_resume]\nclaude = ['sh', './resume.sh', '{prompt}']\n",
+        "[agents.claude]\nresume_command = ['sh', './resume.sh', '{prompt}']\n",
     )
     .unwrap();
     fs::write(path.join("resume.sh"), "printf restored > restored\n").unwrap();
@@ -6123,7 +6142,8 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
 
 #[test]
 fn daemon_restarts_keep_tracked_agents_and_commands_running() {
-    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("restarted");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
@@ -6227,7 +6247,8 @@ fn daemon_restarts_keep_tracked_agents_and_commands_running() {
 
 #[test]
 fn daemon_stop_and_signals_stop_tracked_agents() {
-    let mut fixture = Fixture::with_config(Some("[commands]\nclaude = ['sh', './agent.sh']\n"));
+    let mut fixture =
+        Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("stopped");
     let path = Path::new(workspace["path"].as_str().unwrap()).to_owned();
     fs::write(
@@ -6717,7 +6738,7 @@ fn resource_overviews_preserve_results_after_workspace_errors() {
 #[test]
 fn catalog_lists_configuration_where_simulators_are_unavailable() {
     let fixture = Fixture::with_config(Some(
-        "[simulators.profiles.phone]\ndevice = 'Phone'\n[resources.signing]\ncapacity = 1\n",
+        "[machine.simulators.profiles.phone]\ndevice = 'Phone'\n[resources.signing]\ncapacity = 1\n",
     ));
     // A host without Xcode: Linux refuses before running it, macOS runs this.
     install_test_script(
@@ -6882,7 +6903,7 @@ fn execution_scope_limits_management_and_expires() {
     );
     commit_resource_config(
         &fixture.repo,
-        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
     );
     let worker = fixture.add("worker");
     let worker_path = Path::new(worker["path"].as_str().unwrap());
@@ -6909,7 +6930,7 @@ fn execution_scope_limits_management_and_expires() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|entry| { entry["key"] == "setup_cmd" && entry["value"] == "setup.sh" })
+            .any(|entry| { entry["key"] == "setup.command" && entry["value"] == "setup.sh" })
     );
     assert!(scoped(&["acquire", "port", "web"]).status.success());
     let sibling_started = worker_path.join("sibling-started");
@@ -6991,7 +7012,7 @@ fn execution_scope_limits_management_and_expires() {
         vec![
             "config",
             "set",
-            "default_agent",
+            "agent.default",
             "codex",
             "--repo",
             fixture.repo.to_str().unwrap(),
@@ -6999,14 +7020,13 @@ fn execution_scope_limits_management_and_expires() {
         vec![
             "config",
             "unset",
-            "default_agent",
+            "agent.default",
             "--repo",
             fixture.repo.to_str().unwrap(),
         ],
         vec!["acquire", "port", "web", "--workspace", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
-        vec!["repo", "config", fixture.repo.to_str().unwrap(), "--clear"],
         vec!["daemon", "stop"],
     ] {
         let output = scoped(&args);
@@ -7042,7 +7062,7 @@ fn setup_commands_cannot_recursively_run_setup() {
     let fixture = Fixture::new();
     let setup = fixture.repo.join("setup.sh");
     install_test_script(&setup, "#!/bin/sh\nexit 0\n");
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let worker = fixture.add("worker");
     let setup = Path::new(worker["path"].as_str().unwrap()).join("setup.sh");
     fs::write(
@@ -7062,15 +7082,15 @@ fn setup_commands_cannot_recursively_run_setup() {
 
 #[cfg(target_os = "macos")]
 const SIM_CONFIG: &str = r#"
-[simulators]
+[machine.simulators]
 max_booted = 1
 max_devices = 2
 idle_seconds = 120
 default = "phone"
-[simulators.profiles.phone]
+[machine.simulators.profiles.phone]
 device = "Phone"
 runtime = "iOS Test"
-[simulators.profiles.tablet]
+[machine.simulators.profiles.tablet]
 device = "Tablet"
 runtime = "iOS Test"
 "#;
@@ -7165,7 +7185,7 @@ fn simulator_omitted_runtime_uses_latest_ios_and_preserves_existing_lease() {
 }
 
 #[test]
-fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
+fn the_daemon_alerts_about_global_config_problems_on_start_and_reload() {
     let environment = |fixture: &Fixture| -> Vec<String> {
         fixture
             .ok(&["alerts", "--all", "--keep-unread"])
@@ -7181,22 +7201,29 @@ fn the_daemon_alerts_about_retired_global_settings_on_start_and_reload() {
             .iter()
             .any(|message| message.contains(setting))
     };
-    let fixture = Fixture::with_config(Some("agent_template = 'Work carefully.'\n"));
+    let fixture = Fixture::with_config(Some(
+        "agent.templates.worker = 'You are working in Shoal workspace {workspace} on branch {branch} at {path}.'\n",
+    ));
     // The startup check reads the config before it records its alerts, so
     // this one shows it is past reading by the time the config changes.
     wait_until("the startup environment alert", || {
-        reported(&fixture, "agent_template")
+        reported(&fixture, "agent.templates.worker")
     });
-    // A setting added later is reported only by the reload.
+    // A problem added later is reported only by the reload. A root inside a
+    // file cannot be created.
+    let root_file = tempfile::NamedTempFile::new().unwrap();
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "issue_template = 'Describe the bug.'\n",
+        format!(
+            "machine.root_dir = {:?}\n",
+            root_file.path().join("repos").to_str().unwrap()
+        ),
     )
     .unwrap();
-    assert!(!reported(&fixture, "issue_template"));
+    assert!(!reported(&fixture, "root_dir"));
     fixture.ok(&["daemon", "reload"]);
     wait_until("the reload environment alert", || {
-        reported(&fixture, "issue_template")
+        reported(&fixture, "root_dir")
     });
 }
 
@@ -7210,11 +7237,11 @@ fn global_config_changes_reload_a_running_daemon() {
     let result = fixture.ok(&[
         "config",
         "set",
-        "simulators.profiles.phone.device",
+        "machine.simulators.profiles.phone.device",
         "iPhone 17",
-        "simulators.profiles.phone.runtime",
+        "machine.simulators.profiles.phone.runtime",
         "iOS 27",
-        "simulators.default",
+        "machine.simulators.default",
         "phone",
     ]);
     assert_eq!(result["daemon_reloaded"], true);
@@ -7227,7 +7254,11 @@ fn global_config_changes_reload_a_running_daemon() {
     // Hand edits apply on an explicit reload; an invalid file keeps the running config.
     let config = fixture.root.path().join(".config/shoal/config.toml");
     let edited = fs::read_to_string(&config).unwrap();
-    fs::write(&config, format!("{edited}\n[simulators]\nmax_booted = 0\n")).unwrap();
+    fs::write(
+        &config,
+        format!("{edited}\n[machine.simulators]\nmax_booted = 0\n"),
+    )
+    .unwrap();
     assert!(!fixture.run(&["daemon", "reload"]).status.success());
     assert_eq!(policy()["default"], "phone");
     fs::write(&config, format!("{NO_GRACE}{UNSETTLED}{FORGEJO_HOST}")).unwrap();
@@ -8546,8 +8577,8 @@ fn resource_claims_are_atomic_persistent_and_wait_for_release() {
 fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
     let fixture = Fixture::new();
     for args in [
-        vec!["config", "set", "default_agent", "claude", "--repo", "."],
-        vec!["config", "unset", "default_agent", "--repo", "."],
+        vec!["config", "set", "agent.default", "claude", "--repo", "."],
+        vec!["config", "unset", "agent.default", "--repo", "."],
     ] {
         let output = fixture
             .command()
@@ -8559,12 +8590,8 @@ fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
         assert!(output.status.success(), "{args:?}: {output:?}");
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(
-            result["repository_id"],
-            fixture.ok(&["repo", "ls"])[0]["id"]
-        );
-        assert_eq!(
-            result,
-            fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])
+            result["config"],
+            fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])["path"]
         );
     }
 }
@@ -8572,28 +8599,36 @@ fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
 #[test]
 fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     let mut fixture = Fixture::new();
-    commit_resource_config(&fixture.repo, "default_agent = 'codex'\n");
+    commit_resource_config(&fixture.repo, "agent.default = 'codex'\n");
     fixture.add("worker");
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    let saved = fixture.ok(&["config", "set", "default_agent", "claude", "--repo", id]);
-    assert_eq!(saved["repository_id"], id);
+    let edited = fixture.ok(&["config", "set", "agent.default", "claude", "--repo", id]);
+    let saved = fixture.ok(&["repo", "config", id]);
+    assert_eq!(edited["config"], saved["path"]);
     let agent = || {
         fixture
             .ok(&["config", "show", "worker"])
             .as_array()
             .unwrap()
             .iter()
-            .find(|entry| entry["key"] == "default_agent")
+            .find(|entry| entry["key"] == "agent.default")
             .unwrap()
             .clone()
     };
     assert_eq!(agent()["value"], "claude");
-    assert_eq!(agent()["layer"], "saved_repository_config");
+    assert_eq!(agent()["layer"], "local_config");
     for (key, value) in [
         ("cleanup.auto.enabled", "maybe"),
         ("root_dir", "/tmp/no"),
         ("default_agnet", "codex"),
+        ("agents.claude.prompt_cache_minutes", "0"),
+        ("agents.work.command", "['echo']"),
+        ("commands.claude", "['echo']"),
+        ("agents.loop.base", "loop"),
+        ("agents.helper.base", "work"),
+        ("agents.helper.base", "all"),
+        ("agents.claude.resume", "['--resume']"),
     ] {
         assert!(
             !fixture
@@ -8625,17 +8660,17 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
         "set",
         "cleanup.auto.idle_minutes",
         "30",
-        "default_agent",
+        "agent.default",
         "claude",
         "--repo",
         id,
     ]);
-    fixture.ok(&["config", "unset", "cleanup", "default_agent", "--repo", id]);
+    fixture.ok(&["config", "unset", "cleanup", "agent.default", "--repo", id]);
     assert_eq!(agent()["value"], "codex");
     assert_eq!(agent()["layer"], "worktree_file");
     assert_eq!(
         fs::read_to_string(fixture.repo.join(".shoal.toml")).unwrap(),
-        "default_agent = 'codex'\n"
+        "agent.default = 'codex'\n"
     );
     thread::scope(|scope| {
         for index in 0..8 {
@@ -8660,20 +8695,29 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
 }
 
 #[test]
-fn local_repository_config_is_copied_shared_persistent_and_reversible() {
+fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
     let mut fixture = Fixture::new();
     let first = fixture.add("first");
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    assert!(fixture.ok(&["repo", "config", id])["toml"].is_null());
+    let shown = fixture.ok(&["repo", "config", id]);
+    assert!(shown["toml"].is_null());
+    let local = PathBuf::from(shown["path"].as_str().unwrap());
+    assert!(local.ends_with(".shoal/config.toml"));
+    assert_eq!(
+        local.parent().unwrap().parent().unwrap(),
+        Path::new(first["path"].as_str().unwrap()).parent().unwrap()
+    );
     let input = fixture.root.path().join("local.toml");
     let text = "# Local preferences\n[ports.web]\nenv='LOCAL_PORT'\n[resources.lock]\ncapacity=1\n";
     fs::write(&input, text).unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
-    assert_eq!(saved["repository_id"], id);
+    let saved = fixture.save_local_config(id, &input);
     assert_eq!(saved["toml"], text);
-    assert_eq!(fixture.run(&["repo", "config", id]).stdout, text.as_bytes());
-    fs::remove_file(&input).unwrap();
+    let printed = fixture.run(&["repo", "config", id]).stdout;
+    assert_eq!(
+        String::from_utf8(printed).unwrap(),
+        format!("{}\n{text}", local.display())
+    );
     fixture.ok(&["repo", "rename", id, "renamed"]);
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", "renamed"]), saved);
@@ -8689,27 +8733,38 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
             "LOCAL_PORT"
         );
     }
-    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
-    assert_eq!(port["env_var"], "LOCAL_PORT");
-    fixture.ok(&["acquire", "resource", "lock", "--workspace", "first"]);
+
+    // Edits keep comments and the previous file, and apply at once.
+    let edited = fixture.ok(&["config", "set", "ports.web.env", "EDITED", "--repo", id]);
+    assert_eq!(edited["config"], local.to_str().unwrap());
     assert_eq!(
-        fixture
-            .run(&["acquire", "resource", "lock", "--workspace", "second"])
-            .status
-            .code(),
-        Some(2)
+        fs::read_to_string(local.with_extension("toml.backup")).unwrap(),
+        text
     );
-    fixture.ok(&[
-        "release",
-        "resource",
-        "lock",
-        "--workspace",
-        "first",
-        "--name",
-        "default",
-    ]);
-    fixture.ok(&["rm", "second", "--yes"]);
-    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    assert!(
+        fs::read_to_string(&local)
+            .unwrap()
+            .starts_with("# Local preferences\n")
+    );
+    assert_eq!(
+        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["web"]["env"],
+        "EDITED"
+    );
+    // An edit that leaves an invalid file changes nothing.
+    for (key, value) in [
+        ("ports.web.port", "0"),
+        ("resources.lock.capacity", "0"),
+        ("unknown", "true"),
+    ] {
+        let before = fs::read_to_string(&local).unwrap();
+        assert!(
+            !fixture
+                .run(&["config", "set", key, value, "--repo", id])
+                .status
+                .success()
+        );
+        assert_eq!(fs::read_to_string(&local).unwrap(), before);
+    }
 
     let path = Path::new(first["path"].as_str().unwrap());
     fs::write(
@@ -8717,110 +8772,58 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
         "[ports.checked_in]\nenv='CHECKED_IN'\n",
     )
     .unwrap();
-    fs::create_dir(path.join(".shoal")).unwrap();
-    fs::write(path.join(".shoal/config.toml"), "invalid TOML").unwrap();
-    // The worktree file is a layer of its own; its errors show through the saved config.
-    assert!(
-        !fixture
-            .run(&["catalog", "port", "--workspace", "first"])
-            .status
-            .success()
-    );
-    fs::remove_file(path.join(".shoal/config.toml")).unwrap();
     let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 2);
-    assert_eq!(configured["web"]["env"], "LOCAL_PORT");
+    assert_eq!(configured["web"]["env"], "EDITED");
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
-    // Layered names must agree: the saved `lock` resource meets a `lock` pool.
-    fs::write(
-        path.join(".shoal.toml"),
-        "[resource_pools.lock.resources.a]\ncapacity=1\n",
-    )
-    .unwrap();
+    // A file edited by hand into an invalid one fails every lookup until fixed.
+    fs::write(&local, "invalid TOML").unwrap();
     assert!(
         !fixture
             .run(&["catalog", "port", "--workspace", "first"])
             .status
             .success()
     );
-    fs::write(
-        path.join(".shoal.toml"),
-        "[ports.checked_in]\nenv='CHECKED_IN'\n",
-    )
-    .unwrap();
-    // Invalid replacements must leave the saved config intact.
-    for invalid in [
-        "invalid TOML",
-        "unknown=true",
-        "[ports.web]\nport=0",
-        "[resources.lock]\ncapacity=0",
-    ] {
-        fs::write(&input, invalid).unwrap();
-        assert!(
-            !fixture
-                .run(&["repo", "config", id, "--file", input.to_str().unwrap()])
-                .status
-                .success()
-        );
-        assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    }
-    // An empty saved config sets nothing, so every option falls through.
-    fs::write(&input, "").unwrap();
-    fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    // An empty file sets nothing, so every option falls through.
+    fs::write(&local, "").unwrap();
     let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 1);
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
-    assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
-    assert_eq!(
-        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["checked_in"]["env"],
-        "CHECKED_IN"
-    );
-    assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "first"])["reserved"][0],
-        port
-    );
-    fixture.ok(&["repo", "config", id, "--clear"]);
+    assert!(fixture.clear_local_config(id)["toml"].is_null());
 }
 
 #[test]
-fn local_repository_config_is_isolated_and_deleted_only_with_its_repository() {
+fn local_config_scripts_live_beside_it_and_go_with_the_repository() {
     let fixture = Fixture::new();
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    let input = fixture.root.path().join("local.toml");
-    fs::write(&input, "[ports.web]\n").unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    let local = PathBuf::from(
+        fixture.ok(&["repo", "config", id])["path"]
+            .as_str()
+            .unwrap(),
+    );
+    let directory = local.parent().unwrap();
+    fs::create_dir_all(directory).unwrap();
+    // A relative hook path names a script beside the local config.
+    install_test_script(
+        directory.join("pre-setup.sh"),
+        "#!/bin/sh\ntouch \"$PWD/pre-setup-ran\"\n",
+    );
+    fs::write(&local, "hooks.pre_setup = 'pre-setup.sh'\n").unwrap();
+    let workspace = fixture.add("scripted");
+    assert!(
+        Path::new(workspace["path"].as_str().unwrap())
+            .join("pre-setup-ran")
+            .exists()
+    );
     let other_path = fixture.root.path().join("other-repo");
     fs::create_dir(&other_path).unwrap();
     git(&other_path, &["init", "-b", "main"]);
     let other = fixture.ok(&["repo", "add", other_path.to_str().unwrap()]);
     assert!(fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["toml"].is_null());
-    let outside = fixture.root.path().join("outside");
-    git(
-        &fixture.repo,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "outside",
-            outside.to_str().unwrap(),
-        ],
-    );
-    assert!(!fixture.run(&["repo", "rm", id, "--yes"]).status.success());
-    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    git(
-        &fixture.repo,
-        &["worktree", "remove", outside.to_str().unwrap()],
-    );
+    fixture.ok(&["rm", "scripted", "--yes"]);
     fixture.ok(&["repo", "rm", id, "--yes"]);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
-    assert!(input.exists());
+    assert!(!directory.exists());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
@@ -8831,13 +8834,7 @@ fn local_repository_config_selects_simulator_preferences() {
     fixture.add("worker");
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[simulators]\npreferred=['tablet']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let sim = fixture.ok(&["acquire", "sim", "--workspace", "worker"]);
     assert_eq!(sim["device"], "type.Tablet");
 }
@@ -10639,7 +10636,7 @@ fn config_show_picks_a_workspace_outside_any_checkout() {
     let (output, rows) = fixture.pick(&["config", "show"], id, "");
     assert!(output.status.success(), "{output:?}");
     assert!(rows.starts_with(&format!("{id}\t")), "{rows:?}");
-    assert!(String::from_utf8_lossy(&output.stdout).contains("default_agent"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("agent.default"));
 }
 
 #[test]
@@ -12613,7 +12610,7 @@ fn repository_removal_rejects_symlinks_and_nested_registered_repositories() {
 #[test]
 fn repository_removal_serializes_with_workspace_creation() {
     // Removal refuses a workspace while setup runs, so this race skips setup.
-    let fixture = Fixture::with_config(Some("copy_ignored = false\n"));
+    let fixture = Fixture::with_config(Some("setup.copy_ignored = false\n"));
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap().to_owned();
     let add = fixture
@@ -12647,7 +12644,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     let id = repo["id"].as_str().unwrap();
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[ports.web]\n").unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    let saved = fixture.save_local_config(id, &input);
     let workspace = fixture.add("worker");
     let port = fixture.ok(&["acquire", "port", "web", "--workspace", "worker"]);
     let resource = fixture.ok(&["acquire", "resource", "lock", "--workspace", "worker"]);
@@ -12674,20 +12671,11 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     );
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    let blocked = fixture.run(&["repo", "config", id, "--clear"]);
-    assert!(!blocked.status.success());
-    assert!(String::from_utf8_lossy(&blocked.stderr).contains("removal is incomplete"));
     assert!(!fixture.run(&["add", id, "blocked"]).status.success());
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
+    assert!(!Path::new(saved["path"].as_str().unwrap()).exists());
     assert!(
         fixture.ok(&["leases", "sim", "--all"])["simulators"]
             .as_array()
@@ -12722,7 +12710,7 @@ printf '%s' "$SHOAL_WORKSPACE" > setup-workspace
 "$SHOAL_TEST_BIN" --json status > during-setup.json || exit 91
 "#,
     );
-    commit_resource_config(&fixture.repo, &format!("setup_cmd = {script:?}\n"));
+    commit_resource_config(&fixture.repo, &format!("setup.command = {script:?}\n"));
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("codex"),
@@ -12771,7 +12759,7 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\ncat .env local/signing > setup-saw\n",
     );
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     fs::write(fixture.repo.join(".env"), "TOKEN=1\n").unwrap();
     fs::create_dir(fixture.repo.join("local")).unwrap();
     fs::write(fixture.repo.join("local/signing"), "team\n").unwrap();
@@ -12788,7 +12776,7 @@ fn ignored_files_are_copied_before_setup_unless_turned_off() {
     assert_eq!(fixture.ok(&["work", "setup", "copied"])["state"], "ready");
     assert_eq!(fs::read_to_string(path.join(".env")).unwrap(), "TOKEN=2\n");
 
-    commit_resource_config(&fixture.repo, "copy_ignored = false\n");
+    commit_resource_config(&fixture.repo, "setup.copy_ignored = false\n");
     let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "uncopied"]);
     assert_eq!(workspace["state"], "ready");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -12809,19 +12797,13 @@ fn work_setup_skip_accepts_a_failed_setup() {
     fs::write(
         &input,
         format!(
-            "setup_cmd = {:?}\npost_setup_cmd = {:?}\n",
+            "setup.command = {:?}\nhooks.post_setup = {:?}\n",
             script.to_str().unwrap(),
             post_setup.to_str().unwrap()
         ),
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "skipped"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -12865,7 +12847,7 @@ fn work_setup_skip_accepts_a_failed_setup() {
 #[test]
 fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let fixture = Fixture::new();
-    commit_resource_config(&fixture.repo, "setup_cmd = 'must-not-run'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'must-not-run'\n");
     let script = fixture.root.path().join("system setup.sh");
     install_test_script(
         &script,
@@ -12874,16 +12856,10 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
     let input = fixture.root.path().join("local.toml");
     fs::write(
         &input,
-        format!("setup_cmd = {:?}\n", script.to_str().unwrap()),
+        format!("setup.command = {:?}\n", script.to_str().unwrap()),
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("claude"),
@@ -12952,7 +12928,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
 fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     let fixture = Fixture::new();
     fixture.add("existing");
-    commit_resource_config(&fixture.repo, "setup_cmd = 'missing-script'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'missing-script'\n");
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("codex"),
@@ -12962,7 +12938,7 @@ fn setup_failure_prompt_ignores_or_deletes_only_new_workspace() {
     fs::create_dir_all(&config).unwrap();
     fs::write(
         config.join("config.toml"),
-        "[codex]\ndefault_mode = 'app'\n",
+        "[agents.codex]\ndefault_mode = 'app'\n",
     )
     .unwrap();
     let (ignored, transcript) = fixture.interactive(
@@ -13036,7 +13012,7 @@ Path('setup-result').write_text('complete')
         commit_resource_config(
             &fixture.repo,
             &format!(
-                "setup_cmd = {:?}\n[commands]\npi = ['sh', '-c', 'touch agent-started']\n",
+                "setup.command = {:?}\n[agents.pi]\ncommand = ['sh', '-c', 'touch agent-started']\n",
                 script.to_str().unwrap()
             ),
         );
@@ -13097,7 +13073,7 @@ fn setup_interruption_preserves_work_and_blocks_concurrent_execution() {
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\nprintf partial > setup-started\nwhile :; do sleep 1; done\n",
     );
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let mut add = fixture
         .command()
         .args([
@@ -13189,7 +13165,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     }
     commit_resource_config(
         &fixture.repo,
-        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\npre_remove_cmd = 'pre-remove.sh'\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\nhooks.pre_remove = 'pre-remove.sh'\n",
     );
     let output = fixture
         .command()
@@ -13232,7 +13208,7 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("post_setup_cmd exited with 5"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("hooks.post_setup exited with 5"));
     let failed = fixture.ok(&["status", "hook-fails"]);
     assert_eq!(failed["workspace"]["state"], "ready");
     let failed_path = Path::new(failed["workspace"]["path"].as_str().unwrap());
@@ -13252,7 +13228,10 @@ test ! -f fail-removal || { echo 'session still busy' >&2; exit 3; }
     let output = fixture.run(&["rm", "hooked", "--yes"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("pre_remove_cmd exited with 3"), "{stderr}");
+    assert!(
+        stderr.contains("hooks.pre_remove exited with 3"),
+        "{stderr}"
+    );
     assert!(stderr.contains("session still busy"), "{stderr}");
     assert_eq!(
         fs::read_to_string(home.join("pre-remove-ran")).unwrap(),
@@ -13333,7 +13312,9 @@ fn repository_removal_cleans_more_agent_configs_than_fit_in_a_frame() {
 #[test]
 fn trust_entries_follow_the_config_directories_env_gives_agents() {
     // A launch can fail after trust is written, here at its diff base.
-    let fixture = Fixture::with_config(Some("[commands]\nclaude = ['claude', '{diff_base}']\n"));
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['claude', '{diff_base}']\n",
+    ));
     let home = fixture.root.path();
     // Each workspace's agents get their own directories, from the global
     // config and from the worktree's file.
@@ -13352,7 +13333,7 @@ fn trust_entries_follow_the_config_directories_env_gives_agents() {
     commit_resource_config(
         &fixture.repo,
         &format!(
-            "pre_remove_cmd = 'pre-remove.sh'\n[env]\nCLAUDE_CONFIG_DIR = '{}/claude-{{workspace}}'\n",
+            "hooks.pre_remove = 'pre-remove.sh'\n[env]\nCLAUDE_CONFIG_DIR = '{}/claude-{{workspace}}'\n",
             home.display()
         ),
     );
@@ -13457,9 +13438,9 @@ fn proxied_claude() -> Fixture {
     let config = home.join(".config/shoal/config.toml");
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(
-        "[proxy.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
+        "[machine.proxies.cliproxy]\nupstream = 'http://127.0.0.1:9'\n\
          key = { env = 'CLIPROXY_TEST_KEY' }\n\
-         [ai.claude]\nproxy = 'cliproxy'\n",
+         \n[machine.agents.claude]\nproxy = 'cliproxy'",
     );
     fs::write(&config, text).unwrap();
     let reload = fixture.run(&["daemon", "reload"]);
@@ -13564,12 +13545,10 @@ fn launch_profiles_run_with_their_base_integration_and_own_environment() {
     let mut text = fs::read_to_string(&config).unwrap();
     text.push_str(
         "[env]\nPROXY_URL = 'http://proxy'\nKEPT = 'kept'\n\
-         [ai.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\n\
-         env_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n\
-         [ai.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
+         \n[agents.claude-direct]\nbase = 'claude'\nenv = { CLAUDE_CONFIG_DIR = '~/direct' }\nenv_remove = ['PROXY_URL', 'INHERITED_TOKEN', 'WEB_PORT']\n[agents.claude-port]\nbase = 'claude'\nenv = { WEB_PORT = '1' }\n",
     );
     let chat_profile =
-        "[ai.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
+        "[agents.claude-chat]\nbase = 'claude-direct'\nenv = { CLAUDE_CONFIG_DIR = '~/chat' }\n";
     fs::write(&config, format!("{text}{chat_profile}")).unwrap();
     assert!(fixture.run(&["daemon", "reload"]).status.success());
     commit_resource_config(&fixture.repo, "[ports.web]\nenv = 'WEB_PORT'\n");
@@ -13832,7 +13811,7 @@ fn codex_launches_trust_checkout_shared_repository_directory_and_external_worksp
 
 #[test]
 fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
-    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let bin = fixture.root.path().join("issue-bin");
     install_test_script_with_mode(
         bin.join("gh"),
@@ -13971,90 +13950,8 @@ fn add_from_issue_uses_existing_forge_cli_and_passes_context_to_agents() {
 }
 
 #[test]
-fn the_built_in_issue_prompt_ignores_retired_issue_templates() {
-    let fixture = Fixture::new();
-    let config_dir = fixture.root.path().join(".config/shoal");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(
-        config_dir.join("issue-template.md"),
-        "global {number}: {title} {body}",
-    )
-    .unwrap();
-    let bin = fixture.root.path().join("template-bin");
-    fs::create_dir(&bin).unwrap();
-    for (tool, script) in [
-        (
-            "gh",
-            r#"#!/bin/sh
-printf '%s' '{"state":"OPEN","number":44,"title":"Literal {body}","body":"$(false)"}'
-"#,
-        ),
-        ("claude", "#!/bin/sh\nprintf '%s\\0' \"$@\"\n"),
-    ] {
-        let path = bin.join(tool);
-        install_test_script_with_mode(&path, script, 0o700);
-    }
-    fixture.add_github_origin();
-    let local = fixture.root.path().join("local.toml");
-    fs::write(&local, "issue_template = 'saved {body}'").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        local.to_str().unwrap(),
-    ]);
-    let output = fixture
-        .command()
-        .args([
-            "--json",
-            "add",
-            fixture.repo.to_str().unwrap(),
-            "template",
-            "--base",
-            "HEAD",
-            "--issue",
-            "44",
-            "--agent",
-            "claude",
-        ])
-        .env("PATH", fixture.restricted_path(&bin))
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    let args = strip_shoal_arguments(stdout.split_once('\n').unwrap().1, '\0');
-    let prompt = args.split('\0').next().unwrap();
-    assert!(
-        prompt.starts_with("Work on issue #44: Literal {body}\n"),
-        "{prompt}"
-    );
-    assert!(
-        prompt.contains("\nIssue description:\n$(false)\n"),
-        "{prompt}"
-    );
-    assert!(
-        !prompt.contains("global") && !prompt.contains("saved"),
-        "{prompt}"
-    );
-    let output = fixture
-        .command()
-        .args(["--json", "config", "show", "template"])
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    for layer in ["global config", "saved repository config"] {
-        assert!(
-            stderr.contains(&format!("warning: {layer}: issue_template")),
-            "{stderr}"
-        );
-    }
-}
-
-#[test]
 fn add_item_finds_the_repository_and_starts_the_default_agent() {
-    let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
+    let fixture = Fixture::with_config(Some("agent.default = 'claude'\n"));
     let other = fixture.root.path().join("other");
     git(
         &fixture.repo,
@@ -14102,7 +13999,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
             // The repository's checked-in default wins over the global one.
             fs::write(
                 fixture.repo.join(".shoal.toml"),
-                "default_agent = 'codex'\n",
+                "agent.default = 'codex'\n",
             )
             .unwrap();
             git(&fixture.repo, &["add", ".shoal.toml"]);
@@ -14236,7 +14133,7 @@ fn add_item_finds_the_repository_and_starts_the_default_agent() {
 
 #[test]
 fn agent_picker_can_skip_launch_select_agents_or_cancel() {
-    let fixture = Fixture::with_config(Some("[ai.none]\ncommand = ['agent-probe']\n"));
+    let fixture = Fixture::with_config(Some("[agents.none]\ncommand = ['agent-probe']\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -14322,7 +14219,7 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
 
 #[test]
 fn issue_number_picks_a_repository_before_lookup_interactively() {
-    let fixture = Fixture::with_config(Some("default_agent = 'claude'\n"));
+    let fixture = Fixture::with_config(Some("agent.default = 'claude'\n"));
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
     fs::create_dir(&bin).unwrap();
@@ -14506,7 +14403,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
 
 #[test]
 fn issues_reopen_their_branch_and_report_conflicts_before_picking_an_agent() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     install_test_script(
         fixture.root.path().join("bin/gh"),
@@ -14564,7 +14461,7 @@ fn add_existing_branch_runs_setup_once_and_denies_scoped_creation() {
     }
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "setup_cmd = './setup'\npost_setup_cmd = './post'\n",
+        "setup.command = './setup'\nhooks.post_setup = './post'\n",
     )
     .unwrap();
     git(&fixture.repo, &["add", "."]);
@@ -15050,13 +14947,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     // The saved config is the top layer.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[cleanup.pr]\nenabled=false\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     fixture.add("kept");
     let output = fixture.acknowledge("kept");
     assert_eq!(output["type"], "error");
@@ -15350,7 +15241,7 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
 
 #[test]
 fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("waits");
     fixture.add_github_origin();
     let mut responses = github_pr(7, "waits");
@@ -15809,7 +15700,7 @@ fn pr_wait_reports_forgejo_reviews_when_the_ci_lookup_fails() {
 
 #[test]
 fn merged_rechecks_head_after_removal_hooks() {
-    for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
+    for key in ["hooks.pre_remove", "hooks.pre_resource_release"] {
         let fixture = Fixture::new();
         fs::write(
             fixture.repo.join(".shoal.toml"),
@@ -15834,7 +15725,7 @@ fn merged_rechecks_head_after_removal_hooks() {
             ],
         );
         let workspace = fixture.add("hook");
-        if key == "pre_resource_release_cmd" {
+        if key == "hooks.pre_resource_release" {
             fixture.ok(&["acquire", "resource", "signing", "--workspace", "hook"]);
         }
         assert_eq!(fixture.acknowledge("hook")["type"], "ok");
@@ -15845,7 +15736,7 @@ fn merged_rechecks_head_after_removal_hooks() {
 
 #[test]
 fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
-    for key in ["pre_remove_cmd", "pre_resource_release_cmd"] {
+    for key in ["hooks.pre_remove", "hooks.pre_resource_release"] {
         let fixture = Fixture::new();
         fs::write(
             fixture.repo.join(".shoal.toml"),
@@ -15875,7 +15766,7 @@ fn manual_removal_keeps_a_branch_its_hooks_committed_to() {
             ],
         );
         let workspace = fixture.add("hook");
-        if key == "pre_resource_release_cmd" {
+        if key == "hooks.pre_resource_release" {
             fixture.ok(&["acquire", "resource", "signing", "--workspace", "hook"]);
         }
         // The final inspection sees the hook's commit, which only the branch has.
@@ -15977,7 +15868,7 @@ fn land_merges_into_main_without_a_remote_and_needs_approval_in_scoped_processes
 
 #[test]
 fn view_shows_linked_items_with_status_and_discussion() {
-    let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     fixture.add("view");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
@@ -16436,7 +16327,7 @@ fn wait_for_busy(fixture: &Fixture, workspace: &str) {
     });
 }
 
-const HAPPY_ENABLED: &str = "[happy]\nenabled = true\n";
+const HAPPY_ENABLED: &str = "[terminal.happy]\nenabled = true\n";
 
 #[test]
 fn happy_agents_are_refused_until_enabled() {
@@ -17186,8 +17077,8 @@ fn notifications_report_conflicts_agent_exits_and_removals_once() {
 #[test]
 fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     let fixture = Fixture::with_config(Some(
-        "git_profile = 'personal'\n[git.profiles.personal]\nuser.email = 'personal@example.invalid'\n\
-         [git.profiles.work]\nuser.name = 'Work Name'\nuser.email = 'work@example.invalid'\ncommit.gpgsign = false\n",
+        "git_profile = 'personal'\n[machine.git_profiles.personal]\nuser.email = 'personal@example.invalid'\n\
+         [machine.git_profiles.work]\nuser.name = 'Work Name'\nuser.email = 'work@example.invalid'\ncommit.gpgsign = false\n",
     ));
     git(
         &fixture.repo,
@@ -17205,7 +17096,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     );
     commit_resource_config(
         &fixture.repo,
-        "git_profile = 'work'\nsetup_cmd = 'setup.sh'\n",
+        "git_profile = 'work'\nsetup.command = 'setup.sh'\n",
     );
     let work = fixture.add("work");
     let work_path = Path::new(work["path"].as_str().unwrap());
@@ -17229,13 +17120,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     );
     let saved = fixture.root.path().join("local.toml");
     fs::write(&saved, "git_profile = 'personal'\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     git(&fixture.repo, &["branch", "existing"]);
     let existing = fixture.ok(&[
         "add",
@@ -17306,7 +17191,7 @@ fn git_profiles_leave_unselected_repositories_alone_and_retain_failed_workspaces
 #[test]
 fn git_profile_flag_overrides_config_for_new_and_existing_branches() {
     let fixture = Fixture::with_config(Some(
-        "[git.profiles.manual]\nuser.email = 'manual@example.invalid'\n",
+        "[machine.git_profiles.manual]\nuser.email = 'manual@example.invalid'\n",
     ));
     commit_resource_config(&fixture.repo, "git_profile = 'missing'\n");
     git(&fixture.repo, &["branch", "existing-profile"]);
@@ -17391,13 +17276,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     assert_eq!(fixture.run(&["check", "custom"]).stdout, b"from worktree");
     let saved = fixture.root.path().join("commands.toml");
     fs::write(&saved, "[commands]\ncheck = ['printf', '%s', 'saved']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     assert_eq!(fixture.run(&["check", "custom"]).stdout, b"saved");
 }
 
@@ -17450,7 +17329,7 @@ fn edit_runs_the_editor_or_the_configured_edit_command() {
 #[test]
 fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\nclaude = ['global-claude']\n",
+        "[commands]\nglobal = ['printf', '%s', 'global command']\nshadowed = ['global']\nwork = ['printf', '%s', 'configured work']\n[agents.claude]\ncommand = ['global-claude']\n",
     ));
     let workspace = fixture.add("run-command");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -17465,13 +17344,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         "[commands]\nshadowed = ['saved']\nsaved = ['saved-only']\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
     let output = fixture.run(&["run", "work", "--workspace", "run-command"]);
     assert!(
@@ -17495,15 +17368,14 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     );
     let listed: Vec<Value> = serde_json::from_slice(&output.stdout).unwrap();
     let command = |name: &str| listed.iter().find(|entry| entry["name"] == name).unwrap();
-    assert_eq!(command("codex")["layer"], "built_in_default");
-    assert_eq!(command("codex")["bare_name"], "built_in");
-    assert_eq!(command("claude")["layer"], "global_config");
+    // Agents launch under [agents], so `run` lists only the shortcuts.
+    assert!(!listed.iter().any(|entry| entry["name"] == "claude"));
     assert_eq!(command("global")["bare_name"], "shorthand");
     assert_eq!(command("work")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
-    assert_eq!(command("saved")["layer"], "saved_repository_config");
+    assert_eq!(command("saved")["layer"], "local_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
-    assert_eq!(command("shadowed")["layer"], "saved_repository_config");
+    assert_eq!(command("shadowed")["layer"], "local_config");
 
     let other = fixture.add("other-commands");
     let other_path = Path::new(other["path"].as_str().unwrap());
@@ -17536,7 +17408,7 @@ fn cli_agent_command_defaults_can_be_replaced_at_launch() {
     let workspace = fixture.ok(&["add", fixture.repo.to_str().unwrap(), "configured-agent"]);
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"),
-        "[commands]\nclaude = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\ncodex = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
+        "[agents.claude]\ncommand = ['printf', '%s\\n', '{workspace}', '{args}', '{branch}', '{path}', 'prompt={prompt}']\n[agents.codex]\ncommand = ['printf', '%s\\n', '{args}', 'custom default', 'prompt={prompt}']\n"
     ).unwrap();
     let output = fixture.run(&["claude", "configured-agent", "--", "{path}", "two words"]);
     assert!(
@@ -17814,7 +17686,7 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
         );
     }
     let config = format!(
-        "[commands]\nclaude = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n[agent_auth]\nfj = {:?}\ngh = {:?}\n",
+        "[agent.forge_clis]\nfj = {:?}\ngh = {:?}\n[agents.claude]\ncommand = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n",
         wrappers.join("fj"),
         wrappers.join("gh")
     );
@@ -17824,7 +17696,7 @@ fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|entry| entry["key"] == "agent_auth.fj")
+        .find(|entry| entry["key"] == "agent.forge_clis.fj")
         .unwrap();
     assert_eq!(fj["value"], wrappers.join("fj").to_str().unwrap());
     assert_eq!(fj["layer"], "worktree_file");
@@ -17886,7 +17758,7 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     install_test_script(worktree.join("setup.sh"), "#!/bin/sh\n");
     fs::write(
         worktree.join(".shoal.toml"),
-        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s|%s\\n\" \"$AGENT_TOKEN\" \"$SHOAL_SECRET_ENV\"']\n",
     )
     .unwrap();
     let output = fixture.run(&["claude", "secrets"]);
@@ -17916,17 +17788,11 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "unset|unset"
     );
 
-    // The saved repository config can replace a secret; a failing command
+    // The local config can replace a secret; a failing command
     // stops the launch.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&["claude", "secrets"]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
@@ -17964,7 +17830,7 @@ fn tool_secrets_reach_only_their_tools() {
     );
     fs::write(
         worktree.join(".shoal.toml"),
-        "setup_cmd = 'setup.sh'\npost_setup_cmd = 'post-setup.sh'\n[commands]\nclaude = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n[agents.claude]\ncommand = ['sh', '-c', 'printf \"%s\\n\" \"${TOOL_TOKEN-unset}\"; show-token \"two words\" -x']\n",
     )
     .unwrap();
     let output = fixture.run(&["claude", "tool-secrets"]);
@@ -18065,7 +17931,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
     );
     fs::write(
         worktree.join(".shoal.toml"),
-        "[commands]\nclaude = ['show-token']\n",
+        "[agents.claude]\ncommand = ['show-token']\n",
     )
     .unwrap();
     // The catalog shows what an agent may request, never how it is fetched.
@@ -18156,7 +18022,7 @@ fn gated_tool_secrets_wait_for_the_users_approval() {
 #[test]
 fn agent_git_profile_applies_only_to_agent_processes() {
     let fixture = Fixture::with_config(Some(
-        "[git.profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
+        "[machine.git_profiles.agent]\nuser.name = 'Agent Name'\nuser.email = 'agent@example.invalid'\n",
     ));
     git(
         &fixture.repo,
@@ -18164,10 +18030,10 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     );
     let workspace = fixture.add("agent-git");
     let worktree = Path::new(workspace["path"].as_str().unwrap());
-    let commands = "[commands]\nclaude = ['sh', '-c', 'git config user.email; git config core.abbrev; git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT']\n";
+    let commands = "[agents.claude]\ncommand = ['sh', '-c', 'git config user.email; git config core.abbrev; git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT']\n";
     fs::write(
         worktree.join(".shoal.toml"),
-        format!("{commands}[agent_auth]\ngit_profile = 'agent'\n"),
+        format!("{commands}[agent]\ngit_profile = 'agent'\n"),
     )
     .unwrap();
     let output = fixture
@@ -18208,7 +18074,7 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     assert_eq!(output.stdout, b"main@example.invalid\n");
     fs::write(
         worktree.join(".shoal.toml"),
-        format!("{commands}[agent_auth]\ngit_profile = 'missing'\n"),
+        format!("{commands}[agent]\ngit_profile = 'missing'\n"),
     )
     .unwrap();
     let output = fixture.run(&["claude", "agent-git"]);
@@ -18232,7 +18098,7 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     );
     fs::write(
         worktree.join(".shoal.toml"),
-        "[agent_auth]\nfj = '~/fj-agent'\n",
+        "[agent.forge_clis]\nfj = '~/fj-agent'\n",
     )
     .unwrap();
     let log = fixture.root.path().join("agent.log");
@@ -18263,7 +18129,7 @@ fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
     install_fake_agents(&fixture, &["claude"]);
     let output = fixture.run(&["claude", "detached-auth"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("agent_auth.fj"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("agent.forge_clis.fj"));
     let status = fixture.ok(&["status", "detached-auth"]);
     assert!(
         status["executions"]
@@ -18364,7 +18230,7 @@ fn adopt_cli_preserves_work_and_uses_normal_lifecycle() {
     fs::write(path.join("tracked"), "work in progress\n").unwrap();
     fs::write(
         path.join(".shoal.toml"),
-        "setup_cmd = 'missing'\npost_setup_cmd = 'missing'\ngit_profile = 'missing'\n",
+        "setup.command = 'missing'\nhooks.post_setup = 'missing'\ngit_profile = 'missing'\n",
     )
     .unwrap();
     let output = fixture
@@ -18754,7 +18620,7 @@ fn explicit_locations_do_not_require_unrelated_checkouts_to_be_readable() {
 #[test]
 fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let fixture = Fixture::with_config(Some(
-        "default_agent = 'helper'\nworker_template = 'Follow {branch}'\n[commands]\nhelper = ['missing-global-launcher']\n",
+        "agent.default = 'helper'\nagent.templates.worker = 'Follow {branch}'\n[agents.helper]\ncommand = ['missing-global-launcher']\n",
     ));
     let bin = fixture.root.path().join("bin");
     fs::create_dir_all(&bin).unwrap();
@@ -18775,16 +18641,10 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
     let saved = fixture.root.path().join("saved.toml");
     fs::write(
         &saved,
-        "[commands]\nhelper = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
+        "[agents.helper]\ncommand = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "--json",
         "add",
@@ -18836,20 +18696,24 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "literal {prompt}",
     ]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
-    assert_eq!(
-        fs::read_to_string(fixture.root.path().join("agent-args")).unwrap(),
-        format!("--prompt=\0literal {{prompt}}\0{branch}\0")
+    // An agent run outside an assignment still gets Shoal's guidance.
+    let args = fs::read_to_string(fixture.root.path().join("agent-args")).unwrap();
+    assert!(
+        args.starts_with(&format!("--prompt={GUIDANCE_START}")),
+        "{args}"
+    );
+    assert!(
+        args.ends_with(&format!("\0literal {{prompt}}\0{branch}\0")),
+        "{args}"
     );
 
     // Without an explicit prompt slot, context precedes literal forwarded arguments.
-    fs::write(&saved, "[commands]\nhelper = ['fake-agent', '{args}']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fs::write(
+        &saved,
+        "[agents.helper]\ncommand = ['fake-agent', '{args}']\n",
+    )
+    .unwrap();
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -18882,8 +18746,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
 #[test]
 fn configured_ai_tools_run_as_agents_from_their_own_command() {
     let fixture = Fixture::with_config(Some(
-        "worker_template = 'Follow {branch}'\n[ai.droid]\ncommand = ['fake-droid', '{args}']\n\
-         [ai.notes]\nskill_dir = '~/notes'\n",
+        "agent.templates.worker = 'Follow {branch}'\n[agents.droid]\ncommand = ['fake-droid', '{args}']\n[machine.agents.notes]\nskill_dir = '~/notes'\n",
     ));
     let bin = fixture.root.path().join("bin");
     for name in ["fake-droid", "repo-droid"] {
@@ -18929,17 +18792,36 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
 
     // A repository launcher replaces the one [ai] supplies.
     let saved = fixture.root.path().join("saved.toml");
-    fs::write(&saved, "[commands]\ndroid = ['repo-droid']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fs::write(&saved, "[agents.droid]\ncommand = ['repo-droid']\n").unwrap();
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&["droid", "provider"]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
+
+    // An agent only the worktree's file defines launches from that workspace.
+    fs::write(
+        Path::new(workspace["path"].as_str().unwrap()).join(".shoal.toml"),
+        "[agents.repo-only]\ncommand = ['repo-droid']\n",
+    )
+    .unwrap();
+    for words in [
+        vec!["repo-only", "provider"],
+        vec!["run", "repo-only", "--workspace", "provider"],
+    ] {
+        let output = fixture.run(&words);
+        assert_eq!(output.status.code(), Some(7), "{words:?}: {output:?}");
+        assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
+    }
+    // Outside every workspace it is still an agent, which needs a workspace.
+    let outside = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["repo-only"])
+        .output()
+        .unwrap();
+    assert!(!outside.status.success());
+    let stderr = String::from_utf8_lossy(&outside.stderr);
+    assert!(stderr.contains("only some repositories define"), "{stderr}");
 
     // Built-in providers without specialized launchers place the prompt the
     // same way.
@@ -18987,7 +18869,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     );
     commit_resource_config(
         &fixture.repo,
-        "post_resource_acquire_cmd = 'permit.sh'\npre_resource_release_cmd = 'permit.sh'\n[resources.signing]\n",
+        "hooks.post_resource_acquire = 'permit.sh'\nhooks.pre_resource_release = 'permit.sh'\n[resources.signing]\n",
     );
     let workspace = fixture.add("hooked");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -19050,7 +18932,7 @@ test ! -f "$SHOAL_HOOK-fails" || { echo 'resource busy' >&2; exit 3; }
     // Removing the definition does not prevent release of an existing lease.
     fs::write(
         path.join(".shoal.toml"),
-        "pre_resource_release_cmd = 'permit.sh'\n",
+        "hooks.pre_resource_release = 'permit.sh'\n",
     )
     .unwrap();
     fixture.ok(&[
@@ -19082,7 +18964,7 @@ while test ! -f "$HOME/hook-continue"; do sleep 0.05; done
     );
     commit_resource_config(
         &fixture.repo,
-        "post_resource_acquire_cmd = 'permit.sh'\nsetup_cmd = '/usr/bin/true'\n[resources.signing]\n",
+        "hooks.post_resource_acquire = 'permit.sh'\nsetup.command = '/usr/bin/true'\n[resources.signing]\n",
     );
     fixture.add("hooked");
     let acquire = fixture
@@ -19133,8 +19015,8 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     // exist: resolution must not run a hook or require its executable yet.
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "pre_setup_cmd = 'global'\npost_setup_cmd = 'global'\npre_remove_cmd = 'global'\npost_remove_cmd = 'global'\n\
-         post_resource_acquire_cmd = 'global'\npre_resource_release_cmd = 'global'\n",
+        "hooks.pre_setup = 'global'\nhooks.post_setup = 'global'\nhooks.pre_remove = 'global'\nhooks.post_remove = 'global'\n\
+         hooks.post_resource_acquire = 'global'\nhooks.pre_resource_release = 'global'\n",
     )
     .unwrap();
     fixture.restart();
@@ -19147,13 +19029,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     let saved = fixture.root.path().join("saved.toml");
     let save = |text: &str| {
         fs::write(&saved, text).unwrap();
-        fixture.ok(&[
-            "repo",
-            "config",
-            fixture.repo.to_str().unwrap(),
-            "--file",
-            saved.to_str().unwrap(),
-        ]);
+        fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     };
     for (kind, global) in [
         ("setup", false),
@@ -19164,6 +19040,11 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
         ("post_resource_acquire", true),
         ("pre_resource_release", true),
     ] {
+        let key = if kind == "setup" {
+            "setup.command".to_owned()
+        } else {
+            format!("hooks.{kind}")
+        };
         let directory = if kind == "post_remove" {
             &fixture.repo
         } else {
@@ -19184,23 +19065,26 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
             "{kind}"
         );
 
-        fs::write(&file, format!("{kind}_cmd = 'file hook'\n")).unwrap();
+        fs::write(&file, format!("{key} = 'file hook'\n")).unwrap();
         assert_eq!(
             resolve(kind)["data"],
             serde_json::json!(directory.join("file hook"))
         );
         // An unrelated saved option must not mask the worktree's hook.
-        save("default_agent = 'claude'\n");
+        save("agent.default = 'claude'\n");
         assert_eq!(
             resolve(kind)["data"],
             serde_json::json!(directory.join("file hook"))
         );
-        save(&format!("{kind}_cmd = 'saved hook'\n"));
+        // A relative path in the local config names a script beside it.
+        save(&format!("{key} = 'saved hook'\n"));
+        let local = fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()]);
+        let local_directory = Path::new(local["path"].as_str().unwrap()).parent().unwrap();
         assert_eq!(
             resolve(kind)["data"],
-            serde_json::json!(directory.join("saved hook"))
+            serde_json::json!(local_directory.join("saved hook"))
         );
-        save(&format!("{kind}_cmd = '/absolute/hook'\n"));
+        save(&format!("{key} = '/absolute/hook'\n"));
         assert_eq!(resolve(kind)["data"], "/absolute/hook");
     }
 }
@@ -19208,7 +19092,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
 #[test]
 fn global_post_setup_and_pre_remove_hooks_run_without_setup() {
     let fixture = Fixture::with_config(Some(
-        "post_setup_cmd = 'hook.sh'\npre_remove_cmd = 'hook.sh'\n[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/profile'\n",
+        "hooks.post_setup = 'hook.sh'\nhooks.pre_remove = 'hook.sh'\n[env]\nSESSION = '{workspace}'\nPROFILE = '{workspace_path}/profile'\n",
     ));
     install_test_script(
         fixture.repo.join("hook.sh"),
@@ -19237,7 +19121,7 @@ printf '%s\n' "$SHOAL_HOOK" >> "$HOME/hooks"
 
 #[test]
 fn pre_setup_hook_gates_readiness_and_supports_global_defaults() {
-    let fixture = Fixture::with_config(Some("pre_setup_cmd = 'before.sh'\n"));
+    let fixture = Fixture::with_config(Some("hooks.pre_setup = 'before.sh'\n"));
     install_test_script(
         fixture.repo.join("before.sh"),
         r#"#!/bin/sh
@@ -19253,12 +19137,12 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
         fixture.repo.join("setup.sh"),
         "#!/bin/sh\necho setup >> \"$HOME/setup-order\"\n",
     );
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let home = fixture.root.path();
     fs::write(home.join("fail-before"), "").unwrap();
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "hooked"]);
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("pre_setup_cmd exited with 7"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("hooks.pre_setup exited with 7"));
     let inspection = fixture.ok(&["status", "hooked"]);
     assert_eq!(inspection["workspace"]["state"], "failed");
     assert_eq!(inspection["executions"], serde_json::json!([]));
@@ -19276,7 +19160,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
     // A repository override wins; a pre-setup hook alone still gates readiness.
     fs::write(
         path.join(".shoal.toml"),
-        "pre_setup_cmd = '/usr/bin/true'\n",
+        "hooks.pre_setup = '/usr/bin/true'\n",
     )
     .unwrap();
     assert_eq!(fixture.ok(&["work", "setup", "hooked"])["state"], "ready");
@@ -19306,7 +19190,7 @@ test ! -f "$HOME/fail-before" || { echo 'prepare failed' >&2; exit 7; }
 #[test]
 fn post_remove_hook_uses_checkout_and_reports_failure_after_removal() {
     let fixture = Fixture::with_config(Some(
-        "post_remove_cmd = '/usr/bin/false'\n[env]\nPROFILE = '{workspace_path}/global-profile'\n",
+        "hooks.post_remove = '/usr/bin/false'\n[env]\nPROFILE = '{workspace_path}/global-profile'\n",
     ));
     install_test_script(
         fixture.repo.join("after removal.sh"),
@@ -19327,7 +19211,7 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     );
     commit_resource_config(
         &fixture.repo,
-        "post_remove_cmd = 'after removal.sh'\n[resources.signing]\n",
+        "hooks.post_remove = 'after removal.sh'\n[resources.signing]\n",
     );
     let workspace = fixture.add("hooked");
     let path = Path::new(workspace["path"].as_str().unwrap());
@@ -19335,14 +19219,14 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
     let config = path.join(".shoal.toml");
     fs::write(
         &config,
-        "post_remove_cmd = 'after removal.sh'\npre_remove_cmd = '/usr/bin/false'\n",
+        "hooks.post_remove = 'after removal.sh'\nhooks.pre_remove = '/usr/bin/false'\n",
     )
     .unwrap();
     assert!(!fixture.run(&["rm", "hooked", "--yes"]).status.success());
     assert!(!fixture.root.path().join("removed").exists());
     fs::write(
         &config,
-        "post_remove_cmd = 'after removal.sh'\n[env]\nPROFILE = '{workspace_path}/saved-profile'\n",
+        "hooks.post_remove = 'after removal.sh'\n[env]\nPROFILE = '{workspace_path}/saved-profile'\n",
     )
     .unwrap();
     fs::write(fixture.root.path().join("fail-after"), "").unwrap();
@@ -19753,7 +19637,7 @@ fn files_add_attaches_copies_without_a_message() {
 #[test]
 fn done_hands_back_files_that_shoal_files_lists() {
     // Kept, so the workspace stays to show its completion.
-    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     fixture.add("audit");
     fs::write(fixture.root.path().join("report.md"), "No leaks").unwrap();
     let missing = fixture.run(&["done", "audit", "--attach", "/missing/report.md"]);
@@ -21276,8 +21160,8 @@ fn port_approvals_bind_overrides_and_follow_both_lifetimes() {
 #[cfg(target_os = "macos")]
 fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args() {
     let config = SIM_CONFIG.replace(
-        "[simulators.profiles.phone]",
-        "[simulators.profiles.phone]\nrequires_approval=true\napproval_lifetime='workspace'",
+        "[machine.simulators.profiles.phone]",
+        "[machine.simulators.profiles.phone]\nrequires_approval=true\napproval_lifetime='workspace'",
     );
     let mut fixture = Fixture::with_tools(Some(&config), true);
     commit_resource_config(&fixture.repo, "[simulators]\nrequires_approval=false\n");
@@ -21412,8 +21296,8 @@ fn simulator_approvals_precede_mutations_and_cannot_be_bypassed_by_device_args()
 #[cfg(target_os = "macos")]
 fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants() {
     let config = SIM_CONFIG.replace(
-        "[simulators]",
-        "[simulators]\nrequires_approval=true\napproval_lifetime='workspace'",
+        "[machine.simulators]",
+        "[simulators]\nrequires_approval=true\napproval_lifetime='workspace'\n[machine.simulators]",
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     commit_resource_config(&fixture.repo, "[simulators]\napproval_lifetime='lease'\n");
@@ -21449,8 +21333,8 @@ fn simulator_approval_defaults_layer_per_option_and_release_expires_lease_grants
 #[cfg(target_os = "macos")]
 fn exported_scopes_request_simulator_approval_before_mutations() {
     let config = SIM_CONFIG.replace(
-        "[simulators.profiles.phone]",
-        "[simulators.profiles.phone]\nrequires_approval=true",
+        "[machine.simulators.profiles.phone]",
+        "[machine.simulators.profiles.phone]\nrequires_approval=true",
     );
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("external");
@@ -21704,13 +21588,7 @@ fn benchmark_daemon_reads() {
 fn set_repository_toml(fixture: &Fixture, text: &str) {
     let config = fixture.root.path().join("repository.toml");
     fs::write(&config, text).unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        config.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &config);
 }
 
 fn install_done_hook(fixture: &Fixture) -> PathBuf {
@@ -21724,7 +21602,7 @@ fn install_done_hook(fixture: &Fixture) -> PathBuf {
 
 #[test]
 fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignment() {
-    let fixture = Fixture::with_config(Some("post_agent_exit_cmd = '/usr/bin/false'\n"));
+    let fixture = Fixture::with_config(Some("hooks.post_agent_exit = '/usr/bin/false'\n"));
     let hook = fixture.root.path().join("agent-exit.sh");
     install_test_script(
         &hook,
@@ -21733,7 +21611,8 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     set_repository_toml(
         &fixture,
         &format!(
-            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            "hooks.post_agent_exit = '{}'\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n\
+             [commands]\nfailing = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -21758,7 +21637,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     assert!(fixture.ok(&["status", "agent-work"])["completion"].is_null());
     assert_eq!(
         fixture
-            .run(&["run", "helper", "--workspace", "agent-work"])
+            .run(&["run", "failing", "--workspace", "agent-work"])
             .status
             .code(),
         Some(7)
@@ -21768,7 +21647,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
     fixture.ok(&[
         "config",
         "unset",
-        "post_agent_exit_cmd",
+        "hooks.post_agent_exit",
         "--repo",
         fixture.repo.to_str().unwrap(),
     ]);
@@ -21792,7 +21671,7 @@ fn agent_exit_hook_exposes_custom_agent_results_without_completing_the_assignmen
                     && n["message"]
                         .as_str()
                         .unwrap()
-                        .contains("post_agent_exit_cmd exited with 1")
+                        .contains("hooks.post_agent_exit exited with 1")
             })
     });
 }
@@ -21811,7 +21690,7 @@ fn agent_exit_hook_can_signal_completion_without_a_post_done_hook() {
     set_repository_toml(
         &fixture,
         &format!(
-            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n[done]\ncleanup = false\n",
+            "hooks.post_agent_exit = '{}'\n[cleanup.done]\nenabled = false\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -21847,7 +21726,7 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
     set_repository_toml(
         &fixture,
         &format!(
-            "post_agent_exit_cmd = '{}'\n[commands]\nhelper = ['/bin/sh', '-c', 'exit 7']\n",
+            "hooks.post_agent_exit = '{}'\n[agents.helper]\ncommand = ['/bin/sh', '-c', 'exit 7']\n",
             hook.display()
         ),
     );
@@ -21882,15 +21761,15 @@ fn agent_exit_acknowledgement_does_not_wait_for_the_hook() {
 
 #[test]
 fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers() {
-    let mut fixture = Fixture::with_config(Some("post_done_cmd = '/usr/bin/false'\n"));
+    let mut fixture = Fixture::with_config(Some("hooks.post_done = '/usr/bin/false'\n"));
     let workspace = fixture.add("hooked");
     let path = Path::new(workspace["path"].as_str().unwrap());
     let hook = install_done_hook(&fixture);
-    let config = format!("post_done_cmd = '{}'\n", hook.display());
+    let config = format!("hooks.post_done = '{}'\n", hook.display());
     // The worktree file overrides the global failure hook.
     fs::write(
         path.join(".shoal.toml"),
-        format!("{config}[done]\ncleanup = false\n"),
+        format!("{config}[cleanup.done]\nenabled = false\n"),
     )
     .unwrap();
     let completion = fixture.ok(&[
@@ -21919,10 +21798,10 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     // Saved repository config overrides the file and determines the default choice.
     fs::write(
         path.join(".shoal.toml"),
-        "post_done_cmd = '/usr/bin/false'\n",
+        "hooks.post_done = '/usr/bin/false'\n",
     )
     .unwrap();
-    set_repository_toml(&fixture, &format!("{config}[done]\ncleanup=true\n"));
+    set_repository_toml(&fixture, &format!("{config}[cleanup.done]\nenabled=true\n"));
     // Retention must survive removal of the configuration file later in this
     // test; otherwise the cleanup sweep can win the race against the last done.
     fs::write(path.join("retain-work"), "uncommitted work\n").unwrap();
@@ -21937,8 +21816,12 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     fixture.restart();
     assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 2);
     // Failure is best effort and cannot cancel a recorded choice.
-    fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap(), "--clear"]);
-    fs::write(path.join(".shoal.toml"), "[done]\ncleanup = false\n").unwrap();
+    fixture.clear_local_config(fixture.repo.to_str().unwrap());
+    fs::write(
+        path.join(".shoal.toml"),
+        "[cleanup.done]\nenabled = false\n",
+    )
+    .unwrap();
     assert_eq!(fixture.ok(&["done", "hooked"])["cleanup"], false);
     assert!(
         fixture
@@ -21950,7 +21833,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
                 && n["message"]
                     .as_str()
                     .unwrap()
-                    .contains("post_done_cmd exited with 1"))
+                    .contains("hooks.post_done exited with 1"))
     );
 }
 
@@ -21975,7 +21858,7 @@ fn post_done_hook_observes_persisted_completion_and_excludes_lifecycle_and_permi
     set_repository_toml(
         &fixture,
         &format!(
-            "post_done_cmd = '{}'\nsetup_cmd = '/usr/bin/true'\n[done]\ncleanup = false\n",
+            "hooks.post_done = '{}'\nsetup.command = '/usr/bin/true'\n[cleanup.done]\nenabled = false\n",
             hook.display()
         ),
     );
@@ -22015,7 +21898,10 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n[resources.device]\n"));
     let hook = install_done_hook(&fixture);
     let workspace = fixture.add("finished");
-    set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
+    set_repository_toml(
+        &fixture,
+        &format!("hooks.post_done = '{}'\n", hook.display()),
+    );
     fixture.ok(&["acquire", "port", "web", "--workspace", "finished"]);
     fixture.ok(&["acquire", "resource", "device", "--workspace", "finished"]);
     let mut wrapper = fixture
@@ -22055,7 +21941,7 @@ fn done_defaults_to_cleanup_and_releases_workspace_resources() {
 
 #[test]
 fn agents_follow_a_keep_default_and_can_request_cleanup() {
-    let fixture = Fixture::with_config(Some("[done]\ncleanup=false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled=false\n"));
     fixture.add("keep-default");
     assert_eq!(fixture.ok(&["done", "keep-default"])["cleanup"], false);
     // Agents can explicitly clean their own workspace despite a keep default.
@@ -22089,10 +21975,13 @@ fn done_records_completion_without_claiming_dirty_work_is_merged() {
 fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
     for cleanup in [false, true] {
         let mut fixture = Fixture::with_config(Some(&format!(
-            "[cleanup.auto]\nenabled=false\n[done]\ncleanup={cleanup}\n"
+            "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled={cleanup}\n"
         )));
         let hook = install_done_hook(&fixture);
-        set_repository_toml(&fixture, &format!("post_done_cmd = '{}'\n", hook.display()));
+        set_repository_toml(
+            &fixture,
+            &format!("hooks.post_done = '{}'\n", hook.display()),
+        );
         let workspace = fixture.add("multi");
         fixture.add_github_origin();
         let bin = fixture.root.path().join("bin");
@@ -22177,7 +22066,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
             // A changed default must not change a kept assignment.
             fs::write(
                 root.join(".config/shoal/config.toml"),
-                "[cleanup.auto]\nenabled=false\n[done]\ncleanup=true\n",
+                "[cleanup.auto]\nenabled=false\n[cleanup.done]\nenabled=true\n",
             )
             .unwrap();
             fixture.restart();
@@ -22790,7 +22679,7 @@ fn herdr_calls(fixture: &Fixture) -> Vec<Vec<String>> {
 #[test]
 fn herdr_handoff_preserves_choices_and_literal_arguments() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', 'printf \"%s\\0\" \"$@\" > \"$HOME/agent-args\"; echo \"${SHOAL_ADD_PLAN-unset}\" > \"$HOME/agent-plan\"; exit 7', 'agent', '{args}']\n",
     ));
     install_fake_herdr(&fixture);
     let directive = fixture.root.path().join("caller-directive");
@@ -22865,7 +22754,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
 
 #[test]
 fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
-    let fixture = Fixture::with_config(Some("[herdr]\ntab_name = 'resumed {branch}'\n"));
+    let fixture = Fixture::with_config(Some("[terminal.herdr]\ntab_name = 'resumed {branch}'\n"));
     install_fake_herdr(&fixture);
     // The first agent's pane is back at its prompt; the second's is busy.
     fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
@@ -22949,7 +22838,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
 
 #[test]
 fn herdr_resume_honors_new_tab_and_enabled_settings() {
-    let fixture = Fixture::with_config(Some("[herdr]\nnew_tab = false\n"));
+    let fixture = Fixture::with_config(Some("[terminal.herdr]\nnew_tab = false\n"));
     install_fake_herdr(&fixture);
     fs::write(fixture.root.path().join("idle-panes"), "w1:p5\n").unwrap();
     for (name, pane) in [("first", "w1:p5"), ("second", "w1:p6")] {
@@ -22984,7 +22873,7 @@ fn herdr_resume_honors_new_tab_and_enabled_settings() {
     fs::remove_file(fixture.root.path().join("herdr-calls")).unwrap();
     fs::write(
         fixture.root.path().join(".config/shoal/config.toml"),
-        "[herdr]\nenabled = false\n",
+        "[terminal.herdr]\nenabled = false\n",
     )
     .unwrap();
     let (output, transcript) = herdr_call(&fixture, &["resume", "--all", "--now"], "");
@@ -23021,7 +22910,7 @@ fn herdr_reports_issue_lookup_errors_before_the_agent_picker() {
 
 #[test]
 fn herdr_labels_name_issues_by_repository_and_number() {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     fixture.add_github_origin();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     install_fake_herdr(&fixture);
@@ -23116,13 +23005,13 @@ fn herdr_labels_name_issues_by_repository_and_number() {
 #[test]
 fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'exit 0']\n[herdr]\ntab_name = 'global'\n",
+        "[terminal.herdr]\ntab_name = 'global'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     fixture.add_github_origin();
     fixture.ok(&["repo", "rename", fixture.repo.to_str().unwrap(), "project"]);
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "[herdr]\ntab_name = 'worktree'\n",
+        "[terminal.herdr]\ntab_name = 'worktree'\n",
     )
     .unwrap();
     install_fake_herdr(&fixture);
@@ -23143,7 +23032,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         fixture.ok(&[
             "config",
             "set",
-            "herdr.tab_name",
+            "terminal.herdr.tab_name",
             "'{repo} {branch} #{issue_number}: {issue_title}'",
             "--repo",
             fixture.repo.to_str().unwrap(),
@@ -23169,7 +23058,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         fixture.ok(&[
             "config",
             "set",
-            "herdr.tab_name",
+            "terminal.herdr.tab_name",
             "'changed after handoff'",
             "--repo",
             fixture.repo.to_str().unwrap(),
@@ -23202,7 +23091,7 @@ fn title_in_herdr(fixture: &Fixture, workspace: &str, title: &str) -> Output {
 fn a_workspace_title_renames_the_herdr_tab_shoal_opened_for_it() {
     // Without a watcher, nothing polls the tab after the fixture is gone.
     let fixture = Fixture::with_config(Some(
-        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "[terminal.herdr]\nclose_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let args = [
@@ -23303,8 +23192,9 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
         (Some(false), Some("pi"), false, "--no-focus"),
         (Some(false), Some("pi"), true, "--focus"),
     ] {
-        let mut config = focus.map_or_else(String::new, |focus| format!("focus = {focus}\n"));
-        config.push_str("[commands]\npi = ['sh', '-c', 'exit 0']\n");
+        let mut config =
+            focus.map_or_else(String::new, |focus| format!("terminal.focus = {focus}\n"));
+        config.push_str("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n");
         let fixture = Fixture::with_config(Some(&config));
         install_fake_herdr(&fixture);
         let mut args = vec!["add", fixture.repo.to_str().unwrap(), "focus"];
@@ -23341,7 +23231,7 @@ fn herdr_focus_defaults_follow_the_agent_input_and_allow_overrides() {
 
 #[test]
 fn herdr_no_agent_opens_workspace_shell_and_honors_focus_setting() {
-    let fixture = Fixture::with_config(Some("focus = false\n"));
+    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
         &fixture,
@@ -23400,8 +23290,8 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
     assert!(help.status.success());
     assert!(!fixture.root.path().join("herdr-calls").exists());
     for (name, config) in [
-        ("no-tab", "[herdr]\nnew_tab = false\n"),
-        ("disabled", "[herdr]\nenabled = false\n"),
+        ("no-tab", "[terminal.herdr]\nnew_tab = false\n"),
+        ("disabled", "[terminal.herdr]\nenabled = false\n"),
     ] {
         fs::write(fixture.repo.join(".shoal.toml"), config).unwrap();
         let (output, _) = herdr_call(&fixture, &["add", fixture.repo.to_str().unwrap(), name], "");
@@ -23413,7 +23303,7 @@ fn herdr_opt_out_and_noninteractive_calls_stay_in_place() {
 #[test]
 fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     let fixture = Fixture::with_config(Some(
-        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n[done]\ncleanup = false\n",
+        "[terminal.herdr]\nclose_when_done = false\n[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -23441,7 +23331,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
     // Enable closure, then fail setup before the agent can start.
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "setup_cmd = 'fail-setup'\n[herdr]\nclose_when_done = true\n",
+        "setup.command = 'fail-setup'\n[terminal.herdr]\nclose_when_done = true\n",
     )
     .unwrap();
     install_test_script(fixture.repo.join("fail-setup"), "#!/bin/sh\nexit 17\n");
@@ -23482,7 +23372,7 @@ fn herdr_retains_setup_failures_and_can_disable_completion_closure() {
 #[test]
 fn herdr_closes_when_done_cleanup_terminates_the_agent() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done --cleanup; exec sleep 600']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done --cleanup; exec sleep 600']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -23513,8 +23403,9 @@ fn herdr_closes_when_done_cleanup_terminates_the_agent() {
 
 #[test]
 fn herdr_retains_detached_happy_exits_and_closes_on_done_after_restart() {
-    let mut fixture =
-        Fixture::with_config(Some("[done]\ncleanup = false\n[happy]\nenabled = true\n"));
+    let mut fixture = Fixture::with_config(Some(
+        "[cleanup.done]\nenabled = false\n[terminal.happy]\nenabled = true\n",
+    ));
     install_fake_herdr(&fixture);
     install_fake_agents(&fixture, &["claude"]);
     install_test_script(
@@ -23620,7 +23511,7 @@ fn herdr_closed(fixture: &Fixture) -> bool {
 #[test]
 fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
     let fixture = Fixture::with_config(Some(
-        "[herdr]\nclose_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "[terminal.herdr]\nclose_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     install_fake_herdr(&fixture);
     let (caller, _) = herdr_call(
@@ -23742,7 +23633,7 @@ fn exported_environment_delivers_ports_and_confines_external_processes() {
     let mut fixture = Fixture::new();
     install_test_script(fixture.repo.join("setup.sh"), "#!/bin/sh\nexit 0\n");
     git(&fixture.repo, &["add", "setup.sh"]);
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let workspace = fixture.add("external");
     fixture.add("other");
     let web = fixture.ok(&["acquire", "port", "web", "--workspace", "external"]);
@@ -24650,7 +24541,7 @@ fn chat_syncs_the_default_branch_before_the_agent_starts() {
 
 #[test]
 fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
-    let fixture = Fixture::with_config(Some("focus = false\n"));
+    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     install_fake_herdr(&fixture);
     install_recording_agent(&fixture, "codex");
     let repository = fixture.ok(&["repo", "ls"])[0].clone();
@@ -24873,7 +24764,7 @@ while [ ! -e "$HOME/setup-release" ]; do
 done
 "#,
     );
-    commit_resource_config(&fixture.repo, "setup_cmd = 'setup.sh'\n");
+    commit_resource_config(&fixture.repo, "setup.command = 'setup.sh'\n");
     let setup = fixture
         .command()
         .args([
@@ -25059,7 +24950,9 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     );
     assert!(!output.status.success());
     assert!(
-        transcript.contains("cannot start happy-claude: Happy sessions are off"),
+        transcript.contains(
+            "cannot start happy-claude: Happy sessions are off; set terminal.happy.enabled = true"
+        ),
         "{transcript}"
     );
     let output = fixture.run(&["chat", repo, "--agent", "claude"]);
@@ -25068,7 +24961,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
     // The checkout has no value for a workspace's placeholders.
     fs::write(
         fixture.repo.join(".shoal.toml"),
-        "[commands]\nclaude = ['claude', '--name', '{workspace}']\n",
+        "[agents.claude]\ncommand = ['claude', '--name', '{workspace}']\n",
     )
     .unwrap();
     let (output, transcript) = fixture.interactive_command(
@@ -25109,7 +25002,7 @@ fn chat_picks_chat_agents_and_refuses_unsupported_launches() {
 fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
     // `shift` drops Shoal's guidance, the first argument.
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[commands]\npi = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
+        "machine.max_agents = 1\n[agents.pi]\ncommand = ['sh', '-c', 'shift; echo \"$ZMX_SESSION ${SHOAL_EXECUTION_ID:+tracked} $*\" >> \"$HOME/agent-runs\"', 'agent', '{args}']\n",
     ));
     let home = fixture.root.path();
     let repo = fixture.repo.to_str().unwrap();
@@ -25210,7 +25103,7 @@ fn terminal_add_detaches_launches_with_input_and_attaches_the_rest() {
 
 #[test]
 fn terminal_add_handing_codex_to_its_app_enters_the_workspace() {
-    let fixture = Fixture::with_config(Some("[codex]\ndefault_mode = 'app'\n"));
+    let fixture = Fixture::with_config(Some("[agents.codex]\ndefault_mode = 'app'\n"));
     let home = fixture.root.path();
     install_test_script(
         home.join("bin/codex"),
@@ -25255,11 +25148,11 @@ fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
     // The hook turns the app handoff the repository asks for into a CLI launch.
     install_test_script(
         fixture.repo.join("post-setup.sh"),
-        "#!/bin/sh\nprintf \"[codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
+        "#!/bin/sh\nprintf \"[agents.codex]\\ndefault_mode = 'cli'\\n\" > .shoal.toml\n",
     );
     commit_resource_config(
         &fixture.repo,
-        "post_setup_cmd = 'post-setup.sh'\n[codex]\ndefault_mode = 'app'\n",
+        "hooks.post_setup = 'post-setup.sh'\n[agents.codex]\ndefault_mode = 'app'\n",
     );
     let directive = home.join("shell-directive");
     let (output, transcript) = fixture.terminal_command(
@@ -25287,7 +25180,7 @@ fn terminal_add_decides_where_the_shell_goes_after_the_post_setup_hook() {
 
 #[test]
 fn background_add_without_an_agent_opens_the_workspace_shell_in_its_session() {
-    let fixture = Fixture::with_config(Some("focus = false\n"));
+    let fixture = Fixture::with_config(Some("terminal.focus = false\n"));
     let home = fixture.root.path();
     let shell = home.join("bin/test-shell");
     install_test_script(&shell, "#!/bin/sh\npwd > \"$HOME/shell-cwd\"\n");
@@ -25458,7 +25351,7 @@ fn terminal_resume_of_one_agent_runs_in_a_detached_session_unless_focused() {
 #[test]
 fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n[done]\ncleanup = false\n",
+        "[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', '\"$SHOAL_TEST_BINARY\" done']\n",
     ));
     let home = fixture.root.path();
     // The daemon closes the session, so it needs the fake zmx too.
@@ -25497,7 +25390,7 @@ fn a_detached_session_ends_once_a_kept_completion_resolves_its_agent() {
 #[test]
 fn a_detached_session_stays_open_without_close_when_done() {
     let fixture = Fixture::with_config(Some(
-        "close_when_done = false\n[commands]\npi = ['sh', '-c', 'exit 0']\n",
+        "terminal.close_when_done = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
     ));
     let (output, transcript) = fixture.terminal_command(
         fixture.command().args([
@@ -25524,7 +25417,7 @@ fn a_detached_session_stays_open_without_close_when_done() {
 #[test]
 fn a_detached_session_ends_with_its_agent_whatever_its_exit() {
     let fixture = Fixture::with_config(Some(
-        "[commands]\npi = ['sh', '-c', 'echo \"${SHOAL_ENDS_SESSION-unset}\" > \"$HOME/agent-env\"; exit 3']\n",
+        "[agents.pi]\ncommand = ['sh', '-c', 'echo \"${SHOAL_ENDS_SESSION-unset}\" > \"$HOME/agent-env\"; exit 3']\n",
     ));
     let home = fixture.root.path();
     let shell = home.join("bin/test-shell");
@@ -25917,7 +25810,7 @@ fn attach_shows_a_herdr_tab_and_attaches_its_session_from_outside_herdr() {
     // Disabled, Herdr is never called and the pane is no session.
     fs::remove_file(home.join("herdr-calls")).unwrap();
     let config = home.join(".config/shoal/config.toml");
-    fs::write(&config, "[herdr]\nenabled = false\n").unwrap();
+    fs::write(&config, "[terminal.herdr]\nenabled = false\n").unwrap();
     let (output, transcript) = fixture.interactive(&["attach", "talk"], "");
     assert!(!output.status.success());
     assert!(
@@ -26216,7 +26109,7 @@ fn terminal_agent_launches_refuse_a_missing_zmx_before_creating_anything() {
 #[test]
 fn add_queues_agents_past_max_agents_until_removed() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     let repo = fixture.repo.to_str().unwrap();
     let mut first = fixture
@@ -26329,7 +26222,7 @@ fn add_queues_agents_past_max_agents_until_removed() {
 #[test]
 fn a_queued_agent_keeps_its_callers_output_setting() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\nrecorder = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'trap \"exit 0\" TERM; while :; do sleep 1; done']\n[agents.recorder]\ncommand = ['sh', '-c', 'printf %s \"${SHOAL_OUTPUT-unset}\" > \"$HOME/queued-output\"; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     // The daemon's worker starts the queued agent in a detached session.
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
@@ -26378,7 +26271,7 @@ fn a_queued_agent_keeps_its_callers_output_setting() {
 #[test]
 fn resume_queues_restores_that_start_as_agent_slots_free() {
     let fixture = Fixture::with_config(Some(
-        "max_agents = 1\n[overload.disk]\nenabled = false\n[commands]\nwaiter = ['sh', '-c', 'exit 0']\n[agent_resume]\nwaiter = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
+        "machine.max_agents = 1\n[machine.overload.disk]\nenabled = false\n[agents.waiter]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['sh', '-c', 'touch restored; trap \"exit 0\" TERM; while :; do sleep 1; done']\n",
     ));
     install_test_script(fixture.root.path().join("bin/zmx"), PASSTHROUGH_ZMX);
     let mut paths = Vec::new();
@@ -26475,7 +26368,7 @@ fn managed_update_completes_active_requests_and_continues_event_streams() {
     fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
     fs::write(
         root.path().join(".config/shoal/config.toml"),
-        format!("pre_setup_cmd = '{}'\n", hook.display()),
+        format!("hooks.pre_setup = '{}'\n", hook.display()),
     )
     .unwrap();
     let mut launch = support::isolated(root.path(), &launcher);
@@ -26625,7 +26518,7 @@ fn failed_demo_handoffs_only_close_the_original_known_session() -> anyhow::Resul
 
 #[test]
 fn demos_restart_until_stopped_and_show_their_screen() {
-    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     let workspace = fixture.add("tried");
     let runs = Path::new(workspace["path"].as_str().unwrap()).join("runs");
     // Without zmx or Herdr on PATH the demo runs in the background with a log.
@@ -26779,7 +26672,7 @@ fn finish_preset_demo(fixture: &Fixture, workspace: &Value, name: &str, value: &
 
 #[test]
 fn web_demos_reserve_a_port_and_pass_it_as_port() {
-    let fixture = Fixture::with_config(Some("[done]\ncleanup = false\n"));
+    let fixture = Fixture::with_config(Some("[cleanup.done]\nenabled = false\n"));
     let workspace = fixture.add("tried");
     // Another reservation exported as PORT leaves the demo its own port.
     fixture.ok(&[
@@ -26804,7 +26697,7 @@ fn web_demos_reserve_a_port_and_pass_it_as_port() {
 #[cfg(target_os = "macos")]
 #[test]
 fn simulator_demos_share_the_workspace_simulator() {
-    let config = format!("{SIM_CONFIG}[done]\ncleanup = false\n");
+    let config = format!("{SIM_CONFIG}[cleanup.done]\nenabled = false\n");
     let fixture = Fixture::with_tools(Some(&config), true);
     let workspace = fixture.add("tried");
     let app = start_preset_demo(&fixture, "app", "simulator", "SHOAL_SIM_UDID");

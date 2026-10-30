@@ -398,7 +398,7 @@ that replaces itself with another program, such as `internal launch` or
 
 ## Workspaces and Git
 
-Every repository owns `~/shoal/<name>/` (global `root_dir`): its workspaces
+Every repository owns `~/shoal/<name>/` (`machine.root_dir`): its workspaces
 default to it and a URL clone lives there as `.checkout`, a name no
 workspace can take, so worktrees are grouped per repository, never nested in a
 checkout, and outside the state directory; a root inside either, or inside a
@@ -606,7 +606,7 @@ blocking evidence. Other failures let interactive callers choose delete, ignore
 (which repairs verified state first), or keep. JSON callers get a nonzero exit.
 `work setup` reruns setup explicitly; nothing retries automatically.
 Tracked setup starts by copying the repository checkout's ignored files through
-Worktrunk unless `copy_ignored = false`, so local files like `.env` arrive without a
+Worktrunk unless `setup.copy_ignored = false`, so local files like `.env` arrive without a
 setup script and failures gate readiness; `.worktreeinclude` selects what to copy.
 
 Hooks are deliberately untracked user processes with the workspace identity
@@ -666,7 +666,7 @@ Refresh fetches use private temporary refs; landing merges run in the tracked wr
 A fetch of a whole remote also deletes the tracking refs of branches the remote no
 longer has, since cleanup counts commits on a stale ref as pushed.
 
-A repository's `[seed]` keeps one build of its local default branch that new
+A repository's `[setup.seed]` keeps one build of its local default branch that new
 worktrees start from, instead of sharing build directories between live
 workspaces: a shared directory serialises or corrupts concurrent builds, while a
 copy-on-write clone costs no space until a branch rewrites a file and needs no
@@ -684,7 +684,7 @@ no script. Tools whose build outputs survive a move into another path get a
 seed: Cargo, whose seed covers it better than a shared compiler cache such as
 sccache, which needs another tool and gives up incremental builds, and the Node
 package managers. Preset seeds run the default branch's own build code, as
-`seed.cmd` would. Tools whose caches already serve every checkout get only what
+`setup.seed.command` would. Tools whose caches already serve every checkout get only what
 makes their cache keys independent of the workspace path, or one cache where
 each checkout keeps its own: Go trims paths, ccache takes the workspace as its
 base directory, Zig shares its local cache, and Xcode, whose DerivedData records absolute paths so no seed survives the move,
@@ -722,8 +722,8 @@ status, inspect, execute, setup, and resources.
 Creation other than splitting a child, removal other than of a descendant the user holds nothing below,
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `land` is an
-approval request bound to the branch and its HEAD unless `[land] requires_approval`
-is off; approval lets the agent's retry land that commit through the normal checks,
+approval request bound to the branch and its HEAD unless `[permissions] land`
+is `"direct"`; approval lets the agent's retry land that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.
@@ -756,7 +756,7 @@ numbers cannot decide a replacement. Implicit question and approval decisions
 require stdin, stdout and stderr on a terminal, so redirected details cannot
 hide the decision being made.
 
-`herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
+`terminal.herdr.enabled = false` turns off every Herdr call, so a Herdr pane behaves as a
 plain terminal; `new_tab` only governs opening new tabs.
 The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
@@ -764,7 +764,7 @@ allocated workspace branch by default. An issue number or branch says little abo
 the work, so its agent names it with a workspace title, which replaces that
 default and fills a template's `{title}`; setting one relabels the places Shoal
 created for the workspace that the caller's host server reaches, while other
-places take it when they next open. An optional `herdr.tab_name` template
+places take it when they next open. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
 fields once, and updates the branch after allocation. The resolved template travels
 with the launch plan so the worker preserves the caller's naming choice. Shoal
@@ -806,8 +806,8 @@ its agent is doing and whether closing it ends another place, as closing a Herdr
 pane's tab ends its other panes, where a batch removal or a streaming export
 then refuses to start; generic code tells the Shoal it starts in a new place
 whether to watch it, while a resume in the pane its agent stopped in leaves that
-tab's watcher as it was. Top-level `close_when_done` applies to every host, and
-`herdr.close_when_done` overrides it for tabs, as top-level `focus` is shared.
+tab's watcher as it was. Top-level `terminal.close_when_done` applies to every host, and
+`terminal.herdr.close_when_done` overrides it for tabs, as `terminal.focus` is shared.
 Preparation failures and shell or untracked desktop handoffs retain them until
 that lifecycle change. A watcher ends once its host reports the place missing,
 whatever the daemon reports. It asks the daemon whose its place is until the
@@ -829,7 +829,7 @@ label goes with the session, and a close from the record checks it. A record
 names its session's process and creation time, so `attach` passes over a later
 session under the name, whose own record replaces it. Creation
 sets `shoal.created=1`, which relabelling never adds. The daemon closes a
-workspace's sessions when it removes the workspace, whatever `close_when_done`
+workspace's sessions when it removes the workspace, whatever `terminal.close_when_done`
 says, and startup and cleanup sweeps close those whose workspace record is gone,
 retrying failures without restoring ownership. Sessions from before the label
 have no known origin and are left alone. Relabelling replaces obsolete ownership
@@ -840,16 +840,16 @@ every state directory using that server. Finding sessions needs neither: the
 labels and the lock exist only for cleanup.
 
 Rex is a terminal host as Herdr is: inside a Rex block, Shoal opens a window in
-the caller's session, or with `rex.placement = "split"` splits the caller's
+the caller's session, or with `terminal.rex.placement = "split"` splits the caller's
 block, and runs agents in place in their block, since Rex keeps sessions
 running without a connected client. Generic code decides a split: only a start
 from the caller's own place passes it to the host, so queued starts and starts
 without one open windows. A block beside others carries its own label, and
 Shoal renames a window only while the block it opened is alone there, so a
 split never renames the user's window. A terminal no host
-serves goes to `default_host`, zmx unless set to Herdr or Rex, whose places
-then join the group the host's config names, `herdr.workspace_name` or
-`rex.session_name`; generic code reads the setting and renders the name, and a
+serves goes to `terminal.default_host`, zmx unless set to Herdr or Rex, whose places
+then join the group the host's config names, `terminal.herdr.workspace_name` or
+`terminal.rex.session_name`; generic code reads the setting and renders the name, and a
 host only finds or creates a group by label. A host opens a place for a
 start and shows a place; generic code decides the rest: whether a start stays
 in this terminal, whether an agent runs in place, which host takes a queued
@@ -872,7 +872,7 @@ the host never calls the daemon. A host
 declares the variables naming its places, and a zmx session drops the
 other hosts', so Shoal inside it never takes the caller's place for its own. A queued start
 falls back from its origin's group to its host's configured group on the same
-server, then to `default_host`; with that host turned off, a terminal no host
+server, then to `terminal.default_host`; with that host turned off, a terminal no host
 serves runs work in place, a queued start without another fallback fails, and
 a demo runs as a background process. Rex cannot set a new terminal's
 environment, so Shoal types a launch step that loads the worker and its
@@ -911,7 +911,7 @@ the shell the user left. Sessions are named
 after their workspace and labelled with its ID and canonical state-directory identity,
 so daemons sharing zmx can distinguish their sessions. A detached session that Shoal
 starts labels itself once its workspace exists. A start queued from a zmx
-session joins no group, so it goes to `default_host`. Launches without a terminal, inside a zmx session, or in
+session joins no group, so it goes to `terminal.default_host`. Launches without a terminal, inside a zmx session, or in
 a Herdr pane with the integration enabled run in place, since Herdr reads agent
 state from the pane's process. zmx reports no exit status, so a session launch
 exits 0; the daemon still records the agent's exit.
@@ -943,10 +943,10 @@ opening does, so clients do not rebuild it.
 dispatcher share one count. Slots derive from state the daemon already tracks:
 connected agents, executions awaiting reattachment, resume records and starting
 queue entries, excluding completed workspaces. Agents therefore count however
-they started, and no separate counter can leak a slot. The global value limits
-the machine and a repository's effective value limits that repository; a
-repository without its own value inherits the global one, which already bounds
-it, so normal precedence serves both. The setting defaults to `dynamic`, which
+they started, and no separate counter can leak a slot. `machine.max_agents`
+limits the machine; the repository option `agent.max_running` limits each repository,
+with a global default like any other option, so one name never means both caps.
+The machine setting defaults to `dynamic`, which
 admits from measured load instead of a slot count, so the machine runs as many
 agents as it can without congestion. Agents start one at a time and staggered;
 an agent reads files before it edits and compiles, so a recent start reserves
@@ -1137,12 +1137,14 @@ tracked repository config, so it arrives as a reviewable commit that every clone
 shares rather than as saved local config. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
-AI tools are providers: built-in ones plus global `[ai.<name>]` entries. A
-`command` there is the tool's launcher at the global `[commands]` layer, so
-repositories can still replace it, and gives it a `shoal <name>` agent shortcut
-that `run` shares; names that built-in commands shadow are rejected. Pickers
-and completion offer providers only, while custom `--agent` and `default_agent`
-names select any named command through the same configuration layers. Agents run
+AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
+per tool holding its launcher, resume command, launch mode and argument
+templates, merged option by option across layers so a repository can replace
+`command` and keep the global `resume`. A `command` or `base` gives a tool a
+`shoal <name>` agent shortcut that `run` shares; names that built-in commands
+shadow are rejected, and `[commands]` holds only shortcuts that are not agents.
+What a tool needs of the machine, its skill directory and proxy, sits under
+`[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
 as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
@@ -1185,7 +1187,7 @@ Agent shortcuts use the execution wrapper: by default Codex CLI gets full access
 approvals and Claude runs with its own settings, plus permission for a workspace's
 agent to run the Shoal commands that finish its assignment, so completion never
 depends on Claude Code's auto-mode check. Every agent, chats included, gets the
-configured `agent_dirs`, `/tmp` by default, as working directories, so it reads what the
+configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
 splits there without leaving its sandbox or permission rules; chats split nothing
@@ -1218,7 +1220,7 @@ enough to read in full in tabs, session names and branch lists.
 
 `add <link>` recognizes issue, PR and branch URLs and selects their registered
 repository by origin identity, offering interactive registration when missing.
-Issue links and numbers invoke issue opening with `default_agent` standing in
+Issue links and numbers invoke issue opening with `agent.default` standing in
 for `--agent`; numbers use `--repo`, the current checkout/workspace, then a picker.
 PR links open their head against the refreshed remote base and link the PR once
 the workspace is ready, as issue links associate their issue; branch links open
@@ -1235,9 +1237,9 @@ tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
 them, as zmx, Herdr and Rex do; an external app, such as Quay, is a UI that is
 not a host and reads and acts on Shoal's state through the client API. It holds
 a workspace while it shows it and queues agents, which the daemon starts
-detached in `default_host`, which never names an external app.
+detached in `terminal.default_host`, which never names an external app.
 Happy sessions are an optional integration behind a default Cargo feature and
-the `happy.enabled` setting, off by default, so its encrypted client stays out of
+the `terminal.happy.enabled` setting, off by default, so its encrypted client stays out of
 core. They are the phone-driven flow: a console session that
 Happy's daemon started in a non-workspace directory creates workspaces and starts
 sessions in them. Shoal launches `happy <agent>` with the daemon's own flags so
@@ -1291,7 +1293,7 @@ repeated polled conflicts and identical messages collapse until read, and scoped
 processes cannot read them. Agent messages are separate from completion: telling
 the user a PR is ready neither ends the assignment nor affects cleanup. The
 sending workspace may withdraw its message while it is unread; once shown, it
-stays, because deleting it would not unsay it, and a correction does. `post_agent_exit_cmd` exposes tracked-agent exit notifications to user
+stays, because deleting it would not unsay it, and a correction does. `hooks.post_agent_exit` exposes tracked-agent exit notifications to user
 integrations while the workspace is ready, using normal configuration precedence
 and daemon hook rules with the agent name, reported code, and process-completion
 status. Failure notifies without changing the exit result or marking completion;
@@ -1397,7 +1399,7 @@ Asking leaves out the tokens gh and glab read from the environment for any
 host, so a host that may be another forge never receives them. The daemon records
 each answer in its state and asks recorded hosts again when it starts or
 reloads its config, recording a changed answer with an alert. A host it cannot reach then
-keeps its answer and raises no alert, since a machine may start offline; a global `[forges."<host>"] type`
+keeps its answer and raises no alert, since a machine may start offline; a global `[machine.forges."<host>"] type`
 pins one instead and is never asked, and a host that answers as none fails with a message naming that
 setting. Each process remembers the answers it resolved, so links of the host
 parse the same way, and the CLI starts out knowing the pinned ones. A pasted
@@ -1406,7 +1408,7 @@ its routes name, such as `/pull/` for GitHub
 and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
 form several forges share, falls back to the name: GitLab for a `gitlab` name
 label or a glab login, and otherwise Forgejo. Host types describe hosts rather than
-repositories, so they are global only, like `[bitbucket]`. GitLab-only concepts such as approval rules and merge trains
+repositories, so they are global only, like `[machine.bitbucket]`. GitLab-only concepts such as approval rules and merge trains
 stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as
 `[secrets]` commands do, and Shoal still stores no token; agents act with the
@@ -1433,14 +1435,17 @@ on every forge, so a client offers one set, which `shoal forge reactions` narrow
 to what an instance allows, and are read for a view with its
 comments, which costs a request per comment on forges that list them per comment;
 reacting reads first and changes only a reaction not already as asked, since
-forges differ in whether adding one twice fails. Listing issues and PRs also
+forges differ in whether adding one twice fails. A comment edit changes only
+a comment the acting login wrote, checked against the item's discussion before
+anything is sent, since an account with admin rights could otherwise rewrite
+someone else's words. Listing issues and PRs also
 runs in the daemon, so a scoped caller's search goes out as the agent account
 and anyone else's as the user's own logins; it uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
 command models, since fj has no API passthrough to fall back to. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
-unless `[api] agent_writes` accepts that its writes may merge, approve or skip
+unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
 required labels; the path stays under the API root, so the login reaches only
 its own forge's API. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
@@ -1493,11 +1498,11 @@ binds to HEAD; new commits make it outdated rather than removing it, so marking
 again is an explicit statement about the new revision. Marking linked items
 replaces a workspace mark. Unlinking an item
 withdraws its mark and removal deletes all marks. Marks and withdrawals are
-journal events, and `post_ready_cmd` runs after each explicit mark under the
+journal events, and `hooks.post_ready` runs after each explicit mark under the
 completion hook rules; failure notifies and keeps the marks. Marking a linked
-draft PR also takes it out of draft unless `[ready] undraft = false`, since
+draft PR also takes it out of draft unless `[pr] undraft_on_ready = false`, since
 forges and review bots often skip drafts. Withdrawing a mark leaves the PR
-ready unless `--draft` or `[unready] draft` asks to return it to draft, because
+ready unless `--draft` or `[pr] draft_on_unready` asks to return it to draft, because
 an agent usually withdraws to push more work that still needs CI and review.
 A failed forge change fails the command with the marks kept, so the agent can
 retry it.
@@ -1602,9 +1607,8 @@ state directory, skills included, unless tests in a temporary home set
 `SHOAL_DEV_USER_FILES=1`. A changed or removed skill stays as the user left it until an
 explicit install, which restores removed skills, asks about changed ones in a
 terminal like a package manager's modified configuration files, and with
-`--force` replaces them. Global `[ai.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
-the machine and cannot be set per repository; provider launchers join named
-commands without tool-specific integrations. Packaged skills resolve the runtime
+`--force` replaces them. `[machine.agents.<name>]` settings name skill directories, with defaults for built-in providers. Skill directories describe
+the machine and cannot be set per repository. Packaged skills resolve the runtime
 `SHOAL_SKILLS_DIR`, then an adjacent `shoal-skills` symlink
 to a directory holding every bundled skill. Explicit paths must be absolute;
 relative link targets resolve lexically against the link's directory. Preserve
@@ -1619,7 +1623,11 @@ and failed removal, are allocated atomically with idempotent lease names, and
 are released explicitly or by successful removal. Resources are lazy, never
 claimed at creation.
 
-Global TOML is machine policy, seeded by `install` with the stated defaults when
+Global TOML is `[machine]`, the settings that describe this machine, plus the
+repository schema for this machine's defaults, so nothing is declared twice and
+a setting copies between the files. Each part is deserialized strictly on its own
+from one parse: `serde(flatten)` would accept unknown keys and lose error
+positions. It is seeded by `install` with the stated defaults when
 absent; explicit key edits preserve unrelated settings and comments and validate
 once per command before saving, so dependent keys change together, while reset or named template installation replaces the file.
 Global writes keep the previous file as a backup; the daemon reads it at startup
@@ -1627,16 +1635,24 @@ and on reload, which global CLI writes request of a running daemon, replacing it
 snapshot only with a valid file so agents and leases are untouched; an operation
 that combines global definitions with resolved settings reads both from one snapshot. The CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
-a local override stored in the database by repository ID layered over it per
-option, a named table replacing the one below it whole, and deleted with the
-registration. Inline repository key edits use the same validation as imports and
-serialize read/modify/write in the daemon; unset restores lower-layer values. Every option
-that does not describe the machine may be set at either level and resolves per
-option: saved config, worktree file, global config, then the built-in default.
-One option table defines both the merge and its provenance, so a reported layer
-is the one whose value is in use; the daemon resolves a workspace's settings
+a local config layered over it per option, a named table replacing the one below
+it whole. The local config is a file, `.shoal/config.toml` in the repository's
+own directory beside its workspaces and `.checkout`: outside every Git tree, so
+nothing has to ignore it, and read in place on every request, so an edit reaches
+every workspace without copying or a restart. As a file, the user can edit it
+with any tool, back it up and keep its scripts beside it: its relative hook and
+setup paths name scripts there, made absolute when it loads. Key edits run in the daemon, serialized with moves
+and removal, hold the file's lock, keep a backup and save only a valid result,
+as global edits do; unset restores lower-layer values.
+It moves with the repository's directory and is deleted with the registration.
+Every option that does not describe the machine may be set at either level and
+resolves per option: local config, worktree file, global config, then the
+built-in default.
+One declaration of each option, the field of the repository schema with its
+kind, generates its built-in default, merge, resolved form and provenance, so a
+reported layer is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
-Prompt templates select repository additions by saved/worktree precedence and
+Prompt templates select repository additions by local/worktree precedence and
 append them to global guidance, using the bundled chat template when
 no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below
@@ -1655,13 +1671,12 @@ The issue prompt is built in and states only the task, pointing to `shoal view`
 for the rest: a seeded issue template froze the default for whoever had a copy,
 and instructions for issue work belong in the worker template. That template was
 the agent template, a name that read as one per AI tool although it applies to
-every workspace agent. A retired or renamed setting still loads; `config show`
-warns about it in every layer, and the daemon alerts about one in the global
-config when it starts or reloads its config.
+every workspace agent. Former option names fail as unknown keys rather than
+loading with a warning: the format broke once, so no setting keeps two names.
 Before a workspace exists, the registered checkout's file stands in for the
 worktree's. Repository config is read per request, so changes need no restart
 and leave existing leases alone. Repository config cannot expand machine
-policy: `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
+policy: the `[machine]` table holds `root_dir`, simulator limits and profiles, Git profile definitions, and global resource
 definitions stay global; global pools span repositories, repository pools span
 that repository's worktrees.
 The repository `[env]` table layers by variable name and is rendered once when a
@@ -1719,7 +1734,7 @@ authorized record through mutation, including when a coordinating agent decides.
 a branch (see scope), resource access, and issues and PRs an agent proposed.
 
 In a shared repository everything an agent opens is seen by other people, so
-`[approvals] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
+`[permissions] issue_open` and `pr_open` can make a scoped `issue open` or `pr open`
 propose instead of open (`"direct"` is the default; unscoped callers always open).
 A proposal is an approval request whose record carries the command's options with
 their defaults resolved, the workspace, branch, commit and agent, and copies of its
@@ -1749,7 +1764,7 @@ Item commands that need only a repository also run from a registered checkout,
 where a chat runs with the user's authority: they act as the repository's agent
 account under its settings, open without a proposal, and link or record nothing,
 since only a workspace holds links; workspace processes act from their workspace.
-People outside the project see such an issue, so `[issue] other_repositories`
+People outside the project see such an issue, so `[permissions] issue_other_repositories`
 governs scoped callers separately from `issue_open`: `"propose"` by default,
 `"direct"`, or `"deny"`. The workspace's required labels and templates describe
 its own repository and do not apply there, and the issue cannot be linked, since
@@ -1802,7 +1817,7 @@ workspace: one that needs the user asks, and an open question, like a hold, keep
 workspace from every unattended removal, completion and PR cleanup included. So
 does an agent launch waiting in the agent queue to start in the workspace.
 
-Workspace completion uses `[done] cleanup` (default true), resolved through the
+Workspace completion uses `[cleanup.done] enabled` (default true), resolved through the
 normal configuration layers, and an explicit cleanup override. Only an
 explicit done signal completes an assignment; issue closure and merges do not,
 and merged cleanup removes unused merged workspaces from their state instead.
@@ -1819,7 +1834,7 @@ files go with it. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
 defers cleanup: only holds, open questions, a pending PR proposal and queued
 agent launches keep a workspace.
-The daemon runs `post_done_cmd`
+The daemon runs `hooks.post_done`
 after persisting completion and before cleanup, using normal
 config precedence and the worktree's hook identity plus the keep/cleanup choice.
 It is bounded, excludes lifecycle and permit changes, and reports failure through

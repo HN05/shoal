@@ -71,7 +71,7 @@ async fn env_overrides_the_workspace_tmpdir() {
         .await
         .unwrap();
     manager
-        .set_repository_config(&repo.id, Some("[env]\nTMPDIR = '/scratch'\n".into()))
+        .write_local_config(&repo.id, Some("[env]\nTMPDIR = '/scratch'\n".into()))
         .await
         .unwrap();
     let workspace = manager

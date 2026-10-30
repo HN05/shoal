@@ -272,3 +272,32 @@ fn retried_jobs_report_their_newest_attempt() {
     let unknown = [json!({"id": 1, "name": "x", "status": "later"})];
     assert!(latest_checks(&unknown).is_err());
 }
+
+#[test]
+fn comment_edits_replace_the_body_of_an_items_note() {
+    let repo = gitlab();
+    let pull = repo.item_endpoint(ItemKind::Pr, 7);
+    let inline = GitLab
+        .edit_comment(&repo, ItemKind::Pr, 7, Subject::ReviewComment(40), "Why?")
+        .unwrap();
+    assert_eq!(
+        inline,
+        Request::new(
+            HttpMethod::Put,
+            format!("{pull}/notes/40"),
+            Some(json!({"body": "Why?"})),
+        )
+    );
+    let issue = GitLab
+        .edit_comment(&repo, ItemKind::Issue, 3, Subject::Comment(41), "Fixed")
+        .unwrap();
+    assert_eq!(
+        issue.endpoint,
+        format!("{}/notes/41", repo.item_endpoint(ItemKind::Issue, 3))
+    );
+    assert!(
+        GitLab
+            .edit_comment(&repo, ItemKind::Pr, 7, Subject::Item, "Body")
+            .is_err()
+    );
+}

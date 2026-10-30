@@ -2,7 +2,7 @@
 //! views, and added or removed as the acting account's own.
 pub mod allowed;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use futures_util::{StreamExt as _, TryStreamExt as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -11,7 +11,7 @@ use crate::{
     ForgeRepo,
     account::Account,
     backends::Backend,
-    items::{action::Acted, link::ItemKind},
+    items::{action::Acted, comment, link::ItemKind},
     review::view::Details,
     transport::api::Request,
 };
@@ -134,7 +134,7 @@ impl ForgeRepo {
     ) -> Result<Acted> {
         let item = self.read(account, kind, number).await?.item;
         let subject = match change.comment {
-            Some(id) => self.comment_subject(account, kind, number, id).await?,
+            Some(id) => self.find_comment(account, kind, number, id).await?.subject,
             None => Subject::Item,
         };
         let request = self
@@ -147,38 +147,6 @@ impl ForgeRepo {
             item,
             authored: Vec::new(),
         })
-    }
-
-    /// Comment `comment` of item `number` as a reaction's subject, found
-    /// among the item's comments and inline comments, which forges number
-    /// apart or let a comment endpoint reach another item's.
-    async fn comment_subject(
-        &self,
-        account: &Account,
-        kind: ItemKind,
-        number: u64,
-        comment: u64,
-    ) -> Result<Subject> {
-        let mut details = self
-            .kind
-            .view_details(self, account, kind, number, true)
-            .await?;
-        let mut errors = Vec::new();
-        details.reviews = self
-            .kind
-            .view_discussion(self, account, kind, number, &mut details, &mut errors)
-            .await?;
-        let found = subjects(&details).into_iter().find(|subject| {
-            matches!(subject, Subject::Comment(id) | Subject::ReviewComment(id) if *id == comment)
-        });
-        match (found, errors.as_slice()) {
-            (Some(subject), _) => Ok(subject),
-            (None, []) => bail!("#{number} has no comment {comment}"),
-            (None, errors) => bail!(
-                "#{number} has no comment {comment} that Shoal could read: {}",
-                errors.join("; ")
-            ),
-        }
     }
 
     /// The request that makes `change` to the reactions on `subject`, after
@@ -231,15 +199,8 @@ impl ForgeRepo {
 
 /// The item, its comments and its reviews' inline comments, in that order.
 fn subjects(details: &Details) -> Vec<Subject> {
-    let comments = details.comments.iter().flatten();
-    let review_comments = details
-        .reviews
-        .iter()
-        .flatten()
-        .flat_map(|review| &review.comments);
     std::iter::once(Subject::Item)
-        .chain(comments.map(|comment| Subject::Comment(comment.id)))
-        .chain(review_comments.map(|comment| Subject::ReviewComment(comment.id)))
+        .chain(comment::comments(details).map(|shown| shown.subject))
         .collect()
 }
 

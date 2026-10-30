@@ -1,5 +1,5 @@
 //! The Herdr workspace a start without a pane of its own opens its tab in:
-//! the one `[herdr] workspace_name` names, found by label or created.
+//! the one `[terminal.herdr] workspace_name` names, found by label or created.
 use std::{collections::BTreeMap, path::Path};
 
 use anyhow::{Context as _, Result};

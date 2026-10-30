@@ -553,7 +553,8 @@ async fn prepare_overload_stop(
 ) -> PreparedStop {
     // Read the policy now, so a reload applies to running agents.
     let recovering = stopping.recover
-        && (!protection.follows_overload_recovery() || manager.config().overload.recovery.enabled);
+        && (!protection.follows_overload_recovery()
+            || manager.config().machine.overload.recovery.enabled);
     let update_hold = manager
         .take_update_hold(stopping.execution_id)
         .await

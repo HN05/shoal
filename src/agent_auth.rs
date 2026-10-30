@@ -1,13 +1,15 @@
 //! User-owned forge authentication wrappers and a Git profile, selected only
 //! for agent launches.
+use crate::config::options::Options;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
-pub struct Config {
+#[options(resolved = Self)]
+pub struct ForgeClis {
     pub fj: Option<PathBuf>,
     /// The HOME the agent's `fj` runs with, holding the login Shoal uses for
     /// the agent's Forgejo API requests.
@@ -18,23 +20,23 @@ pub struct Config {
     /// The agent's `tea`, whose login stands for the agent on Gitea and on
     /// Forgejo hosts without `fj_home`.
     pub tea: Option<PathBuf>,
-    pub git_profile: Option<String>,
 }
 
-impl Config {
-    /// The child's environment changes for the agent's account; nested commands
-    /// inherit it.
+impl ForgeClis {
+    /// The child's environment changes for the agent's account, with the Git
+    /// profile `git_profile` names; nested commands inherit it.
     pub fn prepare(
         &self,
+        git_profile: Option<&str>,
         paths: &crate::paths::Paths,
         git: &crate::git_profile::Git,
     ) -> Result<Launch> {
         self.validate()?;
-        let git = match &self.git_profile {
+        let git = match git_profile {
             Some(name) => git
                 .profile(name)
                 .and_then(|profile| profile.settings())
-                .with_context(|| format!("agent_auth.git_profile {name}"))?,
+                .with_context(|| format!("agent.git_profile {name}"))?,
             None => Vec::new(),
         };
         Ok(Launch {
@@ -58,10 +60,10 @@ impl Config {
             let Some(path) = path else { continue };
             let path = crate::fsutil::expand_home(path, &paths.home);
             let executable = crate::fsutil::is_executable(&path)
-                .with_context(|| format!("agent_auth.{name}: inspect {}", path.display()))?;
+                .with_context(|| format!("agent.forge_clis.{name}: inspect {}", path.display()))?;
             ensure!(
                 executable,
-                "agent_auth.{name}: {} is not an executable file",
+                "agent.forge_clis.{name}: {} is not an executable file",
                 path.display()
             );
             std::os::unix::fs::symlink(&path, directory.path().join(name))?;
@@ -73,23 +75,13 @@ impl Config {
     /// What tells the forge logins this configuration selects apart, or none
     /// when the agent uses the user's own.
     pub fn forge_identity(&self) -> Result<Option<String>> {
-        let logins = Self {
-            git_profile: None,
-            ..self.clone()
-        };
-        if [
-            &logins.fj,
-            &logins.fj_home,
-            &logins.gh,
-            &logins.glab,
-            &logins.tea,
-        ]
-        .iter()
-        .all(|login| login.is_none())
+        if [&self.fj, &self.fj_home, &self.gh, &self.glab, &self.tea]
+            .iter()
+            .all(|login| login.is_none())
         {
             return Ok(None);
         }
-        Ok(Some(serde_json::to_string(&logins)?))
+        Ok(Some(serde_json::to_string(self)?))
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -104,12 +96,9 @@ impl Config {
                 ensure!(
                     (path.is_absolute() || path.starts_with("~/"))
                         && !path.as_os_str().as_encoded_bytes().contains(&0),
-                    "agent_auth.{name} must be an absolute or ~/ path"
+                    "agent.forge_clis.{name} must be an absolute or ~/ path"
                 );
             }
-        }
-        if let Some(name) = &self.git_profile {
-            crate::validate::name("git profile", name)?;
         }
         Ok(())
     }

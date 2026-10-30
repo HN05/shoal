@@ -1,23 +1,14 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
 use std::{fs, io::Write, path::Path};
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 
 use crate::{config::Config, paths::Paths};
 
 pub use super::placeholders::render;
 
-/// Retired with issue templates, now that the issue prompt is built in; read
-/// only to warn about instructions it still holds.
-pub const RETIRED_ISSUE_FILE: &str = "issue-template.md";
-/// What `install` used to seed as the issue template, which holds no
-/// instructions of the user's.
-const RETIRED_ISSUE_DEFAULT: &str =
-    "Work on issue #{number}: {title}\n{url}\n\nIssue details:\n{body}";
 pub const WORKER_FILE: &str = "worker-template.md";
-/// What `worker-template.md` was called; still read, with a rename warning.
-pub const RENAMED_AGENT_FILE: &str = "agent-template.md";
-/// Sent to every agent launch ahead of the user's `worker_template` additions.
+/// Sent to every agent launch ahead of the user's `agent.templates.worker` additions.
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
@@ -25,35 +16,6 @@ pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
     crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))
-}
-
-/// Refuse one level setting the worker template under both its names.
-pub fn ensure_one_worker(worker: &Option<String>, renamed: &Option<String>) -> Result<()> {
-    ensure!(
-        worker.is_none() || renamed.is_none(),
-        "worker_template and its former name agent_template are both set; keep only worker_template"
-    );
-    Ok(())
-}
-
-/// Fill one level's omitted inline worker template from `worker-template.md`,
-/// or the file's former name, in `directory`; both files at once is an error.
-pub fn read_worker(
-    directory: &Path,
-    worker: &mut Option<String>,
-    renamed: &mut Option<String>,
-) -> Result<()> {
-    if worker.is_some() || renamed.is_some() {
-        return Ok(());
-    }
-    *worker = read(directory, WORKER_FILE)?;
-    *renamed = read(directory, RENAMED_AGENT_FILE)?;
-    ensure!(
-        worker.is_none() || renamed.is_none(),
-        "both {WORKER_FILE} and {RENAMED_AGENT_FILE} exist in {}; keep only {WORKER_FILE}",
-        directory.display()
-    );
-    Ok(())
 }
 
 pub fn install(paths: &Paths) -> Result<()> {
@@ -82,12 +44,6 @@ fn install_at(directory: &Path) -> Result<()> {
 pub fn repeats_guidance(template: &str) -> bool {
     let opening = AGENT_GUIDANCE.lines().next().unwrap_or_default();
     template.lines().any(|line| line.trim() == opening)
-}
-
-/// Whether a retired issue template holds instructions the user wrote.
-pub fn is_custom_issue_template(template: &str) -> bool {
-    let template = template.trim();
-    !template.is_empty() && template != RETIRED_ISSUE_DEFAULT
 }
 
 /// Chat `instructions` sent as an agent's first message, which starts a turn

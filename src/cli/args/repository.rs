@@ -59,7 +59,7 @@ pub enum ForgeCommand {
     /// Send a request to the repository's forge API and print its JSON response.
     ///
     /// Workspace processes send it as the agent account, and only GET unless
-    /// `[api] agent_writes` lets agents send others; anyone else sends any
+    /// `[permissions] api_writes` lets agents send others; anyone else sends any
     /// request with your own logins.
     Api(ApiArgs),
 }
@@ -77,16 +77,10 @@ pub enum RepoCommand {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
-    /// Show or replace repository configuration stored locally by Shoal.
+    /// Show the path and contents of the repository's local config.
     Config {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Import TOML as the complete config for all this repository's workspaces.
-        #[arg(long, conflicts_with = "clear", value_hint = clap::ValueHint::FilePath)]
-        file: Option<PathBuf>,
-        /// Remove the local config and use each worktree's repository config again.
-        #[arg(long)]
-        clear: bool,
     },
     /// Register a local checkout (no remote required), or clone a repository URL.
     Add {
@@ -107,7 +101,7 @@ pub enum RepoCommand {
     Setup {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Arguments forwarded to the agent.

@@ -167,7 +167,7 @@ pub struct Removal {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MarkDone {
     pub workspace: String,
-    /// Remove the workspace once it qualifies, even where `[done] cleanup` is false.
+    /// Remove the workspace once it qualifies, even where `[cleanup.done] enabled` is false.
     #[serde(default)]
     pub cleanup: bool,
 }

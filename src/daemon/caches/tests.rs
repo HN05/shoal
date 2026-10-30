@@ -142,7 +142,7 @@ async fn hooks_the_cli_runs_find_their_caches_prepared() {
     let repo = manager.repository(&repo.id).await.unwrap();
     std::fs::write(
         workspace.path.join(".shoal.toml"),
-        "post_setup_cmd = 'attach.sh'\n[caches.go]\nscope = 'shared'\n",
+        "hooks.post_setup = 'attach.sh'\n[caches.go]\nscope = 'shared'\n",
     )
     .unwrap();
     manager

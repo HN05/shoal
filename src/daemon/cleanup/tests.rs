@@ -421,7 +421,7 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
     manager.undo_done(&workspace.id).await.unwrap();
 
     manager
-        .set_repository_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
         .await
         .unwrap();
     let status = manager.workspace_status(&workspace.id).await.unwrap();
@@ -559,7 +559,7 @@ async fn cleanup_preserves_work_and_rechecks_activity_before_deleting() {
     let final_snapshot = snapshot(&manager).await.unwrap();
     // The repository's own idle delay applies before the global default.
     manager
-        .set_repository_config(&repo.id, Some("[cleanup.auto]\nidle_minutes = 60\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup.auto]\nidle_minutes = 60\n".into()))
         .await
         .unwrap();
     let idle_for = |seconds| Idle {
@@ -604,7 +604,7 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
         .unwrap();
     // The request applies where idle cleanup is disabled.
     manager
-        .set_repository_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup.auto]\nenabled = false\n".into()))
         .await
         .unwrap();
     for name in ["broken", "dirty", "held", "idle"] {

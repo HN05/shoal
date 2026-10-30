@@ -202,7 +202,7 @@ async fn import_each(ctx: &Context, files: &[PathBuf], options: &ImportOptions) 
                 report.imported(ctx, reopened);
                 if let Err(error) = super::workspaces::run_post_setup(ctx, &workspace).await {
                     let error = error.context(format!(
-                        "imported {}, but its post_setup_cmd failed",
+                        "imported {}, but its hooks.post_setup failed",
                         workspace.name
                     ));
                     report.failed(ctx, file, &error);

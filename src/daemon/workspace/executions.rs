@@ -608,10 +608,10 @@ impl Manager {
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 let setup_cmd = self.workspace_hook(workspace, HookKind::Setup).await?;
                 let pre_setup = self.workspace_hook(workspace, HookKind::PreSetup).await?;
-                let copy_ignored = self.workspace_settings(workspace).await?.copy_ignored;
+                let copy_ignored = self.workspace_settings(workspace).await?.setup.copy_ignored;
                 ensure!(
                     setup_cmd.is_some() || pre_setup.is_some() || copy_ignored,
-                    "no setup configured; set setup_cmd, pre_setup_cmd or copy_ignored"
+                    "no setup configured; set setup.command, hooks.pre_setup or setup.copy_ignored"
                 );
                 let mode = if pre_setup.is_some() {
                     GuardMode::Exclusive

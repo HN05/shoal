@@ -37,7 +37,7 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 /// Longest a seed build may run before it is killed and reported.
 const BUILD_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
-/// What one repository's seed builds, from its resolved `[seed]` table.
+/// What one repository's seed builds, from its resolved `[setup.seed]` table.
 struct Plan {
     branch: String,
     build: Build,
@@ -49,8 +49,8 @@ struct Plan {
 impl Plan {
     /// The seed `settings` describe, or `None` when they configure none.
     async fn new(repo: &Repository, layout: &Layout, settings: &Effective) -> Result<Option<Self>> {
-        let presets = settings.presets.as_deref().unwrap_or_default();
-        let Some(build) = Build::of(&settings.seed, presets, &layout.worktree()) else {
+        let presets = settings.setup.presets.as_deref().unwrap_or_default();
+        let Some(build) = Build::of(&settings.setup.seed, presets, &layout.worktree()) else {
             return Ok(None);
         };
         let branch = default_branch::resolve(&repo.path, DefaultBranchLookup::Cached).await?;
@@ -64,7 +64,7 @@ impl Plan {
         );
         Ok(Some(Self {
             build,
-            paths: build::outputs(&settings.seed, presets),
+            paths: build::outputs(&settings.setup.seed, presets),
             environment: crate::env::render_configured_environment(
                 &settings.env,
                 &identity,
@@ -292,7 +292,7 @@ impl Manager {
     /// thresholds, so a seed build adds no load to a strained host. A failed
     /// reading defers the build.
     fn seed_headroom(&self, layout: &Layout) -> bool {
-        let overload = &self.config().overload;
+        let overload = &self.config().machine.overload;
         let sample = capacity::sample(&[self.paths.state.as_path(), layout.root()], overload, None);
         let disk_floor = if overload.warning.enabled {
             overload.warning.disk_free_bytes()
@@ -561,7 +561,7 @@ async fn exited(pid: i32) -> Result<()> {
             }
             let error = std::io::Error::last_os_error();
             if error.kind() != std::io::ErrorKind::Interrupted {
-                return Err(error).context("wait for seed.cmd");
+                return Err(error).context("wait for setup.seed.command");
             }
         }
     })

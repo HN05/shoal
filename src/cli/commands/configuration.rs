@@ -8,7 +8,7 @@ use crate::{
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{self, edit::Change, repo::LocalConfig},
+    config::{self, edit::Change},
     env,
     protocol::ConfigTarget,
 };
@@ -46,15 +46,17 @@ pub(super) async fn edit(
 ) -> Result<i32> {
     if let Some(repository) = repository {
         let repository = crate::cli::ui::repository_selector(repository)?;
-        let config = crate::cli::client::request::<LocalConfig>(
+        // The daemon edits the file, holding off moves and removal; it reads
+        // the file on each request, so nothing reloads.
+        let edit = crate::cli::client::request::<crate::model::LocalConfigEdit>(
             &ctx.paths,
-            crate::protocol::RepositoryMethod::EditRepositoryConfig {
+            crate::protocol::RepositoryMethod::EditLocalConfig {
                 repository,
                 changes,
             },
         )
         .await?;
-        ctx.emit("Updated saved repository config", &config)?;
+        ctx.emit(&format!("Updated {}", edit.config.display()), &edit)?;
         return Ok(0);
     }
     let (path, backup) = crate::config::Config::edit(&ctx.paths, &changes)?;

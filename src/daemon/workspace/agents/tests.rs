@@ -22,7 +22,10 @@ async fn agent_exit_hook_reports_disconnects_and_skips_removing_workspaces() {
     fs::write(&hook, "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$SHOAL_AGENT\" \"$SHOAL_AGENT_EXIT_CODE\" \"$SHOAL_AGENT_EXIT_COMPLETE\" >> exits\n").unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(&repo.id, Some("post_agent_exit_cmd = 'exited'\n".into()))
+        .write_local_config(
+            &repo.id,
+            Some(format!("hooks.post_agent_exit = '{}'\n", hook.display())),
+        )
         .await
         .unwrap();
     let cleanup_woken = manager.signals.cleanup_woken();
@@ -111,7 +114,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         .await
         .unwrap();
     for (recover, enabled, expected) in [
-        (false, true, "configure [agent_resume]"),
+        (false, true, "resume_command with a session restore command"),
         (true, false, "automatic recovery disabled"),
         (
             true,
@@ -120,7 +123,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         ),
     ] {
         let mut config = crate::config::Config::default();
-        config.overload.recovery.enabled = enabled;
+        config.machine.overload.recovery.enabled = enabled;
         manager.publish_config(config);
         let execution = manager
             .begin_execution(&workspace.id, None, ExecutionKind::Command, None)

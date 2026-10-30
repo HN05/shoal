@@ -2,7 +2,7 @@ use super::*;
 use crate::sessions::HostName;
 
 fn settings(global: &str) -> Effective {
-    let config: crate::config::Config = toml::from_str(global).unwrap();
+    let config = crate::config::Config::from_toml(global).unwrap();
     config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap()
@@ -10,7 +10,7 @@ fn settings(global: &str) -> Effective {
 
 /// Settings with `repository` as the repository's own config file.
 fn repository_settings(global: &str, repository: &str) -> Effective {
-    let config: crate::config::Config = toml::from_str(global).unwrap();
+    let config = crate::config::Config::from_toml(global).unwrap();
     config
         .resolve(&crate::config::repo::ConfigLayers {
             worktree_file: crate::config::repo::parse(repository).unwrap(),
@@ -51,11 +51,14 @@ fn a_start_falls_back_to_its_group_then_the_default_host() {
         );
     }
     assert_eq!(
-        order(&settings("default_host = 'rex'"), None),
+        order(&settings("terminal.default_host = 'rex'"), None),
         [(Rex, false)]
     );
     assert_eq!(
-        order(&settings("default_host = 'herdr'"), Some(&origin(Rex))),
+        order(
+            &settings("terminal.default_host = 'herdr'"),
+            Some(&origin(Rex))
+        ),
         [(Rex, true), (Rex, false), (Herdr, false)]
     );
 }
@@ -64,11 +67,17 @@ fn a_start_falls_back_to_its_group_then_the_default_host() {
 fn hosts_turned_off_go_straight_to_the_default_host() {
     use HostName::*;
     assert_eq!(
-        order(&settings("[rex]\nnew_window = false"), Some(&origin(Rex))),
+        order(
+            &settings("[terminal.rex]\nnew_window = false"),
+            Some(&origin(Rex))
+        ),
         [(Zmx, false)]
     );
     assert_eq!(
-        order(&settings("[herdr]\nnew_tab = false"), Some(&origin(Herdr))),
+        order(
+            &settings("[terminal.herdr]\nnew_tab = false"),
+            Some(&origin(Herdr))
+        ),
         [(Zmx, false)]
     );
     assert_eq!(order(&settings(""), None), [(Zmx, false)]);
@@ -80,12 +89,15 @@ fn a_start_queued_from_a_place_outside_a_group_goes_to_the_default_host() {
     let session = Origin::created(Zmx, "session".into());
     assert_eq!(order(&settings(""), Some(&session)), [(Zmx, false)]);
     assert_eq!(
-        order(&settings("default_host = 'herdr'"), Some(&session)),
+        order(&settings("terminal.default_host = 'herdr'"), Some(&session)),
         [(Herdr, false)]
     );
     let ungrouped = Origin::created(Rex, "block".into());
     assert_eq!(
-        order(&settings("default_host = 'herdr'"), Some(&ungrouped)),
+        order(
+            &settings("terminal.default_host = 'herdr'"),
+            Some(&ungrouped)
+        ),
         [(Herdr, false)]
     );
 }
@@ -94,10 +106,22 @@ fn a_start_queued_from_a_place_outside_a_group_goes_to_the_default_host() {
 fn a_default_host_config_turns_off_leaves_queued_starts_no_host() {
     use HostName::*;
     let turned_off = [
-        ("default_host = 'rex'", "[rex]\nenabled = false"),
-        ("default_host = 'rex'", "[rex]\nnew_window = false"),
-        ("default_host = 'herdr'", "[herdr]\nenabled = false"),
-        ("default_host = 'herdr'", "[herdr]\nnew_tab = false"),
+        (
+            "terminal.default_host = 'rex'",
+            "[terminal.rex]\nenabled = false",
+        ),
+        (
+            "terminal.default_host = 'rex'",
+            "[terminal.rex]\nnew_window = false",
+        ),
+        (
+            "terminal.default_host = 'herdr'",
+            "[terminal.herdr]\nenabled = false",
+        ),
+        (
+            "terminal.default_host = 'herdr'",
+            "[terminal.herdr]\nnew_tab = false",
+        ),
     ];
     for (global, repository) in turned_off {
         let settings = repository_settings(global, repository);
@@ -106,15 +130,18 @@ fn a_default_host_config_turns_off_leaves_queued_starts_no_host() {
         assert!(first_queued_host(&settings, None).is_none(), "{repository}");
     }
     // A start from a grouped place still joins its group.
-    let settings = repository_settings("default_host = 'herdr'", "[herdr]\nenabled = false");
+    let settings = repository_settings(
+        "terminal.default_host = 'herdr'",
+        "[terminal.herdr]\nenabled = false",
+    );
     assert_eq!(
         order(&settings, Some(&origin(Rex))),
         [(Rex, true), (Rex, false)]
     );
     for (global, host) in [
         ("", Zmx),
-        ("default_host = 'rex'", Rex),
-        ("default_host = 'herdr'", Herdr),
+        ("terminal.default_host = 'rex'", Rex),
+        ("terminal.default_host = 'herdr'", Herdr),
     ] {
         let settings = repository_settings(global, "");
         let first = first_queued_host(&settings, None).map(|first| first.host.name());

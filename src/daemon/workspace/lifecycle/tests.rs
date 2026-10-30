@@ -21,7 +21,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
 }
 
 async fn fixture_with_removal_hook(script: &str) -> (tempfile::TempDir, Arc<Manager>, Workspace) {
-    fixture_with_hook("pre_remove_cmd", |_| script.to_owned()).await
+    fixture_with_hook("hooks.pre_remove", |_| script.to_owned()).await
 }
 
 /// A workspace whose repository runs `script(root)` as the `key` hook.
@@ -901,7 +901,7 @@ async fn removal_stops_processes_carrying_the_workspace_identity() {
 #[tokio::test]
 async fn removal_stops_processes_its_post_remove_hook_leaves() {
     // The hook returns once its background process has written its PID.
-    let (root, manager, workspace) = fixture_with_hook("post_remove_cmd", |root| {
+    let (root, manager, workspace) = fixture_with_hook("hooks.post_remove", |root| {
         let pid = root.join("background");
         format!(
             "python3 -c \"import os, time; os.setsid(); \
@@ -1077,7 +1077,7 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
 async fn removal_leaves_detached_processes_in_a_replaced_worktree_alone() {
     // The hook replaces the worktree and leaves a detached process running in
     // the replacement, without the workspace identity hooks pass on.
-    let (root, manager, workspace) = fixture_with_hook("pre_remove_cmd", |root| {
+    let (root, manager, workspace) = fixture_with_hook("hooks.pre_remove", |root| {
         format!(
             r#"common=$(git rev-parse --path-format=absolute --git-common-dir)
 branch=$(git symbolic-ref --short HEAD)

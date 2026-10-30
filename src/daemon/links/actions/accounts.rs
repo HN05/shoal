@@ -19,7 +19,8 @@ const USER_LOGINS: &str = "user";
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().bitbucket).remembering(self.forge_memories.of(USER_LOGINS))
+        Account::user(&self.config().machine.bitbucket)
+            .remembering(self.forge_memories.of(USER_LOGINS))
     }
 
     pub(in crate::daemon::links) async fn agent_account(
@@ -39,9 +40,13 @@ impl Manager {
         config: &Config,
         settings: &Effective,
     ) -> Result<Account> {
-        let auth = &settings.agent_auth;
+        let auth = &settings.agent.forge_clis;
         let logins = AgentLogins {
-            launch: Box::new(auth.prepare(&self.paths, &config.git)?),
+            launch: Box::new(auth.prepare(
+                settings.agent.git_profile.as_deref(),
+                &self.paths,
+                &config.machine.git_profiles,
+            )?),
             fj_home: (auth.fj_home.as_ref()).map(|home| expand_home(home, &self.paths.home)),
             fj: auth.fj.is_some(),
             tea: auth.tea.is_some(),
@@ -51,10 +56,8 @@ impl Manager {
             Some(logins) => format!("agent {logins}"),
             None => USER_LOGINS.to_owned(),
         };
-        Ok(
-            Account::agent(logins, &config.bitbucket)
-                .remembering(self.forge_memories.of(&identity)),
-        )
+        Ok(Account::agent(logins, &config.machine.bitbucket)
+            .remembering(self.forge_memories.of(&identity)))
     }
 
     /// The forge of the workspace's `origin`.

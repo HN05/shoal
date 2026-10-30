@@ -111,7 +111,7 @@ impl Account {
     pub(crate) async fn forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
         ensure!(
             !self.fj_home_missing,
-            "set agent_auth.fj_home to the HOME the agent's fj wrapper uses, so Shoal can use the agent's Forgejo login"
+            "set agent.forge_clis.fj_home to the HOME the agent's fj wrapper uses, so Shoal can use the agent's Forgejo login"
         );
         if self.fj_keys.is_some() || self.tea {
             return self.agent_forgejo_login(host).await;

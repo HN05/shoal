@@ -136,7 +136,11 @@ impl Manager {
         caller: Option<&Caller>,
     ) -> Result<Acquisition> {
         let workspace = self.workspace(selector).await?;
-        let ports = self.workspace_settings(&workspace).await?.ports;
+        let ports = self
+            .workspace_settings(&workspace)
+            .await?
+            .into_settings()
+            .ports;
         let claim =
             PortClaim::resolve(workspace.id.clone(), name, request, ports, caller.is_some())?;
         self.touch(&workspace.id).await;
@@ -167,7 +171,11 @@ impl Manager {
 
     pub async fn port_catalog(&self, selector: &str) -> Result<PortCatalog> {
         let workspace = self.workspace(selector).await?;
-        let ports = self.workspace_settings(&workspace).await?.ports;
+        let ports = self
+            .workspace_settings(&workspace)
+            .await?
+            .into_settings()
+            .ports;
         Ok(PortCatalog {
             workspace,
             start: ports.start,

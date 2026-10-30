@@ -254,7 +254,7 @@ async fn save_root(ctx: &Context, root: &Path) -> Result<()> {
     Config::edit(
         &ctx.paths,
         &[Change {
-            key: "root_dir".into(),
+            key: "machine.root_dir".into(),
             value: Some(value.to_string()),
         }],
     )?;

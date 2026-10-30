@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
-    config::repo::{ConfigLayers, LocalConfig},
+    config::repo::ConfigLayers,
     daemon::{
         allocation::Allocation,
         events::EventItem,
@@ -70,7 +70,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 162;
+pub const VERSION: u32 = 165;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -438,6 +438,31 @@ crate::state::open_enum! {
         /// A restart continues once the stopped agent's remaining processes
         /// exit, which the message names.
         RestartWaits => "restart_waits",
+        /// The workspace, repository, link, question or approval does not exist.
+        NotFound => "not_found",
+        /// A workspace, an unfinished rename or a running chat has the name or
+        /// branch.
+        NameTaken => "name_taken",
+        /// The workspace is not ready, or its worktree is not verified as its own.
+        NotReady => "not_ready",
+        /// Removal would delete unsaved work the caller did not confirm.
+        UnsavedWork => "unsaved_work",
+    }
+}
+
+impl ErrorCode {
+    /// Whether a failure's message says all its code does: `operation_failed`
+    /// is every failure without a more specific code, and a refusal's message
+    /// states the refusal.
+    fn in_message(&self) -> bool {
+        matches!(
+            self,
+            Self::OperationFailed
+                | Self::NotFound
+                | Self::NameTaken
+                | Self::NotReady
+                | Self::UnsavedWork
+        )
     }
 }
 
@@ -481,7 +506,8 @@ response_bodies! {
     Status(DaemonStatus),
     Repositories(Vec<Repository>),
     Repository(Repository),
-    RepositoryConfig(LocalConfig),
+    LocalConfigPath(std::path::PathBuf),
+    LocalConfigEdit(crate::model::LocalConfigEdit),
     RepositoryRemoved(RepositoryRemoval),
     RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),
@@ -595,11 +621,10 @@ pub struct RemoteError {
     pub message: String,
 }
 
-/// `operation_failed` is every failure without a more specific code, so only
-/// the specific codes add to the message.
+/// Only a code the message does not state adds to it.
 impl std::fmt::Display for RemoteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.code == ErrorCode::OperationFailed {
+        if self.code.in_message() {
             return f.write_str(&self.message);
         }
         write!(f, "{}: {}", self.code, self.message)

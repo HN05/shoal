@@ -111,7 +111,7 @@ pub(super) async fn pause(
     let resume = async {
         let grant = ready?;
         ensure!(
-            !follows_policy || manager.config().overload.recovery.enabled,
+            !follows_policy || manager.config().machine.overload.recovery.enabled,
             "overload recovery was disabled while the agent waited"
         );
         prepare_resume(manager, execution_id, workspace_id, grant, &protection).await
@@ -302,7 +302,7 @@ async fn requested_cancel(manager: &Manager, execution_id: &str) -> Cancel {
 async fn recovery_disabled(manager: &Manager) {
     let mut config = manager.config_state.watch();
     if config
-        .wait_for(|config| !config.overload.recovery.enabled)
+        .wait_for(|config| !config.machine.overload.recovery.enabled)
         .await
         .is_err()
     {

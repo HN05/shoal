@@ -1,0 +1,16 @@
+[package]
+name = "shoal-config-derive"
+version = "0.1.0"
+description = "Derive the resolved form, built-in layer and layering of Shoal's config options"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }

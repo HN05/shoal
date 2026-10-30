@@ -14,10 +14,10 @@ pub enum AgentsCommand {
     /// Run Claude Code or open the Claude app.
     Claude {
         workspace: Option<String>,
-        /// Run the Claude Code CLI, overriding claude.default_mode.
+        /// Run the Claude Code CLI, overriding agents.claude.default_mode.
         #[arg(long, conflicts_with = "app")]
         cli: bool,
-        /// Open the workspace in the Claude app, overriding claude.default_mode.
+        /// Open the workspace in the Claude app, overriding agents.claude.default_mode.
         #[arg(long, conflicts_with = "cli")]
         app: bool,
         #[arg(last = true)]
@@ -26,10 +26,10 @@ pub enum AgentsCommand {
     /// Run Codex CLI or open the Codex app.
     Codex {
         workspace: Option<String>,
-        /// Run the Codex CLI, overriding codex.default_mode.
+        /// Run the Codex CLI, overriding agents.codex.default_mode.
         #[arg(long, conflicts_with = "app")]
         cli: bool,
-        /// Open the workspace in the Codex app, overriding codex.default_mode.
+        /// Open the workspace in the Codex app, overriding agents.codex.default_mode.
         #[arg(long, conflicts_with = "cli")]
         app: bool,
         #[arg(last = true)]
@@ -55,7 +55,7 @@ pub enum AgentsCommand {
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Name of the chat; defaults to <repo>-chat, asked for on a terminal.
@@ -85,7 +85,7 @@ pub enum AgentsCommand {
         /// Run in the current pane instead of opening a Herdr tab.
         #[arg(long)]
         here: bool,
-        /// Agent to start; defaults to default_agent, otherwise a picker.
+        /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
         /// Name of the chat; defaults to <repo>-plan-<issue number>.

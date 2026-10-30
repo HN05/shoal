@@ -42,7 +42,9 @@ impl Context {
     /// config names.
     pub fn forge_account(&self) -> Result<crate::forge::account::Account> {
         let config = crate::config::Config::load(&self.paths)?;
-        Ok(crate::forge::account::Account::user(&config.bitbucket))
+        Ok(crate::forge::account::Account::user(
+            &config.machine.bitbucket,
+        ))
     }
 
     /// Classify pasted links of the forge hosts the global config pins as
@@ -52,7 +54,7 @@ impl Context {
         let paths = self.paths.clone();
         crate::forge::hosts::learn_pins(move || {
             crate::config::Config::load(&paths)
-                .map(|config| config.forges.pins())
+                .map(|config| config.machine.forges.pins())
                 .unwrap_or_default()
         });
     }
@@ -62,7 +64,7 @@ impl Context {
         let config = crate::config::Config::load(&self.paths)?;
         Ok(super::forge_hosts::ForgeHosts {
             paths: &self.paths,
-            forges: config.forges,
+            forges: config.machine.forges,
         })
     }
 

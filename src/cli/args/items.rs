@@ -45,10 +45,10 @@ pub enum ItemsCommand {
         /// Withdraw ready-for-review marks from the selected items.
         #[arg(long)]
         undo: bool,
-        /// Return the PRs whose marks are withdrawn to draft, overriding [unready] draft.
+        /// Return the PRs whose marks are withdrawn to draft, overriding [pr] draft_on_unready.
         #[arg(long, requires = "undo", overrides_with = "no_draft")]
         draft: bool,
-        /// Leave the PRs' draft state unchanged, overriding [unready] draft.
+        /// Leave the PRs' draft state unchanged, overriding [pr] draft_on_unready.
         #[arg(long, requires = "undo", overrides_with = "draft")]
         no_draft: bool,
     },

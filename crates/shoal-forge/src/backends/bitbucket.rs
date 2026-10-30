@@ -23,6 +23,7 @@ use crate::{
     items::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder},
+        comment::Found,
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
         link::ItemKind,
@@ -144,7 +145,7 @@ impl Backend for Bitbucket {
     }
 
     fn login_hint(&self) -> &'static str {
-        "Bitbucket API request failed; private repositories need [bitbucket] token_command"
+        "Bitbucket API request failed; private repositories need [machine.bitbucket] token_command"
     }
 
     async fn send(
@@ -575,6 +576,22 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Reactions))
     }
 
+    /// Nicknames are not unique, so the comment's account is compared with
+    /// the login's by UUID.
+    async fn wrote(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        kind: ItemKind,
+        number: u64,
+        comment: &Found,
+    ) -> Result<bool> {
+        let endpoint = comment_endpoint(repo, kind, number, comment.subject)?;
+        let comment = repo.send(account, &Request::get(endpoint)).await?;
+        let user = repo.send(account, &Request::get("user".into())).await?;
+        same_account(&user, &comment["user"])
+    }
+
     fn add_reaction(&self, _endpoint: String, _content: &str) -> Result<Request> {
         Err(capability::unsupported(self, Capability::Reactions))
     }
@@ -708,6 +725,22 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::Attachments))
     }
 
+    /// Inline comments are among a pull request's comments.
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        kind: ItemKind,
+        number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        Ok(Request::new(
+            HttpMethod::Put,
+            comment_endpoint(repo, kind, number, subject)?,
+            Some(json!({ "content": { "raw": body } })),
+        ))
+    }
+
     fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         Vec::new()
     }
@@ -822,7 +855,7 @@ impl RestReads for Bitbucket {
     }
 }
 
-/// The `[bitbucket]` global config: how to sign in to Bitbucket Cloud.
+/// The `[machine.bitbucket]` global config: how to sign in to Bitbucket Cloud.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Credentials {
@@ -838,21 +871,21 @@ impl Credentials {
         if let Some(program) = self.token_command.first() {
             ensure!(
                 !program.is_empty(),
-                "bitbucket.token_command must name a program"
+                "machine.bitbucket.token_command must name a program"
             );
         }
         ensure!(
             self.token_command.iter().all(|word| !word.contains('\0')),
-            "bitbucket.token_command contains NUL"
+            "machine.bitbucket.token_command contains NUL"
         );
         if let Some(email) = &self.email {
             ensure!(
                 !self.token_command.is_empty(),
-                "bitbucket.email needs bitbucket.token_command"
+                "machine.bitbucket.email needs machine.bitbucket.token_command"
             );
             ensure!(
                 email.contains('@') && email.chars().all(|c| c.is_ascii_graphic()),
-                "bitbucket.email must be an email address"
+                "machine.bitbucket.email must be an email address"
             );
         }
         Ok(())
@@ -870,7 +903,7 @@ impl Credentials {
             .timeout(crate::transport::api::TIMEOUT)
             .output()
             .await
-            .context("run bitbucket.token_command")?;
+            .context("run machine.bitbucket.token_command")?;
         Ok(Some(authorization(token.trim(), self.email.as_deref())?))
     }
 }
@@ -883,7 +916,7 @@ fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
             && token
                 .chars()
                 .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
-        "bitbucket.token_command printed no token or an unexpected token format"
+        "machine.bitbucket.token_command printed no token or an unexpected token format"
     );
     let value = match email {
         Some(email) => format!("Basic {}", BASE64.encode(format!("{email}:{token}"))),
@@ -1060,6 +1093,29 @@ fn review_comment(comment: &Value, thread: u64, resolved: bool) -> ReviewComment
         resolved: Some(resolved),
         reactions: Vec::new(),
     }
+}
+
+/// The endpoint of the comment `subject` of item `number`, inline or not.
+fn comment_endpoint(
+    repo: &ForgeRepo,
+    kind: ItemKind,
+    number: u64,
+    subject: Subject,
+) -> Result<String> {
+    let (Subject::Comment(id) | Subject::ReviewComment(id)) = subject else {
+        bail!("not a comment");
+    };
+    Ok(format!(
+        "{}/comments/{id}",
+        repo.item_endpoint(kind, number)
+    ))
+}
+
+/// Whether `author`, as a comment names its user, is the account `user`
+/// describes; a deleted account's comment has no user.
+fn same_account(user: &Value, author: &Value) -> Result<bool> {
+    let own = text(&user["uuid"]).context("Bitbucket did not report your account's UUID")?;
+    Ok(text(&author["uuid"]).is_some_and(|uuid| uuid == own))
 }
 
 /// A deleted account has no user.

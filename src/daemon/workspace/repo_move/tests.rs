@@ -23,7 +23,7 @@ async fn cloned() -> Result<(
         .create_workspace(&repo.id, "feature".into(), None, None, None)
         .await?;
     let root = fs::canonicalize(temp.path())?.join("new");
-    test_support::configure(&manager, &format!("root_dir = {:?}\n", root)).await;
+    test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", root)).await;
     Ok((temp, manager, repo, workspace, root))
 }
 
@@ -36,6 +36,9 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         &repo.path,
         &["worktree", "add", "--lock", "--detach", "../.seed/worktree"],
     );
+    manager
+        .write_local_config(&repo.id, Some("[ports.web]\nport = 3000\n".into()))
+        .await?;
     // So does the workspace's temporary directory.
     let tmp_dir = crate::tmp_dirs::directory(&repo, &workspace.id)?.context("no directory")?;
     fs::write(tmp_dir.join("scratch"), "garbage")?;
@@ -50,6 +53,12 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     assert_eq!(moved.repository.workspaces_dir.as_ref(), Some(&directory));
     assert_eq!(moved.repository.path, directory.join(".checkout"));
     assert!(!old.exists());
+    // The local config moves with the repository's directory.
+    assert!(directory.join(".shoal/config.toml").exists());
+    assert_eq!(
+        manager.local_config_path(&repo.id).await?,
+        directory.join(".shoal/config.toml")
+    );
 
     let workspace = manager.workspace(&workspace.id).await?;
     assert_eq!(workspace.path, directory.join("feature"));
@@ -123,7 +132,7 @@ async fn an_interrupted_rename_finishes_and_an_incomplete_copy_rolls_back() -> R
     manager.store.quarantine_interrupted_operations().await?;
     test_support::configure(
         &manager,
-        &format!("root_dir = {root:?}\npre_setup_cmd = \"true\"\n"),
+        &format!("hooks.pre_setup = \"true\"\n[machine]\nroot_dir = {root:?}\n"),
     )
     .await;
     let error = manager
@@ -368,7 +377,7 @@ async fn a_checkout_placed_in_its_directory_moves_with_its_source() -> Result<()
         Some(fs::canonicalize(&directory)?.as_path())
     );
     let root = fs::canonicalize(temp.path())?.join("new");
-    test_support::configure(&manager, &format!("root_dir = {:?}\n", root)).await;
+    test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", root)).await;
 
     // Another checkout registered inside the directory keeps it in place.
     let other = test_support::repository(&directory, "other");
@@ -408,7 +417,7 @@ async fn refuses_a_root_inside_a_repository_directory_or_workspace() -> Result<(
         ),
         (placed.join("nested"), "inside the workspace placed"),
     ] {
-        test_support::configure(&manager, &format!("root_dir = {:?}\n", inside)).await;
+        test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", inside)).await;
         let error = manager
             .move_repositories(Layout::Regular)
             .await
@@ -484,7 +493,7 @@ async fn an_excluded_move_refuses_to_link_a_recorded_workspace_path() -> Result<
         .create_workspace(&repo.id, "placed".into(), None, None, Some(placed.clone()))
         .await?;
     fs::remove_dir_all(&placed)?;
-    test_support::configure(&manager, &format!("root_dir = {:?}\n", placed)).await;
+    test_support::configure(&manager, &format!("[machine]\nroot_dir = {:?}\n", placed)).await;
     let error = manager
         .move_repositories(Layout::Excluded)
         .await

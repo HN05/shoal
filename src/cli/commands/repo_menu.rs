@@ -68,8 +68,6 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         }),
         RepoMenuAction::Config => repo(RepoCommand::Config {
             repository: Some(picked.id),
-            file: None,
-            clear: false,
         }),
         RepoMenuAction::Setup => repo(RepoCommand::Setup {
             repository: Some(picked.id),

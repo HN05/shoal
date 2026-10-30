@@ -48,7 +48,7 @@ fn stopping_a_session_stops_the_agent_it_started() {
 
 #[test]
 fn a_workspace_session_gets_the_workspace_directories_before_its_own_arguments() {
-    let config: crate::config::Config = toml::from_str("").unwrap();
+    let config = crate::config::Config::from_toml("").unwrap();
     let settings = config
         .resolve(&crate::config::repo::ConfigLayers::default())
         .unwrap();

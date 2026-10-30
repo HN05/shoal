@@ -143,3 +143,76 @@ fn nothing() -> super::Recorded<'static> {
         workspaces: &[],
     }
 }
+
+#[tokio::test]
+async fn a_checkout_where_the_local_config_belongs_gets_its_own_directory() {
+    let (_root, manager) = crate::test_support::manager().await;
+    let root = crate::config::Config::default()
+        .root_dir(&manager.paths)
+        .unwrap();
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let checkout = crate::test_support::repository(&root.join("project"), ".shoal");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let local = manager.local_config_path(&repo.id).await.unwrap();
+    let checkout = std::fs::canonicalize(&checkout).unwrap();
+    assert!(!local.starts_with(&checkout), "{}", local.display());
+}
+
+#[tokio::test]
+async fn no_checkout_registers_where_another_repositorys_local_config_belongs() {
+    let (root, manager) = crate::test_support::manager().await;
+    let checkout = crate::test_support::repository(root.path(), "project");
+    let project = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let local = manager.local_config_path(&project.id).await.unwrap();
+    let directory = local.parent().unwrap();
+    std::fs::create_dir_all(directory).unwrap();
+    let other = crate::test_support::repository(directory, "other");
+    let error = manager
+        .register_repository(other.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("another repository's local config"),
+        "{error:#}"
+    );
+    let error = manager
+        .register_repository(
+            "https://example.test/team/other.git".into(),
+            None,
+            Some(directory.join("clone")),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("another repository's local config"),
+        "{error:#}"
+    );
+    assert!(!directory.join("clone").exists());
+}
+
+#[tokio::test]
+async fn no_clone_lands_where_its_own_local_config_belongs() {
+    let (_root, manager) = crate::test_support::manager().await;
+    let root = crate::config::Config::default()
+        .root_dir(&manager.paths)
+        .unwrap();
+    let error = manager
+        .register_repository(
+            "https://example.test/team/project.git".into(),
+            Some("project".into()),
+            Some(root.join("project").join(".shoal")),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("the repository's local config"),
+        "{error:#}"
+    );
+    assert!(!root.join("project").exists());
+}

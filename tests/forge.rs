@@ -498,8 +498,8 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
 fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[forges.\"GHE.invalid\"]\ntype = \"github\"\n\
-         [forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
+        "[machine.forges.\"GHE.invalid\"]\ntype = \"github\"\n\
+         [machine.forges.\"gitlab.invalid\"]\ntype = \"github\"\n",
     );
     git(
         &fixture.repo,
@@ -550,7 +550,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
     let message = refused["data"]["message"].as_str().unwrap();
     assert!(
         message.contains("unknown.invalid answers as none of")
-            && message.contains("[forges.\"unknown.invalid\"]"),
+            && message.contains("[machine.forges.\"unknown.invalid\"]"),
         "{message}"
     );
 }
@@ -559,7 +559,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
         let config =
-            "[agent_auth]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\nfj_home = '~/agent-home'\n";
+            "[agent.forge_clis]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\nfj_home = '~/agent-home'\n";
         let fixture = Fixture::new(forge, config);
         let root = fixture.root.path();
         for (name, body) in [
@@ -615,7 +615,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
     }
 
     // An fj wrapper whose home Shoal does not know cannot stand in for the agent.
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/agent-fj'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/agent-fj'\n");
     support::install_test_script(fixture.root.path().join("agent-fj"), "#!/bin/sh\n");
     let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
         "item": "8", "action": {"action": "close"}}}));
@@ -623,7 +623,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         refused["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("agent_auth.fj_home"),
+            .contains("agent.forge_clis.fj_home"),
         "{refused}"
     );
     assert!(fixture.requests().is_empty());
@@ -681,7 +681,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
 
 #[test]
 fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();
     let keys = if cfg!(target_os = "macos") {
         "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
@@ -1245,6 +1245,134 @@ fn forgejo_reactions_are_removed_by_content_and_left_when_already_as_asked() {
     );
 }
 
+#[test]
+fn comment_edits_change_only_the_logins_own_comments_and_are_not_reported_back() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let issue = |state: &str| {
+        json!({"body": {"number": 8, "title": "Issue", "state": state, "body": "",
+            "labels": [], "pull_request": null, "user": {"login": "ann"}}})
+    };
+    let comments = |own: &str| {
+        json!({"body": [{"id": 1, "body": "Crashes", "user": {"login": "ann"}},
+            {"id": 2, "body": own, "user": {"login": "me"}}]})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue("open"),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments("Fixd"),
+        // Views read the discussion at once.
+        "GET repos/team/project/issues/8/comments": comments("Fixd"),
+        "GET user": {"body": {"login": "me"}},
+        "PATCH repos/team/project/issues/comments/2":
+            {"body": {"id": 2, "body": "Fixed", "user": {"login": "me"}}},
+    }));
+    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+    fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    let note = fixture.root.path().join("note.md");
+    fs::write(&note, "Fixed").unwrap();
+    let edit = |comment: &str| {
+        let body = note.to_str().unwrap();
+        let args = [
+            "issue",
+            "comment",
+            "--workspace",
+            "topic",
+            "--edit",
+            comment,
+        ];
+        fixture.run(&[&args[..], &["--body-file", body]].concat())
+    };
+    let edited = edit("2");
+    assert!(edited.status.success(), "{edited:?}");
+    // Someone else's comment, and another item's, are refused before
+    // anything is sent.
+    let others = edit("1");
+    assert!(
+        String::from_utf8_lossy(&others.stderr)
+            .contains("comment 1 was written by ann, not by the login Shoal acts as"),
+        "{others:?}"
+    );
+    let missing = edit("99");
+    assert!(
+        String::from_utf8_lossy(&missing.stderr).contains("#8 has no comment 99"),
+        "{missing:?}"
+    );
+    // A comment that already says the body is left unchanged.
+    fs::write(&note, "Fixd").unwrap();
+    let unchanged = edit("2");
+    assert!(unchanged.status.success(), "{unchanged:?}");
+    assert_eq!(
+        writes(&fixture),
+        [json!(["PATCH repos/team/project/issues/comments/2", {"body": "Fixed"}])]
+    );
+    let event = fixture
+        .events()
+        .into_iter()
+        .rfind(|event| event["kind"] == "item_changed")
+        .unwrap();
+    assert_eq!(event["item"]["action"], "edit_comment", "{event}");
+    // The edit is the agent's own change, unlike closing in the web interface.
+    fixture.respond(json!({
+        "GET repos/team/project/issues/8": issue("closed"),
+        "GET repos/team/project/issues/8/comments?limit=50&page=1": comments("Fixed"),
+    }));
+    let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+    let kinds: Vec<_> = closed["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|update| update["kind"].clone())
+        .collect();
+    assert_eq!(kinds, ["closed"], "{closed}");
+}
+
+#[test]
+fn github_comment_edits_reach_inline_comments() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {
+        "pageInfo": {"hasNextPage": false, "endCursor": null},
+        "nodes": [{"id": "T_1", "isResolved": false, "comments": {"nodes": [{"databaseId": 5}]}}]}}}}});
+    fixture.respond(json!({
+        "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
+        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
+            "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
+            "headRefName": "topic", "baseRefName": "main", "isDraft": false, "comments": []}},
+        "GET repos/team/project/pulls/8/reviews": {"body": [[{"id": 11, "state": "COMMENTED",
+            "user": {"login": "me"}, "body": "", "submitted_at": "t2"}]]},
+        "GET repos/team/project/pulls/8/comments": {"body": [[{"id": 5,
+            "pull_request_review_id": 11, "user": {"login": "me"}, "path": "a.rs",
+            "line": 3, "body": "Wy?", "created_at": "t2"}]]},
+        "POST graphql": {"body": threads},
+        "GET user": {"body": {"login": "Me"}},
+        "PATCH repos/team/project/pulls/comments/5": {"body": {"id": 5, "body": "Why?"}},
+    }));
+    let edited = fixture.ok(&[
+        "pr",
+        "comment",
+        "--workspace",
+        "topic",
+        "8",
+        "--edit",
+        "5",
+        "--body",
+        "Why?",
+    ]);
+    assert_eq!(edited["number"], 8, "{edited}");
+    let mut writes = writes(&fixture);
+    writes.retain(|request| request[0] != "POST graphql" && request[0] != "pr view 8");
+    assert_eq!(
+        writes,
+        [json!(["PATCH repos/team/project/pulls/comments/5", {"body": "Why?"}])]
+    );
+    // An edit names the comment's new body, never files.
+    let attached = fixture.run(&[
+        "pr", "comment", "8", "--edit", "5", "--body", "Why?", "--attach", "a.png",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&attached.stderr).contains("cannot be used with"),
+        "{attached:?}"
+    );
+}
+
 /// `shots/login.png` and `shots/demo.mp4` under the fixture, and a body file
 /// beside them that references the image.
 fn attachment_files(fixture: &Fixture) -> [String; 3] {
@@ -1352,7 +1480,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
 #[test]
 fn gitlab_uploads_send_a_form_through_the_agents_glab() {
     // The scripted gh answers as glab on a GitLab remote too.
-    let fixture = Fixture::new(Forge::GitHub, "[agent_auth]\nglab = '~/agent-glab'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[agent.forge_clis]\nglab = '~/agent-glab'\n");
     let root = fixture.root.path();
     std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
     git(
@@ -1641,7 +1769,7 @@ fn forgejo_refuses_files_its_settings_refuse_before_posting() {
 
 #[test]
 fn forgejo_refuses_attachments_with_a_tea_login_before_posting() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\ntea = '~/agent-tea'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\ntea = '~/agent-tea'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();
     let logins = json!([{"name": "agent", "url": format!("http://{host}")}]);
     support::install_test_script(
@@ -2391,7 +2519,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .collect();
     assert_eq!(numbers, (1..=400).collect::<Vec<_>>());
 
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();
     let keys = if cfg!(target_os = "macos") {
         "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
@@ -2481,7 +2609,7 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
 
 #[test]
 fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
     let host = fixture
         .web
         .strip_prefix("http://")
@@ -2606,7 +2734,7 @@ fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_check
     for gitlab in [false, true] {
         let fixture = Fixture::new(
             Forge::GitHub,
-            "[agent_auth]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n",
+            "[agent.forge_clis]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n",
         );
         let root = fixture.root.path();
         let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
@@ -3722,7 +3850,7 @@ fn messages(fixture: &Fixture) -> Vec<String> {
 
 #[test]
 fn proposed_issues_open_on_approval_with_the_users_edits() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
     let created = json!({"number": 40, "title": "Flaky test", "state": "open", "labels": []});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -3806,7 +3934,7 @@ fn proposed_issues_open_on_approval_with_the_users_edits() {
 
 #[test]
 fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspace() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
     let issue = |number: u64, title: &str| json!({"body": {"number": number, "title": title, "state": "open", "labels": []}});
     let mut responses = json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -3913,7 +4041,7 @@ fn denied_and_duplicate_issue_proposals_reach_the_agent_and_outlive_the_workspac
 
 #[test]
 fn proposed_prs_wait_for_approval_at_their_commit() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\npr_open = 'propose'\n");
     let root = fixture.root.path();
     let remote = root.join("remote.git");
     git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
@@ -4035,7 +4163,7 @@ fn proposed_prs_wait_for_approval_at_their_commit() {
 
 #[test]
 fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\npr_open = 'propose'\n");
     let root = fixture.root.path();
     let config = |args: &[&str]| git(&fixture.repo, args);
     for owner in ["alice", "bob"] {
@@ -4116,7 +4244,7 @@ fn a_proposed_fork_pr_opens_only_at_the_commit_the_fork_has() {
 
 #[test]
 fn proposed_issues_keep_their_attachments_until_decided() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
     let [note, image, _] = attachment_files(&fixture);
     let uploads = "POST https://uploads.github.com/user-attachments/assets";
     fixture.respond(json!({
@@ -4182,7 +4310,7 @@ fn proposed_issues_keep_their_attachments_until_decided() {
 
 #[test]
 fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
-    let fixture = Fixture::new(Forge::Forgejo, "[approvals]\nissue_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[permissions]\nissue_open = 'propose'\n");
     let mut responses = json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
         // Forgejo labels the issue after opening it; the first attempt fails.
@@ -4221,7 +4349,7 @@ fn an_issue_approval_that_fails_after_opening_finishes_on_retry() {
 
 #[test]
 fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\npr_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\npr_open = 'propose'\n");
     let root = fixture.root.path();
     let remote = root.join("remote.git");
     git(root, &["init", "--bare", "-q", remote.to_str().unwrap()]);
@@ -4294,7 +4422,7 @@ fn a_pr_approval_that_fails_after_opening_finishes_on_retry() {
 
 #[test]
 fn a_finding_that_reached_the_forge_is_not_posted_again() {
-    let fixture = Fixture::new(Forge::GitHub, "[approvals]\nissue_open = 'propose'\n");
+    let fixture = Fixture::new(Forge::GitHub, "[permissions]\nissue_open = 'propose'\n");
     let issue = json!({"body": {"number": 40, "title": "Flaky", "state": "open", "labels": []}});
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -4341,7 +4469,7 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
 fn issues_open_from_a_registered_checkout_under_its_settings() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[approvals]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
+        "[permissions]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
     );
     fixture.respond(json!({
         "POST repos/team/project/issues": {"status": 201, "body": {"number": 40}},
@@ -4460,7 +4588,7 @@ fn item_commands_act_from_a_registered_checkout() {
 #[test]
 fn checkout_merges_go_out_without_the_agent_account() {
     // A missing agent wrapper leaves the user's own logins usable.
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj = '~/missing-fj'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/missing-fj'\n");
     let endpoint = "repos/team/project/pulls/8";
     fixture.respond(json!({
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},
@@ -4477,7 +4605,7 @@ fn checkout_merges_go_out_without_the_agent_account() {
 fn approving_a_proposal_warns_about_the_repository_conventions() {
     let fixture = Fixture::new(
         Forge::GitHub,
-        "[approvals]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
+        "[permissions]\nissue_open = 'propose'\n[issue]\nrequired_labels = ['type/']\n",
     );
     // The forge reports the opened issue without the label it was given.
     fixture.respond(json!({
@@ -4561,7 +4689,7 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
     fixture.ok(&[
         "config",
         "set",
-        "issue.other_repositories",
+        "permissions.issue_other_repositories",
         "deny",
         "--repo",
         repo,
@@ -4578,7 +4706,10 @@ fn issues_for_other_repositories_wait_for_approval_unless_settings_say_otherwise
 
 #[test]
 fn agents_open_issues_directly_on_another_forge_when_allowed() {
-    let fixture = Fixture::new(Forge::Forgejo, "[issue]\nother_repositories = 'direct'\n");
+    let fixture = Fixture::new(
+        Forge::Forgejo,
+        "[permissions]\nissue_other_repositories = 'direct'\n",
+    );
     fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
     std::os::unix::fs::symlink(
         fixture.root.path().join("forge.py"),
@@ -4619,7 +4750,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
 
 #[test]
 fn api_requests_reach_any_path_and_agents_only_read() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent_auth]\nfj_home = '~/agent'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
     let host = fixture.web.split('/').nth(2).unwrap().to_owned();
     let keys = if cfg!(target_os = "macos") {
         "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
@@ -4722,6 +4853,9 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     ]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("[api] agent_writes = true"), "{stderr}");
+    assert!(
+        stderr.contains("[permissions] api_writes = \"direct\""),
+        "{stderr}"
+    );
     assert!(fixture.requests().is_empty());
 }

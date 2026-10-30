@@ -53,7 +53,7 @@ async fn remove(manager: &Manager, workspace: &Workspace) {
 async fn launches_start_on_a_dependency_once_it_is_done_at_its_head() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let api = create(&manager, &repo, "api").await;
     // Without a limit a launch that waits for other work still queues.
     let ui = add_after(&manager, &repo, "ui", vec![work("api")]).await;
@@ -86,7 +86,7 @@ async fn a_launch_dependency_follows_the_workspace_it_opens_until_removal() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
-        "max_agents = 1\n[overload.disk]\nenabled = false",
+        "[machine]\nmax_agents = 1\n[machine.overload.disk]\nenabled = false",
     ));
     let first = manager
         .queue_add(request(&repo, "first", false))
@@ -112,7 +112,7 @@ async fn a_launch_dependency_follows_the_workspace_it_opens_until_removal() {
 async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let (closed, linked) = (
         "https://forge.example/team/repo/issues/1",
         "https://forge.example/team/repo/issues/2",
@@ -162,7 +162,7 @@ async fn issue_dependencies_wait_for_closure_or_a_done_workspace_linking_them() 
 async fn done_dependencies_build_on_the_one_that_contains_the_others() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let (lower, separate) = (
         create(&manager, &repo, "lower").await,
         create(&manager, &repo, "separate").await,
@@ -225,7 +225,7 @@ async fn done_dependencies_build_on_the_one_that_contains_the_others() {
 async fn dependencies_name_existing_work_other_than_the_launch() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     for after in [work("missing"), work("self")] {
         let error = manager
             .queue_add(QueueRequest {

@@ -17,7 +17,7 @@ pub(super) struct AgentLaunch {
     pub(super) output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
     pub(super) integration: Option<crate::ai::IntegrationKind>,
-    /// What the agent's `[ai]` entry changes in its environment, last.
+    /// What the agent's `[agents.<name>]` entry changes in its environment, last.
     pub(super) environment: crate::ai::Environment,
     pub(super) home: PathBuf,
     /// The proxy the agent's API requests go through, which

@@ -42,7 +42,7 @@ pub enum CoordinationCommand {
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
     Done {
         workspace: Option<String>,
-        /// Request cleanup even when [done] cleanup is false; preserve dirty or unpushed work.
+        /// Request cleanup even when [cleanup.done] enabled is false; preserve dirty or unpushed work.
         #[arg(long, conflicts_with = "undo")]
         cleanup: bool,
         /// Another branch has this work under new commits, such as after a

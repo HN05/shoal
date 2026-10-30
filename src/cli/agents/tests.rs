@@ -78,9 +78,9 @@ fn integrations_serve_only_the_names_they_list() {
 
 #[test]
 fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
-    let config: crate::config::Config = toml::from_str(
-        "[proxy.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         [ai.claude]\nproxy = 'local'\n[ai.codex]\nproxy = 'local'\n",
+    let config = crate::config::Config::from_toml(
+        "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
+         \n[machine.agents.claude]\nproxy = 'local'\n[machine.agents.codex]\nproxy = 'local'",
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
@@ -142,7 +142,7 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
     assert_eq!(joined["model"], "opus", "{joined}");
     assert_eq!(joined["env"]["ANTHROPIC_BASE_URL"], "http://127.0.0.1:4000");
     // An agent without a proxy runs its command as configured.
-    let plain: crate::config::Config = toml::from_str("").unwrap();
+    let plain = crate::config::Config::from_toml("").unwrap();
     let plain = plain.resolve(&Default::default()).unwrap();
     let mut command: Vec<OsString> = vec!["claude".into(), "--continue".into()];
     with_proxy_args(&plain, "claude", &mut command);
@@ -151,9 +151,9 @@ fn a_configured_resume_command_still_goes_through_the_agents_proxy() {
 
 #[test]
 fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
-    let config: crate::config::Config = toml::from_str(
-        "[proxy.local]\nupstream = 'http://127.0.0.1:8317'\n\
-         [ai.pi]\nproxy = 'local'\n[ai.claude]\nproxy = 'local'\n",
+    let config = crate::config::Config::from_toml(
+        "[machine.proxies.local]\nupstream = 'http://127.0.0.1:8317'\n\
+         \n[machine.agents.pi]\nproxy = 'local'\n[machine.agents.claude]\nproxy = 'local'",
     )
     .unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
@@ -164,7 +164,10 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
     );
     // Every launch, a resumed one included, prepares its proxy this way.
     let error = launch_proxy(&settings, "pi").unwrap_err().to_string();
-    assert!(error.contains("remove proxy from its [ai.pi]"), "{error}");
+    assert!(
+        error.contains("remove proxy from its [machine.agents.pi]"),
+        "{error}"
+    );
     let claude = launch_proxy(&settings, "claude").unwrap().unwrap();
     assert_eq!(claude.upstream, "http://127.0.0.1:8317");
     assert!(launch_proxy(&settings, "codex").unwrap().is_none());
@@ -177,7 +180,7 @@ fn a_proxy_is_refused_for_an_agent_shoal_cannot_point_at_it() {
 #[test]
 fn agents_get_each_configured_directory_as_they_resolve_it() {
     let settings = |text: &str| {
-        let config: crate::config::Config = toml::from_str(text).unwrap();
+        let config = crate::config::Config::from_toml(text).unwrap();
         config
             .resolve(&crate::config::repo::ConfigLayers::default())
             .unwrap()
@@ -197,7 +200,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
     assert!(agent_dir_args(&defaults, "pi", home.path()).is_empty());
     // `~/` names a path under the home directory; one reached again through
     // a symlink counts once.
-    let configured = settings("agent_dirs = ['/tmp', '~/cache', '~/link']\n");
+    let configured = settings("agent.dirs = ['/tmp', '~/cache', '~/link']\n");
     let cache = home.path().join("cache");
     fs::create_dir(&cache).unwrap();
     std::os::unix::fs::symlink(&cache, home.path().join("link")).unwrap();
@@ -205,7 +208,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         agent_dirs(&configured, home.path()),
         BTreeSet::from([tmp.clone(), fs::canonicalize(&cache).unwrap()])
     );
-    assert!(agent_dirs(&settings("agent_dirs = []\n"), home.path()).is_empty());
+    assert!(agent_dirs(&settings("agent.dirs = []\n"), home.path()).is_empty());
     // A workspace's or chat's own directory follows the configured ones.
     assert_eq!(
         dir_args(
@@ -244,8 +247,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
 
 #[test]
 fn only_agents_with_fork_arguments_start_from_a_fork() {
-    let config: crate::config::Config =
-        toml::from_str("[ai.droid]\ncommand = ['droid']\n").unwrap();
+    let config = crate::config::Config::from_toml("[agents.droid]\ncommand = ['droid']\n").unwrap();
     let settings = config.resolve(&Default::default()).unwrap();
     let child = Path::new("/work/child");
     assert_eq!(
@@ -261,7 +263,23 @@ fn only_agents_with_fork_arguments_start_from_a_fork() {
         .unwrap_err()
         .to_string();
     assert!(
-        error.contains("cannot fork a session of droid: configure [ai.droid] fork"),
+        error.contains("cannot fork a session of droid: configure [agents.droid] fork"),
         "{error}"
     );
+}
+
+#[test]
+fn a_launch_profile_opens_its_app_by_its_own_mode() {
+    let config = crate::config::Config::from_toml(
+        "[agents.codex-app]\nbase = 'codex'\ndefault_mode = 'app'\n\
+         [agents.claude]\ndefault_mode = 'app'\n[agents.claude-cli]\nbase = 'claude'\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let opens_app = |name: &str| agent_options(&settings, name).app.is_some();
+    assert!(opens_app("codex-app"));
+    assert!(!opens_app("codex"));
+    assert!(opens_app("claude"));
+    // A profile that sets no mode of its own launches the CLI.
+    assert!(!opens_app("claude-cli"));
 }

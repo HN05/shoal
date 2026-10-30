@@ -350,7 +350,7 @@ fn zmx_reassignment_waits_for_another_states_verified_close() -> anyhow::Result<
 #[test]
 fn a_resumed_session_ends_once_a_kept_completion_resolves_its_agent() -> anyhow::Result<()> {
     let fixture = Fixture::with_config(Some(&format!(
-        "[commands]\npi = ['sh', '-c', 'exit 0']\n[agent_resume]\npi = ['{}', 'done']\n[done]\ncleanup = false\n",
+        "[cleanup.done]\nenabled = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\nresume_command = ['{}', 'done']\n",
         env!("CARGO_BIN_EXE_shoal")
     )));
     let home = fixture.root.path();
@@ -435,7 +435,7 @@ fn removals_refuse_to_end_the_zmx_session_they_run_in() -> anyhow::Result<()> {
 
 #[test]
 fn removals_from_a_pane_split_off_a_recorded_pane_go_on() -> anyhow::Result<()> {
-    let fixture = Fixture::with_config(Some("[commands]\npi = ['sh', '-c', 'exit 0']\n"));
+    let fixture = Fixture::with_config(Some("[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n"));
     install_fake_herdr(&fixture);
     let repo = fixture.repo.to_str().unwrap_or_default();
     let (caller, _) = herdr_call(&fixture, &["add", repo, "tabbed", "--agent", "pi"], "");

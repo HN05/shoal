@@ -38,9 +38,6 @@ pub struct Profile {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct SimConfig {
-    /// Repository-overridable approval policy, as written.
-    pub requires_approval: Option<bool>,
-    pub approval_lifetime: Option<crate::daemon::approvals::Lifetime>,
     pub max_booted: usize,
     pub max_devices: usize,
     pub idle_seconds: u64,
@@ -53,8 +50,6 @@ pub struct SimConfig {
 impl Default for SimConfig {
     fn default() -> Self {
         Self {
-            requires_approval: None,
-            approval_lifetime: None,
             max_booted: 2,
             max_devices: 4,
             idle_seconds: 120,
@@ -72,11 +67,11 @@ impl SimConfig {
                 && self.max_booted <= 64
                 && self.max_devices >= self.max_booted
                 && self.max_devices <= 256,
-            "simulators limits require 1 <= max_booted <= 64 and max_booted <= max_devices <= 256"
+            "machine.simulators limits require 1 <= max_booted <= 64 and max_booted <= max_devices <= 256"
         );
         ensure!(
             self.idle_seconds <= 86400,
-            "simulators.idle_seconds must be at most 86400"
+            "machine.simulators.idle_seconds must be at most 86400"
         );
         if let Some(name) = &self.default {
             ensure!(
@@ -232,6 +227,7 @@ impl Manager {
         let preferred = self
             .workspace_settings_from(&config, &workspace)
             .await?
+            .into_settings()
             .simulators
             .preferred;
         let (device_types, runtimes, inventory_error) = match simctl::inventory().await {
@@ -241,7 +237,7 @@ impl Manager {
         Ok(SimulatorCatalog {
             device_types,
             runtimes,
-            policy: config.simulators.clone(),
+            policy: config.machine.simulators.clone(),
             preferred,
             inventory_error,
         })
@@ -402,7 +398,7 @@ impl Manager {
         );
         self.touch(&workspace.id).await;
         let config = self.config();
-        let limits = &config.simulators;
+        let limits = &config.machine.simulators;
         let mut records = self.list_simulators(None).await?;
         let inventory = simctl::inventory().await?;
         let explicit =
@@ -479,7 +475,7 @@ impl Manager {
     ) -> Result<Allocation<Box<Simulator>>> {
         let inventory = self.recheck_plan(&plan).await?;
         if !self
-            .free_running_capacity(&plan, config.simulators.max_booted, inventory)
+            .free_running_capacity(&plan, config.machine.simulators.max_booted, inventory)
             .await?
         {
             return Ok(Allocation::Busy(
@@ -620,7 +616,7 @@ impl Manager {
     ) -> Result<Profile> {
         let settings = self.workspace_settings_from(config, workspace).await?;
         planning::resolve_request(
-            &config.simulators,
+            &config.machine.simulators,
             &settings.simulators,
             request,
             inventory,
@@ -692,7 +688,7 @@ impl Manager {
         let Some(_guard) = self.gates.try_lock_simulators() else {
             return Ok(());
         };
-        let idle_seconds = self.config().simulators.idle_seconds;
+        let idle_seconds = self.config().machine.simulators.idle_seconds;
         for mut sim in self.list_simulators(None).await? {
             if sim.workspace_id.is_none()
                 && unix_seconds().saturating_sub(sim.last_used) >= idle_seconds

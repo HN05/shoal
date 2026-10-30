@@ -85,7 +85,7 @@ pub(super) async fn run(manager: Arc<Manager>) {
 /// Whether to hold the inhibitor under `config`, or `None` when the lookup
 /// failed and the current hold should stay.
 async fn wanted(manager: &Manager, config: &Config) -> Option<bool> {
-    if !config.keep_awake {
+    if !config.machine.keep_awake {
         return Some(false);
     }
     match manager.agents_have_work().await {

@@ -34,9 +34,9 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     )
     .unwrap();
     std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let auth = format!("[agent_auth]\ngh = '{}'\n", gh.display());
+    let auth = format!("[agent.forge_clis]\ngh = '{}'\n", gh.display());
     manager
-        .set_repository_config(&repo.id, Some(auth.clone()))
+        .write_local_config(&repo.id, Some(auth.clone()))
         .await
         .unwrap();
     let request = |method| RawRequest {
@@ -54,15 +54,15 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .forge_api(&workspace.id, &request(HttpMethod::Patch), true)
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("agent_writes"), "{error:#}");
+    assert!(format!("{error:#}").contains("api_writes"), "{error:#}");
     let sent = std::fs::read_to_string(&log).unwrap();
     assert_eq!(sent.lines().count(), 1, "{sent}");
     assert!(sent.contains("-X GET repos/team/repo"), "{sent}");
 
     manager
-        .set_repository_config(
+        .write_local_config(
             &repo.id,
-            Some(format!("{auth}[api]\nagent_writes = true\n")),
+            Some(format!("{auth}[permissions]\napi_writes = 'direct'\n")),
         )
         .await
         .unwrap();

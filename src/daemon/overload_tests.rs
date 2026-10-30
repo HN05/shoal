@@ -78,7 +78,7 @@ async fn fixture() -> (
     fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./resume.sh']\n",
+        "[agents.fixture]\nresume_command = ['./resume.sh']\n",
     )
     .unwrap();
     let serving = serve_fixture(manager.clone());
@@ -152,7 +152,7 @@ async fn built_in_restore_child() {
     let (_root, manager, workspace, serving) = fixture().await;
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[commands]\ncodex = ['codex-fixture', '{args}']\nclaude = ['claude-fixture', '{args}']\n",
+        "[agents.codex]\ncommand = ['codex-fixture', '{args}']\n[agents.claude]\ncommand = ['claude-fixture', '{args}']\n",
     )
     .unwrap();
     let codex = [
@@ -181,7 +181,7 @@ async fn built_in_restore_child() {
         // `/tmp`, the default agent directory, and the child workspaces
         // beside theirs.
         let directory = workspace.path.parent().unwrap();
-        let tools = crate::ai::Table::default().tools;
+        let tools = crate::ai::tools(&Default::default());
         let tool = &tools[agent];
         let directories = [fs::canonicalize("/tmp").unwrap(), directory.to_path_buf()];
         let launch_args = crate::cli::agents::hook_args(tool.integration, false)
@@ -225,7 +225,7 @@ async fn built_in_restore_child() {
     assert!(unsupported.command.is_empty());
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\ncodex = ['saved-session', 'specific-id']\n",
+        "[agents.codex]\nresume_command = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
     let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
@@ -239,7 +239,7 @@ async fn built_in_restore_child() {
     );
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\ncodex = ['saved-session', '--', '{prompt}']\n",
+        "[agents.codex]\nresume_command = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
     let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
@@ -672,7 +672,7 @@ async fn stop_saves_agents_and_commands_preserving_work_and_leases_body() {
     .unwrap();
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./resume.sh', '{prompt}']\n",
+        "[agents.fixture]\nresume_command = ['./resume.sh', '{prompt}']\n",
     )
     .unwrap();
     assert_eq!(
@@ -720,7 +720,7 @@ async fn a_restored_stopped_agent_is_told_the_commands_stopped_with_it_body() {
     .unwrap();
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./resume.sh', '{prompt}']\n",
+        "[agents.fixture]\nresume_command = ['./resume.sh', '{prompt}']\n",
     )
     .unwrap();
     assert_eq!(
@@ -1322,7 +1322,7 @@ async fn failed_restore_expansion_does_not_block_launch_or_manual_recovery_recor
         .unwrap();
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./resume.sh', '{diff_base}']\n",
+        "[agents.fixture]\nresume_command = ['./resume.sh', '{diff_base}']\n",
     )
     .unwrap();
     let launched = launch(&manager, &workspace);
@@ -1375,7 +1375,7 @@ async fn discard_clears_pending_recovery_without_launching_an_agent_body() {
     // Discard does not depend on valid current restore configuration.
     fs::write(
         workspace.path.join(".shoal.toml"),
-        "[agent_resume]\nfixture = ['./missing', '{diff_base}']\n",
+        "[agents.fixture]\nresume_command = ['./missing', '{diff_base}']\n",
     )
     .unwrap();
     assert_eq!(
@@ -1481,7 +1481,7 @@ async fn finishing_the_assignment_cancels_a_waiting_restore() {
 async fn set_recovery(manager: &Manager, enabled: bool) {
     crate::test_support::configure(
         manager,
-        &format!("[overload.recovery]\nenabled = {enabled}\n"),
+        &format!("[machine.overload.recovery]\nenabled = {enabled}\n"),
     )
     .await;
 }

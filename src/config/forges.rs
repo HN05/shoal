@@ -1,4 +1,4 @@
-//! `[forges."<host>"]`: what a forge host serves, set instead of asking it.
+//! `[machine.forges."<host>"]`: what a forge host serves, set instead of asking it.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};
@@ -45,14 +45,14 @@ impl Forges {
         for host in self.0.keys() {
             ensure!(
                 seen.insert(host.to_ascii_lowercase()),
-                "forges.{host:?} names a host another [forges] entry already names in other letter case"
+                "machine.forges.{host:?} names a host another [machine.forges] entry already names in other letter case"
             );
             ensure!(
                 !host.is_empty()
                     && host
                         .chars()
                         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':')),
-                "forges.{host:?} must name a host, such as \"git.example.com\" or \"git.example.com:3000\""
+                "machine.forges.{host:?} must name a host, such as \"git.example.com\" or \"git.example.com:3000\""
             );
         }
         Ok(())
@@ -62,7 +62,7 @@ impl Forges {
 /// The setting that pins `host`'s type, for messages that ask for it.
 pub fn setting(host: &str) -> String {
     format!(
-        "set its type to \"github\", \"gitlab\", \"forgejo\" or \"bitbucket\" under [forges.\"{host}\"] in the global config"
+        "set its type to \"github\", \"gitlab\", \"forgejo\" or \"bitbucket\" under [machine.forges.\"{host}\"] in the global config"
     )
 }
 

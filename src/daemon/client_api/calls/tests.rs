@@ -179,7 +179,11 @@ async fn holds_belong_to_the_user() {
     assert_eq!(hold.name, "quay");
     assert_eq!(client.call(get("held")).await.unwrap().holds, [hold]);
     let scoped = daemon.scoped(&workspace).await;
-    assert_eq!(code(scoped.call(acquire()).await), ErrorCode::ScopeDenied);
+    let review = AcquireHold {
+        name: "review".into(),
+        ..acquire()
+    };
+    assert_eq!(code(scoped.call(review).await), ErrorCode::ApprovalPending);
     client
         .call(ReleaseHold {
             workspace: "held".into(),
@@ -222,7 +226,7 @@ async fn simulator_leases_follow_the_workspace_scope() {
 async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
     let daemon = TestDaemon::start().await;
     // An agent whose command is installed wherever the tests run.
-    crate::test_support::configure(&daemon.manager, "[commands]\nprobe = [\"true\"]\n").await;
+    crate::test_support::configure(&daemon.manager, "[agents.probe]\ncommand = [\"true\"]\n").await;
     daemon.workspace("worker").await;
     let client = daemon.client().await;
     let queue = |agent: &str| QueueAgent {

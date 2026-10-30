@@ -162,7 +162,7 @@ async fn merged_cleanup_waits_for_grace_and_keeps_saved_agents_for_restore() {
     f.unlink_issue().await;
     f.squash_merge();
     f.manager
-        .set_repository_config(
+        .write_local_config(
             &f.workspace.repository_id,
             Some("[cleanup]\ngrace_minutes = 600\n".into()),
         )
@@ -370,7 +370,7 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     let repo = f.workspace.repository_id.clone();
     fs::write(f.workspace.path.join("two"), "edited\n").unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &repo,
             Some("[cleanup.restore]\narchive_max_mb = 0\n".into()),
         )
@@ -383,12 +383,12 @@ async fn holds_questions_running_work_and_unsaved_state_retain_a_merged_workspac
     git(&f.workspace.path, &["checkout", "--", "two"]);
 
     manager
-        .set_repository_config(&repo, Some("[cleanup.merged]\nenabled = false\n".into()))
+        .write_local_config(&repo, Some("[cleanup.merged]\nenabled = false\n".into()))
         .await
         .unwrap();
     assert!(f.kept_after(5).await);
     manager
-        .set_repository_config(&repo, Some("[cleanup.merged]\nidle_minutes = 600\n".into()))
+        .write_local_config(&repo, Some("[cleanup.merged]\nidle_minutes = 600\n".into()))
         .await
         .unwrap();
     assert!(f.kept_after(5).await);

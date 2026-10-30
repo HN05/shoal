@@ -55,8 +55,8 @@ impl Manager {
 
     /// Open the issue for the workspace and record it as opened there. A
     /// workspace process's issue is recorded for the user's approval instead
-    /// when `[approvals] issue_open`, or for another repository
-    /// `[issue] other_repositories`, says so.
+    /// when `[permissions] issue_open`, or for another repository
+    /// `[permissions] issue_other_repositories`, says so.
     async fn open_workspace_issue(
         &self,
         selector: &str,
@@ -178,11 +178,11 @@ impl IssueDestination {
     /// another repository they deny.
     fn opening(&self, settings: &Effective) -> Result<Opening> {
         if !self.elsewhere {
-            return Ok(settings.approvals.issue_open);
+            return Ok(settings.permissions.issue_open);
         }
-        match settings.issue.other_repositories {
+        match settings.permissions.issue_other_repositories {
             OtherRepositories::Deny => bail!(
-                "agents cannot open issues in {}: [issue] other_repositories is \"deny\"",
+                "agents cannot open issues in {}: [permissions] issue_other_repositories is \"deny\"",
                 self.forge.repository_url()
             ),
             OtherRepositories::Propose => Ok(Opening::Propose),

@@ -44,7 +44,8 @@ headings, which you fix with `edit`. Change your PR or issue through Shoal,
 which acts as your agent account and records the change: `shoal pr edit`
 (`--title`, `--body-file`, `--add-label`, `--add-reviewer`,
 `--draft`/`--no-draft`), where `shoal pr reviewers` lists who can review,
-`pr comment --body-file`, `pr close`, and the same
+`pr comment --body-file`, `pr comment --edit <comment-id> --body-file F` for a
+comment you wrote, `pr close`, and the same
 `issue` commands. `open`, `edit` and `comment` take `--attach FILE` for
 screenshots, videos and other files the forge accepts; the body shows images
 and videos and links other files where it references them as `![alt](FILE)`.
@@ -67,8 +68,8 @@ supports, such as resolving threads, rerunning jobs or reading job logs, with
 what to do instead; check it before relying on one. When no command covers a
 read, `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
-`glab api`. It refuses other methods unless the repository sets `[api]
-agent_writes`. File
+`glab api`. It refuses other methods unless the repository sets `[permissions]
+api_writes`. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
 workspace, and only `--link` assigns it to you. A problem that belongs to another
 repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`
@@ -83,7 +84,7 @@ opens it from a child workspace already marked done, which goes once the
 revert merges.
 
 A repository can require the user's approval for issues and PRs you open
-(`[approvals]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
+(`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
 approval request, instead of the item; `pr open` still pushes. Only the user decides
 proposals, never a coordinating agent. Continue your work and do not open the
 item another way. The user may edit the title and
@@ -162,7 +163,7 @@ not reopen them. To keep your own workspace past cleanup, `shoal acquire hold
 none, and approval places the hold. `shoal leases hold` lists holds; release
 the ones agents placed with `shoal release hold --name <name>`, while the user's
 and host apps' stay theirs. `--cleanup` overrides a
-`[done] cleanup = false` default. Dirty or newer work is retained;
+`[cleanup.done] enabled = false` default. Dirty or newer work is retained;
 completion without a PR watch also requires every commit pushed, on the local
 default branch, or with its changes on the branch the workspace builds on. After
 taking another workspace's commits into your branch under new SHAs, as with a
@@ -176,7 +177,7 @@ When a linked PR is ready to merge (checks pass, review findings handled, no
 conflicts), or the issue is solved without one, run `shoal ready`. It marks
 your linked items, or the workspace when nothing is linked, ready for review at
 HEAD for the user's integrations and takes a linked draft PR out of draft
-unless `[ready] undraft = false`. When something new needs fixing, run
+unless `[pr] undraft_on_ready = false`. When something new needs fixing, run
 `shoal ready --undo` before fixing it (`--draft` also returns the PR to draft), and
 `shoal ready` again once it is fixed. To tell the user about status without
 finishing, run `shoal alerts send "<one-line message>"`; if it stops applying before
@@ -286,8 +287,8 @@ brings in their latest commits; use `origin/feature/api` for pushed work after
 another workspace's branch, record that with `shoal branch base set <workspace>`;
 `shoal branch base` shows it.
 When the repository has no remote, `shoal land` merges your committed
-branch into the default branch. Unless the repository sets `[land]
-requires_approval = false`, it first exits 2 with `approval_pending` for your
+branch into the default branch. Unless the repository sets `[permissions]
+land = "direct"`, it first exits 2 with `approval_pending` for your
 current HEAD: wait for the decision message, then run it again without new
 commits. A new commit needs a new request; stop on `approval_denied`.
 

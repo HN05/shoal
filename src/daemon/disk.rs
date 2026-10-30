@@ -63,7 +63,7 @@ pub(super) struct Monitor {
 pub(super) async fn run(manager: Arc<Manager>) {
     let mut monitor = Monitor::default();
     loop {
-        let poll = manager.config().overload.poll_seconds;
+        let poll = manager.config().machine.overload.poll_seconds;
         tokio::time::sleep(Duration::from_secs(poll)).await;
         let _operation = manager.gates.operation().await;
         if let Err(error) = monitor
@@ -86,7 +86,7 @@ impl Monitor {
         // Before the config: a reload in between makes this reading stale.
         let generation = manager.config_state.generation();
         let config = manager.config();
-        let settings = &config.overload.disk;
+        let settings = &config.machine.overload.disk;
         if !settings.enabled {
             // Re-enabling waits for a fresh reading before recovery.
             manager.config_state.publish_disk_reading(None);
@@ -102,13 +102,15 @@ impl Monitor {
         manager
             .config_state
             .publish_disk_reading(recovered.then_some(generation));
-        if config.overload.warning.enabled
+        if config.machine.overload.warning.enabled
             && let Some(lowest) = low
                 .iter()
-                .filter(|filesystem| filesystem.free < config.overload.warning.disk_free_bytes())
+                .filter(|filesystem| {
+                    filesystem.free < config.machine.overload.warning.disk_free_bytes()
+                })
                 .min_by_key(|filesystem| filesystem.free)
         {
-            let message = warnings::disk(&config.overload, &lowest.describe());
+            let message = warnings::disk(&config.machine.overload, &lowest.describe());
             self.warnings
                 .warn(manager, now, Signal::Disk, &message)
                 .await;

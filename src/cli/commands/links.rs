@@ -12,6 +12,7 @@ use crate::{
         context::Context,
         ui,
     },
+    daemon::refusal::{Reason, Refusal},
     forge::{
         IssueInput, PullRequest,
         items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
@@ -228,7 +229,9 @@ async fn workspace_record(ctx: &Context, workspace: &str) -> Result<Workspace> {
         .await?
         .into_iter()
         .find(|w| w.id == workspace || w.name == workspace)
-        .with_context(|| format!("unknown workspace: {workspace}"))
+        .ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown workspace: {workspace}")).into()
+        })
 }
 
 async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Repository> {
@@ -321,7 +324,7 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
     Ok(0)
 }
 
-/// `draft` overrides `[unready] draft` when given.
+/// `draft` overrides `[pr] draft_on_unready` when given.
 pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
     let (workspace, selection) = select(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(

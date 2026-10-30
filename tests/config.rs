@@ -16,16 +16,16 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
     let home = tempfile::tempdir().unwrap();
     let config = home.path().join("xdg/shoal/config.toml");
     let run = |args: &[&str]| command(home.path()).args(args).output().unwrap();
-    let output = run(&["--json", "config", "set", "default_agent", "codex"]);
+    let output = run(&["--json", "config", "set", "agent.default", "codex"]);
     assert!(output.status.success(), "{:?}", output);
     let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(result["config"], config.to_str().unwrap());
     assert!(result["backup"].is_null());
     assert_eq!(result["daemon_reloaded"], false);
     let original =
-        "# policy\ndefault_agent = 'codex' # chosen\n[ports]\nstart = 3000\nend = 4000\n";
+        "# policy\nagent.default = 'codex' # chosen\n[ports]\nstart = 3000\nend = 4000\n";
     fs::write(&config, original).unwrap();
-    let output = run(&["config", "set", "default_agent", "claude"]);
+    let output = run(&["config", "set", "agent.default", "claude"]);
     assert!(output.status.success(), "{:?}", output);
     assert_eq!(
         fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
@@ -39,8 +39,8 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
         vec!["config", "set", "cleanup.auto.enabled", "maybe"],
         vec!["config", "set", "default_agnet", "codex"],
         vec!["config", "unset", "missing"],
-        vec!["config", "set", "default_agent", "claude", "ports.start"],
-        vec!["config", "unset", "default_agent", "missing"],
+        vec!["config", "set", "agent.default", "claude", "ports.start"],
+        vec!["config", "unset", "agent.default", "missing"],
     ] {
         assert!(!run(&args).status.success(), "{args:?}");
         assert_eq!(fs::read_to_string(&config).unwrap(), saved);
@@ -49,11 +49,11 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
             original
         );
     }
-    assert!(run(&["config", "unset", "default_agent"]).status.success());
+    assert!(run(&["config", "unset", "agent.default"]).status.success());
     assert!(
         !fs::read_to_string(&config)
             .unwrap()
-            .contains("default_agent")
+            .contains("agent.default")
     );
     assert!(!home.path().join("state").exists());
 }
@@ -62,8 +62,8 @@ fn inline_edits_validate_preserve_comments_and_work_without_a_daemon() {
 fn scoped_inline_edits_leave_config_untouched() {
     let home = tempfile::tempdir().unwrap();
     for args in [
-        vec!["config", "set", "default_agent", "codex"],
-        vec!["config", "unset", "default_agent"],
+        vec!["config", "set", "agent.default", "codex"],
+        vec!["config", "unset", "agent.default"],
     ] {
         let output = command(home.path())
             .args(args)
@@ -93,7 +93,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         }
         parent.output().unwrap()
     };
-    let config = "config set default_agent codex";
+    let config = "config set agent.default codex";
     for (args, refusal) in [
         (config, "cannot administer"),
         ("skill install", "cannot install user-level skills"),
@@ -253,6 +253,12 @@ fn install_preserves_symlink_targets_and_refuses_directories() {
         original
     );
     assert!(!config.is_symlink());
+    // A second replacement replaces the backup link rather than writing
+    // through it to the original.
+    assert!(run().status.success());
+    assert_eq!(fs::read_to_string(&original).unwrap(), "personal config");
+    assert!(!config.with_extension("toml.backup").is_symlink());
+    let backup = fs::read_to_string(config.with_extension("toml.backup")).unwrap();
     fs::remove_file(&config).unwrap();
     fs::create_dir(&config).unwrap();
     fs::write(config.join("keep"), "keep").unwrap();
@@ -260,6 +266,6 @@ fn install_preserves_symlink_targets_and_refuses_directories() {
     assert_eq!(fs::read_to_string(config.join("keep")).unwrap(), "keep");
     assert_eq!(
         fs::read_to_string(config.with_extension("toml.backup")).unwrap(),
-        "personal config"
+        backup
     );
 }

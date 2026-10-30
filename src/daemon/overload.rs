@@ -130,19 +130,19 @@ pub(super) async fn run(manager: Arc<Manager>) {
     loop {
         // Keep publishing recovery with every protection off: an agent stopped
         // before they were disabled still waits for it.
-        tokio::time::sleep(Duration::from_secs(config.overload.poll_seconds)).await;
+        tokio::time::sleep(Duration::from_secs(config.machine.overload.poll_seconds)).await;
         let operation = manager.gates.operation().await;
         // Check after sleeping, so a reload during it cannot be sampled under
         // the old thresholds. Publication already withdrew readiness, and
         // earlier readings do not count toward the new thresholds.
         let current = manager.config();
-        let changed = current.overload != config.overload;
+        let changed = current.machine.overload != config.machine.overload;
         config = current;
         if changed {
             monitor = Monitor::default();
             continue;
         }
-        let settings = &config.overload;
+        let settings = &config.machine.overload;
         let memory = if settings.memory.enabled {
             crate::process::load::critical_memory(settings.memory.used_percent)
         } else {

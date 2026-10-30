@@ -9,7 +9,7 @@ use crate::{
     protocol::{ConfigTarget, WorkspaceMethod},
 };
 
-pub use crate::config::resolve::Entry;
+pub use crate::config::options::Entry;
 
 /// Every option with its winning layer, and warnings for retired settings.
 pub async fn load(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {

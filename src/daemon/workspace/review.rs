@@ -51,8 +51,8 @@ pub(crate) fn forget(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 impl Manager {
     /// Mark the selected linked items ready at HEAD, or the workspace itself
     /// when nothing is linked and nothing was selected. Marking again moves
-    /// the mark to the current HEAD and reruns `post_ready_cmd`. With
-    /// `[ready] undraft`, marked draft PRs leave draft before the hook runs;
+    /// the mark to the current HEAD and reruns `hooks.post_ready`. With
+    /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs;
     /// a failure there keeps the marks and runs the hook.
     pub async fn mark_ready(
         &self,
@@ -64,7 +64,7 @@ impl Manager {
         let command = HookKind::PostReady
             .command(&settings)
             .map(|path| workspace.path.join(path));
-        // Like post_done_cmd, the hook excludes lifecycle and permit changes.
+        // Like hooks.post_done, the hook excludes lifecycle and permit changes.
         let _resources = match command {
             Some(_) => Some(
                 self.gates
@@ -79,7 +79,7 @@ impl Manager {
         let mut marks = self
             .record_marks(&workspace.id, kind, explicit, head)
             .await?;
-        let undrafted = match settings.ready.undraft {
+        let undrafted = match settings.pr.undraft_on_ready {
             true => self.set_draft(&workspace, &pr_urls(&marks), false).await,
             false => Ok(()),
         };
@@ -100,7 +100,7 @@ impl Manager {
         Ok(marks)
     }
 
-    /// Run `post_ready_cmd`; a failure notifies and keeps the marks.
+    /// Run `hooks.post_ready`; a failure notifies and keeps the marks.
     async fn run_post_ready(&self, workspace: &Workspace, command: &Path, marks: &[ReviewMark]) {
         let result = async {
             let configured_env = self.configured_workspace_environment(workspace).await?;
@@ -190,7 +190,7 @@ impl Manager {
     }
 
     /// Withdraw the selected marks, or every mark without a selection.
-    /// `draft`, else `[unready] draft`, first returns their PRs to draft; a
+    /// `draft`, else `[pr] draft_on_unready`, first returns their PRs to draft; a
     /// failure there keeps the marks, so the withdrawal can be retried.
     pub async fn clear_ready(
         &self,
@@ -204,7 +204,12 @@ impl Manager {
         let selected = self.selected_marks(&workspace.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,
-            None => self.workspace_settings(&workspace).await?.unready.draft,
+            None => {
+                self.workspace_settings(&workspace)
+                    .await?
+                    .pr
+                    .draft_on_unready
+            }
         };
         if draft {
             self.set_draft(&workspace, &pr_urls(&selected), true)

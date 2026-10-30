@@ -71,3 +71,37 @@ fn emoji_require_a_utf8_terminal_with_glyphs() {
         );
     }
 }
+
+#[test]
+fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
+    use anyhow::Context as _;
+
+    use crate::daemon::refusal::{Reason, Refusal};
+
+    let remote = |code| {
+        anyhow::Error::from(RemoteError {
+            code,
+            message: "failed".into(),
+        })
+    };
+    for (error, code) in [
+        (remote(ErrorCode::ScopeDenied), "scope_denied"),
+        (remote(ErrorCode::NameTaken), "name_taken"),
+        (
+            remote(ErrorCode::Unknown("future_code".into())),
+            "future_code",
+        ),
+        (remote(ErrorCode::OperationFailed), "command_failed"),
+        (Refusal::new(Reason::NotFound, "gone").into(), "not_found"),
+        (
+            Refusal::new(Reason::NameTaken, "taken").into(),
+            "name_taken",
+        ),
+        (anyhow::anyhow!("failed"), "command_failed"),
+    ] {
+        let error = Err::<(), _>(error).context("caller context").unwrap_err();
+        let printed = json_error(&error);
+        assert_eq!(printed["error"]["code"], code, "{error:#}");
+        assert_eq!(printed["error"]["message"], format!("{error:#}"));
+    }
+}

@@ -23,3 +23,26 @@ async fn an_oversized_reply_is_answered_with_an_error_saying_so() {
         "{message}"
     );
 }
+
+#[test]
+fn refusals_keep_their_codes_under_context() {
+    use anyhow::Context as _;
+
+    use crate::daemon::refusal::Refusal;
+
+    for (reason, code) in [
+        (Reason::NotFound, ErrorCode::NotFound),
+        (Reason::NameTaken, ErrorCode::NameTaken),
+        (Reason::NotReady, ErrorCode::NotReady),
+        (Reason::UnsavedWork, ErrorCode::UnsavedWork),
+    ] {
+        let error = Err::<(), _>(Refusal::new(reason, "refused"))
+            .context("request")
+            .unwrap_err();
+        assert_eq!(error_code(&error), code, "{error:#}");
+    }
+    assert_eq!(
+        error_code(&anyhow::anyhow!("failed")),
+        ErrorCode::OperationFailed
+    );
+}

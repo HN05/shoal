@@ -8,7 +8,7 @@ use crate::{
 fn configure(manager: &Manager, command: &str, lifetime: Lifetime) {
     let mut config = crate::config::Config::default();
     for (name, requires_approval) in [("GATED", true), ("OPEN", false)] {
-        config.secrets.insert(
+        config.repository.secrets.insert(
             name.into(),
             Secret {
                 command: vec![command.into()],

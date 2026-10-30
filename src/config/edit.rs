@@ -1,4 +1,4 @@
-//! Small, format-preserving edits shared by global and saved repository config.
+//! Small, format-preserving edits shared by global and local config.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Key, Table, Value};

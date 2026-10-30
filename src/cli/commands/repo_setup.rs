@@ -96,7 +96,7 @@ fn prompt(repo: &Repository, workspace: &Workspace) -> String {
          those worktrees and coordinates what tasks share. Study how the project is \
          built, tested and run, then create or update its config in `.shoal.toml`, or \
          in `.shoal/config.toml` when that file already exists, with only what the \
-         project needs: a `setup_cmd` script that prepares a new worktree, named ports \
+         project needs: a `setup.command` script that prepares a new worktree, named ports \
          for servers that several workspaces run at once, `[commands]` for frequent \
          tasks, and resource pools for services or devices that tasks must not use at \
          the same time. `shoal config reference --text` prints the reference that \

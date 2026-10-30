@@ -1,10 +1,13 @@
 use super::*;
+use crate::config::options::Options;
 
 fn labels(plan: Option<&str>, planned: Option<&str>) -> config::Issue {
     config::Issue {
         plan_label: plan.map(str::to_owned),
         planned_label: planned.map(str::to_owned),
-        ..Default::default()
+        ..config::repo::IssueConfig::built_in()
+            .resolve("issue")
+            .unwrap()
     }
 }
 

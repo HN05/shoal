@@ -673,11 +673,13 @@ impl Manager {
     /// machine limit already covers.
     async fn agent_limits(&self, repositories: Vec<String>, slots: &[Slot]) -> Result<Limits> {
         let config = self.config();
-        let global = config.max_agents.unwrap_or_default();
+        let global = config.machine.max_agents;
         let mut limits = Limits {
             global: fixed_limit(global),
             starts: match global {
-                AgentLimit::Dynamic => Some(self.dynamic_starts(&config.overload, slots).await?),
+                AgentLimit::Dynamic => {
+                    Some(self.dynamic_starts(&config.machine.overload, slots).await?)
+                }
                 _ => None,
             },
             repositories: HashMap::new(),
@@ -693,10 +695,10 @@ impl Manager {
             let resolved = config.resolve(&layers)?;
             limits
                 .repositories
-                .insert(id, resolved.max_agents.and_then(fixed_limit));
+                .insert(id, fixed_limit(resolved.agent.max_running));
         }
         if fixed_limit(global).is_some() || limits.repositories.values().any(Option::is_some) {
-            limits.disk = self.disk_limit(&config.overload, slots).await?;
+            limits.disk = self.disk_limit(&config.machine.overload, slots).await?;
         }
         Ok(limits)
     }

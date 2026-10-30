@@ -56,10 +56,9 @@ async fn recorded_hosts_parse_as_their_forge_once_the_daemon_learns_them() {
 async fn reloaded_pins_reach_link_parsing_and_removed_ones_leave_it() {
     let (_root, manager) = crate::test_support::manager().await;
     let url = "https://gitlab.reload.example/team/repo/issues/7";
-    let config = Config {
-        forges: toml::from_str("[\"gitlab.reload.example\"]\ntype = \"forgejo\"\n").unwrap(),
-        ..Config::default()
-    };
+    let config =
+        Config::from_toml("[machine.forges.\"gitlab.reload.example\"]\ntype = \"forgejo\"\n")
+            .unwrap();
     manager.publish_config(config);
     assert!(ForgeRepo::from_issue_url(url).unwrap().issue(url).is_ok());
     // An answer a probe resolved before the reload does not replace it.

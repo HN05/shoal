@@ -97,9 +97,9 @@ shoal watch pr 505                         # Watch an explicit PR
 
 Inside Herdr, `add` opens a new tab after your choices; use `--here`
 to run in the current pane, `--focus` to switch to the new tab, or
-`herdr.enabled = false` to treat Herdr as a plain terminal. Inside
+`terminal.herdr.enabled = false` to treat Herdr as a plain terminal. Inside
 [Rex](https://www.superlogical.com/rex), `add` opens a window in the current
-session instead. `default_host = "herdr"` or `"rex"` sends launches from other
+session instead. `[terminal] default_host = "herdr"` or `"rex"` sends launches from other
 terminals there too. Elsewhere, an agent that starts with an issue or arguments
 runs in a detached zmx session that `shoal attach` reaches. See
 [Herdr settings](docs/reference.md#herdr) and [Rex settings](docs/reference.md#rex).
@@ -108,7 +108,7 @@ Use `--agent claude` for Claude Code, `opencode`, `pi` or `grok` for those
 tools, or `--agent happy-claude`/`happy-codex` for
 a detached [Happy](https://github.com/slopus/happy) session that appears in the
 Happy app. Interactive `shoal add` uses `--agent` or picks an installed agent.
-Issue additions also use `default_agent = "codex"` from the repository or global
+Issue additions also use `agent.default = "codex"` from the repository or global
 config. Edit `~/.config/shoal/worker-template.md` to add instructions for every
 workspace agent and `chat-template.md` for `shoal chat`. Agents read a
 repository's own rules from its `AGENTS.md` or `CLAUDE.md`; the same template
@@ -118,11 +118,10 @@ is supplied to `add`. With shell integration, `shoal add` enters the
 workspace unless its agent runs in a zmx session.
 
 Agent admission defaults to starting agents one at a time while measured CPU,
-memory and disk load leaves room; `load = "light"`, `"balanced"` or `"full"`
-says how hard to push the machine. Set `max_agents` globally or for one
-repository to a fixed limit
-(`shoal config set max_agents 3`, `--repo my-project`), `dynamic`, or `none` to
-disable queuing for that layer. `shoal add` queues agents past the effective
+memory and disk load leaves room; `machine.load = "light"`, `"balanced"` or
+`"full"` says how hard to push the machine. Set a fixed machine-wide limit
+(`shoal config set machine.max_agents 3`) or `none` to disable queuing, and
+limit one repository's agents with `agent.max_running` (`--repo my-project`). `shoal add` queues agents past the effective
 limit and starts them as slots free; `--now` starts one anyway, and `shoal rm
 <name>` drops a queued one. `--after <workspace|issue>` holds an agent until
 that work is done and starts it on the finished branch; an issue's agent also
@@ -138,7 +137,7 @@ shoal                         # Inbox when something needs you, else workspaces;
 shoal repo                    # Interactive repository menu
 shoal inbox                   # Questions, approvals, agents needing input, failures, ready work, demos; --print to list
 shoal work                    # Workspaces, chats and queued agents; --print to list
-shoal queue                   # Agents waiting for a slot under max_agents; start, move or cancel one
+shoal queue                   # Agents waiting for a slot under the agent limits; start, move or cancel one
 shoal work --chats            # Running chats
 shoal work --repo my-project  # Only one repository's workspaces, chats and queued agents
 shoal work --status needs-input,failed  # Only rows with these statuses
@@ -146,10 +145,10 @@ shoal status fix-login        # Workspace activity, changes, resources, issue an
 shoal status pr 12            # Workspaces that link PR 12; also issue or resource
 shoal config show fix-login   # Effective settings and the source of each value
 shoal config reference        # This release's command and configuration reference
-shoal config set default_agent codex
+shoal config set agent.default codex
 shoal config set cleanup.auto.enabled true cleanup.auto.idle_minutes 30  # Saved together
-shoal config set default_agent claude --repo my-project
-shoal config unset default_agent  # Restore the default
+shoal config set agent.default claude --repo my-project
+shoal config unset agent.default  # Restore the default
 shoal cd fix-login             # Enter a workspace; omit the name for a picker
 shoal run --workspace fix-login -- cargo test
 shoal edit fix-login           # Open in $VISUAL/$EDITOR, or [commands] edit = ["zed", "{path}"]
@@ -185,7 +184,7 @@ shoal resume fix-login        # Continue its stopped agent, or the turn shoal st
 shoal resume fix-login --now  # Restore its stopped agent at once in the background
 shoal resume fix-login --focus # Restore its stopped agent in this terminal
 shoal done fix-login          # Mark finished and request safe cleanup
-shoal done --cleanup fix-login # Request cleanup despite [done] cleanup = false
+shoal done --cleanup fix-login # Request cleanup despite [cleanup.done] enabled = false
 shoal done --attach report.md  # Hand back files, such as an investigation's report
 shoal done --integrated fix-login # Another branch has its work under new commits
 shoal done fix-login --undo        # Withdraw a recorded done
@@ -203,6 +202,7 @@ shoal pr edit --draft         # Change the linked PR's text, labels, reviewers o
 shoal pr reviewers            # Users and teams who can review the linked PR
 shoal pr comment --body Done  # Comment on the linked PR; close and reopen work too
 shoal pr comment --attach demo.mp4 # Upload a file and show or link it in a comment
+shoal pr comment --edit 812 --body-file fix.md # Replace the body of a comment you wrote
 shoal pr resolve 812 --body-file why.md # Reply in a review thread, then resolve it
 shoal pr react +1 --comment 812 # React to a comment; --remove takes it back, issue react too
 shoal pr review 42 --comment --line src/a.rs:7 'Why?' # Review with line comments; --approve is yours
@@ -280,18 +280,20 @@ For a separate agent account, configure forge executable wrappers and a
 [Git profile](docs/reference.md#git-profiles) for the agent's commits:
 
 ```toml
-[agent_auth]
+[agent]
+git_profile = "agent"
+
+[agent.forge_clis]
 fj = "~/bin/fj-agent"
 fj_home = "~/.local/share/shoal-auth/fj"  # the HOME fj-agent runs fj with
 gh = "~/bin/gh-agent"
-git_profile = "agent"
 ```
 
 See [agent accounts](docs/reference.md#agent-accounts)
 for wrapper setup.
 
 Memory overload protection stops tracked agents by default while retaining their
-workspaces and leases; before that, Shoal messages running agents to reduce load. To opt out, run `shoal config set overload.memory.enabled
+workspaces and leases; before that, Shoal messages running agents to reduce load. To opt out, run `shoal config set machine.overload.memory.enabled
 false`. See [overload protection](docs/reference.md#overload-protection)
 for thresholds and timing. When disk space runs low, the daemon removes
 workspaces idle cleanup would remove; if space stays critical, it stops tracked
@@ -299,12 +301,12 @@ executions. Agents restore once space returns; `shoal resume` restores the rest.
 they stay down, holding no agent slot and no workspace from cleanup, until
 `shoal resume` continues them, as it continues an agent that exited on its own,
 such as one you quit. To take agents down briefly, use `shoal restart`. `shoal
-resume --all` queues the restores to start as `max_agents` allows; `--now`
+resume --all` queues the restores to start as the agent limits allow; `--now`
 starts them at once in the background, and `--focus` restores one agent in this
 terminal. Agents whose terminal closed, or that a logout or reboot
 stopped, come back through the same queue on their own. Codex and Claude automatically continue
-the workspace session after load recovers; `[agent_resume]` overrides their restore
-command or enables recovery for other agents.
+the workspace session after load recovers; an agent's `resume_command` overrides
+its restore command or enables recovery for other agents.
 
 ## Share resources
 
@@ -364,15 +366,15 @@ Select a named Git identity with `git_profile = "work"` in that file, or use
 in global config; see [Git profiles](docs/reference.md#git-profiles).
 
 New workspaces get the repository checkout's ignored local files, such as `.env`;
-set `copy_ignored = false` in that file to turn this off. The same file can name a
-`setup_cmd`, run automatically on workspace creation or explicitly with
+set `[setup] copy_ignored = false` in that file to turn this off. The same file can name a
+`setup.command`, run automatically on workspace creation or explicitly with
 `shoal work setup [workspace]`, and hooks around setup, assignment completion,
 agent exits, removal, and resource acquisition/release, for example to open a tmux session or prepare an
 external device. See [setup and hooks](docs/reference.md#workspace-setup-and-hooks)
 and [resource hooks](docs/reference.md#resource-hooks) for configuration and failure behavior.
-A `[seed]` table keeps a build of the default branch that new workspaces clone, so
+A `[setup.seed]` table keeps a build of the default branch that new workspaces clone, so
 they rebuild only what their branch changed; see [seed builds](docs/reference.md#seed-builds).
-`presets = ["cargo", "bun"]` sets that up for the tools a repository uses; see
+`[setup] presets = ["cargo", "bun"]` sets that up for the tools a repository uses; see
 [build tool presets](docs/reference.md#build-tool-presets).
 
 Use `[env]` to give tracked executions and hooks workspace-specific variables. Values
@@ -390,7 +392,7 @@ GOCACHE = "{cache.go}"
 scope = "shared"
 ```
 
-Use `[secrets]` in global or saved repository config to give agents, or only
+Use `[secrets]` in global or local config to give agents, or only
 tools such as `agent-browser`, values fetched from your secret store; see
 [agent secrets](docs/reference.md#agent-secrets).
 

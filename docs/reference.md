@@ -12,6 +12,14 @@ nonempty value, which they keep, also when they start later from the queue or in
 a Herdr tab; the commands and shells Shoal runs only inherit one. An agent Shoal does not start, such as one an
 app launch opens, gets JSON by default only when its own environment sets it.
 
+A JSON error is `{"error": {"code": ..., "message": ...}}`. Programs tell
+failures apart by `code`, never by the message, which may change. A refusal
+carries the client API's [error code](../crates/shoal-client/README.md#errors)
+for it, such as `not_found`, `name_taken` or `scope_denied`; `command_failed`
+is a failure without a specific code, and any other code is the daemon's, as it
+sent it. A command that waits on an approval it requested is not an error: it
+exits 2 with `code: "approval_pending"` or `"approval_denied"` on stdout.
+
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
 stay plain; stdout and stderr are detected independently.
@@ -105,7 +113,11 @@ without changing either file; installation needs no daemon. `shoal config` edits
 installs and resets apply to a running daemon at once; after editing the file by
 hand, run `shoal daemon reload`. Reloading keeps running agents and leases, and an
 invalid file leaves the daemon's previous settings in place. The CLI reads agent
-settings on each command. Setup preserves compatible
+settings on each command. The global file's `[machine]` table holds the settings
+that describe this machine; everything outside it follows the repository config
+schema, so a setting copies between the two files. Only a repository config may
+set `setup.command` and `[setup.seed]`, and only the global file `[machine]`; an unknown or
+misplaced key fails with its line and column. Setup preserves compatible
 daemons and commands until restart; incompatible daemons restart automatically.
 Changing the service state directory requires stopping it with its existing
 `--state-dir` first.
@@ -134,7 +146,7 @@ reconnect once a daemon listens again; until then the command's own
 `shoal` calls fail. The new daemon checks the execution record, scope token and
 process identities, then restores the agent's name and automatic recovery
 setting, so stop, overload protection, exit notifications and
-`post_agent_exit_cmd` work as before. A command that exits while the daemon is
+`hooks.post_agent_exit` work as before. A command that exits while the daemon is
 away reports its exit code once reattached; after it exits the wrapper prints
 that it is waiting and gives up after two minutes or on Ctrl-C, leaving the
 execution for `shoal stop`. When the daemon refuses an execution, the wrapper
@@ -184,7 +196,7 @@ once `disk.cleanup_free_gib` is available; otherwise free disk space, then run
 stops nothing, and no agent restores until every reading succeeds.
 
 Before stopping anything, Shoal warns the agents. While memory, CPU or free
-disk space is past its `[overload.warning]` threshold and that protection is
+disk space is past its `[machine.overload.warning]` threshold and that protection is
 enabled, the daemon queues an [agent message](#agent-messages) for each
 workspace with a running agent, naming the threshold and asking it to reduce
 load. CPU must stay above its warning threshold for `cpu_sustained_seconds`.
@@ -199,28 +211,29 @@ against stop thresholds; a warning at or above one arrives with the stop.
 Configure machine-wide settings in global TOML and reload the daemon:
 
 ```toml
+[machine]
 load = "balanced"              # "light", "balanced" or "full"
 
-[overload]
+[machine.overload]
 poll_seconds = 2
 cooldown_seconds = 5
 
-[overload.memory]
+[machine.overload.memory]
 enabled = true                 # Opt out with false
 used_percent = 95              # Linux only; 50–99
 sustained_seconds = 0           # Stop on the first critical sample
 
-[overload.cpu]
+[machine.overload.cpu]
 enabled = false                # Opt in with true
 used_percent = 90              # Aggregate busy time across all cores; 1–100
 sustained_seconds = 300         # Five minutes
 
-[overload.disk]
+[machine.overload.disk]
 enabled = true                 # Opt out with false
 cleanup_free_gib = 5           # Remove idle cleanup candidates below this
 stop_free_gib = 2              # Stop executions below this; 1 to cleanup_free_gib
 
-[overload.warning]
+[machine.overload.warning]
 enabled = true                 # Message running agents before a stop
 memory_used_percent = 85       # Linux; macOS warns at native warning pressure
 cpu_used_percent = 80
@@ -228,7 +241,7 @@ cpu_sustained_seconds = 60
 disk_free_gib = 10
 repeat_minutes = 30            # Least time between repeats per signal and workspace
 
-[overload.recovery]
+[machine.overload.recovery]
 enabled = true                 # Applies only with a configured resume command
 memory_used_percent = 80       # Linux; macOS requires normal pressure
 cpu_used_percent = 75
@@ -255,15 +268,15 @@ and recovery durations must be positive. CPU usage measures aggregate busy time
 across all cores, excluding I/O wait. A failed reading resets that signal’s timer and cannot authorize a stop;
 memory protection remains independent of CPU readings.
 
-Resume commands are argument arrays in `[agent_resume]`, keyed by the tracked
-agent name. They use the same workspace substitutions and repository layering as
-`[commands]`; they must restore a session without repeating the initial prompt.
+A resume command is an argument array in the agent's `[agents.<name>]
+`resume_command`. It uses the same workspace substitutions and layering as
+`[commands]` and must restore a session without repeating the initial prompt.
 Without one, an AI tool with resume arguments (`resume` and `resume_latest`
-under `[ai.<name>]`, built in for Claude and Codex) continues the session its
+under `[agents.<name>]`, built in for Claude and Codex) continues the session its
 hooks last reported, otherwise the latest session in the workspace, without a
 session picker, with a prompt to continue its unfinished assignment on manual or
-automatic resume. Configured commands receive that prompt through `{prompt}`;
-other agents need an entry in `[agent_resume]`.
+automatic resume. Resume commands receive that prompt through `{prompt}`;
+other agents need a `resume_command`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the
 pressure reason, execution ID, and automatic or manual recovery path. After the
@@ -281,7 +294,7 @@ Recovery from load requires
 headroom below each enabled signal’s recovery threshold, whose thresholds must be
 positive and below their stop thresholds, and with disk protection enabled at
 least `disk.cleanup_free_gib` available on every monitored filesystem. Agents restore one at a time, each with
-a fresh healthy interval, which a reload changing `[overload]` restarts. Missing
+a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
 or a done assignment prevent recovery, except from an [idle stop](#idle-agents). Surviving processes Shoal cannot stop, or cannot prove stopped,
 delay it: a `recovery_blocked` notification names them, and the wrapper keeps
@@ -330,7 +343,7 @@ for you to check and stop yourself. An execution Shoal never recorded the launch
 of cannot be proven ended even then, so stop asks you to confirm it did, and
 `--yes` confirms without asking. Stopping several workspaces does not ask: without
 `--yes`, it reports such a workspace as failed. Stopping cancels a waiting
-restore and requires explicit resume even with `[agent_resume]` configured;
+restore and requires explicit resume even with a `resume_command` configured;
 a stop that fails keeps the agents it stopped as stopped work.
 Run stop, restart and resume outside scoped executions, except that a workspace
 process may stop the workspaces below its own with `shoal stop <workspace>`,
@@ -385,7 +398,7 @@ unless `shoal stop` cancels it.
 `shoal resume [workspace...]` queues the restore of each agent a saved recovery
 record or last session keeps after its wrapper exits, or only the `--execution <id>` one, and
 reports how many it queued; the [agent queue](#agent-queue) starts them as
-`max_agents` allows. Without a
+the agent limits allow. Without a
 workspace, resume uses the current workspace when it has something to resume,
 otherwise a picker listing every workspace with what it would restore, stopped
 work first; with nothing to resume anywhere it reports that without a picker.
@@ -398,7 +411,7 @@ there or `shoal done` replaces them. Unlike stopped work they use no agent slot 
 cleanup.
 Stopped commands are included in the continuation prompt, asking the agent to
 rerun the ones still needed: built-in agents receive it as their prompt argument,
-and `[agent_resume]` commands through `{prompt}`. Otherwise, and when no agent was
+and resume commands through `{prompt}`. Otherwise, and when no agent was
 stopped, resume prints them as `shoal run` commands. Either way they are reported once.
 Several workspaces, which each need stopped work or a last session, or `--all` for every workspace whose
 assignment is not done, resume together and report commands without an agent,
@@ -408,10 +421,10 @@ agent restores only when its workspace is named.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive Herdr pane with `herdr.enabled` or Rex block with `rex.enabled`, it
+interactive Herdr pane with `terminal.herdr.enabled` or Rex block with `terminal.rex.enabled`, it
 restores each agent in the pane or block it stopped in once that is back at its
 prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
-per agent where `herdr.new_tab` allows, labelled as `shoal add` labels it, or a
+per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
 start in the background, such as without a terminal, it restores a single agent
 here and lists several as `shoal resume --focus` commands to run in separate
@@ -439,7 +452,8 @@ task prompt is never replayed.
 ### Keeping the machine awake
 
 ```toml
-keep_awake = true              # Opt in; global config only
+[machine]
+keep_awake = true              # Opt in
 ```
 
 With `keep_awake` set, the daemon keeps the machine from sleeping while an
@@ -477,7 +491,7 @@ started, counts as expired; one that ended a turn has the
 [cache lifetime](#agents) of its AI tool. The stop saves the agent as
 [overload protection](#overload-protection) does, records an `agent_stopped`
 notification, and restores the agent once an update arrives for it, though its
-assignment is done and whatever `[overload.recovery]` says. Timers the agent
+assignment is done and whatever `[machine.overload.recovery]` says. Timers the agent
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
@@ -527,7 +541,7 @@ Numbers use `--repo`, the current registered checkout or workspace, then an
 interactive repository picker. An existing association
 reopens its workspace; otherwise the derived local branch reopens as `--existing`
 would. Lookup and ownership failures create nothing. The command starts
-`--agent`, else the configured `default_agent`, else an interactive agent picker.
+`--agent`, else the configured `agent.default`, else an interactive agent picker.
 Choosing “No agent” creates the workspace without a launch. The issue prompt
 names the issue's number, title and URL, includes its description when it has
 one, and points to `shoal view` for comments and later edits; options after
@@ -633,7 +647,7 @@ process gets only its own items, never untracked worktrees, printed, and none af
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
-registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
+registers a path or URL, Ctrl-R renames, Ctrl-O shows the local config, Ctrl-D deletes.
 `repo rename` asks for an omitted name. Commands that take a registered
 repository and omit it use the one of the current registered checkout or
 workspace, then a repository picker.
@@ -714,7 +728,7 @@ Shoal's global flags before `run` or the shorthand command name. Bare `shoal run
 lists each effective command's argument array, source layer, and whether its bare
 name is a built-in; outside a managed workspace it lists only global commands and
 built-in defaults.
-Each name resolves from saved repository config, worktree config, then global
+Each name resolves from local config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
 The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
@@ -725,16 +739,21 @@ and exit status just like arbitrary `run` commands.
 configured arguments. `{diff_base}` resolves lazily through the same daemon
 fork-point/merge-base lookup as `shoal diff`; failure prevents launch.
 A standalone `{args}` inserts the forwarded arguments there; otherwise they are
-appended. Forwarded arguments are never expanded. The CLI agent defaults are:
+appended. Forwarded arguments are never expanded. Agents' launchers live under
+[`[agents.<name>]`](#agents) `command` with the same substitutions; the built-in
+CLI agents' are:
 
 ```toml
-[commands]
-claude = ["claude"]
-codex = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+[agents.claude]
+command = ["claude"]
+
+[agents.codex]
+command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 ```
 
-Override their `[commands]` entries to change the executable or flags; prompt
-templates, trust setup, and agent exit notifications still apply.
+Override their `command` to change the executable or flags; prompt templates,
+trust setup, and agent exit notifications still apply. A `[commands]` entry
+cannot name an agent.
 Claude and Codex launches, including Happy's, trust the repository's checkout and
 shared Shoal workspaces directory before launch, creating the agent's user config if
 needed and preserving other settings. Claude Code looks up a worktree's trust under
@@ -744,7 +763,7 @@ Claude uses `~/.claude.json` (or `$CLAUDE_CONFIG_DIR/.claude.json`); Codex CLI
 and app use `~/.codex/config.toml` (or `$CODEX_HOME/config.toml`). For tracked
 agents, a `CLAUDE_CONFIG_DIR` or `CODEX_HOME` set in the workspace's `[env]` takes
 precedence over Shoal's environment; chats and desktop apps use Shoal's. One set
-in the tool's [`[ai]` `env`](#agents) takes precedence over both. A trust
+in the tool's [`[agents.<name>]` `env`](#agents) takes precedence over both. A trust
 update failure warns and still launches the agent. Removing a repository removes
 its trust entries from these files, and from those its agents and chats ran with,
 while preserving other project settings. When the daemon removes a
@@ -823,24 +842,24 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
-zmx session (`ZMX_SESSION` is set), in a Herdr pane with `herdr.enabled` or in a
-Rex block with `rex.enabled` runs in place. On a terminal outside zmx, a missing
-zmx refuses the agent as a missing agent executable does. The top-level
-`default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
+zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled` or in a
+Rex block with `terminal.rex.enabled` runs in place. On a terminal outside zmx, a missing
+zmx refuses the agent as a missing agent executable does.
+`terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
 [Rex](#rex) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
 
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
 agent in a detached zmx session and returns with a `shoal attach` hint, and any
-other launch runs here and attaches its agent's session. The top-level `focus`
-option overrides the choice, as it does for tabs, and `--here` keeps the launch
+other launch runs here and attaches its agent's session. `terminal.focus`
+overrides the choice, as it does for tabs, and `--here` keeps the launch
 in this terminal. A detached session ends with its agent, whatever its exit
 status; one whose start fails opens your login shell (`$SHELL -l`) there to show
 why, and one without an agent opens the workspace shell there, as a tab does.
 When `done` keeps the workspace, a session Shoal starts for `shoal add`, an
 attached agent or a background `shoal resume` ends after the agent's final turn,
-unless the top-level `close_when_done = false` keeps it open.
+unless `[terminal] close_when_done = false` keeps it open.
 
 `shoal attach [target]` reattaches to the session of the workspace or running
 [chat](#chats) named `target`, with a picker or `--session <name>` when a
@@ -862,7 +881,7 @@ is in use, so `zmx ls` and `zmx attach` work as well, and labelled with their
 owner, `shoal.workspace=<id>` or, once the chat is recorded, `shoal.chat=<id>`.
 Sessions Shoal creates are also labelled `shoal.created=1`. Removing a
 workspace ends the sessions Shoal created for it,
-regardless of `close_when_done`, and daemon startup and `shoal cleanup` end those
+regardless of `terminal.close_when_done`, and daemon startup and `shoal cleanup` end those
 whose workspace is gone. A session you opened yourself stays open, even after a
 Shoal agent ran in it, as do sessions from Shoal versions without the label. An
 agent or chat launched in place refuses to start if Shoal cannot relabel the
@@ -880,18 +899,18 @@ a [workspace title](#workspaces) replaces either.
 `--here` keeps the command in the current pane; JSON, help, and noninteractive
 calls run in place.
 
-The `[herdr]` table in global or repository config uses normal per-option
+The `[terminal.herdr]` table in global or repository config uses normal per-option
 precedence. New tabs stay in the background by default when launching an agent
 with an issue prompt or forwarded arguments, and focus otherwise, so a workspace
-shell or an agent waiting for its first prompt is ready to type into; the
-top-level `focus` option overrides this for tabs and zmx sessions alike, and
+shell or an agent waiting for its first prompt is ready to type into;
+`terminal.focus` overrides this for tabs and zmx sessions alike, and
 `shoal add --focus` focuses one launch and starts it at once, as `--now` does.
-`enabled` and `new_tab` default to true, and `close_when_done` overrides the
-top-level option of that name for tabs; with `enabled = false` Shoal treats a
-Herdr pane as a plain terminal:
+`enabled` and `new_tab` default to true, and `terminal.herdr.close_when_done`
+overrides `terminal.close_when_done` for tabs; with `enabled = false` Shoal treats
+a Herdr pane as a plain terminal:
 
 ```toml
-[herdr]
+[terminal.herdr]
 enabled = true          # Use Herdr tabs and panes
 new_tab = true          # Enable the handoff inside Herdr
 workspace_name = "{repo}" # The workspace for tabs Shoal opens outside Herdr
@@ -910,7 +929,7 @@ open so work can continue, and with shell integration its shell enters the
 workspace at its next prompt; completion closes it once tracked executions resolve
 or the agent finishes its turn, as its hooks report it or, for an agent without
 them, as Herdr does, unless stopped work waits for `shoal resume`. Workspace
-removal closes it immediately, regardless of `close_when_done`, and daemon
+removal closes it immediately, regardless of `terminal.close_when_done`, and daemon
 startup and `shoal cleanup` close those whose workspace is gone. Shoal closes
 only the pane it opened the tab with, so a pane you split off keeps the tab
 open, and a tab you opened stays open. A background tab `shoal resume` opens
@@ -918,16 +937,16 @@ closes the same way; a pane it reuses keeps its tab's behavior. `add`
 without an agent (or choosing “No agent”) opens an interactive shell in the ready
 workspace and leaves the tab open until that workspace is completed or removed.
 
-With `default_host = "herdr"`, launches from a terminal outside Herdr and Rex
+With `[terminal] default_host = "herdr"`, launches from a terminal outside Herdr and Rex
 open their tabs in the `workspace_name` workspace of the Herdr server the
 terminal's `herdr` reaches, which must be running; `{repo}` is the only
 placeholder, and Shoal reuses the first workspace with that label or creates
 it. A focused start, a chat or an agent launch then attaches the terminal to
 the Herdr session holding its tab, as `shoal attach` does, until you detach; a
-background start says where it went. With `herdr.enabled = false` these
+background start says where it went. With `terminal.herdr.enabled = false` these
 launches run in place, and `new_tab = false` keeps queued ones out of Herdr. A start queued from Herdr opens a background
 tab in the workspace it was queued from, then falls back to the
-`workspace_name` workspace on the same server, then to `default_host`.
+`workspace_name` workspace on the same server, then to `terminal.default_host`.
 
 #### Rex
 
@@ -945,12 +964,12 @@ shell, which loads the worker and its variables from a private file and deletes
 it, so nothing long shows on screen or in shell history. The shell stays after
 the worker exits, as in a Herdr tab.
 
-The `[rex]` table in global or repository config uses normal per-option
+The `[terminal.rex]` table in global or repository config uses normal per-option
 precedence; with `enabled = false` Shoal treats a Rex terminal as a plain
 terminal:
 
 ```toml
-[rex]
+[terminal.rex]
 enabled = true          # Use Rex windows and blocks
 new_window = true       # Open windows beside the caller
 placement = "window"    # "split" opens beside the caller's block instead
@@ -959,16 +978,16 @@ session_name = "{repo}" # The session for windows Shoal opens outside one
 # close_when_done = true # Close after done keeps the workspace
 ```
 
-With `default_host = "rex"`, launches from a terminal outside Herdr and Rex
+With `[terminal] default_host = "rex"`, launches from a terminal outside Herdr and Rex
 open their windows in the `session_name` session on the local Rex server; `{repo}` is the only
 placeholder, and Shoal reuses the oldest session with that label or creates it;
-with `rex.enabled = false` these launches run in place, and `new_window = false`
+with `terminal.rex.enabled = false` these launches run in place, and `new_window = false`
 keeps queued ones out of Rex.
 Rex has no terminal client, so a focused start there selects the window in the
 connected Mac Rex app and gives the terminal its shell back; without a
 connected app it says to open Rex. A start queued from Rex opens a background
 window in the session it was queued from, then falls back to the
-`session_name` session on the same server, then to `default_host`.
+`session_name` session on the same server, then to `terminal.default_host`.
 Shoal finds `rex` in Rex's bin directory, on PATH, then in the Rex app, and
 needs Rex API revision 7 or later.
 
@@ -989,14 +1008,16 @@ Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
 (`pi`) and [Grok Build](https://docs.x.ai/build/overview) (`grok`); pi and Grok
 take the prompt as their first argument. Each runs as `shoal <name>` once its
-executable is on PATH. Add another AI tool in global config to run it as an agent:
+executable is on PATH. Add another AI tool in global or repository config to run
+it as an agent:
 
 ```toml
-default_agent = "droid"
+[agent]
+default = "droid"
 
-[ai.droid]
+[agents.droid]
 command = ["droid", "{args}"]
-skill_dir = "~/.factory/skills" # Optional; see agent skills below
+resume_command = ["droid", "--continue"]             # Optional
 instructions = ["--system-prompt", "{instructions}"] # Optional
 resume = ["--resume", "{session}"]                    # Optional
 resume_latest = ["--continue"]                        # Optional
@@ -1005,17 +1026,19 @@ add_dir = ["--add-dir", "{directory}"]                # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
-workspace the way `shoal claude` does, and `--agent droid` selects it. `command`
-is its launcher at the global layer, so a repository `[commands]` entry with the
-same name replaces it; defining both in the global file is an error. Names that
-collide with built-in commands are rejected. The picker and completion offer AI
-tools only.
+workspace the way `shoal claude` does, and `--agent droid` selects it. A tool is
+an agent when it is built in or has a `command` or `base`. Each option merges on
+its own across layers, so a repository can replace `command` and keep the global
+`resume`. Names that collide with built-in commands are rejected. The picker and
+completion offer AI tools only. What a tool needs of this machine, its
+[skill directory](#agent-skill-outside-project-repositories) and proxy, goes
+under `[machine.agents.<name>]` in the global config.
 
 A `base` makes a tool a launch profile of another, here Claude on its own
 claude.ai login while `claude` keeps going through a proxy:
 
 ```toml
-[ai.claude-direct]
+[agents.claude-direct]
 base = "claude"
 env = { CLAUDE_CONFIG_DIR = "~/.claude-direct" }
 env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
@@ -1033,7 +1056,7 @@ Unsetting a variable does not undo one the agent's own settings file sets, such 
 the `env` of Claude's `settings.json`, which a separate `CLAUDE_CONFIG_DIR` avoids.
 
 `retry` defaults to `true` for Claude Code and its launch profiles, and `false`
-for other tools. Set `retry = false` under `[ai.claude]` to opt out; a tool's
+for other tools. Set `retry = false` under `[agents.claude]` to opt out; a tool's
 launch profiles inherit its setting unless they override it. Retries apply to a
 turn an API error ended, for agents whose failed turns Shoal learns of: Claude
 Code, through its `StopFailure` hook, and any agent whose turn its
@@ -1069,14 +1092,14 @@ moment its turn ends.
 
 `proxy` on a tool, which its launch profiles inherit, sends its tracked agents'
 API requests through Shoal's retrying proxy to the `upstream` of a global
-`[proxy.<name>]`, the base URL the agent would otherwise use:
+`[machine.proxies.<name>]`, the base URL the agent would otherwise use:
 
 ```toml
-[proxy.cliproxy]
+[machine.proxies.cliproxy]
 upstream = "http://127.0.0.1:8317"   # CLIProxyAPI
 key = { env = "CLIPROXY_API_KEY" }   # or "<the key itself>", or { cmd = ["bw", "get", "password", "cliproxy"] }
 
-[ai.claude]
+[machine.agents.claude]
 proxy = "cliproxy"
 ```
 
@@ -1085,8 +1108,10 @@ so a profile such as `claude-direct` above would go through the proxy too. To
 keep a direct one, name the proxy on a profile and leave the base without it:
 
 ```toml
-[ai.claude-cliproxy]
+[agents.claude-cliproxy]
 base = "claude"
+
+[machine.agents.claude-cliproxy]
 proxy = "cliproxy"
 ```
 
@@ -1137,23 +1162,23 @@ settings. Claude Code keeps its prompt cache for an hour only on a claude.ai
 login within its usage limits, and for 5 minutes with an API key or auth token,
 so a proxied Claude agent gets `ENABLE_PROMPT_CACHING_1H=1` unless the
 environment it runs with sets that variable; a lifetime in
-`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `[agent_resume]` command, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
+`CLAUDE_CODE_PROMPT_CACHE_TTL` or Claude's `promptCacheTtl` setting still wins. Only Claude Code and Codex, and their launch profiles, can go through it; a launch of another tool that names one is refused. A configured `resume_command`, which gets none of Shoal's hooks, still gets the arguments that point it at the proxy, before a `--` or at its end. An agent its wrapper restores in place, as `shoal restart` or an automatic restore does, runs through the proxy its restore command was resolved with: the same one keeps running, another upstream or key replaces it, and one removed since stops. Chats and desktop apps run without it. Builds without the default
 `proxy` Cargo feature refuse to launch an agent that names one.
 
 `instructions` passes the rendered agent guidance apart from the first message,
 with `{instructions}`, or `{instructions_toml}` for a TOML string literal;
-`resume` and `resume_latest` restore a stopped agent's session (see `[agent_resume]`);
+`resume` and `resume_latest` restore a stopped agent's session (see `resume_command`);
 `fork` starts a new session from a copy of session `{session}`, which
 [`split --fork`](#child-workspaces) uses and which leaves that session unchanged;
 `{directory}` names the workspace it works in, for a tool such as Codex that
 otherwise keeps the forked session's directory.
 `add_dir` gives an agent, fresh or restored, another working directory
 `{directory}`, so a sandbox or a setting such as Claude Code's
-`blockReadsOutsideWorkingDirectories` lets it work there: each `agent_dirs`
+`blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
 entry for every agent and chat, for a workspace's agent the repository's
 workspaces directory, where `shoal split` puts children and its [temporary
 directory](#temporary-directories) lies, and for a chat its temporary directory. An empty list gives none.
-`agent_dirs` (default `["/tmp"]`) lists directories every agent may read without
+`agent.dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an
 empty list gives none.
@@ -1164,21 +1189,21 @@ becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex, and their launch profiles, also get Shoal's
 hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
 `shoal` commands that report on and finish its assignment, with or without `--json`;
-the daemon still limits them to its scope. `--agent` and `default_agent` also
-accept any `[commands]` name; `shoal run <name>` for a name that is not an AI tool
-remains a plain command invocation without agent prompts or exit notifications,
-expanding `{prompt}` to an empty string.
+the daemon still limits them to its scope. `shoal run <name>` for a `[commands]`
+shortcut remains a plain command invocation without agent prompts or exit
+notifications, expanding `{prompt}` to an empty string.
 
-`shoal claude` and `shoal codex` without `--cli`/`--app` use `claude.default_mode`
-and `codex.default_mode` from the workspace's repository config or
+`shoal claude`, `shoal codex` and their launch profiles without `--cli`/`--app`
+use the launched agent's own `agents.<name>.default_mode` from the workspace's
+repository config or
 `~/.config/shoal/config.toml` (or `$XDG_CONFIG_HOME/shoal/config.toml`), read at
 launch without a daemon restart:
 
 ```toml
-[claude]
+[agents.claude]
 default_mode = "cli" # Or "app"
 
-[codex]
+[agents.codex]
 default_mode = "cli" # Or "app"
 ```
 
@@ -1190,7 +1215,7 @@ launches add no agent flags and provide no execution tracking, scope token, port
 variables or output default (so automatic cleanup cannot see their activity);
 T3's app must already be running.
 
-Happy sessions are an optional integration: off until `happy.enabled = true` in
+Happy sessions are an optional integration: off until `terminal.happy.enabled = true` in
 global or repository config, and absent from builds without the default `happy`
 Cargo feature (`cargo build --no-default-features`), which also drops its
 encryption dependencies. While off, pickers and completion leave Happy out and
@@ -1291,7 +1316,7 @@ other commands do. Failed session closes notify and retry at startup or with
 with an agent about a repository, to discuss it, its issues and plans, or to
 coordinate work, without changing code. The repository is the named one, else the
 current checkout's or workspace's, else a picker. The agent is `--agent`, else
-`default_agent`, else a picker of the installed ones. The chat first refreshes the
+`agent.default`, else a picker of the installed ones. The chat first refreshes the
 default branch as `shoal repo sync` does, under the [creation refresh
 rules](#base-branch); a failed refresh warns and the chat still starts. The
 agent's configured launcher runs in the registered checkout with the rendered [chat
@@ -1308,7 +1333,7 @@ default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
 On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
 where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
-opens a focused tab labelled with the name regardless of `herdr.focus`, unless `--here` or
+opens a focused tab labelled with the name regardless of `terminal.focus`, unless `--here` or
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
 window; on a terminal it runs in a zmx
 session named after the chat, which [`shoal attach <name>`](#agents)
@@ -1371,10 +1396,10 @@ planned_label = "planned" # Default: unset
 ### Agent queue
 
 ```sh
-shoal config set max_agents dynamic           # Start agents while measured load allows
-shoal config set max_agents 3                 # Fixed machine-wide limit
-shoal config set max_agents 2 --repo shoal    # And at most two of them in this repository
-shoal config set max_agents none --repo docs  # No repository limit
+shoal config set machine.max_agents dynamic   # Start agents while measured load allows
+shoal config set machine.max_agents 3         # Fixed machine-wide limit
+shoal config set agent.max_running 2 --repo shoal  # And at most two of them in this repository
+shoal config set agent.max_running none --repo docs # No repository limit
 shoal add <issue-url> --agent claude          # Starts now, or queues when no slot is free
 shoal add <issue-url> --agent claude --now    # Starts now regardless of the limits
 shoal add <issue-url> --agent claude --after api --after 12  # Starts once api and #12 are done
@@ -1386,25 +1411,26 @@ shoal queue move api last                     # Stops api's running agent and qu
 shoal queue cancel api                        # Removes a waiting entry; a restore's agent stays stopped
 ```
 
-`max_agents` limits the agents that run at once. It defaults to `dynamic`,
+`machine.max_agents` limits the agents that run at once. It defaults to `dynamic`,
 which starts one agent at a time, at least 10 seconds apart, while measured load
-leaves room below the [`[overload.warning]`](#overload-protection) CPU, memory
+leaves room below the [`[machine.overload.warning]`](#overload-protection) CPU, memory
 and disk thresholds, which [`load`](#overload-protection) sets. A new agent
 mostly reads files at first and compiles later, so for its first three minutes
 it counts at the load a settled agent shows: average CPU use over the last five
 minutes divided by the agents that have run longer, at least half a core each,
 or two cores each before any has. A start must fit the last minute's CPU use
 plus every such warming agent. With no agent running, one starts whatever the
-load. Critical memory, disk below `overload.disk.stop_free_gib`, or a failed
+load. Critical memory, disk below `machine.overload.disk.stop_free_gib`, or a failed
 memory or disk reading starts none; a missing CPU reading starts only that first
 agent. Disabled memory or disk protection ignores that signal. Set a positive
 number for a fixed limit or `none` for unlimited admission. While a fixed
-limit applies, so does the disk rule: below `[overload.warning] disk_free_gib`
+limit applies, so does the disk rule: below `[machine.overload.warning] disk_free_gib`
 an agent starts only when none uses a slot, and below
-`overload.disk.stop_free_gib` or without a reading none starts. The global value
-counts every agent on the machine; a repository's fixed value (saved config or
-`.shoal.toml` in its registered checkout) counts only that repository's agents,
-within the global limit, while `dynamic` there adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
+`machine.overload.disk.stop_free_gib` or without a reading none starts. That
+value counts every agent on the machine; a fixed `agent.max_running` counts
+only one repository's agents, within the machine limit: set globally, it applies
+to each repository that sets none of its own (local config or `.shoal.toml` in
+its registered checkout). Its default, `dynamic`, adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done or its restore waits in the queue; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
@@ -1416,7 +1442,7 @@ starts, from the then-current default branch. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
 records a `queue_started` notification. An entry queued from Herdr or Rex opens
 a background tab or window where it was queued; otherwise it runs where
-`default_host` puts it, by default a detached zmx session that `shoal attach`
+`terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the
 workspace for two minutes, records a `queue_failed` notification with the reason
@@ -1451,8 +1477,8 @@ update arrives; `shoal resume` makes it wait only for a slot, keeping its place.
 The daemon
 starts it as it starts a queued launch: in the Herdr pane or Rex block the agent
 stopped in once that is back at its prompt, otherwise in a background tab or
-window where `herdr.new_tab` or `rex.new_window` allows, otherwise where
-`default_host` puts it. A restore whose
+window where `terminal.herdr.new_tab` or `terminal.rex.new_window` allows, otherwise where
+`terminal.default_host` puts it. A restore whose
 agent has not started within two minutes records a `queue_failed` notification
 and leaves the agent stopped. Stopping the workspace or marking its assignment
 done cancels a pending one, and resuming or discarding the agent another way
@@ -1508,10 +1534,10 @@ user.
 
 ### Agent accounts
 
-`[agent_auth]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
-`tea`, each an absolute or `~/` path, `fj_home`, the HOME the `fj` wrapper runs `fj` with,
-and a `git_profile` naming one of the global [Git profiles](#git-profiles), all
-defaulting to unset. Values follow repository/global
+`[agent.forge_clis]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
+`tea`, each an absolute or `~/` path, and `fj_home`, the HOME the `fj` wrapper runs
+`fj` with; `[agent] git_profile` names one of the global [Git profiles](#git-profiles)
+for agents' Git commands. All default to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
 directory containing these tool names to the child's PATH; nested commands inherit
 it. Missing or non-executable wrappers fail before the agent starts. The directory
@@ -1588,7 +1614,7 @@ command = ["op", "read", "op://Agents/agent-browser/key"]
 tools = ["agent-browser"]
 ```
 
-Set it in the global config or the saved repository config; a worktree file
+Set it in the global config or the local config; a worktree file
 that sets it is rejected, because secret sources belong to the machine. An
 entry replaces the same-named entry below it whole. Shoal stores the commands,
 never the values.
@@ -1621,8 +1647,8 @@ ends a lease grant.
 
 ### Prompt templates
 
-`worker_template` and `chat_template` in the saved repository
-TOML win over the worktree's TOML values or `worker-template.md` and
+`agent.templates.worker` and `agent.templates.chat` in the local config, or
+`worker-template.md` and `chat-template.md` beside it, win over the worktree's TOML values or `worker-template.md` and
 `chat-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
@@ -1631,14 +1657,10 @@ value suppresses local additions while preserving global guidance; an empty
 global value suppresses its base text. Without a global chat template,
 Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
-read at launch without a daemon restart. The issue prompt is built in:
-`issue_template` and `issue-template.md` still load but are unused. The former
-names `agent_template` and `agent-template.md` still work; one level setting
-both names fails. `config show` warns for each layer that holds instructions of
-yours in a retired template, uses a former name, or has a worker template
-repeating the opening of Shoal's guidance, as a copy of an earlier default
-does; the daemon alerts about these in the global config when it starts or
-reloads its config.
+read at launch without a daemon restart. The issue prompt is built in.
+`config show` warns for each layer whose worker template repeats the opening of
+Shoal's guidance, as a copy of an earlier default does; the daemon alerts about
+it in the global config when it starts or reloads its config.
 
 Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
 followed by the worker template, which holds only your additions and cannot
@@ -1860,7 +1882,7 @@ repository gets `~/shoal/<name>/`, named by `--name` or the source basename with
 `.git`, suffixed `-2`, `-3` on conflict with files or recorded paths; its workspaces
 default to it and a URL clone lives there as `.checkout`. A local checkout
 already at `~/shoal/<name>/<anything>` keeps that directory. `root_dir =
-"~/Projects"` in the global config (absolute or `~/` path outside Shoal's state
+"~/Projects"` under `[machine]` (absolute or `~/` path outside Shoal's state
 directory, every checkout and every repository directory; daemon reload required) changes the parent for new
 registrations; symlinks and `..` are resolved before checking and creating the root,
 even across missing components. Existing registrations keep their paths until
@@ -1890,7 +1912,7 @@ is another registered checkout, the selector is ambiguous and lists both matches
 the repository's `.shoal.toml`: setup, named ports, commands and resource pools,
 checked with `config show` and `work setup` and then committed. It runs in the
 repository's `shoal-setup` workspace, opening one on that branch when none
-exists. The agent is `--agent`, else `default_agent`, else one chosen from the
+exists. The agent is `--agent`, else `agent.default`, else one chosen from the
 agent picker; arguments after `--` go to the agent.
 
 ### Contributions
@@ -1925,7 +1947,7 @@ refused.
 Define named Git settings in the global config, then reload the daemon:
 
 ```toml
-[git.profiles.work]
+[machine.git_profiles.work]
 user.name = "Your Name"
 user.email = "you@company.example"
 user.signingKey = "your-key"
@@ -1934,7 +1956,7 @@ commit.gpgsign = true
 
 Set `git_profile = "work"` at the top level of repository or global config.
 Override it for one creation with `shoal add <repo> --git-profile work`.
-Selection follows the flag, saved repository config, the new worktree's config file,
+Selection follows the flag, local config, the new worktree's config file,
 then global config. With no selection, Git settings stay unchanged. Profile
 values may be strings, booleans or integers; omitted keys retain Git's normal
 inheritance. An unknown flag value is rejected before creation; an unknown
@@ -1971,8 +1993,8 @@ Edits preserve unrelated settings and comments and keep the previous file as
 so settings that depend on each other change together:
 
 ```sh
-shoal config set simulators.profiles.phone.device '"iPhone 17"' \
-  simulators.profiles.phone.runtime '"iOS 27"' simulators.default phone
+shoal config set machine.simulators.profiles.phone.device '"iPhone 17"' \
+  machine.simulators.profiles.phone.runtime '"iOS 27"' machine.simulators.default phone
 ```
 
 An invalid result leaves both files unchanged.
@@ -1980,25 +2002,33 @@ An invalid result leaves both files unchanged.
 ### Store repository config outside Git
 
 ```sh
-shoal repo config my-project --file ~/project-shoal.toml
-shoal repo config my-project          # Print the saved TOML
-shoal repo config my-project --clear  # Return to worktree config
+shoal repo config my-project                                 # Print the local config's path and contents
+shoal config set setup.command scripts/setup --repo my-project
+shoal config unset agent.default --repo my-project
 ```
 
-The file uses the `.shoal.toml` format and is validated and copied into Shoal's
-database; reimport it after edits, or use `shoal config set KEY VALUE... --repo NAME`
-and `shoal config unset KEY... --repo NAME` to edit individual saved keys with the
-same syntax and validation as global edits. Repository edits are serialized in
-the daemon and leave worktree files untouched. Unsetting removes only the saved
-value, allowing lower layers to supply it. Repository options resolve per option, for
-every workspace of that repository: a value in the saved config wins, one it
-omits comes from the worktree's `.shoal.toml` or `.shoal/config.toml` (both
-together is an error), and a named `[ports.<name>]`, `[resources.<name>]` or
-`[resource_pools.<name>]` table replaces the one below it as a unit, so a
-saved `[ports.web]` supplies every field of `web`. Changes apply on the next
-request without a restart. The saved config survives restarts, renames, and
-workspace removal; `repo rm` deletes it. `--json` returns `repository_id` and
-`toml`. Scoped workspace commands cannot administer it.
+A repository's local config is `.shoal/config.toml` in its own directory, beside
+its workspaces and `.checkout` (`~/shoal/my-project/.shoal/config.toml`), for a
+repository that won't accept `.shoal.toml` or settings only you want. It is
+outside every Git tree, so nothing ignores it and `git clean` never touches it.
+It uses the `.shoal.toml` format, plus `[secrets]`, and `worker-template.md` and
+`chat-template.md` beside it work as in the other layers. A relative hook path or
+`setup.command` there names a script in that `.shoal` directory, so untracked
+scripts can live beside it; `setup.seed` stays relative to the worktree.
+
+Shoal reads the file in place on every request, so an edit applies to every
+workspace at once without a restart; an invalid file fails each command until
+it is fixed. `shoal config set KEY VALUE... --repo NAME` and
+`shoal config unset KEY... --repo NAME` edit it like global edits, keeping
+comments and the previous file as `config.toml.backup` and saving only a valid
+result. Repository options resolve per option, for every workspace of that
+repository: a value in the local config wins, one it omits comes from the
+worktree's `.shoal.toml` or `.shoal/config.toml` (both together is an error),
+and a named `[ports.<name>]`, `[resources.<name>]` or `[resource_pools.<name>]`
+table replaces the one below it as a unit, so a local `[ports.web]` supplies
+every field of `web`. `repo migrate` moves the file with the repository's
+directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
+while the file does not exist. Scoped workspace commands cannot administer it.
 
 ### Delete a repository
 
@@ -2008,7 +2038,7 @@ shoal repo rm my-project -y
 
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces, their ports, simulators, and
-leases, its seed and shared caches, and the saved config, stopping managed commands first. Shoal attempts to
+leases, its seed and shared caches, and its local config, stopping managed commands first. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking
@@ -2094,7 +2124,7 @@ is aborted: run `shoal merge <default>` in the workspace, resolve there, and lan
 again. Landed commits count as pushed for `rm` and automatic cleanup.
 
 An agent's scoped `shoal land` needs the user's approval for the branch at its
-current commit unless `[land] requires_approval = false`. The first run records a
+current commit unless `[permissions] land = "direct"`. The first run records a
 `land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 after approval, running it again lands that commit with every check above. A new
 commit replaces the request with one for the new commit, approving a request
@@ -2108,7 +2138,9 @@ upstream is refused before merging, and a failed push keeps the landed merge.
 ```toml
 [land]
 push = false             # Default: false
-requires_approval = true # Default: true
+
+[permissions]
+land = "propose"         # Default: "propose"; "direct" lands at once
 ```
 
 ### Diff
@@ -2143,19 +2175,22 @@ conflicts; `--json` returns `target`, `target_commit`, `head`, `conflicts` and
 Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
 config) can name lifecycle executables. Untracked hooks may also be global
 defaults in `~/.config/shoal/config.toml`; a repository value replaces the global
-command, with saved repository config taking precedence over the worktree file.
-`setup_cmd` is repository-only:
+command, with local config taking precedence over the worktree file.
+`setup.command` is repository-only:
 
 ```toml
-copy_ignored = false                  # Skip copying the checkout's ignored files
-pre_setup_cmd = "scripts/before.sh"   # Before tracked setup, without a terminal
-setup_cmd = "scripts/setup.sh"        # Prepares the worktree; must exit 0
-post_setup_cmd = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
-post_agent_exit_cmd = "scripts/exited.sh" # When a tracked agent exits
-post_done_cmd = "scripts/done.sh"     # After assignment completion, before cleanup
-post_ready_cmd = "scripts/ready.sh"   # After work is marked ready for review
-pre_remove_cmd = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
-post_remove_cmd = "scripts/removed.sh" # After removal, from the repository checkout
+[setup]
+copy_ignored = false              # Skip copying the checkout's ignored files
+command = "scripts/setup.sh"      # Prepares the worktree; must exit 0
+
+[hooks]
+pre_setup = "scripts/before.sh"   # Before tracked setup, without a terminal
+post_setup = "scripts/attach.sh"  # After the workspace is ready, e.g. open tmux
+post_agent_exit = "scripts/exited.sh" # When a tracked agent exits
+post_done = "scripts/done.sh"     # After assignment completion, before cleanup
+post_ready = "scripts/ready.sh"   # After work is marked ready for review
+pre_remove = "scripts/detach.sh"  # Before the worktree is removed, e.g. close it
+post_remove = "scripts/removed.sh" # After removal, from the repository checkout
 ```
 
 Each value is one executable path, run directly without shell parsing or PATH
@@ -2163,22 +2198,22 @@ lookup. Hooks that run while the worktree exists resolve relative paths against
 its root and use it as their working directory. Give scripts a shebang and put
 arguments and shell logic inside them.
 
-`pre_setup_cmd` runs in the daemon before tracked setup, after ownership and
-execution checks, with a 60-second limit. It works without a `setup_cmd`.
+`hooks.pre_setup` runs in the daemon before tracked setup, after ownership and
+execution checks, with a 60-second limit. It works without a `setup.command`.
 Failure marks the workspace failed and skips setup;
 retry with `shoal work setup`. Lifecycle and permit changes are rejected while it runs.
 
 Tracked setup starts with Worktrunk's `wt step copy-ignored`, which copies the
 repository checkout's ignored files, such as `.env` or local signing settings,
-into the workspace before `setup_cmd`. It runs without a `setup_cmd`, and a
+into the workspace before `setup.command`. It runs without a `setup.command`, and a
 failure fails setup. It prints how many files it copied, and nothing when it
-copied none. `copy_ignored = false`, also a global default, turns it off.
+copied none. `[setup] copy_ignored = false`, also a global default, turns it off.
 Files the workspace already has are kept, including paths cloned from a
 [seed](#seed-builds). Without a `.worktreeinclude` in the checkout every
 ignored file is copied, build caches included; its gitignore-style patterns limit
 the copy, and `[step.copy-ignored] exclude` in `.config/wt.toml` narrows it further.
 
-`setup_cmd` runs through the tracked execution wrapper with workspace scope and
+`setup.command` runs through the tracked execution wrapper with workspace scope and
 your CLI environment. `shoal add` waits for it before entering the worktree or
 launching an agent; the workspace stays `preparing` until it exits 0 with no
 surviving processes. When that command is interrupted before setup starts,
@@ -2197,15 +2232,15 @@ shoal rm fix-login --yes                    # Delete this workspace
 Hooks are untracked: they run as your own processes with `SHOAL_HOOK` (the key
 without `_cmd`), `SHOAL_WORKSPACE`, `SHOAL_WORKSPACE_ID`, `SHOAL_WORKSPACE_PATH`,
 and `SHOAL_STATE_DIR`, without a scope token, port variables or `SHOAL_OUTPUT`, so whatever they leave running (a tmux
-server, say) is not a Shoal execution. `post_setup_cmd` runs from the CLI with your
+server, say) is not a Shoal execution. `hooks.post_setup` runs from the CLI with your
 terminal after `add` or `work setup` has a ready workspace and before any `--agent`; a
 nonzero exit keeps the workspace, skips the agent, and fails the command.
-`pre_remove_cmd` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
+`hooks.pre_remove` runs inside the daemon for `rm`, `repo rm`, and automatic cleanup,
 after the removal checks pass and managed commands stop, without a terminal and with
 a 60-second limit; a nonzero exit or timeout retains the workspace with the hook's
 stderr as its error. It is skipped when the worktree directory is already gone.
 
-`post_remove_cmd` runs after successful removal from the shared daemon path,
+`hooks.post_remove` runs after successful removal from the shared daemon path,
 with a 60-second limit and no terminal. Its path and working directory are relative
 to the repository checkout, whose copy of the script must exist; `SHOAL_WORKSPACE_PATH`
 still names the removed worktree. The command is selected before removal.
@@ -2216,11 +2251,12 @@ following a daemon restart. Use a pre-remove hook when failure must retain owner
 
 ### Build tool presets
 
-`presets` names the build tools a repository uses, and Shoal sets each one up so
+`setup.presets` names the build tools a repository uses, and Shoal sets each one up so
 its workspaces stop repeating the same work. The global config's list applies to
 every repository that does not name its own, and `presets = []` turns it off:
 
 ```toml
+[setup]
 presets = ["cargo", "bun"]
 ```
 
@@ -2273,8 +2309,8 @@ A repository can keep a build of its default branch that new workspaces start
 from, so a branch rebuilds only what it changed and shares the rest on disk:
 
 ```toml
-[seed]
-cmd = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
+[setup.seed]
+command = "scripts/seed.sh"  # In the worktree; builds the default branch and must exit 0
 paths = ["target"]       # Optional build outputs, relative to the worktree, new workspaces start with
 ```
 
@@ -2284,11 +2320,11 @@ replaces the presets' commands and `paths` their outputs.
 The daemon keeps a locked, detached worktree at the local default branch's tip in
 the repository directory's `.seed`, and runs the build there when that branch or
 the seed's settings change. It checks every minute, one repository at a time, and
-waits while memory or free disk space is past its `[overload.warning]` threshold;
+waits while memory or free disk space is past its `[machine.overload.warning]` threshold;
 a build that failed is retried only after such a change or a daemon restart. The
-settings come from the repository's saved config and its registered checkout's
-file. `seed.cmd` is an executable inside the seed worktree, given as a relative
-path and run like `setup_cmd`; preset commands run in the worktree's root. The
+settings come from the repository's local config and its registered checkout's
+file. `setup.seed.command` is an executable inside the seed worktree, given as a relative
+path and run like `setup.command`; preset commands run in the worktree's root. The
 build gets the repository's `[env]`, with placeholders
 rendered for the seed worktree, but no inherited `SHOAL_*` variables or agent secrets. It has a
 two-hour limit and writes each command's output to `.seed/build.log` after a
@@ -2305,7 +2341,7 @@ already had, older times could hide changed sources. Cloned files share disk blo
 until rewritten. A failed build or clone records a `seed_failed` notification, and
 the workspace starts without the seed.
 
-Removing the repository or its `[seed]` stops a running build and deletes the
+Removing the repository or its `[setup.seed]` stops a running build and deletes the
 seed worktree, snapshot and log, keeping anything else in `.seed`. Shoal marks
 `.seed` and the seed worktree's Git metadata with the repository, and neither
 builds in nor deletes a seed whose marks are missing. Point outputs a tool keeps
@@ -2346,7 +2382,7 @@ Removing the repository deletes `.caches`.
 
 Every workspace and chat has its own directory for temporary files, `.tmp/<id>`
 in the repository directory, named by the workspace's or chat's ID. Every process
-Shoal starts in a workspace, its hooks other than `post_remove_cmd`, `shoal work
+Shoal starts in a workspace, its hooks other than `hooks.post_remove`, `shoal work
 env` and a chat's agent get it as `TMPDIR`, so their scratch files stay out of the
 shared `/tmp`; a `TMPDIR` in `[env]` replaces it. The daemon creates the
 directory, readable only by you, when it starts a process in the workspace,
@@ -2501,7 +2537,7 @@ the registered repository with the exported repository's origin, or the one
 `--repo` names. Given several files, or a directory, whose `.shoal` files it
 reads in name order, it imports each one, going on after a failure, lists every
 workspace it opened and exits 1 naming each file it could not import or whose
-`post_setup_cmd` failed. It fetches the default branch when the repository lacks the
+`hooks.post_setup` failed. It fetches the default branch when the repository lacks the
 commit the bundle builds on, records the workspace as removed with its
 checkpoint, then restores it as `shoal work restore` does; when that restore fails,
 `shoal work restore <workspace>` retries it. On the machine that exported it, `shoal
@@ -2512,15 +2548,15 @@ copied to, and `--new-sessions` on none. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
-`[agent_resume]`. Workspace processes can neither export nor import.
+its `resume_command`. Workspace processes can neither export nor import.
 
 ### Assignment completion
 
 `shoal done [workspace]` records that the assignment is finished and notifies the
 user. It replaces a recorded completion at another HEAD, with another cleanup
 choice, another `--integrated` choice, other results or a cleanup error, and fails when it would change nothing: the same
-completion with no open question to close and no `post_done_cmd` to rerun.
-`[done] cleanup` defaults to true; `--cleanup` requests cleanup when it is
+completion with no open question to close and no `hooks.post_done` to rerun.
+`[cleanup.done] enabled` defaults to true; `--cleanup` requests cleanup when it is
 false. It first stops the workspace's [demos](#demos) unless `--keep-demos` leaves
 them running until cleanup. `--integrated` records that another branch has the
 work under new commits, as after a cherry-pick or a rebase that edited them: until
@@ -2548,8 +2584,8 @@ merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
 whether or not its agent ran `done`.
 
 ```toml
-[done]
-cleanup = true    # Default: true
+[cleanup.done]
+enabled = true    # Default: true
 ```
 
 `shoal done --undo [workspace]` withdraws a recorded completion and fails when none
@@ -2557,7 +2593,7 @@ is recorded, leaving its results among the attached files; `--json` returns `{"w
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.
 
-`post_done_cmd` runs in the daemon after recording completion, before cleanup,
+`hooks.post_done` runs in the daemon after recording completion, before cleanup,
 with the worktree as its working directory, no terminal, and a 60-second limit.
 It follows normal global and repository configuration precedence and receives the
 [hook identity environment](#workspace-setup-and-hooks) plus
@@ -2569,15 +2605,15 @@ workspace's completion/PR gate, so it must not call Shoal commands that change
 that workspace's completion or PR registrations. Each `done` runs it again; daemon
 restart does not replay it.
 
-`post_agent_exit_cmd` runs alongside agent-exit notifications, including configured
+`hooks.post_agent_exit` runs alongside agent-exit notifications, including configured
 agents and disconnects, while the workspace is ready, after acknowledging the
 wrapper's exit. It uses the same daemon hook
-rules and config precedence as `post_done_cmd`, with `SHOAL_AGENT`,
+rules and config precedence as `hooks.post_done`, with `SHOAL_AGENT`,
 `SHOAL_AGENT_EXIT_CODE` (empty on disconnect), and `SHOAL_AGENT_EXIT_COMPLETE`
 (`true` when no owned processes remain, otherwise `false`). Failure only records
 `hook_failed`; agent exit does not mark an assignment done. Removal uses its own
 hooks, and plain commands and restart do not produce agent-exit hooks. An exit
-hook may signal `done` only when no `post_done_cmd` is configured; otherwise the
+hook may signal `done` only when no `hooks.post_done` is configured; otherwise the
 completion hook would conflict with its lifecycle/permit guard.
 
 Issue associations suppress idle cleanup, not merged cleanup.
@@ -2637,14 +2673,14 @@ answers as another forge. A host that answers as none of them fails until you
 set its type, which also stops Shoal asking it:
 
 ```toml
-[forges."git.example.com"]
+[machine.forges."git.example.com"]
 type = "gitlab"   # or "github", "forgejo" (also Gitea) or "bitbucket"
 ```
 
 Lookups use
 your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
 saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
-token `[bitbucket]` configures. Without a login, only public repositories are
+token `[machine.bitbucket]` configures. Without a login, only public repositories are
 readable. Shoal stores no forge credentials. An issue or PR number may be
 written `#42`.
 
@@ -2662,13 +2698,13 @@ on GitHub its eight, and on GitLab the same eight as suggestions, since any emoj
 it knows works. `--json` returns `names` and `accepts_other_names`. Bitbucket
 has no reactions.
 
-Bitbucket has no official CLI, so the global `[bitbucket]` table names a
+Bitbucket has no official CLI, so the global `[machine.bitbucket]` table names a
 `token_command`, an argument array whose output is the token; Shoal runs it for
 each lookup or change and keeps nothing. The token is an access token, or an
 Atlassian API token when `email` names its account:
 
 ```toml
-[bitbucket]
+[machine.bitbucket]
 token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
 email = "you@example.com"
 ```
@@ -2693,6 +2729,7 @@ shoal pr open --label area/cli      # push, then link the branch's open PR or op
 shoal pr edit --title "Fix login" --add-label bug --draft
 shoal pr comment --body-file notes.md
 shoal pr comment --body-file notes.md --attach shot.png --attach 'demo.mp4#Login flow'
+shoal pr comment --edit 812 --body-file fixed.md  # replace the body of comment 812
 shoal pr reply 812 --body-file why.md   # in the thread of review comment 812
 shoal pr resolve 812 --body-file why.md # reply, then resolve; unresolve reopens
 shoal pr review 42 --comment --body-file review.md --line src/a.rs:7 'Why?'
@@ -2788,6 +2825,12 @@ removes it; the reaction is GitHub's name, as `shoal view` shows it, or one the
 forge has, such as a GitLab emoji. A comment must belong to the item, which is
 checked with the item's kind before anything is sent. A reaction already as
 asked is left unchanged. Bitbucket has no reactions.
+`comment --edit ID` replaces the body of a comment, or on a PR an inline
+comment, as `shoal view` shows its ID, with `--body` or `--body-file`; it takes
+no `--attach`. The comment must belong to the item and be written by the login
+Shoal acts as, which is checked before anything is sent; a comment that
+already has the new body is left unchanged. Watches do not report a workspace
+process's edit back.
 `update` brings an open PR's branch up to date with its base on the forge,
 `--method merge` (the default) by merging the base in and `--method rebase` by
 rebasing onto it; workspace processes may update, and then pull the branch
@@ -2808,7 +2851,7 @@ title defaults to `Revert "<title>"`, its description to `Reverts #<number>`,
 and its labels to the reverted PR's. Where the forge reverts PRs (the
 `revert_prs` capability, GitHub only), the forge opens it from a branch it
 creates, and the workspace records it as opened without linking it; a
-workspace process cannot have it opened where `[approvals] pr_open` asks for
+workspace process cannot have it opened where `[permissions] pr_open` asks for
 the user's approval, since the forge's revert cannot wait for it. Elsewhere
 Shoal creates a workspace on branch `revert-<number>` from the base branch as
 `origin` has it, set up as any new workspace and a child of the workspace a
@@ -2879,14 +2922,14 @@ issue.
 workspace's forge or by a repository URL on any forge, still as the agent
 account. The workspace's [conventions](#repository-conventions) do not apply
 there, so nothing requires or warns about its labels or description, and
-`--link` is refused. `[issue] other_repositories` decides it for workspace
+`--link` is refused. `[permissions] issue_other_repositories` decides it for workspace
 processes: `"propose"` records an [approval request](#approval-for-agent-issues-and-prs)
 naming the repository, `"direct"` opens it at once, and `"deny"` refuses it.
 Unscoped callers always open directly.
 
 ```toml
-[issue]
-other_repositories = "deny" # Default: "propose"
+[permissions]
+issue_other_repositories = "deny" # Default: "propose"
 ```
 
 #### Approval for agent issues and PRs
@@ -2898,7 +2941,7 @@ makes `issue open` or `pr open` in a workspace process record an
 directly.
 
 ```toml
-[approvals]
+[permissions]
 issue_open = "propose" # Default: "direct"
 pr_open = "propose" # Default: "direct"
 ```
@@ -3087,13 +3130,13 @@ rate limits and 64 MiB response bound of other forge requests. On Forgejo, a
 GET whose query sets `limit` without `page` reads the first page, since
 Forgejo's Actions lists otherwise ignore `limit` and return every run.
 Processes inside a workspace send it as the [agent account](#agent-accounts),
-and only GET unless `[api] agent_writes` lets agents send other methods, which
+and only GET unless `[permissions] api_writes` lets agents send other methods, which
 could merge, approve or skip required labels around Shoal's checks; anyone
 else sends any request with your own logins.
 
 ```toml
-[api]
-agent_writes = true # Default: false
+[permissions]
+api_writes = "direct" # Default: "deny"
 ```
 
 ### Linked items and cleanup
@@ -3267,14 +3310,14 @@ all marks. Each mark and withdrawal
 is a [workspace event](#workspace-events). Scoped callers mark only their own
 workspace; `--workspace` selects another one for unscoped callers.
 
-`post_ready_cmd` runs in the daemon after marks are recorded, under the same
-rules, precedence and limits as `post_done_cmd`, with `SHOAL_REVIEW_MARKS` holding
+`hooks.post_ready` runs in the daemon after marks are recorded, under the same
+rules, precedence and limits as `hooks.post_done`, with `SHOAL_REVIEW_MARKS` holding
 the JSON array of marks just recorded. Failure records `hook_failed` and keeps
 the marks; every `shoal ready` runs it again.
 
 Before the hook, `shoal ready` takes each marked open PR that is a draft out of
-draft, as `shoal pr edit --no-draft` would; `[ready] undraft = false` keeps marks
-local. `shoal ready --undo --draft`, or `[unready] draft = true`, returns the open PRs
+draft, as `shoal pr edit --no-draft` would; `[pr] undraft_on_ready = false` keeps marks
+local. `shoal ready --undo --draft`, or `[pr] draft_on_unready = true`, returns the open PRs
 whose marks it withdraws to draft first; `--no-draft` overrides that setting.
 A failed change reports the forge's error and exits non-zero, keeping the marks
 in both commands so either can be retried. Marks never change issues, and
@@ -3283,11 +3326,9 @@ label [convention warnings](#repository-conventions) to its mark as `warnings`
 and prints them on stderr; they are never stored.
 
 ```toml
-[ready]
-undraft = true # Default: true
-
-[unready]
-draft = false  # Default: false
+[pr]
+undraft_on_ready = true  # Default: true
+draft_on_unready = false # Default: false
 ```
 
 ### Agent state
@@ -3425,8 +3466,6 @@ idle_minutes = 10
 
 Reload the daemon after changing this globally; the same table in a
 repository config applies to that repository's workspaces on the next sweep.
-The former `[auto_cleanup]` and `[pr_cleanup]` tables are still read where
-`[cleanup.auto]` and `[cleanup.pr]` leave an option unset.
 
 ### Workspace events
 
@@ -3497,7 +3536,7 @@ exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, automatic cleanup that starts failing, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
-a checkout with `core.bare` set, or retired settings in the global config. `shoal alerts send` adds a one-line message (at most 512 bytes, without
+a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
 marking the assignment done. It prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
@@ -3790,8 +3829,8 @@ Each problem shows where you look and names the command that resolves it. When
 the daemon starts and when `daemon reload` rereads its config, it checks that
 `git`, `wt`, `lsof` and `zmx` are executable on its PATH, that it can create a
 file in `root_dir`, which registered checkouts set `core.bare` although they have
-a working tree, which retired settings the global config has, and which forge each
-recorded host serves, asking it again unless `[forges]` sets its type. Each
+a working tree, whether the global worker template repeats Shoal's guidance, and which forge each
+recorded host serves, asking it again unless `[machine.forges]` sets its type. Each
 problem becomes an `environment_problem` alert; a missing optional tool such as
 `fzf` raises none, and a host that cannot be asked keeps its answer. The inbox lists
 Git worktrees under registered repository roots that Shoal does not track. A
@@ -3864,7 +3903,7 @@ Git operations.
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
-and this exported environment. Values resolve from saved repository config, the
+and this exported environment. Values resolve from local config, the
 worktree file, global config, then the default, and substitute `{workspace}`,
 `{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, reserved `{port.NAME}` and
 [`{cache.NAME}`](#shared-caches) fields once. Unknown fields remain literal, inserted values are not expanded, and
@@ -3886,14 +3925,14 @@ Shoal creates, boots, shares, and deletes its own Xcode simulators. Configure
 profiles in the global config and reload the daemon:
 
 ```toml
-[simulators]
+[machine.simulators]
 max_booted = 2
 max_devices = 4
 idle_seconds = 120
 allow_any = false
 default = "phone"
 
-[simulators.profiles.phone]
+[machine.simulators.profiles.phone]
 device = "iPhone 17"
 # runtime = "iOS 26.5"  # Optional pin
 ```
@@ -3903,7 +3942,7 @@ installed, available iOS runtime compatible with the device. `shoal catalog sim`
 lists the profiles, limits and the repository's preferences with the installed
 device types and runtimes; nothing is downloaded. Where simctl cannot run, it
 lists the configuration with the reason the inventory is missing.
-Repository config may set `[simulators] preferred = ["phone"]`;
+`[simulators] preferred = ["phone"]`, globally or per repository, orders them;
 flags override it, and `allow_any = true` permits unconfigured `--device`
 requests with a `--reason`.
 
@@ -4016,8 +4055,8 @@ discard the lease, leaving the related checkout untouched.
 
 ### Resource hooks
 
-Global or repository config can name `post_resource_acquire_cmd` and
-`pre_resource_release_cmd`, using the [hook path and environment rules](#workspace-setup-and-hooks).
+Global or repository config can name `hooks.post_resource_acquire` and
+`hooks.pre_resource_release`, using the [hook path and environment rules](#workspace-setup-and-hooks).
 They apply to generic permits, run in the daemon without a terminal, and have a
 60-second limit. `SHOAL_RESOURCE_LEASE` contains the lease as JSON, including its
 `id`, `scope`, `pool`, `resource`, `name`, `mode`, and `reason`.
@@ -4026,7 +4065,7 @@ Acquisition records the lease before running its hook, including when an existin
 lease is returned; busy requests run no hook. A failed acquisition hook returns
 an error but retains the permit: repeat acquisition to retry, or release it.
 Release runs its hook before freeing capacity; failure retains the lease.
-Workspace removal runs release hooks after `pre_remove_cmd`, keeping every lease
+Workspace removal runs release hooks after `hooks.pre_remove`, keeping every lease
 until removal succeeds. Hooks are skipped when the worktree is already missing.
 Make hooks idempotent: retries can repeat them, and reader hooks run per lease,
 not once per shared member. Hooks may inspect state, but overlapping permit or
@@ -4126,7 +4165,7 @@ tool without `skill_dir`; create a directory, or name the tool, to install for
 it. Set or override a tool's directory in global Shoal config:
 
 ```toml
-[ai.droid]
+[machine.agents.droid]
 skill_dir = "~/.factory/skills"
 ```
 

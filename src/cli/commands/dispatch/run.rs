@@ -25,10 +25,10 @@ pub(in crate::cli::commands) async fn custom(ctx: Context, words: Vec<OsString>)
     let name = configured::command_name(&words)?;
     // An undefined name fails before its arguments are parsed, so that neither
     // help nor an argument error presents it as a command.
-    let definition = if agents::is_agent(&ctx, &name)? {
+    let named = configured::named_workspace(&words);
+    let definition = if agents::is_agent(&ctx, &name, named.as_deref()).await? {
         None
     } else {
-        let named = configured::named_workspace(&words);
         Some(configured::definition(&ctx, &name, named).await?)
     };
     let Some((workspace, args)) = configured::invocation(words)? else {

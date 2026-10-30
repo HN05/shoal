@@ -677,7 +677,7 @@
       "properties": {
         "cleanup": {
           "default": false,
-          "description": "Remove the workspace once it qualifies, even where `[done] cleanup` is false.",
+          "description": "Remove the workspace once it qualifies, even where `[cleanup.done] enabled` is false.",
           "type": "boolean"
         },
         "workspace": {

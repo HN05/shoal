@@ -46,7 +46,7 @@ impl Manager {
         let agent = agent.with_context(|| format!("no connected agent runs execution {id}"))?;
         ensure!(
             agent.recover,
-            "{} has no command to resume its session; configure [agent_resume] for it",
+            "{} has no command to resume its session; configure its [agents.<name>] resume_command",
             agent.name
         );
         ensure!(

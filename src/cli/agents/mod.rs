@@ -199,18 +199,15 @@ fn integration(kind: IntegrationKind) -> &'static dyn Integration {
     }
 }
 
-/// What `settings` set for the integration of AI tools of `kind`, from its
-/// own section: `default_mode = "app"` hands launches to its desktop app.
-fn tool_options(kind: IntegrationKind, settings: &Effective) -> Options {
-    let shortcut = match kind {
-        IntegrationKind::Claude => &settings.claude,
-        IntegrationKind::Codex => &settings.codex,
-        IntegrationKind::None => return Options::default(),
-    };
+/// What `settings` set for agent `name`, which runs with the integration of
+/// `kind`, from its own `[agents.<name>]`: `default_mode = "app"` hands
+/// launches to the integration's desktop app.
+fn tool_options(name: &str, kind: IntegrationKind, settings: &Effective) -> Options {
+    let mode = settings.agents.get(name).map(|agent| agent.default_mode);
     Options {
         app: integration(kind)
             .app()
-            .filter(|_| shortcut.default_mode == AgentMode::App),
+            .filter(|_| mode == Some(AgentMode::App)),
         ..Options::default()
     }
 }
@@ -230,12 +227,12 @@ const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
         integration: &happy::CLAUDE,
-        options: |settings| happy::options(&settings.happy),
+        options: |settings| happy::options(&settings.terminal.happy),
     },
     Added {
         name: "happy-codex",
         integration: &happy::CODEX,
-        options: |settings| happy::options(&settings.happy),
+        options: |settings| happy::options(&settings.terminal.happy),
     },
 ];
 #[cfg(not(feature = "happy"))]
@@ -266,7 +263,7 @@ fn agent_integration(settings: &Effective, name: &str) -> &'static dyn Integrati
 fn agent_options(settings: &Effective, name: &str) -> Options {
     match (settings.integration(name), added(name)) {
         (IntegrationKind::None, Some(added)) => (added.options)(settings),
-        (kind, _) => tool_options(kind, settings),
+        (kind, _) => tool_options(name, kind, settings),
     }
 }
 
@@ -401,10 +398,89 @@ pub(super) async fn launch_agent(
     Ok(code)
 }
 
+/// How `shoal <name>` runs.
+enum NamedRun {
+    /// A configured command.
+    Command,
+    /// An agent of the targeted workspace, or of this machine's config.
+    Agent,
+    /// An agent only these workspaces define, outside every workspace.
+    Elsewhere(Vec<crate::model::Workspace>),
+}
+
 /// Whether `shoal <name>` launches an agent rather than a configured command.
-pub(super) fn is_agent(ctx: &Context, name: &str) -> Result<bool> {
-    let tools = Config::load(&ctx.paths)?.ai.tools;
-    Ok(crate::ai::agents(&tools).any(|agent| agent == name) || added(name).is_some())
+pub(super) async fn is_agent(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<bool> {
+    Ok(!matches!(
+        classify(ctx, name, workspace).await?,
+        NamedRun::Command
+    ))
+}
+
+/// Agents are those the targeted workspace's settings resolve, else this
+/// machine's config; outside every workspace, also a repository's own,
+/// which runs in a workspace defining it, as a repository's command does.
+async fn classify(ctx: &Context, name: &str, workspace: Option<&str>) -> Result<NamedRun> {
+    if added(name).is_some() {
+        return Ok(NamedRun::Agent);
+    }
+    let target = agent_target(ctx, workspace).await?;
+    // A named workspace, resolved or not, never falls back to another.
+    let in_workspace = target.is_some() || workspace.is_some();
+    // A workspace that does not resolve is the command's own error to report.
+    let settings = match target {
+        Some(target) => client::settings(&ctx.paths, target).await.ok(),
+        None => None,
+    };
+    let tools = match settings {
+        Some(settings) => settings.tools,
+        None => Config::load(&ctx.paths)?.tools()?,
+    };
+    if crate::ai::agents(&tools).any(|agent| agent == name) {
+        return Ok(NamedRun::Agent);
+    }
+    if in_workspace {
+        return Ok(NamedRun::Command);
+    }
+    let defining = defining_workspaces(ctx, name).await;
+    Ok(if defining.is_empty() {
+        NamedRun::Command
+    } else {
+        NamedRun::Elsewhere(defining)
+    })
+}
+
+/// The workspaces whose settings resolve `name` as an agent.
+async fn defining_workspaces(ctx: &Context, name: &str) -> Vec<crate::model::Workspace> {
+    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+        return Vec::new();
+    };
+    let mut defining = Vec::new();
+    for workspace in workspaces {
+        let target = ConfigTarget::Workspace(workspace.id.clone());
+        // A workspace whose configuration cannot load has no agents.
+        if let Ok(settings) = client::settings(&ctx.paths, target).await
+            && crate::ai::agents(&settings.tools).any(|agent| agent == name)
+        {
+            defining.push(workspace);
+        }
+    }
+    defining
+}
+
+/// The workspace `workspace` names, else the one running a command would
+/// select: the current directory's, then the caller's scope.
+async fn agent_target(ctx: &Context, workspace: Option<&str>) -> Result<Option<ConfigTarget>> {
+    if let Some(workspace) = workspace {
+        // A selector that does not resolve is the command's own error.
+        let workspace = crate::cli::ui::explicit_workspace(ctx, workspace.to_owned()).await;
+        return Ok(workspace.ok().map(ConfigTarget::Workspace));
+    }
+    // Without a daemon there is no workspace context, only the machine's.
+    let Ok(workspaces) = client::workspaces(&ctx.paths).await else {
+        return Ok(None);
+    };
+    let current = configured::current_workspace(&workspaces)?;
+    Ok(current.map(|workspace| ConfigTarget::Workspace(workspace.id.clone())))
 }
 
 /// `shoal <name>` and `shoal run <name>`: agents launch with their prompts,
@@ -415,9 +491,18 @@ pub(super) async fn run_named(
     workspace: Option<String>,
     args: Vec<OsString>,
 ) -> Result<i32> {
-    if !is_agent(ctx, name)? {
-        return configured::run(ctx, name, workspace, args).await;
-    }
+    let workspace = match classify(ctx, name, workspace.as_deref()).await? {
+        NamedRun::Command => return configured::run(ctx, name, workspace, args).await,
+        NamedRun::Agent => workspace,
+        NamedRun::Elsewhere(defining) => {
+            ensure!(
+                ctx.interactive(),
+                "{name} is an agent only some repositories define; run it in one of their \
+                 workspaces or name one with --workspace"
+            );
+            Some(ui::pick_workspace(ctx, defining, "workspace").await?)
+        }
+    };
     launch::shortcut(
         ctx,
         name.parse()?,
@@ -429,14 +514,14 @@ pub(super) async fn run_named(
     .await
 }
 
-/// The requested agent, else the configured `default_agent`, else a picker.
+/// The requested agent, else the configured `agent.default`, else a picker.
 pub(super) async fn default_agent(
     ctx: &Context,
     target: ConfigTarget,
     agent: Option<Agent>,
 ) -> Result<Option<Agent>> {
     let settings = client::settings(&ctx.paths, target).await?;
-    match agent.or(settings.default_agent.clone()) {
+    match agent.or(settings.agent.default.clone()) {
         Some(agent) => {
             ensure_available(agent.name(), &settings)?;
             Ok(Some(agent))
@@ -445,16 +530,16 @@ pub(super) async fn default_agent(
     }
 }
 
-/// The picker standing in for a missing `default_agent`.
+/// The picker standing in for a missing `agent.default`.
 pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
     ensure!(
         ctx.interactive(),
-        "no agent selected; pass --agent or set default_agent in the repository or global config"
+        "no agent selected; pass --agent or set agent.default in the repository or global config"
     );
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let mut choices: Vec<_> = names(settings)
         .into_iter()
-        .filter(|name| installed(name, &settings.commands, &search_path))
+        .filter(|name| installed(name, &settings.launchers, &search_path))
         .map(|name| (name.parse().ok(), name))
         .collect();
     // A picker cannot run without fzf. Treat that as “No agent” so callers
@@ -527,7 +612,7 @@ pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
         anyhow::bail!("cannot start {name}: {reason}");
     }
     launch_proxy(settings, name)?;
-    ensure_installed(name, &settings.commands)
+    ensure_installed(name, &settings.launchers)
 }
 
 /// Refuse agent `name` when it cannot start from a fork of a session: it
@@ -541,7 +626,7 @@ pub(in crate::cli) fn ensure_forks(settings: &Effective, name: &str) -> Result<(
     }
     ensure!(
         settings.launch(name).arguments.fork.is_some(),
-        "cannot fork a session of {name}: configure [ai.{name}] fork"
+        "cannot fork a session of {name}: configure [agents.{name}] fork"
     );
     Ok(())
 }
@@ -578,7 +663,7 @@ pub(crate) fn launch_proxy<'a>(
     ensure!(
         integration(settings.integration(name)).routes_through_proxy(),
         "cannot start {name}: Shoal cannot send its API requests through a proxy; \
-         remove proxy from its [ai.{name}]"
+         remove proxy from its [machine.agents.{name}]"
     );
     Ok(Some(proxy))
 }
@@ -586,7 +671,7 @@ pub(crate) fn launch_proxy<'a>(
 /// Refuse an agent whose executables are missing.
 fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
     let programs = programs(name, commands).with_context(|| {
-        format!("unknown agent {name:?}; set [ai.{name}] command in Shoal config")
+        format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
     })?;
     for program in programs {
         ensure_program(name, program)?;
@@ -794,7 +879,8 @@ fn dir_args(settings: &Effective, name: &str, home: &Path, extra: Option<&Path>)
 /// resolved as agents compare paths, each once.
 fn agent_dirs(settings: &Effective, home: &Path) -> BTreeSet<PathBuf> {
     settings
-        .agent_dirs
+        .agent
+        .dirs
         .iter()
         .map(|directory| fsutil::expand_home(Path::new(directory), home))
         .map(|directory| std::fs::canonicalize(&directory).unwrap_or(directory))

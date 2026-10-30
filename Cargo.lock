@@ -1318,6 +1318,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "shoal-client",
+ "shoal-config-derive",
  "shoal-forge",
  "shoal-proxy",
  "shoal-subprocess",
@@ -1339,6 +1340,15 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "shoal-config-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

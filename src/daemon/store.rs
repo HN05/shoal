@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 92;
+const SCHEMA_VERSION: i64 = 93;
 
 #[cfg(test)]
 mod benchmark;
@@ -436,6 +436,8 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (90, include_str!("store/workspace_item_runs.sql"), None),
     (91, PARENT_REMOVAL, None),
     (92, HOLD_PLACERS, None),
+    // The local repository config moved to a file in the repository's directory.
+    (93, "DROP TABLE IF EXISTS repository_configs;", None),
 ];
 
 /// The repositories whose copies of files attached to messages before Shoal
@@ -707,6 +709,21 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
         );
     }
     Ok(())
+}
+
+/// A recorded checkout or workspace that lies in `directory`.
+pub fn checkout_within(
+    db: &Connection,
+    directory: &std::path::Path,
+) -> Result<Option<std::path::PathBuf>> {
+    let recorded = db
+        .prepare("SELECT path FROM repositories UNION ALL SELECT path FROM workspaces")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    Ok(recorded
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .find(|path| path.starts_with(directory)))
 }
 
 /// Refuse a workspace path that overlaps where a repository directory is

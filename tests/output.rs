@@ -189,15 +189,15 @@ fn a_closed_stdout_ends_commands_quietly() {
 #[test]
 fn a_closed_stdout_ends_unterminated_output_quietly() {
     let root = tempfile::tempdir().unwrap();
+    let local = root.path().join("config.toml");
+    std::fs::write(&local, "terminal.focus=true").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
-        support::fake_daemon::answer(stream, |_| {
-            serde_json::json!({
-                "type": "repository_config",
-                "data": {"repository_id": "test", "toml": "focus=true"}
-            })
-        });
+        support::fake_daemon::answer(
+            stream,
+            |_| serde_json::json!({"type": "local_config_path", "data": local}),
+        );
     });
     let (reader, writer) = std::io::pipe().unwrap();
     drop(reader);

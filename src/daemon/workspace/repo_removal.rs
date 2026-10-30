@@ -127,6 +127,7 @@ impl Manager {
         delete_tmp_dirs(&repo).await?;
         self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
+        delete_local_config(repo.workspaces_dir.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;
         Ok(RepositoryRemoval {
@@ -357,23 +358,38 @@ impl Manager {
         repo: &Repository,
         workspaces: &[Workspace],
     ) -> Result<()> {
-        ensure!(
-            !contains_protected_directory(&repo.path, &self.paths)?,
-            "repository directory contains Shoal state or the home directory; refusing deletion"
-        );
-        for other in self.repositories().await? {
+        // Removal deletes the checkout and the local config's directory.
+        let local = repo
+            .workspaces_dir
+            .as_ref()
+            .map(|directory| directory.join(crate::config::repo::LOCAL_DIR));
+        let other_repositories = self.repositories().await?;
+        let other_workspaces = self.list_workspaces().await?;
+        for deleted in std::iter::once(&repo.path).chain(local.as_ref()) {
             ensure!(
-                other.id == repo.id || !other.path.starts_with(&repo.path),
-                "repository directory contains another registered repository: {}",
-                other.path.display()
+                !contains_protected_directory(deleted, &self.paths)?,
+                "{} contains Shoal state or the home directory; refusing deletion",
+                deleted.display()
             );
-        }
-        for other in self.list_workspaces().await? {
-            ensure!(
-                workspaces.iter().any(|w| w.id == other.id) || !other.path.starts_with(&repo.path),
-                "repository directory contains another repository's workspace: {}",
-                other.name
-            );
+            for other in &other_repositories {
+                let owned = std::iter::once(&other.path).chain(other.workspaces_dir.as_ref());
+                for path in owned {
+                    ensure!(
+                        other.id == repo.id || !path.starts_with(deleted),
+                        "{} contains another registered repository: {}",
+                        deleted.display(),
+                        path.display()
+                    );
+                }
+            }
+            for other in &other_workspaces {
+                ensure!(
+                    workspaces.iter().any(|w| w.id == other.id) || !other.path.starts_with(deleted),
+                    "{} contains another repository's workspace: {}",
+                    deleted.display(),
+                    other.name
+                );
+            }
         }
         Ok(())
     }
@@ -424,6 +440,31 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
         return Ok(());
     };
     tokio::task::spawn_blocking(move || caches.remove()).await?
+}
+
+/// The local config and the scripts beside it belong to the registration.
+/// Only a real directory in the recorded repository directory goes: the
+/// recorded path is canonical, so a symlink at it or above it, or at `.shoal`,
+/// may lead to files that are not the repository's. A Git checkout there is
+/// never a local config.
+async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()> {
+    let Some(directory) = directory else {
+        return Ok(());
+    };
+    let local = directory.join(crate::config::repo::LOCAL_DIR);
+    tokio::task::spawn_blocking(move || {
+        let real = |path: &Path| {
+            fs::symlink_metadata(path)
+                .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        };
+        let unredirected = fs::canonicalize(&directory).is_ok_and(|path| path == directory);
+        let checkout = fs::symlink_metadata(local.join(".git")).is_ok();
+        if !unredirected || !real(&local) || checkout {
+            return Ok(());
+        }
+        fs::remove_dir_all(&local).with_context(|| format!("delete {}", local.display()))
+    })
+    .await?
 }
 
 async fn delete_tmp_dirs(repo: &Repository) -> Result<()> {

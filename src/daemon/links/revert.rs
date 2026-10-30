@@ -43,9 +43,10 @@ impl Manager {
             "workspace cannot accept a PR in its current state"
         );
         let settings = self.workspace_settings(&workspace).await?;
-        if self.proposer(caller).await.is_some() && settings.approvals.pr_open == Opening::Propose {
+        if self.proposer(caller).await.is_some() && settings.permissions.pr_open == Opening::Propose
+        {
             bail!(
-                "[approvals] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
+                "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
             );
         }
         let (forge, account) = self.workspace_forge_account(&workspace).await?;

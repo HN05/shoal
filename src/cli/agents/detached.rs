@@ -221,7 +221,7 @@ fn workspace_input(
     args: Vec<OsString>,
 ) -> (Option<String>, Vec<OsString>) {
     let instructions = templates::instructions(
-        settings.worker_template.as_deref(),
+        settings.agent.templates.worker.as_deref(),
         workspace,
         super::launch::delivery(integration, settings),
     );

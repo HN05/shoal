@@ -173,7 +173,7 @@ pub(super) async fn register(
 /// Limit the machine to `limit` agents; host disk must not decide the test.
 pub(super) fn limit_globally(manager: &Manager, limit: u32) {
     manager.publish_config(global_config(&format!(
-        "max_agents = {limit}\n[overload.disk]\nenabled = false"
+        "[machine]\nmax_agents = {limit}\n[machine.overload.disk]\nenabled = false"
     )));
 }
 
@@ -209,7 +209,7 @@ pub(super) fn started(id: &str) -> bool {
 async fn launches_without_a_limit_start_untracked() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let admission = add(&manager, &repo, "first").await;
     assert!(admission.start && admission.entry.is_none());
     assert!(manager.queue_entries().await.unwrap().is_empty());
@@ -276,7 +276,7 @@ async fn repository_limits_hold_back_only_their_own_entries() {
     let other = register(&manager, &temp, "other").await;
     limit_globally(&manager, 3);
     manager
-        .set_repository_config(&limited.id, Some("max_agents = 1\n".into()))
+        .write_local_config(&limited.id, Some("agent.max_running = 1\n".into()))
         .await
         .unwrap();
 
@@ -474,7 +474,7 @@ async fn dynamic_admission_staggers_starts() {
     let repo = register(&manager, &temp, "repo").await;
     // Host memory and disk must not decide this test.
     manager.publish_config(global_config(
-        "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false",
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false",
     ));
     // An idle machine starts the first agent whatever its CPU reads.
     assert!(add(&manager, &repo, "first").await.start);
@@ -491,7 +491,7 @@ async fn low_disk_holds_fixed_limits() {
     // No disk has this much free space, so the host reads low or critical;
     // either holds every start after the first below the fixed limit.
     manager.publish_config(global_config(
-        "max_agents = 3\n[overload.warning]\ndisk_free_gib = 1048576",
+        "[machine]\nmax_agents = 3\n[machine.overload.warning]\ndisk_free_gib = 1048576",
     ));
     add(&manager, &repo, "first").await;
     assert!(!add(&manager, &repo, "second").await.start);
@@ -907,7 +907,7 @@ async fn dynamic_admission_restores_once_measured_load_has_room() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(
-        "[overload.memory]\nenabled = false\n[overload.disk]\nenabled = false",
+        "[machine.overload.memory]\nenabled = false\n[machine.overload.disk]\nenabled = false",
     ));
     let (busy, stopped) = (
         create(&manager, &repo, "busy").await,
@@ -951,7 +951,7 @@ async fn launches_in_an_existing_workspace_start_from_the_daemon() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let other = register(&manager, &temp, "other").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let parent = manager
         .create_workspace(&repo.id, "parent".into(), None, None, None)
         .await
@@ -1065,7 +1065,7 @@ async fn a_workspace_reserved_for_removal_refuses_queued_launches() {
 async fn an_expired_launch_in_an_existing_workspace_reports_its_failure() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'none'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'none'"));
     let child = manager
         .create_workspace(&repo.id, "child".into(), None, None, None)
         .await
@@ -1163,7 +1163,7 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
 async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
-    manager.publish_config(global_config("max_agents = 'unlimited'"));
+    manager.publish_config(global_config("[machine]\nmax_agents = 'unlimited'"));
     let idle = create(&manager, &repo, "idle").await;
     let (execution, _stop) = connected_agent(&manager, &idle).await;
     manager

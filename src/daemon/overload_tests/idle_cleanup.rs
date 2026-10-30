@@ -62,9 +62,9 @@ async fn a_workspace_being_removed_refuses_messages_for_its_stopped_agent() {
     .unwrap();
     fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
     manager
-        .set_repository_config(
+        .write_local_config(
             &workspace.repository_id,
-            Some(format!("pre_remove_cmd = '{}'\n", hook.display())),
+            Some(format!("hooks.pre_remove = '{}'\n", hook.display())),
         )
         .await
         .unwrap();

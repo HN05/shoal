@@ -1,4 +1,5 @@
 use super::*;
+use crate::config::options::Options;
 use crate::{daemon::approvals::Lifetime, sim::simctl::DeviceState};
 use serde_json::json;
 
@@ -270,7 +271,7 @@ fn omitted_runtime_selects_latest_compatible_available_ios_and_keeps_approval() 
     config.profiles.insert("phone".into(), unpinned);
     config.default = Some("phone".into());
     config.validate().unwrap();
-    let repo = Simulators::default();
+    let repo = built_in();
     let newest = "com.apple.CoreSimulator.SimRuntime.iOS-26-10-1";
     let mut direct = request();
     direct.device = Some("Phone".into());
@@ -338,7 +339,7 @@ fn profile_resolution_rejects_unavailable_runtime_and_preserves_approval() {
     );
     let mut repo = Simulators {
         requires_approval: false,
-        ..Default::default()
+        ..built_in()
     };
     let resolved = resolve_request(&config, &repo, &request(), &inventory, None).unwrap();
     assert!(resolved.requires_approval);
@@ -359,4 +360,10 @@ fn profile_resolution_rejects_unavailable_runtime_and_preserves_approval() {
             .to_string()
             .contains("runtime is not installed/available")
     );
+}
+
+fn built_in() -> Simulators {
+    crate::config::repo::SimulatorsConfig::built_in()
+        .resolve("simulators")
+        .unwrap()
 }

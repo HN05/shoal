@@ -44,7 +44,6 @@ mod transfer;
 mod validate;
 
 use cli::Cli;
-use serde_json::json;
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 
@@ -93,7 +92,7 @@ fn main() {
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon
 /// polls deep async paths, such as manual cleanup's removal, whose debug
 /// builds overflow that on Linux. Unused stack is reserved, not committed.
-const WORKER_STACK: usize = 8 << 20;
+pub(crate) const WORKER_STACK: usize = 8 << 20;
 
 fn run_cli(cli: Cli) {
     tokio::runtime::Builder::new_multi_thread()
@@ -121,10 +120,7 @@ async fn run_commands(cli: Cli) {
         }
         Err(error) => {
             if json_output {
-                eprintln!(
-                    "{}",
-                    json!({"error": {"code": "command_failed", "message": format!("{error:#}")}})
-                );
+                eprintln!("{}", cli::output::json_error(&error));
             } else {
                 eprintln!(
                     "{} {error:#}",

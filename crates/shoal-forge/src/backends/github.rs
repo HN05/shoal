@@ -907,6 +907,17 @@ impl Backend for GitHub {
         }
     }
 
+    fn edit_comment(
+        &self,
+        repo: &ForgeRepo,
+        _kind: ItemKind,
+        _number: u64,
+        subject: Subject,
+        body: &str,
+    ) -> Result<Request> {
+        github_rest::edit_comment(repo, subject, body, Dialect::GitHub)
+    }
+
     fn template_lookups(&self, kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         shared_lookups(kind)
     }

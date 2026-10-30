@@ -35,7 +35,10 @@ use crate::{
         output::{Palette, Style},
         ui::{self, Entries, KeyBindings, PickerView, ViewPicker, WidthLimit},
     },
-    daemon::notifications::Notification,
+    daemon::{
+        notifications::Notification,
+        refusal::{Reason, Refusal},
+    },
     env,
     forge::items::link,
     model::LinkedItem,
@@ -739,7 +742,7 @@ async fn linked_items(ctx: &Context, workspace: &str) -> Result<Vec<LinkedItem>>
         .await?
         .into_iter()
         .find(|record| record.id == workspace)
-        .with_context(|| format!("unknown workspace: {workspace}"))?;
+        .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {workspace}")))?;
     let items = record.links.items();
     if items.is_empty() {
         return Ok(items);
@@ -843,7 +846,7 @@ async fn execute_command(ctx: &Context, workspace: Option<String>) -> Result<Com
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let agents = agents::names(&settings)
         .into_iter()
-        .filter(|name| agents::installed(name, &settings.commands, &search_path))
+        .filter(|name| agents::installed(name, &settings.launchers, &search_path))
         .map(|name| (ExecuteChoice::Agent(name.clone()), name));
     let apps = APPS
         .into_iter()

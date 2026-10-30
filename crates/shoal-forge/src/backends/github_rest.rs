@@ -384,21 +384,45 @@ pub(crate) fn commit_statuses(combined: &Value, dialect: Dialect) -> Result<Vec<
 #[cfg(test)]
 mod tests;
 
-/// The endpoint of the reactions on `subject` of item `number`; Forgejo
-/// keeps a PR's inline comments among its issue comments.
+/// The endpoint of the reactions on `subject` of item `number`.
 pub(crate) fn reactions_endpoint(
     repo: &ForgeRepo,
     number: u64,
     subject: Subject,
     dialect: Dialect,
 ) -> String {
-    repo.repo_endpoint(&match (subject, dialect) {
-        (Subject::Item, _) => format!("issues/{number}/reactions"),
+    let endpoint = match comment_path(subject, dialect) {
+        Some(comment) => format!("{comment}/reactions"),
+        None => format!("issues/{number}/reactions"),
+    };
+    repo.repo_endpoint(&endpoint)
+}
+
+/// The request that replaces the body of the comment `subject`.
+pub(crate) fn edit_comment(
+    repo: &ForgeRepo,
+    subject: Subject,
+    body: &str,
+    dialect: Dialect,
+) -> Result<Request> {
+    let comment = comment_path(subject, dialect).context("only a comment can be edited")?;
+    Ok(Request::new(
+        HttpMethod::Patch,
+        repo.repo_endpoint(&comment),
+        Some(json!({ "body": body })),
+    ))
+}
+
+/// The path of the comment `subject` in the repository; none for the item
+/// itself. Forgejo keeps a PR's inline comments among its issue comments.
+fn comment_path(subject: Subject, dialect: Dialect) -> Option<String> {
+    match (subject, dialect) {
+        (Subject::Item, _) => None,
         (Subject::Comment(id), _) | (Subject::ReviewComment(id), Dialect::Forgejo) => {
-            format!("issues/comments/{id}/reactions")
+            Some(format!("issues/comments/{id}"))
         }
-        (Subject::ReviewComment(id), Dialect::GitHub) => format!("pulls/comments/{id}/reactions"),
-    })
+        (Subject::ReviewComment(id), Dialect::GitHub) => Some(format!("pulls/comments/{id}")),
+    }
 }
 
 pub(crate) fn listed_reaction(reaction: &Value) -> Result<Listed> {

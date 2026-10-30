@@ -39,7 +39,7 @@ impl Unretried {
             ),
             Self::RetryOff => format!(
                 "{agent}'s turn ended with an API error ({}) and was not retried because \
-                 `retry` is off; set `retry = true` under `[ai.{agent}]` to retry failed turns",
+                 `retry` is off; set `retry = true` under `[agents.{agent}]` to retry failed turns",
                 failure.describe()
             ),
         }

@@ -1,5 +1,5 @@
 //! CLI access to a stacked workspace's base workspace.
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Result, ensure};
 use serde_json::json;
 
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
+    daemon::refusal::{Reason, Refusal},
     model::{Workspace, WorkspaceRef},
     protocol::WorkspaceMethod,
 };
@@ -62,7 +63,9 @@ fn find<'a>(workspaces: &'a [Workspace], selector: &str) -> Result<&'a Workspace
     workspaces
         .iter()
         .find(|w| w.id == selector || w.name == selector)
-        .with_context(|| format!("unknown workspace: {selector}"))
+        .ok_or_else(|| {
+            Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")).into()
+        })
 }
 
 /// Choose another workspace of the same repository as the base.
