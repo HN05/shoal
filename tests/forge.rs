@@ -4764,7 +4764,14 @@ fn item_commands_act_from_a_registered_checkout() {
     let labels = in_checkout(&["--json", "repo", "labels", "--repo", "team/tool"]);
     let labels: Value = serde_json::from_slice(&labels.stdout).unwrap();
     assert_eq!(labels[0]["name"], "bug", "{labels}");
-    let api = ["--json", "forge", "api", "repos/{owner}/{repo}", "--repo", "team/tool"];
+    let api = [
+        "--json",
+        "forge",
+        "api",
+        "repos/{owner}/{repo}",
+        "--repo",
+        "team/tool",
+    ];
     let read: Value = serde_json::from_slice(&in_checkout(&api).stdout).unwrap();
     assert_eq!(read, json!({"name": "tool"}));
     // A checkout links nothing, so the item must be named.
