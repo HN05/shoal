@@ -225,7 +225,11 @@ async fn a_queued_agent_shows_as_the_workspace_agent_until_it_is_stopped() {
         ErrorCode::InvalidRequest
     );
     let queued = client.call(queue("claude")).await.unwrap();
-    assert!(!queued.id.is_empty());
+    let plan = daemon.manager.queued_plan(&queued.id).await.unwrap().plan;
+    let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
+    // A launcher's `{prompt}` receives it rather than its forwarded arguments.
+    assert_eq!(plan["prompt"], "Fix the build");
+    assert_eq!(plan["args"], serde_json::json!([]));
     let agent = client.call(get("worker")).await.unwrap().agent.unwrap();
     assert!(
         matches!(agent.state, AgentState::Queued | AgentState::Starting),

@@ -73,6 +73,7 @@ pub(super) async fn plan_addition(
         issue: issue.map(|issue| issue.url.clone()),
         agent,
         args,
+        prompt: None,
         fork: None,
         queue_entry: None,
         chat: env::chat(),
@@ -110,8 +111,10 @@ pub(crate) fn queued_agent_plan(
     agent: Agent,
     prompt: Option<String>,
 ) -> Result<String> {
-    let args = prompt.into_iter().map(OsString::from).collect();
-    let plan = AddPlan::agent_in(workspace, agent, None, args, None);
+    let plan = AddPlan {
+        prompt,
+        ..AddPlan::agent_in(workspace, agent, None, Vec::new(), None)
+    };
     Ok(serde_json::to_string(&plan)?)
 }
 
@@ -127,6 +130,10 @@ pub(in crate::cli) struct AddPlan {
     pub(super) issue: Option<String>,
     pub(super) agent: ResolvedAddAgent,
     pub(super) args: Vec<OsString>,
+    /// The agent's first message when no issue gives it one, which a
+    /// launcher with `{prompt}` receives there.
+    #[serde(default)]
+    pub(super) prompt: Option<String>,
     /// The session the agent starts from a fork of.
     #[serde(default)]
     pub(super) fork: Option<String>,
@@ -165,6 +172,7 @@ impl AddPlan {
                 tracked: true,
             },
             args,
+            prompt: None,
             fork,
             queue_entry: None,
             chat: None,
@@ -195,7 +203,8 @@ impl AddPlan {
     /// Whether the agent starts with input: an issue prompt or forwarded arguments.
     /// A workspace shell or an agent without input waits for the user.
     pub fn runs_unattended(&self) -> bool {
-        self.agent.agent.is_some() && (self.issue.is_some() || !self.args.is_empty())
+        self.agent.agent.is_some()
+            && (self.issue.is_some() || self.prompt.is_some() || !self.args.is_empty())
     }
 
     pub fn label(&self) -> String {

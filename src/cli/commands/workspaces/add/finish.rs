@@ -64,6 +64,7 @@ async fn add_planned(
         issue: _,
         agent,
         args,
+        prompt,
         fork,
         queue_entry,
         chat,
@@ -101,7 +102,8 @@ async fn add_planned(
         .await?;
     }
     let name = opened.workspace.name.clone();
-    let Some(workspace) = finish_add_workspace(ctx, opened, pr, &agent, issue.is_some()).await?
+    let prompt = issue.as_ref().map(issues::Issue::prompt).or(prompt);
+    let Some(workspace) = finish_add_workspace(ctx, opened, pr, &agent, prompt.is_some()).await?
     else {
         if let Some(entry) = &queue_entry {
             let error = anyhow::anyhow!(
@@ -114,7 +116,7 @@ async fn add_planned(
     if let Some(entry) = &queue_entry {
         crate::env::launch_queue_entry(entry);
     }
-    agent.launch(ctx, workspace, issue, args, fork).await
+    agent.launch(ctx, workspace, prompt, args, fork).await
 }
 
 /// Whether the caller's shell enters the added `workspace`, where `agent`
