@@ -122,15 +122,10 @@ impl Manager {
     /// directory belongs: its tracked files are never local settings.
     async fn local_config_outside_checkouts(&self, directory: &std::path::Path) -> Result<PathBuf> {
         let local = directory.join(config::repo::LOCAL_DIR);
-        let checkouts = self.repositories().await?.into_iter().map(|repo| repo.path);
-        let worktrees = self.list_workspaces().await?.into_iter().map(|w| w.path);
-        for path in checkouts.chain(worktrees) {
-            anyhow::ensure!(
-                !path.starts_with(&local),
-                "{} is where the local config belongs; move it to another directory",
-                path.display()
-            );
-        }
+        let within = local.clone();
+        self.store
+            .run(move |db| crate::daemon::store::ensure_no_checkout_within(db, &within))
+            .await?;
         anyhow::ensure!(
             std::fs::symlink_metadata(local.join(".git")).is_err(),
             "{} is a Git checkout, where the local config belongs; move it to another directory",

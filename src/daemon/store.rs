@@ -702,6 +702,22 @@ pub fn ensure_path_unrecorded(db: &Connection, path: &std::path::Path) -> Result
     Ok(())
 }
 
+/// Refuse when a recorded checkout or workspace lies in `directory`.
+pub fn ensure_no_checkout_within(db: &Connection, directory: &std::path::Path) -> Result<()> {
+    let recorded = db
+        .prepare("SELECT path FROM repositories UNION ALL SELECT path FROM workspaces")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    for path in recorded.iter().map(std::path::Path::new) {
+        ensure!(
+            !path.starts_with(directory),
+            "{} is where the local config belongs; move it to another directory",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
 /// Refuse a workspace path that overlaps where a repository directory is
 /// moving: a failed move deletes its destination.
 pub fn ensure_path_outside_moves(db: &Connection, path: &std::path::Path) -> Result<()> {
