@@ -1087,24 +1087,49 @@ pub fn execution_agent(db: &Connection, id: &str) -> Result<Option<String>> {
         .flatten())
 }
 
-/// The agent each workspace's recorded execution runs, by workspace ID,
-/// with the execution's state; a running execution wins over an unknown one.
-pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, (String, ExecutionState)>> {
-    let mut agents = HashMap::new();
-    let mut statement =
-        db.prepare("SELECT workspace_id,agent,state FROM executions WHERE agent IS NOT NULL")?;
+/// A recorded execution that runs an agent.
+pub struct AgentExecution {
+    pub agent: String,
+    pub state: ExecutionState,
+    /// Whether its wrapper runs the agent now, rather than waiting to start
+    /// it or to restore one protection or a queue move stopped.
+    pub started: bool,
+}
+
+impl AgentExecution {
+    /// How much the execution says about its workspace's agent: one that
+    /// runs, then one not known to, then a wrapper without one.
+    fn weight(&self) -> u8 {
+        match (self.state, self.started) {
+            (ExecutionState::Running, true) => 2,
+            (ExecutionState::Unknown, _) => 1,
+            (ExecutionState::Running, false) => 0,
+        }
+    }
+}
+
+/// The agent execution saying most about each workspace's agent, by
+/// workspace ID.
+pub fn agent_executions(db: &mut Connection) -> Result<HashMap<String, AgentExecution>> {
+    let mut agents: HashMap<String, AgentExecution> = HashMap::new();
+    let mut statement = db.prepare(
+        "SELECT workspace_id,agent,state,child IS NOT NULL FROM executions WHERE agent IS NOT NULL",
+    )?;
     let rows = statement.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get(2)?,
-        ))
+        let execution = AgentExecution {
+            agent: row.get(1)?,
+            state: row.get(2)?,
+            started: row.get(3)?,
+        };
+        Ok((row.get::<_, String>(0)?, execution))
     })?;
     for row in rows {
-        let (workspace, agent, state) = row?;
-        let known = agents.entry(workspace).or_insert((agent.clone(), state));
-        if state == ExecutionState::Running {
-            *known = (agent, state);
+        let (workspace, execution) = row?;
+        match agents.get(&workspace) {
+            Some(known) if known.weight() >= execution.weight() => {}
+            _ => {
+                agents.insert(workspace, execution);
+            }
         }
     }
     Ok(agents)

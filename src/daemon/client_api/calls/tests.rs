@@ -369,3 +369,27 @@ async fn an_agent_that_did_not_reattach_after_a_restart_is_unconfirmed() {
     assert_eq!(agent.state, AgentState::Unconfirmed);
     assert_eq!(agent.agent.as_deref(), Some("claude"));
 }
+
+#[tokio::test]
+async fn a_wrapper_waiting_to_restore_its_agent_shows_it_as_stopped() {
+    let daemon = TestDaemon::start().await;
+    let workspace = daemon.workspace("protected").await;
+    let id = workspace.id.clone();
+    // Protection stopped the agent; its wrapper's execution has no child.
+    daemon
+        .manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state,agent) VALUES ('agent',?1,'running','claude')",
+                [id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let client = daemon.client().await;
+    let agent = client.call(get("protected")).await.unwrap().agent.unwrap();
+    assert_eq!(agent.state, AgentState::Stopped);
+    assert_eq!(agent.agent.as_deref(), Some("claude"));
+}

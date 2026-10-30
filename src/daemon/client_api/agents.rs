@@ -6,7 +6,10 @@ use anyhow::Result;
 use shoal_client::records as api;
 
 use crate::{
-    daemon::{store, workspace::Manager},
+    daemon::{
+        store::{self, AgentExecution},
+        workspace::Manager,
+    },
     execution::recovery,
     model::{QueueEntry, Workspace},
     state::{AgentState, ExecutionState, QueueState},
@@ -14,9 +17,9 @@ use crate::{
 
 /// What the daemon knows of the agents of every workspace.
 pub(super) struct Agents {
-    /// The agent each workspace's recorded execution runs, by workspace ID,
-    /// and whether it is known to run.
-    running: HashMap<String, (String, ExecutionState)>,
+    /// The agent execution saying most about each workspace's agent, by
+    /// workspace ID.
+    executions: HashMap<String, AgentExecution>,
     /// Queued launches and restores, by the workspace they start in.
     queued: HashMap<String, QueueEntry>,
     /// The first stopped agent with a session to restore, by workspace ID.
@@ -24,21 +27,14 @@ pub(super) struct Agents {
 }
 
 impl Agents {
-    /// The workspace's agent: running, else queued, else stopped.
+    /// The workspace's agent: running or unconfirmed, else queued, else
+    /// stopped with a session to restore or a wrapper waiting to restore it.
     pub(super) fn status(&self, workspace: &Workspace) -> Option<api::AgentStatus> {
-        if let Some((agent, execution)) = self.running.get(&workspace.id) {
-            let (state, since) = match (execution, workspace.agent_state) {
-                (ExecutionState::Unknown, _) => (api::AgentState::Unconfirmed, None),
-                (ExecutionState::Running, Some(status)) => {
-                    (agent_state(status.state), Some(status.since))
-                }
-                (ExecutionState::Running, None) => (api::AgentState::Running, None),
-            };
-            return Some(api::AgentStatus {
-                state,
-                agent: Some(agent.clone()),
-                since,
-            });
+        let execution = self.executions.get(&workspace.id);
+        if let Some(execution) = execution
+            .filter(|execution| execution.started || execution.state == ExecutionState::Unknown)
+        {
+            return Some(running(execution, workspace));
         }
         if let Some(entry) = self.queued.get(&workspace.id) {
             return Some(api::AgentStatus {
@@ -50,13 +46,28 @@ impl Agents {
                 since: Some(entry.created_at),
             });
         }
-        self.stopped
-            .get(&workspace.id)
+        let stopped = self.stopped.get(&workspace.id);
+        stopped
+            .or(execution.map(|execution| &execution.agent))
             .map(|agent| api::AgentStatus {
                 state: api::AgentState::Stopped,
                 agent: Some(agent.clone()),
                 since: None,
             })
+    }
+}
+
+/// The agent `execution` runs, or may still run after a restart.
+fn running(execution: &AgentExecution, workspace: &Workspace) -> api::AgentStatus {
+    let (state, since) = match (execution.state, workspace.agent_state) {
+        (ExecutionState::Unknown, _) => (api::AgentState::Unconfirmed, None),
+        (ExecutionState::Running, Some(status)) => (agent_state(status.state), Some(status.since)),
+        (ExecutionState::Running, None) => (api::AgentState::Running, None),
+    };
+    api::AgentStatus {
+        state,
+        agent: Some(execution.agent.clone()),
+        since,
     }
 }
 
@@ -71,7 +82,7 @@ fn agent_state(state: AgentState) -> api::AgentState {
 /// The running, queued and stopped agents of `workspaces`.
 pub(super) async fn load(manager: &Manager, workspaces: &[Workspace]) -> Result<Agents> {
     Ok(Agents {
-        running: manager.store.run(store::agent_executions).await?,
+        executions: manager.store.run(store::agent_executions).await?,
         queued: queued(manager).await?,
         stopped: stopped(manager, workspaces)?,
     })
