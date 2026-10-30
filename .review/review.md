@@ -69,7 +69,7 @@ instead of the PR delivery guidance below.
   and untracked files with Git status codes, bounding the preview and reporting omitted
   entries. Environment checks and the untracked-worktree listing only report,
   as alerts and inbox items; dependency checks use the shared executable catalog.
-- `[env]` layers per variable from saved repository config, worktree, global,
+- `[env]` layers per variable from local config, worktree, global,
   then default. Tracked executions, hooks and workspace exports substitute known
   workspace and reserved-port fields once without shell or recursive expansion;
   `SHOAL_*` names stay reserved and port exports win collisions. Desktop handoffs
@@ -284,7 +284,7 @@ instead of the PR delivery guidance below.
   README on each host; reruns synchronize notes without replacing
   complete asset sets. Homebrew releases install checksummed binaries after
   both release hosts publish assets; the formula has no head channel.
-- Prompt templates append the selected saved/worktree repository value to global
+- Prompt templates append the selected local/worktree repository value to global
   guidance, falling back to the bundled chat template for an omitted global base.
   Empty repository values suppress only local additions; provenance reports the
   combined text and highest configured layer. Inline TOML wins over Markdown.

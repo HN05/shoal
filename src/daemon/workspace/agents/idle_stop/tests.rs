@@ -192,7 +192,7 @@ async fn idle_stop_stops_any_agent_once_its_cache_expires() {
     assert!(!*execution.stop.borrow(), "idle_stop is opt-in");
 
     manager
-        .set_repository_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
+        .write_local_config(&repo.id, Some("[idle_stop]\nenabled = true\n".into()))
         .await
         .unwrap();
     cache_expires_in(&manager, &workspace, 60).await;

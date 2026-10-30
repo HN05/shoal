@@ -126,6 +126,7 @@ impl Manager {
         delete_caches(&repo).await?;
         self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
+        delete_local_config(repo.workspaces_dir.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
         self.unregister_repository(&repo.id).await?;
         Ok(RepositoryRemoval {
@@ -419,6 +420,20 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
         return Ok(());
     };
     tokio::task::spawn_blocking(move || caches.remove()).await?
+}
+
+/// The local config and the scripts beside it belong to the registration.
+async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()> {
+    let Some(directory) = directory else {
+        return Ok(());
+    };
+    let local = directory.join(crate::config::repo::LOCAL_DIR);
+    tokio::task::spawn_blocking(move || match fs::remove_dir_all(&local) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("delete {}", local.display())),
+    })
+    .await?
 }
 
 async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {

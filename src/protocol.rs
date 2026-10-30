@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
-    config::repo::{ConfigLayers, LocalConfig},
+    config::repo::ConfigLayers,
     daemon::{
         allocation::Allocation,
         events::EventItem,
@@ -70,7 +70,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 163;
+pub const VERSION: u32 = 164;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -481,7 +481,7 @@ response_bodies! {
     Status(DaemonStatus),
     Repositories(Vec<Repository>),
     Repository(Repository),
-    RepositoryConfig(LocalConfig),
+    LocalConfigPath(std::path::PathBuf),
     RepositoryRemoved(RepositoryRemoval),
     RepositoryMoves(crate::model::RepositoryMoves),
     MovedRepositories(Vec<crate::model::MovedRepository>),

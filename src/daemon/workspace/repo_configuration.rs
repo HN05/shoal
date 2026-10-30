@@ -1,103 +1,33 @@
-//! Local repository configuration belongs to the registration, not its checkout.
+//! The configuration layers of a repository's workspaces, and where its
+//! local config file lives.
 use super::Manager;
 use crate::{
     config::{
         self, Config, Effective,
-        repo::{ConfigLayers, LocalConfig, RepoConfig},
+        repo::{ConfigLayers, RepoConfig},
     },
     hooks::{HookDirectory, HookKind},
     model::Workspace,
     protocol::ConfigTarget,
 };
-use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, params};
-use std::collections::BTreeMap;
+use anyhow::Result;
+use std::{collections::BTreeMap, path::PathBuf};
 
 impl Manager {
-    pub async fn repository_config(
+    /// The repository's local config file, which the CLI edits in place;
+    /// its directory is reserved when the repository has none yet.
+    pub async fn local_config_path(
         &self,
         selector: impl Into<crate::repository::Selector>,
-    ) -> Result<LocalConfig> {
+    ) -> Result<PathBuf> {
         let repo = self.repository(selector).await?;
-        Ok(LocalConfig {
-            toml: self.local_repository_config(&repo.id).await?,
-            repository_id: repo.id,
-        })
-    }
-
-    pub async fn set_repository_config(
-        &self,
-        selector: impl Into<crate::repository::Selector>,
-        toml: Option<String>,
-    ) -> Result<LocalConfig> {
-        if let Some(text) = &toml {
-            config::repo::parse(text).context("invalid local repository config")?;
+        if let Some(directory) = &repo.workspaces_dir {
+            return Ok(config::repo::local_config_path(directory));
         }
-        // Serialize changes with registration/removal and retain config on failed cleanup.
-        let _registry = self.gates.lock_registry().await;
-        let repo = self.repository(selector).await?;
+        let _git = self.gates.lock_git(&repo.id).await;
         self.ensure_repository_available(&repo.id).await?;
-        self.save_repository_config(repo.id, toml).await
-    }
-
-    pub async fn edit_repository_config(
-        &self,
-        selector: impl Into<crate::repository::Selector>,
-        changes: &[config::edit::Change],
-    ) -> Result<LocalConfig> {
-        // Hold the same gate as imports and removal across read/modify/write.
-        let _registry = self.gates.lock_registry().await;
-        let repo = self.repository(selector).await?;
-        self.ensure_repository_available(&repo.id).await?;
-        let text = self
-            .local_repository_config(&repo.id)
-            .await?
-            .unwrap_or_default();
-        let edited = config::edit::apply(&text, changes)?;
-        config::repo::parse(&edited).context("invalid local repository config")?;
-        self.save_repository_config(repo.id, Some(edited)).await
-    }
-
-    async fn save_repository_config(
-        &self,
-        repository_id: String,
-        toml: Option<String>,
-    ) -> Result<LocalConfig> {
-        self.store
-            .run(move |db| {
-                if let Some(text) = &toml {
-                    db.execute(
-                        "INSERT INTO repository_configs(repository_id,toml) VALUES (?1,?2)
-                     ON CONFLICT(repository_id) DO UPDATE SET toml=excluded.toml",
-                        params![repository_id, text],
-                    )?;
-                } else {
-                    db.execute(
-                        "DELETE FROM repository_configs WHERE repository_id=?1",
-                        [&repository_id],
-                    )?;
-                }
-                Ok(LocalConfig {
-                    repository_id,
-                    toml,
-                })
-            })
-            .await
-    }
-
-    async fn local_repository_config(&self, id: &str) -> Result<Option<String>> {
-        let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT toml FROM repository_configs WHERE repository_id=?1",
-                        [id],
-                        |row| row.get(0),
-                    )
-                    .optional()?)
-            })
-            .await
+        let directory = self.workspaces_dir(&repo).await?;
+        Ok(config::repo::local_config_path(&directory))
     }
 
     /// [`Self::workspace_hook`] of the workspace `selector` names.
@@ -163,19 +93,18 @@ impl Manager {
         repository_id: &str,
         worktree_file: RepoConfig,
     ) -> Result<ConfigLayers> {
-        let saved_repository_config = self
-            .local_repository_config(repository_id)
-            .await?
-            .map(|text| config::repo::parse(&text).context("parse local repository config"))
-            .transpose()?
-            .unwrap_or_default();
+        let repository = self.repository(repository_id).await?;
+        let local_config = match &repository.workspaces_dir {
+            Some(directory) => config::repo::load_local(directory)?,
+            None => RepoConfig::default(),
+        };
         Ok(ConfigLayers {
             worktree_file,
-            saved_repository_config,
+            local_config,
         })
     }
 
-    /// The workspace's settings after every layer: the saved config, the
+    /// The workspace's settings after every layer: the local config, the
     /// worktree file and the global config.
     pub(crate) async fn workspace_settings(&self, workspace: &Workspace) -> Result<Effective> {
         self.workspace_settings_from(&self.config(), workspace)

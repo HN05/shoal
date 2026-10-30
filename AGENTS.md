@@ -52,12 +52,12 @@ when behavior changes, distinguishing decisions from proposals.
   daemon hook rules without marking completion; removal uses its own hooks.
   `hooks.post_ready` follows the same rules after ready-for-review marks persist;
   failure notifies without removing them, and each explicit mark reruns it.
-  Missing-worktree cleanup skips hooks. Optional local repository config lives
-  in daemon state, layers per option over the worktree config, and is deleted
-  with its registration. Settings that describe the machine live under the
-  global `[machine]` table; every other option follows the repository schema in
-  both files and resolves saved config, worktree file, global config, then
-  default; the CLI reads the global file at launch and asks the
+  Missing-worktree cleanup skips hooks. Optional local repository config is
+  `.shoal/config.toml` in the repository's own directory, read in place, layers
+  per option over the worktree config, and is deleted with its registration.
+  Settings that describe the machine live under the global `[machine]` table;
+  every other option follows the repository schema in both files and resolves
+  local config, worktree file, global config, then default; the CLI reads the global file at launch and asks the
   daemon for the repository layer. Named ports are lazy, with CLI overrides and
   explicit conflicts.
 - Workspace commands inherit a scope token; CLI refusals also follow process

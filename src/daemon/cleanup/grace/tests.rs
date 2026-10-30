@@ -17,7 +17,7 @@ async fn fixture() -> (tempfile::TempDir, Arc<Manager>, Workspace) {
         .await
         .unwrap();
     manager
-        .set_repository_config(&repo.id, Some("[cleanup]\ngrace_minutes = 600\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup]\ngrace_minutes = 600\n".into()))
         .await
         .unwrap();
     let workspace = manager

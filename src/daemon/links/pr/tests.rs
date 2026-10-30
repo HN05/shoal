@@ -24,7 +24,7 @@ async fn unwatch_removes_only_the_selected_pr_even_when_cleanup_is_disabled() {
         ],
     );
     manager
-        .set_repository_config(&repo.id, Some("[cleanup.pr]\nenabled=false\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup.pr]\nenabled=false\n".into()))
         .await
         .unwrap();
     let id = workspace.id.clone();

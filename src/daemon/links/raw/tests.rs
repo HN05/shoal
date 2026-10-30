@@ -36,7 +36,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     std::fs::set_permissions(&gh, std::fs::Permissions::from_mode(0o755)).unwrap();
     let auth = format!("[agent.forge_clis]\ngh = '{}'\n", gh.display());
     manager
-        .set_repository_config(&repo.id, Some(auth.clone()))
+        .write_local_config(&repo.id, Some(auth.clone()))
         .await
         .unwrap();
     let request = |method| RawRequest {
@@ -60,7 +60,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     assert!(sent.contains("-X GET repos/team/repo"), "{sent}");
 
     manager
-        .set_repository_config(
+        .write_local_config(
             &repo.id,
             Some(format!("{auth}[permissions]\napi_writes = 'direct'\n")),
         )

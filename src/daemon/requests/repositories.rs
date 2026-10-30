@@ -35,20 +35,9 @@ pub(super) async fn handle(
         RepositoryMethod::RenameRepository { repository, name } => {
             Body::Repository(manager.rename_repository(&repository, name).await?)
         }
-        RepositoryMethod::RepositoryConfig { repository } => {
-            Body::RepositoryConfig(manager.repository_config(&repository).await?)
+        RepositoryMethod::LocalConfigPath { repository } => {
+            Body::LocalConfigPath(manager.local_config_path(&repository).await?)
         }
-        RepositoryMethod::SetRepositoryConfig { repository, toml } => {
-            Body::RepositoryConfig(manager.set_repository_config(&repository, toml).await?)
-        }
-        RepositoryMethod::EditRepositoryConfig {
-            repository,
-            changes,
-        } => Body::RepositoryConfig(
-            manager
-                .edit_repository_config(&repository, &changes)
-                .await?,
-        ),
         RepositoryMethod::RemoveRepository { repository } => {
             Body::RepositoryRemoved(manager.remove_repository(&repository).await?)
         }
@@ -101,9 +90,7 @@ impl Scoped for RepositoryMethod {
             RepositoryMethod::RegisterRepository { .. }
             | RepositoryMethod::RegisterContribution { .. }
             | RepositoryMethod::RenameRepository { .. }
-            | RepositoryMethod::RepositoryConfig { .. }
-            | RepositoryMethod::SetRepositoryConfig { .. }
-            | RepositoryMethod::EditRepositoryConfig { .. }
+            | RepositoryMethod::LocalConfigPath { .. }
             | RepositoryMethod::RemoveRepository { .. }
             | RepositoryMethod::PlanRepositoryMoves { .. }
             | RepositoryMethod::MoveRepositories { .. }

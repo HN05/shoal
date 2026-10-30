@@ -71,10 +71,7 @@ impl Stack {
             normalize(RepoConfig::built_in(), Layer::BuiltInDefault),
             normalize(global.repository_layer(), Layer::GlobalConfig),
             normalize(repository.worktree_file.clone(), Layer::WorktreeFile),
-            normalize(
-                repository.saved_repository_config.clone(),
-                Layer::SavedRepositoryConfig,
-            ),
+            normalize(repository.local_config.clone(), Layer::LocalConfig),
         ];
         Self { layers, warnings }
     }

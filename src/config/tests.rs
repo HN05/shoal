@@ -230,7 +230,8 @@ fn install_writes_the_template_once_and_keeps_edits() {
         "claude".parse::<crate::agent::Agent>().ok()
     );
     // Reset keeps the edited file as a backup and restores the template.
-    let (same, backup) = crate::config::file::replace(expected.clone(), default_template()).unwrap();
+    let (same, backup) =
+        crate::config::file::replace(expected.clone(), default_template()).unwrap();
     let backup = backup.unwrap();
     assert!(same == expected && backup == home.path().join(".config/shoal/config.toml.backup"));
     assert_eq!(fs::read_to_string(&backup).unwrap(), text);

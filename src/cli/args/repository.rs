@@ -74,16 +74,10 @@ pub enum RepoCommand {
         /// Registered repository; defaults to the current checkout or workspace.
         repository: Option<String>,
     },
-    /// Show or replace repository configuration stored locally by Shoal.
+    /// Show the path and contents of the repository's local config.
     Config {
         /// Registered repository; omit to choose one.
         repository: Option<String>,
-        /// Import TOML as the complete config for all this repository's workspaces.
-        #[arg(long, conflicts_with = "clear", value_hint = clap::ValueHint::FilePath)]
-        file: Option<PathBuf>,
-        /// Remove the local config and use each worktree's repository config again.
-        #[arg(long)]
-        clear: bool,
     },
     /// Register a local checkout (no remote required), or clone a repository URL.
     Add {

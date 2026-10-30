@@ -36,6 +36,9 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         &repo.path,
         &["worktree", "add", "--lock", "--detach", "../.seed/worktree"],
     );
+    manager
+        .write_local_config(&repo.id, Some("[ports.web]\nport = 3000\n".into()))
+        .await?;
 
     let moved = manager.move_repositories(Layout::Regular).await?;
     let [moved] = moved.as_slice() else {
@@ -47,6 +50,12 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
     assert_eq!(moved.repository.workspaces_dir.as_ref(), Some(&directory));
     assert_eq!(moved.repository.path, directory.join(".checkout"));
     assert!(!old.exists());
+    // The local config moves with the repository's directory.
+    assert!(directory.join(".shoal/config.toml").exists());
+    assert_eq!(
+        manager.local_config_path(&repo.id).await?,
+        directory.join(".shoal/config.toml")
+    );
 
     let workspace = manager.workspace(&workspace.id).await?;
     assert_eq!(workspace.path, directory.join("feature"));

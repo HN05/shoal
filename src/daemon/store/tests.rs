@@ -58,6 +58,10 @@ fn historical_database(version: i64) -> Result<Connection> {
             db.execute_batch(&format!("DROP TABLE {table};"))?;
         }
     }
+    // The local repository config moved to a file.
+    if version >= 91 {
+        db.execute_batch("DROP TABLE repository_configs;")?;
+    }
     if version >= 29 {
         db.execute_batch(
             "CREATE TABLE workspace_renames (

@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 90;
+const SCHEMA_VERSION: i64 = 91;
 
 #[cfg(test)]
 mod benchmark;
@@ -433,6 +433,8 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (88, include_str!("store/workspace_files.sql"), None),
     (89, EARLIER_ATTACHED_FILES, None),
     (90, include_str!("store/workspace_item_runs.sql"), None),
+    // The local repository config moved to a file in the repository's directory.
+    (91, "DROP TABLE IF EXISTS repository_configs;", None),
 ];
 
 /// The repositories whose copies of files attached to messages before Shoal

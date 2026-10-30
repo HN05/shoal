@@ -366,7 +366,7 @@ fn extraction_preserves_wire_shapes() {
         (json!({"type": "ok"}), "Ok"),
         (json!({"type": "workspaces", "data": []}), "Workspaces"),
         (
-            json!({"type": "layered_config", "data": {"worktree_file": {}, "saved_repository_config": {}}}),
+            json!({"type": "layered_config", "data": {"worktree_file": {}, "local_config": {}}}),
             "LayeredConfig",
         ),
         (json!({"type": "busy", "data": {"message": "busy"}}), "Busy"),

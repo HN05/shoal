@@ -19,16 +19,9 @@ pub enum RepositoryMethod {
         repository: crate::repository::Selector,
         name: String,
     },
-    RepositoryConfig {
+    /// The repository's local config file, reserving its directory.
+    LocalConfigPath {
         repository: crate::repository::Selector,
-    },
-    SetRepositoryConfig {
-        repository: crate::repository::Selector,
-        toml: Option<String>,
-    },
-    EditRepositoryConfig {
-        repository: crate::repository::Selector,
-        changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
         repository: crate::repository::Selector,

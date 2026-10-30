@@ -4,20 +4,19 @@ use crate::sessions::HostName;
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, fs, path::Path};
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LocalConfig {
-    pub repository_id: String,
-    pub toml: Option<String>,
-}
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 /// The repository-owned configuration layers before they are resolved. Keeping
 /// them separate lets callers explain where an effective value came from.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct ConfigLayers {
     pub worktree_file: RepoConfig,
-    pub saved_repository_config: RepoConfig,
+    /// The file in the repository's own directory, outside every Git tree.
+    pub local_config: RepoConfig,
 }
 
 /// Display uses human-readable layer labels rather than the snake_case JSON names.
@@ -27,13 +26,13 @@ pub enum ConfigLayer {
     BuiltInDefault,
     GlobalConfig,
     WorktreeFile,
-    SavedRepositoryConfig,
+    LocalConfig,
 }
 
 impl ConfigLayer {
     /// Whether the repository sets this layer, rather than the machine.
     pub fn is_repository(self) -> bool {
-        matches!(self, Self::WorktreeFile | Self::SavedRepositoryConfig)
+        matches!(self, Self::WorktreeFile | Self::LocalConfig)
     }
 }
 
@@ -43,7 +42,7 @@ impl std::fmt::Display for ConfigLayer {
             Self::BuiltInDefault => "built-in default",
             Self::GlobalConfig => "global config",
             Self::WorktreeFile => "worktree file",
-            Self::SavedRepositoryConfig => "saved repository config",
+            Self::LocalConfig => "local config",
         })
     }
 }
@@ -86,8 +85,8 @@ pub struct RepoConfig {
     /// Commands kept running for the user to try, by name.
     #[option(named)]
     pub demos: BTreeMap<String, crate::demos::Demo>,
-    /// Machine-specific, so the global config or saved repository config sets
-    /// it, never the worktree file.
+    /// Machine-specific, so the global config or local config sets it, never
+    /// the worktree file.
     #[option(named)]
     pub secrets: crate::secrets::Secrets,
     #[option(named)]
@@ -314,6 +313,36 @@ pub fn parse(text: &str) -> Result<RepoConfig> {
     Ok(config)
 }
 
+/// The directory in a repository's own directory that holds its local
+/// config and the scripts it names, beside the workspaces and `.checkout`.
+pub const LOCAL_DIR: &str = ".shoal";
+
+/// `<repository directory>/.shoal/config.toml`.
+pub fn local_config_path(repository_dir: &Path) -> PathBuf {
+    repository_dir.join(LOCAL_DIR).join("config.toml")
+}
+
+/// The local config of the repository whose directory is `repository_dir`,
+/// read in place, with the templates beside it. Relative hook paths and
+/// `setup.command` name scripts in its directory, so they become absolute.
+pub fn load_local(repository_dir: &Path) -> Result<RepoConfig> {
+    let path = local_config_path(repository_dir);
+    let directory = repository_dir.join(LOCAL_DIR);
+    let Some(text) =
+        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?
+    else {
+        return Ok(RepoConfig::default());
+    };
+    let mut config = parse(&text).with_context(|| format!("parse {}", path.display()))?;
+    for &kind in crate::hooks::HookKind::ALL {
+        if let Some(command) = kind.repository_command_mut(&mut config) {
+            *command = directory.join(&*command).to_string_lossy().into_owned();
+        }
+    }
+    read_templates(&mut config, &directory)?;
+    Ok(config)
+}
+
 pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
     let paths = [
         workspace_dir.join(".shoal.toml"),
@@ -331,22 +360,29 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
             let config = parse(&text).with_context(|| format!("parse {}", path.display()))?;
             ensure!(
                 config.secrets.is_empty(),
-                "{}: [secrets] belongs in the global or saved repository config",
+                "{}: [secrets] belongs in the global or local config",
                 path.display()
             );
             config
         }
         None => RepoConfig::default(),
     };
-    if config.agent.templates.worker.is_none() {
-        config.agent.templates.worker =
-            crate::config::templates::read(workspace_dir, crate::config::templates::WORKER_FILE)?;
-    }
-    if config.agent.templates.chat.is_none() {
-        config.agent.templates.chat =
-            crate::config::templates::read(workspace_dir, crate::config::templates::CHAT_FILE)?;
-    }
+    read_templates(&mut config, workspace_dir)?;
     Ok(config)
+}
+
+/// Fill omitted inline templates from the files in `directory`.
+fn read_templates(config: &mut RepoConfig, directory: &Path) -> Result<()> {
+    let templates = &mut config.agent.templates;
+    if templates.worker.is_none() {
+        templates.worker =
+            crate::config::templates::read(directory, crate::config::templates::WORKER_FILE)?;
+    }
+    if templates.chat.is_none() {
+        templates.chat =
+            crate::config::templates::read(directory, crate::config::templates::CHAT_FILE)?;
+    }
+    Ok(())
 }
 
 impl RepoConfig {

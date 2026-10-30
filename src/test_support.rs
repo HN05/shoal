@@ -201,3 +201,28 @@ pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {
         .kill_on_drop(true);
     command
 }
+
+impl Manager {
+    /// Write the repository's local config file, or remove it for `None`.
+    pub async fn write_local_config(
+        &self,
+        selector: &str,
+        toml: Option<String>,
+    ) -> anyhow::Result<std::path::PathBuf> {
+        let path = self.local_config_path(selector).await?;
+        match toml {
+            Some(text) => {
+                crate::config::repo::parse(&text)?;
+                fs::create_dir_all(path.parent().unwrap())?;
+                fs::write(&path, text)?;
+            }
+            None => match fs::remove_file(&path) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error.into());
+                }
+                _ => {}
+            },
+        }
+        Ok(path)
+    }
+}

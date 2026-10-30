@@ -9,10 +9,8 @@ fn wrappers_resolve_per_tool() {
     let layers = crate::config::repo::ConfigLayers {
         worktree_file: crate::config::repo::parse("[agent.forge_clis]\nfj = '/repo/fj-agent'\n")
             .unwrap(),
-        saved_repository_config: crate::config::repo::parse(
-            "[agent.forge_clis]\nfj = '/saved/fj-agent'\n",
-        )
-        .unwrap(),
+        local_config: crate::config::repo::parse("[agent.forge_clis]\nfj = '/saved/fj-agent'\n")
+            .unwrap(),
     };
     let effective = global.resolve(&layers).unwrap();
     assert_eq!(

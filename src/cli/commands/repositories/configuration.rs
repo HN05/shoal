@@ -1,65 +1,34 @@
-//! Read and replace locally stored repository configuration.
+//! Where a repository's local config lives, and what it holds.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
+use serde::Serialize;
 
 use super::selection::chosen;
-use crate::{
-    cli::{
-        client::request,
-        context::Context,
-        output::{Palette, Style},
-    },
-    config::repo::LocalConfig,
-    protocol::RepositoryMethod,
-    repository,
-};
+use crate::{cli::client::request, cli::context::Context, protocol::RepositoryMethod};
 
-pub(super) async fn configure(
-    ctx: &Context,
-    repository: Option<String>,
-    file: Option<PathBuf>,
-    clear: bool,
-) -> Result<i32> {
+#[derive(Serialize)]
+struct LocalConfig {
+    path: PathBuf,
+    /// Unset while the file does not exist.
+    toml: Option<String>,
+}
+
+pub(super) async fn show(ctx: &Context, repository: Option<String>) -> Result<i32> {
     let repository = chosen(ctx, repository).await?;
-    let updating = file.is_some() || clear;
-    let method = config_request(repository, file, updating)?;
-    let config = request::<LocalConfig>(&ctx.paths, method).await?;
-    ctx.show(&config, |config| render(ctx, config, updating, clear))?;
+    let path =
+        request::<PathBuf>(&ctx.paths, RepositoryMethod::LocalConfigPath { repository }).await?;
+    let toml =
+        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?;
+    let config = LocalConfig { path, toml };
+    ctx.show(&config, render)?;
     Ok(0)
 }
 
-fn config_request(
-    repository: repository::Selector,
-    file: Option<PathBuf>,
-    updating: bool,
-) -> Result<RepositoryMethod> {
-    Ok(if updating {
-        let toml = file
-            .map(|path| {
-                std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))
-            })
-            .transpose()?;
-        RepositoryMethod::SetRepositoryConfig { repository, toml }
-    } else {
-        RepositoryMethod::RepositoryConfig { repository }
-    })
-}
-
-fn render(ctx: &Context, config: &LocalConfig, updating: bool, clear: bool) {
-    if clear {
-        outln!(
-            "{}",
-            Palette::stdout(ctx.json).paint(Style::Success, "Cleared local repository config")
-        );
-    } else if updating {
-        outln!(
-            "{}",
-            Palette::stdout(ctx.json).paint(Style::Success, "Saved local repository config")
-        );
-    } else if let Some(text) = &config.toml {
-        out!("{text}");
-    } else {
-        eprintln!("No local repository config; using each worktree's repository config");
+fn render(config: &LocalConfig) {
+    outln!("{}", config.path.display());
+    match &config.toml {
+        Some(text) => out!("{text}"),
+        None => eprintln!("No local config; create the file to add one"),
     }
 }

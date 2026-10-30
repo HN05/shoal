@@ -248,7 +248,7 @@ impl FakeDaemon {
                         method =
                             format!("layered_config {}", target["repository"].as_str().unwrap());
                         json!({"type": "layered_config", "data": {
-                            "worktree_file": {}, "saved_repository_config": {
+                            "worktree_file": {}, "local_config": {
                                 "agent": {"default": "custom"}, "agents": {"custom": {"command": ["false"]}}
                             }
                         }})

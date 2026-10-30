@@ -276,7 +276,7 @@ async fn repository_limits_hold_back_only_their_own_entries() {
     let other = register(&manager, &temp, "other").await;
     limit_globally(&manager, 3);
     manager
-        .set_repository_config(&limited.id, Some("agent.max_running = 1\n".into()))
+        .write_local_config(&limited.id, Some("agent.max_running = 1\n".into()))
         .await
         .unwrap();
 

@@ -48,7 +48,7 @@ async fn a_contribution_waits_out_the_grace_period() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
     manager
-        .set_repository_config(&repo.id, Some("[cleanup]\ngrace_minutes = 10\n".into()))
+        .write_local_config(&repo.id, Some("[cleanup]\ngrace_minutes = 10\n".into()))
         .await
         .unwrap();
     manager.sweep_contributions().await.unwrap();

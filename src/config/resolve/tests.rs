@@ -39,7 +39,7 @@ fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
     let global = Config::from_toml(global).unwrap();
     let layers = ConfigLayers {
         worktree_file: parse(worktree).unwrap(),
-        saved_repository_config: parse(saved).unwrap(),
+        local_config: parse(saved).unwrap(),
     };
     Stack::new(&global, &layers)
 }
@@ -109,14 +109,14 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
                 Some("file"),
                 Some("saved"),
                 Some("global\n\nsaved".into()),
-                Layer::SavedRepositoryConfig,
+                Layer::LocalConfig,
             ),
             (
                 Some("global"),
                 Some("file"),
                 Some(""),
                 Some("global".into()),
-                Layer::SavedRepositoryConfig,
+                Layer::LocalConfig,
             ),
             (
                 Some("global"),
@@ -151,7 +151,7 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
                 Some("file"),
                 Some(""),
                 default.map(str::to_owned).or(Some(String::new())),
-                Layer::SavedRepositoryConfig,
+                Layer::LocalConfig,
             ),
         ] {
             let stack = stack(&config(global), &config(worktree), &config(saved));
@@ -346,7 +346,7 @@ fn herdr_tab_names_resolve_and_report_the_winning_layer() {
             "[terminal.herdr]\ntab_name = '{repo}'",
             "[terminal.herdr]\ntab_name = 'Work'",
             Some("Work"),
-            Layer::SavedRepositoryConfig,
+            Layer::LocalConfig,
         ),
     ] {
         let stack = stack(global, worktree, saved);
@@ -381,7 +381,7 @@ fn every_option_survives_layering_in_both_directions() {
     for (index, layer) in [
         (1, Layer::GlobalConfig),
         (2, Layer::WorktreeFile),
-        (3, Layer::SavedRepositoryConfig),
+        (3, Layer::LocalConfig),
     ] {
         let mut stack = stack("", "", "");
         stack.layers[index].0 = full.clone();
@@ -549,7 +549,7 @@ fn post_setup_and_pre_remove_hooks_use_global_defaults_below_repository_layers()
                 worktree.as_str(),
                 saved.as_str(),
                 Some("saved/hook"),
-                Layer::SavedRepositoryConfig,
+                Layer::LocalConfig,
             ),
         ] {
             let stack = stack(global, worktree, saved);
@@ -611,8 +611,8 @@ fn environment_values_layer_and_report_each_name() {
     for (name, value, layer) in [
         ("GLOBAL", "global", Layer::GlobalConfig),
         ("FILE", "file", Layer::WorktreeFile),
-        ("SESSION", "{workspace}", Layer::SavedRepositoryConfig),
-        ("EMPTY", "", Layer::SavedRepositoryConfig),
+        ("SESSION", "{workspace}", Layer::LocalConfig),
+        ("EMPTY", "", Layer::LocalConfig),
     ] {
         let entry = entries
             .iter()
@@ -641,7 +641,7 @@ fn named_tables_report_replacement_by_name() {
     };
     assert_eq!(
         command("review"),
-        (json(&["saved", "two words"]), Layer::SavedRepositoryConfig)
+        (json(&["saved", "two words"]), Layer::LocalConfig)
     );
     assert_eq!(command("check").1, Layer::GlobalConfig);
     assert_eq!(command("lint").1, Layer::WorktreeFile);

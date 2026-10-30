@@ -28,7 +28,7 @@ pub enum ConfigCommand {
         /// KEY VALUE pairs; each value is TOML, or an unquoted string.
         #[arg(required = true, num_args = 2.., value_names = ["KEY", "VALUE"])]
         assignments: Vec<String>,
-        /// Edit this repository's saved config instead of the global file.
+        /// Edit this repository's local config instead of the global file.
         #[arg(long = "repo")]
         repository: Option<String>,
     },
@@ -36,7 +36,7 @@ pub enum ConfigCommand {
     Unset {
         #[arg(required = true)]
         keys: Vec<String>,
-        /// Edit this repository's saved config instead of the global file.
+        /// Edit this repository's local config instead of the global file.
         #[arg(long = "repo")]
         repository: Option<String>,
     },

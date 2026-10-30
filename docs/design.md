@@ -1590,17 +1590,23 @@ and on reload, which global CLI writes request of a running daemon, replacing it
 snapshot only with a valid file so agents and leases are untouched; an operation
 that combines global definitions with resolved settings reads both from one snapshot. The CLI reads agent settings per command. Repository TOML comes from the
 worktree (`.shoal.toml` or `.shoal/config.toml`, both together is an error) with
-a local override stored in the database by repository ID layered over it per
-option, a named table replacing the one below it whole, and deleted with the
-registration. Inline repository key edits use the same validation as imports and
-serialize read/modify/write in the daemon; unset restores lower-layer values. Every option
-that does not describe the machine may be set at either level and resolves per
-option: saved config, worktree file, global config, then the built-in default.
+a local config layered over it per option, a named table replacing the one below
+it whole. The local config is a file, `.shoal/config.toml` in the repository's
+own directory beside its workspaces and `.checkout`: outside every Git tree, so
+nothing has to ignore it, and read in place on every request, so an edit reaches
+every workspace without copying or a restart. As a file, the user can edit it
+with any tool, back it up and keep its scripts beside it: its relative hook and
+setup paths name scripts there, made absolute when it loads. Key edits hold the file's lock, keep a backup and
+save only a valid result, as global edits do; unset restores lower-layer values.
+It moves with the repository's directory and is deleted with the registration.
+Every option that does not describe the machine may be set at either level and
+resolves per option: local config, worktree file, global config, then the
+built-in default.
 One declaration of each option, the field of the repository schema with its
 kind, generates its built-in default, merge, resolved form and provenance, so a
 reported layer is the one whose value is in use; the daemon resolves a workspace's settings
 once per request and every use site reads them rather than layering on its own.
-Prompt templates select repository additions by saved/worktree precedence and
+Prompt templates select repository additions by local/worktree precedence and
 append them to global guidance, using the bundled chat template when
 no global one is configured. Empty repository values suppress only the addition.
 Repository-root Markdown files and global files beside `config.toml` sit below

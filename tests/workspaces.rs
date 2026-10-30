@@ -132,6 +132,29 @@ impl Fixture {
         )
     }
 
+    /// Write `file`'s contents as repository `repository`'s local config, as
+    /// a user edits it, and return what `repo config` then shows.
+    fn save_local_config(&self, repository: &str, file: &Path) -> Value {
+        let path = PathBuf::from(
+            self.ok(&["repo", "config", repository])["path"]
+                .as_str()
+                .unwrap(),
+        );
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::copy(file, &path).unwrap();
+        self.ok(&["repo", "config", repository])
+    }
+
+    /// Remove repository `repository`'s local config file.
+    fn clear_local_config(&self, repository: &str) -> Value {
+        let shown = self.ok(&["repo", "config", repository]);
+        let path = Path::new(shown["path"].as_str().unwrap());
+        if path.exists() {
+            fs::remove_file(path).unwrap();
+        }
+        self.ok(&["repo", "config", repository])
+    }
+
     fn rename(&self, workspace: &str, branch: &str) -> Value {
         self.request(
             serde_json::json!({"rename_workspace":{"workspace":workspace,"branch":branch}}),
@@ -1680,14 +1703,14 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
             String::from_utf8_lossy(&output.stderr)
         );
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
-        assert_eq!(
-            result[if args[0] == "repo" && args[1] == "add" {
-                "id"
-            } else {
-                "repository_id"
-            }],
-            named["id"]
-        );
+        let local =
+            || fixture.ok(&["repo", "config", named["id"].as_str().unwrap()])["path"].clone();
+        match (args[0], args[1]) {
+            ("repo", "add") => assert_eq!(result["id"], named["id"]),
+            ("repo", "config") => assert_eq!(result["path"], local()),
+            ("config", _) => assert_eq!(result["config"], local()),
+            _ => assert_eq!(result["repository_id"], named["id"]),
+        }
     }
     let other = fixture.ok(&[
         "repo",
@@ -1716,7 +1739,10 @@ fn repository_selectors_preserve_names_and_reject_colliding_registered_paths() {
         String::from_utf8_lossy(&output.stderr)
     );
     let config: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(config["repository_id"], other["id"]);
+    assert_eq!(
+        config["path"],
+        fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["path"]
+    );
     // Replace the second registration with an unrelated directory to exercise
     // removal by the displayed name.
     fixture.ok(&["repo", "rm", other["id"].as_str().unwrap(), "--yes"]);
@@ -3953,13 +3979,7 @@ fn repository_config_sets_the_automatic_port_range() {
     let saved = fixture.root.path().join("saved.toml");
     let save = |text: &str| {
         fs::write(&saved, text).unwrap();
-        fixture.ok(&[
-            "repo",
-            "config",
-            fixture.repo.to_str().unwrap(),
-            "--file",
-            saved.to_str().unwrap(),
-        ]);
+        fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     };
     save(&format!("[ports]\nstart={second}\nend={second}\n"));
     assert_eq!(
@@ -4019,13 +4039,7 @@ fn config_show_reports_effective_values_and_their_layers() {
         "agent.default = 'codex'\n[commands]\nshared = ['saved']\n[ports]\nend = 4000\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
     let report = fixture.ok(&["config", "show", "layered-config"]);
     let entry = |key: &str| {
@@ -4037,15 +4051,11 @@ fn config_show_reports_effective_values_and_their_layers() {
             .unwrap()
     };
     for (key, value, layer) in [
-        (
-            "agent.default",
-            serde_json::json!("codex"),
-            "saved_repository_config",
-        ),
+        ("agent.default", serde_json::json!("codex"), "local_config"),
         (
             "commands.shared",
             serde_json::json!(["saved"]),
-            "saved_repository_config",
+            "local_config",
         ),
         (
             "commands.worktree",
@@ -4058,11 +4068,7 @@ fn config_show_reports_effective_values_and_their_layers() {
             "worktree_file",
         ),
         ("ports.start", serde_json::json!(3000), "worktree_file"),
-        (
-            "ports.end",
-            serde_json::json!(4000),
-            "saved_repository_config",
-        ),
+        ("ports.end", serde_json::json!(4000), "local_config"),
         (
             "commands.global",
             serde_json::json!(["global"]),
@@ -4094,7 +4100,7 @@ fn config_show_reports_effective_values_and_their_layers() {
     assert!(human.status.success());
     let human = String::from_utf8(human.stdout).unwrap();
     assert!(human.contains("ports.start = 3000 (worktree file)"));
-    assert!(human.contains("agent.default = \"codex\" (saved repository config)"));
+    assert!(human.contains("agent.default = \"codex\" (local config)"));
 }
 
 #[test]
@@ -5186,13 +5192,7 @@ fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
                 ),
             )
             .unwrap();
-            fixture.ok(&[
-                "repo",
-                "config",
-                fixture.repo.to_str().unwrap(),
-                "--file",
-                local.to_str().unwrap(),
-            ]);
+            fixture.save_local_config(fixture.repo.to_str().unwrap(), &local);
         }
         let expected = if index == 4 {
             String::new()
@@ -6953,7 +6953,6 @@ fn execution_scope_limits_management_and_expires() {
         vec!["acquire", "port", "web", "--workspace", "other"],
         vec!["repo", "rename", fixture.repo.to_str().unwrap(), "changed"],
         vec!["repo", "config", fixture.repo.to_str().unwrap()],
-        vec!["repo", "config", fixture.repo.to_str().unwrap(), "--clear"],
         vec!["daemon", "stop"],
     ] {
         let output = scoped(&args);
@@ -8517,12 +8516,8 @@ fn inline_repository_config_resolves_relative_paths_in_the_callers_directory() {
         assert!(output.status.success(), "{args:?}: {output:?}");
         let result: Value = serde_json::from_slice(&output.stdout).unwrap();
         assert_eq!(
-            result["repository_id"],
-            fixture.ok(&["repo", "ls"])[0]["id"]
-        );
-        assert_eq!(
-            result,
-            fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])
+            result["config"],
+            fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])["path"]
         );
     }
 }
@@ -8534,8 +8529,9 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
     fixture.add("worker");
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    let saved = fixture.ok(&["config", "set", "agent.default", "claude", "--repo", id]);
-    assert_eq!(saved["repository_id"], id);
+    let edited = fixture.ok(&["config", "set", "agent.default", "claude", "--repo", id]);
+    let saved = fixture.ok(&["repo", "config", id]);
+    assert_eq!(edited["config"], saved["path"]);
     let agent = || {
         fixture
             .ok(&["config", "show", "worker"])
@@ -8547,7 +8543,7 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
             .clone()
     };
     assert_eq!(agent()["value"], "claude");
-    assert_eq!(agent()["layer"], "saved_repository_config");
+    assert_eq!(agent()["layer"], "local_config");
     for (key, value) in [
         ("cleanup.auto.enabled", "maybe"),
         ("root_dir", "/tmp/no"),
@@ -8625,20 +8621,29 @@ fn inline_repository_config_edits_preserve_layers_and_serialize_updates() {
 }
 
 #[test]
-fn local_repository_config_is_copied_shared_persistent_and_reversible() {
+fn local_config_is_a_file_shared_by_every_workspace_and_read_in_place() {
     let mut fixture = Fixture::new();
     let first = fixture.add("first");
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    assert!(fixture.ok(&["repo", "config", id])["toml"].is_null());
+    let shown = fixture.ok(&["repo", "config", id]);
+    assert!(shown["toml"].is_null());
+    let local = PathBuf::from(shown["path"].as_str().unwrap());
+    assert!(local.ends_with(".shoal/config.toml"));
+    assert_eq!(
+        local.parent().unwrap().parent().unwrap(),
+        Path::new(first["path"].as_str().unwrap()).parent().unwrap()
+    );
     let input = fixture.root.path().join("local.toml");
     let text = "# Local preferences\n[ports.web]\nenv='LOCAL_PORT'\n[resources.lock]\ncapacity=1\n";
     fs::write(&input, text).unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
-    assert_eq!(saved["repository_id"], id);
+    let saved = fixture.save_local_config(id, &input);
     assert_eq!(saved["toml"], text);
-    assert_eq!(fixture.run(&["repo", "config", id]).stdout, text.as_bytes());
-    fs::remove_file(&input).unwrap();
+    let printed = fixture.run(&["repo", "config", id]).stdout;
+    assert_eq!(
+        String::from_utf8(printed).unwrap(),
+        format!("{}\n{text}", local.display())
+    );
     fixture.ok(&["repo", "rename", id, "renamed"]);
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", "renamed"]), saved);
@@ -8654,27 +8659,38 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
             "LOCAL_PORT"
         );
     }
-    let port = fixture.ok(&["acquire", "port", "web", "--workspace", "first"]);
-    assert_eq!(port["env_var"], "LOCAL_PORT");
-    fixture.ok(&["acquire", "resource", "lock", "--workspace", "first"]);
+
+    // Edits keep comments and the previous file, and apply at once.
+    let edited = fixture.ok(&["config", "set", "ports.web.env", "EDITED", "--repo", id]);
+    assert_eq!(edited["config"], local.to_str().unwrap());
     assert_eq!(
-        fixture
-            .run(&["acquire", "resource", "lock", "--workspace", "second"])
-            .status
-            .code(),
-        Some(2)
+        fs::read_to_string(local.with_extension("toml.backup")).unwrap(),
+        text
     );
-    fixture.ok(&[
-        "release",
-        "resource",
-        "lock",
-        "--workspace",
-        "first",
-        "--name",
-        "default",
-    ]);
-    fixture.ok(&["rm", "second", "--yes"]);
-    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
+    assert!(
+        fs::read_to_string(&local)
+            .unwrap()
+            .starts_with("# Local preferences\n")
+    );
+    assert_eq!(
+        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["web"]["env"],
+        "EDITED"
+    );
+    // An edit that leaves an invalid file changes nothing.
+    for (key, value) in [
+        ("ports.web.port", "0"),
+        ("resources.lock.capacity", "0"),
+        ("unknown", "true"),
+    ] {
+        let before = fs::read_to_string(&local).unwrap();
+        assert!(
+            !fixture
+                .run(&["config", "set", key, value, "--repo", id])
+                .status
+                .success()
+        );
+        assert_eq!(fs::read_to_string(&local).unwrap(), before);
+    }
 
     let path = Path::new(first["path"].as_str().unwrap());
     fs::write(
@@ -8682,110 +8698,58 @@ fn local_repository_config_is_copied_shared_persistent_and_reversible() {
         "[ports.checked_in]\nenv='CHECKED_IN'\n",
     )
     .unwrap();
-    fs::create_dir(path.join(".shoal")).unwrap();
-    fs::write(path.join(".shoal/config.toml"), "invalid TOML").unwrap();
-    // The worktree file is a layer of its own; its errors show through the saved config.
-    assert!(
-        !fixture
-            .run(&["catalog", "port", "--workspace", "first"])
-            .status
-            .success()
-    );
-    fs::remove_file(path.join(".shoal/config.toml")).unwrap();
     let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 2);
-    assert_eq!(configured["web"]["env"], "LOCAL_PORT");
+    assert_eq!(configured["web"]["env"], "EDITED");
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
-    // Layered names must agree: the saved `lock` resource meets a `lock` pool.
-    fs::write(
-        path.join(".shoal.toml"),
-        "[resource_pools.lock.resources.a]\ncapacity=1\n",
-    )
-    .unwrap();
+    // A file edited by hand into an invalid one fails every lookup until fixed.
+    fs::write(&local, "invalid TOML").unwrap();
     assert!(
         !fixture
             .run(&["catalog", "port", "--workspace", "first"])
             .status
             .success()
     );
-    fs::write(
-        path.join(".shoal.toml"),
-        "[ports.checked_in]\nenv='CHECKED_IN'\n",
-    )
-    .unwrap();
-    // Invalid replacements must leave the saved config intact.
-    for invalid in [
-        "invalid TOML",
-        "unknown=true",
-        "[ports.web]\nport=0",
-        "[resources.lock]\ncapacity=0",
-    ] {
-        fs::write(&input, invalid).unwrap();
-        assert!(
-            !fixture
-                .run(&["repo", "config", id, "--file", input.to_str().unwrap()])
-                .status
-                .success()
-        );
-        assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    }
-    // An empty saved config sets nothing, so every option falls through.
-    fs::write(&input, "").unwrap();
-    fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    // An empty file sets nothing, so every option falls through.
+    fs::write(&local, "").unwrap();
     let configured = fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"].clone();
     assert_eq!(configured.as_object().unwrap().len(), 1);
     assert_eq!(configured["checked_in"]["env"], "CHECKED_IN");
-    assert!(fixture.ok(&["repo", "config", id, "--clear"])["toml"].is_null());
-    assert_eq!(
-        fixture.ok(&["catalog", "port", "--workspace", "first"])["configured"]["checked_in"]["env"],
-        "CHECKED_IN"
-    );
-    assert_eq!(
-        fixture.ok(&["leases", "port", "--workspace", "first"])["reserved"][0],
-        port
-    );
-    fixture.ok(&["repo", "config", id, "--clear"]);
+    assert!(fixture.clear_local_config(id)["toml"].is_null());
 }
 
 #[test]
-fn local_repository_config_is_isolated_and_deleted_only_with_its_repository() {
+fn local_config_scripts_live_beside_it_and_go_with_the_repository() {
     let fixture = Fixture::new();
     let repo = fixture.ok(&["repo", "ls"])[0].clone();
     let id = repo["id"].as_str().unwrap();
-    let input = fixture.root.path().join("local.toml");
-    fs::write(&input, "[ports.web]\n").unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    let local = PathBuf::from(
+        fixture.ok(&["repo", "config", id])["path"]
+            .as_str()
+            .unwrap(),
+    );
+    let directory = local.parent().unwrap();
+    fs::create_dir_all(directory).unwrap();
+    // A relative hook path names a script beside the local config.
+    install_test_script(
+        directory.join("pre-setup.sh"),
+        "#!/bin/sh\ntouch \"$PWD/pre-setup-ran\"\n",
+    );
+    fs::write(&local, "hooks.pre_setup = 'pre-setup.sh'\n").unwrap();
+    let workspace = fixture.add("scripted");
+    assert!(
+        Path::new(workspace["path"].as_str().unwrap())
+            .join("pre-setup-ran")
+            .exists()
+    );
     let other_path = fixture.root.path().join("other-repo");
     fs::create_dir(&other_path).unwrap();
     git(&other_path, &["init", "-b", "main"]);
     let other = fixture.ok(&["repo", "add", other_path.to_str().unwrap()]);
     assert!(fixture.ok(&["repo", "config", other["id"].as_str().unwrap()])["toml"].is_null());
-    let outside = fixture.root.path().join("outside");
-    git(
-        &fixture.repo,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            "outside",
-            outside.to_str().unwrap(),
-        ],
-    );
-    assert!(!fixture.run(&["repo", "rm", id, "--yes"]).status.success());
-    assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    git(
-        &fixture.repo,
-        &["worktree", "remove", outside.to_str().unwrap()],
-    );
+    fixture.ok(&["rm", "scripted", "--yes"]);
     fixture.ok(&["repo", "rm", id, "--yes"]);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
-    assert!(input.exists());
+    assert!(!directory.exists());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
 }
 
@@ -8796,13 +8760,7 @@ fn local_repository_config_selects_simulator_preferences() {
     fixture.add("worker");
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[simulators]\npreferred=['tablet']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let sim = fixture.ok(&["acquire", "sim", "--workspace", "worker"]);
     assert_eq!(sim["device"], "type.Tablet");
 }
@@ -12564,7 +12522,7 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     let id = repo["id"].as_str().unwrap();
     let input = fixture.root.path().join("local.toml");
     fs::write(&input, "[ports.web]\n").unwrap();
-    let saved = fixture.ok(&["repo", "config", id, "--file", input.to_str().unwrap()]);
+    let saved = fixture.save_local_config(id, &input);
     let workspace = fixture.add("worker");
     let port = fixture.ok(&["acquire", "port", "web", "--workspace", "worker"]);
     let resource = fixture.ok(&["acquire", "resource", "lock", "--workspace", "worker"]);
@@ -12591,20 +12549,11 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
     );
     fixture.restart();
     assert_eq!(fixture.ok(&["repo", "config", id]), saved);
-    let blocked = fixture.run(&["repo", "config", id, "--clear"]);
-    assert!(!blocked.status.success());
-    assert!(String::from_utf8_lossy(&blocked.stderr).contains("removal is incomplete"));
     assert!(!fixture.run(&["add", id, "blocked"]).status.success());
     fs::remove_file(fixture.root.path().join("sim-fail")).unwrap();
     fixture.ok(&["repo", "rm", id, "--yes"]);
     assert!(!fixture.repo.exists());
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
-    assert_eq!(
-        db.query_row("SELECT COUNT(*) FROM repository_configs", [], |row| row
-            .get::<_, i64>(0))
-            .unwrap(),
-        0
-    );
+    assert!(!Path::new(saved["path"].as_str().unwrap()).exists());
     assert!(
         fixture.ok(&["leases", "sim", "--all"])["simulators"]
             .as_array()
@@ -12732,13 +12681,7 @@ fn work_setup_skip_accepts_a_failed_setup() {
         ),
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let output = fixture.run(&["add", fixture.repo.to_str().unwrap(), "skipped"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -12794,13 +12737,7 @@ fn setup_cmd_local_override_absolute_path_failure_and_retry() {
         format!("setup.command = {:?}\n", script.to_str().unwrap()),
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        input.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &input);
     let bin = fixture.root.path().join("bin");
     install_test_script(
         bin.join("claude"),
@@ -14888,13 +14825,7 @@ fn repository_config_sets_pr_cleanup_over_the_global_default() {
     // The saved config is the top layer.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[cleanup.pr]\nenabled=false\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     fixture.add("kept");
     let output = fixture.acknowledge("kept");
     assert_eq!(output["type"], "error");
@@ -17065,13 +16996,7 @@ fn git_profiles_layer_and_isolate_worktree_settings_before_setup() {
     );
     let saved = fixture.root.path().join("local.toml");
     fs::write(&saved, "git_profile = 'personal'\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     git(&fixture.repo, &["branch", "existing"]);
     let existing = fixture.ok(&[
         "add",
@@ -17227,13 +17152,7 @@ fn configured_commands_preserve_arguments_scope_and_exit_status() {
     assert_eq!(fixture.run(&["check", "custom"]).stdout, b"from worktree");
     let saved = fixture.root.path().join("commands.toml");
     fs::write(&saved, "[commands]\ncheck = ['printf', '%s', 'saved']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     assert_eq!(fixture.run(&["check", "custom"]).stdout, b"saved");
 }
 
@@ -17301,13 +17220,7 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
         "[commands]\nshadowed = ['saved']\nsaved = ['saved-only']\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
 
     let output = fixture.run(&["run", "work", "--workspace", "run-command"]);
     assert!(
@@ -17336,9 +17249,9 @@ fn run_lists_command_layers_and_executes_names_that_collide_with_built_ins() {
     assert_eq!(command("global")["bare_name"], "shorthand");
     assert_eq!(command("work")["bare_name"], "built_in");
     assert_eq!(command("worktree")["layer"], "worktree_file");
-    assert_eq!(command("saved")["layer"], "saved_repository_config");
+    assert_eq!(command("saved")["layer"], "local_config");
     assert_eq!(command("shadowed")["argv"], serde_json::json!(["saved"]));
-    assert_eq!(command("shadowed")["layer"], "saved_repository_config");
+    assert_eq!(command("shadowed")["layer"], "local_config");
 
     let other = fixture.add("other-commands");
     let other_path = Path::new(other["path"].as_str().unwrap());
@@ -17751,17 +17664,11 @@ fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
         "unset|unset"
     );
 
-    // The saved repository config can replace a secret; a failing command
+    // The local config can replace a secret; a failing command
     // stops the launch.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[secrets.AGENT_TOKEN]\ncommand = ['false']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&["claude", "secrets"]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
@@ -18613,13 +18520,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "[agents.helper]\ncommand = ['fake-agent', '--prompt={prompt}', '{args}', '{branch}']\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "--json",
         "add",
@@ -18688,13 +18589,7 @@ fn custom_agents_launch_with_layered_prompts_scope_and_notifications() {
         "[agents.helper]\ncommand = ['fake-agent', '{args}']\n",
     )
     .unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&[
         "add",
         fixture.repo.to_str().unwrap(),
@@ -18774,13 +18669,7 @@ fn configured_ai_tools_run_as_agents_from_their_own_command() {
     // A repository launcher replaces the one [ai] supplies.
     let saved = fixture.root.path().join("saved.toml");
     fs::write(&saved, "[agents.droid]\ncommand = ['repo-droid']\n").unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        saved.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     let output = fixture.run(&["droid", "provider"]);
     assert_eq!(output.status.code(), Some(7), "{output:?}");
     assert!(args().starts_with("repo-droid\0Follow "), "{}", args());
@@ -19016,13 +18905,7 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
     let saved = fixture.root.path().join("saved.toml");
     let save = |text: &str| {
         fs::write(&saved, text).unwrap();
-        fixture.ok(&[
-            "repo",
-            "config",
-            fixture.repo.to_str().unwrap(),
-            "--file",
-            saved.to_str().unwrap(),
-        ]);
+        fixture.save_local_config(fixture.repo.to_str().unwrap(), &saved);
     };
     for (kind, global) in [
         ("setup", false),
@@ -19069,10 +18952,13 @@ fn workspace_hook_resolution_preserves_layers_and_directories() {
             resolve(kind)["data"],
             serde_json::json!(directory.join("file hook"))
         );
+        // A relative path in the local config names a script beside it.
         save(&format!("{key} = 'saved hook'\n"));
+        let local = fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()]);
+        let local_directory = Path::new(local["path"].as_str().unwrap()).parent().unwrap();
         assert_eq!(
             resolve(kind)["data"],
-            serde_json::json!(directory.join("saved hook"))
+            serde_json::json!(local_directory.join("saved hook"))
         );
         save(&format!("{key} = '/absolute/hook'\n"));
         assert_eq!(resolve(kind)["data"], "/absolute/hook");
@@ -21578,13 +21464,7 @@ fn benchmark_daemon_reads() {
 fn set_repository_toml(fixture: &Fixture, text: &str) {
     let config = fixture.root.path().join("repository.toml");
     fs::write(&config, text).unwrap();
-    fixture.ok(&[
-        "repo",
-        "config",
-        fixture.repo.to_str().unwrap(),
-        "--file",
-        config.to_str().unwrap(),
-    ]);
+    fixture.save_local_config(fixture.repo.to_str().unwrap(), &config);
 }
 
 fn install_done_hook(fixture: &Fixture) -> PathBuf {
@@ -21812,7 +21692,7 @@ fn post_done_hook_runs_for_scoped_done_and_retained_cleanup_with_config_layers()
     fixture.restart();
     assert_eq!(fs::read_to_string(&events).unwrap().lines().count(), 2);
     // Failure is best effort and cannot cancel a recorded choice.
-    fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap(), "--clear"]);
+    fixture.clear_local_config(fixture.repo.to_str().unwrap());
     fs::write(
         path.join(".shoal.toml"),
         "[cleanup.done]\nenabled = false\n",

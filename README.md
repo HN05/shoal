@@ -388,7 +388,7 @@ GOCACHE = "{cache.go}"
 scope = "shared"
 ```
 
-Use `[secrets]` in global or saved repository config to give agents, or only
+Use `[secrets]` in global or local config to give agents, or only
 tools such as `agent-browser`, values fetched from your secret store; see
 [agent secrets](docs/reference.md#agent-secrets).
 

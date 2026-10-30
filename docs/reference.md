@@ -629,7 +629,7 @@ process gets only its own items, never untracked worktrees, printed, and none af
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
-registers a path or URL, Ctrl-R renames, Ctrl-O shows saved config, Ctrl-D deletes.
+registers a path or URL, Ctrl-R renames, Ctrl-O shows the local config, Ctrl-D deletes.
 `repo rename` asks for an omitted name.
 
 Commands acting on one workspace use an explicit target, otherwise the caller's
@@ -706,7 +706,7 @@ Shoal's global flags before `run` or the shorthand command name. Bare `shoal run
 lists each effective command's argument array, source layer, and whether its bare
 name is a built-in; outside a managed workspace it lists only global commands and
 built-in defaults.
-Each name resolves from saved repository config, worktree config, then global
+Each name resolves from local config, worktree config, then global
 config and built-in defaults; a higher layer replaces the whole argument array.
 The executable is resolved through PATH (or use a path),
 with the workspace as working directory. Arguments are passed literally without
@@ -1406,7 +1406,7 @@ an agent starts only when none uses a slot, and below
 `machine.overload.disk.stop_free_gib` or without a reading none starts. That
 value counts every agent on the machine; a fixed `agent.max_running` counts
 only one repository's agents, within the machine limit: set globally, it applies
-to each repository that sets none of its own (saved config or `.shoal.toml` in
+to each repository that sets none of its own (local config or `.shoal.toml` in
 its registered checkout). Its default, `dynamic`, adds no repository limit. Each tracked agent uses a slot while it runs, awaits reattachment
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done or its restore waits in the queue; `shoal done`, the agent's exit,
@@ -1591,7 +1591,7 @@ command = ["op", "read", "op://Agents/agent-browser/key"]
 tools = ["agent-browser"]
 ```
 
-Set it in the global config or the saved repository config; a worktree file
+Set it in the global config or the local config; a worktree file
 that sets it is rejected, because secret sources belong to the machine. An
 entry replaces the same-named entry below it whole. Shoal stores the commands,
 never the values.
@@ -1624,8 +1624,8 @@ ends a lease grant.
 
 ### Prompt templates
 
-`agent.templates.worker` and `agent.templates.chat` in the saved repository
-TOML win over the worktree's TOML values or `worker-template.md` and
+`agent.templates.worker` and `agent.templates.chat` in the local config, or
+`worker-template.md` and `chat-template.md` beside it, win over the worktree's TOML values or `worker-template.md` and
 `chat-template.md` in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
@@ -1917,7 +1917,7 @@ commit.gpgsign = true
 
 Set `git_profile = "work"` at the top level of repository or global config.
 Override it for one creation with `shoal add <repo> --git-profile work`.
-Selection follows the flag, saved repository config, the new worktree's config file,
+Selection follows the flag, local config, the new worktree's config file,
 then global config. With no selection, Git settings stay unchanged. Profile
 values may be strings, booleans or integers; omitted keys retain Git's normal
 inheritance. An unknown flag value is rejected before creation; an unknown
@@ -1963,25 +1963,33 @@ An invalid result leaves both files unchanged.
 ### Store repository config outside Git
 
 ```sh
-shoal repo config my-project --file ~/project-shoal.toml
-shoal repo config my-project          # Print the saved TOML
-shoal repo config my-project --clear  # Return to worktree config
+shoal repo config my-project                                 # Print the local config's path and contents
+shoal config set setup.command scripts/setup --repo my-project
+shoal config unset agent.default --repo my-project
 ```
 
-The file uses the `.shoal.toml` format and is validated and copied into Shoal's
-database; reimport it after edits, or use `shoal config set KEY VALUE... --repo NAME`
-and `shoal config unset KEY... --repo NAME` to edit individual saved keys with the
-same syntax and validation as global edits. Repository edits are serialized in
-the daemon and leave worktree files untouched. Unsetting removes only the saved
-value, allowing lower layers to supply it. Repository options resolve per option, for
-every workspace of that repository: a value in the saved config wins, one it
-omits comes from the worktree's `.shoal.toml` or `.shoal/config.toml` (both
-together is an error), and a named `[ports.<name>]`, `[resources.<name>]` or
-`[resource_pools.<name>]` table replaces the one below it as a unit, so a
-saved `[ports.web]` supplies every field of `web`. Changes apply on the next
-request without a restart. The saved config survives restarts, renames, and
-workspace removal; `repo rm` deletes it. `--json` returns `repository_id` and
-`toml`. Scoped workspace commands cannot administer it.
+A repository's local config is `.shoal/config.toml` in its own directory, beside
+its workspaces and `.checkout` (`~/shoal/my-project/.shoal/config.toml`), for a
+repository that won't accept `.shoal.toml` or settings only you want. It is
+outside every Git tree, so nothing ignores it and `git clean` never touches it.
+It uses the `.shoal.toml` format, plus `[secrets]`, and `worker-template.md` and
+`chat-template.md` beside it work as in the other layers. A relative hook path or
+`setup.command` there names a script in that `.shoal` directory, so untracked
+scripts can live beside it; `setup.seed` stays relative to the worktree.
+
+Shoal reads the file in place on every request, so an edit applies to every
+workspace at once without a restart; an invalid file fails each command until
+it is fixed. `shoal config set KEY VALUE... --repo NAME` and
+`shoal config unset KEY... --repo NAME` edit it like global edits, keeping
+comments and the previous file as `config.toml.backup` and saving only a valid
+result. Repository options resolve per option, for every workspace of that
+repository: a value in the local config wins, one it omits comes from the
+worktree's `.shoal.toml` or `.shoal/config.toml` (both together is an error),
+and a named `[ports.<name>]`, `[resources.<name>]` or `[resource_pools.<name>]`
+table replaces the one below it as a unit, so a local `[ports.web]` supplies
+every field of `web`. `repo migrate` moves the file with the repository's
+directory and `repo rm` deletes it. `--json` returns `path` and `toml`, unset
+while the file does not exist. Scoped workspace commands cannot administer it.
 
 ### Delete a repository
 
@@ -1991,7 +1999,7 @@ shoal repo rm my-project -y
 
 Permanently deletes the checkout (including in-place local repositories with
 uncommitted or unpushed work), all its workspaces, their ports, simulators, and
-leases, its seed and shared caches, and the saved config, stopping managed commands first. Shoal attempts to
+leases, its seed and shared caches, and its local config, stopping managed commands first. Shoal attempts to
 delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking
@@ -2128,7 +2136,7 @@ conflicts; `--json` returns `target`, `target_commit`, `head`, `conflicts` and
 Repository config (`.shoal.toml`, `.shoal/config.toml`, or the imported local
 config) can name lifecycle executables. Untracked hooks may also be global
 defaults in `~/.config/shoal/config.toml`; a repository value replaces the global
-command, with saved repository config taking precedence over the worktree file.
+command, with local config taking precedence over the worktree file.
 `setup.command` is repository-only:
 
 ```toml
@@ -2275,7 +2283,7 @@ the repository directory's `.seed`, and runs the build there when that branch or
 the seed's settings change. It checks every minute, one repository at a time, and
 waits while memory or free disk space is past its `[machine.overload.warning]` threshold;
 a build that failed is retried only after such a change or a daemon restart. The
-settings come from the repository's saved config and its registered checkout's
+settings come from the repository's local config and its registered checkout's
 file. `setup.seed.command` is an executable inside the seed worktree, given as a relative
 path and run like `setup.command`; preset commands run in the worktree's root. The
 build gets the repository's `[env]`, with placeholders
@@ -3769,7 +3777,7 @@ Git operations.
 to strings, using the same workspace identity and current port exports as tracked
 executions, with a fresh `SHOAL_SCOPE_TOKEN` and no `SHOAL_EXECUTION_ID`.
 The `[env]` table adds user-defined variables to tracked executions, lifecycle hooks,
-and this exported environment. Values resolve from saved repository config, the
+and this exported environment. Values resolve from local config, the
 worktree file, global config, then the default, and substitute `{workspace}`,
 `{workspace_path}` (also `{path}`), `{repo}`, `{branch}`, reserved `{port.NAME}` and
 [`{cache.NAME}`](#shared-caches) fields once. Unknown fields remain literal, inserted values are not expanded, and
