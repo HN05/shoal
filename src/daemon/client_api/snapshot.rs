@@ -56,7 +56,7 @@ pub(super) async fn take(
     let workspaces = visible_workspaces(manager, caller).await?;
     let mut found = Vec::new();
     if topics.has(&Topic::Repositories) {
-        found.extend(repositories(manager).await?);
+        found.extend(repositories(manager, caller).await?);
     }
     if topics.has(&Topic::Workspaces) {
         found.extend(workspace_records(manager, &workspaces).await?);
@@ -68,7 +68,7 @@ pub(super) async fn take(
         found.extend(questions(manager, &workspaces).await?);
     }
     if topics.has(&Topic::Approvals) {
-        found.extend(approvals(manager, &workspaces).await?);
+        found.extend(approvals(manager, caller, &workspaces).await?);
     }
     if topics.has(&Topic::Messages) {
         found.extend(messages(manager, caller, &workspaces).await?);
@@ -85,9 +85,10 @@ pub(super) async fn take(
         .collect())
 }
 
-async fn repositories(manager: &Manager) -> Result<Vec<Record>> {
+/// Every repository, or a scoped caller's own, as `repositories.list` lists them.
+async fn repositories(manager: &Manager, caller: Option<&Caller>) -> Result<Vec<Record>> {
     Ok(manager
-        .repositories()
+        .visible_repositories(caller)
         .await?
         .into_iter()
         .map(|repository| Record::Repository(records::repository(repository)))
@@ -125,8 +126,14 @@ async fn questions(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Re
         .collect())
 }
 
-/// Pending approval requests.
-async fn approvals(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record>> {
+/// Pending approval requests: all of them for the user, including issue
+/// proposals that outlive their workspace, and those of its workspace tree
+/// for a scoped caller.
+async fn approvals(
+    manager: &Manager,
+    caller: Option<&Caller>,
+    workspaces: &[Workspace],
+) -> Result<Vec<Record>> {
     let visible = ids(workspaces);
     Ok(manager
         .approval_requests(None)
@@ -134,7 +141,7 @@ async fn approvals(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Re
         .into_iter()
         .filter(|request| {
             request.status == DecisionStatus::Pending
-                && visible.contains(request.workspace_id.as_str())
+                && (caller.is_none() || visible.contains(request.workspace_id.as_str()))
         })
         .map(|request| Record::Approval(records::approval(request)))
         .collect())

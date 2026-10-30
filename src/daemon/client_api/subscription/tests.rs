@@ -228,11 +228,44 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn the_user_keeps_seeing_an_issue_proposal_its_workspace_left() {
+        let daemon = TestDaemon::start().await;
+        let workspace = daemon.workspace("proposer").await;
+        let proposal = crate::daemon::links::proposals::tests::store_issue_proposal(
+            &daemon.manager,
+            &workspace,
+        )
+        .await;
+        daemon
+            .manager
+            .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+            .await
+            .unwrap();
+        let client = daemon.client().await;
+        let mut subscription = client.subscribe(vec![Topic::Approvals]).await.unwrap();
+        let Update::Snapshot { records, .. } = subscription.next().await.unwrap() else {
+            panic!("a subscription starts with its snapshot");
+        };
+        let ids: Vec<_> = records
+            .iter()
+            .filter_map(|record| record.key())
+            .map(|key| key.id)
+            .collect();
+        assert_eq!(ids, [proposal.id.to_string()]);
+    }
+
+    #[tokio::test]
     async fn a_scoped_subscription_covers_its_tree_without_notifications() {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
         let other = daemon.workspace("other").await;
         daemon.manager.ask_question(&other.id, ask()).await.unwrap();
+        let elsewhere = crate::test_support::repository(&daemon.manager.paths.home, "elsewhere");
+        daemon
+            .manager
+            .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
         let client = daemon.scoped(&own).await;
         let mut subscription = client.subscribe(all_topics()).await.unwrap();
         let Update::Snapshot { records, .. } = subscription.next().await.unwrap() else {
@@ -245,6 +278,12 @@ mod streams {
             .map(|key| key.id.as_str())
             .collect();
         assert_eq!(workspaces, [own.id.as_str()]);
+        let repositories: Vec<_> = keys
+            .iter()
+            .filter(|key| key.kind == RecordKind::Repository)
+            .map(|key| key.id.as_str())
+            .collect();
+        assert_eq!(repositories, [daemon.repository.id.as_str()]);
         assert!(
             keys.iter()
                 .all(|key| !matches!(key.kind, RecordKind::Notification | RecordKind::Question)),

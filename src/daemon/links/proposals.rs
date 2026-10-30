@@ -907,4 +907,4 @@ fn comment(finding: Finding) -> Action {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
