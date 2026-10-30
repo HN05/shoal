@@ -744,6 +744,16 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     Ok(Decision { request, new })
 }
 
+/// [`decide`], placing the hold an approved hold request asks for in the
+/// same transaction.
+fn decide_and_place(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision> {
+    let decision = decide(tx, key, approve)?;
+    if decision.new && decision.request.status == DecisionStatus::Approved {
+        crate::daemon::workspace::place_approved_hold(tx, &decision.request)?;
+    }
+    Ok(decision)
+}
+
 impl Manager {
     /// [`check`] in its own transaction, for allocations that claim nothing else.
     pub async fn request_approval(
@@ -970,7 +980,7 @@ impl Manager {
         );
         let decision = self.record_decision(request, approve).await?;
         if decision.new {
-            self.carry_out(&decision.request).await;
+            self.tell_requester(&decision.request).await;
         }
         Ok(decision.request)
     }
@@ -999,7 +1009,7 @@ impl Manager {
             .await?;
         if let Some(decision) = decided {
             if decision.new {
-                self.carry_out(&decision.request).await;
+                self.tell_requester(&decision.request).await;
             }
             return Ok(decision.request);
         }
@@ -1023,6 +1033,7 @@ impl Manager {
     ) -> Result<Option<Decision>> {
         let request = request.clone();
         let (coordinator, key, id) = (coordinator.to_owned(), request.key.clone(), request.id);
+        let _hold = self.hold_decision_guard(&request, approve).await?;
         let _guard = self.gates.lock_simulators().await;
         self.store
             .run(move |db| {
@@ -1039,7 +1050,7 @@ impl Manager {
                 if !may_decide(&tx, &coordinator, &stored)? {
                     return Ok(None);
                 }
-                let decision = decide(&tx, &key, approve)?;
+                let decision = decide_and_place(&tx, &key, approve)?;
                 tx.commit()?;
                 Ok(Some(decision))
             })
@@ -1052,6 +1063,7 @@ impl Manager {
         if request.target == Target::Land && approve && request.status == DecisionStatus::Pending {
             self.ensure_land_current(&request).await?;
         }
+        let _hold = self.hold_decision_guard(&request, approve).await?;
         let key = request.key;
         // Simulator allocation checks approval and mutates devices in separate
         // transactions under this gate; a decision must not land between them.
@@ -1059,23 +1071,11 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let decision = decide(&tx, &key, approve)?;
+                let decision = decide_and_place(&tx, &key, approve)?;
                 tx.commit()?;
                 Ok(decision)
             })
             .await
-    }
-
-    /// Do what a new decision decided, then tell the requester. Failure only
-    /// logs; the decision stands, and retrying the request does it.
-    async fn carry_out(&self, request: &ApprovalRequest) {
-        if let Target::Hold(name) = &request.target
-            && request.status == DecisionStatus::Approved
-            && let Err(error) = self.place_approved_hold(request, name).await
-        {
-            log!("approved hold {name} not placed: {error:#}");
-        }
-        self.tell_requester(request).await;
     }
 
     /// Failure only logs; the decision stands.

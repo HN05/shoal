@@ -2,7 +2,7 @@
 use anyhow::{Result, anyhow, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{GuardMode, Manager};
+use super::{GuardMode, Manager, ResourceGuard};
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -34,21 +34,21 @@ impl Manager {
             .resource_guard(&workspace.id, GuardMode::Shared)?;
         self.verify_worktree(&workspace).await?;
         let id = workspace.id.clone();
-        let hold = self.store.run(move |db| {
-            let tx = db.transaction()?;
-            store::require_ready(&tx, &id)?;
-            tx.execute(
-                "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
-                 ON CONFLICT(workspace_id,name) DO NOTHING",
-                params![id, name, reason, crate::time::unix_seconds() as i64, placed_by],
-            )?;
-            let hold = tx.query_row(
-                &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
-                params![id, name], row,
-            )?;
-            tx.commit()?;
-            Ok(hold)
-        }).await?;
+        let hold = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                store::require_ready(&tx, &id)?;
+                insert(&tx, &id, &name, reason.as_deref(), placed_by)?;
+                let hold = tx.query_row(
+                    &format!("{COLUMNS} WHERE workspace_id=?1 AND name=?2"),
+                    params![id, name],
+                    row,
+                )?;
+                tx.commit()?;
+                Ok(hold)
+            })
+            .await?;
         self.touch(&workspace.id).await;
         Ok(hold)
     }
@@ -95,21 +95,24 @@ impl Manager {
         Ok(outcome)
     }
 
-    /// Place the hold `name` that `request`, an approved request of the
-    /// workspace's agent, asked for.
-    pub(crate) async fn place_approved_hold(
+    /// What approving `request` needs held while its decision places the
+    /// hold it asks for, as acquiring one directly does: no resource hook
+    /// running in its verified worktree. `None` for other requests and
+    /// denials.
+    pub(crate) async fn hold_decision_guard(
         &self,
         request: &ApprovalRequest,
-        name: &str,
-    ) -> Result<WorkspaceHold> {
-        let reason = Some(request.reason.clone()).filter(|reason| !reason.is_empty());
-        self.acquire_hold(
-            &request.workspace_id,
-            name.to_owned(),
-            reason,
-            HoldPlacer::Agent,
-        )
-        .await
+        approve: bool,
+    ) -> Result<Option<ResourceGuard>> {
+        if !approve || !matches!(request.target, Target::Hold(_)) {
+            return Ok(None);
+        }
+        let workspace = self.workspace(&request.workspace_id).await?;
+        let guard = self
+            .gates
+            .resource_guard(&workspace.id, GuardMode::Shared)?;
+        self.verify_worktree(&workspace).await?;
+        Ok(Some(guard))
     }
 
     /// Release the hold `name` for `released_by`: an agent releases only
@@ -168,6 +171,35 @@ impl Manager {
             })
             .await
     }
+}
+
+/// Place, in the transaction that approved it, the hold `request` asks for:
+/// a decision never stands without its hold.
+pub(crate) fn place_approved(
+    tx: &rusqlite::Transaction<'_>,
+    request: &ApprovalRequest,
+) -> Result<()> {
+    let Target::Hold(name) = &request.target else {
+        return Ok(());
+    };
+    let reason = Some(request.reason.as_str()).filter(|reason| !reason.is_empty());
+    insert(tx, &request.workspace_id, name, reason, HoldPlacer::Agent)
+}
+
+/// Insert the hold unless the workspace already has one by that name.
+fn insert(
+    db: &Connection,
+    id: &str,
+    name: &str,
+    reason: Option<&str>,
+    placed_by: HoldPlacer,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO workspace_holds(workspace_id,name,reason,created_at,placed_by) VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(workspace_id,name) DO NOTHING",
+        params![id, name, reason, crate::time::unix_seconds() as i64, placed_by],
+    )?;
+    Ok(())
 }
 
 const COLUMNS: &str = "SELECT workspace_id,name,reason,created_at,placed_by FROM workspace_holds";

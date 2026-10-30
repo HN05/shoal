@@ -1651,6 +1651,23 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     assert_eq!(routed.decider.as_deref(), Some(parent.id.as_str()));
     assert!(manager.workspace(&child.id).await.unwrap().holds.is_empty());
+    // A decision stands only with its hold, so a running resource hook,
+    // which excludes placing it, refuses the decision.
+    let hook = manager
+        .gates
+        .resource_guard(&child.id, crate::daemon::workspace::GuardMode::Exclusive)
+        .unwrap();
+    manager
+        .decide_routed_approval(&parent.id, requested.id, true, None)
+        .await
+        .unwrap_err();
+    let pending = manager
+        .approval_request(requested.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(pending.status, DecisionStatus::Pending);
+    drop(hook);
     let decided = manager
         .decide_routed_approval(&parent.id, requested.id, true, None)
         .await
