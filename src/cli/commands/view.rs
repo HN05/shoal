@@ -123,17 +123,27 @@ async fn read_views(
             read_failed_logs(ctx, &hosts, workspace, &mut items).await;
         }
         let runs = read_runs(ctx, context, selected).await;
-        let (mut items, mut runs) = (items.into_iter(), runs.into_iter());
-        Ok(selected
-            .items
-            .iter()
-            .filter_map(|item| match item.kind.item() {
-                Some(_) => items.next().map(|item| Shown::Item(Box::new(item))),
-                None => runs.next().map(Shown::Run),
-            })
-            .collect())
+        Ok(in_selection_order(selected, items, runs))
     })
     .await
+}
+
+/// The issues and PRs, and the runs, each read in selection order, merged
+/// back into that order.
+fn in_selection_order(
+    selected: &Selected,
+    items: Vec<ItemView>,
+    runs: Vec<ShownRun>,
+) -> Vec<Shown> {
+    let (mut items, mut runs) = (items.into_iter(), runs.into_iter());
+    selected
+        .items
+        .iter()
+        .filter_map(|item| match item.kind.item() {
+            Some(_) => items.next().map(|item| Shown::Item(Box::new(item))),
+            None => runs.next().map(Shown::Run),
+        })
+        .collect()
 }
 
 /// Each selected run with its jobs and failed jobs' logs, read through the
