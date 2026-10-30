@@ -1,5 +1,5 @@
-//! Reads for the forges Shoal reaches through their REST APIs, every forge
-//! but GitHub, whose CLI reports structured data itself.
+//! Reads shared by the forges Shoal reaches through their REST APIs; GitHub
+//! keeps its own activity reads and reads other items with `gh`.
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 

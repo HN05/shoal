@@ -1763,80 +1763,105 @@ fn watches_do_not_report_the_agents_own_comments_back() {
     assert_eq!(kinds, ["closed"], "{closed}");
 }
 
+/// The first page of an issue's discussion as `forge` reads it.
+fn discussion_page(forge: Forge, number: u64) -> String {
+    let page = match forge {
+        Forge::GitHub => "per_page=100",
+        Forge::Forgejo => "limit=50",
+    };
+    format!("GET repos/team/project/issues/{number}/comments?{page}&page=1")
+}
+
 #[test]
 fn watches_read_unchanged_items_as_not_modified() {
-    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
-    let respond = |state: &str| {
-        fixture.respond(json!({
-            "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
-                "state": state, "body": "", "labels": [], "pull_request": null}},
-            "GET repos/team/project/issues/8/comments?limit=50&page=1":
-                {"body": [{"id": 1, "body": "first"}]},
-        }))
-    };
-    respond("open");
-    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
-    let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
-    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
-    fixture.requests();
-    // The remembered discussion stands for the one the forge did not send.
-    respond("closed");
-    let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
-    assert_eq!(closed["updates"].as_array().unwrap().len(), 1, "{closed}");
-    assert_eq!(closed["updates"][0]["kind"], "closed", "{closed}");
-    let log = fs::read_to_string(fixture.root.path().join("forge/requests.jsonl")).unwrap();
-    let discussion: Vec<Value> = log
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .filter(|request| request["key"].as_str().unwrap().contains("/comments"))
-        .map(|request| request["status"].clone())
-        .collect();
-    assert!(!discussion.is_empty());
-    assert!(discussion.iter().all(|status| status == 304), "{log}");
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let fixture = Fixture::new(forge, "[cleanup.auto]\nenabled=false\n");
+        let respond = |state: &str| {
+            fixture.respond(json!({
+                "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+                    "state": state, "body": "", "labels": [], "pull_request": null}},
+                discussion_page(forge, 8): {"body": [{"id": 1, "node_id": "IC_1", "body": "first"}]},
+            }))
+        };
+        respond("open");
+        fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+        let first = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+        assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+        fixture.requests();
+        // The remembered discussion stands for the one the forge did not send.
+        respond("closed");
+        let closed = fixture.ok(&["watch", "issue", "--workspace", "topic"]);
+        assert_eq!(closed["updates"].as_array().unwrap().len(), 1, "{closed}");
+        assert_eq!(closed["updates"][0]["kind"], "closed", "{closed}");
+        let log = fs::read_to_string(fixture.root.path().join("forge/requests.jsonl")).unwrap();
+        let discussion: Vec<Value> = log
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .filter(|request| request["key"].as_str().unwrap().contains("/comments"))
+            .map(|request| request["status"].clone())
+            .collect();
+        assert!(!discussion.is_empty());
+        assert!(discussion.iter().all(|status| status == 304), "{log}");
+    }
 }
 
 #[test]
 fn a_rate_limited_forge_slows_watches_instead_of_failing_lookups() {
-    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
-    fixture.respond(json!({
-        "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
-            "state": "open", "body": "", "labels": [], "pull_request": null}},
-        "GET repos/team/project/issues/8/comments?limit=50&page=1": {"status": 429,
-            "headers": {"Retry-After": "3000"}, "body": {"message": "slow down"}},
-    }));
-    fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
-    let mut watch = fixture
-        .command()
-        .args(["--json", "watch", "issue", "--workspace", "topic"])
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .unwrap();
-    let limited = || {
-        let notifications = fixture.ok(&["alerts", "--keep-unread"]);
-        notifications
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|notification| notification["kind"] == "forge_limited")
-    };
-    support::wait::wait_until("the forge limit to be noticed", limited);
-    let running = watch.try_wait().unwrap().is_none();
-    watch.kill().unwrap();
-    let output = watch.wait_with_output().unwrap();
-    assert!(running, "{}", String::from_utf8_lossy(&output.stdout));
-    // The forge is asked once; until the limit ends, no request goes out.
-    let discussion = fixture
-        .requests()
-        .into_iter()
-        .filter(|request| request[0].as_str().unwrap().contains("/comments"))
-        .count();
-    assert_eq!(discussion, 1);
-    let failures = fixture
-        .events()
-        .into_iter()
-        .filter(|event| event.to_string().contains("lookup_failed"))
-        .count();
-    assert_eq!(failures, 0);
+    for forge in [Forge::GitHub, Forge::Forgejo] {
+        let fixture = Fixture::new(forge, "[cleanup.auto]\nenabled=false\n");
+        // GitHub refuses with 403 and says when its limit resets.
+        let refusal = match forge {
+            Forge::GitHub => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                json!({"status": 403, "headers": {"X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": (now + 3000).to_string()},
+                    "body": {"message": "API rate limit exceeded"}})
+            }
+            Forge::Forgejo => json!({"status": 429, "headers": {"Retry-After": "3000"},
+                "body": {"message": "slow down"}}),
+        };
+        fixture.respond(json!({
+            "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Issue",
+                "state": "open", "body": "", "labels": [], "pull_request": null}},
+            discussion_page(forge, 8): refusal,
+        }));
+        fixture.ok(&["link", "issue", "8", "assigned", "--workspace", "topic"]);
+        let mut watch = fixture
+            .command()
+            .args(["--json", "watch", "issue", "--workspace", "topic"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let limited = || {
+            let notifications = fixture.ok(&["alerts", "--keep-unread"]);
+            notifications
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|notification| notification["kind"] == "forge_limited")
+        };
+        support::wait::wait_until("the forge limit to be noticed", limited);
+        let running = watch.try_wait().unwrap().is_none();
+        watch.kill().unwrap();
+        let output = watch.wait_with_output().unwrap();
+        assert!(running, "{}", String::from_utf8_lossy(&output.stdout));
+        // The forge is asked once; until the limit ends, no request goes out.
+        let discussion = fixture
+            .requests()
+            .into_iter()
+            .filter(|request| request[0].as_str().unwrap().contains("/comments"))
+            .count();
+        assert_eq!(discussion, 1);
+        let failures = fixture
+            .events()
+            .into_iter()
+            .filter(|event| event.to_string().contains("lookup_failed"))
+            .count();
+        assert_eq!(failures, 0);
+    }
 }
 
 #[test]
@@ -2859,16 +2884,11 @@ fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
     fixture.respond(json!({
         "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
             "author": {"login": "agent"}, "labels": [], "createdAt": "t0",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
-            "headRefOid": "head", "baseRefOid": "base", "commits": [], "comments": [],
-            "reviews": [], "mergeable": "MERGEABLE", "statusCheckRollup": [
-                {"__typename": "CheckRun", "name": "rust", "status": "COMPLETED",
-                    "conclusion": "TIMED_OUT", "detailsUrl": job},
-                {"__typename": "StatusContext", "context": "deploy", "state": "FAILURE",
-                    "targetUrl": external}
-            ]}},
-        "GET repos/team/project/pulls/8/comments": {"body": [[]]},
+            "headRefName": "topic", "baseRefName": "main", "isDraft": false, "commits": []}},
         "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/issues/8/comments?per_page=100&page=1": {"body": []},
+        "GET repos/team/project/pulls/8/reviews?per_page=100&page=1": {"body": []},
+        "GET repos/team/project/pulls/8/comments?per_page=100&page=1": {"body": []},
         "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
             "total_count": 1, "check_runs": [
                 {"name": "rust", "status": "completed", "conclusion": "timed_out", "details_url": job}
@@ -2903,6 +2923,7 @@ fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
     );
     assert!(rust.contains("--check 'rust'"), "{rust}");
     assert_eq!(message("deploy"), "deploy: FAILURE");
+    assert_eq!(result["updates"].as_array().unwrap().len(), 2, "{result}");
 }
 
 #[test]

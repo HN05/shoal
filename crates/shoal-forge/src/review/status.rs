@@ -182,11 +182,8 @@ pub(crate) fn forgejo_reviews(reviews: &[serde_json::Value]) -> Result<Vec<(Stri
     Ok(verdicts)
 }
 
-/// Reviewers and verdicts from `gh pr view --json reviews`.
-pub(crate) fn github_reviews(pull: &serde_json::Value) -> Result<Vec<(String, Verdict)>> {
-    let Some(reviews) = pull["reviews"].as_array() else {
-        bail!("missing PR reviews");
-    };
+/// Reviewers and verdicts from GitHub's reviews.
+pub(crate) fn github_reviews(reviews: &[serde_json::Value]) -> Result<Vec<(String, Verdict)>> {
     let mut verdicts = Vec::new();
     for review in reviews {
         let verdict = match review["state"].as_str() {
@@ -196,7 +193,7 @@ pub(crate) fn github_reviews(pull: &serde_json::Value) -> Result<Vec<(String, Ve
             Some("PENDING" | "DISMISSED") => continue,
             _ => bail!("unknown PR review state"),
         };
-        let reviewer = review["author"]["login"].as_str().unwrap_or_default();
+        let reviewer = review["user"]["login"].as_str().unwrap_or_default();
         verdicts.push((reviewer.to_owned(), verdict));
     }
     Ok(verdicts)

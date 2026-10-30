@@ -81,19 +81,18 @@ fn forgejo_reviews_skip_pending_stale_and_dismissed_ones() {
 
 #[test]
 fn github_reviews_skip_drafts_and_dismissals() {
-    let pull = serde_json::json!({"reviews": [
-        {"author": {"login": "a"}, "state": "APPROVED"},
-        {"author": {"login": "b"}, "state": "DISMISSED"},
-        {"author": {"login": "c"}, "state": "PENDING"},
-        {"author": {"login": "d"}, "state": "COMMENTED"},
-    ]});
+    let reviews = [
+        serde_json::json!({"user": {"login": "a"}, "state": "APPROVED"}),
+        serde_json::json!({"user": {"login": "b"}, "state": "DISMISSED"}),
+        serde_json::json!({"user": {"login": "c"}, "state": "PENDING"}),
+        serde_json::json!({"user": {"login": "d"}, "state": "COMMENTED"}),
+    ];
     assert_eq!(
-        github_reviews(&pull).unwrap(),
+        github_reviews(&reviews).unwrap(),
         [
             review("a", Verdict::Approved),
             review("d", Verdict::Commented)
         ]
     );
-    assert!(github_reviews(&serde_json::json!({})).is_err());
-    assert!(github_reviews(&serde_json::json!({"reviews": [{"state": "LATER"}]})).is_err());
+    assert!(github_reviews(&[serde_json::json!({"state": "LATER"})]).is_err());
 }

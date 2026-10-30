@@ -73,10 +73,11 @@ pub(crate) fn current(
             },
         }),
     };
+    // Forgejo reports a draft as not mergeable, whatever its conflicts.
     let conflict = pr
         .as_ref()
         .zip(value["mergeable"].as_bool())
-        .map(|(pr, mergeable)| !pr.draft && !mergeable);
+        .map(|(pr, mergeable)| !mergeable && !(pr.draft && dialect == Dialect::Forgejo));
     Ok(Current {
         item: Item {
             kind,

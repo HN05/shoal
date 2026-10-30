@@ -3104,7 +3104,7 @@ PR's head commit, read with fj's login for the host when it has one. The daemon
 repeats a REST read as a conditional request with the `ETag` and `Last-Modified`
 of the last response it got for that URL as the same account, and takes a
 `304 Not Modified` to mean that response still holds; it keeps them in memory
-only. Reads through tea and GitHub's `gh pr view` are sent in full.
+only. Reads through tea are sent in full.
 Failed CI jobs include the failing step when the runner records it and a
 command to read the log; a log lookup failure stays on that check's update.
 

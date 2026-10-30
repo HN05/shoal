@@ -1,5 +1,5 @@
-//! GitHub, through `gh`, which owns the login: its CLI reports items and
-//! activity as structured data, and `gh api` sends REST and GraphQL requests.
+//! GitHub, through `gh`, which owns the login: its CLI reports items as
+//! structured data, and `gh api` sends REST and GraphQL requests.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
@@ -620,7 +620,9 @@ impl Backend for GitHub {
         number: u64,
         url: &str,
     ) -> Result<PrStatus> {
-        activity::pr_status(repo, account, number, url).await
+        activity::pr_status(repo, account, number, url)
+            .await
+            .hint_login(self)
     }
 
     async fn view_details(
@@ -691,13 +693,7 @@ impl Backend for GitHub {
         account: &Account,
         head: &str,
     ) -> Result<Vec<CiCheck>> {
-        let runs = Request::get(repo.repo_endpoint(&format!(
-            "commits/{head}/check-runs?filter=latest&per_page=100"
-        )));
-        let statuses =
-            Request::get(repo.repo_endpoint(&format!("commits/{head}/status?per_page=100")));
-        let (runs, statuses) =
-            tokio::try_join!(repo.send(account, &runs), repo.send(account, &statuses))?;
+        let (runs, statuses) = activity::commit_checks(repo, account, head).await?;
         let mut checks = actions::checks(&runs)?;
         checks.extend(github_rest::commit_statuses(&statuses, Dialect::GitHub)?);
         Ok(checks)

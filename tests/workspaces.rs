@@ -154,6 +154,25 @@ impl Fixture {
         );
     }
 
+    /// Answer `gh` from `$HOME/forge.py`, a copy of `fixtures/forge.py`, with
+    /// `responses`, as tests/forge.rs does; later calls replace the
+    /// responses and keep a `gh` that runs it.
+    fn script_github(&self, responses: &serde_json::Map<String, Value>) {
+        let root = self.root.path();
+        fs::create_dir_all(root.join("forge")).unwrap();
+        fs::write(
+            root.join("forge/responses.json"),
+            Value::from(responses.clone()).to_string(),
+        )
+        .unwrap();
+        let gh = root.join("bin/gh");
+        if !gh.exists() {
+            let forge = include_str!("fixtures/forge.py");
+            install_test_script(root.join("forge.py"), forge);
+            install_test_script(gh, forge);
+        }
+    }
+
     fn restart(&mut self) {
         self.daemon
             .restart(self.root.path(), &mut daemon_launch(self.root.path()));
@@ -349,6 +368,39 @@ fn link_runner_program(tools: &Path, program: &str) {
         })
         .unwrap_or_else(|| panic!("{program} is not on PATH"));
     std::os::unix::fs::symlink(path, tools.join(program)).unwrap();
+}
+
+/// The `gh` answers for open PR `number` of `branch` on GitHub's
+/// team/project: its commits, for linking, and the REST reads of its
+/// activity, which has none.
+fn github_pr(number: u64, branch: &str) -> serde_json::Map<String, Value> {
+    let pull = format!("repos/team/project/pulls/{number}");
+    let commit = "repos/team/project/commits/head";
+    let responses = serde_json::json!({
+        format!("pr view {number}"): {"body": {"number": number, "state": "OPEN",
+            "headRefName": branch, "commits": []}},
+        format!("GET {pull}"): {"body": {"number": number, "title": "PR", "state": "open",
+            "body": "", "labels": [], "draft": false, "mergeable": true,
+            "head": {"ref": branch, "sha": "head", "repo": {"full_name": "team/project"}},
+            "base": {"ref": "main", "sha": "base"}}},
+        format!("GET repos/team/project/issues/{number}/comments?per_page=100&page=1"): {"body": []},
+        format!("GET {pull}/reviews?per_page=100&page=1"): {"body": []},
+        format!("GET {pull}/comments?per_page=100&page=1"): {"body": []},
+        format!("GET {commit}/check-runs?filter=latest&per_page=100"):
+            {"body": {"total_count": 0, "check_runs": []}},
+        format!("GET {commit}/status?per_page=100"): {"body": {"total_count": 0, "statuses": []}},
+    });
+    responses.as_object().unwrap().clone()
+}
+
+/// The `gh` answer listing `runs` as the check runs on the head commit of
+/// a [`github_pr`].
+fn github_check_runs(runs: Value) -> (String, Value) {
+    let count = runs.as_array().unwrap().len();
+    (
+        "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100".into(),
+        serde_json::json!({"body": {"total_count": count, "check_runs": runs}}),
+    )
 }
 
 #[test]
@@ -14585,7 +14637,7 @@ case "$1 $2" in
  'issue list') echo '[{"number":34,"title":"Fix API timeout","state":"OPEN","labels":[]}]';;
  'pr list') echo '[{"number":7,"title":"Topic","state":"OPEN","labels":[],"headRefName":"topic","baseRefName":"main","isDraft":false}]';;
  'issue view') echo '{"number":34,"state":"OPEN","title":"Fix API timeout","body":"","comments":[]}';;
- 'pr view') echo '{"number":7,"state":"OPEN","headRefName":"topic","headRefOid":"head","title":"Topic","baseRefName":"main","isCrossRepository":false,"commits":[],"comments":[],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}';;
+ 'pr view') echo '{"number":7,"state":"OPEN","headRefName":"topic","title":"Topic","baseRefName":"main","isCrossRepository":false,"commits":[]}';;
  *) printf '[]';;
 esac
 "#,
@@ -15096,24 +15148,18 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     let workspace = fixture.add("watch");
     fixture.add("other");
     fixture.add_github_origin();
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("gh"),
-        "#!/bin/sh\nif [ \"$1\" = api ]; then cat \"$HOME/inline.json\"; else cat \"$HOME/pr.json\"; fi\n",
+    let mut responses = github_pr(7, "watch");
+    let mut checks = serde_json::json!([
+        {"name":"rust","status":"in_progress","conclusion":null,"details_url":"rust/1"},
+        {"name":"review","status":"completed","conclusion":"success","details_url":"review/1"}
+    ]);
+    let (runs, answer) = github_check_runs(checks.clone());
+    responses.insert(runs, answer);
+    responses.insert(
+        "GET repos/team/project/pulls/7/comments?per_page=100&page=1".into(),
+        serde_json::json!({"body": [{"id":1,"body":"review finding","user":{"login":"bot"}}]}),
     );
-    let mut pull = serde_json::json!({"number":7,"state":"OPEN","headRefName":"watch","headRefOid":"head",
-    "commits":[],"comments":[],"reviews":[],"mergeable":"MERGEABLE",
-    "statusCheckRollup":[
-        {"__typename":"CheckRun","name":"rust","status":"IN_PROGRESS","conclusion":"","detailsUrl":"rust/1"},
-        {"__typename":"CheckRun","name":"review","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"review/1"}
-    ]});
-    let response = fixture.root.path().join("pr.json");
-    fs::write(&response, pull.to_string()).unwrap();
-    fs::write(
-        fixture.root.path().join("inline.json"),
-        "[[{\"id\":1,\"body\":\"review finding\",\"user\":{\"login\":\"bot\"}}]]",
-    )
-    .unwrap();
+    fixture.script_github(&responses);
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "watch"]);
     let binary = env!("CARGO_BIN_EXE_shoal");
     let first = fixture.ok(&[
@@ -15163,10 +15209,12 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     // Completion being disabled does not disable activity waits.
     let path = Path::new(workspace["path"].as_str().unwrap());
     fs::write(path.join(".shoal.toml"), "[cleanup.pr]\nenabled=false\n").unwrap();
-    pull["statusCheckRollup"][0]["status"] = serde_json::json!("COMPLETED");
-    pull["statusCheckRollup"][0]["conclusion"] = serde_json::json!("FAILURE");
-    pull["mergeable"] = serde_json::json!("CONFLICTING");
-    fs::write(&response, pull.to_string()).unwrap();
+    checks[0]["status"] = serde_json::json!("completed");
+    checks[0]["conclusion"] = serde_json::json!("failure");
+    let (runs, answer) = github_check_runs(checks);
+    responses.insert(runs, answer);
+    responses["GET repos/team/project/pulls/7"]["body"]["mergeable"] = serde_json::json!(false);
+    fixture.script_github(&responses);
     let result = fixture
         .command()
         .current_dir(path)
@@ -15181,9 +15229,8 @@ fn pr_wait_wakes_for_failed_ci_reviews_and_conflicts_with_own_scope() {
     let second: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(second["updates"].as_array().unwrap().len(), 2);
     assert_eq!(second["updates"][0]["message"], "review: SUCCESS");
-    // This gh answers no log lookup; tests/forge.rs covers what it adds.
-    let message = second["updates"][1]["message"].as_str().unwrap();
-    assert!(message.starts_with("rust: FAILURE; "), "{message}");
+    // The check has no Actions job; tests/forge.rs covers the log it adds.
+    assert_eq!(second["updates"][1]["message"], "rust: FAILURE");
     // A conflict is reported once a second poll sees it at the same commits.
     let third = fixture.ok(&["watch", "pr", "--workspace", "watch"]);
     assert_eq!(third["updates"].as_array().unwrap().len(), 1, "{third}");
@@ -15200,21 +15247,24 @@ fn a_newer_pr_wait_supersedes_the_older_one_without_taking_its_updates() {
     let fixture = Fixture::with_config(Some("[auto_cleanup]\nenabled=false\n"));
     fixture.add("waits");
     fixture.add_github_origin();
-    let bin = fixture.root.path().join("bin");
+    let mut responses = github_pr(7, "waits");
+    responses.insert(
+        "GET repos/team/project/issues/7/comments?per_page=100&page=1".into(),
+        serde_json::json!({"body": [{"id":1,"node_id":"IC_1","body":"review"}]}),
+    );
+    fixture.script_github(&responses);
     // Lookups after linking block until released, so the first wait is still polling when
     // the second starts.
     install_test_script(
-        bin.join("gh"),
+        fixture.root.path().join("bin/gh"),
         r#"#!/bin/sh
 if [ -f "$HOME/block" ]; then
   touch "$HOME/polled"
   while test ! -f "$HOME/release"; do sleep 0.02; done
 fi
-if [ "$1" = api ]; then printf '[]'; else cat "$HOME/pr.json"; fi
+exec "$HOME/forge.py" "$@"
 "#,
     );
-    fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"waits","headRefOid":"head",
-        "commits":[],"comments":[{"id":1,"body":"review"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "waits"]);
     fs::write(fixture.root.path().join("block"), "").unwrap();
     let wait = || {
@@ -15260,29 +15310,23 @@ fn unified_items_link_filter_and_watch_explicit_targets_without_completion() {
     fixture.add("items");
     fixture.add("other");
     fixture.add_github_origin();
-    let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("gh"),
-        r#"#!/bin/sh
-case "$1" in
- api) printf '[]';;
- issue) cat "$HOME/issue.json";;
- *) cat "$HOME/pr.json";;
-esac
-"#,
-    );
-    let issue_file = fixture.root.path().join("issue.json");
-    let write_issue = |number, body: &str| {
-        fs::write(
-            &issue_file,
-            serde_json::json!({"number":number,"state":"OPEN","comments":[{"id":1,"body":body}]})
-                .to_string(),
-        )
-        .unwrap()
+    // Issue `number` with one comment, and PR 7 with another.
+    let write_issue = |fixture: &Fixture, number: u64, body: &str| {
+        let mut responses = github_pr(7, "items");
+        let comments = |number: u64| {
+            format!("GET repos/team/project/issues/{number}/comments?per_page=100&page=1")
+        };
+        let issue = serde_json::json!({
+            format!("GET repos/team/project/issues/{number}"): {"body": {"number": number,
+                "title": "Issue", "state": "open", "body": "", "labels": [],
+                "pull_request": null}},
+            comments(number): {"body": [{"id": 1, "node_id": "IC_1", "body": body}]},
+            comments(7): {"body": [{"id": 2, "node_id": "IC_2", "body": "PR comment"}]},
+        });
+        responses.extend(issue.as_object().unwrap().clone());
+        fixture.script_github(&responses);
     };
-    fs::write(fixture.root.path().join("pr.json"), serde_json::json!({"number":7,"state":"OPEN","headRefName":"items","headRefOid":"head","title":"PR","baseRefName":"main","isCrossRepository":false,
-        "commits":[],"comments":[{"id":2,"body":"PR comment"}],"reviews":[],"statusCheckRollup":[],"mergeable":"MERGEABLE"}).to_string()).unwrap();
-    write_issue(1, "first");
+    write_issue(&fixture, 1, "first");
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "items"]);
     fixture.ok(&[
         "link",
@@ -15312,11 +15356,11 @@ esac
         issue["updates"][0]["url"],
         "https://github.com/team/project/issues/1"
     );
-    write_issue(1, "changed");
+    write_issue(&fixture, 1, "changed");
     let all = fixture.ok(&["watch", "--workspace", "items"]);
     assert_eq!(all["updates"].as_array().unwrap().len(), 1);
     fixture.restart();
-    write_issue(1, "changed after restart");
+    write_issue(&fixture, 1, "changed after restart");
     let direct = fixture.ok(&[
         "watch",
         "https://github.com/team/project/issues/1",
@@ -15363,7 +15407,7 @@ esac
         inspection["pr_cleanup"]["url"],
         "https://github.com/team/project/pull/7"
     );
-    write_issue(2, "unlinked issue");
+    write_issue(&fixture, 2, "unlinked issue");
     let explicit = fixture.ok(&["watch", "issue", "2", "--workspace", "items"]);
     assert_eq!(
         explicit["updates"][0]["url"],
@@ -15371,7 +15415,7 @@ esac
     );
     let inspection = fixture.ok(&["status", "items"]);
     assert!(inspection["issue"].is_null() && inspection["completion"].is_null());
-    write_issue(1, "relink");
+    write_issue(&fixture, 1, "relink");
     fixture.ok(&["link", "issue", "1", "assigned", "--workspace", "items"]);
     fixture.ok(&["unlink", "assigned", "--workspace", "items"]);
     assert!(fixture.ok(&["status", "items"])["issue"].is_null());
@@ -15391,11 +15435,14 @@ esac
         branch["updates"][0]["message"],
         "Conflicts with main: conflict"
     );
-    let pr_file = fixture.root.path().join("pr.json");
-    let mut fork: Value = serde_json::from_str(&fs::read_to_string(&pr_file).unwrap()).unwrap();
-    fork["isCrossRepository"] = serde_json::json!(true);
-    fork["headRefName"] = serde_json::json!("fork-topic");
-    fs::write(pr_file, fork.to_string()).unwrap();
+    let mut fork = github_pr(7, "fork-topic");
+    fork["GET repos/team/project/pulls/7"]["body"]["head"]["repo"]["full_name"] =
+        serde_json::json!("fork/project");
+    fork.insert(
+        "GET repos/team/project/issues/7/comments?per_page=100&page=1".into(),
+        serde_json::json!({"body": [{"id": 2, "node_id": "IC_2", "body": "PR comment"}]}),
+    );
+    fixture.script_github(&fork);
     let explicit = fixture.ok(&["watch", "pr", "7", "--workspace", "items"]);
     assert_eq!(explicit["updates"].as_array().unwrap().len(), 1);
     assert!(fixture.ok(&["status", "items"])["pr_cleanup"].is_null());
@@ -15828,52 +15875,47 @@ fn view_shows_linked_items_with_status_and_discussion() {
     fixture.add("view");
     fixture.add_github_origin();
     let bin = fixture.root.path().join("bin");
-    install_test_script(
-        bin.join("gh"),
-        "#!/bin/sh\ncase \"$1 $2\" in\n'issue view') [ \"$3\" = 3 ] && cat \"$HOME/issue.json\" || echo '{\"number\":3}';;\n'pr view') cat \"$HOME/pr.json\";;\n*) case \"$4 $6\" in */reviews\\ *) cat \"$HOME/reviews.json\";; '-X graphql') printf 'HTTP/2.0 200 OK\\n\\n'; cat \"$HOME/threads.json\";; '-X user') printf 'HTTP/2.0 200 OK\\n\\n{\"login\":\"me\"}';; '-X '*/issues/3/reactions*) printf 'HTTP/2.0 200 OK\\n\\n[{\"id\":1,\"content\":\"heart\",\"user\":{\"login\":\"me\"}}]';; '-X '*/reactions*) printf 'HTTP/2.0 200 OK\\n\\n[]';; *) cat \"$HOME/inline.json\";; esac;;\nesac\n",
-    );
     let root = fixture.root.path();
     // Longer than a protocol frame: lookups run in the CLI.
     let body = "Steps ".repeat(20_000);
-    fs::write(
-        root.join("issue.json"),
-        serde_json::json!({"number":3,"title":"Crash","body":body,"state":"OPEN",
+    let review = serde_json::json!({"id":11,"node_id":"PRR_11","user":{"login":"bot"},
+        "state":"CHANGES_REQUESTED","body":"One blocker","submitted_at":"t3"});
+    let inline = serde_json::json!({"id":21,"pull_request_review_id":11,"user":{"login":"bot"},
+        "path":"src/a.rs","line":3,"body":"Handle None","created_at":"t3"});
+    let mut responses = github_pr(7, "view");
+    let (runs, answer) = github_check_runs(serde_json::json!([
+        {"name":"rust","status":"completed","conclusion":"failure","details_url":"rust/1"}
+    ]));
+    responses.insert(runs, answer);
+    responses["GET repos/team/project/pulls/7"]["body"]["mergeable"] = serde_json::json!(false);
+    let pages = "?per_page=100&page=1";
+    let views = serde_json::json!({
+        "issue view 3": {"body": {"number":3,"title":"Crash","body":body,"state":"OPEN",
             "author":{"login":"ann"},"labels":[{"name":"bug"}],"createdAt":"t0",
-            "comments":[{"author":{"login":"bob"},"createdAt":"t1","body":"Same here"}]})
-        .to_string(),
-    )
-    .unwrap();
-    fs::write(
-        root.join("pr.json"),
-        serde_json::json!({"number":7,"title":"Fix crash","body":"Closes #3","state":"OPEN",
+            "comments":[{"author":{"login":"bob"},"createdAt":"t1","body":"Same here"}]}},
+        // gh answers for another issue than the one asked for.
+        "issue view 9": {"body": {"number":3}},
+        "pr view 7": {"body": {"number":7,"title":"Fix crash","body":"Closes #3","state":"OPEN",
             "author":{"login":"agent"},"labels":[],"createdAt":"t2","headRefName":"view",
-            "baseRefName":"main","isDraft":false,"headRefOid":"head","commits":[],
-            "autoMergeRequest":{"mergeMethod":"REBASE"},
-            "comments":[],"reviews":[{"id":"r1","author":{"login":"bot"},"state":"CHANGES_REQUESTED"}],
-            "mergeable":"CONFLICTING","statusCheckRollup":[{"__typename":"CheckRun","name":"rust",
-            "status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"rust/1"}]})
-        .to_string(),
-    )
-    .unwrap();
-    fs::write(
-        root.join("reviews.json"),
-        r#"[[{"id":11,"user":{"login":"bot"},"state":"CHANGES_REQUESTED","body":"One blocker","submitted_at":"t3"}]]"#,
-    )
-    .unwrap();
-    fs::write(
-        root.join("inline.json"),
-        r#"[[{"id":21,"pull_request_review_id":11,"user":{"login":"bot"},"path":"src/a.rs","line":3,"body":"Handle None","created_at":"t3"}]]"#,
-    )
-    .unwrap();
-    fs::write(
-        root.join("threads.json"),
-        serde_json::json!({"data":{"repository":{"pullRequest":{"reviewThreads":{
+            "baseRefName":"main","isDraft":false,"commits":[],
+            "autoMergeRequest":{"mergeMethod":"REBASE"}}},
+        format!("GET repos/team/project/pulls/7/reviews{pages}"): {"body": [review]},
+        // `shoal view` reads reviews and inline comments with `gh api --paginate`.
+        "GET repos/team/project/pulls/7/reviews": {"body": [[review]]},
+        "GET repos/team/project/pulls/7/comments": {"body": [[inline]]},
+        "POST graphql": {"body": {"data":{"repository":{"pullRequest":{"reviewThreads":{
             "pageInfo":{"hasNextPage":false,"endCursor":null},
             "nodes":[{"id":"T_1","isResolved":false,"comments":{
-                "pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"databaseId":21}]}}]}}}}})
-        .to_string(),
-    )
-    .unwrap();
+                "pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"databaseId":21}]}}]}}}}}},
+        "GET user": {"body": {"login":"me"}},
+        format!("GET repos/team/project/issues/3/reactions{pages}"):
+            {"body": [{"id":1,"content":"heart","user":{"login":"me"}}]},
+        format!("GET repos/team/project/issues/7/reactions{pages}"): {"body": []},
+        format!("GET repos/team/project/issues/comments/0/reactions{pages}"): {"body": []},
+        format!("GET repos/team/project/pulls/comments/21/reactions{pages}"): {"body": []},
+    });
+    responses.extend(views.as_object().unwrap().clone());
+    fixture.script_github(&responses);
     fixture.ok(&["link", "issue", "3", "assigned", "--workspace", "view"]);
     fixture.ok(&["link", "pr", "7", "assigned", "--workspace", "view"]);
 
