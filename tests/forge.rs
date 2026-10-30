@@ -3242,6 +3242,10 @@ fn linked_runs_are_viewed_and_watched_until_they_finish() {
     fixture.ok(&["unlink", "ci", "2765", "related", "--workspace", "topic"]);
     let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
     assert_eq!(links["related"], json!([]), "{links}");
+    // Unlinking drops the run's cursor, so linking it again watches it afresh.
+    fixture.ok(&["link", "ci", "2765", "opened", "--workspace", "topic"]);
+    let again = fixture.ok(&["watch", "ci", "--workspace", "topic", "--timeout", "600"]);
+    assert_eq!(again["updates"][0]["kind"], "ci_completed", "{again}");
 }
 
 #[test]

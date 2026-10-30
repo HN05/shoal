@@ -295,7 +295,25 @@ fn remove(
     for (kind, url) in &removed {
         events::record_link(db, id, EventKind::Unlinked, relation, *kind, url)?;
     }
+    forget_unlinked_runs(db, id, &removed)?;
     Ok(removed.len())
+}
+
+/// Drop the replay cursors of the runs among `removed` that no relation
+/// links any more, so linking one again watches it afresh.
+fn forget_unlinked_runs(db: &Connection, id: &str, removed: &[(LinkKind, String)]) -> Result<()> {
+    let mut unlinked = Vec::new();
+    for (kind, url) in removed {
+        let linked: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM workspace_items WHERE workspace_id=?1 AND url=?2)",
+            rusqlite::params![id, url],
+            |row| row.get(0),
+        )?;
+        if *kind == LinkKind::Ci && !linked {
+            unlinked.push(url.clone());
+        }
+    }
+    forget_activity(db, id, &unlinked)
 }
 
 /// Drop what assigned items kept while linked, their replay cursors and review
