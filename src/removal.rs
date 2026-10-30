@@ -44,6 +44,10 @@ pub struct RemovalCheck {
     /// the inspection; it is not part of the CLI protocol response.
     #[serde(skip)]
     pub(crate) default_branch: Option<String>,
+    /// The workspaces below it, which removal takes first, each after those
+    /// below it; filled in for a manual removal's check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<crate::model::WorkspaceRef>,
     /// The restores of idle agents, which `running_commands` and
     /// `processes` leave out; daemon state like `default_branch`.
     #[serde(skip)]
@@ -70,11 +74,15 @@ pub enum UnsavedWork {
     /// and the commits of a detached HEAD while HEAD is still that commit.
     /// `files_restorable` records that the caller was told the checkpoint
     /// keeps the files, so removal refuses when it cannot after all.
+    /// `children` are the IDs of the workspaces below it the caller saw, the
+    /// only ones it may take; without them it takes whatever is below.
     Confirmed {
         files: bool,
         detached_head: Option<String>,
         #[serde(default)]
         files_restorable: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        children: Option<Vec<String>>,
     },
     /// Everything, for removals that delete more than the workspace.
     All,
@@ -85,6 +93,7 @@ pub static NOTHING: UnsavedWork = UnsavedWork::Confirmed {
     files: false,
     detached_head: None,
     files_restorable: false,
+    children: None,
 };
 
 impl Default for UnsavedWork {
@@ -100,6 +109,35 @@ impl UnsavedWork {
             files: check.dirty,
             detached_head: check.head.clone().filter(|_| check.detached_commits() > 0),
             files_restorable: check.dirty && check.unsaved_files_archived,
+            children: Some(
+                check
+                    .children
+                    .iter()
+                    .map(|child| child.id.clone())
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The IDs of the workspaces below it the caller saw and lets removal
+    /// take, or `None` when it may take any.
+    pub fn children(&self) -> Option<&[String]> {
+        match self {
+            Self::Confirmed { children, .. } => children.as_deref(),
+            Self::All => None,
+        }
+    }
+
+    /// Whether it consents to deleting any unsaved work, which removal then
+    /// forces; the children it names are no unsaved work.
+    pub fn deletes_unsaved(&self) -> bool {
+        match self {
+            Self::All => true,
+            Self::Confirmed {
+                files,
+                detached_head,
+                ..
+            } => *files || detached_head.is_some(),
         }
     }
 
@@ -164,6 +202,10 @@ pub struct RemovalResult {
     pub branch_outcome: BranchOutcome,
     /// Removal succeeded, but its best-effort post hook failed.
     pub hook_error: Option<String>,
+    /// The workspaces below it the removal took first, each after those
+    /// below it.
+    #[serde(default)]
+    pub children: Vec<String>,
 }
 
 impl Serialize for RemovalResult {
@@ -177,6 +219,7 @@ impl Serialize for RemovalResult {
             branch_deleted: bool,
             branch_outcome: &'a BranchOutcome,
             hook_error: &'a Option<String>,
+            children: &'a [String],
         }
         Response {
             removed: self.removed,
@@ -184,6 +227,7 @@ impl Serialize for RemovalResult {
             branch_deleted: self.branch_outcome.is_deleted(),
             branch_outcome: &self.branch_outcome,
             hook_error: &self.hook_error,
+            children: &self.children,
         }
         .serialize(serializer)
     }
@@ -299,6 +343,7 @@ pub(crate) async fn inspect(
         workspace,
         running_commands,
         idle_restores,
+        children: vec![],
         processes: vec![],
         dirty: false,
         changed_files: vec![],

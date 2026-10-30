@@ -43,6 +43,7 @@ mod shutdown_lock;
 mod startup;
 mod startup_audit;
 pub mod store;
+mod tmp_dirs;
 mod untracked;
 mod warnings;
 pub mod workspace;

@@ -27,6 +27,11 @@ pub(super) async fn workspace_forge(ctx: &Context, workspace: Option<String>) ->
         },
     )
     .await?;
+    forge_of(ctx, &workspace).await
+}
+
+/// The forge of `workspace`'s `origin` remote.
+pub(super) async fn forge_of(ctx: &Context, workspace: &Workspace) -> Result<ForgeRepo> {
     let remote = repository::remote_url_from_path(&workspace.path)
         .await?
         .context("the workspace has no origin remote")?;

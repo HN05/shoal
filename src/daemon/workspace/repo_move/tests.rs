@@ -36,6 +36,9 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
         &repo.path,
         &["worktree", "add", "--lock", "--detach", "../.seed/worktree"],
     );
+    // So does the workspace's temporary directory.
+    let tmp_dir = crate::tmp_dirs::directory(&repo, &workspace.id)?.context("no directory")?;
+    fs::write(tmp_dir.join("scratch"), "garbage")?;
 
     let moved = manager.move_repositories(Layout::Regular).await?;
     let [moved] = moved.as_slice() else {
@@ -58,6 +61,10 @@ async fn moves_the_clone_and_workspaces_into_the_new_root() -> Result<()> {
             .is_some_and(|dir| dir.starts_with(&directory))
     );
     manager.verify_worktree(&workspace).await?;
+    let exported = manager.workspace_environment(&workspace.id).await?;
+    let tmp_dir = directory.join(".tmp").join(&workspace.id);
+    assert_eq!(exported[crate::env::TMPDIR], tmp_dir.to_string_lossy());
+    assert!(tmp_dir.join("scratch").is_file());
     let trees = git::worktrees(&moved.repository.path, git::run).await?;
     for path in [&workspace.path, &directory.join(".seed/worktree")] {
         assert!(

@@ -124,6 +124,7 @@ impl Manager {
         verify_directory(&repo.path, identity, true)?;
         self.remove_seed(&repo).await?;
         delete_caches(&repo).await?;
+        delete_tmp_dirs(&repo).await?;
         self.delete_repository_files(&repo).await?;
         delete_checkout(repo.path.clone()).await?;
         delete_empty_workspaces_dir(repo.workspaces_dir.clone()).await?;
@@ -321,6 +322,10 @@ impl Manager {
             })
             .await?;
         for workspace in workspaces {
+            // Removing a parent took its children.
+            if self.find_workspace(&workspace.id).await?.is_none() {
+                continue;
+            }
             self.remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
                 .await
                 .with_context(|| {
@@ -419,6 +424,13 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
         return Ok(());
     };
     tokio::task::spawn_blocking(move || caches.remove()).await?
+}
+
+async fn delete_tmp_dirs(repo: &Repository) -> Result<()> {
+    let Some(tmp_dirs) = crate::tmp_dirs::Layout::of(repo) else {
+        return Ok(());
+    };
+    tokio::task::spawn_blocking(move || tmp_dirs.remove()).await?
 }
 
 async fn delete_empty_workspaces_dir(directory: Option<std::path::PathBuf>) -> Result<()> {

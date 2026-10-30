@@ -476,3 +476,64 @@ fn suffixed_names_fit_the_name_limit() {
     assert_eq!(cut.len(), crate::validate::MAX_NAME_LEN);
     assert!(cut.ends_with("a-12"), "{cut}");
 }
+
+#[tokio::test]
+async fn a_chat_has_its_own_tmpdir_until_it_ends() {
+    use std::os::unix::fs::PermissionsExt;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let mut process = std::process::Command::new("sleep")
+        .arg("600")
+        .spawn()
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let tmp_dir = chat.tmp_dir.clone().unwrap();
+    let directory = repo.workspaces_dir.clone().unwrap();
+    assert_eq!(tmp_dir, directory.join(".tmp").join(&chat.id));
+    let mode = std::fs::metadata(&tmp_dir).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o700);
+    assert_eq!(
+        crate::env::chat_environment(&chat, &manager.paths)[crate::env::TMPDIR],
+        tmp_dir.as_os_str()
+    );
+    std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
+
+    process.kill().unwrap();
+    process.wait().unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert!(!tmp_dir.exists());
+
+    // A chat that cannot have one ends at once.
+    std::fs::remove_dir_all(directory.join(".tmp")).unwrap();
+    std::fs::create_dir(directory.join(".tmp")).unwrap();
+    let error = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "talk".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("not a directory Shoal created"),
+        "{error:#}"
+    );
+    assert!(manager.chats().await.unwrap().is_empty());
+}

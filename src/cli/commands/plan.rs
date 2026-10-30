@@ -68,7 +68,10 @@ async fn labelled(
     let kind = format!("issues labelled {label}");
     // The forge lists the newest first.
     let issue = match pick {
-        Pick::Picker => return ui::pick_item(ctx, "Issue> ", &kind, issues),
+        Pick::Picker => {
+            ui::require_argument(ctx, "issue", "issue")?;
+            return ui::pick_item(ctx, "Issue> ", &kind, issues);
+        }
         Pick::Newest => issues.first(),
         Pick::Oldest => oldest(&issues, &kind)?,
     };

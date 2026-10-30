@@ -33,6 +33,7 @@ use crate::{
         link::ItemKind,
         list,
         reaction::{Listed, Subject},
+        revert::NewRevert,
     },
     repo::locator::ItemRoute,
     review::{
@@ -126,6 +127,10 @@ pub(crate) trait Backend {
 
     /// The field that holds a commit's full ID in a list of PR commits.
     fn commit_field(&self) -> &'static str;
+
+    /// The ref a remote of the repository keeps PR `number`'s head
+    /// commit under, where the forge keeps one after its branch goes.
+    fn pull_head_ref(&self, number: u64) -> Option<String>;
 
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
@@ -301,6 +306,18 @@ pub(crate) trait Backend {
         current: &Current,
         method: UpdateMethod,
     ) -> Result<Vec<Request>>;
+
+    /// Have the forge open `revert` for the merged PR `current` as
+    /// `account`, returning the new PR's number and head branch.
+    async fn revert(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _current: &Current,
+        _revert: &NewRevert,
+    ) -> Result<(u64, String)> {
+        Err(crate::capability::unsupported(self, Capability::RevertPrs))
+    }
 
     /// Where activity records a posted comment: its source, and the
     /// response field that holds its ID.
@@ -788,6 +805,10 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.commit_field())
     }
 
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        dispatch!(self, backend => backend.pull_head_ref(number))
+    }
+
     fn login_hint(&self) -> &'static str {
         dispatch!(self, backend => backend.login_hint())
     }
@@ -949,6 +970,16 @@ impl Backend for ForgeKind {
         method: UpdateMethod,
     ) -> Result<Vec<Request>> {
         dispatch!(self, backend => backend.update_branch(repo, current, method))
+    }
+
+    async fn revert(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        current: &Current,
+        revert: &NewRevert,
+    ) -> Result<(u64, String)> {
+        dispatch!(self, backend => backend.revert(repo, account, current, revert).await)
     }
 
     fn comment_key(&self) -> (&'static str, &'static str) {

@@ -7,6 +7,8 @@ use std::{
 
 use anyhow::{Context as _, Result};
 use clap::{CommandFactory, Parser};
+
+use crate::cli::args::Invocation;
 use serde::Serialize;
 
 use crate::{
@@ -116,13 +118,6 @@ async fn workspace_layers(ctx: &Context, workspace: String) -> Result<ConfigLaye
         },
     )
     .await?)
-}
-
-#[derive(Parser)]
-struct Invocation {
-    workspace: Option<String>,
-    #[arg(last = true)]
-    args: Vec<OsString>,
 }
 
 /// The name `shoal <name>` runs.
@@ -291,7 +286,7 @@ pub(super) async fn run_defined(
             ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?
         }
         Definition::Workspace(workspace) => workspace,
-        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining).await?,
+        Definition::Elsewhere(defining) => ui::pick_workspace(ctx, defining, "workspace").await?,
     };
     recent::record(ctx, &workspace).await;
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;

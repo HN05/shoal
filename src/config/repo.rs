@@ -148,6 +148,8 @@ pub struct RepoConfig {
     #[option(section)]
     pub review: ReviewConfig,
     #[option(section)]
+    pub messages: MessagesConfig,
+    #[option(section)]
     pub ready: ReadyConfig,
     #[option(section)]
     pub unready: UnreadyConfig,
@@ -341,6 +343,7 @@ impl RepoConfig {
             kind.validate(kind.repository_command(self))?;
         }
         self.cleanup.validate()?;
+        self.messages.validate()?;
         crate::config::validate_port_range(self.ports.start, self.ports.end)?;
         for (name, definition) in &self.ports.definitions {
             crate::validate::lowercase_name("port", name)
@@ -490,6 +493,25 @@ pub struct DoneConfig {
 pub struct ReviewConfig {
     #[option(default = true)]
     pub post: Option<bool>,
+}
+
+/// How agent messages that arrive in quick succession are held to reach the
+/// agent together.
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
+#[serde(default, deny_unknown_fields)]
+#[options(resolved = Messages)]
+pub struct MessagesConfig {
+    #[option(default = 5)]
+    pub settle_seconds: Option<u64>,
+}
+
+impl MessagesConfig {
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if let Some(seconds) = self.settle_seconds {
+            anyhow::ensure!(seconds <= 60, "messages.settle_seconds must be at most 60");
+        }
+        Ok(())
+    }
 }
 
 /// Whether `shoal ready` takes marked PRs out of draft.

@@ -14,6 +14,8 @@ use crate::{
     state::WorkspaceState,
 };
 
+mod settle;
+
 /// Unread messages one workspace may hold, and their total size, attached
 /// paths included; together they fit one response.
 pub(crate) const MAX_UNREAD: i64 = 50;

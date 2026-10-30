@@ -70,7 +70,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 162;
+pub const VERSION: u32 = 163;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -519,6 +519,7 @@ response_bodies! {
     AgentSession(crate::model::AgentSession),
     WorkspaceStatus(WorkspaceStatus),
     SelectedItems(crate::model::Selected),
+    MergedPull(crate::forge::items::revert::MergedPull),
     CheckLog(crate::forge::ci::checks::CheckLog),
     CiActed(crate::forge::ci::CiActed),
     CiRunStarted(crate::forge::ci::run::StartedRun),

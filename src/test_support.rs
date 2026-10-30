@@ -93,8 +93,10 @@ pub fn global_config(text: &str) -> crate::config::Config {
 }
 
 /// Global config always turns off `copy_ignored`: only the CLI runs the
-/// tracked setup it needs, so workspaces created here are ready at once.
-const BASE_CONFIG: &str = "copy_ignored = false\n";
+/// tracked setup it needs, so workspaces created here are ready at once. It
+/// delivers each agent message at once, so a test reads it without waiting
+/// for a run of them to settle.
+const BASE_CONFIG: &str = "copy_ignored = false\nmessages.settle_seconds = 0\n";
 
 fn write_global_config(paths: &Paths, text: &str) {
     let config = crate::config::Config::path(paths);

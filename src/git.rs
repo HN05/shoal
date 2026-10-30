@@ -18,6 +18,7 @@ pub use queries::{
 };
 pub mod checkpoint;
 pub mod repo;
+pub mod revert;
 pub mod seed;
 pub mod status;
 pub mod worktrunk;

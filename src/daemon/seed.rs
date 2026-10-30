@@ -71,6 +71,7 @@ impl Plan {
                 crate::repository::name(repo),
                 &[],
                 &crate::caches::locate(repo, &settings.caches),
+                None,
             ),
             caches: settings.caches.clone(),
             branch,

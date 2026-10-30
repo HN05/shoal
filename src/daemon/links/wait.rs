@@ -184,6 +184,7 @@ impl Manager {
             selection.input.is_none() || selection.kind.is_some(),
             "explicit items need a kind"
         );
+        let deadline = watch_deadline(seconds);
         let workspace = self.workspace(selector).await?;
         let wait = self.item_waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
@@ -194,13 +195,13 @@ impl Manager {
         if !unread.wakes {
             // A cancelled poll leaves its deliveries pending for the newer wait.
             tokio::select! {
-                updates = wait_for_updates(seconds, &mut background, || {
+                updates = wait_for_updates(deadline, &mut background, || {
                     self.poll_item_activity(&workspace.id, selection)
                 }) => {
                     let updates = updates?;
-                    // Including those queued while the wait ran. A newer
-                    // delivery may take them and the updates meanwhile.
-                    let unread = self.agent_messages(&workspace.id).await?;
+                    // Including settled ones queued while the wait ran. A
+                    // newer delivery may take them and the updates meanwhile.
+                    let unread = self.deliverable_messages(&workspace).await?;
                     if !wait.is_current() {
                         return Ok(Updates::superseded());
                     }
@@ -210,6 +211,12 @@ impl Manager {
                 () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
         }
+        // Messages still settling at the deadline wait for a later delivery.
+        let messages = tokio::select! {
+            settled = self.settled_messages(&workspace, messages) => settled?,
+            () = wait.superseded.notified() => return Ok(Updates::superseded()),
+            () = until(deadline) => return Ok(Updates::timed_out()),
+        };
         // A newer wait or hook delivery reads the same unacknowledged messages.
         if !wait.is_current() {
             return Ok(Updates::superseded());
@@ -217,8 +224,8 @@ impl Manager {
         Ok(Updates::messages(messages))
     }
 
-    /// What the workspace's agent has not received: its messages and the
-    /// updates queued on its cursor, without waiting or polling the forge.
+    /// What the workspace's agent has not received: its settled messages and
+    /// the updates queued on its cursor, without waiting or polling the forge.
     /// Delivery replaces a running watch, which would otherwise deliver the
     /// same updates again. Cleanup and item changes hold a workspace's PR
     /// gate across its forge requests and its removal, longer than an agent
@@ -227,7 +234,7 @@ impl Manager {
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
         let delivery = self.item_waits.start(&workspace.id);
-        let messages = self.agent_messages(&workspace.id).await?;
+        let messages = self.deliverable_messages(&workspace).await?;
         // The messages share the response with the updates.
         let reserved = serde_json::to_vec(&messages)?.len();
         let children = self.delegated_workspaces(&workspace.id).await?;
@@ -252,23 +259,8 @@ impl Manager {
 
     /// The updates queued for the workspace's agent that fit one response
     /// beside `reserved` bytes of its other content: those on its own cursor
-    /// for an unfiltered watch, then those of the child workspaces it works on.
-    async fn agent_queued_updates(
-        &self,
-        workspace: Workspace,
-        reserved: usize,
-    ) -> Result<Vec<Update>> {
-        let children = self.delegated_workspaces(&workspace.id).await?;
-        let _gate = self
-            .gates
-            .lock_prs(receiving(&workspace.id, &children))
-            .await;
-        self.gated_agent_updates(workspace, &children, reserved)
-            .await
-    }
-
-    /// [`Self::agent_queued_updates`] for a caller already holding the PR
-    /// gates of the workspace and its `children`.
+    /// for an unfiltered watch, then those of the child workspaces it works
+    /// on. The caller holds the PR gates of the workspace and its `children`.
     async fn gated_agent_updates(
         &self,
         workspace: Workspace,
@@ -346,8 +338,8 @@ impl Manager {
         self.pending_activity(&workspace.id, &keys).await
     }
 
-    /// Return once whether the workspace's agent is idle with undelivered
-    /// messages that wake it or queued updates matches `due`, so a launcher
+    /// Return once whether the workspace's agent is idle with settled
+    /// undelivered messages that wake it or queued updates matches `due`, so a launcher
     /// can prompt an agent that has no hook to wake it, then wait for it to
     /// take them. With `interrupted`, the agent is due only while an
     /// interrupt ended the last turn of that execution's agent, whose hook
@@ -363,17 +355,29 @@ impl Manager {
         let mut messages = self.signals.watch_agent_messages();
         let mut queued = self.signals.watch_item_updates();
         let mut changed = self.signals.watch_agents();
-        while self.agent_wake_due(&workspace, interrupted).await? != due {
+        loop {
+            // One reading decides both whether messages are due and when
+            // held ones settle, which no signal announces.
+            let unread = self.unread_agent_messages(&workspace.id).await?;
+            let hold = self.message_hold(&workspace, &unread.messages).await?;
+            let messages_due = wake_messages_due(unread.wakes, hold, due);
+            if self
+                .agent_wake_due(&workspace, interrupted, messages_due, due)
+                .await?
+                == due
+            {
+                return Ok(());
+            }
+            let recheck = hold.map_or(POLL_INTERVAL, |hold| hold.min(POLL_INTERVAL));
             // Closed channels only disable their wake; the poll interval
             // still rechecks.
             tokio::select! {
                 Ok(()) = messages.changed() => {}
                 Ok(()) = queued.changed() => {}
                 Ok(()) = changed.changed() => {}
-                () = tokio::time::sleep(POLL_INTERVAL) => {}
+                () = tokio::time::sleep(recheck) => {}
             }
         }
-        Ok(())
     }
 
     /// Whether messages that wake an idle agent or queued updates wait for
@@ -385,6 +389,14 @@ impl Manager {
         if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
+        self.updates_deliverable(workspace).await
+    }
+
+    /// Whether updates a hook would deliver are queued for the workspace's
+    /// agent. None count while cleanup or an item change holds the PR gates
+    /// of the workspaces whose activity it receives, rather than waiting for
+    /// them for minutes.
+    async fn updates_deliverable(&self, workspace: Workspace) -> Result<bool> {
         let children = self.delegated_workspaces(&workspace.id).await?;
         let Some(_gate) = self.gates.try_lock_prs(receiving(&workspace.id, &children)) else {
             return Ok(false);
@@ -404,15 +416,37 @@ impl Manager {
         if self.unread_agent_messages(&workspace.id).await?.wakes {
             return Ok(true);
         }
+        self.updates_recorded(workspace).await
+    }
+
+    /// Whether updates are queued for the workspace's agent, read without
+    /// the PR gates.
+    async fn updates_recorded(&self, workspace: Workspace) -> Result<bool> {
         let children = self.delegated_workspaces(&workspace.id).await?;
         Ok(!self.queued_updates(workspace).await?.is_empty()
             || !self.delegated_pending(&children, None).await?.is_empty())
     }
 
+    /// Whether updates make a wake due for the workspace's agent. Only
+    /// `arming` a wake waits for them to be deliverable: once prompted, the
+    /// agent stays due while they are recorded, so a gate cleanup takes
+    /// meanwhile cannot end that wait and prompt it again.
+    async fn wake_updates_due(&self, workspace: Workspace, arming: bool) -> Result<bool> {
+        if arming {
+            self.updates_deliverable(workspace).await
+        } else {
+            self.updates_recorded(workspace).await
+        }
+    }
+
+    /// Whether the workspace's idle agent is due a wake: `messages_due`, or
+    /// updates as [`Self::wake_updates_due`] counts them when `arming`.
     async fn agent_wake_due(
         &self,
         workspace: &Workspace,
         interrupted: Option<&str>,
+        messages_due: bool,
+        arming: bool,
     ) -> Result<bool> {
         if let Some(execution) = interrupted
             && !self.turn_interrupted(execution).await
@@ -427,11 +461,7 @@ impl Manager {
         if state.is_none_or(|status| status.state != crate::state::AgentState::Idle) {
             return Ok(false);
         }
-        Ok(self.unread_agent_messages(&workspace.id).await?.wakes
-            || !self
-                .agent_queued_updates(workspace.clone(), 0)
-                .await?
-                .is_empty())
+        Ok(messages_due || self.wake_updates_due(workspace.clone(), arming).await?)
     }
 
     /// The unread messages once one that wakes an idle agent is queued.
@@ -1425,6 +1455,16 @@ impl Updates {
         }
     }
 
+    fn timed_out() -> Self {
+        Self {
+            updates: Vec::new(),
+            messages: Vec::new(),
+            timed_out: true,
+            superseded: false,
+            attached: None,
+        }
+    }
+
     pub(crate) fn messages(messages: Vec<AgentMessage>) -> Self {
         Self {
             updates: Vec::new(),
@@ -1458,30 +1498,41 @@ fn watches_branch(selection: &Selection, items: &[(String, LinkKind)]) -> bool {
         && !items.iter().any(|(_, kind)| *kind == LinkKind::Pr)
 }
 
+/// Whether unread messages, of which one `wakes` the agent and which settle
+/// after `hold`, make a wake due. Settling only delays `arming` a wake: once
+/// prompted, the agent stays due until it takes them or starts a turn, so
+/// a message arriving meanwhile cannot end that wait and prompt it again.
+fn wake_messages_due(wakes: bool, hold: Option<Duration>, arming: bool) -> bool {
+    wakes && (hold.is_none() || !arming)
+}
+
+/// When a watch with a timeout of `seconds` started now ends.
+fn watch_deadline(seconds: Option<u64>) -> Option<tokio::time::Instant> {
+    seconds.map(|seconds| tokio::time::Instant::now() + Duration::from_secs(seconds))
+}
+
+/// Resolves at `deadline`, or never without one.
+async fn until(deadline: Option<tokio::time::Instant>) {
+    match deadline {
+        Some(deadline) => tokio::time::sleep_until(deadline).await,
+        None => std::future::pending().await,
+    }
+}
+
 /// Poll every [`POLL_INTERVAL`], or once a forge's rate limit ends, and at
-/// once whenever `queued` changes.
+/// once whenever `queued` changes, until `deadline`.
 async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
-    seconds: Option<u64>,
+    deadline: Option<tokio::time::Instant>,
     queued: &mut tokio::sync::watch::Receiver<u64>,
     mut poll: impl FnMut() -> F,
 ) -> Result<Updates> {
-    let deadline =
-        seconds.map(|seconds| tokio::time::Instant::now() + Duration::from_secs(seconds));
     loop {
         // A cancelled poll may already have committed a pending delivery. The
         // next wait replays it, so the advertised timeout can remain strict.
         let polled = match deadline {
             Some(deadline) => match tokio::time::timeout_at(deadline, poll()).await {
                 Ok(polled) => polled,
-                Err(_) => {
-                    return Ok(Updates {
-                        updates: Vec::new(),
-                        messages: Vec::new(),
-                        timed_out: true,
-                        superseded: false,
-                        attached: None,
-                    });
-                }
+                Err(_) => return Ok(Updates::timed_out()),
             },
             None => poll().await,
         };
@@ -1498,13 +1549,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
         let sleep_for = if let Some(deadline) = deadline {
             let now = tokio::time::Instant::now();
             if now >= deadline {
-                return Ok(Updates {
-                    updates: Vec::new(),
-                    messages: Vec::new(),
-                    timed_out: true,
-                    superseded: false,
-                    attached: None,
-                });
+                return Ok(Updates::timed_out());
             }
             interval.min(deadline - now)
         } else {

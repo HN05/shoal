@@ -42,6 +42,7 @@ pub(super) async fn attach(
                 .zip(&labels)
                 .map(|(session, label)| (session, label.as_str()))
                 .collect();
+            ui::require_argument(ctx, "session", "session")?;
             ui::pick_choice(ctx, "Attach session> ", &choices)?
         }
     };

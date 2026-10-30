@@ -59,6 +59,14 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
+/// The arguments of `shoal <name>`, a configured command or AI tool.
+#[derive(Debug, clap::Parser)]
+pub struct Invocation {
+    pub workspace: Option<String>,
+    #[arg(last = true)]
+    pub args: Vec<std::ffi::OsString>,
+}
+
 /// An issue or PR argument, where `#42` means `42`.
 pub(in crate::cli) fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
     Ok(match input.strip_prefix('#') {

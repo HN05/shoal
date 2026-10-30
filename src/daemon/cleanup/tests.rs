@@ -381,7 +381,12 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
     git(&checkout, &["merge", "--ff-only", "kept"]);
 
     manager
-        .acquire_hold(&workspace.id, "review".into(), None)
+        .acquire_hold(
+            &workspace.id,
+            "review".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let ask = crate::daemon::questions::Ask {
@@ -397,7 +402,11 @@ async fn status_names_the_first_reason_cleanup_keeps_a_workspace() {
     let question = manager.ask_question(&workspace.name, ask).await.unwrap();
     assert_eq!(reason().await, CleanupReason::Held);
     manager
-        .release_hold(&workspace.id, "review".into())
+        .release_hold(
+            &workspace.id,
+            "review".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     assert_eq!(reason().await, CleanupReason::Question);
@@ -611,7 +620,12 @@ async fn requested_cleanup_removes_candidates_without_idle_delay() {
     fs::write(dirty.path.join("work"), "retain me").unwrap();
     let held = manager.workspace("held").await.unwrap();
     manager
-        .acquire_hold(&held.id, "keep".into(), None)
+        .acquire_hold(
+            &held.id,
+            "keep".into(),
+            None,
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let names = |manager: &Arc<Manager>| {
@@ -717,7 +731,12 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     );
     for name in ["app-one", "app-two"] {
         manager
-            .acquire_hold(&workspace.id, name.into(), None)
+            .acquire_hold(
+                &workspace.id,
+                name.into(),
+                None,
+                crate::model::HoldPlacer::User,
+            )
             .await
             .unwrap();
     }
@@ -726,7 +745,11 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
     assert!(!git(&checkout, &["branch", "--list", "held"]).is_empty());
     assert!(!timers.idle.contains_key(&workspace.id));
     manager
-        .release_hold(&workspace.id, "app-one".into())
+        .release_hold(
+            &workspace.id,
+            "app-one".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     sweep(&manager, &mut timers).await.unwrap();
@@ -738,7 +761,11 @@ async fn holds_block_idle_sweeps_and_release_restores_eligibility() {
             .is_none()
     );
     manager
-        .release_hold(&workspace.id, "app-two".into())
+        .release_hold(
+            &workspace.id,
+            "app-two".into(),
+            crate::model::HoldPlacer::User,
+        )
         .await
         .unwrap();
     let snapshot = manager

@@ -4,6 +4,8 @@ Shoal, open PRs, handle reviews, reach the user and finish an assignment. Keep
 work inside this workspace and follow the repository's instructions. Leave
 Shoal's daemon and installation to the user: when a Shoal command is missing or
 refused, report it with `shoal alerts send` instead of working around it.
+Put scratch files in `$TMPDIR` rather than literal `/tmp` paths; Shoal deletes
+it with the workspace.
 
 While watched PRs are open, {updates} Messages from the user and Shoal arrive
 the same way; follow them.

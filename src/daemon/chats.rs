@@ -1,10 +1,14 @@
 //! Chats: agents the user talks with in a repository's registered checkout.
 //! They are records, not tracked executions, so they never queue, stop under
 //! pressure or resume; a chat lasts while its process lives.
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result, ensure};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
 use crate::{
@@ -12,8 +16,9 @@ use crate::{
         chat_messages, log, store,
         workspace::{Manager, derive_workspace_name},
     },
-    model::{Chat, OpenedWorkspace, Workspace},
+    model::{Chat, OpenedWorkspace, Repository, Workspace},
     process::identity::{self, Identity},
+    tmp_dirs,
 };
 
 /// How soon a chat's end reaches the journal when nothing lists chats.
@@ -44,6 +49,8 @@ impl Manager {
     ) -> Result<Chat> {
         crate::validate::name("chat", &name)?;
         let repository = self.repository(repository).await?.id;
+        // Its temporary directory goes in the repository's directory.
+        let repository = self.reserve_repository_directory(&repository).await?;
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let started_at = i64::try_from(crate::time::unix_seconds())?;
         self.end_finished_chats().await?;
@@ -53,16 +60,40 @@ impl Manager {
         }
         let chat = Chat {
             id: Uuid::new_v4().to_string(),
-            repository_id: repository,
+            repository_id: repository.id.clone(),
             name,
             agent,
             pid: process.pid,
             started_at,
             origin,
+            tmp_dir: None,
         };
-        self.store
-            .run(move |db| insert(db, chat, &process.birth, hands_over))
-            .await
+        let birth = process.birth.clone();
+        let chat = self
+            .store
+            .run(move |db| insert(db, chat, &birth, hands_over))
+            .await?;
+        self.give_tmp_dir(chat, &repository, process).await
+    }
+
+    /// `chat`, just recorded with `process`, with its temporary directory,
+    /// created now; a chat that cannot have one ends.
+    async fn give_tmp_dir(
+        &self,
+        mut chat: Chat,
+        repository: &Repository,
+        process: Identity,
+    ) -> Result<Chat> {
+        match tmp_dirs::directory(repository, &chat.id) {
+            Ok(tmp_dir) => {
+                chat.tmp_dir = tmp_dir;
+                Ok(chat)
+            }
+            Err(error) => {
+                self.end_chats(vec![(chat.id, process)]).await?;
+                Err(error)
+            }
+        }
     }
 
     /// Refuse a name a new chat could not take now.
@@ -117,14 +148,27 @@ impl Manager {
         self.store.run(|db| running(db)).await
     }
 
-    /// Delete chats whose process has exited, which returns their workspaces
-    /// to the user along with the messages the chats had not received.
+    /// End chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(recorded_processes).await?);
+        self.end_chats(ended).await
+    }
+
+    /// End the chats still recorded with the process found ended: return
+    /// their workspaces to the user along with the messages the chats had not
+    /// received, and delete their records and temporary directories. A chat
+    /// moved to another process since keeps running.
+    async fn end_chats(&self, ended: Vec<(String, Identity)>) -> Result<()> {
         if ended.is_empty() {
             return Ok(());
         }
-        if let Some(id) = self.store.run(move |db| delete(db, &ended)).await? {
+        let deleted = self.store.run(move |db| delete(db, &ended)).await?;
+        for (repository_id, id) in deleted.chats {
+            if let Err(error) = self.delete_tmp_dir(&repository_id, &id).await {
+                log!("chat {id}: temporary directory not deleted: {error:#}");
+            }
+        }
+        if let Some(id) = deleted.notification {
             self.signals.notification_recorded(id);
         }
         Ok(())
@@ -300,18 +344,26 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
 fn running(db: &Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,name,agent,pid,started_at,origin FROM chats
-             ORDER BY started_at, rowid",
+            "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
+                    chats.started_at,chats.origin,repositories.workspaces_dir
+             FROM chats JOIN repositories ON repositories.id=chats.repository_id
+             ORDER BY chats.started_at, chats.rowid",
         )?
         .query_map([], |row| {
+            let id: String = row.get(0)?;
+            let repository_id: String = row.get(1)?;
+            let tmp_dir = row.get::<_, Option<String>>(7)?.map(|directory| {
+                tmp_dirs::Layout::new(Path::new(&directory), &repository_id).locate(&id)
+            });
             Ok(Chat {
-                id: row.get(0)?,
-                repository_id: row.get(1)?,
+                id,
+                repository_id,
                 name: row.get(2)?,
                 agent: row.get(3)?,
                 pid: row.get(4)?,
                 started_at: row.get(5)?,
                 origin: store::json_column(row, "origin")?,
+                tmp_dir,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
@@ -348,26 +400,40 @@ fn finished(recorded: Vec<(String, Identity)>) -> Vec<(String, Identity)> {
         .collect()
 }
 
-/// Delete the chats still recorded with the process found ended, giving the
-/// user their unread messages; a chat moved to another process since keeps
-/// running. Returns the last notification recorded.
-fn delete(db: &mut Connection, ended: &[(String, Identity)]) -> Result<Option<i64>> {
+/// The chat records [`delete`] deleted.
+struct Deleted {
+    /// The last notification recorded.
+    notification: Option<i64>,
+    /// The repository and ID of each chat.
+    chats: Vec<(String, String)>,
+}
+
+/// Delete the records of the chats still recorded with the process found
+/// ended, giving the user their unread messages.
+fn delete(db: &mut Connection, ended: &[(String, Identity)]) -> Result<Deleted> {
     let tx = db.transaction()?;
     let mut last = None;
+    let mut deleted = Vec::new();
     for (id, process) in ended {
-        let unchanged: bool = tx.query_row(
-            "SELECT EXISTS(SELECT 1 FROM chats WHERE id=?1 AND pid=?2 AND birth=?3)",
-            params![id, process.pid, process.birth],
-            |row| row.get(0),
-        )?;
-        if !unchanged {
+        let repository_id: Option<String> = tx
+            .query_row(
+                "SELECT repository_id FROM chats WHERE id=?1 AND pid=?2 AND birth=?3",
+                params![id, process.pid, process.birth],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let Some(repository_id) = repository_id else {
             continue;
-        }
+        };
         last = chat_messages::hand_to_user(&tx, id)?.or(last);
         tx.execute("DELETE FROM chats WHERE id=?1", [id])?;
+        deleted.push((repository_id, id.clone()));
     }
     tx.commit()?;
-    Ok(last)
+    Ok(Deleted {
+        notification: last,
+        chats: deleted,
+    })
 }
 
 /// An unknown chat leaves the workspace to the user.

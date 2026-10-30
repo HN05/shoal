@@ -33,6 +33,7 @@ pub(super) async fn selected(
     }
     let waiting = waiting(ctx).await?;
     ensure!(!waiting.is_empty(), "no agents wait in the queue");
+    ui::require_argument(ctx, "queue entry", "entry")?;
     Ok(pick_entry(ctx, &waiting, prompt).await?.id)
 }
 

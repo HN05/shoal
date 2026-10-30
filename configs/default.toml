@@ -276,6 +276,11 @@ cleanup = true
 [review]
 post = true
 
+# Hold agent messages until none has arrived for this many seconds, so a run of
+# them, such as approval decisions, reaches the agent together; 0 delivers each at once.
+[messages]
+settle_seconds = 5
+
 # Push the default branch to its upstream after shoal land; --push and --no-push override it.
 [land]
 push = false

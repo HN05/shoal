@@ -104,12 +104,13 @@ pub(super) async fn start(
         ..
     } = launch;
     super::ensure_available(&name, &settings)?;
+    let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
     let (prompt, args) = workspace_input(
         integration,
         app,
         &settings,
         &workspace,
-        &ctx.paths.home,
+        directories,
         prompt,
         args,
     );
@@ -208,14 +209,14 @@ fn session_files(paths: &Paths, workspace: &Workspace, name: &str) -> PathBuf {
 }
 
 /// The first message and arguments of a workspace session, which runs
-/// without Shoal's hooks, as a tracked launch separates them; `~/` in agent
-/// directories names a path under `home`.
+/// without Shoal's hooks, as a tracked launch separates them, with the
+/// arguments that give it `directories`.
 fn workspace_input(
     integration: &dyn Integration,
     app: &dyn App,
     settings: &Effective,
     workspace: &Workspace,
-    home: &Path,
+    directories: Vec<OsString>,
     prompt: Option<String>,
     args: Vec<OsString>,
 ) -> (Option<String>, Vec<OsString>) {
@@ -230,7 +231,7 @@ fn workspace_input(
     let prompt = Some(prompt).filter(|prompt| !prompt.is_empty());
     let args = instruction_args
         .into_iter()
-        .chain(agent_dir_args(app, settings, home))
+        .chain(directories)
         .chain(args)
         .collect();
     (prompt, args)
@@ -250,11 +251,26 @@ fn instruction_args(
         .filter(|_| app.takes_agent_args())
 }
 
-/// The arguments that give `app`'s agent the configured agent directories,
-/// when it takes arguments.
-fn agent_dir_args(app: &dyn App, settings: &Effective, home: &Path) -> Vec<OsString> {
+/// The arguments that give `app`'s agent the directories a workspace's agent
+/// works in, when it takes arguments.
+async fn workspace_dir_args(
+    ctx: &Context,
+    app: &dyn App,
+    settings: &Effective,
+    workspace: &Workspace,
+) -> Vec<OsString> {
     if app.takes_agent_args() {
-        super::agent_dir_args(settings, app.agent(), home)
+        super::workspace_dir_args(&ctx.paths, settings, app.agent(), workspace).await
+    } else {
+        Vec::new()
+    }
+}
+
+/// The arguments that give `app`'s agent the configured agent directories
+/// and `chat`'s temporary directory, when it takes arguments.
+fn chat_dir_args(app: &dyn App, settings: &Effective, home: &Path, chat: &Chat) -> Vec<OsString> {
+    if app.takes_agent_args() {
+        super::chat_dir_args(settings, app.agent(), home, chat)
     } else {
         Vec::new()
     }
@@ -287,7 +303,6 @@ pub(super) async fn start_chat(
         args,
     } = chat;
     super::ensure_available(name, settings)?;
-    let (prompt, args) = chat_input(app, settings, &ctx.paths.home, instructions, opening, args);
     if let Some(trust) = integration.trust_file() {
         trust
             .trust_checkout(ctx, repository, &Default::default())
@@ -296,6 +311,15 @@ pub(super) async fn start_chat(
     // This process holds the chat until the session runs, which is not in
     // this terminal.
     let record = client::start_chat(&ctx.paths, repository, chat_name, name, None, true).await?;
+    let (prompt, args) = chat_input(
+        app,
+        settings,
+        &ctx.paths.home,
+        &record,
+        instructions,
+        opening,
+        args,
+    );
     let files = ctx.paths.chat_files(&record);
     let session = Session {
         paths: &ctx.paths,
@@ -316,16 +340,18 @@ pub(super) async fn start_chat(
 /// The first message and arguments of a chat session: the instructions as
 /// arguments with the chat's `opening`, where the agent takes them apart,
 /// otherwise as the first message, which starts a turn before the user
-/// speaks. The agent directories come before the chat's own arguments.
+/// speaks. The agent directories and `chat`'s temporary directory come
+/// before the chat's own arguments.
 fn chat_input(
     app: &dyn App,
     settings: &Effective,
     home: &Path,
+    chat: &Chat,
     instructions: &str,
     opening: &Option<String>,
     args: &[OsString],
 ) -> (Option<String>, Vec<OsString>) {
-    let args = agent_dir_args(app, settings, home)
+    let args = chat_dir_args(app, settings, home, chat)
         .into_iter()
         .chain(args.to_vec());
     match instruction_args(app, settings, instructions) {

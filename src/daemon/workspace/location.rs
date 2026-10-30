@@ -88,6 +88,10 @@ impl Manager {
                         && !overlaps(
                             &path,
                             crate::caches::Layout::new(directory, &other.id).root(),
+                        )
+                        && !overlaps(
+                            &path,
+                            crate::tmp_dirs::Layout::new(directory, &other.id).root(),
                         ),
                     "workspace path overlaps a reserved repository directory"
                 );

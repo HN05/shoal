@@ -10,14 +10,39 @@ use anyhow::{Context as _, Result, ensure};
 use crate::cli::{
     context::Context,
     output::{Palette, Style},
+    usage,
 };
 
-pub(super) fn require_interactive(ctx: &Context) -> Result<()> {
-    ensure!(
-        ctx.interactive(),
-        "missing argument; pass an explicit target/name in non-interactive mode"
-    );
-    Ok(())
+/// Refuse to ask for `what` without a terminal, naming how the command line
+/// supplies it: `argument` is the ID or value name of the command's argument.
+pub fn require_argument(ctx: &Context, what: &str, argument: &str) -> Result<()> {
+    if ctx.interactive() {
+        return Ok(());
+    }
+    let option = usage::of(&ctx.command, argument);
+    Err(refusal(what, option.as_deref().unwrap_or("it explicitly")))
+}
+
+/// Refuse to ask what `prompt` asks without a terminal, when its caller
+/// names no argument that supplies it.
+pub(super) fn require_interactive(ctx: &Context, prompt: &str) -> Result<()> {
+    if ctx.interactive() {
+        return Ok(());
+    }
+    Err(refusal(&prompted_argument(prompt), "it explicitly"))
+}
+
+fn refusal(what: &str, option: &str) -> anyhow::Error {
+    anyhow::anyhow!("missing {what}; pass {option} in non-interactive mode")
+}
+
+/// What a prompt such as `Repository> ` asks for, as in `repository`.
+fn prompted_argument(prompt: &str) -> String {
+    let asked = prompt.trim_end_matches([' ', '>', ':']);
+    let mut chars = asked.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_lowercase().chain(chars).collect()
+    })
 }
 
 /// Ctrl-C must cancel a prompt even after the execution wrapper registered its
@@ -204,7 +229,7 @@ fn or_default(value: String, default: &str) -> String {
 
 /// Read a line, preserving blank input; EOF means cancellation.
 pub fn read_input(ctx: &Context, prompt: &str) -> Result<Option<String>> {
-    require_interactive(ctx)?;
+    require_interactive(ctx, prompt)?;
     eprint!(
         "{} ",
         Palette::stderr(ctx.json).paint(Style::Heading, format_args!("{prompt}:"))

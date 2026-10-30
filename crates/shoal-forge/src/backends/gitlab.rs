@@ -78,6 +78,7 @@ impl Backend for GitLab {
 
     fn support(&self, capability: Capability) -> Support {
         match capability {
+            Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ForkPrs => Support::Unsupported(Some(
                 "GitLab opens a fork's merge request in the fork project, so open it on GitLab",
             )),
@@ -137,6 +138,10 @@ impl Backend for GitLab {
 
     fn commit_field(&self) -> &'static str {
         "id"
+    }
+
+    fn pull_head_ref(&self, number: u64) -> Option<String> {
+        Some(format!("refs/merge-requests/{number}/head"))
     }
 
     fn login_hint(&self) -> &'static str {
@@ -218,6 +223,14 @@ impl Backend for GitLab {
             author: text(&value["author"]["username"]),
             head_sha: text(&value["sha"]),
             base_sha: None,
+            // A fast-forward merge leaves the source branch's head.
+            merge_commit: (state == ItemState::Merged)
+                .then(|| {
+                    text(&value["merge_commit_sha"])
+                        .or_else(|| text(&value["squash_commit_sha"]))
+                        .or_else(|| text(&value["sha"]))
+                })
+                .flatten(),
             conflict,
             merges_now: false,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),

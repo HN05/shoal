@@ -131,6 +131,8 @@ const REQUESTS: &[&str] = &[
     r#"{"watch_items":{"workspace":"fix","selection":{"kind":null,"input":"7"},"timeout_secs":null}}"#,
     r#"{"acknowledge_pr_updates":{"workspace":"fix","deliveries":["d1"],"messages":[3],"attached":true}}"#,
     r#"{"open_pull":{"workspace":"fix","options":{"title":null,"body":null,"base":null,"draft":true,"labels":[],"reviewers":[],"attachments":[]}}}"#,
+    r#"{"revert_pull":{"workspace":"fix","item":"42","options":{"title":null,"body":null,"base":null,"draft":null,"labels":[],"reviewers":[],"attachments":[]}}}"#,
+    r#"{"merged_pull":{"workspace":"fix","item":null}}"#,
     r#"{"open_issue":{"workspace":"fix","issue":{"title":"Bug","body":"","labels":[],"attachments":[]},"repository":null,"link":false}}"#,
     r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"close"}}}"#,
     r#"{"list_items":{"workspace":"fix","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","limit":30}}}"#,
