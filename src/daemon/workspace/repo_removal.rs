@@ -440,7 +440,8 @@ async fn delete_caches(repo: &Repository) -> Result<()> {
 /// The local config and the scripts beside it belong to the registration.
 /// Only a real directory in the recorded repository directory goes: the
 /// recorded path is canonical, so a symlink at it or above it, or at `.shoal`,
-/// may lead to files that are not the repository's.
+/// may lead to files that are not the repository's. A Git checkout there is
+/// never a local config.
 async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()> {
     let Some(directory) = directory else {
         return Ok(());
@@ -452,7 +453,8 @@ async fn delete_local_config(directory: Option<std::path::PathBuf>) -> Result<()
                 .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
         };
         let unredirected = fs::canonicalize(&directory).is_ok_and(|path| path == directory);
-        if !unredirected || !real(&local) {
+        let checkout = fs::symlink_metadata(local.join(".git")).is_ok();
+        if !unredirected || !real(&local) || checkout {
             return Ok(());
         }
         fs::remove_dir_all(&local).with_context(|| format!("delete {}", local.display()))

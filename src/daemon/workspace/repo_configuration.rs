@@ -118,20 +118,28 @@ impl Manager {
     }
 
     /// The local config file in the repository directory `directory`, unless
-    /// a checkout or worktree, recorded or not, lies where that file's
-    /// directory belongs: its tracked files are never local settings.
+    /// a checkout or worktree lies where that file's directory belongs.
     async fn local_config_outside_checkouts(&self, directory: &std::path::Path) -> Result<PathBuf> {
-        let local = directory.join(config::repo::LOCAL_DIR);
-        let within = local.clone();
-        self.store
-            .run(move |db| crate::daemon::store::ensure_no_checkout_within(db, &within))
-            .await?;
-        anyhow::ensure!(
-            std::fs::symlink_metadata(local.join(".git")).is_err(),
-            "{} is a Git checkout, where the local config belongs; move it to another directory",
-            local.display()
-        );
+        if let Some(occupant) = self.local_config_occupant(directory).await? {
+            anyhow::bail!(
+                "{} is a checkout where the local config belongs; register it in another directory",
+                occupant.display()
+            );
+        }
         Ok(config::repo::local_config_path(directory))
+    }
+
+    /// A checkout or worktree, recorded or not, that lies where the local
+    /// config of the repository directory `directory` belongs: its tracked
+    /// files are never local settings.
+    async fn local_config_occupant(&self, directory: &std::path::Path) -> Result<Option<PathBuf>> {
+        let local = directory.join(config::repo::LOCAL_DIR);
+        if std::fs::symlink_metadata(local.join(".git")).is_ok() {
+            return Ok(Some(local));
+        }
+        self.store
+            .run(move |db| crate::daemon::store::checkout_within(db, &local))
+            .await
     }
 
     async fn config_layers(
@@ -140,15 +148,14 @@ impl Manager {
         worktree_file: RepoConfig,
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
-        // A checkout registered where the local config belongs is tracked
-        // files, never local settings, and the settings it would hold, such
-        // as hooks, are not dropped silently.
+        // Registration and workspace creation keep checkouts out of the
+        // local config's directory, so one there predates the local config,
+        // which therefore has nothing to hold, and edits refuse.
         let local_config = match &repository.workspaces_dir {
-            Some(directory) => {
-                self.local_config_outside_checkouts(directory).await?;
+            Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
                 config::repo::load_local(directory)?
             }
-            None => RepoConfig::default(),
+            _ => RepoConfig::default(),
         };
         Ok(ConfigLayers {
             worktree_file,

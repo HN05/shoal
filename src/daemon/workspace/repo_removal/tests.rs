@@ -127,8 +127,15 @@ async fn the_local_config_goes_only_when_it_is_the_repositorys_own_directory() {
         .await
         .unwrap();
     assert!(target.join("repo/.shoal/config.toml").exists());
+    // A Git checkout there holds tracked files.
+    let canonical = std::fs::canonicalize(root.path()).unwrap();
+    let checkout = canonical.join("checkout");
+    std::fs::create_dir_all(checkout.join(".shoal")).unwrap();
+    std::fs::write(checkout.join(".shoal/.git"), "gitdir: elsewhere\n").unwrap();
+    delete_local_config(Some(checkout.clone())).await.unwrap();
+    assert!(checkout.join(".shoal/.git").exists());
 
-    let owned = std::fs::canonicalize(root.path()).unwrap().join("owned");
+    let owned = canonical.join("owned");
     std::fs::create_dir_all(owned.join(".shoal")).unwrap();
     std::fs::write(owned.join(".shoal/config.toml"), "").unwrap();
     delete_local_config(Some(owned.clone())).await.unwrap();
@@ -163,7 +170,7 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
         .await
         .unwrap_err();
     assert!(
-        format!("{error:#}").contains("is where the local config belongs"),
+        format!("{error:#}").contains("where the local config belongs"),
         "{error:#}"
     );
     let error = manager.remove_repository(&parent.id).await.unwrap_err();

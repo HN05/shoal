@@ -51,17 +51,28 @@ async fn a_workspace_recorded_where_the_local_config_belongs_is_never_local_conf
         .unwrap();
     let tracked = directory.join("config.toml");
     std::fs::write(&tracked, "agent.default = 'codex'\n").unwrap();
+    test_support::commit(&directory, "config.toml");
     let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
     let error = format!("{:#}", edit.unwrap_err());
-    assert!(
-        error.contains("is where the local config belongs"),
-        "{error}"
-    );
-    assert!(manager.repository_settings(&repo.id).await.is_err());
+    assert!(error.contains("where the local config belongs"), "{error}");
     assert_eq!(
         std::fs::read_to_string(&tracked).unwrap(),
         "agent.default = 'codex'\n"
     );
+    // Settings resolve without it, so the workspace and repository go as usual.
+    let settings = manager.repository_settings(&repo.id).await.unwrap();
+    let agent = settings.agent.default.as_ref().map(ToString::to_string);
+    assert_ne!(agent.as_deref(), Some("codex"));
+    manager
+        .remove_workspace(
+            &workspace.id,
+            crate::removal::UnsavedWork::default(),
+            crate::removal::InspectionPolicy::IncludeDirectoryProcesses,
+        )
+        .await
+        .unwrap();
+    assert!(!directory.exists());
+    manager.remove_repository(&repo.id).await.unwrap();
 }
 
 #[tokio::test]
@@ -79,6 +90,7 @@ async fn an_unrecorded_worktree_where_the_local_config_belongs_is_never_local_co
     );
     let edit = manager.edit_local_config(&repo.id, Vec::new()).await;
     let error = format!("{:#}", edit.unwrap_err());
-    assert!(error.contains("is a Git checkout"), "{error}");
+    assert!(error.contains("where the local config belongs"), "{error}");
     assert!(!directory.join("config.toml").exists());
+    manager.repository_settings(&repo.id).await.unwrap();
 }
