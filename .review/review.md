@@ -36,6 +36,9 @@ instead of the PR delivery guidance below.
   - Integrations such as agent tools, terminal hosts and apps implement callbacks
     for what they do differently; state, decisions and daemon calls stay in
     Shoal's generic code, which passes each callback only what it reads.
+- A chat gets every workspace feature that does not need a worktree or branch.
+  Flag a change that adds or extends such a feature for workspaces only, unless
+  its PR says why it cannot apply to chats.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
   every verified process carrying the workspace identity, and never signals a

@@ -25,6 +25,9 @@ when behavior changes, distinguishing decisions from proposals.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
   for what they do differently; state, decisions and daemon calls stay in
   Shoal's generic code, which passes each callback only what it reads.
+- A chat gets every workspace feature that does not need a worktree or branch.
+  A change that adds or extends such a feature implements it for chats too,
+  through the same code path, or its PR says why it cannot apply to them.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named
