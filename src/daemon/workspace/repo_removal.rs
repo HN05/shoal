@@ -367,12 +367,15 @@ impl Manager {
                 deleted.display()
             );
             for other in &other_repositories {
-                ensure!(
-                    other.id == repo.id || !other.path.starts_with(deleted),
-                    "{} contains another registered repository: {}",
-                    deleted.display(),
-                    other.path.display()
-                );
+                let owned = std::iter::once(&other.path).chain(other.workspaces_dir.as_ref());
+                for path in owned {
+                    ensure!(
+                        other.id == repo.id || !path.starts_with(deleted),
+                        "{} contains another registered repository: {}",
+                        deleted.display(),
+                        path.display()
+                    );
+                }
             }
             for other in &other_workspaces {
                 ensure!(

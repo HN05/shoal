@@ -158,3 +158,42 @@ async fn removal_refuses_a_repository_inside_its_local_config_directory() {
     );
     assert!(nested.exists());
 }
+
+#[tokio::test]
+async fn removal_refuses_a_checkout_holding_another_repositorys_directory() {
+    let (root, manager) = test_support::manager().await;
+    let checkout = test_support::repository(root.path(), "project");
+    let elsewhere = test_support::repository(root.path(), "elsewhere");
+    let other = manager
+        .register_repository(elsewhere.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // An earlier root_dir placed the other repository's directory here.
+    let reserved = std::fs::canonicalize(&checkout)
+        .unwrap()
+        .join(".shoal")
+        .join("elsewhere");
+    std::fs::create_dir_all(reserved.join(".shoal")).unwrap();
+    let (id, directory) = (other.id.clone(), reserved.clone());
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE repositories SET workspaces_dir=?2 WHERE id=?1",
+                rusqlite::params![id, directory.to_str()],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let project = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let error = manager.remove_repository(&project.id).await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("contains another registered repository"),
+        "{error:#}"
+    );
+    assert!(reserved.join(".shoal").exists());
+}
