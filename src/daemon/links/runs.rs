@@ -11,7 +11,6 @@ use crate::{
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
-        account::Account,
         capability::Capability,
         ci::{
             CiAction,
@@ -26,8 +25,6 @@ use crate::{
     protocol::ItemContext,
 };
 
-use self::place::workspace_context;
-
 impl Manager {
     /// Start `workflow`, named by its file or ID or by its web URL, on
     /// `branch`, by default the one the URL names, and link the run as
@@ -35,15 +32,13 @@ impl Manager {
     /// it. Workspace processes start runs only on their workspace's branch.
     pub async fn start_ci_run(
         &self,
-        selector: Option<&str>,
+        context: Option<&ItemContext>,
         workflow: Option<String>,
         branch: Option<String>,
         inputs: BTreeMap<String, String>,
         scoped: bool,
     ) -> Result<StartedRun> {
-        let (place, workflow, linked) = self
-            .workflow_place(workspace_context(selector).as_ref(), workflow, scoped)
-            .await?;
+        let (place, workflow, linked) = self.workflow_place(context, workflow, scoped).await?;
         let branch = place.run_branch(branch.or(linked)).await?;
         if scoped {
             on_own_branch_name(place.own_workspace(), &branch)?;
@@ -120,14 +115,12 @@ impl Manager {
     /// The run `input` names.
     pub async fn view_ci_run(
         &self,
-        selector: Option<&str>,
+        context: Option<&ItemContext>,
         input: String,
         scoped: bool,
     ) -> Result<Run> {
         validate_run_reference(&input)?;
-        let place = self
-            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
-            .await?;
+        let place = self.run_input_place(context, &input, scoped).await?;
         place
             .forge
             .view_run(&place.account, &input)
@@ -138,14 +131,12 @@ impl Manager {
     /// Every job of the run `input` names.
     pub async fn ci_run_jobs(
         &self,
-        selector: Option<&str>,
+        context: Option<&ItemContext>,
         input: String,
         scoped: bool,
     ) -> Result<Vec<RunJob>> {
         validate_run_reference(&input)?;
-        let place = self
-            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
-            .await?;
+        let place = self.run_input_place(context, &input, scoped).await?;
         place
             .forge
             .run_jobs(&place.account, &input)
@@ -156,15 +147,13 @@ impl Manager {
     /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
-        selector: Option<&str>,
+        context: Option<&ItemContext>,
         input: String,
         job: JobRef,
         scoped: bool,
     ) -> Result<CheckLog> {
         validate_run_reference(&input)?;
-        let place = self
-            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
-            .await?;
+        let place = self.run_input_place(context, &input, scoped).await?;
         place
             .forge
             .run_job_log(&place.account, &input, &job)
@@ -173,10 +162,11 @@ impl Manager {
     }
 
     /// The newest runs `filter` selects on the head commit of the PR `pr`
-    /// names, otherwise on the workspace's branch unless it names another.
+    /// names, otherwise on the branch it names, by default the workspace's
+    /// or, from a registered checkout, the repository's default branch.
     pub async fn list_ci_runs(
         &self,
-        selector: &str,
+        context: &ItemContext,
         pr: Option<String>,
         mut filter: RunFilter,
     ) -> Result<Vec<Run>> {
@@ -185,38 +175,25 @@ impl Manager {
             pr.is_none() || filter.branch.is_none(),
             "list the runs of a branch or of a PR, not both"
         );
-        let (workspace, forge, account) = self.run_forge(selector).await?;
+        let place = self.run_place(Some(context), None, false).await?;
+        let (forge, account) = (&place.forge, &place.account);
         // Refuse a forge without runs before reading the PR.
         forge.require(Capability::ReadRuns)?;
         match pr {
             Some(input) => {
                 let (_, url) = forge.pull(&input)?;
                 let head = forge
-                    .pull_head(&account, &url)
+                    .pull_head(account, &url)
                     .await
                     .with_context(|| format!("could not read the head of {url}"))?;
                 filter.commit = Some(head);
             }
-            None => {
-                filter.branch.get_or_insert(workspace.branch);
-            }
+            None => filter.branch = Some(place.run_branch(filter.branch.take()).await?),
         }
         forge
-            .list_runs(&account, &filter)
+            .list_runs(account, &filter)
             .await
             .context("could not list CI runs")
-    }
-
-    /// The verified workspace `selector` names, its forge and its agent
-    /// account.
-    pub(super) async fn run_forge(
-        &self,
-        selector: &str,
-    ) -> Result<(Workspace, ForgeRepo, Account)> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let (forge, account) = self.workspace_forge_account(&workspace).await?;
-        Ok((workspace, forge, account))
     }
 }
 

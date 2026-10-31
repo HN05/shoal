@@ -16,18 +16,18 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        CiMethod::CiRunJobs { workspace, run } => {
+        CiMethod::CiRunJobs { context, run } => {
             let listed = manager
-                .ci_run_jobs(workspace.as_deref(), run, caller.is_some())
+                .ci_run_jobs(context.as_ref(), run, caller.is_some())
                 .await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
         CiMethod::ListCiRuns {
-            workspace,
+            context,
             pr,
             filter,
         } => {
-            let listed = manager.list_ci_runs(&workspace, pr, filter).await;
+            let listed = manager.list_ci_runs(&context, pr, filter).await;
             return Ok(Answer::pages(listed, Body::CiRuns));
         }
         CiMethod::CheckLog {
@@ -54,34 +54,24 @@ pub(super) async fn handle(
         CiMethod::ApproveCiRuns { context, run, pr } => {
             Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr).await?)
         }
-        CiMethod::ViewCiRun { workspace, run } => Body::CiRun(
+        CiMethod::ViewCiRun { context, run } => Body::CiRun(
             manager
-                .view_ci_run(workspace.as_deref(), run, caller.is_some())
+                .view_ci_run(context.as_ref(), run, caller.is_some())
                 .await?,
         ),
-        CiMethod::CiRunJobLog {
-            workspace,
-            run,
-            job,
-        } => Body::CheckLog(
+        CiMethod::CiRunJobLog { context, run, job } => Body::CheckLog(
             manager
-                .ci_run_job_log(workspace.as_deref(), run, job, caller.is_some())
+                .ci_run_job_log(context.as_ref(), run, job, caller.is_some())
                 .await?,
         ),
         CiMethod::StartCiRun {
-            workspace,
+            context,
             workflow,
             branch,
             inputs,
         } => Body::CiRunStarted(
             manager
-                .start_ci_run(
-                    workspace.as_deref(),
-                    workflow,
-                    branch,
-                    inputs,
-                    caller.is_some(),
-                )
+                .start_ci_run(context.as_ref(), workflow, branch, inputs, caller.is_some())
                 .await?,
         ),
     }))
@@ -93,20 +83,20 @@ impl Scoped for CiMethod {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
             }
-            CiMethod::CiAction { context, .. } => Some(super::items::context_workspace(context)?),
+            CiMethod::CiAction { context, .. } | CiMethod::ListCiRuns { context, .. } => {
+                Some(super::items::context_workspace(context)?)
+            }
             // A workspace process acts from its own workspace, so only on
             // runs of its repository.
-            CiMethod::CiRunAction { context, .. } => {
+            CiMethod::CiRunAction { context, .. }
+            | CiMethod::ViewCiRun { context, .. }
+            | CiMethod::CiRunJobs { context, .. }
+            | CiMethod::CiRunJobLog { context, .. }
+            | CiMethod::StartCiRun { context, .. } => {
                 let context = context.get_or_insert_with(|| own_context(caller));
                 Some(super::items::context_workspace(context)?)
             }
-            CiMethod::CheckLog { workspace, .. } | CiMethod::ListCiRuns { workspace, .. } => {
-                Some(workspace)
-            }
-            CiMethod::ViewCiRun { workspace, .. }
-            | CiMethod::CiRunJobs { workspace, .. }
-            | CiMethod::CiRunJobLog { workspace, .. }
-            | CiMethod::StartCiRun { workspace, .. } => Some(caller.own_by_default(workspace)),
+            CiMethod::CheckLog { workspace, .. } => Some(workspace),
         })
     }
 }

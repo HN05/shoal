@@ -43,11 +43,7 @@ pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
             args.check.is_none(),
             "--check reads a PR's check; use --job for a run's"
         );
-        ensure!(
-            args.repo.name.is_none(),
-            "a CI run is read through a workspace; pass --workspace instead of --repo"
-        );
-        return super::ci::view(ctx, args.items, job, args.web).await;
+        return super::ci::view(ctx, args.items, args.repo.name, job, args.web).await;
     }
     ensure!(
         job.is_none(),
@@ -154,19 +150,15 @@ fn in_selection_order(
         .collect()
 }
 
-/// Each selected run with its jobs and failed jobs' logs, read through the
-/// workspace, or outside one by its URL.
+/// Each selected run with its jobs and failed jobs' logs, read in the
+/// context the items were selected in.
 async fn read_runs(ctx: &Context, context: &ItemContext, selected: &Selected) -> Vec<ShownRun> {
     let mut runs = Vec::new();
     for item in &selected.items {
         if item.kind != LinkKind::Ci {
             continue;
         }
-        let workspace = match context {
-            ItemContext::Workspace(workspace) => Some(workspace.as_str()),
-            ItemContext::Checkout(_) => None,
-        };
-        let read = ci::read_view(ctx, workspace, &item.url).await;
+        let read = ci::read_view(ctx, Some(context), &item.url).await;
         let read = read
             .map(RunRead::Read)
             .unwrap_or_else(|error| RunRead::Failed {

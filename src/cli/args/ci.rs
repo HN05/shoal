@@ -74,12 +74,15 @@ pub struct ListArgs {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
-    /// Branch whose runs to list; defaults to the workspace's branch.
+    /// Branch whose runs to list; defaults to the workspace's branch, or
+    /// outside a workspace the repository's default branch.
     #[arg(long)]
     pub branch: Option<String>,
     /// List the runs on this PR's head commit, by number or URL.
     #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "branch", value_parser = item_reference)]
     pub pr: Option<String>,
+    #[command(flatten)]
+    pub repo: crate::cli::args::changes::RegisteredRepo,
     /// List only this workflow file's runs; GitLab has none.
     #[arg(long)]
     pub workflow: Option<String>,
@@ -102,9 +105,11 @@ pub struct RunArgs {
     pub workspace: Option<String>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,
     /// then the workspace's, the only one workspace processes may run on, or
-    /// in another repository its default branch.
+    /// else the repository's default branch.
     #[arg(long)]
     pub branch: Option<String>,
+    #[command(flatten)]
+    pub repo: crate::cli::args::changes::RegisteredRepo,
     /// Pass a workflow input; repeat for more.
     #[arg(long = "input", value_name = "NAME=VALUE", value_parser = workflow_input)]
     pub inputs: Vec<(String, String)>,

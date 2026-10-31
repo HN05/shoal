@@ -3132,7 +3132,10 @@ shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
-`--branch` names, with each repeated `--input NAME=VALUE`. It also takes a
+`--branch` names, with each repeated `--input NAME=VALUE`. Every `ci` command
+also runs outside a workspace as [issue and PR actions](#issue-and-pr-actions)
+do, from a registered checkout or with `--repo`, where `ci run` and `ci list`
+take the repository's default branch. It also takes a
 workflow's web URL: its page, GitHub's `…/actions/workflows/<file>` or
 Forgejo's `…/actions?workflow=<file>`, or the URL of its file on a branch,
 `…/blob/<branch>/.github/workflows/<file>` or
@@ -3176,9 +3179,8 @@ every such CI job, leaving other providers' checks alone, or each repeated
 `--check` by the name `shoal view` shows, which must be a CI job in that state.
 The daemon uses the forge's job API as the agent account and records an
 `item_changed` event once a request succeeds; a failed request stops the rest.
-`rerun`, `cancel` and `approve` act outside a workspace as
-[issue and PR actions](#issue-and-pr-actions) do, from a registered checkout or
-with `--repo`, recording no event there and needing a run or `--pr`.
+Outside a workspace, `rerun`, `cancel` and `approve` record no event and need
+a run or `--pr`.
 GitHub reruns a failed Actions job, or every failed job of a run when several of
 its jobs are selected, because a rerun starts a new attempt of the run, refuses
 a rerun while another job of the run is still running, and cancels the job's

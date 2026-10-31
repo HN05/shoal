@@ -30,20 +30,15 @@ pub(in crate::daemon::links) struct RunPlace {
     pub own: bool,
 }
 
-/// The workspace `selector` names, if any, as the context of a request.
-pub(in crate::daemon::links) fn workspace_context(selector: Option<&str>) -> Option<ItemContext> {
-    selector.map(|selector| ItemContext::Workspace(selector.to_owned()))
-}
-
 impl RunPlace {
     /// The workspace whose own repository the request acts in.
     pub fn own_workspace(&self) -> Option<&Workspace> {
         self.workspace.as_ref().filter(|_| self.own)
     }
 
-    /// The branch a run starts on: the `named` one, otherwise the
-    /// workspace's in its own repository, or else the repository's default
-    /// branch.
+    /// The branch a run starts on or is listed on: the `named` one,
+    /// otherwise the workspace's in its own repository, or else the
+    /// repository's default branch.
     pub async fn run_branch(&self, named: Option<String>) -> Result<String> {
         if let Some(branch) = named {
             return Ok(branch);

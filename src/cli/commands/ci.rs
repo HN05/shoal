@@ -8,12 +8,17 @@ use anyhow::Result;
 
 pub(super) use self::read::{read_view, render_run, view};
 use crate::{
-    cli::{args::ci::CiCommand, context::Context, ui},
+    cli::{
+        args::ci::CiCommand,
+        commands::items::{current_context, select_item_context},
+        context::Context,
+    },
     forge::{
         ForgeRepo, IssueInput,
         capability::Capability,
         ci::{CiAction, run_view::RunFilter},
     },
+    protocol::ItemContext,
 };
 
 pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
@@ -25,7 +30,7 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
                 commit: None,
                 limit: args.limit,
             };
-            read::list(ctx, args.workspace, args.pr, filter).await
+            read::list(ctx, args.workspace, args.repo.name, args.pr, filter).await
         }
         CiCommand::Run(args) => act::start(ctx, args).await,
         CiCommand::Rerun { target, failed } => act::act(ctx, target, CiAction::Rerun, failed).await,
@@ -34,23 +39,21 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
     }
 }
 
-/// The workspace a request about the run or workflow `input` names comes
-/// from: the named or current one, which a run number needs, or otherwise
-/// none for a URL outside a workspace.
-async fn input_workspace(
+/// Where a request about the run or workflow `input` names runs: the named
+/// workspace or the registered repository `repo` names, else the current
+/// workspace or checkout, which a run number or workflow name needs, so they
+/// fall back to the picker; a URL names its repository and needs neither.
+async fn input_context(
     ctx: &Context,
     workspace: Option<String>,
-    input: &str,
-) -> Result<Option<String>> {
-    if workspace.is_some() || IssueInput::parse(input) != IssueInput::Url {
-        let fallback = ui::Fallback::CurrentDirectory;
-        return Ok(Some(ui::select_workspace(ctx, workspace, fallback).await?));
+    repo: Option<String>,
+    input: Option<&str>,
+) -> Result<Option<ItemContext>> {
+    let url = input.is_some_and(|input| IssueInput::parse(input) == IssueInput::Url);
+    if workspace.is_none() && repo.is_none() && url {
+        return current_context(ctx).await;
     }
-    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
-        Ok(workspace) => Ok(Some(workspace)),
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => Ok(None),
-        Err(error) => Err(error),
-    }
+    Ok(Some(select_item_context(ctx, workspace, repo, None).await?))
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR

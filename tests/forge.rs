@@ -3702,6 +3702,60 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
 }
 
 #[test]
+fn ci_runs_are_started_viewed_and_listed_from_a_registered_checkout() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
+    let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "main",
+        "workflow_id": "deps.yml", "status": "success"});
+    fixture.respond(json!({
+        "GET repos/team/project": {"body": {"default_branch": "main"}},
+        dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765}},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [run]}},
+        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+            {"id": 18344, "name": "build", "run_id": 9331, "status": "success"}
+        ]},
+        "GET repos/team/project/actions/runs?limit=10&page=1&ref=refs%2Fheads%2Fmain":
+            {"body": {"workflow_runs": [run], "total_count": 1}},
+    }));
+    let in_checkout = |args: &[&str]| {
+        let output = (fixture.command().current_dir(&fixture.repo))
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let url = format!("{}/actions/runs/2765", fixture.web);
+
+    // A chat's checkout has no workspace branch, so runs start and are
+    // listed on the repository's default branch, and none is linked.
+    let started = in_checkout(&["ci", "run", "deps.yml"]);
+    assert_eq!(
+        started,
+        json!({"workflow": "deps.yml", "branch": "main", "url": url}),
+        "{started}"
+    );
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "main", "inputs": {}, "return_run_info": true}])]
+    );
+    let view = in_checkout(&["view", "ci", "2765"]);
+    assert_eq!(
+        (&view["url"], &view["state"]),
+        (&json!(url), &json!("finished"))
+    );
+    let runs = in_checkout(&["ci", "list"]);
+    assert_eq!(runs[0]["url"], url, "{runs}");
+    // --repo names the registered repository from anywhere.
+    let repo = fixture.repo.to_str().unwrap();
+    let runs = fixture.ok(&["ci", "list", "--repo", repo]);
+    assert_eq!(runs[0]["url"], url, "{runs}");
+    let view = fixture.ok(&["view", "ci", "2765", "--repo", repo]);
+    assert_eq!(view["url"], url, "{view}");
+}
+
+#[test]
 fn forgejo_ci_runs_link_the_run_they_start() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
