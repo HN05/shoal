@@ -4118,6 +4118,8 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
         json!({"link_item": {"workspace": "topic", "kind": "ci", "url": other,
             "relation": "related"}}),
+        json!({"watch_items": {"workspace": "topic", "selection": {"kind": "ci",
+            "input": other}, "timeout_secs": 1}}),
     ] {
         let refused = fixture.request_as(method.clone(), Some(scope));
         assert!(

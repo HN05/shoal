@@ -165,9 +165,19 @@ pub(super) async fn handle(
 }
 
 impl Scoped for ItemMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             ItemMethod::ForgeType { .. } => None,
+            ItemMethod::WatchItems {
+                workspace,
+                selection,
+                ..
+            } => {
+                manager
+                    .ensure_own_repository_run(workspace, selection)
+                    .await?;
+                Some(workspace)
+            }
             ItemMethod::ItemAction {
                 action: Action::Merge { .. } | Action::AutoMerge { .. } | Action::CancelAutoMerge,
                 ..
@@ -207,7 +217,6 @@ impl Scoped for ItemMethod {
             | ItemMethod::UnlinkItems { workspace, .. }
             | ItemMethod::SetPr { workspace, .. }
             | ItemMethod::PrWait { workspace, .. }
-            | ItemMethod::WatchItems { workspace, .. }
             | ItemMethod::OpenPull { workspace, .. }
             | ItemMethod::RevertPull { workspace, .. }
             | ItemMethod::MergedPull { workspace, .. }
