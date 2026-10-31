@@ -5360,79 +5360,6 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
 }
 
 #[test]
-fn local_repository_setup_points_its_agent_at_the_local_config() {
-    for interactive in [false, true] {
-        let fixture = Fixture::new();
-        let repo = fixture.repo.to_str().unwrap();
-        let bin = fixture.root.path().join("bin");
-        let recorded = fixture.root.path().join("agent-args");
-        install_test_script_with_mode(
-            bin.join("claude"),
-            format!(
-                "#!/bin/sh\nprintf '%s\\0' \"$@\" > '{}'\n",
-                recorded.display()
-            ),
-            0o700,
-        );
-        let output = if interactive {
-            // The second choice saves the config locally.
-            let (output, rows) =
-                fixture.pick(&["repo", "setup", repo, "--agent", "claude"], "1", "");
-            assert!(
-                rows.contains("Commit to repository") && rows.contains("Save locally"),
-                "{rows}"
-            );
-            output
-        } else {
-            fixture
-                .command()
-                .args(["repo", "setup", repo, "--local", "--agent", "claude"])
-                .env("PATH", fixture.restricted_path(&bin))
-                .output()
-                .unwrap()
-        };
-        assert!(output.status.success(), "{output:?}");
-        assert_local_setup(&fixture, &fs::read_to_string(&recorded).unwrap());
-    }
-}
-
-/// The local setup's agent, which recorded `args`, works in its own
-/// workspace and may write the local config's directory, which lies in the
-/// repository directory it is given, and the checkout stays as it was.
-fn assert_local_setup(fixture: &Fixture, args: &str) {
-    let args: Vec<_> = args.split('\0').filter(|arg| !arg.is_empty()).collect();
-    let local_config = PathBuf::from(
-        fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])["path"]
-            .as_str()
-            .unwrap(),
-    );
-    let workspaces = fixture.ok(&["work"]);
-    let workspace = workspaces
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|workspace| workspace["branch"] == "shoal-setup-local")
-        .unwrap_or_else(|| panic!("no local setup workspace in {workspaces}"));
-    let directory = fs::canonicalize(local_config.parent().unwrap().parent().unwrap()).unwrap();
-    let add_dir = format!("--add-dir={}", directory.display());
-    assert!(args.contains(&add_dir.as_str()), "{args:?}");
-    let prompt = args.last().unwrap();
-    assert!(
-        prompt.contains(&format!("`{}`", local_config.display())),
-        "{prompt}"
-    );
-    assert!(prompt.contains("commit nothing"), "{prompt}");
-    assert!(
-        prompt.contains(&format!("branch {}", workspace["branch"].as_str().unwrap())),
-        "{prompt}"
-    );
-    let branches = git(&fixture.repo, &["branch", "--list", "shoal-setup"]);
-    assert!(branches.trim().is_empty(), "{branches}");
-    let status = git(&fixture.repo, &["status", "--porcelain"]);
-    assert!(status.trim().is_empty(), "{status}");
-}
-
-#[test]
 fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prompt() {
     let fixture = Fixture::new();
     // Every agent gets the configured agent directories.
@@ -25141,6 +25068,81 @@ fn chat_agents_without_an_instructions_template_get_them_as_their_first_message(
     assert_eq!(args[1], "--fast");
     // A launcher with `{prompt}` takes it there.
     assert_eq!(chat("opencode"), ["--prompt", &args[0], "--fast"]);
+}
+
+#[test]
+fn local_repository_setup_saves_the_config_from_a_chat_in_the_checkout() {
+    for picked in [false, true] {
+        let fixture = Fixture::new();
+        install_recording_agent(&fixture, "claude");
+        let repo = fixture.repo.to_str().unwrap();
+        let branches = git(&fixture.repo, &["branch", "--list"]);
+        let (output, transcript) = if picked {
+            // The second choice saves the config locally.
+            let (output, rows) =
+                fixture.pick(&["repo", "setup", repo, "--agent", "claude"], "1", "");
+            assert!(
+                rows.contains("Commit to repository") && rows.contains("Save locally"),
+                "{rows}"
+            );
+            (output, String::new())
+        } else {
+            fixture.interactive_command(
+                fixture.command().args([
+                    "repo", "setup", repo, "--local", "--agent", "claude", "--here",
+                ]),
+                "",
+            )
+        };
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+
+        // The agent runs as a chat in the checkout and may write the local
+        // config's directory, which exists.
+        let checkout = fs::canonicalize(&fixture.repo).unwrap();
+        assert_eq!(
+            fs::read_to_string(fixture.root.path().join("chat-cwd")).unwrap(),
+            format!("{}\n", checkout.display())
+        );
+        let local_config = PathBuf::from(
+            fixture.ok(&["repo", "config", repo])["path"]
+                .as_str()
+                .unwrap(),
+        );
+        let directory = fs::canonicalize(local_config.parent().unwrap()).unwrap();
+        let args = chat_args(&fixture);
+        assert!(
+            args.contains(&format!("--add-dir={}", directory.display())),
+            "{args:?}"
+        );
+        let prompt = args.last().unwrap();
+        for expected in [
+            format!("`{}`", directory.join("config.toml").display()),
+            "commit nothing".to_owned(),
+            "shoal config show --repo".to_owned(),
+        ] {
+            assert!(prompt.contains(&expected), "{expected:?} in {prompt}");
+        }
+
+        // Nothing opens a workspace or touches the checkout's Git tree.
+        assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+        assert_eq!(git(&fixture.repo, &["branch", "--list"]), branches);
+        let status = git(&fixture.repo, &["status", "--porcelain"]);
+        assert!(status.trim().is_empty(), "{status}");
+    }
+}
+
+#[test]
+fn repository_setup_refuses_named_arguments_before_asking_where_the_config_goes() {
+    let fixture = Fixture::new();
+    let repo = fixture.repo.to_str().unwrap();
+    for args in [
+        &["repo", "setup", "missing-repository"][..],
+        &["repo", "setup", repo, "--agent", "missing-agent"],
+    ] {
+        let (output, rows) = fixture.pick(args, "1", "");
+        assert!(!output.status.success(), "{args:?}: {output:?}");
+        assert!(rows.is_empty(), "{args:?} opened the picker: {rows}");
+    }
 }
 
 #[test]

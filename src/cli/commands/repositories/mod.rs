@@ -27,9 +27,19 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Setup {
             repository,
             local,
+            here,
+            name,
             agent,
             args,
-        } => super::repo_setup::start(ctx, repository, local, agent, args).await,
+        } => {
+            let options = super::chat::Options {
+                agent,
+                here,
+                name,
+                args,
+            };
+            super::repo_setup::start(ctx, repository, local, options).await
+        }
         RepoCommand::Rm {
             repository,
             confirmation,

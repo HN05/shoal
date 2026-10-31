@@ -234,7 +234,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         tmp_dir: Some(cache.join("chat-id")),
     };
     assert_eq!(
-        chat_dir_args(&defaults, "codex", home.path(), &chat),
+        chat_dir_args(&defaults, "codex", home.path(), &chat, &[]),
         [
             OsString::from("--add-dir"),
             tmp.into(),

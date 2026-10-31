@@ -1179,7 +1179,8 @@ otherwise keeps the forked session's directory.
 `blockReadsOutsideWorkingDirectories` lets it work there: each `agent.dirs`
 entry for every agent and chat, for a workspace's agent the repository's
 workspaces directory, where `shoal split` puts children and its [temporary
-directory](#temporary-directories) lies, and for a chat its temporary directory. An empty list gives none.
+directory](#temporary-directories) lies, and for a chat its temporary directory, plus the
+repository's local config directory for the chat of a local `repo setup`. An empty list gives none.
 `agent.dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an
@@ -1911,25 +1912,30 @@ precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
-`repo setup [repository] [--local] [--agent NAME] [-- ARGS]` starts an agent that
-writes the repository's config: setup, named ports, commands and resource pools,
-checked with `config show` and `work setup`. On a terminal without `--local`, it
-first asks whether to commit the config to the repository or save it locally;
-other callers commit it.
+`repo setup [repository] [--local [--here] [--name NAME]] [--agent NAME] [-- ARGS]`
+starts an agent that writes the repository's config: setup, named ports, commands
+and resource pools. On a terminal without `--local`, it first asks whether to
+commit the config to the repository or save it locally; other callers commit it.
+A repository or agent named on the command line that cannot be used is refused
+before that question.
 
-- **Commit to repository** writes `.shoal.toml` and commits it with the scripts
-  it runs, in the repository's `shoal-setup` workspace.
-- **Save locally** (`--local`) writes the repository's
+- **Commit to repository** writes `.shoal.toml`, checks it with `config show`
+  and `work setup`, and commits it with the scripts it runs, in the repository's
+  `shoal-setup` workspace, which Shoal opens on that branch when none exists.
+- **Save locally** (`--local`) starts a [chat](#chats) named `<repo>-setup` in
+  the registered checkout instead, which `--here` and `--name` place and name
+  as for `chat`. It writes the repository's
   [local config](#store-repository-config-outside-git) and the scripts it runs
-  beside it, named by paths relative to that directory, and commits nothing, in
-  the repository's `shoal-setup-local` workspace. The config applies to every
-  workspace as soon as the agent saves it, and the agent ends by telling you to
-  check it with `config show --repo NAME`. The repository directory that holds
-  the file is already one of the agent's working directories.
+  beside it, named by paths relative to that directory, and leaves the
+  checkout's files and branches unchanged. The chat gets that `.shoal`
+  directory, created when missing, as another working directory. The config
+  applies to every workspace as soon as it is saved; the agent checks it with
+  `config show --repo NAME`, tries the setup script in a temporary
+  `shoal-setup-trial` workspace that it then removes, and ends by telling you to
+  check the config with `config show --repo NAME`.
 
-Either way, Shoal opens a workspace on that branch when none exists. The agent
-is `--agent`, else `agent.default`, else one chosen from the agent picker;
-arguments after `--` go to the agent.
+The agent is `--agent`, else `agent.default`, else one chosen from the agent
+picker; arguments after `--` go to the agent.
 
 ### Contributions
 

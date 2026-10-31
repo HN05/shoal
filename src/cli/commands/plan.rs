@@ -103,6 +103,7 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
         name: format!("{}-plan-{}", crate::repository::name(repo), issue.number),
         asks_name: false,
         opening: Some(prompt(issue, labels)),
+        directories: Vec::new(),
     }
 }
 

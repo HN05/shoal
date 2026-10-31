@@ -5,6 +5,7 @@
 use std::{
     ffi::{OsStr, OsString},
     os::unix::process::CommandExt,
+    path::PathBuf,
 };
 
 use anyhow::{Context as _, Result, ensure};
@@ -75,6 +76,8 @@ pub(super) struct Topic {
     pub asks_name: bool,
     /// The task the agent starts on, or `None` to wait for the user.
     pub opening: Option<String>,
+    /// Other working directories the task needs, beside the chat's own.
+    pub directories: Vec<PathBuf>,
 }
 
 impl Topic {
@@ -84,6 +87,7 @@ impl Topic {
             name: format!("{}-chat", repository::name(repo)),
             asks_name: true,
             opening: None,
+            directories: Vec::new(),
         }
     }
 }
@@ -129,6 +133,7 @@ pub(super) async fn begin(
         name,
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
+        directories: topic.directories.clone(),
         repository: repo,
         settings,
         args,
@@ -143,6 +148,7 @@ pub(super) async fn begin(
         settings,
         instructions,
         opening,
+        directories,
         args,
     } = launch;
     let name = if asks_name {
@@ -165,7 +171,13 @@ pub(super) async fn begin(
     .await?;
     let command = command(
         &settings,
-        agents::chat_dir_args(&settings, agent.name(), &ctx.paths.home, &chat),
+        agents::chat_dir_args(
+            &settings,
+            agent.name(),
+            &ctx.paths.home,
+            &chat,
+            &directories,
+        ),
         &repo,
         &agent,
         instructions,

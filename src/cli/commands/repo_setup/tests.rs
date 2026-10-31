@@ -1,12 +1,12 @@
-use std::path::PathBuf;
+use std::path::Path;
 
-use super::{Destination, prompt};
+use super::{commit, local};
 
 #[test]
 fn committed_setup_keeps_its_branch_and_instructions() {
-    assert_eq!(Destination::Commit.branch(), "shoal-setup");
+    assert_eq!(commit::BRANCH, "shoal-setup");
     assert_eq!(
-        prompt("app", "shoal-setup", &Destination::Commit),
+        commit::prompt("app", "shoal-setup"),
         "Set up Shoal for the app repository; this workspace is on branch shoal-setup. \
          Shoal gives each task its own worktree, and the repository config prepares \
          those worktrees and coordinates what tasks share. Study how the project is \
@@ -23,17 +23,17 @@ fn committed_setup_keeps_its_branch_and_instructions() {
 }
 
 #[test]
-fn local_setup_writes_the_local_config_and_its_scripts_without_committing() {
-    let destination = Destination::Local(PathBuf::from("/shoal/app/.shoal/config.toml"));
-    assert_eq!(destination.branch(), "shoal-setup-local");
-    let prompt = prompt("app", "shoal-setup-local", &destination);
+fn local_setup_saves_the_local_config_and_its_scripts_without_committing() {
+    let prompt = local::prompt("app", Path::new("/shoal/app/.shoal/config.toml"));
     for expected in [
-        "this workspace is on branch shoal-setup-local",
+        "this chat runs in its registered checkout",
         "create or update its local config, `/shoal/app/.shoal/config.toml`,",
         "Save the scripts the config runs in `/shoal/app/.shoal` beside it",
         "paths relative to that directory",
         "commit nothing",
-        "tell the user to check it with `shoal config show --repo app`.",
+        "`shoal add app shoal-setup-trial`",
+        "`shoal rm <workspace> -y`",
+        "tell the user to check the config with `shoal config show --repo app`.",
     ] {
         assert!(
             prompt.contains(expected),

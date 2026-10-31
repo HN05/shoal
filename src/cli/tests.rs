@@ -261,6 +261,8 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
             command: Some(RepoCommand::Setup {
                 repository: Some(repository),
                 local: false,
+                here: false,
+                name: None,
                 agent: Some(agent),
                 args,
             })
@@ -269,14 +271,23 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
 }
 
 #[test]
-fn local_repository_setup_is_a_flag() {
-    let cli = Cli::try_parse_from(["shoal", "repo", "setup", "project", "--local"]).unwrap();
+fn local_repository_setup_names_its_chat() {
+    let cli = Cli::try_parse_from([
+        "shoal", "repo", "setup", "project", "--local", "--here", "--name", "talk",
+    ])
+    .unwrap();
     assert!(matches!(
         cli.command,
         Some(Command::Repository(RepositoryCommand::Repo {
-            command: Some(RepoCommand::Setup { local: true, .. })
-        }))
+            command: Some(RepoCommand::Setup { local: true, here: true, name: Some(name), .. })
+        })) if name == "talk"
     ));
+    // Only the local setup runs a chat.
+    for flag in [&["--here"][..], &["--name", "talk"]] {
+        let mut args = vec!["shoal", "repo", "setup", "project"];
+        args.extend(flag);
+        assert!(Cli::try_parse_from(args).is_err(), "{flag:?}");
+    }
 }
 
 #[test]

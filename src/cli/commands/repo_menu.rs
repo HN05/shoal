@@ -72,6 +72,8 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
         RepoMenuAction::Setup => repo(RepoCommand::Setup {
             repository: Some(picked.id),
             local: false,
+            here: false,
+            name: None,
             agent: None,
             args: vec![],
         }),

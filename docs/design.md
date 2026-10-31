@@ -1139,10 +1139,12 @@ likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write 
 tracked repository config, so it arrives as a reviewable commit that every clone
 shares. For a repository that won't take that file, or settings for one user,
 `--local` or the interactive “Save locally” choice has the agent write the local
-config and its scripts in the repository directory's `.shoal/` instead, from a
-workspace on `shoal-setup-local` it commits nothing on; the repository directory
-is already one of every workspace agent's working directories, so no extra one
-is needed, and the result applies as soon as it is saved. Review tools own review storage, exports, and forge authentication, with
+config and its scripts in the repository directory's `.shoal/` instead. Nothing
+then needs a branch, so the agent runs as a chat in the registered checkout,
+with the user's authority, given that directory as another working directory;
+the result applies as soon as it is saved, and the agent tries the setup script
+in a temporary workspace it removes again. Explicit arguments are checked
+before the interactive choice. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
 AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
@@ -1199,7 +1201,8 @@ configured `agent.dirs`, `/tmp` by default, as working directories, so it reads 
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
 splits there without leaving its sandbox or permission rules; chats split nothing
-and get only their temporary directory. Both trust the repository's checkout,
+and get only their temporary directory, plus the local config directory when a
+chat sets up local config. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, in their user config before
 launch, creating the file if needed; Happy
