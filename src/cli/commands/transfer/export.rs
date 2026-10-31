@@ -178,8 +178,8 @@ impl Output {
 
 /// Export the removed workspace `selector` names, which needs no removal.
 async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Result<ExportedSpace> {
-    let method = RemovalMethod::ExportWorkspace {
-        workspace: selector.to_owned(),
+    let method = RemovalMethod::ExportSpace {
+        space: selector.to_owned(),
         unsaved: UnsavedWork::default(),
         file: output.file(),
     };
@@ -213,8 +213,8 @@ async fn export_checked(
     check: &RemovalCheck,
     output: &Output,
 ) -> Result<ExportedSpace> {
-    let method = RemovalMethod::ExportWorkspace {
-        workspace: check.workspace.id.clone(),
+    let method = RemovalMethod::ExportSpace {
+        space: check.workspace.id.clone(),
         unsaved: UnsavedWork::confirming(check),
         file: output.file(),
     };

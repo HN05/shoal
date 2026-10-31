@@ -195,6 +195,16 @@ pub async fn export(
     Ok((manifest, warnings))
 }
 
+impl Source {
+    /// The repository the space belongs to.
+    pub fn repository_id(&self) -> &str {
+        match self {
+            Self::Workspace(removed) => &removed.repository_id,
+            Self::Chat(chat) => &chat.repository_id,
+        }
+    }
+}
+
 /// A session file opened for the export, with its size now; its agent has
 /// stopped, so it no longer grows.
 type OpenedSessionFile = (SessionFile, std::fs::File);

@@ -69,7 +69,7 @@ async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
     let directory = tempfile::tempdir().unwrap();
     let file = directory.path().join("workspace.shoal");
     let exported = manager
-        .export_workspace(
+        .export_space(
             workspace,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -80,7 +80,7 @@ async fn export_removed(manager: &Manager, workspace: &str) -> Vec<u8> {
     assert!(exported.removal.is_some());
     // The daemon writes new files only.
     let error = manager
-        .export_workspace(
+        .export_space(
             workspace,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,
@@ -259,7 +259,7 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
     fs::write(&blocked, "").unwrap();
 
     let error = exporting
-        .export_workspace(
+        .export_space(
             &workspace.id,
             UnsavedWork::All,
             InspectionPolicy::GitOnly,

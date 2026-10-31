@@ -174,6 +174,19 @@ impl Manager {
             .find(|chat| chat.id == selector || chat.name == selector))
     }
 
+    /// End the running chat `id`: stop the process it lasts while, then end
+    /// its record as when that process exits.
+    pub(crate) async fn end_chat(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        let process = self
+            .store
+            .run(move |db| recorded_process(db, &id))
+            .await?
+            .context("the chat has ended")?;
+        identity::stop_verified(std::slice::from_ref(&process)).await?;
+        self.end_finished_chats().await
+    }
+
     /// End chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
         let ended = finished(self.store.run(recorded_processes).await?);
@@ -411,6 +424,19 @@ fn running(db: &Connection) -> Result<Vec<Chat>> {
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// The process the chat `id` lasts while, unless it has ended.
+fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
+    Ok(db
+        .query_row("SELECT pid,birth FROM chats WHERE id=?1", [id], |row| {
+            Ok(Identity {
+                pid: row.get(0)?,
+                birth: row.get(1)?,
+                unique: None,
+            })
+        })
+        .optional()?)
 }
 
 fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {

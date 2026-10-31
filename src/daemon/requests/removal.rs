@@ -63,13 +63,13 @@ pub(super) async fn handle(
         RemovalMethod::RestoreWorkspace { workspace } => {
             Body::RestoredWorkspace(manager.restore_workspace(&workspace).await?)
         }
-        RemovalMethod::ExportWorkspace {
-            workspace,
+        RemovalMethod::ExportSpace {
+            space,
             unsaved,
             file,
         } => Body::ExportedSpace(
             manager
-                .export_workspace(&workspace, unsaved, InspectionPolicy::GitOnly, file)
+                .export_space(&space, unsaved, InspectionPolicy::GitOnly, file)
                 .await?,
         ),
         RemovalMethod::ImportWorkspace {

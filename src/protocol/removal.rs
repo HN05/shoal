@@ -33,10 +33,11 @@ pub enum RemovalMethod {
     RemovedWorkspaces,
     /// Open a removed workspace again from its removal record.
     RestoreWorkspace { workspace: String },
-    /// Remove a workspace, or take a removed one, and write it for another
-    /// Shoal to the new file `file`.
-    ExportWorkspace {
-        workspace: String,
+    /// End a space here, removing a workspace or stopping a chat's agent,
+    /// or take a removed workspace, and write it for another Shoal to the
+    /// new file `file`.
+    ExportSpace {
+        space: String,
         unsaved: UnsavedWork,
         file: std::path::PathBuf,
     },

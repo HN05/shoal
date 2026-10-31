@@ -8,16 +8,13 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
-    config::Effective,
     daemon::events::EventCause,
     git,
     model::{
         CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, Workspace,
         WorkspaceLinks,
     },
-    removal::{InspectionPolicy, UnsavedWork},
     time::unix_seconds,
-    transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
 impl Manager {
@@ -155,110 +152,6 @@ impl Manager {
             removed,
             warnings,
         })
-    }
-
-    /// Write a workspace for another Shoal to the new file `file`: remove it
-    /// first when it exists, otherwise export the latest removal record with
-    /// that name or ID. The daemon writes the file, so closing the caller's
-    /// terminal with the workspace cannot cut the export short; it checks that
-    /// it can before removing anything, since its file access can differ from
-    /// the caller's.
-    pub async fn export_workspace(
-        &self,
-        selector: &str,
-        unsaved: UnsavedWork,
-        inspection: InspectionPolicy,
-        file: std::path::PathBuf,
-    ) -> Result<ExportedSpace> {
-        crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
-        let (removal, settings) = match self.workspace(selector).await {
-            Ok(workspace) => {
-                // Its own config may describe its agents, and goes with it.
-                let settings = self.workspace_settings(&workspace).await;
-                let removal = self
-                    .remove_workspace(&workspace.id, unsaved, inspection)
-                    .await?;
-                (Some((workspace.id.clone(), removal)), Some(settings))
-            }
-            Err(_) => (None, None),
-        };
-        let removed = self
-            .removed_workspaces()
-            .await?
-            .into_iter()
-            .find(|removed| match &removal {
-                Some((id, _)) => &removed.workspace_id == id,
-                None => removed.workspace_id == selector || removed.name == selector,
-            })
-            .with_context(|| format!("no workspace or restorable workspace {selector}"))?;
-        ensure!(
-            !removed.checkpoint.files_omitted,
-            "the removal could not keep the uncommitted files; shoal work restore {} opens the workspace here again",
-            removed.name
-        );
-        let repo = self.repository(&removed.repository_id).await?;
-        let settings = match settings {
-            Some(settings) => settings,
-            None => self.repository_settings(&repo.id).await,
-        };
-        let manifest = Manifest::of(&repo, Source::Workspace(removed)).await?;
-        let (sessions, mut warnings) = self.session_sources(&repo, settings, &manifest).await;
-        let (manifest, left_out) = crate::transfer::export(&repo, manifest, sessions, file).await?;
-        warnings.extend(left_out);
-        Ok(ExportedSpace {
-            manifest,
-            removal: removal.map(|(_, removal)| removal),
-            warnings,
-        })
-    }
-
-    /// The files of the sessions the agents of the package `manifest`
-    /// reported, as `settings` describes the agents, wherever they ran, with
-    /// a warning for each session left out, which then starts over on the
-    /// importing machine.
-    async fn session_sources(
-        &self,
-        repo: &Repository,
-        settings: Result<Effective>,
-        manifest: &Manifest,
-    ) -> (Vec<SessionSource>, Vec<String>) {
-        let settings = match settings {
-            Ok(settings) => settings,
-            Err(error) => {
-                return (
-                    Vec::new(),
-                    vec![format!(
-                        "cannot export the agents' session files: {error:#}"
-                    )],
-                );
-            }
-        };
-        let mut warnings = Vec::new();
-        let environments = self
-            .agent_environments(&repo.id)
-            .await
-            .unwrap_or_else(|error| {
-                warnings.push(format!(
-                    "agents' session files are looked up in the default places only: {error:#}"
-                ));
-                Vec::new()
-            });
-        let home = self.paths.home.clone();
-        let sessions = manifest.sessions.clone().unwrap_or_default();
-        let found = tokio::task::spawn_blocking(move || {
-            crate::cli::agents::session_sources(&settings, &home, &environments, &sessions)
-        })
-        .await;
-        match found {
-            Ok((sessions, more)) => {
-                warnings.extend(more);
-                (sessions, warnings)
-            }
-            Err(error) => {
-                warnings.push(format!("cannot export the agents' session files: {error}"));
-                (Vec::new(), warnings)
-            }
-        }
     }
 
     /// Open a workspace another Shoal exported: record it as removed here
