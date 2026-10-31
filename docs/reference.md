@@ -3200,9 +3200,9 @@ whether it was.
 `shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
 `ci run` or a check links it, or the number in that URL. `rerun` reruns every
 job of a finished run, or with `--failed` only its failed jobs; GitLab retries
-only failed and cancelled jobs either way, Forgejo reruns each failed job and
-the jobs that need it, also while the run is running, and Forgejo before 17,
-Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
+only failed and cancelled jobs either way, Forgejo with `--failed` reruns each
+failed job and the jobs that need it, also while the run is running, and
+Forgejo before 17, Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
 Processes inside a workspace act only on runs of that workspace's branch, so a
 PR's checks, whose runs may name the PR instead, are acted on through the PR.
 `--json` returns the run's `url` and the `action`.
