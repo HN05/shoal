@@ -276,17 +276,8 @@ fn reviewing_agent(settings: &Effective, agent: Option<Agent>) -> Result<String>
         .or_else(|| settings.review.agent.clone())
         .or_else(|| settings.agent.default.clone())
         .context("no reviewer: pass --agent, or set review.agent or agent.default")?;
-    let name = agent.name();
-    let tool = settings
-        .tools
-        .get(name)
-        .filter(|tool| tool.runs_as_agent)
-        .with_context(|| format!("{name} is not an AI tool, so it cannot review"))?;
-    ensure!(
-        tool.launch.arguments.review.is_some(),
-        "{name} has no review template; set agents.{name}.review to review with it"
-    );
-    Ok(name.to_owned())
+    settings.check_reviewer(agent.name())?;
+    Ok(agent.name().to_owned())
 }
 
 fn now() -> i64 {

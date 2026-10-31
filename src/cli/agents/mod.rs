@@ -738,9 +738,11 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
     })
 }
 
-/// Refuse a reviewer whose review command's program is missing. A review
-/// runs without a session, so it needs no terminal host.
+/// Refuse a reviewer without a review template or whose review command's
+/// program is missing. A review runs without a session, so it needs no
+/// terminal host.
 pub(in crate::cli) fn ensure_reviewer_available(name: &str, settings: &Effective) -> Result<()> {
+    settings.check_reviewer(name)?;
     let program = settings
         .launchers
         .get(name)

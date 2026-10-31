@@ -3934,6 +3934,7 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n[agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
     ));
     fixture.add("changes");
+    let repo = fixture.repo.to_str().unwrap();
     let output = fixture.run(&["review", "run", "changes"]);
     assert!(!output.status.success());
     assert!(
@@ -3960,6 +3961,13 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         (
             &["review", "run", "changes", "--agent", "absent"][..],
             "no-such-reviewer is not installed",
+        ),
+        // Before a PR's workspace is opened, which needs the forge.
+        (
+            &[
+                "review", "run", "--pr", "1", "--repo", repo, "--agent", "reviewer",
+            ][..],
+            "reviewer has no review template",
         ),
     ] {
         let output = fixture.run(args);

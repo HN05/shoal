@@ -235,6 +235,21 @@ impl Effective {
         requested.or(chosen).or(configured.unwrap_or_default())
     }
 
+    /// Refuse agent `name` as a reviewer unless it is an AI tool with a
+    /// review template.
+    pub fn check_reviewer(&self, name: &str) -> anyhow::Result<()> {
+        let tool = self
+            .tools
+            .get(name)
+            .filter(|tool| tool.runs_as_agent)
+            .with_context(|| format!("{name} is not an AI tool, so it cannot review"))?;
+        anyhow::ensure!(
+            tool.launch.arguments.review.is_some(),
+            "{name} has no review template; set agents.{name}.review to review with it"
+        );
+        Ok(())
+    }
+
     /// The integration agent `name` runs with; none for an agent no AI tool
     /// describes.
     pub fn integration(&self, name: &str) -> crate::ai::IntegrationKind {

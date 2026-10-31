@@ -120,28 +120,34 @@ pub(super) async fn start(
                 "shoal review <url> --repo <repository>",
             )
             .await?;
-            check_reviewer_model(ctx, &repo, &reviewer, &model).await?;
+            check_reviewer(ctx, &repo, &reviewer, post, &model).await?;
             pull_request(ctx, &repo, &input, reviewer, post, model, args).await
         }
     }
 }
 
-/// Refuse an agent reviewer's `model` before a PR's workspace is opened or
-/// updated: that of the named agent, else the configured reviewer.
-async fn check_reviewer_model(
+/// Refuse an agent reviewer that could not review before a PR's workspace
+/// is opened or updated: the named agent, else the configured reviewer,
+/// without its review command or the templates `model` needs. Choosing
+/// whether to post, or having no manual review command, chooses an agent.
+async fn check_reviewer(
     ctx: &Context,
     repo: &Repository,
     reviewer: &Reviewer,
+    post: Option<bool>,
     model: &ModelChoice,
 ) -> Result<()> {
-    let Reviewer::Agent(agent) = reviewer else {
+    let settings = super::super::chat::settings(ctx, repo).await?;
+    let agent = match reviewer {
+        Reviewer::Agent(agent) => agent.clone(),
+        Reviewer::Ask if post.is_some() || !settings.commands.contains_key(MANUAL) => None,
+        _ => return Ok(()),
+    };
+    let Some(agent) = agent.or_else(|| configured_reviewer(&settings)) else {
         return Ok(());
     };
-    let settings = super::super::chat::settings(ctx, repo).await?;
-    match agent.clone().or_else(|| configured_reviewer(&settings)) {
-        Some(agent) => super::super::chat::check_model(&settings, &agent, model),
-        None => Ok(()),
-    }
+    super::super::chat::check_model(&settings, &agent, model)?;
+    crate::cli::agents::ensure_reviewer_available(agent.name(), &settings)
 }
 
 impl Reviewer {
