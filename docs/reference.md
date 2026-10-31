@@ -1622,9 +1622,8 @@ that fails, prints nothing or prints NUL stops the launch. With `tools`, the
 agent's environment never holds the value: the launch puts a launcher for
 each listed program first on a private PATH, and each run of the program
 through it fetches the value and runs the next program of that name on PATH
-with the value set, or fails with the command's error. Like the agent account
-wrappers, launchers are cooperative: an absolute program path or a reset PATH
-bypasses them. Other executions fetch no secrets of their own, and hooks started
+with the value set, or fails with the command's error. Launchers are
+cooperative: an absolute program path or a reset PATH bypasses them. Other executions fetch no secrets of their own, and hooks started
 beneath an agent drop the inherited values and launchers.
 
 A tool-scoped secret can set `requires_approval = true` and `approval_lifetime`
