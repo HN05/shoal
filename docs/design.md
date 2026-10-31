@@ -1123,11 +1123,20 @@ arguments; a standalone `{args}` places the caller's literal arguments.
 `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit` runs the
 `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace path, through the same
 wrapper, so the editor gets scope and port variables and counts as activity.
-Built-in `review` chooses
-between the `review` command and an agent prompted to report, not change, the
-work. An agent reviewing a PR posts its findings there as one comment
-unless `[review] post` or `--no-post` keeps them local; workspace reviews stay
-local. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
+`review run` chooses between the `review` command and a local review, which
+follows the review bot. The daemon runs the reviewer once, without a session,
+read-only in a detached checkout of the committed HEAD, so the review judges what
+the agent committed and never sees or changes its uncommitted work; Worktrunk only
+creates worktrees on branches, so the checkout is a plain Git worktree. The
+reviewer returns findings in a fixed schema, which the daemon stores, so the agent
+answers each with a typed outcome carrying its reason, issue or original finding,
+and the next review checks every `fixed` one instead of rereading free text. The
+history a review receives is context, not instructions, and the verdict is shown
+but decides nothing. Failures are typed reasons classified like the bot's, so
+backend output never reaches a message. The 30-minute limit is fixed: a review that
+long has stopped making progress. Reviews take no agent slot, since they are
+short and nothing waits on their turns. A chat has no worktree or branch, so local
+reviews do not apply to it; a chat names the workspace it reviews. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.
 The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
@@ -1144,8 +1153,9 @@ then needs a branch, so the agent runs as a chat in the registered checkout,
 with the user's authority, given that directory as another working directory;
 the result applies as soon as it is saved, and the agent tries the setup script
 in a temporary workspace it removes again. Explicit arguments are checked
-before the interactive choice. Review tools own review storage, exports, and forge authentication, with
-explicit feedback handoff to agents.
+before the interactive choice. A `review` command such as tuicr owns its own
+storage, exports and forge authentication, with explicit feedback handoff to
+agents.
 
 AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table
 per tool holding its launcher, resume command, launch mode and argument

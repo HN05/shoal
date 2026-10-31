@@ -366,6 +366,27 @@ impl Review {
     }
 }
 
+/// A workspace's latest review as lists show it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReviewStatus {
+    pub id: i64,
+    pub state: ReviewState,
+    /// [`Review::status`].
+    pub status: String,
+    pub unresolved: usize,
+}
+
+impl From<&Review> for ReviewStatus {
+    fn from(review: &Review) -> Self {
+        Self {
+            id: review.id,
+            state: review.state,
+            status: review.status(),
+            unresolved: review.unresolved().count(),
+        }
+    }
+}
+
 /// The findings counted by severity, most severe first as [`Severity::ALL`]
 /// lists them, such as
 /// "1 blocker, 2 should-fix"; empty without findings.

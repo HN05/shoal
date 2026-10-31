@@ -48,7 +48,11 @@ fn add_reuses_resolution_requests_without_reordering_failures() {
             "shoal repo add https://other.example/team/repo",
         ),
         (
-            vec!["review", "http://other.example:3000/team/repo/pulls/7"],
+            vec![
+                "review",
+                "run",
+                "http://other.example:3000/team/repo/pulls/7",
+            ],
             vec!["list_repositories"],
             "shoal repo add http://other.example:3000/team/repo",
         ),

@@ -41,7 +41,7 @@ pub(super) async fn handle(
             repository,
         } => {
             let ids = manager
-                .review_workspaces(workspace.as_deref(), repository.as_deref())
+                .review_workspaces(workspace.as_deref(), repository)
                 .await?;
             Body::Reviews(manager.reviews(ids).await?)
         }
@@ -49,20 +49,12 @@ pub(super) async fn handle(
             Some(id) => manager.review(id).await?,
             None => manager.latest_review(&named(workspace)?).await?,
         }),
-        ReviewMethod::ReplyToFinding {
-            workspace,
-            finding,
-            body,
-        } => review(manager.reply_to_finding(&workspace, finding, body).await?),
+        ReviewMethod::ReplyToFinding { finding, body, .. } => {
+            review(manager.reply_to_finding(finding, body).await?)
+        }
         ReviewMethod::ResolveFinding {
-            workspace,
-            finding,
-            outcome,
-        } => review(
-            manager
-                .resolve_finding(&workspace, finding, outcome)
-                .await?,
-        ),
+            finding, outcome, ..
+        } => review(manager.resolve_finding(finding, outcome).await?),
     }))
 }
 
@@ -88,10 +80,7 @@ impl Scoped for ReviewMethod {
             }
             | ReviewMethod::ResolveFinding {
                 workspace, finding, ..
-            } => {
-                manager.require_review_of(workspace, finding.review).await?;
-                Some(workspace)
-            }
+            } => Some(workspace.insert(manager.review_workspace(finding.review).await?)),
             ReviewMethod::RunReview { workspace, .. } => Some(workspace),
             ReviewMethod::ListReviews {
                 workspace,

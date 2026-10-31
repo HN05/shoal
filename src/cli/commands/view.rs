@@ -69,6 +69,8 @@ async fn view(
     no_comments: bool,
     check: Option<String>,
 ) -> Result<i32> {
+    // Plain `shoal view` in a workspace adds its latest review.
+    let plain = items.kind_or_url.is_none();
     let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     if let Some(check) = check {
         let ItemContext::Workspace(workspace) = context else {
@@ -77,7 +79,16 @@ async fn view(
         return show_log(ctx, workspace, selection, check).await;
     }
     let selected = links::select_items(ctx, &context, selection, true).await?;
-    let views = read_views(ctx, &context, &selected, !no_comments).await?;
+    let mut views = read_views(ctx, &context, &selected, !no_comments).await?;
+    if plain && let ItemContext::Workspace(workspace) = &context {
+        let latest = super::review::show::latest(ctx, workspace).await;
+        views.extend(latest.map(|review| {
+            Shown::Review(ShownReview {
+                kind: "review",
+                review,
+            })
+        }));
+    }
     ctx.show(&views, |views| render_views(views, ctx.json))?;
     Ok(i32::from(views.iter().any(Shown::failed)))
 }
@@ -88,6 +99,15 @@ async fn view(
 enum Shown {
     Item(Box<ItemView>),
     Run(ShownRun),
+    Review(ShownReview),
+}
+
+/// The workspace's latest local review.
+#[derive(Serialize)]
+struct ShownReview {
+    kind: &'static str,
+    #[serde(flatten)]
+    review: crate::reviews::Review,
 }
 
 /// A linked CI run, as `view ci` shows it, or why it could not be read.
@@ -110,6 +130,7 @@ impl Shown {
         match self {
             Self::Item(view) => view.details.is_none(),
             Self::Run(run) => matches!(run.read, RunRead::Failed { .. }),
+            Self::Review(_) => false,
         }
     }
 }
@@ -192,6 +213,7 @@ fn render_views(views: &[Shown], json: bool) {
         }
         match view {
             Shown::Item(view) => render(view, palette, emoji),
+            Shown::Review(shown) => super::review::show::render(&shown.review, palette),
             Shown::Run(ShownRun {
                 read: RunRead::Read(view),
                 ..

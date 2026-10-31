@@ -260,11 +260,20 @@ shoal land                    # Merge your branch into the default branch; no re
 shoal land --push             # Then push the default branch instead of opening a PR
 ```
 
-For local code review, configure `[commands] review = ["tuicr", "-r",
-"{diff_base}..HEAD"]` and run `shoal review fix-login` or `shoal review <pr-url>`,
-then choose manual or agent review. See the
-[command and review configuration](docs/reference.md#configured-commands) for uncommitted
-review and exporting feedback to an agent.
+To have an agent review a workspace's committed changes or a PR:
+
+```sh
+shoal review run fix-login    # Queue a one-shot, read-only review; findings reach the agent
+shoal review run <pr-url>     # Review a PR in the workspace that owns its branch
+shoal review list             # Reviews, newest first, with unresolved findings
+shoal view review             # The latest review in full
+shoal review resolve 17.2 false-positive --reason 'The caller checks it'
+```
+
+With `[commands] review = ["tuicr", "-r", "{diff_base}..HEAD"]` configured,
+`review run` asks whether to run it or an agent. See
+[local reviews](docs/reference.md#local-reviews) for reviewers, outcomes and the
+[review command](docs/reference.md#configured-commands) for uncommitted review.
 
 CLI agents and chats run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
 running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns

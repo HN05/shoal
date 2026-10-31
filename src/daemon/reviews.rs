@@ -130,7 +130,7 @@ impl Manager {
     pub async fn review_workspaces(
         &self,
         workspace: Option<&str>,
-        repository: Option<&str>,
+        repository: Option<crate::repository::Selector>,
     ) -> Result<Vec<String>> {
         if let Some(workspace) = workspace {
             return Ok(vec![self.workspace(workspace).await?.id]);
@@ -167,14 +167,8 @@ impl Manager {
         }
     }
 
-    /// Add a reply to `finding` of a review of the workspace `selector`.
-    pub async fn reply_to_finding(
-        &self,
-        selector: &str,
-        finding: FindingId,
-        body: String,
-    ) -> Result<Review> {
-        self.require_review_of(selector, finding.review).await?;
+    /// Add a reply to `finding`.
+    pub async fn reply_to_finding(&self, finding: FindingId, body: String) -> Result<Review> {
         crate::validate::agent_message(&body)?;
         let now = now();
         self.store
@@ -183,34 +177,16 @@ impl Manager {
         self.review(finding.review).await
     }
 
-    /// Resolve `finding` of a review of the workspace `selector` with
-    /// `outcome`, or reopen it.
+    /// Resolve `finding` with `outcome`, or reopen it.
     pub async fn resolve_finding(
         &self,
-        selector: &str,
         finding: FindingId,
         outcome: Option<Outcome>,
     ) -> Result<Review> {
-        self.require_review_of(selector, finding.review).await?;
         self.store
             .run(move |db| store::resolve(db, finding, outcome.as_ref()))
             .await?;
         self.review(finding.review).await
-    }
-
-    /// The workspace `selector` names, which review `id` must be of.
-    pub(crate) async fn require_review_of(&self, selector: &str, id: i64) -> Result<Workspace> {
-        let workspace = self.workspace(selector).await?;
-        let review = self.store.run(move |db| store::load(db, id)).await?;
-        match review {
-            Some(review) if review.workspace_id == workspace.id => Ok(workspace),
-            Some(review) => bail!(
-                "review {id} is of {}, not {}",
-                review.workspace,
-                workspace.name
-            ),
-            None => bail!("review {id} does not exist"),
-        }
     }
 
     /// The workspace review `id` is of.

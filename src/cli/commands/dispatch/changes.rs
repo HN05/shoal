@@ -16,21 +16,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
         ChangesCommand::Conflicts { target, workspace } => {
             workspaces::conflicts(&ctx, workspace, target).await
         }
-        ChangesCommand::Review {
-            workspace,
-            pr,
-            repository,
-            post,
-            no_post,
-            manual,
-            agent,
-            args,
-        } => {
-            let post = (post || no_post).then_some(post);
-            let target = review::Target::new(workspace, pr, repository, post)?;
-            let reviewer = review::Reviewer::new(manual, agent);
-            review::start(&ctx, target, reviewer, args).await
-        }
+        ChangesCommand::Review { command } => review::run(&ctx, command).await,
         ChangesCommand::Land {
             workspace,
             push,

@@ -784,33 +784,96 @@ review = ["tuicr", "-r", "{diff_base}..HEAD"]
 review-worktree = ["tuicr", "-w"]
 ```
 
-`shoal review [workspace]` asks whether to review manually or with an agent;
-`--manual` or `--agent <name>` skips the question, which is required without a
-terminal. Manual review runs the `review` command (`shoal run review` also does);
-without one, the agent reviews. Choosing “No agent” returns without starting a reviewer.
-The agent is otherwise chosen as for `shoal add` and is
-prompted to report findings, not to change files, commit, push, or post.
-`shoal review <pr-url>` or `shoal review --pr <number-or-url>` looks up the PR
-with your `gh`/`fj` login and reviews it the same way in the workspace that owns
-its head branch, fast-forwarded to the pushed head and refused when diverged or
-when the worktree is no longer the recorded one on that branch, or
-opens one from origin whose base is the PR's refreshed `origin/<base>`. Either
-workspace links the PR as `shoal add` does; fork PRs are refused. `--repo` selects the PR's repository,
-which otherwise follows `shoal add`.
-An issue URL is refused; `shoal plan` settles an issue before implementation.
-An agent reviewing a PR posts its findings there as one comment, without
-approving or requesting changes, unless `[review] post` is
-false; `--post` or `--no-post` overrides that for one run and selects the agent.
-
-```toml
-[review]
-post = true # Default: true
-```
+`shoal review run [workspace]` asks whether to review with the `review` command or
+an agent (see [local reviews](#local-reviews)); `--manual` or `--agent <name>` skips
+the question, which is required without a terminal. Manual review runs the `review`
+command (`shoal run review` also does) with the arguments after `--`; without one,
+the agent reviews.
 `shoal review-worktree [workspace]` reviews uncommitted changes. The committed
 range excludes working-tree changes that `shoal diff` includes. Export feedback
 from tuicr and hand it to your agent explicitly; see
 [tuicr's export documentation](https://github.com/agavra/tuicr/blob/main/docs/CLI.md#output-for-scripts-and-agents).
 Shoal tracks execution; the review tool owns sessions, exports, and forge access.
+
+### Local reviews
+
+`shoal review run [workspace]` queues a review of the workspace's committed HEAD
+against [`shoal diff`](#diff)'s base. An agent reviews it once in the
+background, read-only, in a detached checkout of that commit outside the
+workspace, so uncommitted edits and later commits stay out; no session opens and
+no setup runs. The checkout is trusted for the reviewer's tool, as workspaces are,
+until the review ends and the checkout is removed. A queued review takes the
+workspace's HEAD when it starts. A workspace has at most one queued or running
+review: running the command again returns the queued one, and is refused while one
+runs. Reviews take no `max_agents` slot. A chat has no changes of its own, so name a
+workspace there.
+
+The reviewer is `--agent`, else `[review] agent`, else `agent.default`, else one you
+pick, and needs a [`review` template](#agents). A reviewer still running after 30
+minutes is stopped and the review fails as `timed-out`; after any other failure,
+`fallback_agent` reviews once more. A failed review records why as one of
+`usage-limit`, `quota-exhausted`, `rate-limit`, `authentication-failed`,
+`execution-failed`, `invalid-output` or `timed-out`, never the reviewer's output.
+Findings and a verdict of any kind are results, not failures.
+
+```toml
+[review]
+agent = "codex"           # Default: agent.default
+fallback_agent = "claude" # Optional
+```
+
+The [review template](#prompt-templates) gives the instructions. Each review also
+receives, as context, the workspace's earlier reviews with their findings, replies,
+outcomes and fix checks, and for a PR its description, conversation and reviews.
+It checks every finding resolved `fixed` and reports it `confirmed` or
+`still-present`, and does not raise a settled claim again unless its reason no
+longer holds.
+
+When a review ends, the workspace's agents receive it as a message, waking an idle
+agent: a finished review's summary and findings, ending with a note that the
+reviewer is automated and can be wrong, or why it failed or that it was cancelled.
+A workspace whose own process cancelled the review is not told. The agent or chat
+coordinating the workspace hears one line, such as `fix-login: review 17
+finished: 1 blocker, 2 should-fix`.
+
+```sh
+shoal review list [workspace]   # Newest first; --repo R for a repository's
+shoal view review [ID]          # One review in full; default: the workspace's latest
+shoal watch review [ID]         # Wait until it ends, then show it
+shoal review cancel [ID]        # Default: the workspace's queued or running review
+shoal review reply 17.2 'It only happens on empty input'  # or --body-file F
+shoal review resolve 17.2 false-positive --reason 'The caller checks the length'
+shoal review resolve 17.2 --undo
+```
+
+Findings are numbered `<review>.<n>`. `review list` marks a review outdated once
+the workspace's HEAD has moved past it and counts its unresolved findings. Plain
+`shoal view` in a workspace ends with its latest review, and `shoal work` shows each
+workspace's latest review state. `review resolve` takes one outcome with its data;
+`review reply` discusses a finding without resolving it:
+
+| Outcome | Meaning | Takes |
+|---|---|---|
+| `fixed` | The code was changed to address it; the next review checks it | — |
+| `false-positive` | The claim is wrong | `--reason` |
+| `wont-fix` | The claim holds, but the code stays | `--reason` |
+| `deferred` | The claim holds and other work fixes it | `--issue` |
+| `duplicate` | Another finding makes the same point | `--of <finding>` |
+
+A finding that needs your decision stays unresolved while the agent asks with
+`shoal questions ask`. A workspace process runs, cancels and answers the reviews of
+its own workspace and those below it. Removing a workspace cancels its review and
+deletes its reviews. Every command takes `--json`.
+
+`shoal review run <pr-url>` or `--pr <number-or-url>` looks up the PR with your
+`gh`/`fj` login and reviews its head against its base, both fetched from origin, in
+the workspace that owns its head branch, fast-forwarded to the pushed head and
+refused when diverged or when the worktree is no longer the recorded one on that
+branch, or in one opened from origin whose base is the PR's `origin/<base>`. Either
+workspace links the PR as `shoal add` does, and the review is stored on it; fork
+PRs are refused. `--repo` selects the PR's repository, which otherwise follows
+`shoal add`. An issue URL is refused: `shoal plan` settles an issue before
+implementation.
 
 ### Agents
 

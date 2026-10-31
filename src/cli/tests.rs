@@ -491,17 +491,58 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
 }
 
 #[test]
-fn review_selects_a_workspace_or_a_pr() {
-    let review = Cli::try_parse_from(["shoal", "review", "--pr", "7", "--agent", "claude"]);
+fn review_run_selects_a_workspace_or_a_pr() {
+    use crate::cli::args::changes::ReviewCommand;
+    let review = Cli::try_parse_from(["shoal", "review", "run", "--pr", "7", "--agent", "claude"]);
     assert!(matches!(review.unwrap().command,
-            Some(Command::Changes(ChangesCommand::Review { workspace: None, pr: Some(pr), agent: Some(agent), .. })) if pr == "7" && agent.name() == "claude"));
+            Some(Command::Changes(ChangesCommand::Review { command: ReviewCommand::Run { workspace: None, pr: Some(pr), agent: Some(agent), .. } })) if pr == "7" && agent.name() == "claude"));
     for args in [
         vec![
-            "shoal", "review", "--pr", "7", "--manual", "--agent", "claude",
+            "shoal", "review", "run", "--pr", "7", "--manual", "--agent", "claude",
         ],
-        vec!["shoal", "review", "workspace", "--pr", "7"],
+        vec!["shoal", "review", "run", "workspace", "--pr", "7"],
+        // Bare `shoal review` is a command group.
+        vec!["shoal", "review", "fix-login"],
     ] {
         assert!(Cli::try_parse_from(args).is_err());
+    }
+}
+
+#[test]
+fn review_resolve_takes_one_outcome_or_undo() {
+    for args in [
+        vec!["shoal", "review", "resolve", "17.2", "fixed"],
+        vec![
+            "shoal",
+            "review",
+            "resolve",
+            "17.2",
+            "false-positive",
+            "--reason",
+            "Checked",
+        ],
+        vec![
+            "shoal",
+            "review",
+            "resolve",
+            "17.2",
+            "duplicate",
+            "--of",
+            "17.1",
+        ],
+        vec!["shoal", "review", "resolve", "17.2", "--undo"],
+        vec!["shoal", "review", "reply", "17.2", "Why?"],
+    ] {
+        assert!(Cli::try_parse_from(&args).is_ok(), "{args:?}");
+    }
+    for args in [
+        vec!["shoal", "review", "resolve", "17.2"],
+        vec!["shoal", "review", "resolve", "17.2", "fixed", "--undo"],
+        vec!["shoal", "review", "resolve", "17", "fixed"],
+        vec!["shoal", "review", "resolve", "17.2", "maybe"],
+        vec!["shoal", "review", "reply", "17.2"],
+    ] {
+        assert!(Cli::try_parse_from(&args).is_err(), "{args:?}");
     }
 }
 

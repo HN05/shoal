@@ -5,6 +5,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
     Workspace {
         holds: Vec::new(),
         review: Vec::new(),
+        latest_review: None,
         agent_state: None,
         base_workspace: None,
         stacked_workspaces: Vec::new(),

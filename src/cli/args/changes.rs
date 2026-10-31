@@ -6,6 +6,7 @@ use clap::{Args, Subcommand};
 use crate::{
     agent::Agent,
     cli::args::{AgentParser, BodyArgs, ConfirmationArgs, item_reference},
+    reviews::{FindingId, OutcomeKind},
 };
 
 #[derive(Debug, Subcommand)]
@@ -65,31 +66,10 @@ pub enum ChangesCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Review workspace or PR changes with a review tool or agent.
+    /// Review a workspace's committed changes or a PR, and answer the findings.
     Review {
-        /// Workspace to review, or a PR URL.
-        workspace: Option<String>,
-        /// Review this PR in the workspace that owns its head branch, opening one when none does.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
-        pr: Option<String>,
-        /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
-        #[arg(long = "repo")]
-        repository: Option<String>,
-        /// Have the agent post its findings on the PR, overriding [review] post.
-        #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
-        post: bool,
-        /// Keep the agent's findings local, overriding [review] post.
-        #[arg(long, overrides_with = "post", conflicts_with = "manual")]
-        no_post: bool,
-        /// Run the configured `review` command without asking.
-        #[arg(long, conflicts_with = "agent")]
-        manual: bool,
-        /// Start this agent with a review prompt without asking.
-        #[arg(long, value_parser = AgentParser)]
-        agent: Option<Agent>,
-        /// Arguments forwarded to the review command or agent.
-        #[arg(last = true)]
-        args: Vec<OsString>,
+        #[command(subcommand)]
+        command: ReviewCommand,
     },
     /// Open the workspace's PR, or change, comment on, close, reopen or merge a PR.
     Pr {
@@ -115,6 +95,86 @@ pub enum ChangesCommand {
         /// Keep the landing local, overriding [land] push.
         #[arg(long, overrides_with = "push")]
         no_push: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+#[command(defer = true)]
+pub enum ReviewCommand {
+    /// Queue a review of a workspace's committed HEAD or a PR, or run the configured review command.
+    ///
+    /// The reviewer runs once in the background, read-only, and its findings
+    /// arrive as a message.
+    Run {
+        /// Workspace to review, or a PR URL.
+        workspace: Option<String>,
+        /// Review this PR in the workspace that owns its head branch, opening one when none does.
+        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
+        pr: Option<String>,
+        /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
+        #[arg(long = "repo")]
+        repository: Option<String>,
+        /// Post the review on the PR, overriding [review] post.
+        #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
+        post: bool,
+        /// Keep the PR review local, overriding [review] post.
+        #[arg(long, overrides_with = "post", conflicts_with = "manual")]
+        no_post: bool,
+        /// Run the configured `review` command without asking.
+        #[arg(long, conflicts_with = "agent")]
+        manual: bool,
+        /// Review with this agent, overriding [review] agent.
+        #[arg(long, value_parser = AgentParser)]
+        agent: Option<Agent>,
+        /// Arguments forwarded to the configured review command.
+        #[arg(last = true)]
+        args: Vec<OsString>,
+    },
+    /// List reviews with their state and unresolved findings, newest first.
+    List {
+        /// Workspace whose reviews to list; defaults to the current workspace, else every one.
+        workspace: Option<String>,
+        /// List the reviews of this registered repository's workspaces.
+        #[arg(long = "repo", conflicts_with = "workspace")]
+        repository: Option<String>,
+    },
+    /// Cancel a queued or running review; defaults to the workspace's.
+    Cancel {
+        /// Review ID.
+        id: Option<i64>,
+        /// Workspace whose review to cancel; defaults to the current workspace or picker.
+        #[arg(long, conflicts_with = "id")]
+        workspace: Option<String>,
+    },
+    /// Reply to a finding without resolving it.
+    Reply {
+        /// Finding ID, such as 17.2.
+        finding: FindingId,
+        /// Text of the reply.
+        #[arg(value_name = "TEXT", required_unless_present = "body_file")]
+        reply: Option<String>,
+        /// Read the reply from a file.
+        #[arg(long, value_name = "PATH", conflicts_with = "reply")]
+        body_file: Option<PathBuf>,
+    },
+    /// Resolve a finding with an outcome, or reopen it with --undo.
+    Resolve {
+        /// Finding ID, such as 17.2.
+        finding: FindingId,
+        #[arg(required_unless_present = "undo")]
+        outcome: Option<OutcomeKind>,
+        /// Why the claim is wrong (false-positive) or is not changed (wont-fix).
+        #[arg(long)]
+        reason: Option<String>,
+        /// The issue whose work fixes it (deferred).
+        #[arg(long, value_parser = item_reference)]
+        issue: Option<String>,
+        /// The finding it repeats (duplicate).
+        #[arg(long, value_name = "FINDING")]
+        of: Option<FindingId>,
+        /// Reopen the finding.
+        #[arg(long, conflicts_with_all = ["outcome", "reason", "issue", "of"])]
+        undo: bool,
     },
 }
 

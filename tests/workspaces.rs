@@ -2216,8 +2216,8 @@ fn live_completion_uses_targets_state_override_workspace_context_and_scope() {
             .any(|line| line == "review")
     );
     assert!(complete(&["rev"], cwd).contains(&"review".into()));
-    assert!(complete(&["review", "fi"], cwd).contains(&"first".into()));
-    assert!(complete(&["review", "fi"], fixture.root.path()).contains(&"first".into()));
+    assert!(complete(&["review", "run", "fi"], cwd).contains(&"first".into()));
+    assert!(complete(&["review", "run", "fi"], fixture.root.path()).contains(&"first".into()));
     assert!(complete(&["acquire", "port", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["release", "port", "w"], cwd).contains(&"web".into()));
     assert!(complete(&["acquire", "resource", "d"], cwd).contains(&"devices".into()));
@@ -3804,7 +3804,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
             fs::write(path.join("tracked"), "unstaged workspace content\n").unwrap();
         }
         let base = git(path, &["merge-base", "main", "HEAD"]);
-        let review = fixture.run(&["review", "changes", "--manual", "--", "{diff_base}"]);
+        let review = fixture.run(&["review", "run", "changes", "--manual", "--", "{diff_base}"]);
         assert!(
             review.status.success(),
             "{}",
@@ -3848,7 +3848,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
     git(&fixture.repo, &["branch", "-m", "renamed-main"]);
     assert!(
         !fixture
-            .run(&["review", "changes", "--manual"])
+            .run(&["review", "run", "changes", "--manual"])
             .status
             .success()
     );
@@ -3862,42 +3862,79 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
 }
 
 #[test]
-fn review_runs_the_configured_command_or_prompts_an_agent() {
+fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let fixture = Fixture::with_config(Some(
         "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n",
     ));
     fixture.add("changes");
-    let output = fixture.run(&["review", "changes"]);
+    let output = fixture.run(&["review", "run", "changes"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("--manual or --agent"),
         "{output:?}"
     );
     assert_eq!(
-        fixture.run(&["review", "changes", "--manual"]).stdout,
+        fixture
+            .run(&["review", "run", "changes", "--manual"])
+            .stdout,
         b"manual changes"
     );
-    for args in [
-        &["review", "changes", "--agent", "reviewer", "--", "extra"][..],
-        &["run", "reviewer", "--workspace", "changes", "--", "extra"][..],
+    for (args, refusal) in [
+        (
+            &[
+                "review", "run", "changes", "--agent", "reviewer", "--", "extra",
+            ][..],
+            "arguments after -- go to the configured review command",
+        ),
+        (
+            &["review", "run", "changes", "--agent", "reviewer"][..],
+            "reviewer has no review template",
+        ),
     ] {
         let output = fixture.run(args);
-        assert!(output.status.success(), "{output:?}");
-        let stdout = String::from_utf8(output.stdout).unwrap();
-        assert!(stdout.ends_with("|extra|"), "{stdout}");
-        if args[0] == "review" {
-            assert!(stdout.contains("Review the changes on branch changes"));
-            assert!(stdout.contains("`shoal diff`"));
-        }
+        assert!(!output.status.success(), "{output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(refusal),
+            "{output:?}"
+        );
     }
-    // Without a configured review command, the default agent reviews.
-    let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
-    ));
+    // Without a configured review command, the agent reviews in the daemon.
+    let result = fixture.root.path().join("review.json");
+    fs::write(
+        &result,
+        r#"{"summary":"One nit.","verdict":"comment","checked":[],"findings":[{"path":"tracked","line":1,"severity":"nit","title":"Name it","body":"Say what it holds."}]}"#,
+    )
+    .unwrap();
+    let fixture = Fixture::with_config(Some(&format!(
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'cat {}', '{{prompt}}', '{{schema}}']\n",
+        result.display()
+    )));
     fixture.add("agent-only");
-    let output = fixture.run(&["review", "agent-only"]);
-    assert!(output.status.success(), "{output:?}");
-    assert!(String::from_utf8_lossy(&output.stdout).contains("branch agent-only"));
+    let queued = fixture.ok(&["review", "run", "agent-only"]);
+    assert_eq!(queued["state"], "queued", "{queued}");
+    let id = queued["id"].to_string();
+    let review = fixture.ok(&["watch", "review", &id]);
+    assert_eq!(review["state"], "finished", "{review}");
+    assert_eq!(review["reviewer"], "reviewer");
+    let finding = format!("{id}.1");
+    assert_eq!(review["findings"][0]["id"], finding);
+    let resolved = fixture.ok(&[
+        "review",
+        "resolve",
+        &finding,
+        "false-positive",
+        "--reason",
+        "The name says it",
+    ]);
+    assert_eq!(
+        resolved["findings"][0]["outcome"],
+        serde_json::json!({"outcome": "false-positive", "reason": "The name says it"})
+    );
+    let listed = fixture.ok(&["review", "list", "agent-only"]);
+    assert_eq!(listed[0]["id"].to_string(), id);
+    assert_eq!(fixture.ok(&["view", "review", &id])["summary"], "One nit.");
+    let workspaces = fixture.ok(&["work"]);
+    assert_eq!(workspaces[0]["latest_review"]["status"], "finished: 1 nit");
 }
 
 /// An upstream remote served at ssh://git@forge.example/team/project.git;
@@ -3953,7 +3990,7 @@ fn review_refers_issues_to_shoal_plan() {
     );
     let output = fixture
         .command()
-        .args(["review", "--issue", "12"])
+        .args(["review", "run", "--issue", "12"])
         .current_dir(&fixture.repo)
         .output()
         .unwrap();
@@ -4004,7 +4041,7 @@ fn add_issue_takes_the_repository_of_the_current_checkout_or_workspace() {
 #[test]
 fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', 'exit 1', '{prompt}', '{schema}']\n",
     ));
     let author = forge_origin(&fixture);
     let commit = |message: &str| {
@@ -4041,7 +4078,7 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     let review = |target: &[&str]| {
         fixture
             .command()
-            .arg("review")
+            .args(["review", "run"])
             .args(target)
             .args(["--agent", "reviewer"])
             .current_dir(&fixture.repo)
@@ -4053,16 +4090,18 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert!(output.status.success(), "{output:?}");
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
-        stdout.contains(
-            "Review pull request #7: Top change\nhttps://forge.example/team/project/pulls/7"
-        ),
+        stdout.contains("Review 1 of stack-top is queued for reviewer"),
         "{stdout}"
     );
-    assert!(stdout.contains("branch stack/top"), "{stdout}");
-    assert!(
-        stdout.contains("Post them as one comment on pull request #7"),
-        "{stdout}"
+    // The review covers the PR's head against its base, both from origin.
+    let ended = fixture.ok(&["watch", "review", "1"]);
+    assert_eq!(ended["target"]["head"], "stack/top", "{ended}");
+    assert_eq!(ended["target"]["base"], "stack/base", "{ended}");
+    assert_eq!(
+        ended["head"],
+        git(&author, &["rev-parse", "stack/top"]).trim()
     );
+    assert_eq!(ended["failure"], "execution-failed");
     assert!(
         fs::read_to_string(fixture.root.path().join("curl-urls"))
             .unwrap()
@@ -4113,8 +4152,12 @@ fn review_opens_a_pr_head_against_its_base_and_reuses_the_owner() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(linked_prs(), serde_json::json!([url]));
     assert!(
-        String::from_utf8_lossy(&output.stdout).contains("or comment on the forge unless asked"),
+        String::from_utf8_lossy(&output.stdout).contains("Review 2 of stack-top is queued"),
         "{output:?}"
+    );
+    assert_eq!(
+        fixture.ok(&["watch", "review", "2"])["target"]["post"],
+        false
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -14487,7 +14530,8 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
         if choice == "No agent" {
             assert!(!agent_args.exists());
             // The shared review picker also accepts the choice without a launch.
-            let (output, transcript) = fixture.interactive(&["review", "298-pick-agent"], "");
+            let (output, transcript) =
+                fixture.interactive(&["review", "run", "298-pick-agent"], "");
             assert!(output.status.success(), "{output:?}\n{transcript}");
             assert!(!agent_args.exists());
         } else {

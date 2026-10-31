@@ -236,7 +236,9 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                     }
                     values
                 }))
-            } else if matches!(name.as_str(), "add" | "review") && arg.get_id() == "agent" {
+            } else if (name == "add" || (parent == "review" && name == "run"))
+                && arg.get_id() == "agent"
+            {
                 let typed = typed.clone();
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let search_path = std::env::var_os("PATH").unwrap_or_default();

@@ -264,7 +264,7 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
     let finding = first.findings[0].id;
     fixture
         .manager
-        .resolve_finding(&fixture.workspace.id, finding, Some(Outcome::Fixed))
+        .resolve_finding(finding, Some(Outcome::Fixed))
         .await
         .unwrap();
     fixture.review().await;
@@ -368,4 +368,78 @@ async fn the_coordinating_agent_hears_one_line() {
             queued.id
         )]
     );
+}
+
+#[tokio::test]
+async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
+    use crate::{
+        daemon::scope::{Caller, ScopedExecution, authorize},
+        protocol::ReviewMethod,
+    };
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let manager = &fixture.manager;
+    let parent = &fixture.workspace;
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let parent_review = fixture.review().await;
+    let child_review = fixture.review_of(&child.id).await;
+    manager
+        .executions
+        .issue_scope(
+            "scope".into(),
+            Caller {
+                workspace_id: parent.id.clone(),
+                execution: Some(ScopedExecution {
+                    id: "execution".into(),
+                    kind: crate::daemon::workspace::ExecutionKind::Command,
+                    agent: None,
+                }),
+            },
+        )
+        .await;
+    let resolve = |review: &Review| ReviewMethod::ResolveFinding {
+        workspace: None,
+        finding: review.findings[0].id,
+        outcome: Some(Outcome::Fixed),
+    };
+    // The parent's agent reaches its own and its child's reviews.
+    for review in [&parent_review, &child_review] {
+        authorize(manager, Some("scope"), &mut resolve(review))
+            .await
+            .unwrap();
+    }
+    manager
+        .executions
+        .issue_scope(
+            "child-scope".into(),
+            Caller {
+                workspace_id: child.id.clone(),
+                execution: None,
+            },
+        )
+        .await;
+    assert!(
+        authorize(manager, Some("child-scope"), &mut resolve(&parent_review))
+            .await
+            .is_err()
+    );
+    let mut show = ReviewMethod::ShowReview {
+        workspace: None,
+        id: Some(parent_review.id),
+    };
+    assert!(
+        authorize(manager, Some("child-scope"), &mut show)
+            .await
+            .is_err()
+    );
+    let mut own = ReviewMethod::ShowReview {
+        workspace: None,
+        id: None,
+    };
+    authorize(manager, Some("child-scope"), &mut own)
+        .await
+        .unwrap();
+    assert!(matches!(own, ReviewMethod::ShowReview { workspace: Some(id), .. } if id == child.id));
 }
