@@ -123,3 +123,29 @@ async fn forges_without_downloads_refuse_before_sending() {
         "{error:#}"
     );
 }
+
+#[tokio::test]
+async fn downloads_keep_to_the_forges_rate_limit() {
+    let dir = tempfile::tempdir().unwrap();
+    let memory = crate::transport::memory::Memory::default();
+    let account = || {
+        gh_printing(
+            dir.path(),
+            "HTTP/2.0 429 Too Many Requests\\nRetry-After: 30\\n\\n",
+        )
+        .remembering(memory.clone())
+    };
+    let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
+    let url = "https://github.com/user-attachments/assets/abc";
+    // A refusal records the limit, and the next download waits it out
+    // without asking the forge again.
+    let log = dir.path().join("log");
+    for asked in [true, false] {
+        let error = repo.download(&account(), url).await.unwrap_err();
+        assert!(
+            crate::transport::limits::rate_limited(&error).is_some(),
+            "{error:#}"
+        );
+        assert_eq!(std::fs::remove_file(&log).is_ok(), asked);
+    }
+}

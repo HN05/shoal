@@ -1,4 +1,5 @@
 use super::*;
+use crate::transport::response::Response;
 
 fn response(status: u16, headers: &[(&str, &str)]) -> Response {
     Response {

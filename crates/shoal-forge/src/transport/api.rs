@@ -18,7 +18,7 @@ use crate::{
         limits::unix_seconds,
         programs,
         resend::{Resend, Transient, resending},
-        response::{Response, last_head},
+        response::{Headed, Response, last_head},
     },
 };
 
@@ -229,9 +229,21 @@ impl ForgeRepo {
     /// The response to `request`, refused without sending it while the
     /// forge limits the account's requests.
     async fn within_limit(&self, account: &Account, request: &Request) -> Result<Response> {
+        self.limited(account, self.kind.send(self, account, request))
+            .await
+    }
+
+    /// The response `exchange` gets as `account`, refused without starting
+    /// it while the forge limits the account's requests, and recording the
+    /// limit the response reports.
+    pub(crate) async fn limited<T: Headed>(
+        &self,
+        account: &Account,
+        exchange: impl Future<Output = Result<T>>,
+    ) -> Result<T> {
         let memory = account.memory();
         memory.check_limit(&self.host, unix_seconds())?;
-        let response = self.kind.send(self, account, request).await?;
+        let response = exchange.await?;
         // Relative limits count from the response, which may have taken a while.
         memory.observe_limit(&self.host, &response, unix_seconds())?;
         Ok(response)

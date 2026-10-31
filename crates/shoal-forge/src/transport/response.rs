@@ -7,6 +7,13 @@ use crate::transport::api::http_body;
 /// A response's status and its headers, with names in lowercase.
 type Head = (u16, Vec<(String, String)>);
 
+/// The status and headers of a response, whatever its body.
+pub(crate) trait Headed {
+    fn status(&self) -> u16;
+    /// The value of the header `name`, given in lowercase.
+    fn header(&self, name: &str) -> Option<&str>;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Response {
     pub status: u16,
@@ -15,12 +22,17 @@ pub(crate) struct Response {
     pub body: String,
 }
 
-impl Response {
-    /// The value of the header `name`, given in lowercase.
-    pub fn header(&self, name: &str) -> Option<&str> {
-        header(&self.headers, name)
+impl Headed for Response {
+    fn status(&self) -> u16 {
+        self.status
     }
 
+    fn header(&self, name: &str) -> Option<&str> {
+        header(&self.headers, name)
+    }
+}
+
+impl Response {
     /// The body of a successful response, or the error a failed one reports.
     pub fn success_body(&self) -> Result<&str> {
         http_body(self.status, &self.body)
@@ -58,9 +70,14 @@ impl Fetched {
             body: output,
         })
     }
+}
 
-    /// The value of the header `name`, given in lowercase.
-    pub fn header(&self, name: &str) -> Option<&str> {
+impl Headed for Fetched {
+    fn status(&self) -> u16 {
+        self.status
+    }
+
+    fn header(&self, name: &str) -> Option<&str> {
         header(&self.headers, name)
     }
 }

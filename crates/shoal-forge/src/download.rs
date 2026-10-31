@@ -9,7 +9,10 @@ use crate::{
     account::Account,
     backends::Backend,
     capability::Capability,
-    transport::{api::http_body, response::Fetched},
+    transport::{
+        api::http_body,
+        response::{Fetched, Headed},
+    },
 };
 
 /// A downloaded file and the content type the forge served it as.
@@ -24,14 +27,10 @@ impl ForgeRepo {
     pub async fn download(&self, account: &Account, url: &str) -> Result<Download> {
         self.require(Capability::Downloads)?;
         self.check_download(url)?;
-        async {
-            self.kind
-                .download(self, account, url)
-                .await?
-                .into_download()
-        }
-        .await
-        .with_context(|| format!("download {url}"))
+        let fetched = self.kind.download(self, account, url);
+        async { self.limited(account, fetched).await?.into_download() }
+            .await
+            .with_context(|| format!("download {url}"))
     }
 
     /// Refuse a URL that is not on this repository's forge, whose login

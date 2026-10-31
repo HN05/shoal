@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::transport::{
     limits::{Limit, RateLimited, limit},
-    response::Response,
+    response::{Headed, Response},
 };
 
 /// Reads remembered before the least recently used is forgotten.
@@ -61,7 +61,7 @@ impl Memory {
     pub(crate) fn observe_limit(
         &self,
         host: &str,
-        response: &Response,
+        response: &impl Headed,
         now: u64,
     ) -> Result<(), RateLimited> {
         let Some(limit) = limit(response, now) else {

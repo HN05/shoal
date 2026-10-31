@@ -3,7 +3,7 @@
 //! `RateLimit-*` headers.
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::transport::response::Response;
+use crate::transport::response::Headed;
 
 /// How long a forge that refuses requests without saying until when is left
 /// alone.
@@ -60,7 +60,7 @@ impl Limit {
 }
 
 /// The limit `response` reports at `now`, if any.
-pub(crate) fn limit(response: &Response, now: u64) -> Option<Limit> {
+pub(crate) fn limit(response: &impl Headed, now: u64) -> Option<Limit> {
     let number = |names: &[&str]| {
         names
             .iter()
@@ -79,8 +79,8 @@ pub(crate) fn limit(response: &Response, now: u64) -> Option<Limit> {
     let bounded = |until: u64| until.clamp(now + 1, now + MAX_WAIT);
     // GitHub refuses with 403 as well; only a limit header tells it from a
     // permission error.
-    let refused = response.status == 429
-        || (response.status == 403 && (retry_after.is_some() || remaining == Some(0)));
+    let refused = response.status() == 429
+        || (response.status() == 403 && (retry_after.is_some() || remaining == Some(0)));
     if refused {
         let until = retry_after.or(reset).unwrap_or(now + DEFAULT_WAIT);
         return Some(Limit::Refused(bounded(until)));
