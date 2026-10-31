@@ -76,10 +76,13 @@ jobs:
         env:
           TOKEN: ${{ github.token }}
           API: ${{ github.api_url }}/repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }}/status
+          RUN: ${{ github.run_number }}
         run: |
           set -o pipefail
           # A failed lookup must not drop the checks: fall through to running them.
-          checks=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r '.statuses[]
+          # This run's own gate is pending from the start, so its statuses do not count.
+          checks=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r --arg run "/actions/runs/$RUN/" '.statuses[]
+              | select(.target_url | contains($run) | not)
               | select(.context == "ci / rust (fmt, clippy, test, scripts) (pull_request)"
                   or (.context == "ci / gate (docs-only PRs skip the checks) (pull_request)" and .status != "skipped"))
               | "\(.context): \(.status)"') \
