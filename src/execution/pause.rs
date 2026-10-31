@@ -245,7 +245,7 @@ pub(super) enum Halt {
         resumes_when: String,
     },
     /// `shoal stop`, workspace removal, a daemon shutdown or a refused
-    /// reattachment.
+    /// reattachment; the reason is saved for `shoal resume`.
     Pause {
         reason: Option<String>,
         /// The removal record of the removed workspace keeps the session.
@@ -284,8 +284,7 @@ impl Halt {
         match self {
             Self::Protection { reason, .. } => Some(reason),
             Self::Ended { reason } => Some(reason),
-            Self::Shutdown { reason } => reason.as_deref(),
-            Self::Pause { .. } => None,
+            Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
         }
     }
 

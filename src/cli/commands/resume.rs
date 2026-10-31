@@ -325,7 +325,7 @@ pub async fn run(
     let _claim = claim(&selected)?;
     let recorded = Record::load(&selected)?.context("recovery record was already consumed")?;
     if let Some(reason) = &recorded.stop_reason {
-        eprintln!("shoal: restoring {} stopped after {reason}", recorded.agent);
+        eprintln!("shoal: restoring {}, stopped: {reason}", recorded.agent);
     }
     let session = recorded.into_last_session(selected_id);
     restore(ctx, workspace, session, selected, saved.commands).await
@@ -517,7 +517,7 @@ fn agent_label(path: &Path) -> String {
     label.push_str(&stop_time(path));
     let idle = record.as_ref().is_some_and(Record::between_turns);
     if let Some(reason) = record.and_then(|record| record.stop_reason) {
-        label.push_str(&format!(" after {reason}"));
+        label.push_str(&format!(" ({reason})"));
     }
     label.push_str(if idle { ", idle" } else { ", interrupted" });
     label

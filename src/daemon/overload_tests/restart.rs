@@ -313,7 +313,7 @@ async fn restart_keeps_uncertain_stopped_agents_and_notifies_once() {
         )),
         "{survivor}"
     );
-    assert!(survivor.contains("after test memory pressure"));
+    assert!(survivor.contains("stopped (test memory pressure)"));
     assert!(survivor.contains("shoal stop load"));
     assert!(survivor.contains("shoal resume load --execution survivor"));
     let unproven = messages.iter().find(|m| m.contains("unproven")).unwrap();

@@ -248,7 +248,7 @@ impl Manager {
         let reason = record
             .stop_reason
             .as_deref()
-            .map_or(String::new(), |reason| format!(" after {reason}"));
+            .map_or(String::new(), |reason| format!(" ({reason})"));
         self.notify(
             Some(&workspace.name),
             NotificationKind::RecoveryBlocked,

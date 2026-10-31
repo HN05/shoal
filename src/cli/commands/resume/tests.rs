@@ -13,7 +13,7 @@ fn agents_are_labelled_by_name_stop_time_and_reason() {
     assert!(label.starts_with("claude, stopped "), "{label}");
     // A record without a turn counts as interrupted.
     assert!(
-        label.ends_with(" after critical memory pressure, interrupted"),
+        label.ends_with(" (critical memory pressure), interrupted"),
         "{label}"
     );
     assert!(!label.contains("execution"), "{label}");

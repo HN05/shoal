@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
+fn stopped_lines_name_the_cause_that_is_saved() {
     let protection = Halt::Protection {
         recover: false,
         reason: "free disk space is below 2 GiB".into(),
@@ -19,7 +19,7 @@ fn stopped_lines_name_the_cause_and_only_protection_saves_it() {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
     };
-    assert_eq!(stop.saved_reason(), None);
+    assert_eq!(stop.saved_reason(), Some("stopped by shoal stop"));
     assert_eq!(stop.stated_reason(), ": stopped by shoal stop");
     assert_eq!(
         stop.manual_restore("worker", "id"),
