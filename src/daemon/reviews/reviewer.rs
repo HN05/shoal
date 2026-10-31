@@ -207,33 +207,50 @@ fn command(reviewer: &Reviewer) -> Result<Command> {
 
 fn read(reviewer: &Reviewer, success: bool) -> Result<Result<ReviewerOutput, FailureReason>> {
     let files = reviewer.files;
-    let stdout = fs::read(files.stdout())?;
-    let stderr = fs::read(files.stderr())?;
-    let written = match reviewer.writes_output {
-        true => read_if_present(&files.output())?,
-        false => None,
-    };
+    // A result too large to be a review is no review; it is never loaded.
     let result = match reviewer.writes_output {
-        true => written.as_deref(),
-        false => Some(stdout.as_slice()),
+        true => read_bounded(&files.output(), RESULT_LIMIT)?,
+        false => read_bounded(&files.stdout(), RESULT_LIMIT)?,
     };
+    let stderr = read_tail(&files.stderr(), DIAGNOSTIC_LIMIT)?;
+    let stdout = read_tail(&files.stdout(), DIAGNOSTIC_LIMIT)?;
     Ok(output::read(
         reviewer.format,
         &output::Run {
             success,
-            result,
+            result: result.as_deref(),
             diagnostics: [&stderr, &stdout],
         },
     ))
 }
 
-/// The file's bytes; a reviewer that wrote none leaves it missing.
-fn read_if_present(path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(bytes)),
+/// The most of a reviewer's result that is read.
+const RESULT_LIMIT: u64 = 8 * 1024 * 1024;
+
+/// The most of each diagnostic stream that is read, from its end, where
+/// a failure is reported.
+const DIAGNOSTIC_LIMIT: u64 = 64 * 1024;
+
+/// The file's bytes, unless it is missing, as from a reviewer that wrote
+/// none, or larger than `limit`.
+fn read_bounded(path: &std::path::Path, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.len() > limit => Ok(None),
+        Ok(_) => fs::read(path).map(Some),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error),
     }
+}
+
+/// The last `limit` bytes of the file.
+fn read_tail(path: &std::path::Path, limit: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(path)?;
+    let length = file.metadata()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(limit)))?;
+    let mut tail = Vec::new();
+    file.take(limit).read_to_end(&mut tail)?;
+    Ok(tail)
 }
 
 /// Kills a reviewer's process group when dropped before its leader is
