@@ -14,6 +14,7 @@ use crate::{
     reviews::{FindingId, Outcome, Review, ReviewTarget},
 };
 
+mod delivery;
 mod history;
 mod reviewer;
 mod run;
@@ -85,6 +86,7 @@ impl Manager {
         if let Some(cancel) = self.reviews.cancels.lock().unwrap().get(&id) {
             cancel.send_replace(true);
         }
+        self.deliver_review(id).await;
         self.review(id).await
     }
 

@@ -69,8 +69,10 @@ impl Manager {
                 .store
                 .run(move |db| store::fail(db, id, None, FailureReason::ExecutionFailed, now))
                 .await;
-            if let Err(error) = failed {
-                log!("review {id}: {error:#}");
+            match failed {
+                Ok(true) => self.deliver_review(id).await,
+                Ok(false) => {}
+                Err(error) => log!("review {id}: {error:#}"),
             }
         }
         self.reviews.cancels.lock().unwrap().remove(&id);
@@ -206,22 +208,25 @@ impl Manager {
         ended
     }
 
+    /// Record how the run ended and deliver the review; a cancel already
+    /// recorded and delivered it.
     async fn record_end(&self, id: i64, reviewer: &str, ended: Ended) -> Result<()> {
         let reviewer = reviewer.to_owned();
         let now = now();
-        self.store
+        let recorded = self
+            .store
             .run(move |db| match ended {
-                Ended::Returned(output) => store::finish(db, id, &reviewer, &output, now).map(drop),
-                Ended::Failed(reason) => {
-                    store::fail(db, id, Some(&reviewer), reason, now).map(drop)
-                }
-                // The cancel already ended it.
-                Ended::Cancelled => Ok(()),
+                Ended::Returned(output) => store::finish(db, id, &reviewer, &output, now),
+                Ended::Failed(reason) => store::fail(db, id, Some(&reviewer), reason, now),
+                Ended::Cancelled => Ok(false),
             })
-            .await
+            .await?;
+        if recorded {
+            self.deliver_review(id).await;
+        }
+        Ok(())
     }
 
-    /// The review's instructions for its checkout.
     /// The review's instructions for its checkout, then its history.
     async fn review_instructions(
         &self,
