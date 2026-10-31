@@ -131,7 +131,7 @@ def curl(args):
     if "Content-Type" not in sent:
         sent = {"Content-Type": "application/json", **sent}
     head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
-    sys.stderr.write(f"HTTP/1.1 {status} Scripted\r\n{head}\r\n")
+    sys.stdout.write(f"HTTP/1.1 {status} Scripted\r\n{head}\r\n")
     if isinstance(answer, str):
         sys.stdout.write(answer)
     elif answer is not None:

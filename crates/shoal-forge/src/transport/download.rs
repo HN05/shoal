@@ -8,7 +8,7 @@ use tokio::process::Command;
 use crate::transport::{
     api::{FILE_TIMEOUT, curl_failure, size},
     programs,
-    response::{Fetched, last_head},
+    response::{Fetched, split_heads},
 };
 
 /// The largest file Shoal downloads, which is also the largest it attaches.
@@ -24,18 +24,22 @@ pub(crate) async fn with_curl(url: &str, authorization: Option<Vec<u8>>) -> Resu
     curl.args(["-q", "-sS", "--globoff", "--location", "--max-redirs", "5"])
         .args(["--proto-redir", "=http,https", "--max-time"])
         .arg(FILE_TIMEOUT.as_secs().to_string())
-        // The heads go apart from the file, which ends with the status.
-        .args(["-D", "/dev/stderr", "-w", "\n%{http_code}", "-K", "-", url]);
+        // The heads go before the file, which ends with the status.
+        .args(["-D", "-", "-w", "\n%{http_code}", "-K", "-", url]);
     let output = capture(curl, authorization.unwrap_or_default())
         .await
         .map_err(|error| unrun(error, "curl is required to download from this forge"))?;
     if !output.status.success() {
         return Err(curl_failure(&output));
     }
-    let (body, status) = split_status(output.stdout)?;
+    let mut stdout = output.stdout;
+    let (headers, rest) = split_heads(&stdout);
+    let heads = stdout.len() - rest.len();
+    stdout.drain(..heads);
+    let (body, status) = split_status(stdout)?;
     Ok(Fetched {
         status,
-        headers: last_head(&String::from_utf8_lossy(&output.stderr)),
+        headers,
         body,
     })
 }

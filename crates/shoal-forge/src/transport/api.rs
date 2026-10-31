@@ -15,7 +15,7 @@ use crate::{
         limits::unix_seconds,
         programs,
         resend::{Resend, Transient, resending},
-        response::{Headed, Response, last_head},
+        response::{Headed, Response, split_heads},
     },
 };
 
@@ -265,9 +265,10 @@ impl ForgeRepo {
                 "Accept: application/json",
                 "-w",
                 "\n%{http_code}",
-                // The head goes apart from the body, which ends with the status.
+                // The heads go before the body, which ends with the status;
+                // sandboxes such as Codex's refuse opening /dev/stderr.
                 "-D",
-                "/dev/stderr",
+                "-",
             ]);
         for condition in &request.conditions {
             curl.args(["-H", condition]);
@@ -292,11 +293,12 @@ impl ForgeRepo {
         if !output.status.success() {
             return Err(curl_failure(&output));
         }
-        let text = String::from_utf8(output.stdout).context("curl output is not UTF-8")?;
-        let (status, body) = curl_status(&text)?;
+        let (headers, rest) = split_heads(&output.stdout);
+        let text = std::str::from_utf8(rest).context("curl output is not UTF-8")?;
+        let (status, body) = curl_status(text)?;
         Ok(Response {
             status,
-            headers: last_head(&String::from_utf8_lossy(&output.stderr)),
+            headers,
             body: body.to_owned(),
         })
     }

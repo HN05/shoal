@@ -66,18 +66,33 @@ fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
-/// The headers of the last response head in `text`, which curl's
-/// `--dump-header` writes apart from the body; none when it has no head.
-pub(crate) fn last_head(text: &str) -> Vec<(String, String)> {
-    let start = text
-        .match_indices("HTTP/")
-        .map(|(at, _)| at)
-        .filter(|&at| at == 0 || text[..at].ends_with('\n'))
-        .last();
-    start
-        .and_then(|at| parse_head(&text[at..]))
-        .map(|(_, headers)| headers)
-        .unwrap_or_default()
+/// The headers of the last response head at the start of `output`, which
+/// `--dump-header -` writes there for each response curl follows, and the
+/// output after the heads; no headers when it starts with none.
+pub(crate) fn split_heads(mut output: &[u8]) -> (Vec<(String, String)>, &[u8]) {
+    let mut headers = Vec::new();
+    while output.starts_with(b"HTTP/") {
+        let Some(end) = head_end(output) else {
+            break;
+        };
+        if let Some((_, head)) = parse_head(&String::from_utf8_lossy(&output[..end])) {
+            headers = head;
+        }
+        output = &output[end..];
+    }
+    (headers, output)
+}
+
+/// Where the head at the start of `output` ends, after its blank line.
+fn head_end(output: &[u8]) -> Option<usize> {
+    output
+        .windows(2)
+        .enumerate()
+        .find_map(|(at, pair)| match pair {
+            b"\n\n" => Some(at + 2),
+            b"\n\r" if output.get(at + 2) == Some(&b'\n') => Some(at + 3),
+            _ => None,
+        })
 }
 
 /// The status and headers of a head, which ends at its first blank line.
