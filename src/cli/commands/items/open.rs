@@ -12,7 +12,7 @@ use crate::{
     },
     git,
     model::Workspace,
-    protocol::{ItemMethod, WorkspaceMethod},
+    protocol::{ItemMethod, ReviewMethod, WorkspaceMethod},
 };
 
 pub(super) async fn open_pr(
@@ -58,6 +58,10 @@ pub(super) async fn publish(
         },
     )
     .await?;
+    let gate = ReviewMethod::CheckPrGate {
+        workspace: workspace.id.clone(),
+    };
+    client::request::<()>(&ctx.paths, gate).await?;
     push(ctx, &workspace).await?;
     client::request(
         &ctx.paths,

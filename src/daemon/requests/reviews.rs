@@ -49,6 +49,12 @@ pub(super) async fn handle(
             Some(id) => manager.review(id).await?,
             None => manager.latest_review(&named(workspace)?).await?,
         }),
+        ReviewMethod::CheckPrGate { workspace } => {
+            if caller.is_some() {
+                manager.check_pr_review_gate(&workspace).await?;
+            }
+            Body::Ok
+        }
         ReviewMethod::ReplyToFinding { finding, body, .. } => {
             review(manager.reply_to_finding(finding, body).await?)
         }
@@ -81,7 +87,9 @@ impl Scoped for ReviewMethod {
             | ReviewMethod::ResolveFinding {
                 workspace, finding, ..
             } => Some(workspace.insert(manager.review_workspace(finding.review).await?)),
-            ReviewMethod::RunReview { workspace, .. } => Some(workspace),
+            ReviewMethod::RunReview { workspace, .. } | ReviewMethod::CheckPrGate { workspace } => {
+                Some(workspace)
+            }
             ReviewMethod::ListReviews {
                 workspace,
                 repository,

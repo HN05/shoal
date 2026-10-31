@@ -51,6 +51,9 @@ pub enum ReviewMethod {
         finding: FindingId,
         body: String,
     },
+    /// Refuse `shoal pr open` of a new PR before it pushes when the
+    /// workspace's review gate would; only workspace processes are gated.
+    CheckPrGate { workspace: String },
     /// Resolve a finding with `outcome`, or reopen it without one.
     ResolveFinding {
         #[serde(default, skip_serializing_if = "Option::is_none")]

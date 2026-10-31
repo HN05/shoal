@@ -290,6 +290,23 @@ pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Ve
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The workspace's newest finished review of commit `head`.
+pub(crate) fn finished_at(
+    db: &Connection,
+    workspace_id: &str,
+    head: &str,
+) -> Result<Option<Review>> {
+    let id: Option<i64> = db.query_row(
+        "SELECT MAX(id) FROM reviews WHERE workspace_id=?1 AND head=?2 AND state='finished'",
+        params![workspace_id, head],
+        |row| row.get(0),
+    )?;
+    match id {
+        Some(id) => load(db, id),
+        None => Ok(None),
+    }
+}
+
 /// The workspace's newest review.
 pub(crate) fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Review>> {
     let id: Option<i64> = db.query_row(

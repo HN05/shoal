@@ -861,7 +861,23 @@ workspace's latest review state. `review resolve` takes one outcome with its dat
 | `duplicate` | Another finding makes the same point | `--of <finding>` |
 
 A finding that needs your decision stays unresolved while the agent asks with
-`shoal questions ask`. A workspace process runs, cancels and answers the reviews of
+`shoal questions ask`, which keeps the gates below closed until you answer.
+
+```toml
+[review]
+require_for_pr = false    # Default: false
+require_for_ready = false # Default: false
+```
+
+With `require_for_pr`, a workspace process's `shoal pr open` that would open a new
+PR is checked before it pushes, and before a [proposal](#approval-for-agent-issues-and-prs); linking an
+existing PR is not. With `require_for_ready`, its `shoal ready` is checked, not
+`ready --undo`. A gate passes once a finished review covers HEAD exactly and every
+one of its findings is resolved, whatever the verdict. Otherwise the command is
+refused, naming what is missing and listing the unresolved findings; without a
+review of HEAD and with none queued or running, it queues one, whose findings
+arrive as a message. Your own commands are never gated, and a gate's review is a
+workspace review, never posted. A workspace process runs, cancels and answers the reviews of
 its own workspace and those below it. Removing a workspace cancels its review and
 deletes its reviews. Every command takes `--json`.
 

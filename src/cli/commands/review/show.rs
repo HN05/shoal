@@ -112,7 +112,7 @@ fn render_list(reviews: &[Review], json: bool) {
             Some(true) => " (outdated)",
             _ => "",
         };
-        let status = palette.paint(state_style(review), &review.status());
+        let status = palette.paint(state_style(review), review.status());
         outln!(
             "{:>5}  {}  {status}{unresolved}{outdated}  {}",
             review.id,
@@ -128,7 +128,7 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
     outln!("{}", palette.paint(Style::Heading, heading));
     outln!(
         "State:    {}",
-        palette.paint(state_style(review), &review.status())
+        palette.paint(state_style(review), review.status())
     );
     if let Some(reason) = review.failure {
         outln!("Failure:  {}", reason.describe());
@@ -168,7 +168,7 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         Some(Posted::Posted { url }) => outln!("Posted:   {url}"),
         Some(Posted::Failed { error }) => outln!(
             "Posted:   {}",
-            palette.paint(Style::Warning, &format!("not posted: {error}"))
+            palette.paint(Style::Warning, format!("not posted: {error}"))
         ),
         None => {}
     }

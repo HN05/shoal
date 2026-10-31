@@ -573,6 +573,13 @@ pub struct ReviewConfig {
     /// The agent that reviews once more when the first reviewer fails for a
     /// reason other than running too long.
     pub fallback_agent: Option<Agent>,
+    /// Whether a workspace process opening a new PR needs a finished review
+    /// of HEAD with every finding resolved.
+    #[option(default = false)]
+    pub require_for_pr: Option<bool>,
+    /// Whether a workspace process marking work ready needs one.
+    #[option(default = false)]
+    pub require_for_ready: Option<bool>,
 }
 
 /// How agent messages that arrive in quick succession are held to reach the
