@@ -4,7 +4,7 @@
 #[allow(dead_code)]
 #[path = "support/daemon.rs"]
 mod daemon_fixture;
-use daemon_fixture::DaemonGuard;
+use daemon_fixture::{CommandGroup, DaemonGuard};
 
 #[path = "support/git.rs"]
 mod git_fixture;
@@ -28,7 +28,9 @@ enum Forge {
 }
 
 struct Fixture {
-    // Fields drop in declaration order: the daemon and server before the directory.
+    // Fields drop in declaration order: the commands, daemon and server before
+    // the directory.
+    commands: CommandGroup,
     _daemon: DaemonGuard,
     server: Option<Child>,
     root: tempfile::TempDir,
@@ -96,6 +98,7 @@ impl Fixture {
         let mut launch = support::cli(root.path());
         let daemon = DaemonGuard::start(root.path(), &mut launch);
         let mut fixture = Self {
+            commands: CommandGroup::new(),
             _daemon: daemon,
             server: server.map(|(child, _)| child),
             root,
@@ -156,7 +159,9 @@ impl Fixture {
     }
 
     fn command(&self) -> Command {
-        support::cli(self.root.path())
+        let mut command = support::cli(self.root.path());
+        self.commands.join(&mut command);
+        command
     }
 
     fn run(&self, args: &[&str]) -> Output {

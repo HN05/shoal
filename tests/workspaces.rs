@@ -17,7 +17,7 @@ mod pty;
 
 #[path = "support/daemon.rs"]
 mod daemon_fixture;
-use daemon_fixture::DaemonGuard;
+use daemon_fixture::{CommandGroup, DaemonGuard};
 
 #[path = "support/git.rs"]
 mod git_fixture;
@@ -40,12 +40,16 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
 
 struct Fixture {
+    // Fields drop in declaration order: the commands stop while the daemon
+    // still answers them.
+    commands: CommandGroup,
     daemon: DaemonGuard,
     root: TempDir,
     repo: PathBuf,
@@ -118,7 +122,12 @@ impl Fixture {
         // Model a starting commit already present on a remote, without network I/O.
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         let daemon = DaemonGuard::start(root.path(), &mut daemon_launch(root.path()));
-        let fixture = Self { root, repo, daemon };
+        let fixture = Self {
+            commands: CommandGroup::new(),
+            root,
+            repo,
+            daemon,
+        };
         fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
         fixture
     }
@@ -210,7 +219,9 @@ impl Fixture {
     }
 
     fn command(&self) -> Command {
-        cli(self.root.path())
+        let mut command = cli(self.root.path());
+        self.commands.join(&mut command);
+        command
     }
     fn run(&self, args: &[&str]) -> Output {
         self.command().args(args).output().unwrap()
@@ -2502,6 +2513,50 @@ fn workspace_context_adapters_preserve_directory_scope_and_picker_policy() {
         "{output:?}"
     );
 }
+
+/// A test that fails while `shoal run` runs leaves neither the wrapper nor
+/// its command running once its fixture drops.
+#[test]
+fn fixture_stops_the_commands_of_a_failed_test() {
+    let started = Mutex::new(None);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let fixture = Fixture::new();
+        fixture.add("leak");
+        let pid_file = fixture.root.path().join("command-pid");
+        let wrapper = fixture
+            .command()
+            .args(["run", "--workspace", "leak", "--"])
+            .args(READABLE_SLEEP_PID)
+            .arg(&pid_file)
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        wait_until("command to start", || {
+            fs::read_to_string(&pid_file).is_ok_and(|pid| !pid.is_empty())
+        });
+        let command: u32 = fs::read_to_string(&pid_file).unwrap().parse().unwrap();
+        *started.lock().unwrap() = Some((wrapper, command));
+        panic!("simulate a failed test assertion");
+    }));
+    assert!(result.is_err());
+    let (mut wrapper, command) = started.into_inner().unwrap().unwrap();
+    assert!(
+        wrapper.try_wait().unwrap().is_some(),
+        "the wrapper still runs"
+    );
+    assert!(
+        !process_running(command),
+        "the wrapper's command still runs"
+    );
+}
+
+/// A command that writes its PID to the file its last argument names, then
+/// runs until stopped, keeping its environment readable as `READABLE_SLEEP`.
+const READABLE_SLEEP_PID: [&str; 3] = [
+    "python3",
+    "-c",
+    "import os, sys, time; open(sys.argv[1], 'w').write(str(os.getpid())); time.sleep(600)",
+];
 
 #[test]
 fn status_summarizes_current_workspace_work_and_supports_json() {

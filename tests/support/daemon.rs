@@ -4,6 +4,7 @@ use std::{
     os::unix::{fs::PermissionsExt, process::CommandExt},
     path::Path,
     process::{Child, Command, Stdio},
+    time::{Duration, Instant},
 };
 
 use crate::support;
@@ -106,6 +107,82 @@ impl Drop for DaemonGuard {
         }
         self.kill();
     }
+}
+
+/// The process group of the CLI processes a fixture spawns, so dropping the
+/// fixture stops what a failed test left running, such as a `shoal run`
+/// wrapper. It is not the daemon's, which a test kills to simulate a crash
+/// that wrappers outlive. A `cat` reading a pipe from the test leads it, so
+/// the group lasts across daemon restarts and its leader exits with the test.
+#[allow(dead_code)] // Integration test binaries use different subsets of support.
+pub struct CommandGroup {
+    leader: Child,
+}
+
+#[allow(dead_code)]
+impl CommandGroup {
+    pub fn new() -> Self {
+        let leader = Command::new("cat")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        Self { leader }
+    }
+
+    /// Run `command` in the group. One that starts its own session leaves it.
+    pub fn join(&self, command: &mut Command) {
+        let group = self.leader.id() as libc::pid_t;
+        // SAFETY: setpgid is async-signal-safe and touches no memory.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::setpgid(0, group) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+    }
+}
+
+/// SIGTERM first, and SIGKILL only once the group is empty or the execution
+/// stop grace has passed: a wrapper killed at once would leave its command's
+/// own process group running.
+impl Drop for CommandGroup {
+    fn drop(&mut self) {
+        // While the leader is unreaped, no other process can take its group ID.
+        let group = -(self.leader.id() as i32);
+        unsafe { libc::kill(group, libc::SIGTERM) };
+        let deadline = Instant::now() + 2 * EXECUTION_STOP_GRACE;
+        while Instant::now() < deadline && group_runs(self.leader.id()) {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        unsafe { libc::kill(group, libc::SIGKILL) };
+        let _ = self.leader.kill();
+        let _ = self.leader.wait();
+    }
+}
+
+/// The daemon's `timing::EXECUTION_STOP_GRACE`, which a wrapper gives its
+/// command after SIGTERM before it kills it.
+#[allow(dead_code)]
+const EXECUTION_STOP_GRACE: Duration = Duration::from_secs(2);
+
+/// Whether a process of process group `group` runs, other than zombies.
+#[allow(dead_code)]
+fn group_runs(group: u32) -> bool {
+    let Ok(output) = Command::new("ps")
+        .args(["-ax", "-o", "pgid=,stat="])
+        .output()
+    else {
+        return false;
+    };
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        let mut fields = line.split_whitespace();
+        fields.next().and_then(|pgid| pgid.parse().ok()) == Some(group)
+            && fields.next().is_some_and(|stat| !stat.starts_with('Z'))
+    })
 }
 
 /// Give the daemon a `zmx`, last on its PATH, when the runner has none, so
