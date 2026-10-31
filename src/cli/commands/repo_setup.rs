@@ -28,7 +28,7 @@ pub(super) async fn start(
     if local || choose_local(ctx)? {
         local::start(ctx, repo, settings, options).await
     } else {
-        commit::start(ctx, &repo, options.agent, options.args).await
+        commit::start(ctx, &repo, options.agent, options.model, options.args).await
     }
 }
 

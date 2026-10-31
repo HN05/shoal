@@ -32,6 +32,10 @@ pub fn validate(agents: &Agents, commands: &Commands) -> Result<()> {
             "agents.{name}.retry needs a command or base, or a built-in AI tool"
         );
         ensure!(
+            (agent.model.is_none() && agent.effort.is_none()) || runs_as_agent(agents, name),
+            "agents.{name}: model and effort need a command or base, or a built-in AI tool"
+        );
+        ensure!(
             agent.prompt_cache_minutes.is_none() || runs_as_agent(agents, name),
             "agents.{name}.prompt_cache_minutes needs a command or base, or a built-in AI tool"
         );
@@ -49,6 +53,11 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
         "agents.{name}.prompt_cache_minutes must be at least 1"
     );
     environment(agent).with_context(|| format!("agents.{name}"))?;
+    crate::agent::ModelChoice {
+        model: agent.model.clone(),
+        effort: agent.effort.clone(),
+    }
+    .validate(&format!("agents.{name}"))?;
     for (key, argv, placeholders) in [
         (
             "instructions",
@@ -58,6 +67,8 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
         ("resume", &agent.resume, &["{session}"][..]),
         ("resume_latest", &agent.resume_latest, &[][..]),
         ("fork", &agent.fork, &["{session}"][..]),
+        ("model_args", &agent.model_args, &["{model}"][..]),
+        ("effort_args", &agent.effort_args, &["{effort}"][..]),
     ] {
         if let Some(argv) = argv {
             validate_arguments(argv, placeholders)

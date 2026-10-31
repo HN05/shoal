@@ -60,6 +60,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             agent: None,
             now: false,
             after: vec![],
+            model: Default::default(),
             args: vec![],
         }),
         RepoMenuAction::Rename => repo(RepoCommand::Rename {
@@ -75,6 +76,7 @@ pub(super) async fn choose(ctx: &Context) -> Result<Command> {
             here: false,
             name: None,
             agent: None,
+            model: Default::default(),
             args: vec![],
         }),
         RepoMenuAction::Delete => repo(RepoCommand::Rm {

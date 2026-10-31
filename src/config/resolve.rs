@@ -202,6 +202,25 @@ impl Effective {
         self.tools.get(name).map_or(&NONE, |tool| &tool.launch)
     }
 
+    /// The model and effort a launch of agent `name` runs with: each
+    /// `requested` value, else `[agent] model` and `effort` when `[agent]
+    /// default` names it, else its AI tool's.
+    pub fn model(
+        &self,
+        name: &str,
+        requested: crate::agent::ModelChoice,
+    ) -> crate::agent::ModelChoice {
+        let chosen = match &self.agent.default {
+            Some(default) if default.name() == name => crate::agent::ModelChoice {
+                model: self.agent.model.clone(),
+                effort: self.agent.effort.clone(),
+            },
+            _ => Default::default(),
+        };
+        let configured = self.tools.get(name).map(|tool| tool.model.clone());
+        requested.or(chosen).or(configured.unwrap_or_default())
+    }
+
     /// The integration agent `name` runs with; none for an agent no AI tool
     /// describes.
     pub fn integration(&self, name: &str) -> crate::ai::IntegrationKind {

@@ -8,7 +8,10 @@ use super::{LaunchOptions, desktop::App};
 #[cfg(feature = "happy")]
 use crate::happy::Agent;
 use crate::{
-    agent::AgentMode, ai::IntegrationKind, cli::context::Context, config::named_commands::Commands,
+    agent::{AgentMode, ModelChoice},
+    ai::IntegrationKind,
+    cli::context::Context,
+    config::named_commands::Commands,
 };
 
 /// `shoal claude` and `shoal codex`, which run the agent of integration
@@ -19,6 +22,7 @@ pub(in crate::cli) async fn with_app(
     kind: IntegrationKind,
     mode: Option<AgentMode>,
     workspace: Option<String>,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let integration = super::integration(kind);
@@ -29,6 +33,7 @@ pub(in crate::cli) async fn with_app(
     }
     let options = LaunchOptions {
         tracked: mode == Some(AgentMode::Cli),
+        model,
         ..Default::default()
     };
     let agent = kind.as_str().parse()?;

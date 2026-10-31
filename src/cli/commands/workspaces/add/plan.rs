@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use super::{agent::ResolvedAddAgent, target::AddTarget};
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{
         client::request,
         commands::{issues, repositories},
@@ -113,7 +113,14 @@ pub(crate) fn queued_agent_request(
 ) -> Result<QueueRequest> {
     let plan = AddPlan {
         prompt,
-        ..AddPlan::agent_in(workspace, agent.clone(), None, Vec::new(), None)
+        ..AddPlan::agent_in(
+            workspace,
+            agent.clone(),
+            Default::default(),
+            None,
+            Vec::new(),
+            None,
+        )
     };
     Ok(QueueRequest {
         repository: workspace.repository_id.as_str().into(),
@@ -159,12 +166,14 @@ pub(in crate::cli) struct AddPlan {
 }
 
 impl AddPlan {
-    /// A launch of `agent` in the existing `workspace`, prompted with the
-    /// issue at `issue` or with `args`, from a fork of session `fork` when
-    /// given. It runs detached, so it stays tracked.
+    /// A launch of `agent` with the requested `model` in the existing
+    /// `workspace`, prompted with the issue at `issue` or with `args`, from a
+    /// fork of session `fork` when given. It runs detached, so it stays
+    /// tracked.
     pub(in crate::cli::commands) fn agent_in(
         workspace: &Workspace,
         agent: Agent,
+        model: ModelChoice,
         issue: Option<&issues::Issue>,
         args: Vec<OsString>,
         fork: Option<String>,
@@ -180,6 +189,7 @@ impl AddPlan {
             agent: ResolvedAddAgent {
                 agent: Some(agent),
                 tracked: true,
+                model,
             },
             args,
             prompt: None,

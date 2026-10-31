@@ -68,6 +68,26 @@ pub struct Invocation {
     pub args: Vec<std::ffi::OsString>,
 }
 
+// `--model` and `--effort` of a command that starts an agent.
+#[derive(Debug, Default, Clone, clap::Args)]
+pub struct ModelArgs {
+    /// Model the agent runs with, overriding [agents.<name>] model and [agent] model.
+    #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub model: Option<String>,
+    /// Reasoning effort the agent runs with, overriding [agents.<name>] effort and [agent] effort.
+    #[arg(long, value_parser = clap::builder::NonEmptyStringValueParser::new())]
+    pub effort: Option<String>,
+}
+
+impl From<ModelArgs> for crate::agent::ModelChoice {
+    fn from(args: ModelArgs) -> Self {
+        Self {
+            model: args.model,
+            effort: args.effort,
+        }
+    }
+}
+
 /// An issue or PR argument, where `#42` means `42`.
 pub(in crate::cli) fn item_reference(input: &str) -> Result<String, std::convert::Infallible> {
     Ok(match input.strip_prefix('#') {

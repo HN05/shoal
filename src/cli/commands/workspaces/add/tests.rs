@@ -13,6 +13,7 @@ fn plan(args: &[&str]) -> AddPlan {
     AddPlan::agent_in(
         &workspace,
         agent,
+        Default::default(),
         None,
         args.iter().map(Into::into).collect(),
         None,

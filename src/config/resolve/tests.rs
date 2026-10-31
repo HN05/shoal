@@ -7,7 +7,7 @@ use serde_json::Value;
 /// another layer than the one holding the fixture.
 const FULL: &str = "\
 git_profile = 'work'\n\
-[agent]\ndefault = 'claude'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
+[agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
 [agent.forge_clis]\nfj = '/fj'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\n\
 [agent.templates]\nworker = 'agent'\nchat = 'chat'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
@@ -29,7 +29,7 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
 base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
 fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
-prompt_cache_minutes = 5\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";
+prompt_cache_minutes = 5\nmodel = 'opus'\neffort = 'high'\nmodel_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";
 
 fn json<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).unwrap()

@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, item_reference},
+    cli::args::{AgentParser, ModelArgs, item_reference},
 };
 
 #[derive(Debug, Subcommand)]
@@ -56,6 +56,8 @@ pub enum CreateCommand {
         /// repeat for more. An issue's agent also waits for the issues blocking it.
         #[arg(long, value_name = "WORK", conflicts_with_all = ["now", "focus"])]
         after: Vec<String>,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -95,6 +97,8 @@ pub enum CreateCommand {
         /// stays unchanged.
         #[arg(long)]
         fork: bool,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the agent, such as its prompt.
         #[arg(last = true, requires = "child_agent")]
         args: Vec<OsString>,
@@ -121,6 +125,8 @@ pub struct ContributeArgs {
     /// Start the agent now even when max_agents is reached, instead of queuing it.
     #[arg(long)]
     pub now: bool,
+    #[command(flatten)]
+    pub model: ModelArgs,
     /// Arguments forwarded to the agent.
     #[arg(last = true)]
     pub args: Vec<OsString>,

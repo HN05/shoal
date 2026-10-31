@@ -385,3 +385,89 @@ fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
         assert!(error.contains(message), "{config}: {error}");
     }
 }
+
+#[test]
+fn model_arguments_select_the_model_and_effort_or_name_the_missing_template() {
+    let agents = parse(
+        "[agents.droid]\ncommand = ['droid']\nmodel_args = ['--model={model}']\n[agents.claude-fast]\nbase = 'claude'\neffort_args = ['--effort', '{effort}', '--fast']\n",
+    )
+    .unwrap();
+    let choice = |model: Option<&str>, effort: Option<&str>| crate::agent::ModelChoice {
+        model: model.map(str::to_owned),
+        effort: effort.map(str::to_owned),
+    };
+    let both = choice(Some("m1"), Some("high"));
+    assert_eq!(
+        arguments(&agents, "claude").model_args(&both),
+        Ok(["--model", "m1", "--effort", "high"]
+            .map(OsString::from)
+            .to_vec())
+    );
+    assert_eq!(
+        arguments(&agents, "codex").model_args(&both),
+        Ok(["-m", "m1", "-c", "model_reasoning_effort=\"high\""]
+            .map(OsString::from)
+            .to_vec())
+    );
+    // A profile keeps its base's templates unless it sets its own.
+    assert_eq!(
+        arguments(&agents, "claude-fast").model_args(&both),
+        Ok(["--model", "m1", "--effort", "high", "--fast"]
+            .map(OsString::from)
+            .to_vec())
+    );
+    let droid = arguments(&agents, "droid");
+    assert_eq!(
+        droid.model_args(&choice(Some("m1"), None)),
+        Ok(vec![OsString::from("--model=m1")])
+    );
+    assert_eq!(droid.model_args(&both), Err("effort_args"));
+    assert_eq!(
+        arguments(&agents, "pi").model_args(&both),
+        Err("model_args")
+    );
+    assert_eq!(
+        arguments(&agents, "pi").model_args(&Default::default()),
+        Ok(Vec::new())
+    );
+    // Claude's effort variable overrides its flag, so a launch sets both.
+    let claude = launch(&agents, "claude-fast");
+    assert_eq!(
+        claude.environment_with(&both).values(Path::new("/home")),
+        BTreeMap::from([("CLAUDE_CODE_EFFORT_LEVEL".to_owned(), "high".into())])
+    );
+    assert_eq!(
+        launch(&agents, "codex").environment_with(&both),
+        Environment::default()
+    );
+}
+
+#[test]
+fn configured_models_follow_the_nearest_entry_per_option() {
+    let agents = parse(
+        "[agents.claude]\nmodel = 'opus'\neffort = 'high'\n[agents.claude-fast]\nbase = 'claude'\nmodel = 'haiku'\n",
+    )
+    .unwrap();
+    let model = &agents["claude-fast"].model;
+    assert_eq!(model.model.as_deref(), Some("haiku"));
+    assert_eq!(model.effort.as_deref(), Some("high"));
+    assert!(agents["codex"].model.is_empty());
+    for (config, message) in [
+        ("[agents.notes]\nmodel = 'x'\n", "need a command or base"),
+        (
+            "[agents.codex]\neffort = ''\n",
+            "agents.codex.effort must be nonempty",
+        ),
+        (
+            "[agents.droid]\ncommand = ['droid']\nmodel_args = ['--model']\n",
+            "{model}",
+        ),
+        (
+            "[agents.droid]\ncommand = ['droid']\neffort_args = ['-e']\n",
+            "{effort}",
+        ),
+    ] {
+        let error = format!("{:#}", parse(config).unwrap_err());
+        assert!(error.contains(message), "{config}: {error}");
+    }
+}

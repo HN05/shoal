@@ -21,6 +21,11 @@ pub struct Provider {
     pub(super) resume_latest: Option<&'static [&'static str]>,
     pub(super) fork: Option<&'static [&'static str]>,
     pub(super) add_dir: Option<&'static [&'static str]>,
+    pub(super) model_args: Option<&'static [&'static str]>,
+    pub(super) effort_args: Option<&'static [&'static str]>,
+    /// The variable that sets the reasoning effort over the effort
+    /// arguments, which a launch with an effort sets to the same value.
+    pub(super) effort_variable: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,6 +73,9 @@ pub const PROVIDERS: &[Provider] = &[
         // told where to work.
         fork: Some(&["fork", "{session}", "--cd", "{directory}"]),
         add_dir: Some(&["--add-dir", "{directory}"]),
+        model_args: Some(&["-m", "{model}"]),
+        effort_args: Some(&["-c", "model_reasoning_effort=\"{effort}\""]),
+        effort_variable: None,
     },
     Provider {
         name: "claude",
@@ -81,6 +89,9 @@ pub const PROVIDERS: &[Provider] = &[
         // `--add-dir` takes every following argument up to the next option,
         // which would include a prompt; the joined form takes one.
         add_dir: Some(&["--add-dir={directory}"]),
+        model_args: Some(&["--model", "{model}"]),
+        effort_args: Some(&["--effort", "{effort}"]),
+        effort_variable: Some("CLAUDE_CODE_EFFORT_LEVEL"),
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -93,6 +104,9 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        model_args: None,
+        effort_args: None,
+        effort_variable: None,
     },
     Provider {
         name: "pi",
@@ -104,6 +118,9 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        model_args: None,
+        effort_args: None,
+        effort_variable: None,
     },
     Provider {
         name: "grok",
@@ -115,6 +132,9 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        model_args: None,
+        effort_args: None,
+        effort_variable: None,
     },
 ];
 

@@ -124,6 +124,9 @@ allow_any = false
 # Agent `shoal add <issue-url>` starts when --agent is omitted (no default):
 # a built-in AI tool or one defined under [agents].
 # default = "codex"
+# The model and reasoning effort the default agent runs with, over its tool's.
+# model = "gpt-5.5"
+# effort = "high"
 # Directories every agent and chat may read without a permission prompt, as
 # other working directories. Entries are absolute or start with ~/.
 dirs = ["/tmp"]
@@ -155,12 +158,18 @@ default_mode = "cli"
 command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
+# The model and reasoning effort its agents run with; --model and --effort
+# override them for one launch. Without them the tool uses its own defaults.
+# model = "gpt-5.5"
+# effort = "medium"
 
 # A custom agent: shoal add <repository> <branch> --agent droid. Its resume
 # command must restore a session rather than repeat the initial prompt.
 # [agents.droid]
 # command = ["droid", "{args}"]
 # resume_command = ["droid", "resume", "{path}"]
+# model_args = ["--model", "{model}"]
+# effort_args = ["--reasoning-effort", "{effort}"]
 
 # Named workspace shortcuts: shoal check [workspace] -- <extra arguments>
 # [commands]

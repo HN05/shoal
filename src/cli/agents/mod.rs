@@ -25,7 +25,7 @@ use std::{
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
-    agent::{Agent, AgentMode},
+    agent::{Agent, AgentMode, ModelChoice},
     ai::IntegrationKind,
     cli::{client, commands::configured, context::Context, terminal, ui},
     config::{Config, Effective, named_commands::Commands},
@@ -302,6 +302,8 @@ pub(in crate::cli) struct Launch {
     /// The arguments that start the agent from a fork of a session, which
     /// lead the others as a subcommand does.
     pub fork: Vec<OsString>,
+    /// The model and effort it runs with.
+    pub model: ModelChoice,
     /// Recovery records of stopped agents this one replaces, consumed once
     /// it has started.
     pub replaces: Vec<PathBuf>,
@@ -339,6 +341,8 @@ pub(in crate::cli) struct ChatLaunch {
     pub opening: Option<String>,
     /// Other working directories the chat's task needs, beside its own.
     pub directories: Vec<PathBuf>,
+    /// The model and effort it runs with.
+    pub model: ModelChoice,
     pub args: Vec<OsString>,
 }
 
@@ -352,6 +356,9 @@ pub(in crate::cli) struct LaunchOptions {
     pub replaces: Vec<PathBuf>,
     /// The session the agent starts from a fork of, which stays unchanged.
     pub fork: Option<String>,
+    /// The model and effort requested for this launch, over the configured
+    /// ones.
+    pub model: ModelChoice,
 }
 
 /// Whether a launch of `agent` under `settings` runs in a session this
@@ -391,6 +398,7 @@ pub(super) async fn launch_agent(
         prompt.is_some(),
         options.tracked,
     );
+    let model = settings.model(agent.name(), options.model);
     let launch = Launch {
         name: agent.into(),
         workspace,
@@ -398,11 +406,13 @@ pub(super) async fn launch_agent(
         prompt,
         args,
         fork,
+        model,
         replaces: options.replaces,
     };
     let replaces = launch.replaces.clone();
     let code = match (app, integration.detached()) {
         (Some(app), _) => {
+            warn_app_model(app, &launch.model);
             let trust = integration.trust_file();
             launch::open_app(ctx, &launch.workspace, app, trust, launch.args).await?
         }
@@ -414,6 +424,40 @@ pub(super) async fn launch_agent(
         crate::execution::recovery::consume(record)?;
     }
     Ok(code)
+}
+
+/// Say that desktop `app` opens with its own model and effort, when the
+/// launch it takes over would have run with `model`.
+fn warn_app_model(app: &desktop::App, model: &ModelChoice) {
+    if !model.is_empty() {
+        eprintln!(
+            "warning: {} opens with its own model and effort; Shoal cannot pass the \
+             configured ones to it",
+            app.name
+        );
+    }
+}
+
+/// The arguments that run agent `name` with `model`, refusing an agent
+/// without the template for a value it sets.
+pub(crate) fn model_args(
+    settings: &Effective,
+    name: &str,
+    model: &ModelChoice,
+) -> Result<Vec<OsString>> {
+    settings
+        .launch(name)
+        .arguments
+        .model_args(model)
+        .map_err(|template| missing_template(name, template))
+}
+
+/// The refusal of a model or effort for agent `name`, which lacks `template`.
+fn missing_template(name: &str, template: &str) -> anyhow::Error {
+    let option = template.trim_end_matches("_args");
+    anyhow::anyhow!(
+        "cannot start {name} with a configured or requested {option}: set [agents.{name}] {template}"
+    )
 }
 
 /// How `shoal <name>` runs.

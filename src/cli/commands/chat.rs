@@ -12,7 +12,7 @@ use anyhow::{Context as _, Result, ensure};
 
 use super::{configured, listing::ListFilter};
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{
         agents,
         client::{self, request},
@@ -51,6 +51,8 @@ pub(super) struct Options {
     pub here: bool,
     /// The chat's name; defaults to the topic's.
     pub name: Option<String>,
+    /// The model and effort requested over the configured ones.
+    pub model: ModelChoice,
     /// Arguments forwarded to the agent.
     pub args: Vec<OsString>,
 }
@@ -122,6 +124,7 @@ pub(super) async fn begin(
         agent,
         here,
         name: requested,
+        model,
         args,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
@@ -134,6 +137,7 @@ pub(super) async fn begin(
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
         directories: topic.directories.clone(),
+        model: settings.model(agent.name(), model.clone()),
         repository: repo,
         settings,
         args,
@@ -149,14 +153,23 @@ pub(super) async fn begin(
         instructions,
         opening,
         directories,
+        model: resolved,
         args,
     } = launch;
+    let model_args = agents::model_args(&settings, agent.name(), &resolved)?;
     let name = if asks_name {
         ask_name(ctx, &name).await?
     } else {
         name
     };
-    if !here && start_beside(ctx, &settings, &repo, &topic, &name, &agent, &args).await? {
+    let beside = Beside {
+        topic: &topic,
+        name: &name,
+        agent: &agent,
+        model: &model,
+        args: &args,
+    };
+    if !here && start_beside(ctx, &settings, &repo, beside).await? {
         return Ok(0);
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
@@ -171,13 +184,17 @@ pub(super) async fn begin(
     .await?;
     let command = command(
         &settings,
-        agents::chat_dir_args(
-            &settings,
-            agent.name(),
-            &ctx.paths.home,
-            &chat,
-            &directories,
-        ),
+        [
+            model_args,
+            agents::chat_dir_args(
+                &settings,
+                agent.name(),
+                &ctx.paths.home,
+                &chat,
+                &directories,
+            ),
+        ]
+        .concat(),
         &repo,
         &agent,
         instructions,
@@ -190,7 +207,7 @@ pub(super) async fn begin(
         &repo,
         &chat,
         &command,
-        &settings.launch(agent.name()).environment,
+        &settings.launch(agent.name()).environment_with(&resolved),
     )
 }
 
@@ -305,31 +322,46 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     ui::pick_choice(ctx, "Agent> ", &choices)?.parse()
 }
 
-/// Run this chat, `name`, in a new focused tab or session at the checkout,
-/// where Shoal starts it in place, returning whether it ran there; otherwise
-/// it runs here.
+/// A chat to start beside this terminal: its topic, name, agent, requested
+/// model and forwarded arguments.
+struct Beside<'a> {
+    topic: &'a Topic,
+    name: &'a str,
+    agent: &'a Agent,
+    model: &'a ModelChoice,
+    args: &'a [OsString],
+}
+
+/// Run the chat `beside` describes in a new focused tab or session at the
+/// checkout, where Shoal starts it in place, returning whether it ran there;
+/// otherwise it runs here.
 async fn start_beside(
     ctx: &Context,
     settings: &Effective,
     repo: &Repository,
-    topic: &Topic,
-    name: &str,
-    agent: &Agent,
-    args: &[OsString],
+    beside: Beside<'_>,
 ) -> Result<bool> {
-    let mut chat = topic.relaunch.clone();
+    let mut chat = beside.topic.relaunch.clone();
     chat.extend([
         "--here".into(),
         "--name".into(),
-        name.into(),
+        beside.name.into(),
         "--agent".into(),
-        agent.name().into(),
+        beside.agent.name().into(),
     ]);
-    if !args.is_empty() {
-        chat.push("--".into());
-        chat.extend_from_slice(args);
+    for (flag, value) in [
+        ("--model", &beside.model.model),
+        ("--effort", &beside.model.effort),
+    ] {
+        if let Some(value) = value {
+            chat.extend([flag.into(), value.into()]);
+        }
     }
-    terminal::start_chat(ctx, settings, repo, name, &chat).await
+    if !beside.args.is_empty() {
+        chat.push("--".into());
+        chat.extend_from_slice(beside.args);
+    }
+    terminal::start_chat(ctx, settings, repo, beside.name, &chat).await
 }
 
 /// The agent's configured launcher with the chat instructions, its opening

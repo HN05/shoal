@@ -28,6 +28,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             no_post,
             manual,
             agent,
+            model,
             args,
         } => {
             let item = pr
@@ -35,8 +36,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
                 .or(issue.map(|issue| (ItemKind::Issue, issue)));
             let post = (post || no_post).then_some(post);
             let target = review::Target::new(workspace, item, repository, post)?;
-            let reviewer = review::Reviewer::new(manual, agent);
-            review::start(&ctx, target, reviewer, args).await
+            let model = model.into();
+            let reviewer = review::Reviewer::new(manual, agent, &model);
+            review::start(&ctx, target, reviewer, model, args).await
         }
         ChangesCommand::Land {
             workspace,

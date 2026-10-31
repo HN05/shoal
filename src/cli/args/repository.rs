@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, ConfirmationArgs},
+    cli::args::{AgentParser, ConfirmationArgs, ModelArgs},
 };
 
 #[derive(Debug, Subcommand)]
@@ -146,6 +146,8 @@ pub enum RepoCommand {
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

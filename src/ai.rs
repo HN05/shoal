@@ -42,6 +42,14 @@ pub struct Agent {
     /// Arguments that give the agent another working directory,
     /// `{directory}`; empty gives none.
     pub add_dir: Option<Vec<String>>,
+    /// The model its agents run with by default.
+    pub model: Option<String>,
+    /// The reasoning effort its agents run with by default.
+    pub effort: Option<String>,
+    /// Arguments that select the model `{model}`.
+    pub model_args: Option<Vec<String>>,
+    /// Arguments that select the reasoning effort `{effort}`.
+    pub effort_args: Option<Vec<String>>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,

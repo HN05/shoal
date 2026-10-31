@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{
         client,
         commands::issues::Issue,
@@ -101,10 +101,13 @@ pub(super) async fn start(
     ctx: &Context,
     target: Target,
     reviewer: Reviewer,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     match target {
-        Target::Workspace(workspace) => run(ctx, workspace, reviewer, Subject::Changes, args).await,
+        Target::Workspace(workspace) => {
+            run(ctx, workspace, reviewer, Subject::Changes, model, args).await
+        }
         Target::Item {
             kind,
             input,
@@ -120,18 +123,21 @@ pub(super) async fn start(
             )
             .await?;
             match kind {
-                ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, args).await,
-                ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, args).await,
+                ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, model, args).await,
+                ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, model, args).await,
             }
         }
     }
 }
 
 impl Reviewer {
-    pub fn new(manual: bool, agent: Option<Agent>) -> Self {
+    /// `--manual`, else `--agent`; a requested `model` chooses an agent
+    /// reviewer, since only an agent runs with one.
+    pub fn new(manual: bool, agent: Option<Agent>, model: &ModelChoice) -> Self {
         match (manual, agent) {
             (true, _) => Reviewer::Manual,
             (false, Some(agent)) => Reviewer::Agent(Some(agent)),
+            (false, None) if !model.is_empty() => Reviewer::Agent(None),
             (false, None) => Reviewer::Ask,
         }
     }
@@ -145,6 +151,7 @@ async fn pull_request(
     input: &str,
     reviewer: Reviewer,
     post: Option<bool>,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let remote = crate::repository::remote_url_from_path(&repo.path)
@@ -188,6 +195,7 @@ async fn pull_request(
                     focus: false,
                     now: false,
                     after: Vec::new(),
+                    model: Default::default(),
                 },
             )
             .await?;
@@ -205,7 +213,7 @@ async fn pull_request(
         }
     };
     let subject = Subject::Pull { pull, post };
-    run(ctx, Some(workspace), reviewer, subject, args).await
+    run(ctx, Some(workspace), reviewer, subject, model, args).await
 }
 
 /// Refine an issue before implementation in the workspace that works on it,
@@ -216,6 +224,7 @@ async fn issue(
     input: &str,
     reviewer: Reviewer,
     post: Option<bool>,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     ensure!(
@@ -239,6 +248,7 @@ async fn issue(
                     focus: false,
                     now: false,
                     after: Vec::new(),
+                    model: Default::default(),
                 },
             )
             .await?;
@@ -259,7 +269,7 @@ async fn issue(
         reviewer => reviewer,
     };
     let subject = Subject::Issue { issue, post };
-    run(ctx, Some(workspace.id), reviewer, subject, args).await
+    run(ctx, Some(workspace.id), reviewer, subject, model, args).await
 }
 
 /// The workspace associated with the issue, otherwise the one on its derived branch.
@@ -323,6 +333,7 @@ async fn run(
     workspace: Option<String>,
     reviewer: Reviewer,
     subject: Subject,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
@@ -373,7 +384,10 @@ async fn run(
                 workspace,
                 Some(prompt),
                 args,
-                crate::cli::agents::LaunchOptions::default(),
+                crate::cli::agents::LaunchOptions {
+                    model,
+                    ..Default::default()
+                },
             )
             .await
         }

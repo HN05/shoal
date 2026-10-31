@@ -98,11 +98,12 @@ pub(super) async fn tracked(
     launch: Launch,
 ) -> Result<i32> {
     ensure_available(&launch.name, &launch.settings)?;
+    let model_args = super::model_args(&launch.settings, &launch.name, &launch.model)?;
     if let Some(trust) = integration.trust_file() {
         let profile = &launch.settings.launch(&launch.name).environment;
         trust.trust_tracked(ctx, &launch.workspace, profile).await;
     }
-    let command = command(ctx, integration, &launch).await?;
+    let command = command(ctx, integration, &launch, model_args).await?;
     let Launch {
         name,
         workspace,
@@ -123,12 +124,13 @@ pub(super) async fn tracked(
 }
 
 /// The agent's configured command with the arguments that fork a session,
-/// Shoal's instructions, its workspace arguments, the prompt and the
-/// forwarded arguments.
+/// Shoal's instructions, `model_args`, its workspace arguments, the prompt
+/// and the forwarded arguments.
 async fn command(
     ctx: &Context,
     integration: &dyn Integration,
     launch: &Launch,
+    model_args: Vec<OsString>,
 ) -> Result<Vec<OsString>> {
     let Launch {
         name,
@@ -149,7 +151,11 @@ async fn command(
         name,
         instructions,
         prompt.clone(),
-        super::workspace_args(&ctx.paths, settings, name, workspace).await?,
+        [
+            model_args,
+            super::workspace_args(&ctx.paths, settings, name, workspace).await?,
+        ]
+        .concat(),
         args.clone(),
     );
     let args = fork.iter().cloned().chain(args).collect();
