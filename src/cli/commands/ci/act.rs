@@ -6,6 +6,7 @@ use crate::{
     cli::{
         args::ci::{RunArgs, Subject, Target},
         client,
+        commands::items::select_item_context,
         context::Context,
         ui,
     },
@@ -52,20 +53,10 @@ pub(super) async fn act(
     if let Some(run) = &subject.run {
         validate_run_reference(run)?;
     }
-    let workspace =
-        ui::select_workspace(ctx, subject.workspace, ui::Fallback::CurrentDirectory).await?;
+    let context = subject_context(ctx, &subject).await?;
     match subject.run {
-        Some(run) => act_on_run(ctx, ItemContext::Workspace(workspace), run, action, failed).await,
-        None => {
-            act_on_checks(
-                ctx,
-                ItemContext::Workspace(workspace),
-                subject.pr,
-                action,
-                target.checks,
-            )
-            .await
-        }
+        Some(run) => act_on_run(ctx, context, run, action, failed).await,
+        None => act_on_checks(ctx, context, subject.pr, action, target.checks).await,
     }
 }
 
@@ -75,12 +66,11 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
     if let Some(run) = &subject.run {
         validate_run_reference(run)?;
     }
-    let workspace =
-        ui::select_workspace(ctx, subject.workspace, ui::Fallback::CurrentDirectory).await?;
+    let context = subject_context(ctx, &subject).await?;
     let approved: RunsApproved = client::request(
         &ctx.paths,
         CiMethod::ApproveCiRuns {
-            context: ItemContext::Workspace(workspace),
+            context,
             run: subject.run,
             pr: subject.pr,
         },
@@ -88,6 +78,19 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
     .await?;
     ctx.emit(&approved_text(&approved), &approved)?;
     Ok(0)
+}
+
+/// Where the subject's run or PR is acted on: the named or current
+/// workspace, or the checkout of the registered repository `--repo` names or
+/// the current directory or the PR's URL is in.
+async fn subject_context(ctx: &Context, subject: &Subject) -> Result<ItemContext> {
+    select_item_context(
+        ctx,
+        subject.workspace.clone(),
+        subject.repo.name.clone(),
+        subject.pr.as_deref(),
+    )
+    .await
 }
 
 /// One line per approved run.

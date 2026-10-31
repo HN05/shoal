@@ -37,7 +37,7 @@ use self::{
     thread::{reply, resolve, thread},
 };
 pub(crate) use content::read_body;
-pub(super) use context::{checkout_repository, select_context, select_repo_context};
+pub(super) use context::{checkout_repository, select_item_context, select_repo_context};
 
 pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
     let (item, action, outcome) = match command {
@@ -182,7 +182,13 @@ async fn act(
     let item: Item = client::request(
         &ctx.paths,
         ItemMethod::ItemAction {
-            context: select_context(ctx, selector.workspace).await?,
+            context: select_item_context(
+                ctx,
+                selector.workspace,
+                selector.repo.name,
+                selector.item.as_deref(),
+            )
+            .await?,
             kind,
             item: selector.item,
             action,
@@ -200,7 +206,13 @@ async fn act(
 
 /// The PR `selector` names, or the workspace's linked ones.
 async fn select_prs(ctx: &Context, selector: &ItemSelector) -> Result<Selected> {
-    let context = select_context(ctx, selector.workspace.clone()).await?;
+    let context = select_item_context(
+        ctx,
+        selector.workspace.clone(),
+        selector.repo.name.clone(),
+        selector.item.as_deref(),
+    )
+    .await?;
     let selection = Selection {
         kind: Some(LinkKind::Pr),
         input: selector.item.clone(),

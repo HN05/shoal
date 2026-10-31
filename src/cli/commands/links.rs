@@ -33,14 +33,17 @@ pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Se
 }
 
 /// The items selected in the named or current workspace, with the kind of a
-/// bare number resolved, or in the registered checkout the current directory
-/// is in, where only a number or URL selects one.
+/// bare number resolved, or in the checkout of the registered repository
+/// `repo` names or the current directory or a URL is in, where only a number
+/// or URL selects one.
 pub(super) async fn select_in_context(
     ctx: &Context,
     items: ItemArgs,
+    repo: Option<String>,
 ) -> Result<(ItemContext, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
-    match super::items::select_context(ctx, items.workspace).await? {
+    let input = selection.input.as_deref();
+    match super::items::select_item_context(ctx, items.workspace, repo, input).await? {
         ItemContext::Workspace(workspace) => {
             let selection = resolve_kind(ctx, &workspace, selection).await?;
             Ok((ItemContext::Workspace(workspace), selection))

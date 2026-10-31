@@ -141,7 +141,7 @@ pub enum PrCommand {
     /// branch in a new workspace, which goes once the revert merges.
     Revert {
         #[command(flatten)]
-        item: ItemSelector,
+        item: RevertedPr,
         #[command(flatten)]
         revert: RevertArgs,
     },
@@ -366,9 +366,37 @@ pub struct ListArgs {
     pub limit: u16,
 }
 
-// An issue or PR of the workspace's repository.
+// An issue or PR of the repository of the workspace, or of the registered
+// repository --repo names.
 #[derive(Debug, Args)]
 pub struct ItemSelector {
+    /// Number or URL; defaults to the linked one.
+    #[arg(value_parser = item_reference)]
+    pub item: Option<String>,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+    #[command(flatten)]
+    pub repo: RegisteredRepo,
+}
+
+// A registered repository to act in instead of a workspace.
+#[derive(Debug, Default, Args)]
+pub struct RegisteredRepo {
+    /// Act in this registered repository without a workspace, named by name,
+    /// ID, path or remote URL; workspace processes act only in their own.
+    #[arg(
+        id = "repo",
+        long = "repo",
+        value_name = "REPOSITORY",
+        conflicts_with = "workspace"
+    )]
+    pub name: Option<String>,
+}
+
+// A merged PR of the workspace's repository to revert.
+#[derive(Debug, Args)]
+pub struct RevertedPr {
     /// Number or URL; defaults to the linked one.
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,

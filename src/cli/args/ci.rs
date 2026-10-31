@@ -63,6 +63,8 @@ pub struct Subject {
     /// Workspace to use; defaults to the current workspace or picker.
     #[arg(long)]
     pub workspace: Option<String>,
+    #[command(flatten)]
+    pub repo: crate::cli::args::changes::RegisteredRepo,
 }
 
 // Which runs `shoal ci list` lists.

@@ -43,16 +43,21 @@ pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
             args.check.is_none(),
             "--check reads a PR's check; use --job for a run's"
         );
+        ensure!(
+            args.repo.name.is_none(),
+            "a CI run is read through a workspace; pass --workspace instead of --repo"
+        );
         return super::ci::view(ctx, args.items, job, args.web).await;
     }
     ensure!(
         job.is_none(),
         "--job and --job-id read a CI run's job: view ci RUN --job NAME"
     );
+    let repo = args.repo.name;
     if args.web {
-        open(ctx, args.items).await
+        open(ctx, args.items, repo).await
     } else {
-        view(ctx, args.items, args.no_comments, args.check).await
+        view(ctx, args.items, repo, args.no_comments, args.check).await
     }
 }
 
@@ -60,10 +65,11 @@ pub(super) async fn show(ctx: &Context, args: ViewArgs) -> Result<i32> {
 async fn view(
     ctx: &Context,
     items: ItemArgs,
+    repo: Option<String>,
     no_comments: bool,
     check: Option<String>,
 ) -> Result<i32> {
-    let (context, selection) = links::select_in_context(ctx, items).await?;
+    let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     if let Some(check) = check {
         let ItemContext::Workspace(workspace) = context else {
             bail!("--check reads a log through a workspace; run this in one or pass --workspace");
@@ -205,9 +211,9 @@ fn render_views(views: &[Shown], json: bool) {
 
 /// Open the selected items in the browser and print each URL, also when
 /// the opener fails, for a terminal elsewhere; workspace processes cannot.
-async fn open(ctx: &Context, items: ItemArgs) -> Result<i32> {
+async fn open(ctx: &Context, items: ItemArgs, repo: Option<String>) -> Result<i32> {
     may_open_browser(ctx)?;
-    let (context, selection) = links::select_in_context(ctx, items).await?;
+    let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     let selected = links::select_items(ctx, &context, selection, true).await?;
     open_urls(
         ctx,

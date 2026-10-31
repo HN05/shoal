@@ -70,6 +70,23 @@ pub(super) async fn repository_for(
     .await
 }
 
+/// The only registered repository whose origin the issue or PR at `url`
+/// belongs to, or none when no registered repository has that origin.
+pub(super) async fn registered_for_item<'a>(
+    repos: &'a [Repository],
+    url: &str,
+) -> Result<Option<&'a Repository>> {
+    let Ok(forge) = ForgeRepo::from_pull_url(url).or_else(|_| ForgeRepo::from_issue_url(url))
+    else {
+        return Ok(None);
+    };
+    match repository_with_remote(repos, forge, "--repo <ID>").await {
+        Ok(repo) => Ok(Some(repo)),
+        Err(error) if error.is::<UnregisteredRemote>() => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// The ID of the repository [`repository_with_remote`] selects. When none has
 /// the remote, the user may register its URL, which joins `repos`.
 pub(super) async fn registered_remote(

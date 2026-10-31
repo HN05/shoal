@@ -59,6 +59,8 @@ pub enum ItemsCommand {
 pub struct ViewArgs {
     #[command(flatten)]
     pub items: ItemArgs,
+    #[command(flatten)]
+    pub repo: crate::cli::args::changes::RegisteredRepo,
     /// Leave out comments and reviews.
     #[arg(long)]
     pub no_comments: bool,

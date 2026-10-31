@@ -2762,6 +2762,7 @@ shoal pr merge --method rebase --delete-branch
 shoal pr merge --auto --method squash  # merge once checks pass; --cancel-auto withdraws it
 shoal pr delete-branch 12           # delete a merged or closed PR's branch on the forge
 shoal pr revert 42                  # open a PR that reverts merged PR 42
+shoal pr comment 12 --repo shoal --body-file notes.md  # in a registered repository, without a workspace
 shoal issue list --label bug flaky  # search by text; --state, --author and --limit too
 shoal pr list --state all --author dev
 shoal issue list --repo team/review-bot missed  # search another repository
@@ -2803,8 +2804,13 @@ required_labels = ["area/", "type/"] # Default: []
 `shoal pr` and `shoal issue` change an item of the workspace's repository: the
 number or URL given, otherwise the linked issue or the only linked PR. Outside a
 workspace, such as in a chat, they act on the repository of the registered
-checkout they run in, as its agent account, and take only a number or URL;
-outside both, a non-interactive call fails saying so. `edit`
+checkout they run in, as its agent account, and take only a number or URL.
+`--repo`, instead of `--workspace`, names a registered repository by name, ID,
+path or remote URL to act on the same way from anywhere, so a client acting as
+the user needs no workspace; outside a workspace and a checkout, an issue or PR
+URL of a registered repository selects that repository too. Workspace processes
+act only from their own workspace, and `pr open` and `pr revert` need one.
+Outside all of them, a non-interactive call fails saying so. `edit`
 takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
 `--remove-reviewer`, which take a team as `owner/team` on GitHub and Forgejo,
@@ -3078,6 +3084,7 @@ shoal view ci 2765                       # a run's state, its jobs and failed jo
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
 shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
+shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a workspace
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
@@ -3112,6 +3119,9 @@ every such CI job, leaving other providers' checks alone, or each repeated
 `--check` by the name `shoal view` shows, which must be a CI job in that state.
 The daemon uses the forge's job API as the agent account and records an
 `item_changed` event once a request succeeds; a failed request stops the rest.
+`rerun`, `cancel` and `approve` act outside a workspace as
+[issue and PR actions](#issue-and-pr-actions) do, from a registered checkout or
+with `--repo`, recording no event there and needing a run or `--pr`.
 GitHub reruns a failed Actions job, or every failed job of a run when several of
 its jobs are selected, because a rerun starts a new attempt of the run, refuses
 a rerun while another job of the run is still running, and cancels the job's
@@ -3234,8 +3244,9 @@ Kinds and explicit items select as they do for `watch`, except that an issue
 or PR URL may name another repository's item, shown without failed job logs, and
 `--no-comments` leaves out comments and reviews. Outside a workspace, such as in
 a chat, it shows the item a number or URL names in the repository of the
-registered checkout it runs in, without failed job logs, which `--check` there
-refuses. Each comment shows its ID; an
+registered checkout it runs in, or of the one `--repo` or the URL names as for
+[issue and PR actions](#issue-and-pr-actions), without failed job logs, which
+`--check` there refuses. Each comment shows its ID; an
 inline comment also shows the ID of the comment that starts its thread when it is
 a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a
 review whose inline comments could not be read keeps its body; the command exits 1 when an item could not be read. `--json` returns an array

@@ -4883,10 +4883,25 @@ fn item_commands_act_from_a_registered_checkout() {
 #[test]
 fn item_commands_act_in_a_named_repository_without_a_workspace() {
     let fixture = Fixture::new(Forge::GitHub, "");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
     fixture.respond(json!({
+        "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
+            "state": "open", "labels": []}},
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
         "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky":
             {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
+        "issue view 40": {"body": {"number": 40, "state": "OPEN", "title": "Flaky",
+            "body": "", "comments": []}},
         "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
+            "total_count": 1, "check_runs": [{"name": "rust", "status": "completed",
+                "conclusion": "failure",
+                "details_url": "https://github.com/team/project/actions/runs/1/job/11"}]}},
+        "GET repos/team/project/commits/head/status?per_page=100":
+            {"body": {"total_count": 0, "statuses": []}},
+        "POST repos/team/project/actions/jobs/11/rerun": {"status": 201},
     }));
     // Outside every workspace and checkout, as a client such as Quay runs.
     let outside = |args: &[&str]| {
@@ -4903,24 +4918,78 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         serde_json::from_slice::<Value>(&output.stdout).unwrap()
     };
 
+    read(&["issue", "comment", "40", "--body", "Seen", "--repo", "repo"]);
+    assert_eq!(
+        writes(&fixture),
+        [json!(["POST repos/team/project/issues/40/comments", {"body": "Seen"}])]
+    );
     let listed = read(&["issue", "list", "flaky", "--repo", "repo"]);
     assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
     let labels = read(&["repo", "labels", "--repo", "repo"]);
     assert_eq!(labels[0]["name"], "bug", "{labels}");
+    // An item URL of a registered repository names it as well.
+    let url = format!("{}/issues/40", fixture.web);
+    let viewed = read(&["view", &url, "--no-comments"]);
+    assert_eq!(viewed[0]["title"], "Flaky", "{viewed}");
+    fixture.requests();
+    // So do CI actions on a PR's checks, which change no workspace.
+    let rerun = read(&[
+        "ci", "rerun", "--pr", "8", "--check", "rust", "--repo", "repo",
+    ]);
+    assert_eq!(rerun["checks"], json!(["rust"]), "{rerun}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/jobs/11/rerun",
+            null
+        ])]
+    );
+    assert!(
+        !fixture
+            .events()
+            .iter()
+            .any(|event| event["kind"] == "item_changed"),
+        "{:?}",
+        fixture.events()
+    );
 
     let refused = |args: &[&str], message: &str| {
         let output = outside(args);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains(message), "{args:?}: {stderr}");
     };
-    // Where --repo names any repository, it stays a forge repository for a
-    // workspace process.
+    // Nothing is linked without a workspace, so the PR must be named.
+    refused(&["ci", "rerun", "--repo", "repo"], "nothing is linked");
+    refused(
+        &["issue", "close", "40", "--repo", "elsewhere"],
+        "repository is not registered",
+    );
+    refused(
+        &[
+            "issue",
+            "close",
+            "40",
+            "--repo",
+            "repo",
+            "--workspace",
+            "topic",
+        ],
+        "cannot be used with",
+    );
+    // A workspace process acts only from its own workspace.
     let shoal = env!("CARGO_BIN_EXE_shoal");
+    let close = ["issue", "close", "40", "--repo", "repo"];
+    refused(
+        &[&["run", "--workspace", "topic", "--", shoal][..], &close].concat(),
+        "not from a registered checkout",
+    );
+    // Where --repo names any repository, it stays a forge repository for one.
     let list = ["issue", "list", "--repo", "repo"];
     refused(
         &[&["run", "--workspace", "topic", "--", shoal][..], &list].concat(),
         "repo names no repository",
     );
+    assert!(writes(&fixture).is_empty());
 }
 
 #[test]

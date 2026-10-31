@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     cli::{
-        args::changes::{ItemSelector, RevertArgs},
+        args::changes::{RevertArgs, RevertedPr},
         client::request,
         commands::{capabilities::forge_of, split},
         context::Context,
@@ -42,7 +42,7 @@ struct Report<'a> {
     workspace: Option<&'a Workspace>,
 }
 
-pub(super) async fn revert(ctx: &Context, selector: ItemSelector, args: RevertArgs) -> Result<i32> {
+pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
     let workspace =
         ui::select_workspace(ctx, selector.workspace, ui::Fallback::CurrentDirectory).await?;

@@ -1788,6 +1788,12 @@ Item commands that need only a repository also run from a registered checkout,
 where a chat runs with the user's authority: they act as the repository's agent
 account under its settings, open without a proposal, and link or record nothing,
 since only a workspace holds links; workspace processes act from their workspace.
+An unscoped client such as Quay names that repository with `--repo` instead of
+picking a workspace, whose worktree Shoal would check first: a registered
+repository's checkout is the place to act in, so it reaches PR, view and CI
+commands from anywhere, and an item URL of a registered repository selects it
+outside a workspace and checkout. Where `--repo` already names any repository to
+read, a registered one is read through its checkout the same way.
 People outside the project see such an issue, so `[permissions] issue_other_repositories`
 governs scoped callers separately from `issue_open`: `"propose"` by default,
 `"direct"`, or `"deny"`. The workspace's required labels and templates describe

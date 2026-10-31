@@ -6,7 +6,7 @@ use anyhow::{Context as _, Result, ensure};
 use crate::{
     cli::{client, context::Context, ui},
     env,
-    forge::ForgeRepo,
+    forge::{ForgeRepo, IssueInput},
     model::Repository,
     protocol::ItemContext,
     repository::{self, NotRegistered},
@@ -14,30 +14,21 @@ use crate::{
 
 /// What is missing when nothing gives a non-interactive command its repository.
 const NO_CONTEXT: &str =
-    "no current workspace or registered checkout; run this in one, or pass --workspace";
+    "no current workspace or registered checkout; run this in one, or pass --workspace or --repo";
 
-/// The named or current workspace, else the registered checkout the current
-/// directory is in, else a workspace the user picks.
-pub(in crate::cli::commands) async fn select_context(
+/// The checkout of the registered repository `repo` names, else the context
+/// [`select_context`] selects, except that outside a workspace or checkout
+/// an issue or PR URL `item` of a registered repository selects that one's.
+pub(in crate::cli::commands) async fn select_item_context(
     ctx: &Context,
     workspace: Option<String>,
+    repo: Option<String>,
+    item: Option<&str>,
 ) -> Result<ItemContext> {
-    if workspace.is_some() {
-        let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory);
-        return Ok(ItemContext::Workspace(workspace.await?));
+    match repo {
+        Some(repo) => Ok(ItemContext::Checkout(named(ctx, &repo).await?.id)),
+        None => select_context(ctx, workspace, item).await,
     }
-    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
-        Ok(workspace) => return Ok(ItemContext::Workspace(workspace)),
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
-        Err(error) => return Err(error),
-    }
-    let repos = client::repositories(&ctx.paths).await?;
-    if let Some(repo) = super::super::issues::current_checkout(&repos).await? {
-        return Ok(ItemContext::Checkout(repo.id.clone()));
-    }
-    ensure!(ctx.interactive(), "{NO_CONTEXT}");
-    let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
-    Ok(ItemContext::Workspace(workspace))
 }
 
 /// The context of a command whose `--repo` names any repository, and the
@@ -57,14 +48,50 @@ pub(in crate::cli::commands) async fn select_repo_context(
     }
     // Refuse a bad repository before the workspace picker asks for anything.
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
-    Ok((select_context(ctx, workspace).await?, repo))
+    Ok((select_context(ctx, workspace, None).await?, repo))
+}
+
+/// The named or current workspace, else the registered checkout the current
+/// directory is in, else the registered repository of the issue or PR URL
+/// `item`, else a workspace the user picks.
+async fn select_context(
+    ctx: &Context,
+    workspace: Option<String>,
+    item: Option<&str>,
+) -> Result<ItemContext> {
+    if workspace.is_some() {
+        let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory);
+        return Ok(ItemContext::Workspace(workspace.await?));
+    }
+    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
+        Ok(workspace) => return Ok(ItemContext::Workspace(workspace)),
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
+        Err(error) => return Err(error),
+    }
+    let repos = client::repositories(&ctx.paths).await?;
+    if let Some(repo) = super::super::issues::current_checkout(&repos).await? {
+        return Ok(ItemContext::Checkout(repo.id.clone()));
+    }
+    if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
+        && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
+    {
+        return Ok(ItemContext::Checkout(repo.id.clone()));
+    }
+    ensure!(ctx.interactive(), "{NO_CONTEXT}");
+    let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
+    Ok(ItemContext::Workspace(workspace))
+}
+
+/// The registered repository `repo` names.
+async fn named(ctx: &Context, repo: &str) -> Result<Repository> {
+    let repos = client::repositories(&ctx.paths).await?;
+    Ok(repository::select(&repos, repo).await?.clone())
 }
 
 /// The registered repository `repo` names, if any.
 async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
-    let repos = client::repositories(&ctx.paths).await?;
-    match repository::select(&repos, repo).await {
-        Ok(repo) => Ok(Some(repo.clone())),
+    match named(ctx, repo).await {
+        Ok(repo) => Ok(Some(repo)),
         Err(error) if error.is::<NotRegistered>() => Ok(None),
         Err(error) => Err(error),
     }
