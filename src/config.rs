@@ -92,6 +92,9 @@ impl<'de> Deserialize<'de> for AgentLimit {
 pub struct Config {
     pub machine: Machine,
     pub repository: RepoConfig,
+    /// The file each template came from, once
+    /// [`Self::load_with_templates`] read them.
+    pub template_files: templates::Files,
 }
 
 impl Ports {
@@ -279,7 +282,7 @@ impl Config {
         let mut config = Self::load(paths)?;
         let path = Self::path(paths);
         let directory = path.parent().context("config has no directory")?;
-        templates::fill(
+        config.template_files = templates::fill(
             &mut config.repository.agent.templates,
             &[directory.to_owned()],
         )?;
@@ -330,6 +333,7 @@ impl Config {
         Ok(Self {
             machine,
             repository,
+            template_files: templates::Files::new(),
         })
     }
 

@@ -149,21 +149,23 @@ impl Manager {
     async fn config_layers(
         &self,
         repository_id: &str,
-        worktree_file: RepoConfig,
+        (worktree_file, worktree_template_files): (RepoConfig, config::templates::Files),
     ) -> Result<ConfigLayers> {
         let repository = self.repository(repository_id).await?;
         // Registration and workspace creation keep checkouts out of the
         // local config's directory, so one there predates the local config,
         // which therefore has nothing to hold, and edits refuse.
-        let local_config = match &repository.workspaces_dir {
+        let (local_config, local_template_files) = match &repository.workspaces_dir {
             Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
                 config::repo::load_local(directory)?
             }
-            _ => RepoConfig::default(),
+            _ => Default::default(),
         };
         Ok(ConfigLayers {
             worktree_file,
             local_config,
+            worktree_template_files,
+            local_template_files,
         })
     }
 

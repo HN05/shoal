@@ -1661,7 +1661,7 @@ templates. Inline TOML wins over Markdown at each level. An empty repository
 value suppresses local additions while preserving global guidance; an empty
 global value suppresses its base text. Without a global chat template,
 Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
-layer that configured it. Unknown placeholders stay literal. Templates are
+layer that configured it, with the file that layer read it from. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart. The issue prompt is built in.
 `config show` warns for each layer whose worker template repeats the opening of
 Shoal's guidance, as a copy of an earlier default does; the daemon alerts about
@@ -2001,7 +2001,7 @@ workspace, the registered checkout when no workspace exists yet, then the
 workspace picker. `--repo NAME` shows a repository's settings in its registered
 checkout from any directory. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
-and `layer` for each entry.
+and `layer` for each entry, and `file` for a template read from a file.
 
 `shoal config reference` prints this reference as bundled with the installed
 release, so agents without network access can read the options; `--json` returns

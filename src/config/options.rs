@@ -1,7 +1,7 @@
 //! Layering for config structs that `#[derive(Options)]`: one declaration of
 //! each option drives its built-in default, its merge across layers and its
 //! provenance, so a reported layer is the one whose value is in effect.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -50,6 +50,9 @@ pub struct Entry {
     pub key: String,
     pub value: Value,
     pub layer: Layer,
+    /// The Markdown file the layer read a template from.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<PathBuf>,
 }
 
 pub fn key(prefix: &str, name: &str) -> String {
@@ -173,7 +176,12 @@ pub fn scalar_entry<T: Serialize>(
         Some((value, layer)) => (serde_json::to_value(value)?, layer),
         None => (Value::Null, Layer::BuiltInDefault),
     };
-    entries.push(Entry { key, value, layer });
+    entries.push(Entry {
+        key,
+        value,
+        layer,
+        file: None,
+    });
     Ok(())
 }
 
@@ -191,6 +199,7 @@ pub fn list_entry<T: Serialize>(
         key,
         value: serde_json::to_value(value)?,
         layer: *layer,
+        file: None,
     });
     Ok(())
 }
@@ -220,6 +229,7 @@ pub fn template_entry(
         layer: addition
             .or(base)
             .map_or(Layer::BuiltInDefault, |(_, layer)| layer),
+        file: None,
     });
     Ok(())
 }
@@ -234,6 +244,7 @@ pub fn named_entries<T: Serialize>(
             key: key(prefix, name),
             value: serde_json::to_value(value)?,
             layer,
+            file: None,
         });
     }
     Ok(())

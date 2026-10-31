@@ -186,6 +186,7 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     assert!(
         load_local(repository.path())
             .unwrap()
+            .0
             .setup
             .command
             .is_none()
@@ -194,8 +195,15 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     fs::create_dir(&directory).unwrap();
     // A template beside it works without a config file.
     fs::write(directory.join("chat-template.md"), "Local chat").unwrap();
-    let templates = load_local(repository.path()).unwrap().agent.templates;
-    assert_eq!(templates.chat.as_deref(), Some("Local chat"));
+    let (config, files) = load_local(repository.path()).unwrap();
+    assert_eq!(config.agent.templates.chat.as_deref(), Some("Local chat"));
+    assert_eq!(
+        files,
+        templates::Files::from([(
+            "agent.templates.chat".into(),
+            directory.join("chat-template.md")
+        )])
+    );
     fs::write(
         local_config_path(repository.path()),
         "[setup]\ncommand = 'setup.sh'\n[hooks]\npost_setup = '/abs/attach'\n\
@@ -203,7 +211,7 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
     )
     .unwrap();
     fs::write(directory.join("worker-template.md"), "Local additions").unwrap();
-    let config = load_local(repository.path()).unwrap();
+    let (config, _) = load_local(repository.path()).unwrap();
     let expected = directory.join("setup.sh");
     assert_eq!(config.setup.command.as_deref(), expected.to_str());
     assert_eq!(config.hooks.post_setup.as_deref(), Some("/abs/attach"));
@@ -225,22 +233,33 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
             fs::write(worktree.path().join(path), text).unwrap();
         }
         fs::write(worktree.path().join(".shoal.toml"), toml).unwrap();
-        load(worktree.path()).map(|config| config.agent.templates)
+        load(worktree.path()).map(|(config, files)| {
+            let files: Vec<_> = files
+                .into_iter()
+                .map(|(key, path)| {
+                    let path = path.strip_prefix(worktree.path()).unwrap().to_owned();
+                    (key, path)
+                })
+                .collect();
+            (config.agent.templates, files)
+        })
     };
     for directory in ["", ".shoal/"] {
-        let templates = read(
-            &[
-                (&format!("{directory}worker-template.md"), "Worker"),
-                (&format!("{directory}chat-template.md"), "Chat"),
-            ],
-            "",
-        )
-        .unwrap();
+        let worker = format!("{directory}worker-template.md");
+        let chat = format!("{directory}chat-template.md");
+        let (templates, files) = read(&[(&worker, "Worker"), (&chat, "Chat")], "").unwrap();
         assert_eq!(templates.worker.as_deref(), Some("Worker"));
         assert_eq!(templates.chat.as_deref(), Some("Chat"));
+        assert_eq!(
+            files,
+            [
+                ("agent.templates.chat".into(), chat.into()),
+                ("agent.templates.worker".into(), worker.into()),
+            ]
+        );
     }
     // Each template stands alone, and inline TOML wins over its file.
-    let templates = read(
+    let (templates, files) = read(
         &[
             ("worker-template.md", "Worker"),
             (".shoal/chat-template.md", "Chat"),
@@ -250,6 +269,13 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
     .unwrap();
     assert_eq!(templates.worker.as_deref(), Some("Inline"));
     assert_eq!(templates.chat.as_deref(), Some("Chat"));
+    assert_eq!(
+        files,
+        [(
+            "agent.templates.chat".into(),
+            ".shoal/chat-template.md".into()
+        )]
+    );
     for name in ["worker-template.md", "chat-template.md"] {
         let error = read(&[(name, "Root"), (&format!(".shoal/{name}"), "Shoal")], "")
             .unwrap_err()

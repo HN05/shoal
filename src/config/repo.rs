@@ -17,6 +17,11 @@ pub struct ConfigLayers {
     pub worktree_file: RepoConfig,
     /// The file in the repository's own directory, outside every Git tree.
     pub local_config: RepoConfig,
+    /// The Markdown file each template of a layer came from.
+    #[serde(default)]
+    pub worktree_template_files: templates::Files,
+    #[serde(default)]
+    pub local_template_files: templates::Files,
 }
 
 /// Display uses human-readable layer labels rather than the snake_case JSON names.
@@ -325,9 +330,10 @@ pub fn local_config_path(repository_dir: &Path) -> PathBuf {
 }
 
 /// The local config of the repository whose directory is `repository_dir`,
-/// read in place, with the templates beside it. Relative hook paths and
-/// `setup.command` name scripts in its directory, so they become absolute.
-pub fn load_local(repository_dir: &Path) -> Result<RepoConfig> {
+/// read in place, with the templates beside it and the files they came from.
+/// Relative hook paths and `setup.command` name scripts in its directory, so
+/// they become absolute.
+pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
     let path = local_config_path(repository_dir);
     let directory = repository_dir.join(LOCAL_DIR);
     let text =
@@ -337,8 +343,8 @@ pub fn load_local(repository_dir: &Path) -> Result<RepoConfig> {
         None => RepoConfig::default(),
     };
     resolve_script_paths(&mut config, &directory);
-    templates::fill(&mut config.agent.templates, &[directory])?;
-    Ok(config)
+    let files = templates::fill(&mut config.agent.templates, &[directory])?;
+    Ok((config, files))
 }
 
 /// Make each relative hook path and `setup.command` name a script in
@@ -351,7 +357,9 @@ fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
     }
 }
 
-pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
+/// The worktree's repository config with its templates, and the files they
+/// came from.
+pub fn load(workspace_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
     let paths = [
         workspace_dir.join(".shoal.toml"),
         workspace_dir.join(".shoal/config.toml"),
@@ -375,11 +383,11 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         }
         None => RepoConfig::default(),
     };
-    templates::fill(
+    let files = templates::fill(
         &mut config.agent.templates,
         &[workspace_dir.to_owned(), workspace_dir.join(".shoal")],
     )?;
-    Ok(config)
+    Ok((config, files))
 }
 
 impl RepoConfig {

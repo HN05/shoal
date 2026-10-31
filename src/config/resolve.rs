@@ -11,6 +11,7 @@ use crate::config::{
     agents::AgentTool,
     options::{self, Entry, Merge, Options},
     repo::{ConfigLayer as Layer, ConfigLayers, RepoConfig, Settings},
+    templates,
 };
 
 /// Settings after every layer, with each AI tool resolved from them and
@@ -51,6 +52,8 @@ impl std::ops::DerefMut for Effective {
 #[derive(Debug, Clone)]
 pub struct Stack {
     layers: [(RepoConfig, Layer); 4],
+    /// The file each template of a layer that reads them came from.
+    template_files: [(templates::Files, Layer); 3],
     /// Settings a layer sets that repeat Shoal's guidance.
     warnings: Vec<String>,
 }
@@ -73,7 +76,19 @@ impl Stack {
             normalize(repository.worktree_file.clone(), Layer::WorktreeFile),
             normalize(repository.local_config.clone(), Layer::LocalConfig),
         ];
-        Self { layers, warnings }
+        let template_files = [
+            (global.template_files.clone(), Layer::GlobalConfig),
+            (
+                repository.worktree_template_files.clone(),
+                Layer::WorktreeFile,
+            ),
+            (repository.local_template_files.clone(), Layer::LocalConfig),
+        ];
+        Self {
+            layers,
+            template_files,
+            warnings,
+        }
     }
 
     /// The settings in effect; fails when the layers combine into an invalid
@@ -93,12 +108,25 @@ impl Stack {
         Ok(settings)
     }
 
-    /// Every option with its value and winning layer, in configuration order.
+    /// Every option with its value and winning layer, and the file a
+    /// template came from, in configuration order.
     pub fn report(&self) -> Result<Vec<Entry>> {
         self.clone().resolve()?;
         let mut entries = Vec::new();
         RepoConfig::entries("", &self.sources(), &mut entries)?;
+        for entry in &mut entries {
+            entry.file = self.template_file(entry.layer, &entry.key);
+        }
         Ok(entries)
+    }
+
+    /// The file `layer` read the template `key` from.
+    fn template_file(&self, layer: Layer, key: &str) -> Option<std::path::PathBuf> {
+        self.template_files
+            .iter()
+            .find(|(_, files_layer)| *files_layer == layer)
+            .and_then(|(files, _)| files.get(key))
+            .cloned()
     }
 
     /// Warnings for the settings each layer sets that repeat Shoal's guidance.

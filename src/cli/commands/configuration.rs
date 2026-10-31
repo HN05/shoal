@@ -106,11 +106,15 @@ pub(super) async fn show(
         let palette = Palette::stdout(ctx.json);
         for entry in entries {
             let value = serde_json::to_string(&entry.value).expect("serialize config value");
+            let source = match &entry.file {
+                Some(file) => format!("({}, {})", entry.layer, file.display()),
+                None => format!("({})", entry.layer),
+            };
             outln!(
                 "{} = {} {}",
                 entry.key,
                 value,
-                palette.paint(Style::Muted, format_args!("({})", entry.layer))
+                palette.paint(Style::Muted, source)
             );
         }
     })?;

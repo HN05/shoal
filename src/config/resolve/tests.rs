@@ -40,6 +40,7 @@ fn stack(global: &str, worktree: &str, saved: &str) -> Stack {
     let layers = ConfigLayers {
         worktree_file: parse(worktree).unwrap(),
         local_config: parse(saved).unwrap(),
+        ..Default::default()
     };
     Stack::new(&global, &layers)
 }
@@ -50,7 +51,7 @@ fn former_template_files_are_not_read() {
     for name in ["agent-template.md", "issue-template.md"] {
         std::fs::write(directory.path().join(name), name).unwrap();
     }
-    let config = config::repo::load(directory.path()).unwrap();
+    let (config, _) = config::repo::load(directory.path()).unwrap();
     assert_eq!(config.agent.templates.worker, None);
 }
 
@@ -172,6 +173,51 @@ fn templates_append_one_repository_value_and_report_the_composed_text() {
             assert_eq!(entry.layer, layer);
         }
     }
+}
+
+#[test]
+fn a_template_reports_the_file_of_the_layer_it_came_from() {
+    let file = |path: &str| {
+        config::templates::Files::from([("agent.templates.worker".into(), path.into())])
+    };
+    let mut global = Config::from_toml("").unwrap();
+    global.repository.agent.templates.worker = Some("Global".into());
+    global.template_files = file("/global/worker-template.md");
+    let report = |layers: &ConfigLayers| {
+        Stack::new(&global, layers)
+            .report()
+            .unwrap()
+            .into_iter()
+            .map(|entry| (entry.key, (entry.layer, entry.file)))
+            .collect::<BTreeMap<_, _>>()
+    };
+    let mut layers = ConfigLayers::default();
+    let entries = report(&layers);
+    assert_eq!(
+        entries["agent.templates.worker"],
+        (
+            Layer::GlobalConfig,
+            Some("/global/worker-template.md".into())
+        )
+    );
+    assert_eq!(
+        entries["agent.templates.chat"],
+        (Layer::BuiltInDefault, None)
+    );
+    // An inline value is not from a file.
+    layers.worktree_file = parse("agent.templates.worker = 'Worktree'").unwrap();
+    assert_eq!(
+        report(&layers)["agent.templates.worker"],
+        (Layer::WorktreeFile, None)
+    );
+    layers.worktree_template_files = file("/worktree/.shoal/worker-template.md");
+    assert_eq!(
+        report(&layers)["agent.templates.worker"],
+        (
+            Layer::WorktreeFile,
+            Some("/worktree/.shoal/worker-template.md".into())
+        )
+    );
 }
 
 #[test]

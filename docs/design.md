@@ -1703,7 +1703,7 @@ no global one is configured. Empty repository values suppress only the addition.
 Repository Markdown files, at the root or in `.shoal/` like the repository
 config and refused in both, and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
-and reports the combined text.
+and the file it read, and reports the combined text.
 Shoal's agent guidance is built in and precedes every worker template, so
 adding instructions never freezes or replaces it. It holds only what the launch
 knows (the workspace, branch, path and how activity arrives), the rules an

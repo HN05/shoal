@@ -1,5 +1,6 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
 use std::{
+    collections::BTreeMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -20,23 +21,28 @@ pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 
+/// The Markdown file each of one layer's templates came from, by option key.
+pub type Files = BTreeMap<String, PathBuf>;
+
 /// Fill one layer's omitted inline templates from the Markdown files in
 /// `directories`, where each file may be in only one of them.
-pub fn fill(templates: &mut TemplatesConfig, directories: &[PathBuf]) -> Result<()> {
-    for (name, value) in [
-        (WORKER_FILE, &mut templates.worker),
-        (CHAT_FILE, &mut templates.chat),
+pub fn fill(templates: &mut TemplatesConfig, directories: &[PathBuf]) -> Result<Files> {
+    let mut files = Files::new();
+    for (key, name, value) in [
+        ("agent.templates.worker", WORKER_FILE, &mut templates.worker),
+        ("agent.templates.chat", CHAT_FILE, &mut templates.chat),
     ] {
-        let text = find(directories, name)?;
-        if value.is_none() {
-            *value = text;
+        let found = find(directories, name)?;
+        if let (None, Some((path, text))) = (&value, found) {
+            *value = Some(text);
+            files.insert(key.to_owned(), path);
         }
     }
-    Ok(())
+    Ok(files)
 }
 
-/// The text of the one file named `name` among `directories`.
-fn find(directories: &[PathBuf], name: &str) -> Result<Option<String>> {
+/// The one file named `name` among `directories`, with its text.
+fn find(directories: &[PathBuf], name: &str) -> Result<Option<(PathBuf, String)>> {
     let mut found = Vec::new();
     for path in directories.iter().map(|directory| directory.join(name)) {
         let text = crate::fsutil::read_optional(&path)
@@ -50,7 +56,7 @@ fn find(directories: &[PathBuf], name: &str) -> Result<Option<String>> {
             second.display()
         );
     }
-    Ok(found.pop().map(|(_, text)| text))
+    Ok(found.pop())
 }
 
 pub fn install(paths: &Paths) -> Result<()> {

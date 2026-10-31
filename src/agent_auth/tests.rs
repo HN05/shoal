@@ -11,6 +11,7 @@ fn wrappers_resolve_per_tool() {
             .unwrap(),
         local_config: crate::config::repo::parse("[agent.forge_clis]\nfj = '/saved/fj-agent'\n")
             .unwrap(),
+        ..Default::default()
     };
     let effective = global.resolve(&layers).unwrap();
     assert_eq!(

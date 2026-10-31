@@ -8,6 +8,7 @@ fn commands_layer_by_name_and_replace_whole_argument_arrays() {
     let layers = config::repo::ConfigLayers {
         worktree_file: config::repo::parse("[commands]\nreview = ['file']\n").unwrap(),
         local_config: config::repo::parse("[commands]\nreview = ['saved', 'two words']\n").unwrap(),
+        ..Default::default()
     };
     let effective = global.resolve(&layers).unwrap();
     assert_eq!(effective.commands["review"], ["saved", "two words"]);
