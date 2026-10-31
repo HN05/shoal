@@ -5,8 +5,11 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    ForgeRepo, account::Account, backends::Backend, capability::Capability,
-    transport::api::http_body,
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    capability::Capability,
+    transport::{api::http_body, response::Fetched},
 };
 
 /// A downloaded file and the content type the forge served it as.
@@ -22,25 +25,10 @@ impl ForgeRepo {
         self.require(Capability::Downloads)?;
         self.check_download(url)?;
         async {
-            let fetched = self.kind.download(self, account, url).await?;
-            if !(200..300).contains(&fetched.status) {
-                http_body(fetched.status, &String::from_utf8_lossy(&fetched.body))?;
-            }
-            let content_type = fetched
-                .header("content-type")
-                .and_then(|value| value.split(';').next())
-                .map(|value| value.trim().to_ascii_lowercase())
-                .filter(|value| !value.is_empty());
-            // A forge answers a request its login cannot read with a page,
-            // such as its sign-in page, which is never the file itself.
-            ensure!(
-                content_type.as_deref() != Some("text/html"),
-                "the forge answered with a web page instead of the file; check that the login can read the repository"
-            );
-            Ok(Download {
-                content_type,
-                bytes: fetched.body,
-            })
+            self.kind
+                .download(self, account, url)
+                .await?
+                .into_download()
         }
         .await
         .with_context(|| format!("download {url}"))
@@ -61,6 +49,31 @@ impl ForgeRepo {
             self.host
         );
         Ok(())
+    }
+}
+
+impl Fetched {
+    /// The file a successful response carries, or the error a failed one
+    /// reports.
+    fn into_download(self) -> Result<Download> {
+        if !(200..300).contains(&self.status) {
+            http_body(self.status, &String::from_utf8_lossy(&self.body))?;
+        }
+        let content_type = self
+            .header("content-type")
+            .and_then(|value| value.split(';').next())
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+        // A forge answers a request its login cannot read with a page, such
+        // as its sign-in page, which is never the file itself.
+        ensure!(
+            content_type.as_deref() != Some("text/html"),
+            "the forge answered with a web page instead of the file; check that the login can read the repository"
+        );
+        Ok(Download {
+            content_type,
+            bytes: self.body,
+        })
     }
 }
 

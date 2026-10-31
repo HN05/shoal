@@ -10,7 +10,7 @@ use crate::{
     cli::{
         args::repository::DownloadArgs, client, commands::items::select_context, context::Context,
     },
-    forge::ForgeRepo,
+    forge::{ForgeRepo, download::Download},
 };
 
 /// Where a download was written, for `--json`.
@@ -35,23 +35,33 @@ pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
         )
         .await?;
     if args.output == Path::new("-") {
-        let mut stdout = std::io::stdout().lock();
-        stdout
-            .write_all(&download.bytes)
-            .and_then(|()| stdout.flush())
-            .context("write the file to standard output")?;
+        write_stdout(&download.bytes)?;
         return Ok(0);
     }
-    let path = std::path::absolute(&args.output)
-        .with_context(|| format!("resolve {}", args.output.display()))?;
-    std::fs::write(&path, &download.bytes).with_context(|| format!("write {}", path.display()))?;
-    let written = Written {
-        path,
-        bytes: download.bytes.len(),
-        content_type: download.content_type,
-    };
+    let written = save(&args.output, download)?;
     ctx.show(&written, |written| {
         outln!("Saved {} ({} bytes)", written.path.display(), written.bytes);
     })?;
     Ok(0)
+}
+
+/// Write `bytes` to standard output as they are.
+fn write_stdout(bytes: &[u8]) -> Result<()> {
+    let mut stdout = std::io::stdout().lock();
+    stdout
+        .write_all(bytes)
+        .and_then(|()| stdout.flush())
+        .context("write the file to standard output")
+}
+
+/// Write `download` to `output`, relative to the current directory.
+fn save(output: &Path, download: Download) -> Result<Written> {
+    let path =
+        std::path::absolute(output).with_context(|| format!("resolve {}", output.display()))?;
+    std::fs::write(&path, &download.bytes).with_context(|| format!("write {}", path.display()))?;
+    Ok(Written {
+        path,
+        bytes: download.bytes.len(),
+        content_type: download.content_type,
+    })
 }
