@@ -54,7 +54,7 @@ pub enum AgentsCommand {
     Chat {
         #[command(subcommand)]
         command: Option<ChatCommand>,
-        /// Run in this terminal instead of a new tab or session.
+        /// Run in this terminal instead of a new tab or detached session.
         #[arg(long)]
         here: bool,
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
@@ -88,7 +88,7 @@ pub enum AgentsCommand {
         /// Registered repository of the issue; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
         repository: Option<String>,
-        /// Run in this terminal instead of a new tab or session.
+        /// Run in this terminal instead of a new tab or detached session.
         #[arg(long)]
         here: bool,
         /// Agent to start; defaults to agent.default, otherwise a picker.

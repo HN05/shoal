@@ -13,7 +13,7 @@ use crate::{
 pub enum CreateCommand {
     /// Create or reopen a workspace.
     Add {
-        /// Run in this terminal instead of a new tab or session.
+        /// Run in this terminal instead of a new tab or detached session.
         #[arg(long)]
         here: bool,
         /// Give the new tab or session the terminal, overriding the `focus` setting;
@@ -108,7 +108,7 @@ pub enum CreateCommand {
 // Arguments of `shoal contribute`.
 #[derive(Debug, Args)]
 pub struct ContributeArgs {
-    /// Run in this terminal instead of a new tab or session.
+    /// Run in this terminal instead of a new tab or detached session.
     #[arg(long)]
     pub here: bool,
     /// Give the new tab or session the terminal, overriding the `focus` setting;

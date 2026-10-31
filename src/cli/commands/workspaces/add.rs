@@ -33,7 +33,7 @@ use crate::cli::context::Context;
 /// How `shoal add` runs once its workspace is planned.
 #[derive(Debug, Clone, Default)]
 pub(in crate::cli::commands) struct AddOptions {
-    /// Run in this terminal instead of a new tab or session.
+    /// Run in this terminal instead of a new tab or detached session.
     pub here: bool,
     /// Focus the new tab or session whatever the `focus` setting says.
     pub focus: bool,

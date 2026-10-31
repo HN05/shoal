@@ -137,7 +137,7 @@ pub enum RepoCommand {
         /// from a chat, instead of committing them; asked when interactive.
         #[arg(long)]
         local: bool,
-        /// Run the local setup's chat in this terminal instead of a new tab or session.
+        /// Run the local setup's chat in this terminal instead of a new tab or detached session.
         #[arg(long, requires = "local")]
         here: bool,
         /// Name of the local setup's chat; defaults to <repo>-setup.
