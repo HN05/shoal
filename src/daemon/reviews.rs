@@ -14,6 +14,7 @@ use crate::{
     reviews::{FindingId, Outcome, Review, ReviewTarget},
 };
 
+mod history;
 mod reviewer;
 mod run;
 pub(crate) mod store;

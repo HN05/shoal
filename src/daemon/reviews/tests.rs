@@ -248,3 +248,32 @@ async fn removing_the_workspace_stops_its_review() {
     assert!(manager.review(queued.id).await.is_err());
     assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
 }
+
+#[tokio::test]
+async fn the_next_review_receives_the_history_and_checks_fixes() {
+    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let first = fixture.review().await;
+    let finding = first.findings[0].id;
+    fixture
+        .manager
+        .resolve_finding(&fixture.workspace.id, finding, Some(Outcome::Fixed))
+        .await
+        .unwrap();
+    fixture.review().await;
+    let prompt_file = fixture._root.path().join("prompt");
+    let prompt = std::fs::read_to_string(prompt_file).unwrap();
+    assert!(
+        prompt.starts_with("You are reviewing the committed changes of Shoal workspace fix-login")
+    );
+    assert!(
+        prompt.contains(&format!(
+            "### Finding {finding} (should-fix) at tracked:1: Unclear"
+        )),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("Outcome: fixed; check it and report it in `checked`"),
+        "{prompt}"
+    );
+}
