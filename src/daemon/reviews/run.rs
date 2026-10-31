@@ -209,10 +209,7 @@ impl Manager {
                 return Ended::Failed(FailureReason::ExecutionFailed);
             }
         };
-        let ended = reviewer::run(&reviewer, cancelled).await;
-        // Another reviewer starts without this one's result.
-        let _ = std::fs::remove_file(run.files.output());
-        ended
+        reviewer::run(&reviewer, cancelled).await
     }
 
     /// Record how the run ended, post a finished PR review and deliver the

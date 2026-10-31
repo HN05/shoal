@@ -40,6 +40,11 @@ impl Files {
     pub fn output(&self) -> PathBuf {
         self.directory.join("result.json")
     }
+
+    /// Remove the result a reviewer wrote to [`Self::output`].
+    fn remove_output(&self) {
+        let _ = fs::remove_file(self.output());
+    }
 }
 
 /// What one reviewer runs with.
@@ -60,7 +65,7 @@ pub(super) enum Ended {
 }
 
 /// Run `reviewer` until it exits, [`TIMEOUT`] passes or `cancel` turns true,
-/// and read its result.
+/// and read its result, which another reviewer of the run does not see.
 pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {
     let files = reviewer.files;
     let run = oneshot::Run {
@@ -69,7 +74,14 @@ pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bo
         files: &files.directory,
         timeout: TIMEOUT,
     };
-    match oneshot::run(&run, cancel).await {
+    let ended = ended(reviewer, oneshot::run(&run, cancel).await);
+    reviewer.files.remove_output();
+    ended
+}
+
+/// What `reviewer`'s run, which ended as `exited`, produced.
+fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
+    match exited {
         Ok(oneshot::Ended::Exited { success }) => match read(reviewer, success) {
             Ok(Ok(output)) => Ended::Returned(output),
             Ok(Err(reason)) => Ended::Failed(reason),
