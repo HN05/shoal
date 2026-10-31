@@ -325,6 +325,11 @@ the failing test and log excerpt; rerun only after that, never instead of it.
 - Messages: an imperative subject under 72 characters without a type prefix (the
   release workflow's `chore:` excepted), a blank line, then a body saying why when
   the diff does not make it obvious. `Closes #n` goes in the PR description.
+- A PR closes every issue it fixes, one `Closes #n` line each. Before opening
+  it, and again when work beyond the assigned issue lands in it, such as a
+  failing test or a bug found along the way, search the open issues with
+  `shoal issue list <words>` for each such fix and add the reference for every
+  issue it completes.
 - Deliver completed work as a PR on a topic branch: commit, push, open or update the
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its

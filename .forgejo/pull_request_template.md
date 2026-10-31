@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What changes and why. End with `Closes #<number>` when the PR completes an issue. -->
+<!-- What changes and why. End with a `Closes #<number>` line for each issue the PR completes. -->
 
 ## Testing
 

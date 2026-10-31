@@ -582,7 +582,9 @@ of independent changes and suggest concrete boundaries. The size guidance in
 AGENTS.md is a prompt to inspect, not a line-count gate; tightly coupled
 changes are a valid reason for a larger commit. Flag a PR that changes what
 Shoal prints or draws in the terminal without examples of the new interface in
-its description or comments. After fixing substantial findings, an agent
+its description or comments. Flag a PR that fixes something beyond its
+assigned issue, such as a failing test, without a closing reference for it or
+saying that no open issue tracks it. After fixing substantial findings, an agent
 requests another review and marks the PR ready only once it comes back clean.
 Agents cannot merge PRs;
 leave merging to the user instead of asking for permission to merge.
