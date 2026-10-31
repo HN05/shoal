@@ -1,7 +1,7 @@
 //! Following an operation: its events from the one asked for on, then its
-//! result or error, until it ends or the client hangs up. It holds an
-//! operation guard only while it writes, so a daemon restart closes it
-//! between writes.
+//! result or error, until it ends, the client hangs up or its scope token
+//! is revoked. It holds an operation guard only while it writes, so a
+//! daemon restart closes it between writes.
 use anyhow::Result;
 use shoal_client::{
     FollowOperation,
@@ -38,6 +38,12 @@ pub(super) async fn run(
     let mut next = follow.after;
     loop {
         changed.borrow_and_update();
+        // A token revoked or expired since the stream opened ends it.
+        if let Err(error) = session.current_caller().await {
+            let reply = Reply::Error(error);
+            super::write_guarded(&manager, &mut writer, &Response { id, reply }).await?;
+            return Ok(());
+        }
         let (events, ended) = entry.since(next);
         let ended = match ended {
             Some(ended) => Some(progress::ended(&session, ended).await),

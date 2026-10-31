@@ -202,3 +202,32 @@ async fn creation_refuses_a_bad_agent_or_issue_without_leaving_a_workspace() {
     };
     assert_eq!(code(client.call(get).await), ErrorCode::NotFound);
 }
+
+#[tokio::test]
+async fn following_ends_once_the_followers_scope_token_is_revoked() {
+    let daemon = TestDaemon::start().await;
+    let own = daemon.workspace("own").await;
+    let land = LandWorkspace {
+        workspace: "own".into(),
+        push: None,
+    };
+    let started = daemon.client().await.call(land).await.unwrap();
+    let mut worker = fake::take(&started.operation);
+    let token = daemon.scope_token(&own).await;
+    let mut following = daemon
+        .connector()
+        .scope(token.clone())
+        .follow(started.operation.clone(), 0)
+        .await
+        .unwrap();
+    worker.stdout("one").await;
+    assert!(matches!(following.next().await, Ok(Followed::Progress(_))));
+    daemon
+        .manager
+        .revoke_workspace_environment(&own.id, token)
+        .await
+        .unwrap();
+    worker.stdout("two").await;
+    assert_eq!(code(following.next().await), ErrorCode::ScopeDenied);
+    worker.exit(0);
+}
