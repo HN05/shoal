@@ -349,6 +349,12 @@ instead of the PR delivery guidance below.
   desktop handoffs retain the tab.
 - Each command, flag and value has one name; flag a clap alias, including an
   old name kept after a rename.
+- Commands follow the grammar `AGENTS.md` states: a verb that acts the same way
+  on every linked kind is top-level, `shoal <verb> [kind] [item]`, and every
+  other action goes under its kind's group. Flag a group subcommand that
+  repeats a cross-kind verb, such as a `ci view`, a top-level command for an
+  action on one kind of linked item, and a cross-kind verb that refuses a kind
+  it applies to.
 - Commands refuse invalid given arguments before any prompt for omitted ones;
   interactive `add` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,

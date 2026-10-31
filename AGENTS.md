@@ -38,6 +38,15 @@ when behavior changes, distinguishing decisions from proposals.
   the existing ones, so every command looks and behaves the same.
 - Give each command, flag and value one name: no clap aliases, and a rename
   drops the old name.
+- A verb that acts the same way on every kind a workspace links (issues, PRs
+  and CI runs) is a top-level command, `shoal <verb> [kind] [item]`, that acts
+  on everything linked when both are omitted: `view`, `view ci 2765`,
+  `watch pr 12`. Leases follow the same grammar: `acquire port`, `release sim`.
+  Every other action goes subject first under its kind's group, even when
+  another group has one of the same name: `pr merge`, `issue comment`,
+  `ci rerun`. Listing is one, since each kind filters its own way: `ci list`.
+  A new kind joins the cross-kind verbs that apply to it instead of growing its
+  own `view` or `watch`.
 - Forge requests live in `crates/shoal-forge`, which depends on no other Shoal
   code; it takes the account to act as, while scope, approvals, identity choice
   and workspace records stay in the daemon. What one forge does its own way
