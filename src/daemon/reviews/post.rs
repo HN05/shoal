@@ -9,7 +9,10 @@ use super::store;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        items::{action::Action, link::ItemKind},
+        items::{
+            action::{Action, Sent},
+            link::ItemKind,
+        },
         review::submit::{LineComment, NewReview, ReviewVerdict, Side},
     },
     model::Workspace,
@@ -50,8 +53,8 @@ impl Manager {
     }
 
     /// Submit the review for the commit it covered, `head`. When the PR's
-    /// head moved meanwhile, or the forge refuses the line comments, every
-    /// finding goes in the body.
+    /// head moved meanwhile, or the forge refuses the line comments before
+    /// anything reached it, every finding goes in the body.
     async fn submit_review(
         &self,
         review: &Review,
@@ -80,7 +83,8 @@ impl Manager {
             .await
         {
             Ok(_) => Ok(url),
-            Err(error) if inline => {
+            // A review that reached the forge is not posted again.
+            Err(error) if inline && error.downcast_ref::<Sent>().is_none() => {
                 log!(
                     "review {}: line comments refused ({error:#}); posting them in the body",
                     review.id
