@@ -1207,3 +1207,39 @@ async fn an_update_restores_an_idle_agent_only_once_disk_space_recovered() {
     manager.dispatch_queue().await.unwrap();
     assert_eq!(bounded(restoring).await.unwrap().unwrap(), Grant::Update);
 }
+
+#[tokio::test]
+async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let first = add(&manager, &repo, "first").await.entry.unwrap();
+    let launch = add(&manager, &repo, "launch").await.entry.unwrap();
+    let mut review = manager.agent_queue.request_oneshot(repo.id.as_str());
+    let workspace = manager
+        .create_workspace(&repo.id, "first".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .queue_attach(&first.id, &workspace.id)
+        .await
+        .unwrap();
+    manager.consume_queue_entry(&first.id, &workspace.id).await;
+    manager
+        .mark_done(&workspace.id, false, false, vec![], &Attacher::User)
+        .await
+        .unwrap();
+
+    // The one free slot goes to the run queued after the launch.
+    manager.dispatch_queue().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), review.admitted())
+        .await
+        .unwrap();
+    assert!(!started(&launch.id));
+    manager.dispatch_queue().await.unwrap();
+    assert!(!started(&launch.id), "the run holds its slot");
+
+    drop(review);
+    manager.dispatch_queue().await.unwrap();
+    assert!(started(&launch.id));
+}

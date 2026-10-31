@@ -813,8 +813,9 @@ no setup runs. Shoal adds no trust entry for the checkout, which is removed when
 the review ends. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
-runs. Reviews take no `max_agents` slot. A chat has no changes of its own, so name a
-workspace there.
+runs. A review waits in the [agent queue](#agent-queue) for a slot, ahead of every
+launch, and holds it while its reviewer runs; `shoal queue` does not list it. A chat
+has no changes of its own, so name a workspace there.
 
 The reviewer is `--agent`, else `[review] agent`, else `agent.default`, else one you
 pick, and needs a [`review` template](#agents). A reviewer still running after 30
@@ -1588,6 +1589,8 @@ its registered checkout). Its default, `dynamic`, adds no repository limit. Each
 after a daemon restart, or waits for `shoal resume`, unless its workspace is
 done or its restore waits in the queue; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
+A [local review](#local-reviews)'s reviewer also uses a slot while it runs; a
+queued review waits ahead of every launch and starts as soon as a slot is free.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns

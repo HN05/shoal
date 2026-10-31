@@ -22,8 +22,8 @@ use crate::{
     reviews::{FailureReason, Review, ReviewState, ReviewTarget},
 };
 
-/// Start every queued review, now and whenever one is queued. Reviews take no
-/// agent slot, so nothing else limits how many run.
+/// Start every queued review, now and whenever one is queued; each then
+/// waits in the agent queue for a slot.
 pub(crate) async fn run(manager: Arc<Manager>) {
     let mut running = JoinSet::new();
     let mut started = HashSet::new();
@@ -92,6 +92,14 @@ impl Manager {
             return Ok(());
         }
         let workspace = self.workspace(&review.workspace_id).await?;
+        let mut slot = self
+            .agent_queue
+            .request_oneshot(workspace.repository_id.as_str());
+        tokio::select! {
+            () = slot.admitted() => {}
+            // A cancel or the workspace's removal recorded the review's end.
+            _ = cancelled.wait_for(|cancelled| *cancelled) => return Ok(()),
+        }
         let settings = self.workspace_settings_with_templates(&workspace).await?;
         let commits = self.review_commits(&workspace, &review.target).await?;
         let (head, base, now) = (commits.head.clone(), commits.base.clone(), now());

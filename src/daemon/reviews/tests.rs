@@ -17,8 +17,8 @@ struct Fixture {
 }
 
 /// A workspace whose reviewers are `[agents.<name>]` scripts, in which
-/// `{review}` names a file holding [`REVIEW`], with the review scheduler
-/// running when there are any.
+/// `{review}` names a file holding [`REVIEW`], with the review scheduler and
+/// the agent queue, under a fixed agent limit, running when there are any.
 async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
     let (root, manager) = manager().await;
     let result = root.path().join("review.json");
@@ -33,6 +33,7 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
             path.display()
         ));
     }
+    config.push_str("[machine]\nmax_agents = 4\n[machine.overload.disk]\nenabled = false\n");
     configure(&manager, &config).await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -45,6 +46,7 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
         .unwrap();
     if !reviewers.is_empty() {
         tokio::spawn(run(manager.clone()));
+        tokio::spawn(crate::daemon::agent_queue::run(manager.clone()));
     }
     Fixture {
         _root: root,

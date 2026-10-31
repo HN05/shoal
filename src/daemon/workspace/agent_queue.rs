@@ -1,5 +1,6 @@
-//! The agent queue: `shoal add` launches past `max_agents` and restores of
-//! stopped agents wait here and start in order as slots free. Slots are
+//! The agent queue: `shoal add` launches past `max_agents`, restores of
+//! stopped agents and one-shot runs such as reviews wait here and start in
+//! order as slots free. Slots are
 //! counted from what the daemon already tracks, so a limit applies however an
 //! agent started.
 use std::{
@@ -53,6 +54,8 @@ impl Limits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Work {
     Launch,
+    /// A one-shot run, which the daemon starts without a session.
+    OneShot,
     /// A stopped agent's restore. `waiting` says its agent waits for it with
     /// every process stopped.
     Restore {
@@ -119,7 +122,7 @@ pub(crate) fn admit(
             break;
         }
         let own = match entry.work {
-            Work::Launch => 0,
+            Work::Launch | Work::OneShot => 0,
             Work::Restore {
                 waiting: true,
                 wake: Wake::Slot | Wake::Update { due: true },
@@ -518,13 +521,18 @@ impl Manager {
                 self.agent_queue.grant_restore(execution, grant);
             }
         }
+        let admitted = admitted
+            .into_iter()
+            .filter(|id| !self.agent_queue.admit_oneshot(id))
+            .collect();
         let starts = self.mark_starting(admitted, bases).await?;
         self.start_launches(starts, caller).await
     }
 
     /// The queued entries in order, each restore with whether its agent
     /// waits and what for. A restore the daemon starts is admitted like a
-    /// launch once it waits for nothing.
+    /// launch once it waits for nothing. One-shot runs, such as reviews of
+    /// work already done, go ahead of every launch.
     async fn waiting_work(&self) -> Result<WaitingWork> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
         let waiters = self.agent_queue.restore_waiters();
@@ -566,6 +574,20 @@ impl Manager {
                 work,
             });
         }
+        let first_launch = waiting
+            .iter()
+            .position(|entry| entry.work == Work::Launch)
+            .unwrap_or(waiting.len());
+        let oneshots = self
+            .agent_queue
+            .waiting_oneshots()
+            .into_iter()
+            .map(|(id, repository)| Waiting {
+                id,
+                repository,
+                work: Work::OneShot,
+            });
+        waiting.splice(first_launch..first_launch, oneshots);
         Ok(WaitingWork {
             entries: waiting,
             restores,
@@ -744,7 +766,8 @@ impl Manager {
     /// The used slots. Each agent in a workspace that is not done uses one
     /// while it runs, awaits reattachment or waits for resume, counted once by
     /// its execution, except the `dormant` ones whose restore waits for an
-    /// update; so does each starting launch until its agent registers. An
+    /// update; so does each starting launch until its agent registers, and
+    /// each admitted one-shot run until it ends. An
     /// admitted restore starts in its agent's slot, and one of a last
     /// session, which holds none, as a launch.
     async fn occupied_slots(&self, dormant: &HashSet<String>) -> Result<Vec<Slot>> {
@@ -798,6 +821,12 @@ impl Manager {
                     activity: starting_since(launch.seen_at),
                 });
             }
+        }
+        for (repository, held) in self.agent_queue.admitted_oneshots() {
+            slots.push(Slot {
+                repository,
+                activity: Activity::Running(held),
+            });
         }
         Ok(slots)
     }
