@@ -23018,21 +23018,26 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
         fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
-    // A failure after the merge is confirmed is reported.
-    write_pr(&fixture, 1, "merged", "lower", "main", head.trim());
-    fs::write(root.join("fail"), "pulls/2").unwrap();
+    // A failure after the merge is confirmed is reported: the merged PR now
+    // has no base branch, so looking up the branch it merged into fails. A
+    // failed retarget of the stacked PR would not do, since the restack only
+    // reports it in the stacked workspace's update.
+    write_pr(&fixture, 1, "merged", "lower", "", head.trim());
     fixture.restart();
     wait_until("reported restack failure", || {
         fixture.ok(&["status", "lower"])["pr_cleanup"]["error"]
             .as_str()
-            .is_some_and(|error| error.contains("could not move the workspaces stacked on it"))
+            .is_some_and(|error| {
+                error.starts_with("could not move the workspaces stacked on it")
+                    && error.contains("has no head or base branch")
+            })
     });
     assert_eq!(
         fixture.ok(&["status", "upper"])["workspace"]["base_workspace"]["name"],
         "lower"
     );
     // Recovery restacks and clears the recorded error.
-    fs::remove_file(root.join("fail")).unwrap();
+    write_pr(&fixture, 1, "merged", "lower", "main", head.trim());
     fixture.restart();
     wait_until("restack after recovery", || {
         let lower = fixture.ok(&["status", "lower"]);
