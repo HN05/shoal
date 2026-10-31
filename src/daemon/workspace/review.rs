@@ -11,6 +11,7 @@ use crate::{
     daemon::{
         links::{pr::current_head, wait::linked_items},
         notifications::NotificationKind,
+        reviews::gate::Gate,
         store,
     },
     forge::items::link::{ItemKind, LinkKind, Selection},
@@ -53,11 +54,14 @@ impl Manager {
     /// when nothing is linked and nothing was selected. Marking again moves
     /// the mark to the current HEAD and reruns `hooks.post_ready`. With
     /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs;
-    /// a failure there keeps the marks and runs the hook.
+    /// a failure there keeps the marks and runs the hook. With `gated`, as for
+    /// a workspace process, `[review] require_for_ready` applies to the HEAD
+    /// the marks record.
     pub async fn mark_ready(
         &self,
         selector: &str,
         selection: Selection,
+        gated: bool,
     ) -> Result<Vec<ReviewMark>> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
@@ -74,6 +78,9 @@ impl Manager {
         };
         self.verify_worktree(&workspace).await?;
         let head = current_head(&workspace).await?;
+        if gated {
+            self.require_review(&workspace, Gate::Ready, &head).await?;
+        }
         let kind = marked_kind(&selection)?;
         let explicit = marked_item(self.explicit_item(&workspace, &selection).await?);
         let mut marks = self

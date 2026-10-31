@@ -327,7 +327,7 @@ impl Manager {
             }
             None => {
                 if caller.is_some() {
-                    self.require_review(&workspace, Gate::Pr).await?;
+                    self.require_review(&workspace, Gate::Pr, &head).await?;
                 }
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
@@ -403,7 +403,10 @@ impl Manager {
             .await?;
         match existing {
             Some(_) => Ok(()),
-            None => self.require_review(&workspace, Gate::Pr).await,
+            None => {
+                let head = super::pr::current_head(&workspace).await?;
+                self.require_review(&workspace, Gate::Pr, &head).await
+            }
         }
     }
 
