@@ -112,6 +112,17 @@ pub(crate) trait Backend {
     /// Whether the forge has `capability`.
     fn support(&self, capability: Capability) -> Support;
 
+    /// Whether the server `repo` is on has `capability`, where the forge's
+    /// versions differ in it.
+    async fn server_support(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        capability: Capability,
+    ) -> Result<Support> {
+        Ok(self.support(capability))
+    }
+
     /// Whether a repository path may have more than `owner/repository`.
     fn nests_groups(&self) -> bool;
 
@@ -854,6 +865,15 @@ impl Backend for ForgeKind {
 
     fn support(&self, capability: Capability) -> Support {
         dispatch!(self, backend => backend.support(capability))
+    }
+
+    async fn server_support(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        capability: Capability,
+    ) -> Result<Support> {
+        dispatch!(self, backend => backend.server_support(repo, account, capability).await)
     }
 
     fn nests_groups(&self) -> bool {

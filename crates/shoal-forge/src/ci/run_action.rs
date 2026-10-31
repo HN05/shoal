@@ -86,7 +86,8 @@ impl ForgeRepo {
     /// The run `input`, its web URL or the number in it, names, once the
     /// forge is known to apply `action` to runs.
     pub async fn find_run(&self, account: &Account, input: &str, action: CiAction) -> Result<Run> {
-        self.require(Capability::ci(action))?;
+        self.require_on_server(account, Capability::ci(action))
+            .await?;
         self.read_run(account, input).await
     }
 

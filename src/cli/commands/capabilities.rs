@@ -1,6 +1,6 @@
 //! `shoal forge capabilities`: what the forge of the workspace's repository, or
 //! another one, supports, so agents can check before they ask for something it
-//! lacks.
+//! lacks. Where a forge's versions differ, the server is asked.
 use anyhow::{Context as _, Result};
 
 use crate::{
@@ -21,7 +21,13 @@ use crate::{
 
 pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> Result<i32> {
     let forge = repository_forge(ctx, repository).await?;
-    ctx.show(&forge.capabilities(), render)?;
+    let capabilities = ctx
+        .progress(
+            "Reading capabilities",
+            forge.server_capabilities(&ctx.forge_account()?),
+        )
+        .await?;
+    ctx.show(&capabilities, render)?;
     Ok(0)
 }
 

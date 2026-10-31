@@ -106,7 +106,8 @@ impl ForgeRepo {
         action: CiAction,
         names: &[String],
     ) -> Result<Plan> {
-        self.require(Capability::ci(action))?;
+        self.require_on_server(account, Capability::ci(action))
+            .await?;
         let head = self.open_head(account, number).await?;
         let jobs = self.ci_jobs(account, &head).await?;
         let selected = select(&jobs, action, names)?;

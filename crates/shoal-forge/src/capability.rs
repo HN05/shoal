@@ -7,6 +7,7 @@ use serde::Serialize;
 use crate::state::states;
 use crate::{
     ForgeRepo,
+    account::Account,
     backends::Backend,
     ci::CiAction,
     items::{
@@ -211,17 +212,50 @@ impl ForgeRepo {
             .try_for_each(|capability| self.require(capability))
     }
 
+    /// Refuse a request that needs `capability` when the repository's
+    /// server lacks it, asking the server where the forge's versions differ.
+    pub async fn require_on_server(&self, account: &Account, capability: Capability) -> Result<()> {
+        match self.kind.server_support(self, account, capability).await? {
+            Support::Supported => Ok(()),
+            Support::Unsupported(hint) => Err(Unsupported {
+                forge: self.kind.name(),
+                capability,
+                hint,
+            }
+            .into()),
+        }
+    }
+
     pub fn supports(&self, capability: Capability) -> bool {
         self.kind.support(capability) == Support::Supported
     }
 
     pub fn capabilities(&self) -> Capabilities {
+        self.listed(
+            Capability::ALL
+                .iter()
+                .map(|&capability| (capability, self.kind.support(capability))),
+        )
+    }
+
+    /// The capabilities of the repository's server, asking it where the
+    /// forge's versions differ.
+    pub async fn server_capabilities(&self, account: &Account) -> Result<Capabilities> {
+        let mut supports = Vec::new();
+        for &capability in Capability::ALL {
+            let support = self.kind.server_support(self, account, capability).await?;
+            supports.push((capability, support));
+        }
+        Ok(self.listed(supports))
+    }
+
+    fn listed(&self, supports: impl IntoIterator<Item = (Capability, Support)>) -> Capabilities {
         Capabilities {
             forge: self.kind.name(),
-            capabilities: Capability::ALL
-                .iter()
-                .map(|&capability| {
-                    let (supported, hint) = match self.kind.support(capability) {
+            capabilities: supports
+                .into_iter()
+                .map(|(capability, support)| {
+                    let (supported, hint) = match support {
                         Support::Supported => (true, None),
                         Support::Unsupported(hint) => (false, hint),
                     };
