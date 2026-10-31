@@ -125,7 +125,7 @@ jobs:
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Labels are added right after `fj pr create`, so only the opened run can race them.
+          # Labels are added right after the PR opens, so only the opened run can race them.
           if [ "$ACTION" = opened ]; then sleep 15; fi
           # A failed lookup must not narrow the checks: fall through to running them all.
           labels=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r '.labels[].name') \

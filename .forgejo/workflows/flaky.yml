@@ -10,7 +10,7 @@ on:
   schedule:
     # Off the hour, and after the night's merges have landed.
     - cron: '41 2 * * *'
-  # `fj actions dispatch flaky.yml main` to hunt after fixing a flaky test.
+  # `shoal ci run flaky.yml --branch main` to hunt after fixing a flaky test.
   workflow_dispatch:
 
 concurrency:

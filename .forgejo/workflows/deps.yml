@@ -9,7 +9,7 @@ on:
   schedule:
     # Off the hour so it does not queue behind everything else that wakes on one.
     - cron: '17 4 * * 1'
-  # `fj actions dispatch deps.yml main` after a dependency bump.
+  # `shoal ci run deps.yml --branch main` after a dependency bump.
   workflow_dispatch:
 
 concurrency:
