@@ -314,3 +314,22 @@ fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
         choice(Some("opus"), "high")
     );
 }
+
+#[test]
+fn a_reviewer_needs_only_its_review_command_installed() {
+    let config = crate::config::Config::from_toml(
+        "[agents.present]\ncommand = ['sh']\nreview = ['{prompt}', '{schema}']\n\
+         [agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    ensure_reviewer_available("present", &settings).unwrap();
+    let refused = ensure_reviewer_available("absent", &settings).unwrap_err();
+    assert!(
+        refused
+            .to_string()
+            .contains("no-such-reviewer is not installed"),
+        "{refused}"
+    );
+    assert!(ensure_reviewer_available("unknown", &settings).is_err());
+}
