@@ -8,11 +8,13 @@ use anyhow::{Context, Result};
 
 /// Check out `commit` at `path`, a new linked worktree of `repo` on no branch,
 /// whose files and directories nobody may write. No hooks run, so a
-/// repository's `post-checkout` hook sets nothing up.
+/// repository's `post-checkout` hook sets nothing up. The caller owns
+/// `path`, so a registration a killed checkout left there, locked while it
+/// was being created, is replaced.
 pub async fn add(repo: &Path, path: &Path, commit: &str) -> Result<()> {
     let mut command = super::isolated_command_without_submodules(repo);
     command
-        .args(["worktree", "add", "--detach", "--"])
+        .args(["worktree", "add", "--detach", "--force", "--force", "--"])
         .arg(path)
         .arg(commit);
     super::output(command)

@@ -40,3 +40,28 @@ async fn a_detached_checkout_holds_the_commit_and_leaves_no_worktree_behind() {
     remove(&checkout).await.unwrap();
 }
 
+#[tokio::test]
+async fn a_checkout_killed_while_it_was_created_is_replaced() {
+    let root = tempfile::tempdir().unwrap();
+    let repo = crate::test_support::repository(root.path(), "repo");
+    let commit = git(&repo, &["rev-parse", "HEAD"]).await;
+    let checkout = root.path().join("reviews").join("1");
+    std::fs::create_dir_all(checkout.parent().unwrap()).unwrap();
+    add(&repo, &checkout, commit.trim()).await.unwrap();
+    // What a killed `git worktree add` leaves: a locked registration whose
+    // directory is gone.
+    git(&repo, &["worktree", "lock", checkout.to_str().unwrap()]).await;
+    remove_writable(&checkout);
+    add(&repo, &checkout, commit.trim()).await.unwrap();
+    assert_eq!(
+        git(&checkout, &["rev-parse", "HEAD"]).await.trim(),
+        commit.trim()
+    );
+    remove(&checkout).await.unwrap();
+}
+
+/// Delete the read-only checkout's directory, leaving its registration.
+fn remove_writable(checkout: &Path) {
+    set_writable(checkout, true).unwrap();
+    std::fs::remove_dir_all(checkout).unwrap();
+}
