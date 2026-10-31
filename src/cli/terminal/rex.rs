@@ -1,8 +1,8 @@
-//! Rex windows and blocks: Shoal opens a shell block per place, in a window
-//! of its own or splitting the caller's block, and types its command into
-//! the shell, since Rex sets no environment for a new terminal. Rex keeps
-//! sessions running without a connected app, so agents run in place in
-//! their block and outlive the Mac app or the phone.
+//! Rex windows and blocks: Shoal opens a block per place, in a window of its
+//! own or splitting the caller's block, that runs Shoal's launch step and
+//! then the user's shell, since Rex sets no environment for a new terminal.
+//! Rex keeps sessions running without a connected app, so agents run in
+//! place in their block and outlive the Mac app or the phone.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};
@@ -245,7 +245,8 @@ async fn session(near: Option<&Origin>, label: &str, cwd: &Path) -> Result<Origi
 }
 
 /// Open a block for `start` in its origin's session, in a window of its own
-/// or splitting the caller's block, and type its command there.
+/// or splitting the caller's block, running its command and then a shell,
+/// which follows the shell directive once at its prompt.
 async fn open_block(start: &Start<'_>) -> Result<Origin> {
     let origin = start
         .origin
@@ -263,7 +264,7 @@ async fn open_block(start: &Start<'_>) -> Result<Origin> {
             label: start.label,
             cwd: start.cwd,
             focus: start.focus,
-            input: Some(typed.text()),
+            command: Some(typed.command()),
             beside: start.split,
         })
         .await?;
@@ -330,7 +331,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
             label: demo.label,
             cwd: demo.cwd,
             focus: false,
-            input: None,
+            command: None,
             beside: None,
         })
         .await?;

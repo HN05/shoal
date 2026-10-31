@@ -120,6 +120,26 @@ impl RexServer {
             .collect()
     }
 
+    /// The first block of `session`'s window labelled `label`.
+    fn block_in(&self, session: &str, label: &str) -> String {
+        let windows = self.json(&["window", "ls", "-s", session, "--json"]);
+        let window = windows["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|window| window["label"] == label)
+            .unwrap();
+        window["layers"][0]["blocks"][0]["block_id"]
+            .as_str()
+            .unwrap()
+            .to_owned()
+    }
+
+    /// What `block` shows, with its scrollback.
+    fn screen(&self, block: &str) -> String {
+        String::from_utf8_lossy(&self.rex(&["capture", "-b", block]).stdout).into_owned()
+    }
+
     fn block_open(&self, block: &str) -> bool {
         self.rex(&["block", "inspect", block, "--json"])
             .status
@@ -207,6 +227,12 @@ fn additions_open_owned_windows_that_removal_closes_leaving_the_users_blocks() {
                 .is_some_and(|runs| runs.len() == 1)
     });
     assert_eq!(sessions(&fixture, "placed"), ["placed"]);
+    // The block starts with Shoal's launch step instead of having it typed.
+    let placed = rex.block_in(&session, "placed");
+    wait_until("the agent's output to show", || {
+        rex.screen(&placed).contains("agent ran")
+    });
+    assert!(!rex.screen(&placed).contains("internal"));
 
     // An agent in the user's own block is recorded where it runs, but the
     // block stays the user's.

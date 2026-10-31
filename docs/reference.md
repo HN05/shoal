@@ -974,10 +974,10 @@ right in the same window; the new block takes the label and the window keeps
 its name. Starts queued from Rex and starts from outside Rex still open
 windows. Rex keeps sessions running without a connected app, so an agent keeps
 running when the Mac app or the phone disconnects. Rex cannot set a new
-terminal's environment: Shoal types one short command into the new block's
-shell, which loads the worker and its variables from a private file and deletes
-it, so nothing long shows on screen or in shell history. The shell stays after
-the worker exits, as in a Herdr tab.
+terminal's environment: the new block starts with one short command, which
+loads the worker and its variables from a private file and deletes it, so
+nothing shows on screen or in shell history. Your login shell starts in the
+block once the worker exits, as in a Herdr tab.
 
 The `[terminal.rex]` table in global or repository config uses normal per-option
 precedence; with `enabled = false` Shoal treats a Rex terminal as a plain

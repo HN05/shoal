@@ -59,8 +59,9 @@ pub(crate) struct Shell<'a> {
     pub label: &'a str,
     pub cwd: &'a Path,
     pub focus: bool,
-    /// Typed into the shell once it starts.
-    pub input: Option<&'a str>,
+    /// What the block runs, through the user's login shell, instead of an
+    /// interactive shell.
+    pub command: Option<&'a [String]>,
     /// The block to split for it; `None` opens a window of its own.
     pub beside: Option<&'a str>,
 }
@@ -71,8 +72,8 @@ impl Shell<'_> {
         let mut options = json!({
             "cwd": self.cwd.to_str().context("the shell's directory is not UTF-8")?,
         });
-        if let Some(input) = self.input {
-            options["initial_input"] = input.into();
+        if let Some(command) = self.command {
+            options["command"] = command.into();
         }
         Ok(json!({"block": {"flavor": SHELL_FLAVOR, "label": self.label, "options": options}}))
     }

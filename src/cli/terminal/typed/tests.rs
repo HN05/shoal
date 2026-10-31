@@ -9,13 +9,30 @@ fn the_typed_line_stays_out_of_history_and_keeps_the_directive_in_the_shell() {
         "/tmp/f".into(),
     ];
     assert_eq!(
-        typed_text(&launch, None, false),
+        typed_text(&shell_line(&launch, None), false),
         " /opt/shoal internal launch /tmp/f\r"
     );
     assert_eq!(
-        typed_text(&launch, Some("/tmp/a b"), false),
+        typed_text(&shell_line(&launch, Some("/tmp/a b")), false),
         " export SHOAL_SHELL_DIRECTIVE='/tmp/a b'; /opt/shoal internal launch /tmp/f\r"
     );
+}
+
+#[test]
+fn a_place_command_runs_the_launch_in_the_foreground_then_the_login_shell() {
+    let line = shell_line(
+        &["/opt/shoal".to_owned(), "launch".into()],
+        Some("/tmp/a b"),
+    );
+    assert_eq!(
+        place_command(&line, false),
+        [
+            "/bin/sh",
+            "-c",
+            "set -m; export SHOAL_SHELL_DIRECTIVE='/tmp/a b'; /opt/shoal launch; exec \"${SHELL:-/bin/sh}\" -l"
+        ]
+    );
+    assert_eq!(place_command(&line, true)[2], format!("set -m; {line}"));
 }
 
 #[test]
@@ -27,6 +44,7 @@ fn the_launch_file_carries_the_command_and_goes_once_read() {
     )
     .unwrap();
     assert!(!typed.text().contains("secret"));
+    assert!(!typed.command().concat().contains("secret"));
     let file = typed.file.to_path_buf();
     typed.hand_over().unwrap();
     let launch = read(&file).unwrap();
@@ -63,7 +81,7 @@ fn the_launch_step_names_the_state_directory_and_output_as_workers_do() {
 fn a_command_that_ends_its_shell_exits_after_it() {
     let launch = ["/opt/shoal".to_owned(), "launch".into()];
     assert_eq!(
-        typed_text(&launch, None, true),
+        typed_text(&shell_line(&launch, None), true),
         " /opt/shoal launch; exit\r"
     );
 }

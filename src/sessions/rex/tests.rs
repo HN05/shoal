@@ -161,7 +161,7 @@ async fn an_unreachable_server_is_an_error_not_a_gone_block() {
 }
 
 #[tokio::test]
-async fn a_new_window_types_its_input_into_a_shell() {
+async fn a_new_window_runs_its_command() {
     let (root, rex) = fake(
         r#"{('api', 'call', 'session.new_window'): (0, '{"window_id": "window:1", "block_ids": ["block:1"], "revision": 2}')}"#,
     );
@@ -171,7 +171,7 @@ async fn a_new_window_types_its_input_into_a_shell() {
             label: "shoal#1",
             cwd: Path::new("/work"),
             focus: false,
-            input: Some(" shoal internal launch /tmp/f\r"),
+            command: Some(&["shoal".into(), "internal".into()]),
             beside: None,
         })
         .await
@@ -190,7 +190,7 @@ async fn a_new_window_types_its_input_into_a_shell() {
     assert_eq!(input["layout"]["block"]["label"], "shoal#1");
     let options = &input["layout"]["block"]["options"];
     assert_eq!(options["cwd"], "/work");
-    assert_eq!(options["initial_input"], " shoal internal launch /tmp/f\r");
+    assert_eq!(options["command"], serde_json::json!(["shoal", "internal"]));
 }
 
 /// A `window ls` answer: window:1 holds block:1 alone, window:2 holds
@@ -253,7 +253,7 @@ async fn renaming_a_block_beside_others_leaves_their_window_alone() {
 }
 
 #[tokio::test]
-async fn a_split_types_its_input_into_a_shell_beside_its_anchor() {
+async fn a_split_runs_its_command_beside_its_anchor() {
     let (root, rex) = fake(
         r#"{('api', 'call', 'session.new_split'): (0, '{"anchor_id": "block:1", "block_ids": ["block:2"], "split_ids": ["split:1"], "revision": 3}')}"#,
     );
@@ -263,7 +263,7 @@ async fn a_split_types_its_input_into_a_shell_beside_its_anchor() {
             label: "shoal#1",
             cwd: Path::new("/work"),
             focus: true,
-            input: Some(" shoal internal launch /tmp/f\r"),
+            command: Some(&["shoal".into(), "internal".into()]),
             beside: Some("block:1"),
         })
         .await
@@ -287,8 +287,8 @@ async fn a_split_types_its_input_into_a_shell_beside_its_anchor() {
     let block = &input["layout"]["block"];
     assert_eq!(block["label"], "shoal#1");
     assert_eq!(
-        block["options"]["initial_input"],
-        " shoal internal launch /tmp/f\r"
+        block["options"]["command"],
+        serde_json::json!(["shoal", "internal"])
     );
 }
 

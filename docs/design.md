@@ -900,9 +900,9 @@ falls back from its origin's group to its host's configured group on the same
 server, then to `terminal.default_host`; with that host turned off, a terminal no host
 serves runs work in place, a queued start without another fallback fails, and
 a demo runs as a background process. Rex cannot set a new terminal's
-environment, so Shoal types a launch step that loads the worker and its
+environment, so a new block runs a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
-of shell history, and the shell stays as in a Herdr tab. Rex blocks and Herdr
+of shell history, then the user's login shell, which stays as in a Herdr tab. Rex blocks and Herdr
 panes carry no ownership marks, so the daemon's records of the places Shoal
 created are the proof of ownership, closed through the same removal hook,
 orphan sweep and pending-close retries as zmx sessions; neither host reuses
