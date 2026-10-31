@@ -194,7 +194,7 @@ fn unique((pid, mut process): (u32, Observed), unique: u64, parent: u64) -> (u32
 fn marked(execution: &str) -> Evidence {
     Evidence::Marked(Marks {
         execution: Some(execution.into()),
-        workspace: None,
+        ..Marks::default()
     })
 }
 

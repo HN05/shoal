@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, os::unix::process::CommandExt, path::Path, sync::Arc};
 
 use crate::{
     daemon::workspace::Manager,
@@ -11,30 +11,55 @@ use crate::{
 /// A manager with a chat `name` about a registered repository, whose
 /// process this test reaps once a signal ends it, so the chat ends with it.
 async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
+    chat_running(name, "exec sleep 600").await
+}
+
+/// [`chat`] whose process runs the shell `script` with the chat's identity,
+/// as a chat's agent runs: the chat starts with this process, then moves to
+/// the script's.
+async fn chat_running(name: &str, script: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
     let (root, manager) = manager().await;
     let checkout = repository(root.path(), "repo");
     let repo = manager
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
-    let pid = process.id();
-    std::thread::spawn(move || process.wait());
-    manager
+    let chat = manager
         .start_chat(
             repo.id.into(),
             name.into(),
             "claude".into(),
-            pid,
+            std::process::id(),
             None,
-            false,
+            true,
         )
         .await
         .unwrap();
+    // It leads its process group, as a chat's process does in a terminal.
+    let mut process = std::process::Command::new("sh")
+        .args(["-c", script])
+        .env(crate::env::CHAT, &chat.id)
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let pid = process.id();
+    std::thread::spawn(move || process.wait());
+    manager.move_chat(&chat.id, pid).await.unwrap();
     (root, manager, pid)
+}
+
+/// The process ID the chat's script writes to `file`, once it has.
+async fn written_pid(file: &Path) -> u32 {
+    for _ in 0..400 {
+        if let Some(pid) = fs::read_to_string(file)
+            .ok()
+            .and_then(|pid| pid.trim().parse::<u32>().ok())
+        {
+            return pid;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("{} names no process", file.display());
 }
 
 async fn export(manager: &Manager, selector: &str, file: &Path) -> anyhow::Result<ExportedSpace> {
@@ -90,4 +115,115 @@ async fn a_chat_without_a_session_keeps_running() {
     assert!(identity::capture(pid).unwrap().is_some());
     assert!(!file.exists());
     manager.end_chat(&chat.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_chat_ends_with_the_agent_its_launcher_started() {
+    let directory = tempfile::tempdir().unwrap();
+    let child = directory.path().join("agent-pid");
+    // A launcher script that runs the agent as its child rather than
+    // replacing itself with it.
+    let script = format!("sleep 600 & echo $! > '{}'; wait", child.display());
+    let (root, manager, pid) = chat_running("launched", &script).await;
+    let agent = identity::capture(written_pid(&child).await)
+        .unwrap()
+        .expect("the launcher's agent runs");
+    let chat = manager.chats().await.unwrap().remove(0);
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+
+    export(&manager, "launched", &root.path().join("launched.shoal"))
+        .await
+        .unwrap();
+    assert!(!identity::alive(&agent).unwrap());
+    assert_eq!(identity::capture(pid).unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
+    let directory = tempfile::tempdir().unwrap();
+    let child = directory.path().join("late-pid");
+    let ready = directory.path().join("ready-pid");
+    // A process that starts another when told to stop, and says so once it
+    // will.
+    let script = format!(
+        "trap 'sleep 600 & echo $! > \"{}\"; exit 0' TERM; echo $$ > \"{}\"; \
+         while :; do sleep 1; done",
+        child.display(),
+        ready.display()
+    );
+    let (root, manager, pid) = chat_running("forking", &script).await;
+    assert_eq!(written_pid(&ready).await, pid);
+    let chat = manager.chats().await.unwrap().remove(0);
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+
+    export(&manager, "forking", &root.path().join("forking.shoal"))
+        .await
+        .unwrap();
+    // Written as it started, before the export finished; stopped, it is gone
+    // once launchd or init reaps it.
+    let late = written_pid(&child).await;
+    for _ in 0..400 {
+        if identity::capture(late).unwrap().is_none() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_eq!(identity::capture(late).unwrap(), None);
+    assert_eq!(identity::capture(pid).unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_chat_ends_without_the_workspace_executions_it_started() {
+    let directory = tempfile::tempdir().unwrap();
+    let started = directory.path().join("wrapper-pid");
+    // A command in the chat started a workspace's execution, whose wrapper
+    // stays among the chat's processes.
+    let script = format!(
+        "sleep 600 & echo $! > '{}'; while :; do sleep 1; done",
+        started.display()
+    );
+    let (root, manager, _) = chat_running("coordinator", &script).await;
+    let wrapper = identity::capture(written_pid(&started).await)
+        .unwrap()
+        .expect("the wrapper runs");
+    let chat = manager.chats().await.unwrap().remove(0);
+    let workspace = manager
+        .create_workspace(&chat.repository_id, "worker".into(), None, None, None)
+        .await
+        .unwrap();
+    let recorded = serde_json::to_string(&wrapper).unwrap();
+    manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "INSERT INTO executions(id,workspace_id,state,wrapper)
+                 VALUES ('worker-run',?1,'running',?2)",
+                [&workspace.id, &recorded],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+
+    export(
+        &manager,
+        "coordinator",
+        &root.path().join("coordinator.shoal"),
+    )
+    .await
+    .unwrap();
+    assert!(manager.chats().await.unwrap().is_empty());
+    let kept = identity::alive(&wrapper).unwrap();
+    identity::signal(&wrapper, libc::SIGKILL).unwrap();
+    assert!(kept, "the workspace's execution was stopped with the chat");
 }

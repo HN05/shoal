@@ -174,17 +174,32 @@ impl Manager {
             .find(|chat| chat.id == selector || chat.name == selector))
     }
 
-    /// End the running chat `id`: stop the process it lasts while, then end
-    /// its record as when that process exits.
+    /// End the running chat `id`: stop every process it owns, so none goes
+    /// on writing the agent's session, then end its record as when the
+    /// process it lasts while exits.
     pub(crate) async fn end_chat(&self, id: &str) -> Result<()> {
-        let id = id.to_owned();
-        let process = self
+        let chat = id.to_owned();
+        let recorded = self
             .store
-            .run(move |db| recorded_process(db, &id))
+            .run(move |db| recorded_process(db, &chat))
             .await?
             .context("the chat has ended")?;
-        identity::stop_verified(std::slice::from_ref(&process)).await?;
+        let wrappers = self.execution_wrappers().await?;
+        processes::ChatProcesses::of(id, &recorded, wrappers)?
+            .context("the chat has ended")?
+            .stop()
+            .await?;
         self.end_finished_chats().await
+    }
+
+    /// The wrappers of the executions running, which belong to their
+    /// workspaces even when a chat started them.
+    async fn execution_wrappers(&self) -> Result<Vec<Identity>> {
+        let executions = self.store.run(|db| store::all_executions(db)).await?;
+        Ok(executions
+            .into_iter()
+            .filter_map(|execution| execution.wrapper)
+            .collect())
     }
 
     /// End chats whose process has exited.
@@ -533,6 +548,8 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
     )?;
     Ok(())
 }
+
+mod processes;
 
 #[cfg(test)]
 mod tests;

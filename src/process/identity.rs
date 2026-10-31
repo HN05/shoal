@@ -324,6 +324,13 @@ pub async fn scan_workspace(id: &str) -> Result<Vec<Identity>> {
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
+/// Live same-user processes carrying the identity of chat `id`: its agent
+/// and what the agent started with its environment.
+pub async fn scan_chat(id: &str) -> Result<Vec<Identity>> {
+    let scan = scan_marked(Marker::Chat, HashSet::from([id.to_owned()])).await?;
+    Ok(scan.processes.into_iter().map(|p| p.identity).collect())
+}
+
 /// `scan_workspace` for each of the workspaces `ids`, pairing every process
 /// with the workspace it carries.
 pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identity)>> {
@@ -427,6 +434,7 @@ struct Observed {
 struct Marks {
     execution: Option<String>,
     workspace: Option<String>,
+    chat: Option<String>,
 }
 
 /// The marker a scan attributes processes by.
@@ -434,6 +442,7 @@ struct Marks {
 enum Marker {
     Execution,
     Workspace,
+    Chat,
 }
 
 impl Marks {
@@ -449,6 +458,7 @@ impl Marks {
         Self {
             execution: value(crate::env::EXECUTION_ID),
             workspace: value(crate::env::WORKSPACE_ID),
+            chat: value(crate::env::CHAT),
         }
     }
 
@@ -456,11 +466,18 @@ impl Marks {
         match marker {
             Marker::Execution => self.execution.as_deref(),
             Marker::Workspace => self.workspace.as_deref(),
+            // A workspace's process a chat started belongs to the workspace.
+            Marker::Chat => self.chat.as_deref().filter(|_| !self.of_workspace()),
         }
     }
 
+    /// Whether a workspace or one of its executions owns the process.
+    fn of_workspace(&self) -> bool {
+        self.workspace.is_some() || self.execution.is_some()
+    }
+
     fn is_empty(&self) -> bool {
-        self.execution.is_none() && self.workspace.is_none()
+        self.execution.is_none() && self.workspace.is_none() && self.chat.is_none()
     }
 }
 
@@ -1389,6 +1406,44 @@ pub async fn group_exited(group: u32) -> Result<()> {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
     Ok(())
+}
+
+/// The live processes `identity` started, directly or through others,
+/// followed by the unique IDs of their lineage, so a reused PID never counts
+/// and they count after it exits; none when its lineage is unknown. A
+/// workspace's process among them, as [`owned_by_workspace`] tells with
+/// `wrappers`, is left out with what it started.
+pub async fn started_by(identity: &Identity, wrappers: &[Identity]) -> Result<Vec<Identity>> {
+    let Some(root) = identity.lineage_root() else {
+        return Ok(Vec::new());
+    };
+    let rows = same_user_processes().await?;
+    let wrappers = wrappers.to_vec();
+    tokio::task::spawn_blocking(move || {
+        let mut lineages = Vec::new();
+        for (pid, _, _) in &rows {
+            lineages.extend(lineage(*pid)?);
+        }
+        lineage_descendants(root, lineages, |process| {
+            owned_by_workspace(process, &wrappers)
+        })
+    })
+    .await
+    .context("process lineage worker failed")?
+}
+
+/// Whether the process `identity` names belongs to a workspace: it is one of
+/// the execution `wrappers`, or its own environment, read rather than
+/// hidden, carries a workspace's or an execution's marker.
+pub fn owned_by_workspace(identity: &Identity, wrappers: &[Identity]) -> Result<bool> {
+    if wrappers.contains(identity) {
+        return Ok(true);
+    }
+    let deadline = std::time::Instant::now() + timing::PROCESS_SETTLE_TIMEOUT;
+    Ok(observe(identity.pid, deadline)?.is_some_and(|observed| {
+        observed.lineage.identity == *identity
+            && matches!(&observed.evidence, Evidence::Marked(marks) if marks.of_workspace())
+    }))
 }
 
 pub async fn related(
