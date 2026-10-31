@@ -1,5 +1,7 @@
 use super::*;
-use crate::test_support::{Adopted, Detached, isolated_command, runs_until_stopped};
+use crate::test_support::{
+    Adopted, Detached, copy_test_binary, isolated_command, runs_until_stopped,
+};
 
 /// This test binary, which runs until stopped as [`runs_until_stopped`]
 /// tells it to.
@@ -64,7 +66,7 @@ async fn the_temporary_directory_and_programs_built_in_the_worktree_tie_detached
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir(&elsewhere).unwrap();
     let built = space.programs.as_ref().unwrap().join("built");
-    std::fs::copy(this_binary(), &built).unwrap();
+    copy_test_binary(&built).await;
 
     let in_tmp = Adopted::start(&tmp_dir, "sleep 300", &[], &root.path().join("tmp-pid")).await;
     let running_built = Adopted::start(

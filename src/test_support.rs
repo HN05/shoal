@@ -286,6 +286,24 @@ impl Drop for Adopted {
     }
 }
 
+/// Copy this test binary to `path`. A child copies it, so parallel spawns
+/// cannot inherit its writable descriptor and cause ETXTBSY when a test
+/// executes the copy.
+pub async fn copy_test_binary(path: &Path) {
+    let dir = path.parent().unwrap();
+    let output = isolated_command("cp", dir)
+        .arg(std::env::current_exe().unwrap())
+        .arg(path)
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "copy the test binary: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// A command running `program`, a copy of this test binary, until stopped.
 /// Its environment stays readable once launchd adopts it, which a platform
 /// binary such as `sleep` hides on macOS.

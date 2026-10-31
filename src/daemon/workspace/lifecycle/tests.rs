@@ -1079,7 +1079,7 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
 async fn removal_stops_detached_programs_built_in_the_worktree() {
     let (root, manager, workspace) = fixture().await;
     let built = workspace.path.join("built");
-    fs::copy(std::env::current_exe().unwrap(), &built).unwrap();
+    crate::test_support::copy_test_binary(&built).await;
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::test_support::Adopted::start(
@@ -1109,7 +1109,7 @@ async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
     fs::create_dir_all(exclude.parent().unwrap()).unwrap();
     fs::write(&exclude, "built\n").unwrap();
     let built = workspace.path.join("built");
-    fs::copy(std::env::current_exe().unwrap(), &built).unwrap();
+    crate::test_support::copy_test_binary(&built).await;
     let elsewhere = root.path().join("elsewhere");
     fs::create_dir(&elsewhere).unwrap();
     let detached = crate::test_support::Adopted::start(
