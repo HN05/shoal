@@ -37,6 +37,12 @@ impl Reporter<'_> {
         self.report(Report::Step(step)).await
     }
 
+    /// Report `step`, a change already made, which a cancel arriving
+    /// meanwhile does not take back.
+    pub(in crate::cli::commands) async fn reached(&self, step: Step) -> Result<()> {
+        self.report(Report::Step(step)).await
+    }
+
     /// Refuse to go on once the operation is cancelled, as before a change
     /// that cannot be taken back.
     pub(in crate::cli::commands) fn ensure_running(&self) -> Result<()> {

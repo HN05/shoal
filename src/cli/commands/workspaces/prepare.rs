@@ -51,13 +51,13 @@ pub(in crate::cli::commands) async fn prepare(
     }
     if let Some(pr) = steps.pr {
         link_pr(ctx, &workspace, pr, reporter).await?;
-        reporter.step(Step::PrLinked).await?;
+        reporter.reached(Step::PrLinked).await?;
         workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
     }
     let agent = match steps.agent {
         Some(launch) => {
             let entry = queue_agent(ctx, &workspace, launch, reporter).await?;
-            reporter.step(Step::AgentQueued).await?;
+            reporter.reached(Step::AgentQueued).await?;
             Some(entry)
         }
         None => None,
@@ -138,8 +138,9 @@ async fn link_pr(
 }
 
 /// Queue `launch` in the ready workspace, which the agent queue starts
-/// detached in the default host. A cancel that arrives meanwhile queues
-/// nothing, or withdraws what it queued.
+/// detached in the default host. A cancel that arrives first queues
+/// nothing; the queue may start the agent as it admits it, so once queued
+/// it stays.
 async fn queue_agent(
     ctx: &Context,
     workspace: &Workspace,
@@ -154,17 +155,7 @@ async fn queue_agent(
     reporter.ensure_running()?;
     let admission: QueueAdmission =
         client::request(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
-    let entry = admission
+    admission
         .entry
-        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))?;
-    if let Err(cancelled) = reporter.ensure_running() {
-        let method = QueueMethod::QueueRemove {
-            entry: entry.id.clone(),
-        };
-        if let Err(error) = client::request::<()>(&ctx.paths, method).await {
-            return Err(cancelled.context(format!("the queued agent stays queued: {error:#}")));
-        }
-        return Err(cancelled);
-    }
-    Ok(entry)
+        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
 }
