@@ -63,6 +63,12 @@ async fn one_review_is_queued_or_running_per_workspace() {
             )?;
             assert_eq!(again, Queued::Existing(first.id()));
             assert!(start(db, first.id(), "head", "base", 3)?);
+            // A run protection stopped waits for healthy readings until the
+            // review starts again.
+            assert!(requeue(db, first.id())?);
+            assert!(waits_for_recovery(db, first.id())?);
+            assert!(start(db, first.id(), "head", "base", 3)?);
+            assert!(!waits_for_recovery(db, first.id())?);
             let refused = queue(
                 db,
                 "work",

@@ -77,7 +77,6 @@ impl Manager {
     /// Run queued review `id` to its end. A failure to prepare it fails it,
     /// as the reviewer could not run.
     async fn run_review(&self, id: i64) {
-        let mut after_stop = false;
         loop {
             let (cancel, mut cancelled) = watch::channel(false);
             let cancel = Arc::new(cancel);
@@ -86,13 +85,9 @@ impl Manager {
                 .lock()
                 .unwrap()
                 .insert(id, cancel.clone());
-            match self
-                .review_once(id, &cancel, &mut cancelled, after_stop)
-                .await
-            {
+            match self.review_once(id, &cancel, &mut cancelled).await {
                 Ok(Pass::Stopped) => {
                     log!("review {id}: protection stopped it; it runs again once load recovers");
-                    after_stop = true;
                 }
                 Ok(Pass::Ended) => break,
                 Err(error) => {
@@ -123,13 +118,13 @@ impl Manager {
     }
 
     /// Run queued review `id` once it has an agent slot, which protection
-    /// stops by sending `cancel`; a run it stopped asks for one `after_stop`.
+    /// stops by sending `cancel`; a review whose run it stopped asks for one
+    /// that waits for healthy readings.
     async fn review_once(
         &self,
         id: i64,
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
-        after_stop: bool,
     ) -> Result<Pass> {
         let Some(review) = self.store.run(move |db| store::load(db, id)).await? else {
             return Ok(Pass::Ended);
@@ -138,6 +133,10 @@ impl Manager {
             return Ok(Pass::Ended);
         }
         let workspace = self.workspace(&review.workspace_id).await?;
+        let after_stop = self
+            .store
+            .run(move |db| store::waits_for_recovery(db, id))
+            .await?;
         let stop = cancel.clone();
         let mut slot = self.agent_queue.request_oneshot(
             workspace.repository_id.as_str(),

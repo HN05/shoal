@@ -204,6 +204,15 @@ async fn a_review_protection_stops_is_queued_again() {
     }
     let review = manager.review(queued.id).await.unwrap();
     assert_eq!((review.head, review.started_at), (None, None));
+    // A restarted daemon keeps it waiting for healthy readings.
+    let id = queued.id;
+    assert!(
+        manager
+            .store
+            .run(move |db| store::waits_for_recovery(db, id))
+            .await
+            .unwrap()
+    );
     // It waits for healthy readings; a cancel still ends it.
     let mut ended = manager.reviews.ended.subscribe();
     let cancelled = manager

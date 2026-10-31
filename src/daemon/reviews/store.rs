@@ -104,14 +104,28 @@ pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
     )?)
 }
 
-/// Queue running review `id` again, as after protection stopped its run;
-/// false when it is no longer running.
+/// Queue running review `id` again after protection stopped its run, to wait
+/// for healthy readings; false when it is no longer running.
 pub(crate) fn requeue(db: &Connection, id: i64) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL
+        "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL,
+            waits_for_recovery=1
             WHERE id=?1 AND state='running'",
         [id],
     )? == 1)
+}
+
+/// Whether queued review `id` waits for healthy readings, as one protection
+/// stopped does until it starts again.
+pub(crate) fn waits_for_recovery(db: &Connection, id: i64) -> Result<bool> {
+    Ok(db
+        .query_row(
+            "SELECT waits_for_recovery FROM reviews WHERE id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .unwrap_or(false))
 }
 
 /// The reviews that are running.
@@ -126,7 +140,7 @@ pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
 /// queued, as after a cancel.
 pub(crate) fn start(db: &Connection, id: i64, head: &str, base: &str, now: i64) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE reviews SET state='running',head=?2,base=?3,started_at=?4
+        "UPDATE reviews SET state='running',head=?2,base=?3,started_at=?4,waits_for_recovery=0
             WHERE id=?1 AND state='queued'",
         params![id, head, base, now],
     )? == 1)

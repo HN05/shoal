@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS reviews (
     -- The workspace whose process cancelled the review, whose agents are
     -- not told about it.
     cancelled_by TEXT,
+    -- Whether protection stopped its run, so it waits for healthy readings
+    -- before it runs again, through a daemon restart too.
+    waits_for_recovery INTEGER NOT NULL DEFAULT 0,
     CHECK((state='failed') = (failure IS NOT NULL))
 );
 -- At most one review of a workspace is queued or running.
