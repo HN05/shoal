@@ -330,6 +330,10 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   failing test or a bug found along the way, search the open issues with
   `shoal issue list <words>` for each such fix and add the reference for every
   issue it completes.
+- An assigned issue that is already fixed needs no PR: verify the fix on the
+  default branch, comment on the issue with the PR or commit that fixed it
+  (`shoal issue comment --body-file`), then close it with `shoal issue close`
+  and finish with `shoal done`.
 - Deliver completed work as a PR on a topic branch: commit, push, open or update the
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
