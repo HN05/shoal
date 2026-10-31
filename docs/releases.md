@@ -12,8 +12,8 @@ since the nearest earlier published ancestor release, link referenced issues, an
 are copied to GitHub, with runtime dependency links to each host's tagged README.
 Dependent jobs then work from that exact tag:
 `shoal-vX.Y.Z-<os>-<arch>.tar.gz` is cross-built
-for `linux` (static musl) and `macos` on `x86_64` and `arm64`, the macOS binary
-packaged as a signed `Shoal.app`, and attached to the
+for `linux` (static musl) and `macos` on `x86_64` and `arm64`, macOS archives
+also holding the binary as a signed `Shoal.app`, and attached to the
 Forgejo release with a `SHA256SUMS` file, and the same release with the same
 files is created on GitHub once the push mirror carries the tag. Both Homebrew
 taps then use their host's published checksums to install the matching archive.
@@ -32,8 +32,8 @@ token. There is no separate Homebrew or GitHub workflow to run.
 - `RELEASE_TOKEN_GITHUB`: fine-grained GitHub token for `HN05/shoal` with
   read and write access to Contents; it creates the GitHub release and assets.
 - `MACOS_SIGNING_PEM`: Actions secret holding the unified PEM (certificate and
-  private key) of Shoal's self-signed code-signing certificate, which signs
-  `Shoal.app`. Store the maintainer's existing copy; a new certificate
+  private key) of Shoal's self-signed code-signing certificate, which signs the
+  macOS binaries and `Shoal.app`. Store the maintainer's existing copy; a new certificate
   changes the requirement in `.forgejo/scripts/sign-macos.sh` and makes every
   user grant access again.
 - A `docker` Actions runner with HTTPS access to the forge, registries, and GitHub.

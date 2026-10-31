@@ -12,10 +12,11 @@ shoal skill install
 ```
 
 Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
-On macOS the archive holds `Shoal.app`, signed with Shoal's own certificate but
-not notarized: clear its quarantine with
-`xattr -dr com.apple.quarantine Shoal.app` and put a link to
-`Shoal.app/Contents/MacOS/shoal` on your `PATH`.
+On macOS the archive holds the `shoal` binary and the same in `Shoal.app`, both
+signed with Shoal's own certificate but not notarized: clear their quarantine
+with `xattr -dr com.apple.quarantine shoal Shoal.app`, then put `shoal`, or a
+link to `Shoal.app/Contents/MacOS/shoal`, on your `PATH`. macOS keeps the bare
+binary's privacy grants only while it stays at the same path.
 Homebrew installs the additional tools for workspace management and interactive
 menus. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.

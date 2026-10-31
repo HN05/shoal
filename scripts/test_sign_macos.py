@@ -1,4 +1,4 @@
-"""The macOS signing helper packages Shoal.app, signs it as Shoal and rejects any other signature."""
+"""The macOS signing helper signs the binary and Shoal.app as Shoal and rejects any other signature."""
 
 import os
 from pathlib import Path
@@ -15,8 +15,10 @@ REQUIREMENT = re.search(r"^requirement='(.*)'$", SCRIPT.read_text(), re.M)[1]
 
 def signature_info(identifier="com.shoal.cli", flags="CodeSignatureFlags(0x0)",
                    requirement=REQUIREMENT, path="Contents/MacOS/shoal"):
-    """A bundle's signature info in rcodesign 0.29's layout, trimmed to what the helper reads."""
+    """Signature info in rcodesign 0.29's layout, trimmed to what the helper reads,
+    naming both the bare binary and the bundle's executable."""
     lines = [
+        "- path: shoal",
         "- path: Contents/Info.plist",
         f"- path: {path}",
         "  entity:",
@@ -35,7 +37,7 @@ def signature_info(identifier="com.shoal.cli", flags="CodeSignatureFlags(0x0)",
 class SignMacosTests(unittest.TestCase):
     def sign(self, info):
         """Run the helper on a stand-in binary; return its result, the rcodesign
-        calls and the Info.plist and executable of the bundle it made."""
+        calls and the Info.plist and executable of the bundle it made, if any."""
         with tempfile.TemporaryDirectory() as root:
             root = Path(root)
             calls = root / "calls"
@@ -51,13 +53,17 @@ class SignMacosTests(unittest.TestCase):
             result = subprocess.run(["bash", str(SCRIPT), "key.pem", "shoal", "1.2.3", "app/Shoal.app"],
                                     cwd=root, env=env, capture_output=True, text=True, check=False)
             contents = root / "app/Shoal.app/Contents"
+            if not contents.exists():
+                return result, calls.read_text().splitlines(), None, None
             plist = plistlib.loads((contents / "Info.plist").read_bytes())
             return result, calls.read_text().splitlines(), plist, (contents / "MacOS/shoal").read_text()
 
-    def test_packages_and_signs_as_shoal_and_accepts_the_expected_signature(self):
+    def test_signs_the_binary_and_its_bundle_as_shoal(self):
         result, calls, plist, executable = self.sign(signature_info())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls, [
+            "sign --pem-file key.pem --binary-identifier com.shoal.cli --timestamp-url none shoal",
+            "print-signature-info shoal",
             "sign --pem-file key.pem --timestamp-url none app/Shoal.app",
             "print-signature-info app/Shoal.app",
         ])
