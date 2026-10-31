@@ -22,11 +22,16 @@ pub(crate) enum Gate {
 }
 
 impl Manager {
-    /// Refuse unless a finished review covers the workspace's HEAD with
-    /// every finding resolved, saying what is missing; without a review of
-    /// HEAD and with none queued or running, queue one. Passes when `gate`
-    /// is not required.
-    pub(crate) async fn require_review(&self, workspace: &Workspace, gate: Gate) -> Result<()> {
+    /// Refuse unless a finished review covers `head`, the commit the caller
+    /// acts on, with every finding resolved, saying what is missing; without
+    /// a review of it and with none queued or running, queue one. Passes when
+    /// `gate` is not required.
+    pub(crate) async fn require_review(
+        &self,
+        workspace: &Workspace,
+        gate: Gate,
+        head: &str,
+    ) -> Result<()> {
         let settings = self.workspace_settings(workspace).await?;
         let required = match gate {
             Gate::Pr => settings.review.require_for_pr,
@@ -35,8 +40,7 @@ impl Manager {
         if !required {
             return Ok(());
         }
-        let head = crate::daemon::links::pr::current_head(workspace).await?;
-        let (id, covering) = (workspace.id.clone(), head.clone());
+        let (id, covering) = (workspace.id.clone(), head.to_owned());
         let (reviewed, active) = self
             .store
             .run(move |db| {

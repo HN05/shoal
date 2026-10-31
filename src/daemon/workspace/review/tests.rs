@@ -67,13 +67,13 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
 
     // Nothing linked: the workspace itself is marked, but a kind needs links.
     let marks = manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert_eq!((marks[0].kind, marks[0].url.as_deref()), (None, None));
     assert!(
         manager
-            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), None))
+            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), None), false)
             .await
             .is_err()
     );
@@ -109,7 +109,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
     assert_eq!(inspection.workspace.links, listed[0].links);
     let marks = manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     let mut marked: Vec<_> = marks.iter().map(|mark| mark.url.clone().unwrap()).collect();
@@ -124,7 +124,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     );
     assert!(
         manager
-            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("13")))
+            .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("13")), false)
             .await
             .is_err(),
         "an unlinked PR cannot be marked"
@@ -144,7 +144,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     );
     let later = current_head(&workspace).await.unwrap();
     manager
-        .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")))
+        .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")), false)
         .await
         .unwrap();
     let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
@@ -218,7 +218,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
 
     // Removal cascades marks away without reporting each as withdrawn.
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     let id = workspace.id.clone();
@@ -310,7 +310,7 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
         .await
         .unwrap();
     let marks = manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     let recorded = std::fs::read_to_string(&record).unwrap();
@@ -417,7 +417,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     // Marking undrafts by default, and a PR already out of draft is left alone.
     // The unlabeled PR comes back with a warning that is never stored.
     let marks = manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert!(!draft());
@@ -429,7 +429,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     let stored = manager.workspace(&workspace.id).await.unwrap().review;
     assert!(stored[0].warnings.is_empty());
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert_eq!(mutations(), 1);
@@ -451,7 +451,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(!draft());
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     manager
@@ -472,7 +472,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .await
         .unwrap();
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert!(draft());
@@ -481,7 +481,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .await
         .unwrap();
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert!(!draft());
@@ -494,7 +494,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     // A forge failure keeps the mark either way, so the command can be retried.
     std::fs::write(forge_dir.join("fail"), "").unwrap();
     let error = manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("still a draft"), "{error:#}");
@@ -502,7 +502,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     assert_eq!(marks().await, 1);
     std::fs::remove_file(forge_dir.join("fail")).unwrap();
     manager
-        .mark_ready(&workspace.id, Selection::default())
+        .mark_ready(&workspace.id, Selection::default(), false)
         .await
         .unwrap();
     assert!(!draft());

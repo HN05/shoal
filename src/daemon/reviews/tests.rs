@@ -455,11 +455,17 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     .await;
     let manager = &fixture.manager;
     let workspace = &fixture.workspace;
-    manager.require_review(workspace, Gate::Pr).await.unwrap();
+    let head = crate::daemon::links::pr::current_head(workspace)
+        .await
+        .unwrap();
+    manager
+        .require_review(workspace, Gate::Pr, &head)
+        .await
+        .unwrap();
 
     let mut ended = manager.reviews.ended.subscribe();
     let refused = manager
-        .require_review(workspace, Gate::Ready)
+        .require_review(workspace, Gate::Ready, &head)
         .await
         .unwrap_err();
     let refused = refused.to_string();
@@ -475,7 +481,7 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
 
     let review = manager.latest_review(&workspace.id).await.unwrap();
     let refused = manager
-        .require_review(workspace, Gate::Ready)
+        .require_review(workspace, Gate::Ready, &head)
         .await
         .unwrap_err();
     let refused = refused.to_string();
@@ -509,7 +515,13 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .await
         .unwrap();
     manager
-        .require_review(workspace, Gate::Ready)
+        .require_review(workspace, Gate::Ready, &head)
         .await
         .unwrap();
+    // A workspace process's mark checks the HEAD it records.
+    let marks = manager
+        .mark_ready(&workspace.id, Default::default(), true)
+        .await
+        .unwrap();
+    assert_eq!(marks[0].head, head);
 }
