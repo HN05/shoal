@@ -265,6 +265,7 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
                 name: None,
                 agent: Some(agent),
                 args,
+                ..
             })
         })) if repository == "project" && agent.name() == "codex" && args == ["--model", "fast"]
     ));

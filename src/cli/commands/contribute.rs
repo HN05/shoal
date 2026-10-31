@@ -30,6 +30,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         branch,
         agent,
         now,
+        model,
         args,
     } = args;
     let options = AddOptions {
@@ -37,6 +38,7 @@ pub(super) async fn contribute(ctx: &Context, args: ContributeArgs) -> Result<i3
         focus,
         now,
         after: Vec::new(),
+        model: model.into(),
     };
     ensure_agent_available(ctx, agent.as_ref())?;
     let link = Link::parse(&target).ok();

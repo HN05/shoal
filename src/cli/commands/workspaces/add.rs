@@ -38,6 +38,8 @@ pub(in crate::cli::commands) struct AddOptions {
     pub now: bool,
     /// Workspaces, queued agents and issues the agent waits for.
     pub after: Vec<String>,
+    /// The model and effort requested over the configured ones.
+    pub model: crate::agent::ModelChoice,
 }
 
 impl AddOptions {
@@ -79,7 +81,7 @@ pub(in crate::cli::commands) async fn add(
     let creation = select_add_creation(ctx, &target, creation, issue.as_ref()).await?;
     // An issue or a typed name settles the branch; check it before the agent picker.
     check_add_creation(ctx, &target, &creation).await?;
-    let agent = resolve_add_agent(ctx, &settings, agent).await?;
+    let agent = resolve_add_agent(ctx, &settings, agent, options.model.clone()).await?;
     let mut plan = plan_addition(ctx, &target, creation, issue.as_ref(), agent, args).await?;
     ensure!(
         options.after.is_empty() || plan.agent_name().is_some(),

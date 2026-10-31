@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+use crate::agent::ModelChoice;
+
 /// What an AI tool's tracked launches change in the environment they would
 /// otherwise run with: values as written, and the variables they remove.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -38,6 +40,19 @@ impl Environment {
         configured.extend(self.values(home));
     }
 
+    /// These changes with `variable` also set to `effort`, when both are
+    /// given.
+    pub fn with_effort(&self, variable: Option<&str>, effort: Option<&str>) -> Self {
+        let mut environment = self.clone();
+        if let (Some(variable), Some(effort)) = (variable, effort) {
+            environment.remove.remove(variable);
+            environment
+                .set
+                .insert(variable.to_owned(), effort.to_owned());
+        }
+        environment
+    }
+
     /// Make these changes to `command`'s environment.
     pub fn apply(&self, command: &mut std::process::Command, home: &Path) {
         for variable in &self.remove {
@@ -56,9 +71,27 @@ pub struct Arguments {
     pub resume_latest: Option<Vec<String>>,
     pub fork: Option<Vec<String>>,
     pub add_dir: Option<Vec<String>>,
+    pub model_args: Option<Vec<String>>,
+    pub effort_args: Option<Vec<String>>,
 }
 
 impl Arguments {
+    /// The arguments that select `choice`'s model and effort; the error names
+    /// the template missing for a value it sets.
+    pub fn model_args(&self, choice: &ModelChoice) -> Result<Vec<OsString>, &'static str> {
+        let mut args = Vec::new();
+        for (value, template, name, field) in [
+            (&choice.model, &self.model_args, "model_args", "{model}"),
+            (&choice.effort, &self.effort_args, "effort_args", "{effort}"),
+        ] {
+            if let Some(value) = value {
+                let template = template.as_ref().ok_or(name)?;
+                args.extend(substitute(template, &[(field, value)]));
+            }
+        }
+        Ok(args)
+    }
+
     /// The arguments that give the agent `instructions`; `None` when it takes
     /// them only in its prompt. Empty instructions need no arguments.
     pub fn instruction_args(&self, instructions: &str) -> Option<Vec<OsString>> {

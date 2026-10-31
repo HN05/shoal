@@ -5,7 +5,7 @@ use std::ffi::OsString;
 use anyhow::{Context as _, Result};
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{agents, client, commands::workspaces, context::Context},
     git,
     model::{Repository, Workspace},
@@ -20,6 +20,7 @@ pub(super) async fn start(
     ctx: &Context,
     repo: &Repository,
     agent: Option<Agent>,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     // Choose before creating work, so a declined agent leaves none.
@@ -47,7 +48,10 @@ pub(super) async fn start(
         workspace,
         Some(prompt),
         args,
-        agents::LaunchOptions::default(),
+        agents::LaunchOptions {
+            model,
+            ..Default::default()
+        },
     )
     .await
 }
@@ -81,6 +85,7 @@ async fn open(ctx: &Context, repo: &Repository) -> Result<i32> {
             focus: false,
             now: false,
             after: Vec::new(),
+            model: Default::default(),
         },
     )
     .await

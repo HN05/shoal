@@ -125,6 +125,11 @@ pub struct RepoConfig {
 pub struct AgentConfig {
     /// Agent an issue workspace starts when `--agent` is omitted.
     pub default: Option<Agent>,
+    /// The model the `default` agent runs with, over its AI tool's.
+    pub model: Option<String>,
+    /// The reasoning effort the `default` agent runs with, over its AI
+    /// tool's.
+    pub effort: Option<String>,
     /// Agents of this repository running at once; by default only the
     /// machine limit applies. Use `none` for unlimited.
     #[option(default = crate::config::AgentLimit::Dynamic)]
@@ -438,6 +443,11 @@ impl RepoConfig {
         crate::daemon::resources::definitions(&self.resources, &self.resource_pools)?;
         crate::env::validate_configured_environment(&self.env)?;
         crate::config::validate_agent_dirs(self.agent.dirs.as_deref().unwrap_or_default())?;
+        crate::agent::ModelChoice {
+            model: self.agent.model.clone(),
+            effort: self.agent.effort.clone(),
+        }
+        .validate("agent")?;
         crate::caches::validate(&self.caches)?;
         crate::demos::validate(&self.demos)?;
         crate::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;

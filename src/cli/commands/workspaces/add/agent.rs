@@ -4,7 +4,7 @@ use std::ffi::OsString;
 use anyhow::Result;
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{agents, client, context::Context, terminal},
     model::Workspace,
     protocol::ConfigTarget,
@@ -23,6 +23,8 @@ pub(super) struct ResolvedAddAgent {
     pub(super) agent: Option<Agent>,
     /// Whether the agent runs tracked, never handed to a desktop app.
     pub(super) tracked: bool,
+    /// The model and effort requested over the configured ones.
+    pub(super) model: ModelChoice,
 }
 
 /// A plan's agent as queued entries store it, including plans queued before
@@ -34,6 +36,8 @@ struct StoredAddAgent {
     tracked: bool,
     #[serde(default)]
     codex_mode: Option<crate::agent::AgentMode>,
+    #[serde(default)]
+    model: ModelChoice,
 }
 
 /// Codex's CLI meant a tracked launch.
@@ -42,6 +46,7 @@ impl From<StoredAddAgent> for ResolvedAddAgent {
         Self {
             agent: stored.agent,
             tracked: stored.tracked || stored.codex_mode == Some(crate::agent::AgentMode::Cli),
+            model: stored.model,
         }
     }
 }
@@ -122,10 +127,13 @@ pub(super) async fn choose_for_picked_issue(
     }
 }
 
+/// The agent an addition starts, refusing a `model` it cannot run with
+/// before anything is created.
 pub(super) async fn resolve_add_agent(
     ctx: &Context,
     settings: &AddSettings<'_>,
     agent: AgentChoice,
+    model: ModelChoice,
 ) -> Result<ResolvedAddAgent> {
     let agent = match agent {
         AgentChoice::Chosen(agent) => agent,
@@ -135,9 +143,21 @@ pub(super) async fn resolve_add_agent(
         }
         AgentChoice::PickerIfInteractive => None,
     };
+    match &agent {
+        Some(agent) => {
+            let settings = settings.get().await?;
+            let resolved = settings.model(agent.name(), model.clone());
+            agents::model_args(settings, agent.name(), &resolved)?;
+        }
+        None => anyhow::ensure!(
+            model.is_empty(),
+            "--model and --effort need an agent; name one with --agent"
+        ),
+    }
     Ok(ResolvedAddAgent {
         agent,
         tracked: false,
+        model,
     })
 }
 
@@ -158,6 +178,7 @@ impl ResolvedAddAgent {
         let options = agents::LaunchOptions {
             tracked: self.tracked,
             fork,
+            model: self.model,
             ..Default::default()
         };
         agents::launch_agent(ctx, agent, workspace, prompt, args, options).await

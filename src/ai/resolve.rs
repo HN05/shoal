@@ -13,6 +13,7 @@ use super::{
     builtin::{self, Provider},
     validate::skill_dir,
 };
+use crate::agent::ModelChoice;
 
 /// Every built-in and configured AI tool by name.
 pub type Tools = BTreeMap<String, Tool>;
@@ -44,6 +45,8 @@ pub struct Tool {
     pub proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.
     configured_prompt_cache: Option<Duration>,
+    /// The `model` and `effort` each configured nearest in its lineage.
+    pub model: ModelChoice,
 }
 
 /// How long an agent's prompt cache lives after a turn when neither its AI
@@ -58,6 +61,17 @@ pub const DEFAULT_PROMPT_CACHE: Duration = Duration::from_secs(30 * 60);
 pub struct LaunchProfile {
     pub arguments: Arguments,
     pub environment: Environment,
+    /// The variable that sets the reasoning effort over the effort
+    /// arguments, which a launch with an effort sets to the same value.
+    pub effort_variable: Option<&'static str>,
+}
+
+impl LaunchProfile {
+    /// The environment changes of a launch with `choice`.
+    pub fn environment_with(&self, choice: &ModelChoice) -> Environment {
+        self.environment
+            .with_effort(self.effort_variable, choice.effort.as_deref())
+    }
 }
 
 crate::state::states!(
@@ -158,6 +172,7 @@ fn tool(entries: &Agents, name: &str) -> Tool {
     let launch = LaunchProfile {
         arguments: arguments(&configured, builtin),
         environment: environment(&configured),
+        effort_variable: builtin.and_then(|provider| provider.effort_variable),
     };
     let integration = builtin.map_or(IntegrationKind::None, |provider| provider.integration);
     Tool {
@@ -173,6 +188,10 @@ fn tool(entries: &Agents, name: &str) -> Tool {
             .iter()
             .find_map(|agent| agent.prompt_cache_minutes)
             .map(|minutes| Duration::from_secs(minutes * 60)),
+        model: ModelChoice {
+            model: configured.iter().find_map(|agent| agent.model.clone()),
+            effort: configured.iter().find_map(|agent| agent.effort.clone()),
+        },
     }
 }
 
@@ -234,6 +253,14 @@ fn arguments(configured: &[&Agent], builtin: Option<&Provider>) -> Arguments {
         add_dir: pick(
             |agent| agent.add_dir.as_ref(),
             builtin.and_then(|provider| provider.add_dir),
+        ),
+        model_args: pick(
+            |agent| agent.model_args.as_ref(),
+            builtin.and_then(|provider| provider.model_args),
+        ),
+        effort_args: pick(
+            |agent| agent.effort_args.as_ref(),
+            builtin.and_then(|provider| provider.effort_args),
         ),
     }
 }

@@ -17,19 +17,23 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             workspace,
             cli,
             app,
+            model,
             args,
         } => {
             let mode = mode(cli, app);
-            agents::with_app(&ctx, IntegrationKind::Claude, mode, workspace, args).await
+            let kind = IntegrationKind::Claude;
+            agents::with_app(&ctx, kind, mode, workspace, model.into(), args).await
         }
         AgentsCommand::Codex {
             workspace,
             cli,
             app,
+            model,
             args,
         } => {
             let mode = mode(cli, app);
-            agents::with_app(&ctx, IntegrationKind::Codex, mode, workspace, args).await
+            let kind = IntegrationKind::Codex;
+            agents::with_app(&ctx, kind, mode, workspace, model.into(), args).await
         }
         AgentsCommand::T3 { workspace, args } => {
             agents::open_app(&ctx, workspace, &agents::T3, args).await
@@ -51,12 +55,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             repository,
             agent,
             name,
+            model,
             args,
         } => {
             let options = chat::Options {
                 agent,
                 here,
                 name,
+                model: model.into(),
                 args,
             };
             chat::start(&ctx, repository, options).await
@@ -69,6 +75,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             here,
             agent,
             name,
+            model,
             args,
         } => {
             let pick = match (oldest, newest) {
@@ -80,6 +87,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
                 agent,
                 here,
                 name,
+                model: model.into(),
                 args,
             };
             plan::start(&ctx, issue, repository, pick, options).await

@@ -22,6 +22,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             agent,
             now,
             after,
+            model,
             args,
         } => {
             links::add(
@@ -46,6 +47,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                     focus,
                     now,
                     after,
+                    model: model.into(),
                 },
             )
             .await
@@ -58,6 +60,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
             workspace,
             agent,
             fork,
+            model,
             args,
         } => {
             let split = split::Split {
@@ -66,6 +69,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: CreateCommand) 
                 base,
                 agent,
                 fork,
+                model: model.into(),
                 args,
             };
             split::run(&ctx, workspace, split).await

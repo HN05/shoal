@@ -629,3 +629,41 @@ fn an_empty_repository_env_remove_keeps_every_variable() {
     assert!(removed(""));
     assert!(!removed("[agents.claude]\nenv_remove = []\n"));
 }
+
+#[test]
+fn a_launch_model_comes_from_the_request_then_the_choosing_setting_then_the_tool() {
+    use crate::agent::ModelChoice;
+    let global = Config::from_toml(
+        "[agent]\ndefault = 'codex'\neffort = 'xhigh'\n[agents.codex]\nmodel = 'gpt'\neffort = 'low'\n[agents.claude]\neffort = 'medium'\n",
+    )
+    .unwrap();
+    let effective = global.effective(&RepoConfig::default()).unwrap();
+    let choice = |model: &str, effort: &str| ModelChoice {
+        model: Some(model.to_owned()),
+        effort: Some(effort.to_owned()),
+    };
+    // `[agent]` effort applies to the agent `default` chooses only.
+    assert_eq!(
+        effective.model("codex", Default::default()),
+        choice("gpt", "xhigh")
+    );
+    assert_eq!(
+        effective.model("claude", Default::default()),
+        ModelChoice {
+            model: None,
+            effort: Some("medium".into()),
+        }
+    );
+    let requested = ModelChoice {
+        model: Some("o9".into()),
+        effort: None,
+    };
+    assert_eq!(effective.model("codex", requested), choice("o9", "xhigh"));
+    assert!(effective.model("pi", Default::default()).is_empty());
+    let paths = Paths::for_test("/home/test");
+    let error = Config::parse("[agent]\nmodel = ''\n", &paths).unwrap_err();
+    assert!(
+        format!("{error:#}").contains("agent.model must be nonempty"),
+        "{error:#}"
+    );
+}

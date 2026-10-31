@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 
 use super::{ChatLaunch, Integration, Launch};
 use crate::{
+    agent::ModelChoice,
     cli::{client, context::Context},
     config::{Effective, templates},
     execution::{self, DetachedLaunch},
@@ -101,10 +102,13 @@ pub(super) async fn start(
         settings,
         prompt,
         args,
+        model,
         ..
     } = launch;
     super::ensure_available(&name, &settings)?;
+    let model_args = model_args(app, &settings, &name, &model)?;
     let directories = workspace_dir_args(ctx, app, &settings, &workspace).await;
+    let directories = [model_args, directories].concat();
     let (prompt, args) = workspace_input(
         integration,
         app,
@@ -237,6 +241,28 @@ fn workspace_input(
     (prompt, args)
 }
 
+/// The arguments that run `app`'s agent, started as `name`, with `model`;
+/// refused when the app passes the agent no arguments or the agent has no
+/// template for a value `model` sets.
+fn model_args(
+    app: &dyn App,
+    settings: &Effective,
+    name: &str,
+    model: &ModelChoice,
+) -> Result<Vec<OsString>> {
+    if model.is_empty() {
+        return Ok(Vec::new());
+    }
+    anyhow::ensure!(
+        app.takes_agent_args(),
+        "cannot start {name} with a configured or requested model or effort: {} passes {} no \
+         arguments",
+        app.name(),
+        app.agent()
+    );
+    super::model_args(settings, app.agent(), model)
+}
+
 /// The arguments that give `app`'s agent `instructions` apart from its first
 /// message, when it takes them.
 fn instruction_args(
@@ -304,9 +330,11 @@ pub(super) async fn start_chat(
         repository,
         name: chat_name,
         settings,
+        model,
         ..
     } = chat;
     super::ensure_available(name, settings)?;
+    let model_args = model_args(app, settings, name, model)?;
     if let Some(trust) = integration.trust_file() {
         trust
             .trust_checkout(ctx, repository, &Default::default())
@@ -316,6 +344,7 @@ pub(super) async fn start_chat(
     // this terminal.
     let record = client::start_chat(&ctx.paths, repository, chat_name, name, None, true).await?;
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
+    let args = [model_args, args].concat();
     let files = ctx.paths.chat_files(&record);
     let session = Session {
         paths: &ctx.paths,

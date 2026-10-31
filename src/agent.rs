@@ -56,3 +56,43 @@ impl From<Agent> for String {
         agent.0
     }
 }
+
+/// The model and reasoning effort an agent runs with; each one left out
+/// keeps the tool's own. Values pass to the tool unchanged, which checks
+/// them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+pub struct ModelChoice {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+}
+
+impl ModelChoice {
+    /// Whether it leaves both to the tool.
+    pub fn is_empty(&self) -> bool {
+        self.model.is_none() && self.effort.is_none()
+    }
+
+    /// Refuse an empty value or one with NUL, which no argument can carry;
+    /// `section` is where they are set.
+    pub fn validate(&self, section: &str) -> anyhow::Result<()> {
+        for (key, value) in [("model", &self.model), ("effort", &self.effort)] {
+            anyhow::ensure!(
+                value
+                    .as_deref()
+                    .is_none_or(|value| !value.is_empty() && !value.contains('\0')),
+                "{section}.{key} must be nonempty and must not contain NUL"
+            );
+        }
+        Ok(())
+    }
+
+    /// Each value it sets, else `fallback`'s.
+    pub fn or(self, fallback: Self) -> Self {
+        Self {
+            model: self.model.or(fallback.model),
+            effort: self.effort.or(fallback.effort),
+        }
+    }
+}

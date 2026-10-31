@@ -5,7 +5,7 @@ use clap::Subcommand;
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, item_reference},
+    cli::args::{AgentParser, ModelArgs, item_reference},
 };
 
 #[derive(Debug, Subcommand)]
@@ -18,8 +18,10 @@ pub enum AgentsCommand {
         #[arg(long, conflicts_with = "app")]
         cli: bool,
         /// Open the workspace in the Claude app, overriding agents.claude.default_mode.
-        #[arg(long, conflicts_with = "cli")]
+        #[arg(long, conflicts_with_all = ["cli", "model", "effort"])]
         app: bool,
+        #[command(flatten)]
+        model: ModelArgs,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
@@ -30,8 +32,10 @@ pub enum AgentsCommand {
         #[arg(long, conflicts_with = "app")]
         cli: bool,
         /// Open the workspace in the Codex app, overriding agents.codex.default_mode.
-        #[arg(long, conflicts_with = "cli")]
+        #[arg(long, conflicts_with_all = ["cli", "model", "effort"])]
         app: bool,
+        #[command(flatten)]
+        model: ModelArgs,
         #[arg(last = true)]
         args: Vec<OsString>,
     },
@@ -61,6 +65,8 @@ pub enum AgentsCommand {
         /// Name of the chat; defaults to <repo>-chat, asked for on a terminal.
         #[arg(long)]
         name: Option<String>,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,
@@ -91,6 +97,8 @@ pub enum AgentsCommand {
         /// Name of the chat; defaults to <repo>-plan-<issue number>.
         #[arg(long)]
         name: Option<String>,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

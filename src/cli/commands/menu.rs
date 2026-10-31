@@ -679,6 +679,7 @@ fn add() -> Command {
         agent: None,
         now: false,
         after: vec![],
+        model: Default::default(),
         args: vec![],
     })
 }
@@ -821,6 +822,7 @@ const APPS: [(&str, &agents::App, OpenApp); 3] = [
             workspace,
             cli: false,
             app: true,
+            model: Default::default(),
             args: vec![],
         })
     }),
@@ -829,6 +831,7 @@ const APPS: [(&str, &agents::App, OpenApp); 3] = [
             workspace,
             cli: false,
             app: true,
+            model: Default::default(),
             args: vec![],
         })
     }),
