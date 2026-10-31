@@ -229,6 +229,56 @@ impl Drop for Detached {
     }
 }
 
+/// A process started from a shell that exits at once, so launchd or init
+/// adopts it. Dropping it kills it.
+pub struct Adopted {
+    pub identity: Identity,
+}
+
+impl Adopted {
+    /// Run `command` in `dir` with `env`, recording its PID in `pid`, which
+    /// must lie outside the directories a test looks for processes in.
+    pub async fn start(dir: &Path, command: &str, env: &[(&str, &str)], pid: &Path) -> Self {
+        let script = format!(
+            "{command} >/dev/null 2>&1 & echo $! > {pid}.tmp; mv {pid}.tmp {pid}",
+            pid = pid.display()
+        );
+        let status = isolated_command("sh", dir)
+            .envs(env.iter().copied())
+            .args(["-c", &script])
+            .status()
+            .await
+            .unwrap();
+        assert!(status.success());
+        let pid: u32 = fs::read_to_string(pid).unwrap().trim().parse().unwrap();
+        Self {
+            identity: identity::capture(pid).unwrap().unwrap(),
+        }
+    }
+}
+
+impl Drop for Adopted {
+    fn drop(&mut self) {
+        let _ = identity::signal(&self.identity, libc::SIGKILL);
+    }
+}
+
+/// A command running `program`, a copy of this test binary, until stopped.
+/// Its environment stays readable once launchd adopts it, which a platform
+/// binary such as `sleep` hides on macOS.
+pub fn runs_until_stopped(program: &Path) -> String {
+    format!(
+        "'{}' --exact test_support::run_until_stopped --ignored",
+        program.display()
+    )
+}
+
+#[test]
+#[ignore = "helper process tests start"]
+fn run_until_stopped() {
+    std::thread::sleep(std::time::Duration::from_secs(300));
+}
+
 /// A process a test started as the leader of its own process group.
 /// Dropping it kills the group, so neither the process nor what it started
 /// outlives a test that fails or times out.

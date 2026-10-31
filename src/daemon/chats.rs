@@ -165,6 +165,12 @@ impl Manager {
         self.store.run(|db| running(db)).await
     }
 
+    /// The agent processes of the recorded chats.
+    pub(crate) async fn chat_processes(&self) -> Result<Vec<Identity>> {
+        let recorded = self.store.run(recorded_processes).await?;
+        Ok(recorded.into_iter().map(|(_, process)| process).collect())
+    }
+
     /// The running chat `selector` names, by ID or name.
     pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
         Ok(self

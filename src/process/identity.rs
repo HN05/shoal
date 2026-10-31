@@ -1,6 +1,7 @@
 //! Same-user process ownership for cooperative recovery. Never expose process
-//! arguments/environment; only the explicit execution marker, ancestor PIDs
-//! and scoped ancestors' state directories leave this module.
+//! arguments/environment; only the explicit execution marker, ancestor PIDs,
+//! scoped ancestors' state directories and the working directories of a
+//! space's untracked processes leave this module.
 use crate::protocol::timing;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
@@ -256,54 +257,18 @@ impl Unattributed {
     }
 }
 
-/// The lineages of live same-user processes, captured from bare PIDs.
-pub struct Lineages(HashMap<u32, Lineage>);
-
-impl Lineages {
-    pub fn capture(pids: &HashSet<u32>) -> Result<Self> {
-        let mut lineages = HashMap::new();
-        for pid in pids {
-            if let Some(lineage) = lineage(*pid)? {
-                lineages.insert(*pid, lineage);
-            }
-        }
-        Ok(Self(lineages))
-    }
-
-    /// Keep the processes `pids`, listed after the capture, still names and
-    /// that are still alive: neither PID was reused meanwhile, so what the
-    /// listing says about each PID holds for the captured process.
-    pub fn confirm(&mut self, pids: &HashSet<u32>) -> Result<()> {
-        let mut confirmed = HashMap::new();
-        for (pid, lineage) in self.0.drain() {
-            if pids.contains(&pid) && alive(&lineage.identity)? {
-                confirmed.insert(pid, lineage);
-            }
-        }
-        self.0 = confirmed;
-        Ok(())
-    }
-
-    /// The processes that are detached, or descend from a detached one
-    /// through parents all among these.
-    pub fn detached(&self) -> Vec<Identity> {
-        self.0
-            .values()
-            .filter(|lineage| descends_from_detached(lineage, &self.0))
-            .map(|lineage| lineage.identity.clone())
-            .collect()
-    }
-}
-
-/// Whether `lineage` is detached, or its parent among `lineages` is the
-/// process it was forked from and descends from a detached one.
-fn descends_from_detached(lineage: &Lineage, lineages: &HashMap<u32, Lineage>) -> bool {
+/// Whether `lineage` is detached, or the parent `among` finds for its PID is
+/// the process it was forked from and descends from a detached one.
+fn descends_from_detached<'a>(
+    lineage: &'a Lineage,
+    among: impl Fn(u32) -> Option<&'a Lineage>,
+) -> bool {
     let mut current = lineage;
     for _ in 0..MAX_ANCESTRY {
         if current.detached() {
             return true;
         }
-        match lineages.get(&current.parent_pid) {
+        match among(current.parent_pid) {
             Some(parent) if current.forked_from(parent) => current = parent,
             _ => return false,
         }
@@ -316,14 +281,6 @@ pub async fn scan(ids: HashSet<String>) -> Result<Scan> {
     scan_marked(Marker::Execution, ids).await
 }
 
-/// Live same-user processes carrying the workspace's identity: its tracked
-/// executions, hooks and processes started with its exported environment.
-/// Unreadable environments cannot be attributed and are left out.
-pub async fn scan_workspace(id: &str) -> Result<Vec<Identity>> {
-    let scan = scan_marked(Marker::Workspace, HashSet::from([id.to_owned()])).await?;
-    Ok(scan.processes.into_iter().map(|p| p.identity).collect())
-}
-
 /// Live same-user processes carrying the identity of chat `id`: its agent
 /// and what the agent started with its environment.
 pub async fn scan_chat(id: &str) -> Result<Vec<Identity>> {
@@ -331,8 +288,10 @@ pub async fn scan_chat(id: &str) -> Result<Vec<Identity>> {
     Ok(scan.processes.into_iter().map(|p| p.identity).collect())
 }
 
-/// `scan_workspace` for each of the workspaces `ids`, pairing every process
-/// with the workspace it carries.
+/// Live same-user processes carrying the identity of one of the workspaces
+/// `ids`: their tracked executions, hooks and processes started with their
+/// exported environment, each paired with the workspace it carries.
+/// Unreadable environments cannot be attributed and are left out.
 pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identity)>> {
     let scan = scan_marked(Marker::Workspace, ids).await?;
     Ok(scan
@@ -365,6 +324,15 @@ async fn scan_remembering(
     if ids.is_empty() {
         return Ok(Scan::default());
     }
+    inventory(owners, move |inventory| inventory.attribute(marker, &ids)).await
+}
+
+/// Observe every process this user runs, consulting and updating `owners`,
+/// and `read` the inventory off the async runtime.
+async fn inventory<T: Send + 'static>(
+    owners: &'static owners::Owners,
+    read: impl FnOnce(&Inventory<'static>) -> Result<T> + Send + 'static,
+) -> Result<T> {
     let turn = owners::TURN.lock().await;
     let listing = list_processes().await?;
     tokio::task::spawn_blocking(move || {
@@ -381,7 +349,7 @@ async fn scan_remembering(
                 inventory.observed.insert(pid, process);
             }
         }
-        inventory.attribute(marker, &ids)
+        read(&inventory)
     })
     .await
     .context("process inventory worker failed")?
@@ -638,19 +606,13 @@ impl<'a> Inventory<'a> {
         }
     }
 
-    /// Attribute every observed process and collect the scan of those whose
-    /// `marker` is one of `ids`, checking that owned processes still live.
-    /// Later inventories remember what this one told about each process.
+    /// Collect the scan of the observed processes whose `marker` is one of
+    /// `ids`, checking that owned processes still live.
     fn attribute(&self, marker: Marker, ids: &HashSet<String>) -> Result<Scan> {
-        let mut attributions = HashMap::new();
         let mut scan = Scan::default();
-        let mut told = Vec::new();
-        for (pid, process) in &self.observed {
-            if matches!(process.evidence, Evidence::Elevated) {
-                continue;
-            }
-            let identity = &process.lineage.identity;
-            let evidence = match self.evidence(self.resolve(*pid, &mut attributions), process) {
+        for (pid, evidence) in self.attribute_all() {
+            let identity = &self.observed[&pid].lineage.identity;
+            let evidence = match evidence {
                 Ok(evidence) => evidence,
                 Err(head) => {
                     scan.unreadable.push(Unattributed {
@@ -669,10 +631,29 @@ impl<'a> Inventory<'a> {
                     identity: identity.clone(),
                 });
             }
-            told.extend(process.lineage.unique.map(|unique| (unique, evidence)));
+        }
+        Ok(scan)
+    }
+
+    /// What tells the owner of each observed process this user runs itself,
+    /// or the head of the processes whose owner cannot be told. Later
+    /// inventories remember what this one told about each process.
+    fn attribute_all(&self) -> HashMap<u32, Result<owners::Evidence, Identity>> {
+        let mut attributions = HashMap::new();
+        let mut found = HashMap::new();
+        let mut told = Vec::new();
+        for (pid, process) in &self.observed {
+            if matches!(process.evidence, Evidence::Elevated) {
+                continue;
+            }
+            let evidence = self.evidence(self.resolve(*pid, &mut attributions), process);
+            if let (Ok(evidence), Some(unique)) = (&evidence, process.lineage.unique) {
+                told.push((unique, evidence.clone()));
+            }
+            found.insert(*pid, evidence);
         }
         self.owners.update(told, &self.named());
-        Ok(scan)
+        found
     }
 
     /// What `attribution` tells about the owner of `process`, or the head of
@@ -1123,6 +1104,18 @@ fn working_directory(pid: u32) -> Option<PathBuf> {
     (!path.is_empty()).then(|| PathBuf::from(OsStr::from_bytes(&path)))
 }
 
+/// The file `pid` runs, which macOS shows for a platform binary too.
+#[cfg(target_os = "macos")]
+fn executable(pid: u32) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStringExt as _;
+    let mut path = vec![0_u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let len =
+        unsafe { libc::proc_pidpath(pid as i32, path.as_mut_ptr().cast(), path.len() as u32) };
+    let len = usize::try_from(len).ok().filter(|len| *len > 0)?;
+    path.truncate(len);
+    Some(PathBuf::from(std::ffi::OsString::from_vec(path)))
+}
+
 #[cfg(target_os = "macos")]
 pub(super) fn parent(pid: u32) -> Option<u32> {
     bsd_info(pid, false)
@@ -1310,6 +1303,11 @@ fn platform_unreaped(identity: &Identity) -> Result<bool> {
 #[cfg(target_os = "linux")]
 fn working_directory(pid: u32) -> Option<PathBuf> {
     std::fs::read_link(format!("/proc/{pid}/cwd")).ok()
+}
+
+#[cfg(target_os = "linux")]
+fn executable(pid: u32) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -1641,5 +1639,6 @@ pub async fn stop_verified(targets: &[Identity]) -> Result<()> {
 }
 
 mod owners;
+pub mod spaces;
 #[cfg(test)]
 mod tests;

@@ -154,7 +154,8 @@ impl<'a> Removal<'a> {
     }
 
     /// Automatic removal takes only unused workspaces, so a detached process
-    /// running from one is activity that retains it; the others stop it.
+    /// running from one is activity that retains it; the others stop the
+    /// processes its worktree ties to it.
     fn stops_detached_processes(self) -> bool {
         !matches!(self, Removal::Automatic { .. })
     }
@@ -1065,7 +1066,7 @@ impl Manager {
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             // The hook runs with the workspace identity after removal's sweep.
-            if let Err(error) = self.stop_workspace_processes(&workspace.id).await {
+            if let Err(error) = self.stop_processes_without_worktree(workspace).await {
                 crate::daemon::log!(
                     "processes left by the post-remove hook of {} not stopped: {error:#}",
                     workspace.name
@@ -1150,10 +1151,8 @@ impl Manager {
         }
         // Processes can write files as they stop, which the final inspection
         // and the checkpoint must include.
-        self.stop_workspace_processes(&workspace.id).await?;
-        if removal.stops_detached_processes() {
-            self.stop_detached_directory_processes(workspace).await?;
-        }
+        self.stop_removed_processes(workspace, removal.stops_detached_processes())
+            .await?;
         let check = self
             .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
             .await?;
@@ -1284,7 +1283,7 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
-        self.stop_workspace_processes(&workspace.id).await?;
+        self.stop_processes_without_worktree(workspace).await?;
         let children = self.remove_children(workspace, removal).await?;
         // Prune only this owned registration, through Worktrunk, and retain
         // its branch because the contents cannot be inspected.

@@ -7,7 +7,7 @@ use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_w
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
-    daemon::{scope::Caller, store},
+    daemon::{scope::Caller, space_processes::Selection, store},
     demos::Launch,
     hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
@@ -1152,49 +1152,32 @@ impl Manager {
         Ok(())
     }
 
-    /// Stop every verified process that still carries the workspace's identity,
-    /// such as servers its hooks or apps started, since none outlives removal.
-    pub(super) async fn stop_workspace_processes(&self, id: &str) -> Result<()> {
-        let survivors = process::scan_workspace(id).await?;
-        if survivors.is_empty() {
-            return Ok(());
+    /// Stop every untracked process of the workspace being removed, such as
+    /// servers its hooks or apps started, or scripts a recording left
+    /// behind, since none outlives removal. With `worktree`, once the
+    /// directory is verified to be its worktree still, that includes the
+    /// detached processes it ties to the workspace.
+    pub(super) async fn stop_removed_processes(
+        &self,
+        workspace: &Workspace,
+        worktree: bool,
+    ) -> Result<()> {
+        if worktree {
+            self.verify_worktree(workspace).await?;
         }
-        process::stop_verified(&survivors).await?;
-        let remaining = process::scan_workspace(id).await?;
-        ensure!(
-            remaining.is_empty(),
-            "workspace processes survived stopping: {}; stop them yourself, then retry",
-            pids(&remaining)
-        );
+        let space = self.workspace_space(workspace, worktree).await?;
+        self.stop_untracked(space, Selection::Processes, None)
+            .await?;
         Ok(())
     }
 
-    /// Stop the detached processes running from the workspace's directory,
-    /// such as scripts a recording left behind, whose environment may not
-    /// show the workspace's identity, once the directory is verified to be
-    /// its worktree still. Each round also stops those its predecessor
-    /// started meanwhile, which stopping their parent detaches.
-    pub(super) async fn stop_detached_directory_processes(
+    /// [`Self::stop_removed_processes`] for a workspace whose worktree is
+    /// gone or no longer counts.
+    pub(super) async fn stop_processes_without_worktree(
         &self,
         workspace: &Workspace,
     ) -> Result<()> {
-        const ROUNDS: usize = 3;
-        self.verify_worktree(workspace).await?;
-        let path = &workspace.path;
-        for _ in 0..ROUNDS {
-            let detached = crate::process::detached_in_directory(path).await?;
-            if detached.is_empty() {
-                return Ok(());
-            }
-            process::stop_verified(&detached).await?;
-        }
-        let remaining = crate::process::detached_in_directory(path).await?;
-        ensure!(
-            remaining.is_empty(),
-            "detached processes running from the workspace directory survived stopping: {}; stop them yourself, then retry",
-            pids(&remaining)
-        );
-        Ok(())
+        self.stop_removed_processes(workspace, false).await
     }
 
     /// Ask connected wrappers to stop and signal disconnected survivors.

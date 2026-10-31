@@ -1073,6 +1073,31 @@ async fn removal_stops_detached_processes_running_from_the_worktree() {
     attached.kill().await.unwrap();
 }
 
+/// A program built in the worktree and left running elsewhere, as a
+/// recording's daemon is, is the workspace's to stop.
+#[tokio::test]
+async fn removal_stops_detached_programs_built_in_the_worktree() {
+    let (root, manager, workspace) = fixture().await;
+    let built = workspace.path.join("built");
+    fs::copy(std::env::current_exe().unwrap(), &built).unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    let detached = crate::test_support::Adopted::start(
+        &elsewhere,
+        &crate::test_support::runs_until_stopped(&built),
+        &[],
+        &root.path().join("pid"),
+    )
+    .await;
+
+    manager
+        .remove_workspace(&workspace.id, UnsavedWork::All, InspectionPolicy::GitOnly)
+        .await
+        .unwrap();
+
+    assert!(!identity::alive(&detached.identity).unwrap());
+}
+
 #[tokio::test]
 async fn removal_leaves_detached_processes_in_a_replaced_worktree_alone() {
     // The hook replaces the worktree and leaves a detached process running in

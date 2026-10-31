@@ -17,27 +17,3 @@ async fn in_directory_leaves_out_excluded_processes() {
     assert!(!found.iter().any(|process| process.ends_with(&named)));
     child.kill().await.unwrap();
 }
-
-#[tokio::test]
-async fn detached_in_directory_finds_adopted_processes_and_their_children_there() {
-    let root = tempfile::tempdir().unwrap();
-    let dir = root.path().join("worktree");
-    std::fs::create_dir(&dir).unwrap();
-    let detached = crate::test_support::Detached::start(&dir, &root.path().join("pids")).await;
-    let mut attached = crate::test_support::isolated_command("sleep", &dir)
-        .arg("60")
-        .spawn()
-        .unwrap();
-
-    let found: Vec<u32> = detached_in_directory(&dir)
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|identity| identity.pid)
-        .collect();
-
-    assert!(found.contains(&detached.shell.pid), "{found:?}");
-    assert!(found.contains(&detached.child.pid), "{found:?}");
-    assert!(!found.contains(&attached.id().unwrap()), "{found:?}");
-    attached.kill().await.unwrap();
-}
