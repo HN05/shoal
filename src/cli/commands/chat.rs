@@ -138,7 +138,7 @@ pub(super) async fn begin(
         instructions: instructions(&settings, &repo),
         opening: topic.opening.clone(),
         directories: topic.directories.clone(),
-        model: settings.model(agent.name(), model.clone()),
+        model: agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
         settings,
         args,
@@ -311,7 +311,7 @@ pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<
 /// Refuse `model` for `agent` before anything else is asked for, when its
 /// launch cannot pass the values on.
 pub(super) fn check_model(settings: &Effective, agent: &Agent, model: &ModelChoice) -> Result<()> {
-    let resolved = settings.model(agent.name(), model.clone());
+    let resolved = agents::resolve_model(settings, agent.name(), model.clone());
     agents::check_model(settings, agent.name(), &resolved)
 }
 

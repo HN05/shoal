@@ -117,7 +117,7 @@ async fn child_agent(
     if session.is_some() {
         agents::ensure_forks(&settings, agent.name())?;
     }
-    let resolved = settings.model(agent.name(), model.clone());
+    let resolved = agents::resolve_model(&settings, agent.name(), model.clone());
     agents::check_model(&settings, agent.name(), &resolved)?;
     Ok(Some(ChildAgent {
         agent,

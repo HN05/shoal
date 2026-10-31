@@ -413,7 +413,7 @@ pub(super) async fn launch_agent(
         options.tracked,
     );
     let model = match options.model {
-        ModelRequest::Override(requested) => settings.model(agent.name(), requested),
+        ModelRequest::Override(requested) => resolve_model(&settings, agent.name(), requested),
         ModelRequest::Kept(model) => model,
     };
     let launch = Launch {
@@ -467,6 +467,24 @@ pub(crate) fn model_args(
         .arguments
         .model_args(model)
         .map_err(|template| missing_template(name, template))
+}
+
+/// The model and effort a launch of agent `name` runs with, as
+/// [`Effective::model`] resolves them, with what it leaves to the tool taken
+/// from the configuration of the agent an app it runs in starts.
+pub(in crate::cli) fn resolve_model(
+    settings: &Effective,
+    name: &str,
+    requested: ModelChoice,
+) -> ModelChoice {
+    let model = settings.model(name, requested);
+    let started = agent_integration(settings, name)
+        .detached()
+        .and_then(|app| settings.tools.get(app.agent()));
+    match started {
+        Some(tool) => model.or(tool.model.clone()),
+        None => model,
+    }
 }
 
 /// Refuse agent `name` with `model` before anything starts when its launch

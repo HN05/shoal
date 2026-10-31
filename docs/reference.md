@@ -1076,7 +1076,9 @@ gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
 effort, since the variable otherwise overrides the flag; Codex gets `-m` and `-c
 model_reasoning_effort="<effort>"`. A launch with a value its tool has no
 template for is refused with the template to configure, and `--model` or
-`--effort` without an agent is refused. A restored, resumed or moved agent runs
+`--effort` without an agent is refused. A Happy session's agent, such as
+`happy-claude`, takes them through the tool it starts, whose `model` and
+`effort` fill in what nothing else sets. A restored, resumed or moved agent runs
 with the values it started with, which its execution in `shoal status --json`
 and its recovery records show; a `resume_command` gets them before its `--`.
 One whose tool no longer has the templates for them is not restored until it
