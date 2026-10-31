@@ -30,7 +30,7 @@ class CrossBuildTests(unittest.TestCase):
                 helper.write_text('#!/bin/sh\nread -r ignored || true\nprintf "%s\\n" "$1"\n')
                 helper.chmod(0o755)
             signer = root / "sign-macos.sh"
-            signer.write_text('#!/bin/sh\nprintf "signed %s with %s\\n" "$2" "$1"\n')
+            signer.write_text('#!/bin/sh\nprintf "signed %s %s into %s with %s\\n" "$2" "$3" "$4" "$1"\n')
             signer.chmod(0o755)
             for workflow in ("ci.yml", "release.yml"):
                 with self.subTest(workflow=workflow):
@@ -47,7 +47,9 @@ class CrossBuildTests(unittest.TestCase):
                         expected.append(target)
                         # Only the release signs, and it goes by the target, not the platform.
                         if workflow == "release.yml" and target.endswith("-apple-darwin"):
-                            expected.append(f"signed {root}/target/{target}/release/shoal with key.pem")
+                            release = f"{root}/target/{target}/release"
+                            expected.append(
+                                f"signed {release}/shoal 0.2.0 into {release}/app/Shoal.app with key.pem")
                     self.assertEqual(result.stdout.splitlines(), expected)
 
     def test_target_validation_follows_the_table_beside_the_helper(self):

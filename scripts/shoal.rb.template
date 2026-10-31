@@ -14,10 +14,17 @@ class Shoal < Formula
   uses_from_macos "lsof"
 
   def install
-    libexec.install "shoal"
+    # macOS keeps privacy grants for an app bundle across upgrades, but for a
+    # bare executable only at its versioned Cellar path.
+    if OS.mac?
+      libexec.install "Shoal.app"
+      bin.install_symlink libexec/"Shoal.app/Contents/MacOS/shoal"
+    else
+      libexec.install "shoal"
+      bin.install_symlink libexec/"shoal"
+    end
     (share/"shoal").install "skills"
     (libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"
-    bin.install_symlink libexec/"shoal"
   end
 
   def caveats
@@ -36,6 +43,7 @@ class Shoal < Formula
   end
 
   test do
+    system "codesign", "--verify", "--strict", libexec/"Shoal.app" if OS.mac?
     assert_match "shoal", shell_output("#{bin}/shoal --version")
     assert_match "name: shoal-worker", shell_output("#{bin}/shoal skill")
     assert_match "name: shoal-orchestrator", shell_output("#{bin}/shoal skill orchestrator")

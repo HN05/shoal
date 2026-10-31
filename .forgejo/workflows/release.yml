@@ -212,11 +212,16 @@ jobs:
           epoch=$(git log -1 --format=%ct)
           while read -r target platform _selectors <&3; do
             ../cross-build.sh "$target" 3<&-
+            release="$CARGO_TARGET_DIR/$target/release"
+            # macOS archives carry the signed Shoal.app, others the bare binary.
             case "$target" in
-              *-apple-darwin) ../sign-macos.sh "$pem" "$CARGO_TARGET_DIR/$target/release/shoal" 3<&- ;;
+              *-apple-darwin)
+                ../sign-macos.sh "$pem" "$release/shoal" "${RELEASE_TAG#v}" "$release/app/Shoal.app" 3<&-
+                entry=(-C "$release/app" Shoal.app) ;;
+              *) entry=(-C "$release" shoal) ;;
             esac
             tar --sort=name --mtime="@$epoch" --owner=0 --group=0 --numeric-owner \
-              -C "$CARGO_TARGET_DIR/$target/release" -cf - shoal \
+              -cf - "${entry[@]}" \
               -C "$PWD" skills \
               | gzip -n -9 > "dist/shoal-$RELEASE_TAG-$platform.tar.gz"
           done 3< ../release-targets.txt

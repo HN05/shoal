@@ -368,7 +368,7 @@ open no issues; audit results are advisory and do not gate merges.
 Distribution is a Homebrew formula in the shared HN05 tap: releases install
 checksummed prebuilt Linux and macOS binaries on x86_64 and arm64. The formula
 has no head channel, so every Homebrew installation runs a CI-signed release.
-`shoal update` replaces a downloaded binary with the latest GitHub release and
+`shoal update` replaces a downloaded binary or app bundle with the latest GitHub release and
 leaves Homebrew installations to Homebrew, so one package manager owns each
 installation. A shared release-target table drives cross-builds,
 archive names and Homebrew platform selectors.
@@ -388,11 +388,18 @@ explicitly selecting the current tagged version resumes from that tag, and tap
 updates retry against the tap's latest main without force pushes. Deleted release
 branch labels are accepted only for matching repository and exact PR identity.
 
-Release signing: the release job signs each macOS binary with `rcodesign` as
-`com.shoal.cli` using a project-owned self-signed certificate, and fails unless
-the signature has the expected designated requirement. macOS privacy grants
-such as Full Disk Access follow that requirement; an ad-hoc signature's
-requirement is its hash, so each release would need a new grant. Only a stable
+Release signing: the release job packages each macOS binary as `Shoal.app` and
+signs the bundle with `rcodesign` as `com.shoal.cli` using a project-owned
+self-signed certificate, and fails unless the signature has the expected
+designated requirement. macOS keeps privacy grants such as Removable Volumes
+for an app bundle by its identifier and that requirement, wherever it is
+installed. For a bare executable it keeps them by path, and Homebrew installs
+each version at its own path, so each upgrade would ask again; an ad-hoc
+signature's requirement is its hash, so each release would need a new grant.
+The formula links `bin/shoal` to the bundle's executable, so the daemon, the
+execution wrappers and every command share the bundle's grant. Packaged files
+such as the skills link sit beside the bundle, since a file added inside it
+breaks its signature. Only a stable
 requirement is needed, not Gatekeeper trust, so there is no Developer ID or
 notarization. The certificate came from `rcodesign
 generate-self-signed-certificate --person-name "Shoal" --validity-days 7300`;

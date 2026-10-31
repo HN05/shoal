@@ -33,6 +33,8 @@ end
         self.assertEqual(result.count('sha256 "' + "c" * 64 + '"'), len(updater.release_platforms()))
         self.assertIn('  version "0.2.0"', result)
         self.assertNotRegex(result, r"\bhead\b")
+        self.assertIn('libexec.install "Shoal.app"', result)
+        self.assertIn('bin.install_symlink libexec/"Shoal.app/Contents/MacOS/shoal"', result)
         self.assertIn('libexec.install "shoal"', result)
         self.assertIn('(libexec/"shoal-skills").make_symlink opt_share/"shoal/skills"', result)
         self.assertIn('bin.install_symlink libexec/"shoal"', result)

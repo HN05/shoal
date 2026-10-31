@@ -12,9 +12,10 @@ shoal skill install
 ```
 
 Or download a prebuilt macOS or Linux binary from a [release](https://github.com/HN05/shoal/releases).
-The macOS binaries are signed with Shoal's own certificate but not notarized, so
-clear the quarantine of a downloaded binary with
-`xattr -d com.apple.quarantine shoal`.
+On macOS the archive holds `Shoal.app`, signed with Shoal's own certificate but
+not notarized: clear its quarantine with
+`xattr -dr com.apple.quarantine Shoal.app` and put a link to
+`Shoal.app/Contents/MacOS/shoal` on your `PATH`.
 Homebrew installs the additional tools for workspace management and interactive
 menus. For a downloaded binary, install
 the [runtime dependencies](#runtime-dependencies) before running `shoal daemon install`.
@@ -25,11 +26,12 @@ daemon and writes missing config and chat template defaults in `~/.config/shoal/
 `shoal skill install <tool>` creates one. Later `shoal` commands keep installed
 skills current after upgrades.
 
-On macOS, when workspaces or `root_dir` are on an external volume, grant the
-`shoal` binary Full Disk Access or Removable Volumes once under System Settings >
-Privacy & Security, then run `shoal daemon restart`. The grant survives upgrades
-and covers the agents Shoal starts through zmx, Herdr or Rex or in the
-background, with the commands they run.
+On macOS, when workspaces or `root_dir` are on an external volume, allow Shoal
+access to removable volumes when macOS asks, or grant Shoal Full Disk Access or
+Removable Volumes under System Settings > Privacy & Security, then run
+`shoal daemon restart`. The grant survives upgrades and covers the agents Shoal
+starts through zmx, Herdr or Rex or in the background, with the commands they
+run.
 
 For directory navigation and tab completion, add this to your `.zshrc` or
 `.bashrc`, then run it in your current shell:
@@ -459,7 +461,7 @@ brew update
 brew upgrade hn05/tap/shoal
 ```
 
-Update a downloaded binary with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
+Update a downloaded binary or `Shoal.app` with `shoal update`. Managed daemons apply the upgrade once their operations are idle; run
 `shoal daemon restart` to apply an upgrade immediately; running agents and
 commands reattach to the new daemon. Wrappers from releases before reattachment
 are stopped instead; restore them with `shoal resume --all`. The next `shoal`
