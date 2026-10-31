@@ -16,6 +16,7 @@ use tokio::sync::watch;
 use uuid::Uuid;
 
 use super::{
+    log,
     refusal::{Reason, Refusal},
     scope::Caller,
     workspace::Manager,
@@ -158,18 +159,19 @@ impl Manager {
     /// when given, returning the operation's ID. The scope check already
     /// narrowed a scoped caller's workspace to an ID.
     pub(crate) async fn start_operation(
-        &self,
+        self: &Arc<Self>,
         mut spec: OperationSpec,
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
     ) -> Result<String> {
         let workspace = self.workspace(spec.workspace_mut()).await?.id;
         *spec.workspace_mut() = workspace.clone();
-        let token = match caller {
-            Some(caller) => Some(self.scope_token(caller).await?),
+        let scope = match caller {
+            Some(caller) => Some(self.worker_scope(caller).await?),
             None => None,
         };
-        let (id, entry) = self.operations.register(workspace);
+        let token = scope.as_ref().map(|scope| scope.token.clone());
+        let (id, entry) = self.operations.register(workspace.clone());
         let order = Order {
             id: id.clone(),
             spec,
@@ -186,7 +188,18 @@ impl Manager {
         // An update waits for the operation, which its worker cannot report
         // to the replacement.
         let operation = self.gates.owned_operation().await;
-        tokio::spawn(worker::supervise(entry, worker, operation));
+        let manager = self.clone();
+        let released = async move {
+            if let Some(WorkerScope {
+                token,
+                issued: Some(caller),
+            }) = scope
+                && let Err(error) = manager.revoke_workspace_environment(&caller, token).await
+            {
+                log!("operation: cannot revoke its worker's scope: {error:#}");
+            }
+        };
+        tokio::spawn(worker::supervise(entry, worker, operation, released));
         Ok(id)
     }
 
@@ -221,15 +234,31 @@ impl Manager {
     }
 
     /// A token that grants `caller`'s scope: its execution's while it is
-    /// connected, or its workspace's.
-    async fn scope_token(&self, caller: &Caller) -> Result<String> {
+    /// connected, so the worker acts as that execution, or else one issued
+    /// for the worker alone, so revoking any other token leaves it alone.
+    async fn worker_scope(&self, caller: &Caller) -> Result<WorkerScope> {
         if let Some(execution) = caller.execution_id()
             && let Some(token) = self.executions.token_of(execution).await
         {
-            return Ok(token);
+            return Ok(WorkerScope {
+                token,
+                issued: None,
+            });
         }
-        self.workspace_scope_token(&caller.workspace_id).await
+        let token = self.issue_workspace_scope(&caller.workspace_id).await?;
+        Ok(WorkerScope {
+            token,
+            issued: Some(caller.workspace_id.clone()),
+        })
     }
+}
+
+/// The scope token a worker acts with; one issued for it is revoked once it
+/// exits.
+struct WorkerScope {
+    token: String,
+    /// The caller's workspace, whose scope the token was issued for.
+    issued: Option<String>,
 }
 
 #[cfg(test)]

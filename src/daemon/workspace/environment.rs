@@ -33,21 +33,22 @@ impl Manager {
             .await
     }
 
-    /// A token of the workspace scopes issued for `workspace_id`, which a
-    /// caller with no execution of its own called with.
-    pub(crate) async fn workspace_scope_token(&self, workspace_id: &str) -> Result<String> {
+    /// Issue a new token of `workspace_id`'s scope, which lasts until
+    /// [`Self::revoke_workspace_environment`] revokes it or the workspace goes.
+    pub(crate) async fn issue_workspace_scope(&self, workspace_id: &str) -> Result<String> {
         let workspace_id = workspace_id.to_owned();
+        let token = Uuid::new_v4().to_string();
+        let issued = token.clone();
         self.store
             .run(move |db| {
-                db.query_row(
-                    "SELECT token FROM workspace_scopes WHERE workspace_id=?1 LIMIT 1",
-                    [workspace_id],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .context("the caller's workspace scope was revoked")
+                db.execute(
+                    "INSERT INTO workspace_scopes(token,workspace_id) VALUES (?1,?2)",
+                    params![issued, workspace_id],
+                )?;
+                Ok(())
             })
-            .await
+            .await?;
+        Ok(token)
     }
 
     pub(crate) async fn workspace_environment(

@@ -151,8 +151,21 @@ async fn the_worker_acts_with_the_callers_scope_which_follows_only_its_tree() {
         .start_operation(setup(&own), None, Some(&caller))
         .await
         .unwrap();
-    assert_eq!(fake::take(&id).token.as_ref(), Some(token));
-    manager.operation(&id, Some(&caller)).await.unwrap();
+    // The worker gets a token of its own for the caller's workspace, which
+    // outlives revoking the caller's and goes once the worker exits.
+    let worker = fake::take(&id);
+    let issued = worker.token.clone().unwrap();
+    assert_ne!(&issued, token);
+    manager
+        .revoke_workspace_environment(&own.id, token.clone())
+        .await
+        .unwrap();
+    let acting = manager.caller(&issued).await.unwrap().unwrap();
+    assert_eq!(acting.workspace_id, own.id);
+    let entry = manager.operation(&id, Some(&caller)).await.unwrap();
+    worker.exit(0);
+    until(&entry, |_, ended| ended).await;
+    assert!(manager.caller(&issued).await.unwrap().is_none());
     let theirs = manager
         .start_operation(setup(&other), None, None)
         .await

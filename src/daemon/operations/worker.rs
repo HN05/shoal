@@ -123,11 +123,13 @@ pub(super) fn spawn(
 }
 
 /// Relay the worker's output to `entry` until it exits and its streams
-/// close, or [`DRAIN`] after it exits, then end the operation.
+/// close, or [`DRAIN`] after it exits, then await `released`, which lets go
+/// of what the worker held, and end the operation.
 pub(super) async fn supervise(
     entry: Arc<Entry>,
     worker: Worker,
     _operation: OwnedRwLockReadGuard<()>,
+    released: impl Future<Output = ()>,
 ) {
     let stdout = tokio::spawn(relay(entry.clone(), worker.stdout, Stream::Stdout));
     let stderr = tokio::spawn(relay(entry.clone(), worker.stderr, Stream::Stderr));
@@ -143,6 +145,7 @@ pub(super) async fn supervise(
         stdout_abort.abort();
         stderr_abort.abort();
     }
+    released.await;
     entry.end(code);
 }
 
