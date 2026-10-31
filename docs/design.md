@@ -34,8 +34,8 @@ that takes its value from outside the config, such as a proxy's upstream key,
 shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }`
 run like a secret's command when the agent starts, and Shoal prints no written
 value. Forge changes Shoal
-makes for a workspace act as the agent too: through the `gh` wrapper, and on
-Forgejo, Gitea and Bitbucket with the host's configured `agent_token`. An agent Git profile
+makes for a workspace act as the agent too, with the host's configured
+`agent_token`. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override
@@ -1428,10 +1428,11 @@ workspace and goes as a decided proposal does.
 Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
-merge) and planned per forge as REST requests: `gh api` and `glab api`, which
-own GitHub's and GitLab's logins, or curl with the token `[machine.forges."<host>"]`
-gives a Forgejo, Gitea or Bitbucket host, and otherwise anonymously. Shoal
-needs only a token per host, so it reads no CLI's private login files. A token
+merge) and planned per forge as REST requests, sent with curl and the token
+`[machine.forges."<host>"]` gives the host, or anonymously without one; GitHub's
+GraphQL requests go the same way. Shoal needs only a token per host, so it runs
+no forge CLI and reads none of their login files, and a forge works without its
+CLI installed. A token
 is given in the shared value form, so it may come from a command such as a
 password manager, and is fetched at most once per operation and never stored;
 an `{ env }` token reads the environment of the process sending the request,
@@ -1441,10 +1442,9 @@ itself would, except on a forge where a wrapper gives the agent its own account,
 where a missing token fails rather than act as the user.
 The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
-version or metadata endpoint with the user's login for that host, since a name
-cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo.
-Asking leaves out the tokens gh and glab read from the environment for any
-host, so a host that may be another forge never receives them. The daemon records
+version or metadata endpoint with the user's token for that host, since a name
+cannot tell a GitHub Enterprise Server or a self-hosted GitLab from Forgejo;
+the token goes only to the host it is set for. The daemon records
 each answer in its state and asks recorded hosts again when it starts or
 reloads its config, recording a changed answer with an alert. A host it cannot reach then
 keeps its answer and raises no alert, since a machine may start offline; a global `[machine.forges."<host>"] type`
@@ -1455,7 +1455,7 @@ link of a host not yet resolved is classified without a request by the forge
 its routes name, such as `/pull/` for GitHub
 and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
 form several forges share, falls back to the name: GitLab for a `gitlab` name
-label or a glab login, and otherwise Forgejo. Host types describe hosts rather than
+label, and otherwise Forgejo. Host types describe hosts rather than
 repositories, so they are global only, like the tokens in the same table. GitLab-only concepts such as approval rules and merge trains
 stay unmodeled; approvals count as approving reviews. Forge differences stay in planning, such as Forgejo keeping draft
 state in the title, so callers see the same item either way. Milestones are
@@ -1519,7 +1519,7 @@ because the reply tells the reviewer why. Attached files are read
 by the daemon from paths the CLI checked, anywhere on disk: a body file can
 already come from anywhere and scope is cooperative, while recordings kept in the
 worktree would be untracked files that hold up cleanup. GitHub's REST API has no
-upload endpoint, so Shoal uses the one gh itself uses, through `gh api`. Forgejo
+upload endpoint, so Shoal uses the one gh itself uses on GitHub's upload host. Forgejo
 takes a comment's files only once it is posted, so a failure there would leave it
 without them: Shoal refuses what the instance's attachment settings refuse before
 posting, detecting a file's media type from its leading bytes as Forgejo does, and resends the uploads and the comment's update after failures that may
@@ -1951,9 +1951,8 @@ and replacing one requires unlinking it first. Unlinking preserves recorded comp
 Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
-login, because discussion can exceed a protocol frame: `gh` for GitHub, and
-Forgejo's API with the host's token, or anonymously without one,
-because fj has no structured output. Views automatically include the logs of
+login, because discussion can exceed a protocol frame: the forge's API with
+the host's token, or anonymously without one. Views automatically include the logs of
 failed CI jobs where the forge serves them, fetched by the daemon with the
 workspace's agent account and returned as bounded tails with the job's URL, so
 scoped callers never need forge credentials. Successful and pending checks omit

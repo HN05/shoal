@@ -222,15 +222,14 @@ instead of the PR delivery guidance below.
   targeting its branch, and queues a watch update; it never rebases or pushes.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
   `shoal forge api` requests, sent through the REST transport; scoped callers cannot
-  merge. `shoal forge api` paths stay under the forge's API root. Forgejo and Gitea API
-  and Bitbucket requests send the `[machine.forges."<host>"]` token of the
-  repository's own host (`agent_token` for the agent account), validated, on
-  curl's stdin, fetched at most once per operation, never logged, stored or sent
-  to another host; GitLab requests go through `glab api`. The forge is chosen
+  merge. `shoal forge api` paths stay under the forge's API root. Every forge
+  request sends the `[machine.forges."<host>"]` token of the repository's own
+  host (`agent_token` for the agent account), validated, on curl's stdin, fetched
+  at most once per operation, never logged, stored or sent to another host;
+  Shoal runs no forge CLI. The forge is chosen
   by a pinned `[machine.forges."<host>"] type`, a well-known host name, or else the
   host's own answer to each forge's version or metadata endpoint, asked with
-  only the logins saved for that host and never gh's or glab's environment
-  tokens, which the daemon records so the host is asked once and asks again
+  only that host's token, which the daemon records so the host is asked once and asks again
   when it starts or reloads its config; a pasted link of a host not yet resolved is classified by its pin,
   else by the forge its routes name.
   A request needing a capability the forge's backend does not declare is
@@ -441,11 +440,10 @@ configured command for another agent, plus proven child
   process group; the reattach request stays accepted at every protocol version.
   Detached wrappers never write to the terminal while their command runs.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
-  and change only the PATH of a tracked agent, inherited by descendants, and of
-  the `gh` and `glab` requests Shoal makes for a workspace. Wrappers own
-  authentication; Shoal reads no CLI's saved login, and never switches the
-  user's login. An agent with an `fj` or `tea` wrapper never falls back to the
-  user's Forgejo token. Forge changes for a workspace use the
+  and change only the PATH of a tracked agent, inherited by descendants. Shoal
+  never runs them, reads no CLI's saved login, and never switches the user's
+  login. An agent with a wrapper for a forge's CLI never falls back to the
+  user's token on that forge. Forge changes for a workspace use the
   agent account except merging, which uses the user's. The agent Git profile
   reaches only a tracked agent's environment and the push of `shoal pr open`;
   it never writes Git config.

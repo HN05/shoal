@@ -52,10 +52,8 @@ the daemon. Prebuilt binaries do not require Rust.
 | `ps` (included with macOS; typically `procps` or `procps-ng` on Linux) | Tracking and stopping processes |
 | [fzf](https://github.com/junegunn/fzf) | Interactive menus and pickers |
 
-Feature-specific tools are installed separately: an authenticated `gh` (GitHub)
-or `glab` (GitLab) for issues and PR watches, or `curl` and a
-[token](docs/reference.md#forges) for private repositories on Forgejo, Gitea
-and Bitbucket; the agent or
+Feature-specific tools are installed separately: `curl` for issues and PR
+watches, with a [token](docs/reference.md#forges) for private repositories; the agent or
 command you want to run;
 and `happy` plus `curl` for Happy sessions. Simulator use requires macOS with
 Xcode, `xcrun simctl`, and an installed simulator runtime.

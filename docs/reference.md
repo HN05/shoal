@@ -791,7 +791,7 @@ without one, the agent reviews. Choosing “No agent” returns without starting
 The agent is otherwise chosen as for `shoal add` and is
 prompted to report findings, not to change files, commit, push, or post.
 `shoal review <pr-url>` or `shoal review --pr <number-or-url>` looks up the PR
-with your `gh`/`fj` login and reviews it the same way in the workspace that owns
+with your [token](#forges) and reviews it the same way in the workspace that owns
 its head branch, fast-forwarded to the pushed head and refused when diverged or
 when the worktree is no longer the recorded one on that branch, or
 opens one from origin whose base is the PR's refreshed `origin/<base>`. Either
@@ -1552,14 +1552,13 @@ path to avoid recursion. They own credential selection, including overriding
 inherited token variables. PATH selection is cooperative: an absolute tool path
 or a shell that resets PATH bypasses it.
 
-Issue and PR changes Shoal makes for a workspace use the agent account. On
-GitHub they run `gh api` through the `gh` wrapper, and on GitLab `glab api`
-through the `glab` wrapper. On Forgejo, Gitea and Bitbucket they use the host's
-`agent_token` under [`[machine.forges."<host>"]`](#forges), with `agent_email`
-for a Bitbucket API token. Options left unset use your own logins, as the agent
-would, except that with an `fj` or `tea` wrapper the agent has its own Forgejo
-account: changes on a Forgejo or Gitea host without an `agent_token` then fail
-rather than use your token.
+Issue and PR changes Shoal makes for a workspace use the agent account: the
+host's `agent_token` under [`[machine.forges."<host>"]`](#forges), with
+`agent_email` for a Bitbucket API token. The wrappers stay the agent's own; Shoal
+never runs them. Without an `agent_token`, changes use your token, as the agent
+would, except where a wrapper gives the agent its own account on the host's
+forge, `gh` on GitHub, `glab` on GitLab, `fj` or `tea` on Forgejo and Gitea:
+those changes fail rather than use your token.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -1776,9 +1775,8 @@ workspaces stacked on it to its own base workspace and retargets their linked
 PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
 rebases and force-pushes its branch. The PR is retargeted through the forge's
-API with the user's login: `gh api` on GitHub, and on Forgejo or Gitea curl with
-your [token](#forges) for that host, passed on stdin. A missing login or failed
-request is reported in the update.
+API with your [token](#forges) for that host, passed to curl on stdin. A
+failed request is reported in the update.
 
 ### Child workspaces
 
@@ -2705,11 +2703,8 @@ confirmation and includes them in its JSON result; `--yes` skips confirmation.
 Shoal reads and changes the issues and PRs of the forge serving a repository's
 `origin`. `github.com` is GitHub, `gitlab.com` GitLab and `bitbucket.org`
 Bitbucket Cloud. The daemon asks any other host once which API it serves, through
-GitHub's `meta` with `gh`, GitLab's `version` with `glab`, and Forgejo's or
-Gitea's `version` with the token below, and records the answer; GitHub Enterprise
-Server and self-hosted GitLab need the CLI logged in to the host: asking sends
-only a login saved for that host, never a token such as `GH_ENTERPRISE_TOKEN` or
-`GITLAB_TOKEN` that the CLI would send to any host. The daemon asks recorded hosts
+GitHub's `meta`, GitLab's `version` and Forgejo's or Gitea's `version` on that
+host, with the host's token below, and records the answer. The daemon asks recorded hosts
 again when it starts or reloads its config, and records an alert when one now
 answers as another forge. A host that answers as none of them fails until you
 set its type, which also stops Shoal asking it:
@@ -2719,9 +2714,11 @@ set its type, which also stops Shoal asking it:
 type = "gitlab"   # or "github", "forgejo" (also Gitea) or "bitbucket"
 ```
 
-Lookups use
-your login: `gh` on GitHub, `glab` on GitLab, and on Forgejo, Gitea and
-Bitbucket the `token` set for the host in the same table. Changes Shoal makes
+Shoal sends every request to the forge's API with curl, signed in with the
+`token` set for the host in the same table: GitHub.com at `api.github.com`, a
+GitHub Enterprise Server under `/api/v3`, GitLab under `/api/v4`, Forgejo and
+Gitea under `/api/v1`, and Bitbucket Cloud at `api.bitbucket.org`. It runs no
+`gh`, `glab`, `fj` or `tea`. Changes Shoal makes
 for a workspace use the host's `agent_token`, as [agent accounts](#agent-accounts)
 describe. Each is the token as written, `{ env = "<variable>" }`, or
 `{ cmd = [...] }`, an argument array whose output is the token:
