@@ -22699,7 +22699,9 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy() {
 #[test]
 fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
     for tool in ["gh", "fj"] {
-        let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
+        let mut fixture = Fixture::with_config(Some(
+            "machine.forges.\"forge.example\".token = \"secret123\"\n[cleanup.auto]\nenabled=false\n",
+        ));
         let lower = fixture.add("lower");
         let repo = fixture.repo.to_str().unwrap().to_owned();
         fixture.ok(&["add", &repo, "upper", "--base", "lower"]);
@@ -22721,7 +22723,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
         let bin = root.join("bin");
         fs::create_dir_all(&bin).unwrap();
         // Both forges read and PATCH the PR through their API: gh api, or
-        // curl with fj's token.
+        // curl with the host's token.
         install_test_script(
             bin.join("gh"),
             r#"#!/bin/sh
@@ -22747,17 +22749,6 @@ cat >/dev/null
                 1,
             ),
         );
-        let keys = if cfg!(target_os = "macos") {
-            root.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
-        } else {
-            root.join(".local/share/forgejo-cli/keys.json")
-        };
-        fs::create_dir_all(keys.parent().unwrap()).unwrap();
-        fs::write(
-            &keys,
-            r#"{"hosts":{"forge.example":{"type":"Application","token":"secret123"}}}"#,
-        )
-        .unwrap();
         let head = git(
             Path::new(lower["path"].as_str().unwrap()),
             &["rev-parse", "HEAD"],
