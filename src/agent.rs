@@ -1,6 +1,7 @@
 //! Agent names and the hooks agents run Shoal through, independent of the
 //! integrations that launch them.
 pub mod hooks;
+pub mod trust;
 
 use crate::state::states;
 

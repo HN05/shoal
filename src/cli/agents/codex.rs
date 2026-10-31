@@ -48,7 +48,7 @@ impl Integration for Codex {
         if !args.iter().any(|arg| arg == PROVIDER) {
             return Ok(());
         }
-        let config = super::trust::codex_config(environment)?;
+        let config = crate::agent::trust::codex_config(environment.home, environment.configured)?;
         let codex_home = config.parent().unwrap_or(routing.directory);
         provider::route(args, routing.url, codex_home, routing.directory)
     }
