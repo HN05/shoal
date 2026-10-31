@@ -79,6 +79,7 @@ impl Scoped for Operation {
             Operation::Ci(method) => method.scope(manager, caller).await,
             Operation::Notification(method) => method.scope(manager, caller).await,
             Operation::Question(method) => method.scope(manager, caller).await,
+            Operation::Review(method) => method.scope(manager, caller).await,
             Operation::Approval(method) => method.scope(manager, caller).await,
             Operation::Port(method) => method.scope(manager, caller).await,
             Operation::Secret(method) => method.scope(manager, caller).await,

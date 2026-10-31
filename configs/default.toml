@@ -274,9 +274,14 @@ end = 65535
 [cleanup.done]
 enabled = true
 
-# Agent reviews of PRs and issues post their findings; --post and --no-post override it.
 [review]
+# A review of a PR posts its findings there; --post and --no-post override it.
 post = true
+# Agent that runs local reviews (no default); unset, agent.default does.
+# agent = "codex"
+# Agent that reviews once more when the first reviewer fails for a reason other
+# than running longer than 30 minutes (no default).
+# fallback_agent = "claude"
 
 # Hold agent messages until none has arrived for this many seconds, so a run of
 # them, such as approval decisions, reaches the agent together; 0 delivers each at once.

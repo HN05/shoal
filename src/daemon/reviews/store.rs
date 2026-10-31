@@ -282,6 +282,14 @@ pub(crate) fn list(db: &Connection, ids: &[String]) -> Result<Vec<Review>> {
         .collect()
 }
 
+/// The IDs of the repository's workspaces, or of every workspace.
+pub(crate) fn workspaces(db: &Connection, repository: Option<&str>) -> Result<Vec<String>> {
+    Ok(db
+        .prepare("SELECT id FROM workspaces WHERE ?1 IS NULL OR repository_id=?1")?
+        .query_map([repository], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// The workspace's newest review.
 pub(crate) fn latest(db: &Connection, workspace_id: &str) -> Result<Option<Review>> {
     let id: Option<i64> = db.query_row(

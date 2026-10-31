@@ -13,7 +13,10 @@ use super::{
     builtin::{self, Provider},
     validate::skill_dir,
 };
-use crate::reviews::output::{self, ResultFormat};
+use crate::{
+    agent::trust::TrustConfig,
+    reviews::output::{self, ResultFormat},
+};
 
 /// Every built-in and configured AI tool by name.
 pub type Tools = BTreeMap<String, Tool>;
@@ -48,6 +51,9 @@ pub struct Tool {
     /// How its review result comes back: as the built-in tool its lineage
     /// ends at returns it, else as the whole result.
     pub review_result: &'static ResultFormat,
+    /// The config file that records the directories it trusts: the one of
+    /// the built-in tool its lineage ends at.
+    pub trust: Option<&'static TrustConfig>,
 }
 
 /// How long an agent's prompt cache lives after a turn when neither its AI
@@ -178,6 +184,7 @@ fn tool(entries: &Agents, name: &str) -> Tool {
             .find_map(|agent| agent.prompt_cache_minutes)
             .map(|minutes| Duration::from_secs(minutes * 60)),
         review_result: builtin.map_or(&output::PLAIN, |provider| provider.review_result),
+        trust: builtin.and_then(|provider| provider.trust),
     }
 }
 

@@ -157,6 +157,7 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         workspace::turn_retry::run,
     );
     spawn_supervised(&mut background, &manager, "chats", chats::run);
+    spawn_supervised(&mut background, &manager, "reviews", reviews::run);
     spawn_supervised(
         &mut background,
         &manager,
@@ -243,6 +244,13 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     startup.step("learning forge hosts", hosts).await?;
     let audit = manager.audit_worktrees();
     startup.step("auditing worktrees", audit).await?;
+    let reviews = manager.recover_reviews();
+    if let Err(error) = startup
+        .step("removing interrupted reviews' checkouts", reviews)
+        .await
+    {
+        log!("{error:#}");
+    }
     let sessions = manager.cleanup_orphan_sessions();
     startup.step("cleaning up orphan sessions", sessions).await;
     Ok(manager)

@@ -118,6 +118,12 @@ impl Paths {
         self.state.join("chats").join(&chat.name)
     }
 
+    /// Where each running review keeps its detached checkout and its
+    /// reviewer's output, until the review ends.
+    pub fn reviews(&self) -> PathBuf {
+        self.state.join("reviews")
+    }
+
     /// Run data Shoal keeps for one workspace, such as detached session logs;
     /// deleted with the workspace record.
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {

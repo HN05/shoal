@@ -226,8 +226,14 @@ impl OutcomeKind {
 pub enum ReviewTarget {
     /// The workspace's committed HEAD against its diff base.
     Workspace,
-    /// A PR's head against its base, posted there when `post` is set.
-    Pr { url: String, post: bool },
+    /// A PR's head branch against its base branch, both as fetched from
+    /// origin, posted there when `post` is set.
+    Pr {
+        url: String,
+        head: String,
+        base: String,
+        post: bool,
+    },
 }
 
 /// One reviewer finding and how it was answered.
