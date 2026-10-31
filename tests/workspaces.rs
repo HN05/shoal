@@ -5535,6 +5535,12 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
         !workspaces.to_string().contains("unsupported"),
         "{workspaces}"
     );
+    // A plan refuses it before looking for an issue to plan, which here
+    // would fail for want of a plan label.
+    let output = launch(&["plan", "--repo", repo]);
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");
 }
 
 #[test]

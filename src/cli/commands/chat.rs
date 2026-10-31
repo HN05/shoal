@@ -128,6 +128,7 @@ pub(super) async fn begin(
         args,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
+    check_model(&settings, &agent, &model)?;
     let asks_name = topic.asks_name && requested.is_none();
     let name = initial_name(ctx, &topic, requested).await?;
     sync(ctx, &repo).await;
@@ -305,6 +306,13 @@ pub(super) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<
     };
     agents::ensure_available(agent.name(), settings)?;
     Ok(Some(agent))
+}
+
+/// Refuse `model` for `agent` before anything else is asked for, when its
+/// launch cannot pass the values on.
+pub(super) fn check_model(settings: &Effective, agent: &Agent, model: &ModelChoice) -> Result<()> {
+    let resolved = settings.model(agent.name(), model.clone());
+    agents::check_model(settings, agent.name(), &resolved)
 }
 
 fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
