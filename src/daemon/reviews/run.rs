@@ -166,11 +166,18 @@ impl Manager {
         let files = Files {
             directory: self.paths.reviews().join(id.to_string()),
         };
+        let checkout = self
+            .reviews
+            .hold_checkout(id, workspace.repository_id.as_str());
         let ended = self
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
             .await;
-        if let Err(error) = remove_run(&files).await {
-            log!("review {id}: {error:#}");
+        match remove_run(&files).await {
+            Ok(()) => drop(checkout),
+            Err(error) => {
+                log!("review {id}: {error:#}");
+                checkout.keep();
+            }
         }
         let (reviewer, ended) = ended?;
         self.record_end(id, &workspace, &reviewer, ended).await

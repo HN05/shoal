@@ -75,21 +75,6 @@ pub(crate) fn active(db: &Connection, workspace_id: &str) -> Result<Option<(i64,
         .optional()?)
 }
 
-/// Whether a review of the repository's workspaces is queued or running, or
-/// is one of `runs`, whose run has yet to end.
-pub(crate) fn holds_repository(db: &Connection, repository_id: &str, runs: &[i64]) -> Result<bool> {
-    Ok(db
-        .query_row(
-            "SELECT 1 FROM reviews JOIN workspaces ON workspaces.id=workspace_id
-                WHERE workspaces.repository_id=?1 AND (reviews.state IN ('queued','running')
-                    OR reviews.id IN (SELECT value FROM json_each(?2)))",
-            params![repository_id, serde_json::to_string(runs)?],
-            |_| Ok(()),
-        )
-        .optional()?
-        .is_some())
-}
-
 /// The queued or running reviews of the repository's workspaces.
 pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<i64>> {
     Ok(db

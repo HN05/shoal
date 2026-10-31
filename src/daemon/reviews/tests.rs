@@ -370,7 +370,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
 }
 
 #[tokio::test]
-async fn a_cancelled_review_holds_its_repository_until_its_run_ends() {
+async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
     let repository = fixture.workspace.repository_id.as_str().to_owned();
@@ -391,17 +391,17 @@ async fn a_cancelled_review_holds_its_repository_until_its_run_ends() {
         .unwrap()
         .id();
     assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
-    // Cancelled, while its run still removes the checkout.
+    // Its records go with its workspace while its run still removes the
+    // checkout.
+    let checkout = manager.reviews.hold_checkout(queued, &repository);
     manager
         .store
-        .run(move |db| store::cancel(db, queued, None, 2))
+        .run(move |db| Ok(db.execute("DELETE FROM reviews WHERE id=?1", [queued])?))
         .await
         .unwrap();
-    let run = Arc::new(watch::channel(true).0);
-    manager.reviews.cancels.lock().unwrap().insert(queued, run);
     let error = manager.ensure_no_reviews_in(&repository).await.unwrap_err();
     assert!(error.to_string().contains("queued or running"), "{error:#}");
-    manager.reviews.cancels.lock().unwrap().remove(&queued);
+    drop(checkout);
     manager.ensure_no_reviews_in(&repository).await.unwrap();
 }
 

@@ -29,6 +29,9 @@ pub(crate) struct Reviews {
     queued: tokio::sync::Notify,
     /// Stops each review that has started to run.
     cancels: std::sync::Mutex<HashMap<i64, std::sync::Arc<watch::Sender<bool>>>>,
+    /// The repository of each review whose checkout, a worktree of it, may
+    /// exist, which outlives the review's records when its workspace goes.
+    checkouts: std::sync::Mutex<HashMap<i64, String>>,
     /// Counts the runs that ended, for waits on one.
     ended: watch::Sender<u64>,
 }
@@ -38,8 +41,50 @@ impl Default for Reviews {
         Self {
             queued: Default::default(),
             cancels: Default::default(),
+            checkouts: Default::default(),
             ended: watch::channel(0).0,
         }
+    }
+}
+
+impl Reviews {
+    /// Record that review `id` may have a checkout of `repository` until the
+    /// returned value is dropped, once it is removed.
+    fn hold_checkout(&self, id: i64, repository: &str) -> CheckoutHold<'_> {
+        self.checkouts
+            .lock()
+            .unwrap()
+            .insert(id, repository.to_owned());
+        CheckoutHold { reviews: self, id }
+    }
+
+    /// Whether a review's checkout of `repository` may exist.
+    fn holds_checkout_of(&self, repository: &str) -> bool {
+        self.checkouts
+            .lock()
+            .unwrap()
+            .values()
+            .any(|held| held == repository)
+    }
+}
+
+/// A review's possible checkout, until it is removed.
+struct CheckoutHold<'a> {
+    reviews: &'a Reviews,
+    id: i64,
+}
+
+impl CheckoutHold<'_> {
+    /// Keep holding a checkout that could not be removed, until the daemon
+    /// restarts and removes what its runs left.
+    fn keep(self) {
+        std::mem::forget(self);
+    }
+}
+
+impl Drop for CheckoutHold<'_> {
+    fn drop(&mut self) {
+        self.reviews.checkouts.lock().unwrap().remove(&self.id);
     }
 }
 
@@ -229,24 +274,14 @@ impl Manager {
     /// Cancel the reviews of the repository's workspaces and wait until their
     /// runs have ended and removed their checkouts, which are worktrees of
     /// the repository its removal would otherwise refuse.
-    /// Refuse while a review of the repository is queued or running, or its
-    /// ended run still holds a checkout, a worktree of the repository.
+    /// Refuse while a review of the repository is queued or running, or a
+    /// review that ended, even with its workspace, still has a checkout, a
+    /// worktree of the repository.
     pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &str) -> Result<()> {
-        let runs: Vec<i64> = self
-            .reviews
-            .cancels
-            .lock()
-            .unwrap()
-            .keys()
-            .copied()
-            .collect();
         let id = repository_id.to_owned();
-        let held = self
-            .store
-            .run(move |db| store::holds_repository(db, &id, &runs))
-            .await?;
+        let active = self.store.run(move |db| store::active_in(db, &id)).await?;
         ensure!(
-            !held,
+            active.is_empty() && !self.reviews.holds_checkout_of(repository_id),
             "a review of the repository is queued or running; wait for it or cancel it"
         );
         Ok(())
