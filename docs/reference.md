@@ -809,8 +809,9 @@ Shoal tracks execution; the review tool owns sessions, exports, and forge access
 against [`shoal diff`](#diff)'s base. An agent reviews it once in the
 background, read-only, in a detached checkout of that commit outside the
 workspace, so uncommitted edits and later commits stay out; no session opens and
-no setup runs. Shoal adds no trust entry for the checkout, which is removed when
-the review ends. A queued review takes the
+no setup runs. The checkout's files are read-only whatever the reviewer's
+settings allow, and Shoal adds no trust entry for it; it is removed when the
+review ends. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
 runs. A review waits in the [agent queue](#agent-queue) for a slot, ahead of every

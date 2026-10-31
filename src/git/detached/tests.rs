@@ -22,10 +22,21 @@ async fn a_detached_checkout_holds_the_commit_and_leaves_no_worktree_behind() {
             .is_empty()
     );
     assert!(!checkout.join("uncommitted").exists());
-    std::fs::write(checkout.join("scratch"), "left by the reviewer").unwrap();
+    // Root writes whatever the permissions say.
+    // SAFETY: geteuid has no arguments or memory-safety preconditions.
+    if unsafe { libc::geteuid() } != 0 {
+        assert!(std::fs::write(checkout.join("scratch"), "left by the reviewer").is_err());
+        let tracked = std::fs::read_dir(&checkout)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .find(|path| path.is_file() && !path.ends_with(".git"))
+            .unwrap();
+        assert!(std::fs::write(&tracked, "changed").is_err());
+    }
     remove(&checkout).await.unwrap();
     assert!(!checkout.exists());
     let listed = git(&repo, &["worktree", "list", "--porcelain"]).await;
     assert!(!listed.contains("reviews/1"), "{listed}");
     remove(&checkout).await.unwrap();
 }
+
