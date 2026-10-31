@@ -509,8 +509,21 @@ fn launch_child(
     workspace: &crate::model::Workspace,
     test: &str,
 ) -> tokio::task::JoinHandle<Result<i32>> {
+    run_child(child_command(manager, workspace, test))
+}
+
+/// The agent helper `test` as a wrapper in `workspace`.
+fn child_command(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    test: &str,
+) -> tokio::process::Command {
     let mut command = crate::test_support::isolated_test(&manager.paths.home, test);
     command.env("SHOAL_TEST_WORKSPACE", &workspace.id);
+    command
+}
+
+fn run_child(mut command: tokio::process::Command) -> tokio::task::JoinHandle<Result<i32>> {
     tokio::spawn(async move {
         let status = command.status().await?;
         Ok(crate::execution::exit_code(status))
@@ -1399,7 +1412,14 @@ async fn record_group(manager: &Manager, workspace: &crate::model::Workspace, gr
 #[tokio::test]
 async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     let (_root, manager, workspace, serving) = fixture().await;
-    let launched = launch(&manager, &workspace);
+    let mut command = child_command(
+        &manager,
+        &workspace,
+        "daemon::overload_tests::tracked_agent_child",
+    );
+    let terminal = manager.paths.home.join("terminal");
+    command.stderr(fs::File::create(&terminal).unwrap());
+    let launched = run_child(command);
     wait_started(&manager, &workspace).await;
     // An incomplete launch identity stands in for survivors Shoal cannot stop.
     let group = manager
@@ -1443,6 +1463,14 @@ async fn unproven_stop_keeps_the_agent_waiting_until_proof_then_restores_it() {
     assert_eq!(
         fs::read_to_string(workspace.path.join("restored")).unwrap(),
         "restored"
+    );
+    // The agent's terminal says what the restore waits for, as the user's notification does.
+    let terminal = fs::read_to_string(&terminal).unwrap();
+    assert!(
+        terminal.contains(
+            "the restore also waits until the agent's remaining processes exit: its launch identity is incomplete"
+        ),
+        "{terminal}"
     );
     serving.abort();
 }

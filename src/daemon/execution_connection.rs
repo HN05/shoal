@@ -59,6 +59,8 @@ struct Connected {
     /// The daemon resumed the stopped agent, whose restored child has not
     /// started.
     resuming: bool,
+    /// The wrapper reads [`Control::RestoreWaits`].
+    hears_restore_waits: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
@@ -165,6 +167,8 @@ pub(super) async fn execute(
         started: false,
         awaiting_restore: false,
         resuming: false,
+        // Registration requires this daemon's protocol.
+        hears_restore_waits: true,
         stopped: false,
         stop,
     };
@@ -173,10 +177,12 @@ pub(super) async fn execute(
 }
 
 /// Restore a wrapper's connection after a daemon restart, then serve it like
-/// any other. A refusal tells the wrapper to stop its command.
+/// any other, sending it only the controls its protocol `version` reads. A refusal
+/// tells the wrapper to stop its command.
 pub(super) async fn reattach(
     mut stream: UnixStream,
     request_id: u64,
+    version: u32,
     manager: Arc<Manager>,
     request: Reattach,
     operation: OwnedRwLockReadGuard<()>,
@@ -211,6 +217,7 @@ pub(super) async fn reattach(
         started: true,
         awaiting_restore: request.awaiting_restore.is_some(),
         resuming: false,
+        hears_restore_waits: version >= protocol::RESTORE_WAITS,
         stopped: false,
         stop,
     };
@@ -324,6 +331,7 @@ async fn relay(
         started,
         awaiting_restore,
         resuming,
+        hears_restore_waits,
         stopped,
         stop,
         ..
@@ -459,7 +467,7 @@ async fn relay(
                     &workspace.id,
                     incoming,
                     stop,
-                    recovering,
+                    hears_restore_waits.then_some(&mut *writer),
                     unattachable,
                 )
                 .await?

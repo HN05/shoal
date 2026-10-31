@@ -299,8 +299,8 @@ least `disk.cleanup_free_gib` available on every monitored filesystem. Agents re
 a fresh healthy interval, which a reload changing `[machine.overload]` restarts. Missing
 readings, manual stop/removal, an exited wrapper, changed workspace ownership
 or a done assignment prevent recovery, except from an [idle stop](#idle-agents). Surviving processes Shoal cannot stop, or cannot prove stopped,
-delay it: a `recovery_blocked` notification names them, and the wrapper keeps
-waiting until they exit. Reloading with recovery disabled
+delay it: a `recovery_blocked` notification and the agent's terminal name
+them, and the wrapper keeps waiting until they exit. Reloading with recovery disabled
 finishes waiting agents at once, keeping their records for `shoal resume`.
 
 `shoal stop [workspace...]` stops tracked agents and commands through their wrappers,

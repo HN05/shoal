@@ -1073,6 +1073,9 @@ pub(super) async fn wait(link: &mut super::link::Link) -> Result<Waited> {
                 Ok(Received::Control(Control::Stop { reason, removed })) => {
                     return Ok(Waited::Cancelled { reason, removed });
                 }
+                Ok(Received::Control(Control::RestoreWaits { issue })) => {
+                    eprintln!("shoal: the restore also waits until the agent's remaining processes exit: {issue}");
+                }
                 Ok(Received::Control(_)) => anyhow::bail!("unexpected recovery control"),
                 Err(error) if error.is::<Refused>() => {
                     return Ok(Waited::cancelled(error.to_string()));

@@ -349,6 +349,7 @@ async fn serve_request(
             return execution_connection::reattach(
                 stream,
                 request.id,
+                request.protocol,
                 server.manager,
                 reattach,
                 operation_guard,

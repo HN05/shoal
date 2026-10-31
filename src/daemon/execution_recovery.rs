@@ -4,14 +4,17 @@
 //! ownership checks never authorize a replacement process.
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
-use tokio::sync::{OwnedRwLockReadGuard, mpsc, watch};
+use tokio::{
+    net::unix::OwnedWriteHalf,
+    sync::{OwnedRwLockReadGuard, mpsc, watch},
+};
 
 use super::workspace::{Grant, Manager, Pause, Protection, StopRequest};
 use crate::daemon::log;
 use crate::{
     execution::recovery,
     model::PortReservation,
-    protocol::{Control, ExecutionEvent, timing},
+    protocol::{self, Control, ExecutionEvent, timing},
 };
 
 pub(super) enum Action {
@@ -56,19 +59,19 @@ impl Cancel {
 }
 
 /// `hold` is the operation guard that holds back a daemon update while the
-/// wrapper waits, which a wait for an update lets go of.
+/// wrapper waits, which a wait for an update lets go of. `notices` reaches a
+/// wrapper whose release reads what holds its restore back.
 pub(super) async fn pause(
     manager: &Manager,
     execution_id: &str,
     workspace_id: &str,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
-    recover: bool,
+    notices: Option<&mut OwnedWriteHalf>,
     hold: &mut Option<OwnedRwLockReadGuard<()>>,
 ) -> Result<Action> {
-    ensure!(recover, "execution is not eligible for overload recovery");
     if manager.restart_requested(execution_id).await {
-        return restart(manager, execution_id, workspace_id, incoming, stop).await;
+        return restart(manager, execution_id, workspace_id, incoming, stop, notices).await;
     }
     let Some(protection) = manager.agent_overload(execution_id).await else {
         return Ok(Action::Stop(requested_cancel(manager, execution_id).await));
@@ -102,7 +105,7 @@ pub(super) async fn pause(
             return Ok(Action::Stop(Cancel::because("automatic recovery was disabled")));
         }
         ready = async {
-            await_stopped(manager, execution_id, workspace_id, stopped).await?;
+            await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
             // Every process the agent left has stopped writing.
             manager.checkpoint_after_agent(workspace_id).await;
             admit_restore(manager, execution_id, workspace_id, moved, hold).await
@@ -128,8 +131,10 @@ async fn restart(
     workspace_id: &str,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
+    notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<Action> {
-    let action = restart_once_stopped(manager, execution_id, workspace_id, incoming, stop).await;
+    let action =
+        restart_once_stopped(manager, execution_id, workspace_id, incoming, stop, notices).await;
     if let Ok(Action::Stop(cancel)) = &action {
         let reason = cancel
             .reason
@@ -146,6 +151,7 @@ async fn restart_once_stopped(
     workspace_id: &str,
     incoming: &mut mpsc::Receiver<Result<ExecutionEvent>>,
     stop: &mut watch::Receiver<bool>,
+    notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<Action> {
     let stopped = match manager
         .pause_agent_execution(execution_id, workspace_id, timing::PROCESS_PROOF_TIMEOUT)
@@ -158,7 +164,7 @@ async fn restart_once_stopped(
         biased;
         action = interrupted(manager, execution_id, incoming, stop) => return action,
         ready = async {
-            await_stopped(manager, execution_id, workspace_id, stopped).await?;
+            await_stopped(manager, execution_id, workspace_id, stopped, notices).await?;
             manager.checkpoint_after_agent(workspace_id).await;
             anyhow::Ok(())
         } => ready,
@@ -241,18 +247,20 @@ fn done_cancels_restore() -> Action {
 const SURVIVOR_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Wait until none of the stopped agent's processes survive, since a restore
-/// must not start beside them, telling the user once what it waits for and a
-/// restart's requests what it waits for now.
+/// must not start beside them, telling the user and the wrapper's terminal
+/// once what it waits for and a restart's requests what it waits for now.
 async fn await_stopped(
     manager: &Manager,
     execution_id: &str,
     workspace_id: &str,
     stopped: Pause,
+    notices: Option<&mut OwnedWriteHalf>,
 ) -> Result<()> {
     let Pause::Unproven(issue) = stopped else {
         return Ok(());
     };
     manager.notify_restore_waits(execution_id, &issue).await;
+    tell_restore_waits(notices, issue).await;
     loop {
         tokio::time::sleep(SURVIVOR_POLL_INTERVAL).await;
         match manager
@@ -262,6 +270,15 @@ async fn await_stopped(
             Pause::Paused => return Ok(()),
             Pause::Unproven(issue) => manager.restart_waits(execution_id, &issue).await,
         }
+    }
+}
+
+/// Tell a waiting wrapper whose release reads it what `issue` holds its
+/// restore back, for its terminal.
+async fn tell_restore_waits(notices: Option<&mut OwnedWriteHalf>, issue: String) {
+    if let Some(wrapper) = notices {
+        // A lost connection ends the wait through the wrapper's events.
+        let _ = protocol::write(wrapper, &Control::RestoreWaits { issue }).await;
     }
 }
 

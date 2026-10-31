@@ -72,7 +72,9 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 173;
+pub const VERSION: u32 = 174;
+/// The first protocol whose wrappers read [`Control::RestoreWaits`].
+pub const RESTORE_WAITS: u32 = 174;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -894,6 +896,12 @@ pub enum Control {
     /// The plan of an execution whose wrapper registered again.
     Registered {
         plan: Box<crate::model::ExecutionPlan>,
+    },
+    /// The waiting restore also waits until the stopped agent's remaining
+    /// processes exit, which `issue` names. Only wrappers of
+    /// [`RESTORE_WAITS`] and later read it.
+    RestoreWaits {
+        issue: String,
     },
 }
 

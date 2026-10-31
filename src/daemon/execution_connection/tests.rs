@@ -98,6 +98,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
     let reattached = tokio::spawn(reattach(
         server,
         7,
+        crate::protocol::VERSION,
         manager.clone(),
         Reattach {
             model: Default::default(),
