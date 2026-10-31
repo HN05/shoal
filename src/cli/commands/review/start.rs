@@ -315,6 +315,8 @@ async fn queue(
             None => return Ok(0),
         },
     };
+    // Refused here, before the daemon queues a review it could not run.
+    crate::cli::agents::ensure_available(agent.name(), settings)?;
     let review: Box<Review> = client::request(
         &ctx.paths,
         ReviewMethod::RunReview {
