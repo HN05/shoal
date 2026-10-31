@@ -6578,6 +6578,22 @@ fn a_chat_moves_with_its_session_and_continues_it() {
         fs::create_dir_all(&project).unwrap();
         fs::write(project.join("chat-session.jsonl"), "{\"turn\":1}\n").unwrap();
 
+        // Run inside the chat without a target, the export never takes the
+        // chat it would end under itself.
+        let inside = fixture
+            .command()
+            .env("SHOAL_CHAT", chats[0]["id"].as_str().unwrap())
+            .args(["move", "export", "-o", file, "--yes"])
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!inside.status.success(), "{inside:?}");
+        assert!(
+            !String::from_utf8_lossy(&inside.stderr).contains("runs in chat"),
+            "{inside:?}"
+        );
+        assert_eq!(fixture.ok(&["work", "--chats"])[0]["name"], "talk");
+
         // Ending a chat the user talks with needs a confirmation.
         let unconfirmed = fixture.run(&["move", "export", "talk", "-o", file]);
         assert!(!unconfirmed.status.success(), "{unconfirmed:?}");

@@ -50,7 +50,8 @@ pub(super) async fn export(
     }
     let output = Output::reserve(&file)?;
     let named = names.into_iter().next();
-    let selector = ui::select_space(ctx, named, Fallback::CurrentDirectory).await?;
+    // The export ends its space, so it never takes the chat it runs in.
+    let selector = ui::select_other_space(ctx, named, Fallback::CurrentDirectory).await?;
     let space = present_space(ctx, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;

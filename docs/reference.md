@@ -2544,8 +2544,8 @@ shoal move import moving                       # continue every space exported t
 
 `shoal move export [space] -o <file>` ends a workspace or chat here and writes
 it to a new file, or to standard output without `-o` or for `-`, refusing a
-terminal. Its argument names a workspace or chat, else the chat it runs in, else
-the current workspace, else a picker offers both. The daemon writes the file, so
+terminal. Its argument names a workspace or chat, else the current workspace,
+else a picker offers both. The daemon writes the file, so
 it is complete even when the terminal closes with the space. It refuses before
 ending anything when the file exists, when the daemon cannot create a file in its
 directory within 30 seconds, or when `-` would stream from a place that closes

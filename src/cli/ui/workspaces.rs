@@ -96,14 +96,11 @@ pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<
 }
 
 /// The spaces, workspaces or chats, a command that acts on several takes:
-/// those named, each once and in order, otherwise the chat this process
-/// runs in, otherwise the current workspace, otherwise those picked among
-/// the workspaces and running chats. A name no workspace has stays as
-/// given, for a chat or the daemon's refusal.
+/// those named, each once and in order, otherwise the current workspace,
+/// otherwise those picked among the workspaces and running chats. It ends
+/// what it acts on, so it never defaults to the chat it runs in. A name no
+/// workspace has stays as given, for a chat or the daemon's refusal.
 pub async fn select_spaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
-    if let Some(chat) = current_chat(&names.first().cloned()) {
-        return Ok(vec![chat]);
-    }
     let mut selected = named_workspaces(ctx, names).await?;
     if selected.is_empty() {
         selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
@@ -370,6 +367,17 @@ pub async fn select_space(
     if let Some(chat) = current_chat(&explicit) {
         return Ok(chat);
     }
+    select_other_space(ctx, explicit, fallback).await
+}
+
+/// [`select_space`] for a command that never acts on the chat it runs in,
+/// such as one that ends the space it acts on: without one `explicit`, the
+/// workspace `fallback` chooses or a picker decides.
+pub async fn select_other_space(
+    ctx: &Context,
+    explicit: Option<String>,
+    fallback: Fallback,
+) -> Result<String> {
     let space = match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Workspace(id) => id,
         Resolution::Picker(workspaces) => {
