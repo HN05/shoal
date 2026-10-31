@@ -251,8 +251,31 @@ impl Adopted {
             .unwrap();
         assert!(status.success());
         let pid: u32 = fs::read_to_string(pid).unwrap().trim().parse().unwrap();
-        Self {
+        let adopted = Self {
             identity: identity::capture(pid).unwrap().unwrap(),
+        };
+        adopted.await_exec(&script).await;
+        adopted
+    }
+
+    /// Wait until the process runs its command rather than the shell that
+    /// forked it, whose command line is `script`.
+    async fn await_exec(&self, script: &str) {
+        // A generous hang guard; the fork execs the command at once.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            let described = crate::process::described::describe(&[self.identity.pid])
+                .await
+                .unwrap();
+            let command = &described[&self.identity.pid].command;
+            if !command.ends_with(script) {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "{command} never ran its command"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     }
 }
