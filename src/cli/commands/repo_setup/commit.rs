@@ -49,7 +49,7 @@ pub(super) async fn start(
         Some(prompt),
         args,
         agents::LaunchOptions {
-            model,
+            model: agents::ModelRequest::Override(model),
             ..Default::default()
         },
     )

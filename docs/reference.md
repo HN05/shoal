@@ -1078,7 +1078,9 @@ model_reasoning_effort="<effort>"`. A launch with a value its tool has no
 template for is refused with the template to configure, and `--model` or
 `--effort` without an agent is refused. A restored, resumed or moved agent runs
 with the values it started with, which its execution in `shoal status --json`
-and its recovery records show. A desktop app takes
+and its recovery records show; a `resume_command` gets them before its `--`.
+One whose tool no longer has the templates for them is not restored until it
+does. A desktop app takes
 neither: `--app` refuses them, and a launch `default_mode = "app"` hands to an
 app warns that it opens with the app's own.
 `env` sets and `env_remove` removes variables for the tool's tracked agents and
