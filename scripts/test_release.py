@@ -1,10 +1,11 @@
 import unittest
 import copy
+import json
 from io import BytesIO
 from pathlib import Path
 import subprocess
 import tempfile
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import ANY, MagicMock, call, patch
 from urllib.error import HTTPError
 import isolated_git
 import release
@@ -235,9 +236,9 @@ class ReleaseIntegrationTests(unittest.TestCase):
             forge_calls = []
 
             def run(*args, **kwargs):
-                if args[0] == "fj":
-                    forge_calls.append(args)
-                    return ""
+                if args[0] == "shoal":
+                    forge_calls.append((args[1:4], json.loads(kwargs["input"])))
+                    return "{}"
                 return actual_run(*args, **kwargs)
 
             def api(path, **_kwargs):
@@ -251,7 +252,9 @@ class ReleaseIntegrationTests(unittest.TestCase):
                     patch.object(release, "api", side_effect=api):
                 release.prepare(None, False)
                 self.assertEqual(command("git", "branch", "--show-current", cwd=checkout), "release/v0.1.1")
-                self.assertTrue(any(args[1:3] == ("pr", "create") for args in forge_calls))
+                self.assertIn((("forge", "api", "repos/HN05/shoal/pulls"),
+                               {"title": "Release v0.1.1", "base": "main",
+                                "head": "release/v0.1.1", "body": ANY}), forge_calls)
                 self.assertEqual(validate.call_count, 1)
                 with self.assertRaises(ValueError):
                     release.publish("0.1.1", False)
@@ -260,7 +263,8 @@ class ReleaseIntegrationTests(unittest.TestCase):
                 command("git", "merge", "--ff-only", "release/v0.1.1", cwd=checkout)
                 command("git", "push", "origin", "main", cwd=checkout)
                 release.publish("0.1.1", False)
-                self.assertTrue(any(args[1:3] == ("release", "create") for args in forge_calls))
+                self.assertEqual(forge_calls[-1][0], ("forge", "api", "repos/HN05/shoal/releases"))
+                self.assertEqual(forge_calls[-1][1]["tag_name"], "v0.1.1")
                 self.assertEqual(command("git", "rev-parse", "v0.1.1^{commit}", cwd=remote),
                                  command("git", "rev-parse", "main", cwd=remote))
                 self.assertEqual(validate.call_count, 2)

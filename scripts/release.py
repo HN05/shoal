@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Prepare a release PR, then publish its merged version using the fj login."""
+"""Prepare a release PR, then publish its merged version using your Shoal login."""
 import argparse
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
-import tempfile
 import time
 import tomllib
 from urllib.error import HTTPError
@@ -18,8 +17,8 @@ from release_metadata import (commit_id, http_error_message, pull_branch, tag_ve
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def run(*args, capture=False):
-    return subprocess.run(args, cwd=ROOT, check=True, text=True,
+def run(*args, capture=False, input=None):
+    return subprocess.run(args, cwd=ROOT, check=True, text=True, input=input,
                           stdout=subprocess.PIPE if capture else None).stdout
 
 
@@ -79,6 +78,12 @@ def api(path, data=None, authenticated=True):
         return json.loads(body) if body else None
 
 
+def shoal_api(path, data):
+    """Send *data* to the forge API *path* with the user's login through Shoal."""
+    return json.loads(run("shoal", "forge", "api", path.lstrip("/"), "--input", "-", "--json",
+                          input=json.dumps(data), capture=True))
+
+
 def prepare(requested, dry_run, automated=False):
     if git("status", "--porcelain"):
         raise ValueError("commit or stash changes before preparing a release")
@@ -109,14 +114,14 @@ def prepare(requested, dry_run, automated=False):
             "body": f"Prepare Shoal {version}. Validated formatting, Clippy, tests, and release build. "
                     "The Release workflow will merge this version change and publish it automatically.",
         })
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".md") as body:
-        body.write(f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
-                   "Validated formatting, Clippy, tests, and the release build.\n\n"
-                   f"After merging, run `python3 scripts/release.py publish {version}`. "
-                   "Alternatively use Actions → release for the fully automated process.\n")
-        body.flush()
-        run("fj", "pr", "create", f"Release v{version}", "--base", "main",
-            "--head", branch, "--body-file", body.name)
+    repository = os.environ.get("RELEASE_REPOSITORY", "HN05/shoal")
+    shoal_api(f"/repos/{repository}/pulls", {
+        "title": f"Release v{version}", "base": "main", "head": branch,
+        "body": f"Prepare Shoal {version}. Both Cargo versions are updated.\n\n"
+                "Validated formatting, Clippy, tests, and the release build.\n\n"
+                f"After merging, run `python3 scripts/release.py publish {version}`. "
+                "Alternatively use Actions → release for the fully automated process.\n",
+    })
 
 
 def verify_release_commit(sha, version):
@@ -170,14 +175,11 @@ def create_release(version):
         tag, git,
         lambda path: api(f"/repos/{repository}{path}", authenticated=False), url, repository)
     # CI calls repository endpoints directly; no user-profile/login API is needed.
-    if os.environ.get("RELEASE_AUTOMATION_TOKEN"):
-        api(f"/repos/{repository}/releases", {
-            "name": f"Shoal {version}", "tag_name": f"v{version}",
-            "body": body, "draft": False, "prerelease": False,
-        })
-    else:
-        run("fj", "release", "create", f"Shoal {version}", "--tag", f"v{version}",
-            "--body", body)
+    send = api if os.environ.get("RELEASE_AUTOMATION_TOKEN") else shoal_api
+    send(f"/repos/{repository}/releases", {
+        "name": f"Shoal {version}", "tag_name": f"v{version}",
+        "body": body, "draft": False, "prerelease": False,
+    })
 
 
 def merged_release(pr, repository, number):
