@@ -7,14 +7,17 @@ use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
 
 use super::{
-    history, now,
+    CheckoutHold, history, now,
     reviewer::{self, Ended, Files, Reviewer},
     store,
 };
 use crate::{
     agent::ModelChoice,
     config::{Effective, templates},
-    daemon::{log, oneshot, workspace::Manager},
+    daemon::{
+        log, oneshot,
+        workspace::{Manager, agent_queue::OneShotSlot},
+    },
     model::Workspace,
     reviews::{FailureReason, Review, ReviewState, ReviewTarget},
 };
@@ -127,13 +130,50 @@ impl Manager {
         cancel: &Arc<watch::Sender<bool>>,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<Pass> {
-        let Some(review) = self.store.run(move |db| store::load(db, id)).await? else {
+        let Some(review) = self.queued_review(id).await? else {
             return Ok(Pass::Ended);
         };
-        if review.state != ReviewState::Queued {
+        let workspace = self.workspace(&review.workspace_id).await?;
+        let Some(slot) = self.await_slot(id, &workspace, cancel, cancelled).await? else {
+            return Ok(Pass::Ended);
+        };
+        // Its configuration and commits are read only from the worktree
+        // that is this workspace's.
+        self.verify_worktree(&workspace).await?;
+        let settings = self.workspace_settings_with_templates(&workspace).await?;
+        let commits = self.review_commits(&workspace, &review.target).await?;
+        if !self.start_review(id, &commits).await? {
             return Ok(Pass::Ended);
         }
-        let workspace = self.workspace(&review.workspace_id).await?;
+        let files = self.run_files(id);
+        let checkout = self
+            .reviews
+            .hold_checkout(id, workspace.repository_id.as_str());
+        let ended = self
+            .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
+            .await;
+        let left_running = matches!(ended, Ok((_, Ended::LeftRunning)));
+        release_run(id, &files, checkout, slot, left_running).await;
+        let (reviewer, ended) = ended?;
+        self.record_end(id, &workspace, &reviewer, ended).await
+    }
+
+    /// Review `id` while it is queued.
+    async fn queued_review(&self, id: i64) -> Result<Option<Review>> {
+        let review = self.store.run(move |db| store::load(db, id)).await?;
+        Ok(review.filter(|review| review.state == ReviewState::Queued))
+    }
+
+    /// Wait for review `id`'s agent slot in its workspace's repository, which
+    /// protection takes back by sending `cancel`; none once `cancelled`, as a
+    /// cancel or the workspace's removal recorded the review's end.
+    async fn await_slot(
+        &self,
+        id: i64,
+        workspace: &Workspace,
+        cancel: &Arc<watch::Sender<bool>>,
+        cancelled: &mut watch::Receiver<bool>,
+    ) -> Result<Option<OneShotSlot<'_>>> {
         let after_stop = self
             .store
             .run(move |db| store::waits_for_recovery(db, id))
@@ -147,49 +187,25 @@ impl Manager {
             },
         );
         tokio::select! {
-            () = slot.admitted() => {}
-            // A cancel or the workspace's removal recorded the review's end.
-            _ = cancelled.wait_for(|cancelled| *cancelled) => return Ok(Pass::Ended),
+            () = slot.admitted() => Ok(Some(slot)),
+            _ = cancelled.wait_for(|cancelled| *cancelled) => Ok(None),
         }
-        // Its configuration and commits are read only from the worktree
-        // that is this workspace's.
-        self.verify_worktree(&workspace).await?;
-        let settings = self.workspace_settings_with_templates(&workspace).await?;
-        let commits = self.review_commits(&workspace, &review.target).await?;
+    }
+
+    /// Record that review `id` started on `commits`; false when it is no
+    /// longer queued.
+    async fn start_review(&self, id: i64, commits: &Commits) -> Result<bool> {
         let (head, base, now) = (commits.head.clone(), commits.base.clone(), now());
-        if !self
-            .store
+        self.store
             .run(move |db| store::start(db, id, &head, &base, now))
-            .await?
-        {
-            return Ok(Pass::Ended);
-        }
-        let files = Files {
+            .await
+    }
+
+    /// The files of review `id`'s run.
+    fn run_files(&self, id: i64) -> Files {
+        Files {
             directory: self.paths.reviews().join(id.to_string()),
-        };
-        let checkout = self
-            .reviews
-            .hold_checkout(id, workspace.repository_id.as_str());
-        let ended = self
-            .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
-            .await;
-        if let Ok((_, Ended::LeftRunning)) = ended {
-            // Its run directory, checkout and slot stay until a restarted
-            // daemon stops what the reviewer left.
-            log!("review {id}: its reviewer's processes could not be stopped");
-            checkout.keep();
-            slot.keep();
-        } else {
-            match remove_run(&files).await {
-                Ok(()) => drop(checkout),
-                Err(error) => {
-                    log!("review {id}: {error:#}");
-                    checkout.keep();
-                }
-            }
         }
-        let (reviewer, ended) = ended?;
-        self.record_end(id, &workspace, &reviewer, ended).await
     }
 
     /// Check the reviewed commit out and run the reviewers there; returns
@@ -438,9 +454,7 @@ impl Manager {
     /// may still use until the daemon restarts: its tracking, its checkout
     /// of the repository and an agent slot there.
     async fn hold_unreconciled_run(&self, id: i64) {
-        let files = Files {
-            directory: self.paths.reviews().join(id.to_string()),
-        };
+        let files = self.run_files(id);
         self.oneshot_runs.track(&files.directory);
         // The run names it, as removing the workspace deletes the review.
         match std::fs::read_to_string(files.repository()) {
@@ -473,6 +487,28 @@ impl Manager {
     async fn remove_interrupted_run(&self, files: &Files) -> Result<()> {
         self.oneshot_runs.stop_leftovers(&files.directory).await?;
         remove_run(files).await
+    }
+}
+
+/// Remove review `id`'s run and give back its checkout and slot. A run whose
+/// reviewer `left_running` processes keeps all three, as does a run that
+/// could not be removed its checkout, until a restarted daemon removes them.
+async fn release_run(
+    id: i64,
+    files: &Files,
+    checkout: CheckoutHold<'_>,
+    slot: OneShotSlot<'_>,
+    left_running: bool,
+) {
+    if left_running {
+        log!("review {id}: its reviewer's processes could not be stopped");
+        checkout.keep();
+        slot.keep();
+        return;
+    }
+    if let Err(error) = remove_run(files).await {
+        log!("review {id}: {error:#}");
+        checkout.keep();
     }
 }
 

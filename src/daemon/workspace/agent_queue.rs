@@ -1295,7 +1295,7 @@ mod state;
 mod stopped;
 mod wake;
 
-pub(crate) use state::{AgentQueue, OneShotStop};
+pub(crate) use state::{AgentQueue, OneShotSlot, OneShotStop};
 pub(crate) use wake::Grant;
 
 #[cfg(test)]

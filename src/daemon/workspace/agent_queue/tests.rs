@@ -1285,6 +1285,16 @@ async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
             .await
     );
     assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
+    // Neither the stopped run nor a held one is stopped again, so the next
+    // stop falls to the agents, of which there are none.
+    manager.agent_queue.hold_oneshot(repo.id.as_str());
+    assert!(
+        !manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    assert_eq!(manager.agent_queue.stop_oneshots(OneShotStop::All), 0);
+    assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
     drop(run);
 
     let mut again = manager

@@ -31,7 +31,7 @@ pub(crate) struct Reviews {
     cancels: std::sync::Mutex<HashMap<i64, std::sync::Arc<watch::Sender<bool>>>>,
     /// The repository of each review whose checkout, a worktree of it, may
     /// exist, which outlives the review's records when its workspace goes.
-    checkouts: std::sync::Mutex<HashMap<i64, String>>,
+    checkouts: std::sync::Mutex<HashMap<i64, HeldCheckout>>,
     /// Counts the runs that ended, for waits on one.
     ended: watch::Sender<u64>,
 }
@@ -51,21 +51,33 @@ impl Reviews {
     /// Record that review `id` may have a checkout of `repository` until the
     /// returned value is dropped, once it is removed.
     fn hold_checkout(&self, id: i64, repository: &str) -> CheckoutHold<'_> {
-        self.checkouts
-            .lock()
-            .unwrap()
-            .insert(id, repository.to_owned());
+        self.checkouts.lock().unwrap().insert(
+            id,
+            HeldCheckout {
+                repository: repository.to_owned(),
+                kept: false,
+            },
+        );
         CheckoutHold { reviews: self, id }
     }
 
-    /// Whether a review's checkout of `repository` may exist.
-    fn holds_checkout_of(&self, repository: &str) -> bool {
+    /// Whether a review's checkout of `repository` may exist that its run
+    /// still removes, or, when `kept`, that only a restarted daemon removes.
+    fn holds_checkout_of(&self, repository: &str, kept: bool) -> bool {
         self.checkouts
             .lock()
             .unwrap()
             .values()
-            .any(|held| held == repository)
+            .any(|held| held.repository == repository && held.kept == kept)
     }
+}
+
+/// A review's checkout that may exist.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HeldCheckout {
+    repository: String,
+    /// Whether its run ended without removing it.
+    kept: bool,
 }
 
 /// A review's possible checkout, until it is removed.
@@ -78,6 +90,9 @@ impl CheckoutHold<'_> {
     /// Keep holding a checkout that could not be removed, until the daemon
     /// restarts and removes what its runs left.
     fn keep(self) {
+        if let Some(held) = self.reviews.checkouts.lock().unwrap().get_mut(&self.id) {
+            held.kept = true;
+        }
         std::mem::forget(self);
     }
 }
@@ -271,9 +286,6 @@ impl Manager {
         }
     }
 
-    /// Cancel the reviews of the repository's workspaces and wait until their
-    /// runs have ended and removed their checkouts, which are worktrees of
-    /// the repository its removal would otherwise refuse.
     /// Refuse while a review of the repository is queued or running, or a
     /// review that ended, even with its workspace, still has a checkout, a
     /// worktree of the repository.
@@ -281,12 +293,20 @@ impl Manager {
         let id = repository_id.to_owned();
         let active = self.store.run(move |db| store::active_in(db, &id)).await?;
         ensure!(
-            active.is_empty() && !self.reviews.holds_checkout_of(repository_id),
+            active.is_empty() && !self.reviews.holds_checkout_of(repository_id, false),
             "a review of the repository is queued or running; wait for it or cancel it"
+        );
+        ensure!(
+            !self.reviews.holds_checkout_of(repository_id, true),
+            "an ended review left a checkout of the repository that could not be removed; \
+             restart the daemon with `shoal daemon restart` to remove it"
         );
         Ok(())
     }
 
+    /// Cancel the reviews of the repository's workspaces and wait until their
+    /// runs have ended and removed their checkouts, which are worktrees of
+    /// the repository its removal would otherwise refuse.
     pub(crate) async fn stop_repository_reviews(&self, repository_id: &str) {
         let id = repository_id.to_owned();
         let active = match self.store.run(move |db| store::active_in(db, &id)).await {

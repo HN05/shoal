@@ -403,6 +403,13 @@ async fn a_review_checkout_holds_its_repository_until_it_is_removed() {
     assert!(error.to_string().contains("queued or running"), "{error:#}");
     drop(checkout);
     manager.ensure_no_reviews_in(&repository).await.unwrap();
+    // A checkout its run could not remove waits for a restarted daemon.
+    manager.reviews.hold_checkout(queued, &repository).keep();
+    let error = manager.ensure_no_reviews_in(&repository).await.unwrap_err();
+    assert!(
+        error.to_string().contains("shoal daemon restart"),
+        "{error:#}"
+    );
 }
 
 #[tokio::test]
@@ -957,7 +964,13 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
     assert!(runs.iter().all(|run| run.join("checkout").exists()));
     // Until a restart, the repository stays held and the slots used.
     let held = manager.reviews.checkouts.lock().unwrap().clone();
-    let both = [stuck, stuck + 1].map(|id| (id, repository.clone()));
+    let both = [stuck, stuck + 1].map(|id| {
+        let held = HeldCheckout {
+            repository: repository.clone(),
+            kept: true,
+        };
+        (id, held)
+    });
     assert_eq!(held, std::collections::HashMap::from(both));
     let slots = manager.agent_queue.admitted_oneshots();
     assert_eq!(slots.len(), 2);

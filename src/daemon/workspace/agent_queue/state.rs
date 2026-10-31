@@ -43,8 +43,9 @@ struct OneShot {
     after_stop: bool,
     /// When admission gave it a slot, which it holds until it ends.
     admitted: watch::Sender<Option<Instant>>,
-    /// Stops the run for protection.
-    stop: Box<dyn Fn() + Send + Sync>,
+    /// Stops the run for protection, until it is used or the run cannot be
+    /// stopped.
+    stop: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
 
 /// Which admitted one-shot runs protection stops.
@@ -145,7 +146,7 @@ impl AgentQueue {
         &self,
         repository: &str,
         after_stop: bool,
-        stop: impl Fn() + Send + Sync + 'static,
+        stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotSlot<'_> {
         let (admitted, waiting) = watch::channel(None);
         let mut oneshots = self.oneshots.lock().unwrap();
@@ -157,7 +158,7 @@ impl AgentQueue {
                 repository: repository.to_owned(),
                 after_stop,
                 admitted,
-                stop: Box::new(stop),
+                stop: Some(Box::new(stop)),
             },
         );
         drop(oneshots);
@@ -195,22 +196,25 @@ impl AgentQueue {
             .collect()
     }
 
-    /// Stop the admitted one-shot runs `which` picks, returning how many.
+    /// Stop the admitted one-shot runs `which` picks among those not yet
+    /// stopped and not held, returning how many.
     pub(crate) fn stop_oneshots(&self, which: OneShotStop) -> usize {
-        let oneshots = self.oneshots.lock().unwrap();
-        let mut admitted: Vec<&OneShot> = oneshots
+        let mut oneshots = self.oneshots.lock().unwrap();
+        let mut stoppable: Vec<&mut OneShot> = oneshots
             .runs
-            .values()
-            .filter(|run| run.admitted.borrow().is_some())
+            .values_mut()
+            .filter(|run| run.admitted.borrow().is_some() && run.stop.is_some())
             .collect();
         if let OneShotStop::Newest = which {
-            admitted.sort_by_key(|run| *run.admitted.borrow());
-            admitted.drain(..admitted.len().saturating_sub(1));
+            stoppable.sort_by_key(|run| *run.admitted.borrow());
+            stoppable.drain(..stoppable.len().saturating_sub(1));
         }
-        for run in &admitted {
-            (run.stop)();
+        for run in &mut stoppable {
+            if let Some(stop) = run.stop.take() {
+                stop();
+            }
         }
-        admitted.len()
+        stoppable.len()
     }
 
     /// The repository of each one-shot run holding a slot, with how long it
@@ -287,8 +291,18 @@ impl OneShotSlot<'_> {
     }
 
     /// Keep the slot of a run whose processes may still be running until the
-    /// daemon restarts.
+    /// daemon restarts. Protection no longer picks it, as nothing stops it.
     pub(crate) fn keep(self) {
+        if let Some(run) = self
+            .queue
+            .oneshots
+            .lock()
+            .unwrap()
+            .runs
+            .get_mut(&self.number)
+        {
+            run.stop = None;
+        }
         std::mem::forget(self);
     }
 }
