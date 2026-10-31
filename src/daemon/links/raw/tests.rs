@@ -94,3 +94,65 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
     assert_eq!(sent.lines().count(), 3, "{sent}");
     assert!(sent.contains("-X GET repos/team/tool"), "{sent}");
 }
+
+#[tokio::test]
+async fn agents_download_from_their_forge_as_their_account() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "download".into(), None, None, None)
+        .await
+        .unwrap();
+    git(
+        &path,
+        &["remote", "add", "origin", "https://github.com/team/repo"],
+    );
+    let gh = root.path().join("gh-agent");
+    let log = root.path().join("log");
+    install_test_script(
+        &gh,
+        &format!(
+            "#!/bin/sh\necho \"$*\" >> '{}'\nprintf 'HTTP/2.0 200 OK\\nContent-Type: image/png\\n\\nPNG'\n",
+            log.display()
+        ),
+    );
+    manager
+        .write_local_config(
+            &repo.id,
+            Some(format!("[agent.forge_clis]\ngh = '{}'\n", gh.display())),
+        )
+        .await
+        .unwrap();
+    let url = "https://github.com/user-attachments/assets/abc";
+
+    let download = manager
+        .forge_download(
+            &ItemContext::Workspace(workspace.id.clone()),
+            url,
+            None,
+            true,
+        )
+        .await
+        .unwrap();
+    assert_eq!(download.content_type.as_deref(), Some("image/png"));
+    assert_eq!(download.bytes, b"PNG");
+    let error = manager
+        .forge_download(
+            &ItemContext::Workspace(workspace.id.clone()),
+            "https://example.com/shot.png",
+            None,
+            true,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("not on the repository's forge"),
+        "{error:#}"
+    );
+    let sent = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(sent.trim(), format!("api --include {url}"));
+}

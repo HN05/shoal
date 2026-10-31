@@ -72,6 +72,17 @@ pub(super) async fn handle(
                 .map(|response| protocol::text_pieces(&response.to_string()));
             return Ok(Answer::pages(response, Body::ApiResponse));
         }
+        ItemMethod::ForgeDownload {
+            context,
+            url,
+            repository,
+        } => {
+            let download = manager
+                .forge_download(&context, &url, repository.as_deref(), caller.is_some())
+                .await
+                .map(protocol::DownloadPiece::split);
+            return Ok(Answer::pages(download, Body::Downloaded));
+        }
         ItemMethod::ItemAction {
             context,
             kind,
@@ -176,6 +187,7 @@ impl Scoped for ItemMethod {
             ItemMethod::OpenIssue { context, .. }
             | ItemMethod::ListItems { context, .. }
             | ItemMethod::ForgeApi { context, .. }
+            | ItemMethod::ForgeDownload { context, .. }
             | ItemMethod::ItemAction {
                 context,
                 action:

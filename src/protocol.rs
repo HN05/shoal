@@ -57,7 +57,7 @@ pub use demos::DemoMethod;
 pub use executions::ExecutionMethod;
 pub use files::FileMethod;
 pub use holds::HoldMethod;
-pub use items::{ItemContext, ItemMethod};
+pub use items::{DownloadPiece, ItemContext, ItemMethod};
 pub use notifications::NotificationMethod;
 pub use ports::PortMethod;
 pub use questions::QuestionMethod;
@@ -70,7 +70,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 168;
+pub const VERSION: u32 = 169;
 pub const MAX_FRAME: usize = 64 * 1024;
 
 /// Shared CLI, daemon, and wrapper timing; keep related budgets in view when tuning.
@@ -536,6 +536,7 @@ response_bodies! {
     Item(crate::forge::items::item::Item),
     Items(Vec<crate::forge::items::item::Item>),
     ApiResponse(Vec<String>),
+    Downloaded(Vec<DownloadPiece>),
     Opened(crate::daemon::links::proposals::OpenOutcome),
     Completion(crate::model::Completion),
     Discarded(crate::daemon::workspace::Discarded),

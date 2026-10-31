@@ -39,6 +39,23 @@ fn text_pieces_fit_frames_and_keep_characters_whole() {
     assert_eq!(pieces.concat(), text);
 }
 
+#[test]
+fn downloads_fit_frames_and_join_whole() {
+    let download = crate::forge::download::Download {
+        content_type: Some("image/png".into()),
+        bytes: (0..MAX_FRAME * 3).map(|n| (n % 251) as u8).collect(),
+    };
+    let pieces = DownloadPiece::split(download.clone());
+    let pages = frame_pages(pieces).unwrap();
+    for page in &pages {
+        assert!(serde_json::to_vec(page).unwrap().len() < MAX_FRAME - 512);
+    }
+    assert_eq!(
+        DownloadPiece::join(pages.into_iter().flatten().collect()).unwrap(),
+        download
+    );
+}
+
 #[tokio::test]
 async fn buffered_execution_reads_preserve_adjacent_frames() {
     let (mut writer, reader) = tokio::io::duplex(1024);

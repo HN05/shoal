@@ -1,6 +1,9 @@
+use anyhow::{Context, Result};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
+use crate::forge::download::Download;
 
 /// Requests about the issues and PRs of a workspace's repository and the ones it links.
 #[derive(Debug, Serialize, Deserialize)]
@@ -96,6 +99,15 @@ pub enum ItemMethod {
         request: crate::forge::raw::RawRequest,
         repository: Option<String>,
     },
+    /// A file on the forge of the context's repository, or of the one
+    /// `repository` names, answered with its content type and bytes in one
+    /// or more `downloaded` frames and then `ok`.
+    ForgeDownload {
+        #[serde(flatten)]
+        context: ItemContext,
+        url: String,
+        repository: Option<String>,
+    },
     /// Linked items, or an explicit one, for the CLI to look up; with
     /// `elsewhere`, also an issue or PR of another repository by its URL.
     SelectItems {
@@ -107,6 +119,47 @@ pub enum ItemMethod {
     /// The forge `host` serves, asking it over `scheme` once when neither
     /// the global config nor a recorded answer says.
     ForgeType { host: String, scheme: String },
+}
+
+/// A piece of a downloaded file, sent in order: its content type, if the
+/// forge named one, then its bytes in base64 pieces that each fit a frame.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DownloadPiece {
+    ContentType(String),
+    Bytes(String),
+}
+
+impl DownloadPiece {
+    /// The pieces that carry `download`.
+    pub fn split(download: Download) -> Vec<Self> {
+        const PIECE_BYTES: usize = super::MAX_FRAME / 4 * 3 / 2;
+        let content_type = download.content_type.map(Self::ContentType);
+        let bytes = download
+            .bytes
+            .chunks(PIECE_BYTES)
+            .map(|chunk| Self::Bytes(BASE64.encode(chunk)));
+        content_type.into_iter().chain(bytes).collect()
+    }
+
+    /// The download `pieces` carry.
+    pub fn join(pieces: Vec<Self>) -> Result<Download> {
+        let mut download = Download {
+            content_type: None,
+            bytes: Vec::new(),
+        };
+        for piece in pieces {
+            match piece {
+                Self::ContentType(content_type) => download.content_type = Some(content_type),
+                Self::Bytes(bytes) => download.bytes.extend(
+                    BASE64
+                        .decode(bytes)
+                        .context("the daemon sent an invalid file piece")?,
+                ),
+            }
+        }
+        Ok(download)
+    }
 }
 
 /// Where an item request runs: in a workspace, or in the registered checkout

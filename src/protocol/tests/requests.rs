@@ -136,6 +136,7 @@ const REQUESTS: &[&str] = &[
     r#"{"item_action":{"workspace":"fix","kind":"pr","item":"7","action":{"action":"close"}}}"#,
     r#"{"list_items":{"workspace":"fix","kind":"issue","search":{"state":"open","labels":[],"author":null,"text":"crash","limit":30},"repository":null}}"#,
     r#"{"forge_api":{"workspace":"fix","request":{"method":"GET","path":"repos/{owner}/{repo}","body":null},"repository":null}}"#,
+    r#"{"forge_download":{"workspace":"fix","url":"https://forge.example/attachments/a1","repository":null}}"#,
     r#"{"select_items":{"workspace":"fix","selection":{"kind":"issue","input":null},"elsewhere":false}}"#,
     r#"{"forge_type":{"host":"forge.example","scheme":"https"}}"#,
     // CI.
