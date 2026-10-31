@@ -33,7 +33,7 @@ impl Operation {
                 | Self::Execution(ExecutionMethod::CheckLanding | ExecutionMethod::ListAgents)
                 | Self::File(FileMethod::ListFiles { .. })
                 | Self::Hold(HoldMethod::HoldList { .. })
-                | Self::Item(ItemMethod::ListItems { .. })
+                | Self::Item(ItemMethod::ListItems { .. } | ItemMethod::ForgeDownload { .. })
                 | Self::Notification(NotificationMethod::ListNotifications { .. })
                 | Self::Port(PortMethod::PortOverview { .. } | PortMethod::PortCatalog { .. })
                 | Self::Question(
