@@ -385,7 +385,7 @@ async fn run(
                 Some(prompt),
                 args,
                 crate::cli::agents::LaunchOptions {
-                    model,
+                    model: crate::cli::agents::ModelRequest::Override(model),
                     ..Default::default()
                 },
             )

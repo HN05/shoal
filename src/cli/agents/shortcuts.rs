@@ -33,7 +33,7 @@ pub(in crate::cli) async fn with_app(
     }
     let options = LaunchOptions {
         tracked: mode == Some(AgentMode::Cli),
-        model,
+        model: super::ModelRequest::Override(model),
         ..Default::default()
     };
     let agent = kind.as_str().parse()?;

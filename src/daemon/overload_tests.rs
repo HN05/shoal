@@ -353,6 +353,31 @@ async fn built_in_restore_child() {
         ]
         .map(std::ffi::OsString::from)
     );
+    // A configured resume command gets the model ahead of its prompt.
+    let model = crate::agent::ModelChoice {
+        model: Some("m1".into()),
+        effort: None,
+    };
+    let with_model = |agent| crate::execution::recovery::Restored {
+        agent,
+        model: &model,
+        session: None,
+    };
+    let kept = Recovery::resolve(&manager.paths, &workspace, with_model("codex"), None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        kept.command[..4],
+        ["saved-session", "-m", "m1", "--"].map(std::ffi::OsString::from)
+    );
+    // A tool that cannot take it refuses the restore, which waits.
+    let refused = Recovery::resolve(&manager.paths, &workspace, with_model("custom"), None, None)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{refused:#}").contains("set [agents.custom] model_args"),
+        "{refused:#}"
+    );
     // A restore tells the session why and when it stopped.
     let stop = crate::execution::recovery::Stop {
         reason: Some("critical memory pressure".into()),

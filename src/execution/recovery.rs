@@ -170,19 +170,6 @@ pub(crate) struct Restored<'a> {
     pub session: Option<&'a str>,
 }
 
-/// The arguments that restore agent `name` with `model`; none, with a
-/// warning, when its templates no longer take a value it ran with.
-fn resumed_model_args(
-    settings: &crate::config::Effective,
-    name: &str,
-    model: &ModelChoice,
-) -> Vec<OsString> {
-    crate::cli::agents::model_args(settings, name, model).unwrap_or_else(|error| {
-        eprintln!("warning: restoring {name} with its own model and effort: {error:#}");
-        Vec::new()
-    })
-}
-
 impl Recovery {
     /// The agent it restores, with the model and effort it runs with.
     pub(crate) fn tracked(&self) -> super::TrackedAgent {
@@ -245,6 +232,9 @@ impl Recovery {
         let automatic = configured.is_some() || resume_args.is_some();
         let message = resumed_prompt(stop, handoff);
         let prompt = std::ffi::OsStr::new(&message);
+        // A restore runs with what the agent ran with, or not at all, so the
+        // record stays for once its templates take the values again.
+        let model_args = crate::cli::agents::model_args(&settings, &name, restored.model)?;
         let (command, handoff_delivered) = if let Some(argv) = configured {
             let mut command = configured::expand_with_fields(
                 paths,
@@ -255,11 +245,12 @@ impl Recovery {
                 &[("{prompt}", prompt)],
             )
             .await?;
+            crate::cli::agents::insert_options(&mut command, model_args);
             // Without Shoal's hooks it still goes through the agent's proxy.
             crate::cli::agents::with_proxy_args(&settings, &name, &mut command);
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else if let Some(mut args) = resume_args {
-            args.extend(resumed_model_args(&settings, &name, restored.model));
+            args.extend(model_args);
             args.extend(
                 crate::cli::agents::workspace_args(paths, &settings, &name, workspace).await?,
             );

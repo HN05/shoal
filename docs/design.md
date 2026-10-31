@@ -1194,7 +1194,7 @@ its tool has no template for is refused rather than run without it. Claude's
 effort variable overrides its flag, so a launch with an effort sets both. The
 execution and its recovery records keep the values, so restores, `shoal resume`
 and reports use what the agent started with rather than the configuration at
-that time. Desktop apps take neither and say so.
+that time; a restore that cannot pass them waits, as a launch is refused. Desktop apps take neither and say so.
 Turn retry defaults to on for Claude and its launch profiles, off for other
 tools, and is overridden per tool with `retry`. Backoff is built in, and no
 failure a retry can fix has a deadline: an agent waits out an outage or a weekly

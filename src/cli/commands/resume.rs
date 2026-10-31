@@ -433,7 +433,7 @@ async fn start_moved(
     let options = crate::cli::agents::LaunchOptions {
         tracked: true,
         replaces: records,
-        model: session.model.clone(),
+        model: crate::cli::agents::ModelRequest::Kept(session.model.clone()),
         ..Default::default()
     };
     crate::cli::agents::launch_agent(

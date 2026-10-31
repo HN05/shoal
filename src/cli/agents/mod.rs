@@ -356,9 +356,23 @@ pub(in crate::cli) struct LaunchOptions {
     pub replaces: Vec<PathBuf>,
     /// The session the agent starts from a fork of, which stays unchanged.
     pub fork: Option<String>,
-    /// The model and effort requested for this launch, over the configured
-    /// ones.
-    pub model: ModelChoice,
+    /// The model and effort the launch asks for.
+    pub model: ModelRequest,
+}
+
+/// The model and effort a launch asks for.
+pub(in crate::cli) enum ModelRequest {
+    /// Values over the configured ones, which fill in the rest.
+    Override(ModelChoice),
+    /// What a restored agent ran with, used as it is; a value it left to
+    /// the tool stays the tool's.
+    Kept(ModelChoice),
+}
+
+impl Default for ModelRequest {
+    fn default() -> Self {
+        Self::Override(ModelChoice::default())
+    }
 }
 
 /// Whether a launch of `agent` under `settings` runs in a session this
@@ -398,7 +412,10 @@ pub(super) async fn launch_agent(
         prompt.is_some(),
         options.tracked,
     );
-    let model = settings.model(agent.name(), options.model);
+    let model = match options.model {
+        ModelRequest::Override(requested) => settings.model(agent.name(), requested),
+        ModelRequest::Kept(model) => model,
+    };
     let launch = Launch {
         name: agent.into(),
         workspace,
@@ -858,18 +875,23 @@ pub(crate) fn route_through_proxy(
 
 /// `command`, a configured command of agent `name` that Shoal gives no
 /// hooks, with the arguments that send its API requests to its proxy when it
-/// has one it can use: before a `--`, after which arguments are the
-/// agent's prompt, else at the end.
+/// has one it can use.
 pub(crate) fn with_proxy_args(settings: &Effective, name: &str, command: &mut Vec<OsString>) {
     let kind = settings.integration(name);
     if settings.proxy(name).is_none() || !routes_through_proxy(kind) {
         return;
     }
+    insert_options(command, integration(kind).proxy_args());
+}
+
+/// Add `options` to `command`, a configured command: before a `--`, after
+/// which arguments are the agent's prompt, else at the end.
+pub(crate) fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
     let at = command
         .iter()
         .position(|arg| arg == "--")
         .unwrap_or(command.len());
-    command.splice(at..at, integration(kind).proxy_args());
+    command.splice(at..at, options);
 }
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt

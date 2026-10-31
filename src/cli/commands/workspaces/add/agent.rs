@@ -178,7 +178,7 @@ impl ResolvedAddAgent {
         let options = agents::LaunchOptions {
             tracked: self.tracked,
             fork,
-            model: self.model,
+            model: agents::ModelRequest::Override(self.model),
             ..Default::default()
         };
         agents::launch_agent(ctx, agent, workspace, prompt, args, options).await
