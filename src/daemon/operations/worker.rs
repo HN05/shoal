@@ -81,9 +81,14 @@ pub(super) fn spawn(
     else {
         anyhow::bail!("the operation's worker has no standard streams");
     };
-    let pid = child
+    // Signalled only while its birth matches, so a cancel that races the
+    // worker's reaping cannot reach a process that took over its ID.
+    let identity = child
         .id()
-        .context("the operation's worker has no process ID")? as i32;
+        .map(crate::process::identity::capture)
+        .transpose()?
+        .flatten()
+        .context("the operation's worker cannot be identified")?;
     let order = serde_json::to_vec(order)?;
     // The worker reads its order, then its processes find standard input at
     // its end.
@@ -100,10 +105,8 @@ pub(super) fn spawn(
             }
         }),
         // The worker's tracked executions stop their commands on SIGTERM.
-        // SAFETY: signalling a process ID, which the worker keeps until
-        // the operation's end forgets this.
-        interrupt: Some(Box::new(move || unsafe {
-            libc::kill(pid, libc::SIGTERM);
+        interrupt: Some(Box::new(move || {
+            let _ = crate::process::identity::signal(&identity, libc::SIGTERM);
         })),
     })
 }
