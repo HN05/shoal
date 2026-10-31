@@ -7,12 +7,13 @@ use crate::{
     reviews::{Finding, OutcomeKind, Review},
 };
 
-/// The most of a history a review receives; the newest part is kept.
-const LIMIT: usize = 192 * 1024;
+/// The most a review's whole prompt holds: the built-in reviewers take it
+/// as one argument, which Linux limits to 128 KiB.
+pub(super) const PROMPT_LIMIT: usize = 120 * 1024;
 
 /// The earlier reviews, their findings, replies, outcomes and checks, then
-/// the PR's discussion, in at most [`LIMIT`] bytes.
-pub(super) fn history(earlier: &[Review], pull: Option<&Details>) -> String {
+/// the PR's discussion, in at most `limit` bytes; the newest part is kept.
+pub(super) fn history(earlier: &[Review], pull: Option<&Details>, limit: usize) -> String {
     let mut sections = Vec::new();
     if !earlier.is_empty() {
         sections.push(earlier_reviews(earlier));
@@ -21,13 +22,14 @@ pub(super) fn history(earlier: &[Review], pull: Option<&Details>) -> String {
         sections.push(discussion(details));
     }
     let history = sections.join("\n\n");
-    match history.len() > LIMIT {
+    const OMITTED: &str = "[earlier history omitted]\n";
+    match history.len() > limit {
         true => {
-            let mut start = history.len() - LIMIT;
+            let mut start = history.len() - limit.saturating_sub(OMITTED.len());
             while !history.is_char_boundary(start) {
                 start += 1;
             }
-            format!("[earlier history omitted]\n{}", &history[start..])
+            format!("{OMITTED}{}", &history[start..])
         }
         false => history,
     }

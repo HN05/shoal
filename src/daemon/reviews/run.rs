@@ -283,7 +283,9 @@ impl Manager {
             ReviewTarget::Pr { url, .. } => self.pull_discussion(workspace, url).await,
             ReviewTarget::Workspace => None,
         };
-        let history = history::history(&earlier, pull.as_ref());
+        // The history fills what the instructions leave of the prompt.
+        let room = history::PROMPT_LIMIT.saturating_sub(instructions.len() + 2);
+        let history = history::history(&earlier, pull.as_ref(), room);
         Ok(match history.is_empty() {
             true => instructions,
             false => format!("{instructions}\n\n{history}"),
