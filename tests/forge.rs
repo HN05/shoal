@@ -3509,11 +3509,11 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
 }
 
 #[test]
-fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
+fn forgejo_ci_cancels_runs_and_reruns_jobs_from_release_17_as_the_scoped_agent() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let mut open = pull(8, "open", "Fix", &[]);
     open["head"]["sha"] = json!("head");
-    fixture.respond(json!({
+    let mut responses = json!({
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 3, "statuses": [
             {"context": "rust", "status": "pending", "target_url": "/team/project/actions/runs/2765/jobs/1"},
@@ -3524,7 +3524,8 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
             {"id": 9331, "index_in_repo": 2765, "commit_sha": "head"}
         ]}},
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
-    }));
+    });
+    fixture.respond(responses.clone());
     let exported = fixture.ok(&["work", "env", "topic"]);
     let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
     let ci = |action: &str| {
@@ -3554,6 +3555,7 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
         ])]
     );
 
+    // The fixture's server runs Forgejo 11, which cannot rerun.
     let rerun = ci("rerun");
     assert!(
         rerun["data"]["message"]
@@ -3563,6 +3565,32 @@ fn forgejo_ci_cancels_runs_as_the_scoped_agent_but_cannot_rerun() {
         "{rerun}"
     );
     assert!(fixture.requests().is_empty());
+
+    // Forgejo 17 reruns the failed check's job by its index in the run.
+    let more = json!({
+        "GET version": {"body": {"version": "17.0.1+gitea-1.22.0"}},
+        "GET repos/team/project/actions/runs?run_number=2764": {"body": {"workflow_runs": [
+            {"id": 9330, "index_in_repo": 2764, "commit_sha": "head"}
+        ]}},
+        "GET repos/team/project/actions/runs/9330/jobs": {"body": [
+            {"id": 18340, "name": "lint", "run_id": 9330, "status": "failure"}
+        ]},
+        "POST repos/team/project/actions/jobs/18340/rerun": {"status": 204},
+    });
+    responses
+        .as_object_mut()
+        .unwrap()
+        .extend(more.as_object().unwrap().clone());
+    fixture.respond(responses);
+    let rerun = ci("rerun");
+    assert_eq!(rerun["data"]["checks"], json!(["lint"]), "{rerun}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/jobs/18340/rerun",
+            null
+        ])]
+    );
 }
 
 #[test]

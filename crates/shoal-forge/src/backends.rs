@@ -589,7 +589,9 @@ pub(crate) trait Backend {
     ) -> Result<String> {
         match operation {
             Operation::Post(endpoint) => Ok(endpoint),
-            Operation::CancelForgejoRun { .. } => anyhow::bail!("not a Forgejo repository"),
+            Operation::ForgejoRun { .. } | Operation::RerunForgejoJob { .. } => {
+                anyhow::bail!("not a Forgejo repository")
+            }
         }
     }
 

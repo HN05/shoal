@@ -63,9 +63,11 @@ pub(crate) enum Location {
     GitLab {
         job: u64,
     },
-    /// Forgejo links a run by its number in the repository, not its API ID.
+    /// Forgejo links a job by its run's number in the repository and its
+    /// index in the run, neither an API ID.
     Forgejo {
         run_number: u64,
+        job_index: usize,
     },
 }
 
@@ -74,8 +76,13 @@ pub(crate) enum Location {
 pub(crate) enum Operation {
     /// POST to this endpoint under the repository's.
     Post(String),
-    CancelForgejoRun {
+    ForgejoRun {
         run_number: u64,
+        action: CiAction,
+    },
+    RerunForgejoJob {
+        run_number: u64,
+        job_index: usize,
     },
 }
 

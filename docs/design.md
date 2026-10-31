@@ -1477,7 +1477,10 @@ or milestone, because forges drop what they cannot apply without an error. Each 
 declares the capabilities it has, and a request needing one it lacks is refused
 before anything is sent with one typed error naming the forge and the
 capability, so a backend gains a capability without changes elsewhere;
-`shoal forge capabilities` reports them so agents can check first. A revert uses
+`shoal forge capabilities` reports them so agents can check first. Where a
+forge's releases differ in a capability, the backend asks the server for its
+version before the request, so an older server refuses as clearly and the
+report matches the server. A revert uses
 the forge's own where it has one, and elsewhere reverts the merge with Git in a
 new workspace that opens the PR and goes once it merges, so backing out a merge
 needs no agent; a conflicting revert does, so it is abandoned rather than left
@@ -1974,12 +1977,13 @@ log is reported on that update without hiding other activity.
 Agents can also rerun failed and cancel running CI jobs on a PR's current head
 through the daemon, as the agent account and under the same scope, with each
 action recorded as an `item_changed` event. Each forge's own job API carries them
-out; Forgejo's API cannot rerun jobs and Shoal does not sign in to its web UI, so
-Forgejo only cancels, and Shoal acts on no Bitbucket Pipelines job.
+out; Forgejo's API reruns jobs only from release 17, which Shoal reads from the
+server's version, and Shoal does not sign in to its web UI, so earlier Forgejo
+releases and Gitea only cancel, and Shoal acts on no Bitbucket Pipelines job.
 Agents may also start a workflow run on their own workspace's branch, on every
 forge including Bitbucket. A started run is not a rerun of a PR's checks: on
 Forgejo it has no head commit or event, so it cannot replace the rerun Forgejo
-lacks, while elsewhere only a run on the PR's head commit reports checks there.
+lacks before 17, while elsewhere only a run on the PR's head commit reports checks there.
 `ci` gathers both: it reruns and cancels one run by its URL, or the checks on a
 PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
 Run numbers overlap issue and PR numbers, so only a number after `ci` names a

@@ -3182,7 +3182,8 @@ unless `--branch` names another. A URL of another repository starts the run
 there, on its default branch unless a branch is named, and needs no workspace.
 It is a new run, not a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
 reports checks there like any other run. Forgejo attaches a dispatched run to no
-commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub,
+commit, so a failed check stays failed for `shoal view` and PR cleanup until
+`ci rerun` reruns it on Forgejo 17 or later. GitHub,
 Forgejo and Gitea dispatch the named workflow file, or a GitHub workflow ID,
 which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline,
 taking no workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
@@ -3223,7 +3224,10 @@ a run or `--pr`.
 GitHub reruns a failed Actions job, or every failed job of a run when several of
 its jobs are selected, because a rerun starts a new attempt of the run, refuses
 a rerun while another job of the run is still running, and cancels the job's
-run; GitLab retries or cancels each job; Forgejo cancels each check's run.
+run; GitLab retries or cancels each job; Forgejo 17 and later rerun a failed
+job with the jobs that need it, or its run when several of the run's jobs are
+selected, which waits until none of them runs, and Forgejo cancels each check's
+run.
 `--json` returns `url`, `action` and the `checks` acted on.
 
 `shoal view ci` shows a run's state (`running`, `failed` or `finished`),

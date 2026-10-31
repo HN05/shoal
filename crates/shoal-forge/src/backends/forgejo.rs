@@ -637,31 +637,25 @@ impl Backend for Forgejo {
     }
 
     fn locate_job(&self, repo: &ForgeRepo, target: &str) -> Option<Location> {
-        let (run_number, _) = actions::job_location(repo, target).ok()?;
-        Some(Location::Forgejo { run_number })
+        let (run_number, job_index) = actions::job_location(repo, target).ok()?;
+        Some(Location::Forgejo {
+            run_number,
+            job_index,
+        })
     }
 
     fn ci_operation(
         &self,
-        _jobs: &[Job],
-        _selected: &[Job],
+        jobs: &[Job],
+        selected: &[Job],
         job: &Job,
         action: CiAction,
     ) -> Result<(Operation, Vec<String>)> {
-        let Some(Location::Forgejo { run_number }) = job.location else {
-            bail!("check {} is not a Forgejo Actions job", job.name);
-        };
-        if action != CiAction::Cancel {
-            return Err(capability::unsupported(self, Capability::ci(action)));
-        }
-        Ok((
-            Operation::CancelForgejoRun { run_number },
-            vec![job.name.clone()],
-        ))
+        actions::operation(jobs, selected, job, action)
     }
 
-    /// Forgejo links a run by its number in the repository, not the API ID
-    /// its cancellation takes.
+    /// Forgejo links a job by its run's number and its index in the run, not
+    /// the API IDs its actions take.
     async fn ci_endpoint(
         &self,
         repo: &ForgeRepo,
@@ -671,9 +665,21 @@ impl Backend for Forgejo {
     ) -> Result<String> {
         match operation {
             Operation::Post(endpoint) => Ok(endpoint),
-            Operation::CancelForgejoRun { run_number } => {
+            Operation::ForgejoRun { run_number, action } => {
                 let run = actions::run_id_for(repo, account, run_number, head).await?;
-                Ok(format!("actions/runs/{run}/cancel"))
+                let endpoint = match action {
+                    CiAction::Rerun => "rerun",
+                    CiAction::Cancel => "cancel",
+                };
+                Ok(format!("actions/runs/{run}/{endpoint}"))
+            }
+            Operation::RerunForgejoJob {
+                run_number,
+                job_index,
+            } => {
+                let job =
+                    actions::failed_job_id(repo, account, head, run_number, job_index).await?;
+                Ok(format!("actions/jobs/{job}/rerun"))
             }
         }
     }

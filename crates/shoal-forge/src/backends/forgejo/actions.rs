@@ -1,6 +1,6 @@
-//! Forgejo Actions: the runs that commit statuses link, and the logs of
-//! failed jobs.
-use anyhow::{Context, Result, ensure};
+//! Forgejo Actions: the runs that commit statuses link, the requests that
+//! rerun or cancel them, and the logs of failed jobs.
+use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
@@ -9,7 +9,7 @@ use crate::{
     account::Account,
     backends::Backend,
     ci::{
-        JobState,
+        CiAction, Job, JobState, Location, Operation,
         checks::{CheckLog, MAX_LOG_BYTES, NoJobLog},
     },
     items::link::ItemKind,
@@ -54,6 +54,76 @@ pub(crate) async fn failed_check_log(
     let no_log = || NoJobLog { name: name.into() };
     let target = status["target_url"].as_str().ok_or_else(no_log)?;
     let (run_number, job_index) = job_location(repo, target).map_err(|_| no_log())?;
+    let job_id = failed_job_id(repo, account, head, run_number, job_index).await?;
+    let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
+    let log = job_log(repo, account, &endpoint).await?;
+    let log = repo.kind.plain_log(&log);
+    let step = failed_step(&log);
+    Ok(CheckLog::from_text(url, name, &log, step).with_job(job_url(repo, target)))
+}
+
+/// The operation that applies `action` to `job`, and the checks it reaches.
+/// One failed job reruns alone, with the jobs that need it; several of one
+/// run rerun the run, which Forgejo reruns only once none of its jobs runs.
+/// A cancellation cancels the job's run.
+pub(crate) fn operation(
+    jobs: &[Job],
+    selected: &[Job],
+    job: &Job,
+    action: CiAction,
+) -> Result<(Operation, Vec<String>)> {
+    let Some(Location::Forgejo {
+        run_number,
+        job_index,
+    }) = job.location
+    else {
+        bail!("check {} is not a Forgejo Actions job", job.name);
+    };
+    let in_run = |other: &&Job| run_of(other) == Some(run_number);
+    let run = Operation::ForgejoRun { run_number, action };
+    match action {
+        CiAction::Rerun if selected.iter().filter(in_run).count() > 1 => {
+            if let Some(running) = jobs
+                .iter()
+                .filter(in_run)
+                .find(|other| other.state == JobState::Running)
+            {
+                bail!(
+                    "check {} is still running in the same workflow run; wait for it or cancel it before rerunning {}",
+                    running.name,
+                    job.name
+                );
+            }
+            let names = jobs.iter().filter(in_run).map(|other| other.name.clone());
+            Ok((run, names.collect()))
+        }
+        CiAction::Rerun => Ok((
+            Operation::RerunForgejoJob {
+                run_number,
+                job_index,
+            },
+            vec![job.name.clone()],
+        )),
+        CiAction::Cancel => Ok((run, vec![job.name.clone()])),
+    }
+}
+
+fn run_of(job: &Job) -> Option<u64> {
+    match job.location {
+        Some(Location::Forgejo { run_number, .. }) => Some(run_number),
+        _ => None,
+    }
+}
+
+/// The API ID of the failed job at `job_index` in the run numbered
+/// `run_number`, which must have run on `head`.
+pub(crate) async fn failed_job_id(
+    repo: &ForgeRepo,
+    account: &Account,
+    head: &str,
+    run_number: u64,
+    job_index: usize,
+) -> Result<u64> {
     let run_id = run_id_for(repo, account, run_number, head).await?;
     let jobs = repo
         .send(
@@ -61,12 +131,7 @@ pub(crate) async fn failed_check_log(
             &Request::get(repo.repo_endpoint(&format!("actions/runs/{run_id}/jobs"))),
         )
         .await?;
-    let job_id = job_id(&jobs, job_index, run_id)?;
-    let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
-    let log = job_log(repo, account, &endpoint).await?;
-    let log = repo.kind.plain_log(&log);
-    let step = failed_step(&log);
-    Ok(CheckLog::from_text(url, name, &log, step).with_job(job_url(repo, target)))
+    job_id(&jobs, job_index, run_id)
 }
 
 /// The step the runner marks as failing, or the one it started last before
@@ -227,7 +292,10 @@ fn job_id(jobs: &Value, index: usize, run: u64) -> Result<u64> {
         job["run_id"] == run,
         "Actions job does not belong to the check's run"
     );
-    ensure!(job["status"] == "failure", "Actions job has not failed");
+    ensure!(
+        matches!(job["status"].as_str(), Some("failure" | "cancelled")),
+        "Actions job has not failed"
+    );
     job["id"]
         .as_u64()
         .filter(|id| *id > 0)
