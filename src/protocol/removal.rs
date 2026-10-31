@@ -13,6 +13,9 @@ pub enum RemovalMethod {
         #[serde(default)]
         acknowledge_unproven: bool,
     },
+    /// Refuse now what stopping `workspace` would refuse, so a batch checks
+    /// every target before stopping any.
+    CheckStop { workspace: String },
     /// Stop the untracked processes of the workspace or chat `space` that
     /// `selection` takes, other than process `requester` and the processes
     /// that started it.

@@ -42,7 +42,9 @@ impl Operation {
                 | Self::Queue(QueueMethod::ListQueue | QueueMethod::QueuedPlan { .. })
                 | Self::Recovery(RecoveryMethod::Checkpoints { .. })
                 | Self::Removal(
-                    RemovalMethod::CheckRemoval { .. } | RemovalMethod::RemovedWorkspaces
+                    RemovalMethod::CheckRemoval { .. }
+                        | RemovalMethod::CheckStop { .. }
+                        | RemovalMethod::RemovedWorkspaces
                 )
                 | Self::Repository(
                     RepositoryMethod::ListRepositories

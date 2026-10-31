@@ -188,6 +188,40 @@ async fn lifecycle_reservation_returns_replaced_state() {
     );
 }
 
+/// A batch checks each target as reserving it would, without reserving, so
+/// it can refuse a workspace whose resource hook runs before acting on any.
+#[tokio::test]
+async fn lifecycle_check_refuses_what_reserving_would_and_reserves_nothing() {
+    let (_root, manager, workspace) = fixture().await;
+    let hook = manager
+        .gates
+        .resource_guard(&workspace.id, super::super::GuardMode::Exclusive)
+        .unwrap();
+
+    let error = manager.check_lifecycle(&workspace.id).await.unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("resource operation is in progress"),
+        "{error:#}"
+    );
+    drop(hook);
+    manager.check_lifecycle(&workspace.id).await.unwrap();
+    assert_eq!(
+        manager.workspace(&workspace.id).await.unwrap().state,
+        WorkspaceState::Ready
+    );
+    manager
+        .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
+        .await
+        .unwrap();
+    let error = manager.check_lifecycle(&workspace.id).await.unwrap_err();
+    assert!(
+        error.to_string().contains("workspace is stopping"),
+        "{error:#}"
+    );
+}
+
 #[tokio::test]
 async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
     let (_root, manager, workspace) = fixture().await;

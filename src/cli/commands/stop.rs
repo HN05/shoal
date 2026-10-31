@@ -17,7 +17,6 @@ use crate::{
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
-    state::WorkspaceState,
 };
 
 pub(super) async fn run(
@@ -236,7 +235,8 @@ pub(super) async fn ensure_below(ctx: &Context, selected: &[String]) -> Result<(
 }
 
 /// The workspaces `selectors` name, refusing them all before any stops when
-/// one is unknown or in another lifecycle operation, which stopping refuses.
+/// one is unknown or stopping it would be refused now, as while another
+/// lifecycle operation or a resource hook runs.
 async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspace>> {
     let mut workspaces = Vec::new();
     let mut refusals = Vec::new();
@@ -248,14 +248,12 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
                 continue;
             }
         };
-        let state = workspace.state;
-        if matches!(state, WorkspaceState::Ready | WorkspaceState::Failed) {
-            workspaces.push(workspace);
-        } else {
-            refusals.push(format!(
-                "{}: workspace is {state}; wait for that operation to finish",
-                workspace.name
-            ));
+        let check = RemovalMethod::CheckStop {
+            workspace: workspace.id.clone(),
+        };
+        match request::<()>(&ctx.paths, check).await {
+            Ok(()) => workspaces.push(workspace),
+            Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
         }
     }
     ensure!(

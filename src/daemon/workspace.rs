@@ -771,8 +771,16 @@ impl Manager {
         id: &str,
         state: WorkspaceState,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(id, state, RemovalRules::default())
+        self.reserve_lifecycle_inner(id, Some(state), RemovalRules::default())
             .await
+    }
+
+    /// Refuse what [`Self::reserve_lifecycle`] would refuse now, without
+    /// reserving, so a batch can check every target before acting on any.
+    pub(crate) async fn check_lifecycle(&self, id: &str) -> Result<()> {
+        self.reserve_lifecycle_inner(id, None, RemovalRules::default())
+            .await?;
+        Ok(())
     }
 
     async fn reserve_lifecycle_for_removal(
@@ -780,14 +788,16 @@ impl Manager {
         id: &str,
         rules: RemovalRules,
     ) -> Result<WorkspaceState> {
-        self.reserve_lifecycle_inner(id, WorkspaceState::Removing, rules)
+        self.reserve_lifecycle_inner(id, Some(WorkspaceState::Removing), rules)
             .await
     }
 
+    /// Reserve the workspace in `state`, or only check that it could be
+    /// without `state`.
     async fn reserve_lifecycle_inner(
         &self,
         id: &str,
-        state: WorkspaceState,
+        state: Option<WorkspaceState>,
         rules: RemovalRules,
     ) -> Result<WorkspaceState> {
         let _resources = self.gates.resource_guard(id, GuardMode::Shared)?;
@@ -797,7 +807,7 @@ impl Manager {
                 let tx = db.transaction()?;
                 // Removal checks pending intent after reserving the lifecycle,
                 // so a confirmed-deleted worktree can release its ownership.
-                if state != WorkspaceState::Reconciling && !rules.allow_pending_rename {
+                if state != Some(WorkspaceState::Reconciling) && !rules.allow_pending_rename {
                     store::ensure_no_pending_rename(&tx, &id)?;
                 }
                 store::ensure_no_pending_move(&tx, &id)?;
@@ -839,11 +849,13 @@ impl Manager {
                         )?,
                     "workspace has holds, which are the user's; ask the user to remove it"
                 );
-                tx.execute(
-                    "UPDATE workspaces SET state=?2 WHERE id=?1",
-                    params![id, state],
-                )?;
-                tx.commit()?;
+                if let Some(state) = state {
+                    tx.execute(
+                        "UPDATE workspaces SET state=?2 WHERE id=?1",
+                        params![id, state],
+                    )?;
+                    tx.commit()?;
+                }
                 Ok(current)
             })
             .await

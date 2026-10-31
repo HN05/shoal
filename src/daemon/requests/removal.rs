@@ -36,6 +36,11 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
+        RemovalMethod::CheckStop { workspace } => {
+            let id = manager.workspace(&workspace).await?.id;
+            manager.check_lifecycle(&id).await?;
+            Body::Ok
+        }
         RemovalMethod::StopProcesses {
             space,
             selection,
@@ -133,6 +138,7 @@ impl Scoped for RemovalMethod {
             // Its own processes too: a scoped caller's shells and their
             // commands descend from its execution, which keeps them.
             RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),
+            RemovalMethod::CheckStop { workspace } => Ok(Some(workspace)),
             _ => Err(denied()),
         }
     }
