@@ -35,11 +35,10 @@ printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n
     );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
-        fj_home: None,
-        fj: false,
-        tea: false,
+        logins: Default::default(),
+        separate: Vec::new(),
     };
-    let account = Account::agent(logins, &Default::default()).remembering(Memory::default());
+    let account = Account::agent(logins, Default::default()).remembering(Memory::default());
     let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
     let issue = NewIssue {
         title: "Flaky".into(),

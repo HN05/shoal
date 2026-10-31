@@ -35,8 +35,7 @@ shares one form: as written, `{ env }` from the agent's environment, or `{ cmd }
 run like a secret's command when the agent starts, and Shoal prints no written
 value. Forge changes Shoal
 makes for a workspace act as the agent too: through the `gh` wrapper, and on
-Forgejo with the token the agent's fj saved under the configured `fj_home`,
-because fj has no API passthrough, or else through the agent's `tea` wrapper. An agent Git profile
+Forgejo, Gitea and Bitbucket with the host's configured `agent_token`. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
 other executions keep theirs. Desktop handoffs have no authentication override
@@ -1430,9 +1429,16 @@ Shoal owns forge writes for its workspaces so that every client, from an agent
 in a terminal to an app built on Shoal, gets one item model, one account rule
 and one policy. Issue and PR actions are typed (edit, comment, close, reopen,
 merge) and planned per forge as REST requests: `gh api` and `glab api`, which
-own GitHub's and GitLab's logins, or curl with the token fj saved for a Forgejo
-host, since fj has no API passthrough, or the configured Bitbucket token. Gitea shares Forgejo's API; a host fj has no login for uses tea's
-login through `tea api`, which owns that token, and otherwise reads anonymously.
+own GitHub's and GitLab's logins, or curl with the token `[machine.forges."<host>"]`
+gives a Forgejo, Gitea or Bitbucket host, and otherwise anonymously. Shoal
+needs only a token per host, so it reads no CLI's private login files. A token
+is given in the shared value form, so it may come from a command such as a
+password manager, and is fetched at most once per operation and never stored;
+an `{ env }` token reads the environment of the process sending the request,
+which for the daemon is the service's. The agent account has its own
+`agent_token` per host; without one it uses the user's token, as the agent
+itself would, except on a forge where a wrapper gives the agent its own account,
+where a missing token fails rather than act as the user.
 The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
 version or metadata endpoint with the user's login for that host, since a name
@@ -1450,11 +1456,8 @@ its routes name, such as `/pull/` for GitHub
 and `/-/merge_requests/` for GitLab; only an issue or repository URL, whose
 form several forges share, falls back to the name: GitLab for a `gitlab` name
 label or a glab login, and otherwise Forgejo. Host types describe hosts rather than
-repositories, so they are global only, like `[machine.bitbucket]`. GitLab-only concepts such as approval rules and merge trains
-stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
-to own a login, so a user-configured command supplies its token per lookup, as
-`[secrets]` commands do, and Shoal still stores no token; agents act with the
-user's Bitbucket credentials until a separate agent token is configurable. Forge differences stay in planning, such as Forgejo keeping draft
+repositories, so they are global only, like the tokens in the same table. GitLab-only concepts such as approval rules and merge trains
+stay unmodeled; approvals count as approving reviews. Forge differences stay in planning, such as Forgejo keeping draft
 state in the title, so callers see the same item either way. Milestones are
 named by title and looked up as the ID each forge takes, and a new item gets its
 assignees and milestone from the edit that finishes it, so one path sets them.
@@ -1939,7 +1942,7 @@ Issue associations suppress idle cleanup, not merged cleanup.
 Item views let agents read issues and PRs without knowing the forge. The daemon
 selects linked or explicit items; the CLI looks them up with the user's forge
 login, because discussion can exceed a protocol frame: `gh` for GitHub, and
-Forgejo's API with fj's saved token for the host, or anonymously without one,
+Forgejo's API with the host's token, or anonymously without one,
 because fj has no structured output. Views automatically include the logs of
 failed CI jobs where the forge serves them, fetched by the daemon with the
 workspace's agent account and returned as bounded tails with the job's URL, so
@@ -2096,7 +2099,7 @@ worktrees and dangerous paths, persists progress, and blocks new workspaces unti
 an interrupted removal is retried.
 PR cleanup is separately enabled by default; disabling it pauses PR completion
 without affecting links, which serve more than cleanup. Persisted watches use the
-user's gh/fj login, resolve numbers against the workspace's origin into stored
+user's forge login, resolve numbers against the workspace's origin into stored
 URLs bound to that repository. Top-level `link` and `unlink` manage associations
 and always name a relation, so no link becomes the assignment by default. `assigned`
 items are the work the workspace exists for and drive completion and cleanup;

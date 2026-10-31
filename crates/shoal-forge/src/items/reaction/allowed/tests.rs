@@ -20,7 +20,7 @@ fn allowed_reactions_read_a_list_of_names_or_none() {
 async fn forges_without_reactions_refuse_to_list_them() {
     let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo").unwrap();
     let refused = bitbucket
-        .allowed_reactions(&Account::user(&Default::default()))
+        .allowed_reactions(&Account::user(Default::default()))
         .await
         .unwrap_err();
     assert_eq!(

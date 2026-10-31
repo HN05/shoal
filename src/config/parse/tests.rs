@@ -54,6 +54,21 @@ fn keys_in_the_wrong_file_name_the_file_they_belong_in() {
 }
 
 #[test]
+fn removed_settings_name_what_replaces_them() {
+    let error = message(global("[machine.bitbucket]\ntoken_command = ['security']\n").unwrap_err());
+    assert!(error.contains("line 1"), "{error}");
+    assert!(
+        error.contains("set token and email under [machine.forges.\"bitbucket.org\"]"),
+        "{error}"
+    );
+    let text = "[agent.forge_clis]\nfj_home = '~/fj'\n";
+    for error in [global(text).err(), repository(text).err()] {
+        let error = message(error.unwrap());
+        assert!(error.contains("set agent_token under"), "{error}");
+    }
+}
+
+#[test]
 fn every_repository_only_key_is_one_the_global_file_refuses() {
     let mut keys = Vec::new();
     RepoConfig::repository_only("", &mut keys);

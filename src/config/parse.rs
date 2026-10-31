@@ -12,12 +12,33 @@ use super::{machine::Machine, options::Options, repo::RepoConfig};
 
 const MACHINE: &str = "machine";
 
+/// Settings Shoal no longer reads, each refused with what replaces it.
+const REMOVED: &[(&[&str], &str)] = &[
+    (
+        &["machine", "bitbucket"],
+        "[machine.bitbucket] moved: set token and email under [machine.forges.\"bitbucket.org\"]",
+    ),
+    (
+        &["agent", "forge_clis", "fj_home"],
+        "agent.forge_clis.fj_home is gone: set agent_token under [machine.forges.\"<host>\"] in the global config",
+    ),
+];
+
+/// Fail at the first setting of `root` that [`REMOVED`] names.
+fn refuse_removed(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
+    for (path, message) in REMOVED {
+        refuse(root, path, message)?;
+    }
+    Ok(())
+}
+
 pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
     let positioned = |mut error: Error| {
         error.set_input(Some(text));
         error
     };
     let mut root = DeTable::parse(text)?;
+    refuse_removed(&root).map_err(positioned)?;
     let mut repository_only = Vec::new();
     RepoConfig::repository_only("", &mut repository_only);
     for key in &repository_only {
@@ -42,10 +63,12 @@ pub fn global(text: &str) -> Result<(Machine, RepoConfig), Error> {
 
 pub fn repository(text: &str) -> Result<RepoConfig, Error> {
     let root = DeTable::parse(text)?;
-    refuse(&root, &[MACHINE], "[machine] belongs in the global config").map_err(|mut error| {
-        error.set_input(Some(text));
-        error
-    })?;
+    refuse(&root, &[MACHINE], "[machine] belongs in the global config")
+        .and_then(|()| refuse_removed(&root))
+        .map_err(|mut error| {
+            error.set_input(Some(text));
+            error
+        })?;
     serde::Deserialize::deserialize(Deserializer::from(root)).map_err(|mut error: Error| {
         error.set_input(Some(text));
         error

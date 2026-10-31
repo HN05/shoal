@@ -72,11 +72,10 @@ esac
     );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
-        fj_home: None,
-        fj: false,
-        tea: false,
+        logins: Default::default(),
+        separate: Vec::new(),
     };
-    let account = Account::agent(logins, &Default::default());
+    let account = Account::agent(logins, Default::default());
     let repo = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
     assert!(!repo.pushable(&account).await.unwrap());
     let fork = repo.fork(&account).await.unwrap();

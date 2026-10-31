@@ -221,11 +221,10 @@ instead of the PR delivery guidance below.
   Forge writes are retargeting, the daemon's typed issue and PR actions and
   `shoal forge api` requests, sent through the REST transport; scoped callers cannot
   merge. `shoal forge api` paths stay under the forge's API root. Forgejo and Gitea API
-  requests use fj's saved token for the repository's own host, validated, passed
-  to curl on stdin, never logged, stored or sent elsewhere, or else tea's login
-  through `tea api`; GitLab requests go through `glab api`. Bitbucket requests
-  send the token `[machine.bitbucket] token_command` prints, validated, only to
-  api.bitbucket.org on curl's stdin, never stored or logged. The forge is chosen
+  and Bitbucket requests send the `[machine.forges."<host>"]` token of the
+  repository's own host (`agent_token` for the agent account), validated, on
+  curl's stdin, fetched at most once per operation, never logged, stored or sent
+  to another host; GitLab requests go through `glab api`. The forge is chosen
   by a pinned `[machine.forges."<host>"] type`, a well-known host name, or else the
   host's own answer to each forge's version or metadata endpoint, asked with
   only the logins saved for that host and never gh's or glab's environment
@@ -441,9 +440,10 @@ configured command for another agent, plus proven child
   Detached wrappers never write to the terminal while their command runs.
 - Agent forge wrappers are opt-in, resolve per tool through configuration layers,
   and change only the PATH of a tracked agent, inherited by descendants, and of
-  the `gh`, `glab` and `tea` requests Shoal makes for a workspace. Wrappers own
-  authentication; Shoal reads only fj's saved token, per request, never storing or logging it,
-  and never switches the user's login. Forge changes for a workspace use the
+  the `gh` and `glab` requests Shoal makes for a workspace. Wrappers own
+  authentication; Shoal reads no CLI's saved login, and never switches the
+  user's login. An agent with an `fj` or `tea` wrapper never falls back to the
+  user's Forgejo token. Forge changes for a workspace use the
   agent account except merging, which uses the user's. The agent Git profile
   reaches only a tracked agent's environment and the push of `shoal pr open`;
   it never writes Git config.

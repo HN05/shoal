@@ -63,11 +63,10 @@ printf 'HTTP/2.0 200 OK\n\n[{{"number":4,"title":"V2"}},{{"number":5,"title":"v2
     );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
-        fj_home: None,
-        fj: false,
-        tea: false,
+        logins: Default::default(),
+        separate: Vec::new(),
     };
-    let account = Account::agent(logins, &Default::default()).remembering(Memory::default());
+    let account = Account::agent(logins, Default::default()).remembering(Memory::default());
     let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
     assert_eq!(github.milestone_id(&account, "v2").await.unwrap(), 5);
     assert_eq!(

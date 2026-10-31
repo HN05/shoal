@@ -16,3 +16,66 @@ fn hosts_pin_a_known_type_case_insensitively() {
     .unwrap();
     assert!(twice.validate().is_err());
 }
+
+#[test]
+fn tokens_take_the_shared_value_forms_and_emails_only_on_bitbucket() {
+    let forges: Forges = toml::from_str(
+        r#"
+["git.example.com"]
+token = { cmd = ["security", "find-generic-password", "-w"] }
+agent_token = { env = "AGENT_TOKEN" }
+
+["bitbucket.org"]
+token = "written"
+email = "me@example.com"
+"#,
+    )
+    .unwrap();
+    forges.validate().unwrap();
+    assert_eq!(forges.pinned("git.example.com"), None);
+    assert!(forges.pins().is_empty());
+    assert_eq!(forges.agent_token_hosts(), ["git.example.com"]);
+    // A written token never shows.
+    assert!(!format!("{forges:?}").contains("written"));
+
+    for (text, error) in [
+        (
+            "[\"git.example.com\"]\ntoken = \"t\"\nemail = \"me@example.com\"\n",
+            "is for Bitbucket API tokens",
+        ),
+        (
+            "[\"bitbucket.org\"]\nagent_email = \"me@example.com\"\n",
+            "agent_email needs machine.forges.\"bitbucket.org\".agent_token",
+        ),
+        (
+            "[\"bitbucket.org\"]\ntoken = \"t\"\nemail = \"me\"\n",
+            "must be an email address",
+        ),
+        (
+            "[\"git.example.com\"]\ntoken = { cmd = [] }\n",
+            "token.cmd must name a program",
+        ),
+    ] {
+        let forges: Forges = toml::from_str(text).unwrap();
+        let message = format!("{:#}", forges.validate().unwrap_err());
+        assert!(message.contains(error), "{message}");
+    }
+}
+
+#[tokio::test]
+async fn tokens_fetch_their_value_and_name_the_setting_when_they_fail() {
+    let configured = |value| Configured {
+        setting: "machine.forges.\"git.example.com\".agent_token".into(),
+        value,
+    };
+    let written = configured(Value::Written("abc".into()));
+    assert_eq!(written.fetch().await.unwrap(), "abc");
+    let failing = configured(Value::Cmd {
+        cmd: vec!["false".into()],
+    });
+    let error = failing.fetch().await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("read machine.forges.\"git.example.com\".agent_token"),
+        "{error:#}"
+    );
+}

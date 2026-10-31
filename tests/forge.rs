@@ -46,20 +46,49 @@ impl Drop for Fixture {
     }
 }
 
+/// The user's and the agent account's tokens on the scripted forge.
+const AGENT_TOKEN: &str =
+    "[machine.forges.\"{forge}\"]\ntoken = \"usertoken\"\nagent_token = \"agenttoken\"\n";
+
+/// Start the Forgejo server in `root` and return it with its `host:port`.
+fn serve(root: &Path) -> (Child, String) {
+    let port_file = root.join("forge/port");
+    let child = support::isolated(root, "python3")
+        .arg(root.join("forge.py"))
+        .args(["serve", port_file.to_str().unwrap()])
+        .spawn()
+        .unwrap();
+    // A hang guard only: the server writes its port once it listens.
+    support::wait::wait_until("forge server to start", || port_file.exists());
+    let port = fs::read_to_string(port_file).unwrap();
+    (child, format!("127.0.0.1:{port}"))
+}
+
 impl Fixture {
     fn new(forge: Forge, config: &str) -> Self {
         Self::with_daemon_env(forge, config, &[])
     }
 
     /// A fixture whose daemon also has `env` in its environment.
+    /// `config` names the forge's host as `{forge}`; on Forgejo the user has
+    /// the token `usertoken` there unless `config` sets the host's tokens.
     fn with_daemon_env(forge: Forge, config: &str, env: &[(&str, &str)]) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
-        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
-        fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
         fs::create_dir_all(root.path().join("forge")).unwrap();
         fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
         let script = root.path().join("forge.py");
         support::install_test_script(&script, FORGE);
+        let server = (forge == Forge::Forgejo).then(|| serve(root.path()));
+        let host = server
+            .as_ref()
+            .map_or_else(|| "github.com".to_owned(), |(_, host)| host.clone());
+        let mut config = config.replace("{forge}", &host);
+        let table = format!("[machine.forges.\"{host}\"]");
+        if forge == Forge::Forgejo && !config.contains(&table) {
+            config.push_str(&format!("\n{table}\ntoken = \"usertoken\"\n"));
+        }
+        fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
+        fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
         let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         let mut launch = support::cli(root.path());
@@ -67,7 +96,7 @@ impl Fixture {
         let daemon = DaemonGuard::start(root.path(), &mut launch);
         let mut fixture = Self {
             _daemon: daemon,
-            server: None,
+            server: server.map(|(child, _)| child),
             root,
             repo,
             web: String::new(),
@@ -82,13 +111,6 @@ impl Fixture {
                 "git@github.com:team/project.git".to_owned()
             }
             Forge::Forgejo => {
-                let host = fixture.serve();
-                let keys = if cfg!(target_os = "macos") {
-                    "Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-                } else {
-                    ".local/share/forgejo-cli/keys.json"
-                };
-                fixture.write_keys(&fixture.root.path().join(keys), &host, "usertoken");
                 fixture.web = format!("http://{host}/team/project");
                 format!("http://{host}/team/project.git")
             }
@@ -105,27 +127,9 @@ impl Fixture {
         fixture
     }
 
-    /// Start the Forgejo server and return its `host:port`.
-    fn serve(&mut self) -> String {
-        let port_file = self.root.path().join("forge/port");
-        let child = support::isolated(self.root.path(), "python3")
-            .arg(self.root.path().join("forge.py"))
-            .args(["serve", port_file.to_str().unwrap()])
-            .spawn()
-            .unwrap();
-        self.server = Some(child);
-        // A hang guard only: the server writes its port once it listens.
-        support::wait::wait_until("forge server to start", || port_file.exists());
-        format!("127.0.0.1:{}", fs::read_to_string(port_file).unwrap())
-    }
-
-    fn write_keys(&self, path: &Path, host: &str, token: &str) {
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(
-            path,
-            json!({"hosts": {host: {"type": "Application", "token": token}}}).to_string(),
-        )
-        .unwrap();
+    /// Replace the global config, which the next CLI command reads.
+    fn write_config(&self, config: &str) {
+        fs::write(self.root.path().join(".config/shoal/config.toml"), config).unwrap();
     }
 
     fn respond(&self, responses: Value) {
@@ -578,8 +582,8 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
         let config =
-            "[agent.forge_clis]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\nfj_home = '~/agent-home'\n";
-        let fixture = Fixture::new(forge, config);
+            format!("[agent.forge_clis]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\n{AGENT_TOKEN}");
+        let fixture = Fixture::new(forge, &config);
         let root = fixture.root.path();
         for (name, body) in [
             (
@@ -592,16 +596,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         }
         let (agent, user) = match forge {
             Forge::GitHub => (json!("agent"), Value::Null),
-            Forge::Forgejo => {
-                let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-                let keys = if cfg!(target_os = "macos") {
-                    "agent-home/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-                } else {
-                    "agent-home/.local/share/forgejo-cli/keys.json"
-                };
-                fixture.write_keys(&root.join(keys), &host, "agenttoken");
-                (json!("token agenttoken"), json!("token usertoken"))
-            }
+            Forge::Forgejo => (json!("token agenttoken"), json!("token usertoken")),
         };
         let endpoint = "repos/team/project/pulls/8";
         fixture.respond(json!({
@@ -633,7 +628,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         assert_eq!(auth, [agent, user.clone(), user]);
     }
 
-    // An fj wrapper whose home Shoal does not know cannot stand in for the agent.
+    // With an fj wrapper but no agent token, the user's token does not stand in.
     let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/agent-fj'\n");
     support::install_test_script(fixture.root.path().join("agent-fj"), "#!/bin/sh\n");
     let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
@@ -642,7 +637,7 @@ fn changes_use_the_agent_account_and_merges_the_users() {
         refused["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("agent.forge_clis.fj_home"),
+            .contains("set its agent_token under [machine.forges."),
         "{refused}"
     );
     assert!(fixture.requests().is_empty());
@@ -700,14 +695,7 @@ fn pr_update_takes_in_the_base_on_the_forge_for_workspace_processes_too() {
 
 #[test]
 fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
-    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut pull = pull(8, "open", "Fix", &[]);
     pull["head"]["sha"] = json!("c0ffee");
     let diff = "diff --git a/src/a.rs b/src/a.rs\n--- a/src/a.rs\n+++ b/src/a.rs\n\
@@ -1176,13 +1164,8 @@ fn views_count_reactions_and_mark_the_logins_own() {
     assert!(text.contains("Reactions: +1 2 (you), heart 1"), "{text}");
     assert!(text.contains("comment 9"), "{text}");
 
-    // Without a login, a public repository's reactions are still listed.
-    let keys = if cfg!(target_os = "macos") {
-        "Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        ".local/share/forgejo-cli/keys.json"
-    };
-    fs::remove_file(fixture.root.path().join(keys)).unwrap();
+    // Without a token, a public repository's reactions are still listed.
+    fixture.write_config("");
     let view = &fixture.ok(&["view", "issue", "3", "--workspace", "topic"])[0];
     assert_eq!(view["reactions"][0]["reacted"], false, "{view}");
     assert!(view.get("errors").is_none(), "{view}");
@@ -1880,29 +1863,6 @@ fn forgejo_refuses_files_its_settings_refuse_before_posting() {
                 .collect();
             assert_eq!(sent, [json!("GET settings/attachment")]);
         }
-    }
-}
-
-#[test]
-fn forgejo_refuses_attachments_with_a_tea_login_before_posting() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\ntea = '~/agent-tea'\n");
-    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-    let logins = json!([{"name": "agent", "url": format!("http://{host}")}]);
-    support::install_test_script(
-        fixture.root.path().join("agent-tea"),
-        format!("#!/bin/sh\necho '{logins}'\n"),
-    );
-    let [_, image, _] = attachment_files(&fixture);
-    for args in [
-        &["pr", "comment", "8", "--body", "Seen"][..],
-        &["issue", "open", "--title", "Flaky"],
-    ] {
-        let refused = fixture.run(&[args, &["--workspace", "topic", "--attach", &image]].concat());
-        assert!(
-            String::from_utf8_lossy(&refused.stderr).contains("tea cannot upload files"),
-            "{refused:?}"
-        );
-        assert!(fixture.requests().is_empty());
     }
 }
 
@@ -2817,14 +2777,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         .collect();
     assert_eq!(numbers, (1..=400).collect::<Vec<_>>());
 
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
-    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     // Forgejo's issue search lists PRs without their branches, so each is read.
     let search = "GET repos/team/project/issues?type=pulls&state=closed&labels=bug&created_by=dev&q=crash&limit=50&page=1";
     fixture.respond(json!({
@@ -2882,14 +2835,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
 
 #[test]
 fn lists_search_another_repository_with_the_same_filters() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
-    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let search =
         "GET repos/team/tool/issues?type=issues&state=all&labels=bug&q=crash&limit=50&page=1";
     fixture.respond(json!({
@@ -2948,20 +2894,7 @@ fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
 
 #[test]
 fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
-    let host = fixture
-        .web
-        .strip_prefix("http://")
-        .unwrap()
-        .split('/')
-        .next()
-        .unwrap();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let mut responses = failed_check_responses();
     fixture.respond(responses.clone());
     let exported = fixture.ok(&["work", "env", "topic"]);
@@ -5244,14 +5177,7 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
 
 #[test]
 fn api_requests_reach_any_path_and_agents_only_read() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
-    let host = fixture.web.split('/').nth(2).unwrap().to_owned();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), &host, "agenttoken");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     // Longer than one protocol frame, so it arrives in pieces.
     let branches: Vec<Value> = (0..400)
         .map(|n| json!({"name": format!("b{n}"), "commit": {"message": "\"x\"".repeat(100)}}))
@@ -5373,15 +5299,8 @@ fn api_requests_reach_any_path_and_agents_only_read() {
 
 #[test]
 fn downloads_read_files_on_the_forge_with_its_login() {
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
     let origin = fixture.web.strip_suffix("/team/project").unwrap();
-    let host = origin.strip_prefix("http://").unwrap();
-    let keys = if cfg!(target_os = "macos") {
-        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
-    } else {
-        "agent/.local/share/forgejo-cli/keys.json"
-    };
-    fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
     fixture.respond(json!({
         "GET /attachments/a1": {"body": "PNG", "headers": {"Content-Type": "image/png"}},
     }));

@@ -23,11 +23,10 @@ async fn a_cli_that_fails_after_a_successful_head_cut_the_file_off() {
     let account = Account::agent(
         AgentLogins {
             launch: Box::new(Bin(dir.path().to_owned())),
-            fj_home: None,
-            fj: false,
-            tea: false,
+            logins: Default::default(),
+            separate: Vec::new(),
         },
-        &Default::default(),
+        Default::default(),
     );
     let error = through_cli(programs::GH, &account, &["https://github.com/a"])
         .await

@@ -3,13 +3,12 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    config::{Config, resolve::Effective},
+    config::{Config, forges::Whose, resolve::Effective},
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
         account::{Account, AgentLogins},
     },
-    fsutil::expand_home,
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
@@ -37,7 +36,7 @@ const USER_LOGINS: &str = "user";
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(&self.config().machine.bitbucket)
+        Account::user(self.config().machine.forges.logins(Whose::User))
             .remembering(self.forge_memories.of(USER_LOGINS))
     }
 
@@ -59,22 +58,23 @@ impl Manager {
         settings: &Effective,
     ) -> Result<Account> {
         let auth = &settings.agent.forge_clis;
+        let forges = &config.machine.forges;
         let logins = AgentLogins {
             launch: Box::new(auth.prepare(
                 settings.agent.git_profile.as_deref(),
                 &self.paths,
                 &config.machine.git_profiles,
             )?),
-            fj_home: (auth.fj_home.as_ref()).map(|home| expand_home(home, &self.paths.home)),
-            fj: auth.fj.is_some(),
-            tea: auth.tea.is_some(),
+            logins: forges.logins(Whose::Agent),
+            separate: auth.separate_forges(),
         };
         // An agent with the user's logins shares what the user's requests taught.
+        let tokens = forges.agent_token_hosts();
         let identity = match auth.forge_identity()? {
-            Some(logins) => format!("agent {logins}"),
-            None => USER_LOGINS.to_owned(),
+            None if tokens.is_empty() => USER_LOGINS.to_owned(),
+            wrappers => format!("agent {} {tokens:?}", wrappers.unwrap_or_default()),
         };
-        Ok(Account::agent(logins, &config.machine.bitbucket)
+        Ok(Account::agent(logins, forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&identity)))
     }
 

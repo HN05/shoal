@@ -1,6 +1,6 @@
 //! Forgejo, and Gitea, which serves the same API: GitHub's REST shapes
-//! under `/api/v1`, sent with the token fj saved for the host, else through
-//! tea's login, else anonymously.
+//! under `/api/v1`, sent with the account's token for the host, else
+//! anonymously.
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Value, json};
@@ -10,7 +10,6 @@ mod organization;
 mod review;
 mod reviewers;
 mod sniff;
-pub(crate) mod tea;
 pub(crate) mod threads;
 mod uploads;
 mod view;
@@ -22,7 +21,7 @@ use super::{
 };
 use crate::{
     ForgeRepo,
-    account::{Account, ForgejoLogin},
+    account::Account,
     backends::rest::{RestCheck, RestReads, fingerprints},
     capability::{self, Capability, Support},
     ci::{
@@ -53,7 +52,7 @@ use crate::{
         view::{Details, Review, login},
     },
     transport::{
-        api::{HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page},
+        api::{HttpMethod, Request, Upload, encode, full_page},
         download,
         response::{Fetched, Response},
     },
@@ -155,7 +154,11 @@ impl Backend for Forgejo {
     }
 
     fn login_hint(&self) -> &'static str {
-        "Forgejo API request failed; private repositories need an fj or tea login"
+        "Forgejo API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
+    }
+
+    fn authorization(&self, token: &str, _email: Option<&str>) -> String {
+        format!("token {token}")
     }
 
     async fn send(
@@ -168,16 +171,8 @@ impl Backend for Forgejo {
             "{}://{}/api/v1/{}",
             repo.web_scheme, repo.host, request.endpoint
         );
-        match account.forgejo_login(&repo.host).await? {
-            ForgejoLogin::Tea(login) => {
-                tea::exchange(account, &login, request, MAX_RESPONSE_BYTES).await
-            }
-            ForgejoLogin::Token(token) => {
-                repo.curl_send(&url, Some(authorization(token)), request)
-                    .await
-            }
-            ForgejoLogin::Anonymous => repo.curl_send(&url, None, request).await,
-        }
+        let authorization = account.authorization(repo).await?;
+        repo.curl_send(&url, authorization, request).await
     }
 
     /// Forgejo's Actions lists apply `limit` only with `page`, and without
@@ -579,7 +574,7 @@ impl Backend for Forgejo {
 
     /// Public repositories are readable without a login, which has none.
     async fn own_login(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<String>> {
-        if let ForgejoLogin::Anonymous = account.forgejo_login(&repo.host).await? {
+        if account.authorization(repo).await?.is_none() {
             return Ok(None);
         }
         github_rest::own_login(repo, account)
@@ -797,18 +792,11 @@ impl Backend for Forgejo {
         actions::failed_step(log)
     }
 
-    /// Forgejo takes fj's token for attachments and raw files on its web
-    /// host; an anonymous request reaches only what anyone may see.
+    /// Forgejo takes the host's token for attachments and raw files on its
+    /// web host; an anonymous request reaches only what anyone may see.
     async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        match account.forgejo_login(&repo.host).await? {
-            ForgejoLogin::Token(token) => {
-                download::with_curl(url, Some(authorization(token))).await
-            }
-            ForgejoLogin::Anonymous => download::with_curl(url, None).await,
-            ForgejoLogin::Tea(_) => {
-                bail!("tea cannot download files; save an fj login for the host with fj auth login")
-            }
-        }
+        let authorization = account.authorization(repo).await?;
+        download::with_curl(url, authorization).await
     }
 
     /// tea cannot send a file, so uploads need fj's token. The instance's
@@ -820,12 +808,6 @@ impl Backend for Forgejo {
         account: &Account,
         attachments: &[Attachment],
     ) -> Result<bool> {
-        let login = account.forgejo_login(&repo.host).await?;
-        ensure!(
-            !matches!(login, ForgejoLogin::Tea(_)),
-            "tea cannot upload files; save an fj login for {} with fj auth login",
-            repo.host
-        );
         let settings = uploads::Settings::read(repo, account).await?;
         for attachment in attachments {
             settings.check(attachment)?;

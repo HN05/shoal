@@ -1,6 +1,7 @@
 //! User-owned forge authentication wrappers and a Git profile, selected only
 //! for agent launches.
 use crate::config::options::Options;
+use crate::forge::backends::ForgeKind;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -11,14 +12,9 @@ use std::path::PathBuf;
 #[options(resolved = Self)]
 pub struct ForgeClis {
     pub fj: Option<PathBuf>,
-    /// The HOME the agent's `fj` runs with, holding the login Shoal uses for
-    /// the agent's Forgejo API requests.
-    pub fj_home: Option<PathBuf>,
     pub gh: Option<PathBuf>,
     /// The agent's `glab`, which sends GitLab requests as the agent.
     pub glab: Option<PathBuf>,
-    /// The agent's `tea`, whose login stands for the agent on Gitea and on
-    /// Forgejo hosts without `fj_home`.
     pub tea: Option<PathBuf>,
 }
 
@@ -75,7 +71,7 @@ impl ForgeClis {
     /// What tells the forge logins this configuration selects apart, or none
     /// when the agent uses the user's own.
     pub fn forge_identity(&self) -> Result<Option<String>> {
-        if [&self.fj, &self.fj_home, &self.gh, &self.glab, &self.tea]
+        if [&self.fj, &self.gh, &self.glab, &self.tea]
             .iter()
             .all(|login| login.is_none())
         {
@@ -84,10 +80,19 @@ impl ForgeClis {
         Ok(Some(serde_json::to_string(self)?))
     }
 
+    /// The forges on which a wrapper gives the agent an account of its
+    /// own, so the user's token never stands in for its missing one.
+    pub fn separate_forges(&self) -> Vec<ForgeKind> {
+        if self.fj.is_some() || self.tea.is_some() {
+            vec![ForgeKind::Forgejo]
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn validate(&self) -> Result<()> {
         for (name, path) in [
             (Tool::Forgejo.program(), &self.fj),
-            ("fj_home", &self.fj_home),
             (Tool::GitHub.program(), &self.gh),
             (Tool::GitLab.program(), &self.glab),
             (Tool::Tea.program(), &self.tea),

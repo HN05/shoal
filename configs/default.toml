@@ -42,18 +42,21 @@ root_dir = "~/shoal"
 # user.email = "agent@example.com"
 # core.sshCommand = "ssh -i ~/.ssh/agent_key -o IdentitiesOnly=yes"
 
-# Bitbucket Cloud credentials: a command that prints an access token, or an
-# Atlassian API token with its account email. Without them only public
-# repositories are readable. See docs/reference.md#forges.
-# [machine.bitbucket]
-# token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
-# email = "you@example.com"
-
-# The API a forge host serves, set instead of letting the daemon ask the host
-# once: "github", "gitlab", "forgejo" (also Gitea) or "bitbucket".
+# A forge host: the API it serves, set instead of letting the daemon ask the
+# host once, "github", "gitlab", "forgejo" (also Gitea) or "bitbucket"; and
+# the tokens Forgejo, Gitea and Bitbucket requests sign in with, yours and
+# the agent account's, each written out, from a variable or printed by a
+# command. Without a token only public repositories are readable.
 # See docs/reference.md#forges.
 # [machine.forges."git.example.com"]
-# type = "gitlab"
+# type = "forgejo"
+# token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
+# agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
+
+# Bitbucket Cloud also takes the email of an Atlassian API token's account.
+# [machine.forges."bitbucket.org"]
+# token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
+# email = "you@example.com"
 
 # Where shoal skill install adds <skill>/SKILL.md for an AI tool, and the
 # proxy under machine.proxies its tracked agents reach their API through.

@@ -140,6 +140,12 @@ pub(crate) trait Backend {
     /// What a failed read as the user most likely needs.
     fn login_hint(&self) -> &'static str;
 
+    /// The Authorization header value that signs a request in with
+    /// `token`, which belongs to `email` where the forge needs it.
+    fn authorization(&self, token: &str, _email: Option<&str>) -> String {
+        format!("Bearer {token}")
+    }
+
     /// Send `request` as `account` and return the forge's response, which
     /// may report a failure.
     async fn send(
@@ -880,6 +886,10 @@ impl Backend for ForgeKind {
 
     fn login_hint(&self) -> &'static str {
         dispatch!(self, backend => backend.login_hint())
+    }
+
+    fn authorization(&self, token: &str, email: Option<&str>) -> String {
+        dispatch!(self, backend => backend.authorization(token, email))
     }
 
     async fn send(

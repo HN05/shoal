@@ -4,7 +4,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn forges_without_a_revert_refuse_before_sending_anything() {
-    let account = Account::user(&Default::default());
+    let account = Account::user(Default::default());
     let revert = NewRevert {
         title: "Revert \"Fix\"".into(),
         ..NewRevert::default()

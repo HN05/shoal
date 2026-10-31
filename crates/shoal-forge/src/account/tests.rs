@@ -1,57 +1,108 @@
-use super::*;
-use crate::test_support::install_test_script;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
-/// An agent with `fj_home`, whose fj has a login for `fj.example` only,
-/// and a `tea` wrapper with a login for `tea.example` only.
-fn agent(root: &std::path::Path) -> Account {
-    let home = root.join("fj-home");
-    let keys = fj_keys_at(&home, None);
-    std::fs::create_dir_all(keys.parent().unwrap()).unwrap();
-    std::fs::write(
-        &keys,
-        r#"{"hosts":{"fj.example":{"type":"Application","token":"fj-token"}}}"#,
-    )
-    .unwrap();
-    let bin = root.join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    let tea = bin.join("tea");
-    install_test_script(
-        &tea,
-        "#!/bin/sh\necho '[{\"name\":\"agent\",\"url\":\"https://tea.example\"}]'\n",
-    );
-    let logins = AgentLogins {
-        launch: Box::new(Bin(bin)),
-        fj_home: Some(home),
-        fj: false,
-        tea: true,
-    };
-    Account::agent(logins, &Default::default())
+use super::*;
+
+/// A token that counts how often it is fetched.
+struct Counted {
+    token: &'static str,
+    fetches: Arc<AtomicUsize>,
 }
 
-/// Finds the CLIs only in one directory.
-struct Bin(std::path::PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut tokio::process::Command) {
-        command.env("PATH", &self.0);
+impl Token for Counted {
+    fn fetch(&self) -> BoxFuture<'_, Result<String>> {
+        self.fetches.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move { Ok(self.token.to_owned()) })
     }
 }
 
+fn logins(hosts: &[(&str, &'static str)], fetches: &Arc<AtomicUsize>) -> Logins {
+    let mut logins = Logins::default();
+    for (host, token) in hosts {
+        let token = Box::new(Counted {
+            token,
+            fetches: fetches.clone(),
+        });
+        logins.insert(host, Login { token, email: None });
+    }
+    logins
+}
+
+struct Unchanged;
+
+impl Launch for Unchanged {
+    fn apply(&self, _command: &mut tokio::process::Command) {}
+}
+
+fn repo(host: &str) -> ForgeRepo {
+    ForgeRepo::parse(&format!("https://{host}/team/project")).unwrap()
+}
+
+async fn header(account: &Account, host: &str) -> Result<Option<String>> {
+    let header = account.authorization(&repo(host)).await?;
+    Ok(header.map(|bytes| String::from_utf8(bytes).unwrap()))
+}
+
 #[tokio::test]
-async fn agents_fall_back_from_fj_to_tea_per_host() {
-    let root = tempfile::tempdir().unwrap();
-    let account = agent(root.path());
-    assert!(matches!(
-        account.forgejo_login("fj.example").await.unwrap(),
-        ForgejoLogin::Token(token) if token == "fj-token"
-    ));
-    assert!(matches!(
-        account.forgejo_login("tea.example").await.unwrap(),
-        ForgejoLogin::Tea(login) if login.name == "agent"
-    ));
-    let error = account.forgejo_login("other.example").await.err().unwrap();
+async fn agents_use_their_own_token_then_the_users_outside_separate_forges() {
+    let fetches = Arc::new(AtomicUsize::new(0));
+    let user = logins(
+        &[("agent.example", "user-a"), ("user.example", "user-u")],
+        &fetches,
+    );
+    let agent = AgentLogins {
+        launch: Box::new(Unchanged),
+        logins: logins(&[("Agent.Example", "agent-a")], &fetches),
+        separate: Vec::new(),
+    };
+    let account = Account::agent(agent, user);
+    assert_eq!(
+        header(&account, "agent.example").await.unwrap().unwrap(),
+        "header = \"Authorization: token agent-a\"\n"
+    );
     assert!(
-        format!("{error:#}").contains("the agent's fj login"),
+        header(&account, "user.example")
+            .await
+            .unwrap()
+            .unwrap()
+            .contains("user-u")
+    );
+    assert_eq!(header(&account, "none.example").await.unwrap(), None);
+    // Each login's token is fetched once for the account's requests.
+    header(&account, "agent.example").await.unwrap();
+    assert_eq!(fetches.load(Ordering::SeqCst), 2);
+
+    let separate = AgentLogins {
+        launch: Box::new(Unchanged),
+        logins: Logins::default(),
+        separate: vec![ForgeKind::Forgejo],
+    };
+    let account = Account::agent(separate, logins(&[("user.example", "u")], &fetches));
+    let error = header(&account, "user.example").await.unwrap_err();
+    assert!(
+        format!("{error:#}").contains("agent_token under [machine.forges.\"user.example\"]"),
         "{error:#}"
+    );
+}
+
+#[tokio::test]
+async fn malformed_tokens_are_refused() {
+    let fetches = Arc::new(AtomicUsize::new(0));
+    for token in ["", " ", "a b", "a\"b", "a\\b", "a\nb"] {
+        let account = Account::user(logins(&[("forge.example", token)], &fetches));
+        assert!(
+            header(&account, "forge.example").await.is_err(),
+            "{token:?}"
+        );
+    }
+    let padded = Account::user(logins(&[("forge.example", " abc\n")], &fetches));
+    assert!(
+        header(&padded, "forge.example")
+            .await
+            .unwrap()
+            .unwrap()
+            .contains("token abc\"")
     );
 }

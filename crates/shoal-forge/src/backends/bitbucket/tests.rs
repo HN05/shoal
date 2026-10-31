@@ -81,40 +81,11 @@ fn pages_end_without_a_next_link() {
 
 #[test]
 fn tokens_are_bearer_or_basic_with_an_email() {
+    assert_eq!(Bitbucket.authorization("abc", None), "Bearer abc");
     assert_eq!(
-        authorization("abc", None).unwrap(),
-        b"header = \"Authorization: Bearer abc\"\n"
+        Bitbucket.authorization("abc", Some("me@example.com")),
+        format!("Basic {}", BASE64.encode("me@example.com:abc"))
     );
-    assert_eq!(
-        authorization("abc", Some("me@example.com")).unwrap(),
-        format!(
-            "header = \"Authorization: Basic {}\"\n",
-            BASE64.encode("me@example.com:abc")
-        )
-        .into_bytes()
-    );
-    for token in ["", "a b", "a\"b", "a\\b", "a\nb"] {
-        assert!(authorization(token, None).is_err(), "{token:?}");
-    }
-}
-
-#[test]
-fn credentials_need_a_program_for_an_email() {
-    let email = Credentials {
-        email: Some("me@example.com".into()),
-        ..Credentials::default()
-    };
-    assert!(email.validate().is_err());
-    let complete = Credentials {
-        token_command: vec!["security".into(), "find-generic-password".into()],
-        ..email
-    };
-    assert!(complete.validate().is_ok());
-    let blank = Credentials {
-        token_command: vec![String::new()],
-        email: None,
-    };
-    assert!(blank.validate().is_err());
 }
 
 #[test]

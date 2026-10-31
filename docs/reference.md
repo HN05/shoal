@@ -1539,8 +1539,7 @@ user.
 ### Agent accounts
 
 `[agent.forge_clis]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
-`tea`, each an absolute or `~/` path, and `fj_home`, the HOME the `fj` wrapper runs
-`fj` with; `[agent] git_profile` names one of the global [Git profiles](#git-profiles)
+`tea`, each an absolute or `~/` path; `[agent] git_profile` names one of the global [Git profiles](#git-profiles)
 for agents' Git commands. All default to unset. Values follow repository/global
 precedence and appear in `config show`. Tracked agent shortcuts prepend a private
 directory containing these tool names to the child's PATH; nested commands inherit
@@ -1555,11 +1554,12 @@ or a shell that resets PATH bypasses it.
 
 Issue and PR changes Shoal makes for a workspace use the agent account. On
 GitHub they run `gh api` through the `gh` wrapper, and on GitLab `glab api`
-through the `glab` wrapper. On Forgejo and Gitea they use
-the token the agent's `fj` saved under `fj_home`, read for each request and passed
-to curl on stdin; with an `fj` wrapper but no `fj_home` they fail rather than use
-your login. For a host the agent's fj has no login for, a `tea` wrapper sends
-them through `tea api` with its login for the host. Options left unset use your own logins, as the agent would.
+through the `glab` wrapper. On Forgejo, Gitea and Bitbucket they use the host's
+`agent_token` under [`[machine.forges."<host>"]`](#forges), with `agent_email`
+for a Bitbucket API token. Options left unset use your own logins, as the agent
+would, except that with an `fj` or `tea` wrapper the agent has its own Forgejo
+account: changes on a Forgejo or Gitea host without an `agent_token` then fail
+rather than use your token.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -1581,8 +1581,8 @@ exec env HOME="$agent_home" XDG_DATA_HOME="$agent_home/.local/share" \
 ```
 
 Run `~/bin/fj-agent auth login` (or `auth add-token`) yourself to authenticate
-as the agent account, and set `fj_home = "~/.local/share/shoal-auth/fj"` so
-Shoal finds that login. Only the `fj` process receives the separate home.
+as the agent account, and give Shoal the same account's token as the host's
+`agent_token`. Only the `fj` process receives the separate home.
 
 For `gh`, changing `GH_CONFIG_DIR` alone can still reach your system keyring.
 A wrapper can instead obtain an agent token from your credential manager and
@@ -1777,9 +1777,8 @@ PRs that still target its branch to the branch it merged into. Their next
 `watch` returns a `base_merged` update with the rebase command; the agent
 rebases and force-pushes its branch. The PR is retargeted through the forge's
 API with the user's login: `gh api` on GitHub, and on Forgejo or Gitea curl with
-the token fj saved for that host, read for the request and passed on stdin, or
-`tea api` with tea's login for the host. A missing login or failed request is
-reported in the update.
+your [token](#forges) for that host, passed on stdin. A missing login or failed
+request is reported in the update.
 
 ### Child workspaces
 
@@ -2706,7 +2705,7 @@ Shoal reads and changes the issues and PRs of the forge serving a repository's
 `origin`. `github.com` is GitHub, `gitlab.com` GitLab and `bitbucket.org`
 Bitbucket Cloud. The daemon asks any other host once which API it serves, through
 GitHub's `meta` with `gh`, GitLab's `version` with `glab`, and Forgejo's or
-Gitea's `version` with the login below, and records the answer; GitHub Enterprise
+Gitea's `version` with the token below, and records the answer; GitHub Enterprise
 Server and self-hosted GitLab need the CLI logged in to the host: asking sends
 only a login saved for that host, never a token such as `GH_ENTERPRISE_TOKEN` or
 `GITLAB_TOKEN` that the CLI would send to any host. The daemon asks recorded hosts
@@ -2720,11 +2719,30 @@ type = "gitlab"   # or "github", "forgejo" (also Gitea) or "bitbucket"
 ```
 
 Lookups use
-your login: `gh` on GitHub, `glab` on GitLab, on Forgejo or Gitea the token `fj`
-saved for the host, else `tea`'s login through `tea api`, and on Bitbucket the
-token `[machine.bitbucket]` configures. Without a login, only public repositories are
-readable. Shoal stores no forge credentials. An issue or PR number may be
-written `#42`.
+your login: `gh` on GitHub, `glab` on GitLab, and on Forgejo, Gitea and
+Bitbucket the `token` set for the host in the same table. Changes Shoal makes
+for a workspace use the host's `agent_token`, as [agent accounts](#agent-accounts)
+describe. Each is the token as written, `{ env = "<variable>" }`, or
+`{ cmd = [...] }`, an argument array whose output is the token:
+
+```toml
+[machine.forges."git.example.com"]
+token = { cmd = ["security", "find-generic-password", "-s", "forgejo", "-w"] }
+agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }
+
+[machine.forges."bitbucket.org"]
+token = { cmd = ["security", "find-generic-password", "-s", "bitbucket", "-w"] }
+email = "you@example.com"   # an Atlassian API token's account; omit for an access token
+```
+
+`{ env }` reads the environment of the Shoal process that sends the request:
+for the daemon's requests, such as PR watches, that is the daemon's own
+environment, which a service does not take from your shell, so set the variable
+where the daemon runs or use `{ cmd }`. A command runs without input, at most
+once for each operation that needs the token and for at most a minute, and its
+output is never stored; one that fails or prints nothing fails the request.
+Without a token, only public repositories are readable. `email` and `agent_email`
+apply only to Bitbucket. An issue or PR number may be written `#42`.
 
 Forges differ in what Shoal can do there. `shoal forge capabilities` lists each
 capability of the workspace repository's forge, such as resolving review
@@ -2742,17 +2760,6 @@ naming the forge and the capability.
 on GitHub its eight, and on GitLab the same eight as suggestions, since any emoji
 it knows works. `--json` returns `names` and `accepts_other_names`. Bitbucket
 has no reactions.
-
-Bitbucket has no official CLI, so the global `[machine.bitbucket]` table names a
-`token_command`, an argument array whose output is the token; Shoal runs it for
-each lookup or change and keeps nothing. The token is an access token, or an
-Atlassian API token when `email` names its account:
-
-```toml
-[machine.bitbucket]
-token_command = ["security", "find-generic-password", "-s", "bitbucket", "-w"]
-email = "you@example.com"
-```
 
 GitLab projects may sit in subgroups, its merge requests are PRs, and its item
 URLs use `/-/issues/` and `/-/merge_requests/`. Reviewers are usernames, and
@@ -2877,7 +2884,7 @@ while the connection fails before sending it or the forge answers 503, and a
 comment's update also after a broken connection or another 5xx; a 429 is the
 forge's [rate limit](#linked-items-and-cleanup), which holds back requests until it ends.
 GitHub needs write access to the repository and Forgejo
-an fj login.
+a token.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review
 thread, as `shoal view` shows it, before the PR's number or URL. `reply` takes
 `--body` or `--body-file`; `resolve` posts one as a reply first when given.
@@ -3237,9 +3244,9 @@ names the file to write, or `-` for standard output, and `--json` returns the
 written `path`, its size in `bytes` and the `content_type` the forge sent. A
 response that is a web page, such as a sign-in page the login cannot pass,
 fails instead of being saved, as does a file over 100 MiB. GitHub downloads go
-through `gh api` and Forgejo and Gitea through fj's token, or anonymously
-without one; a tea login cannot download. GitLab's web routes take no access
-token, so a file uploaded to a project or group, at
+through `gh api`, and Forgejo and Gitea downloads send the host's
+[token](#forges), or go anonymously without one. GitLab's web routes take no
+access token, so a file uploaded to a project or group, at
 `/-/project/<id>/uploads/<secret>/<file>`, `/<project path>/uploads/…`,
 `/-/group/<id>/uploads/…` or `/groups/<group path>/-/uploads/…`, is read
 through `glab api` from the API route for the same upload, which GitLab 17.4
@@ -3377,11 +3384,11 @@ not asked again as that account until its `Retry-After` or reset time, at most
 an hour away. Polls wait until then instead of reporting lookup failures, and
 the daemon records a `forge_limited` notification. Forgejo
 comment and review changes are grouped; CI results are the commit statuses of the
-PR's head commit, read with fj's login for the host when it has one. The daemon
+PR's head commit, read with the host's token when it has one. The daemon
 repeats a REST read as a conditional request with the `ETag` and `Last-Modified`
 of the last response it got for that URL as the same account, and takes a
 `304 Not Modified` to mean that response still holds; it keeps them in memory
-only. Reads through tea are sent in full.
+only.
 Failed CI jobs include the failing step when the runner records it and a
 command to read the log; a log lookup failure stays on that check's update.
 

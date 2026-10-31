@@ -1,20 +1,15 @@
-//! Whose credentials a forge request uses: the user's own logins, or an
+//! Whose credentials a forge request uses: the user's own tokens, or an
 //! agent's, which the caller chooses and describes.
-use std::path::PathBuf;
+use std::collections::HashMap;
 
-use anyhow::{Context, Result, ensure};
-
+use anyhow::{Result, ensure};
+use futures_util::future::BoxFuture;
 use tokio::sync::OnceCell;
 
 use crate::{
-    backends::{
-        bitbucket::Credentials,
-        forgejo::tea::{self, TeaLogin},
-    },
-    transport::{
-        api::{fj_keys_at, fj_keys_path, fj_token},
-        memory::Memory,
-    },
+    ForgeRepo,
+    backends::{Backend, ForgeKind},
+    transport::memory::Memory,
 };
 /// Starts a forge CLI as someone other than the user, such as through
 /// their wrappers.
@@ -22,68 +17,86 @@ pub trait Launch: Send + Sync {
     fn apply(&self, command: &mut tokio::process::Command);
 }
 
+/// Fetches the token of one login, such as by running a command; the
+/// caller owns where it comes from and what a failure names.
+pub trait Token: Send + Sync {
+    fn fetch(&self) -> BoxFuture<'_, Result<String>>;
+}
+
+/// How an account signs in to one host.
+pub struct Login {
+    pub token: Box<dyn Token>,
+    /// The account an API token belongs to, for a forge that signs in
+    /// with both.
+    pub email: Option<String>,
+}
+
+/// An account's logins by host.
+#[derive(Default)]
+pub struct Logins(HashMap<String, Signer>);
+
+impl Logins {
+    /// Sign in to `host`, as remotes name it, with `login`.
+    pub fn insert(&mut self, host: &str, login: Login) {
+        let signer = Signer {
+            login,
+            header: OnceCell::new(),
+        };
+        self.0.insert(host.to_ascii_lowercase(), signer);
+    }
+
+    fn get(&self, host: &str) -> Option<&Signer> {
+        self.0.get(&host.to_ascii_lowercase())
+    }
+}
+
+/// A login and the authorization its token gave, fetched once for the
+/// account's requests and never kept beyond it.
+struct Signer {
+    login: Login,
+    header: OnceCell<Vec<u8>>,
+}
+
 /// An agent's own logins; the user's stand in for those it leaves unset.
 pub struct AgentLogins {
-    /// Starts the agent's `gh`, `glab` and `tea`.
+    /// Starts the agent's `gh` and `glab`.
     pub launch: Box<dyn Launch>,
-    /// The HOME the agent's `fj` runs with, holding its saved logins.
-    pub fj_home: Option<PathBuf>,
-    /// The agent has an `fj` wrapper.
-    pub fj: bool,
-    /// The agent has a `tea` wrapper.
-    pub tea: bool,
+    /// The agent account's tokens.
+    pub logins: Logins,
+    /// The forges on which the agent has an account of its own, where the
+    /// user's tokens never stand in for one it lacks.
+    pub separate: Vec<ForgeKind>,
 }
 
 #[derive(Default)]
 pub struct Account {
     /// Starts the agent's CLIs; the user's when absent.
     launch: Option<Box<dyn Launch>>,
-    /// The agent's saved fj logins; the user's when absent.
-    fj_keys: Option<PathBuf>,
-    /// The agent has an `fj` wrapper but no `fj_home`, so its Forgejo login
-    /// cannot be found and the user's must not stand in for it.
-    fj_home_missing: bool,
-    /// The agent has a `tea` wrapper, whose login stands for the agent on
-    /// Forgejo and Gitea hosts.
-    tea: bool,
-    bitbucket: Credentials,
-    /// The Bitbucket authorization, fetched once for this account's requests.
-    bitbucket_authorization: OnceCell<Option<Vec<u8>>>,
+    logins: Logins,
+    /// The user's tokens, for hosts an agent has none of its own for.
+    fallback: Logins,
+    separate: Vec<ForgeKind>,
     /// What earlier requests as this account taught.
     memory: Memory,
 }
 
-/// How a Forgejo or Gitea request authenticates.
-pub(crate) enum ForgejoLogin {
-    /// The token fj saved for the host.
-    Token(String),
-    /// tea's login for the host, which sends the request itself.
-    Tea(TeaLogin),
-    /// No login, which reaches only public repositories.
-    Anonymous,
-}
-
 impl Account {
-    /// The CLIs as Shoal finds them, the token fj saved in its default
-    /// location, and the configured Bitbucket credentials.
-    pub fn user(bitbucket: &Credentials) -> Self {
+    /// The CLIs as Shoal finds them, and the user's tokens.
+    pub fn user(logins: Logins) -> Self {
         Self {
-            bitbucket: bitbucket.clone(),
+            logins,
             ..Self::default()
         }
     }
 
-    /// An agent's account; logins it leaves unset use the user's, as the
-    /// agent itself would.
-    pub fn agent(logins: AgentLogins, bitbucket: &Credentials) -> Self {
-        let fj_keys = logins.fj_home.map(|home| fj_keys_at(&home, None));
+    /// An agent's account; hosts it has no token for use the user's, as
+    /// the agent itself would, except on its separate forges.
+    pub fn agent(agent: AgentLogins, user: Logins) -> Self {
         Self {
-            launch: Some(logins.launch),
-            fj_home_missing: logins.fj && fj_keys.is_none(),
-            fj_keys,
-            tea: logins.tea,
-            bitbucket: bitbucket.clone(),
-            bitbucket_authorization: OnceCell::new(),
+            launch: Some(agent.launch),
+            logins: agent.logins,
+            fallback: user,
+            separate: agent.separate,
             memory: Memory::default(),
         }
     }
@@ -105,56 +118,48 @@ impl Account {
         }
     }
 
-    /// The login for a Forgejo or Gitea `host`: fj's token, then tea's
-    /// login. The user may have neither, which leaves an anonymous request;
-    /// an agent with a wrapper must have a login through it.
-    pub(crate) async fn forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
+    /// The curl config line that signs a request to `repo`'s host in, or
+    /// none without a token, which reaches only public repositories.
+    pub(crate) async fn authorization(&self, repo: &ForgeRepo) -> Result<Option<Vec<u8>>> {
+        let Some(signer) = self.signer(&repo.host, repo.kind)? else {
+            return Ok(None);
+        };
+        let header = signer
+            .header
+            .get_or_try_init(|| signer.authorization(repo.kind))
+            .await?;
+        Ok(Some(header.clone()))
+    }
+
+    /// The login for `host`: the account's own, else the user's unless the
+    /// agent has an account of its own on `kind`.
+    fn signer(&self, host: &str, kind: ForgeKind) -> Result<Option<&Signer>> {
+        if let Some(signer) = self.logins.get(host) {
+            return Ok(Some(signer));
+        }
         ensure!(
-            !self.fj_home_missing,
-            "set agent.forge_clis.fj_home to the HOME the agent's fj wrapper uses, so Shoal can use the agent's Forgejo login"
+            !self.separate.contains(&kind),
+            "the agent has its own {} account, so set its agent_token under [machine.forges.\"{host}\"]",
+            kind.name()
         );
-        if self.fj_keys.is_some() || self.tea {
-            return self.agent_forgejo_login(host).await;
-        }
-        if let Ok(token) = fj_token(&fj_keys_path()?, host) {
-            return Ok(ForgejoLogin::Token(token));
-        }
-        // tea is optional; without it or a login for the host, read anonymously.
-        Ok(match tea::login(self, host).await {
-            Ok(Some(login)) => ForgejoLogin::Tea(login),
-            Ok(None) | Err(_) => ForgejoLogin::Anonymous,
-        })
+        Ok(self.fallback.get(host))
     }
+}
 
-    /// The agent's fj token for `host`, else its tea login for the host. The
-    /// user's logins never stand in for the agent's.
-    async fn agent_forgejo_login(&self, host: &str) -> Result<ForgejoLogin> {
-        let fj = self
-            .fj_keys
-            .as_ref()
-            .map(|path| fj_token(path, host).context("the agent's fj login"));
-        if let Some(Ok(token)) = fj {
-            return Ok(ForgejoLogin::Token(token));
-        }
-        if self.tea
-            && let Some(login) = tea::login(self, host)
-                .await
-                .context("the agent's tea logins")?
-        {
-            return Ok(ForgejoLogin::Tea(login));
-        }
-        match fj {
-            Some(Err(error)) => Err(error),
-            _ => anyhow::bail!("the agent's tea has no login for {host}"),
-        }
-    }
-
-    /// The curl config line that signs a Bitbucket request in, if any.
-    pub(crate) async fn bitbucket_authorization(&self) -> Result<Option<Vec<u8>>> {
-        self.bitbucket_authorization
-            .get_or_try_init(|| self.bitbucket.authorization())
-            .await
-            .cloned()
+impl Signer {
+    async fn authorization(&self, kind: ForgeKind) -> Result<Vec<u8>> {
+        let token = self.login.token.fetch().await?;
+        let token = token.trim();
+        // The value goes into a curl config line; anything but a plain token is refused.
+        ensure!(
+            !token.is_empty()
+                && token
+                    .chars()
+                    .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
+            "the token is empty or has an unexpected format"
+        );
+        let value = kind.authorization(token, self.login.email.as_deref());
+        Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
     }
 }
 

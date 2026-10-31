@@ -32,11 +32,10 @@ async fn requests_carry_their_method_and_body_and_return_the_json() {
     );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.path().to_owned())),
-        fj_home: None,
-        fj: false,
-        tea: false,
+        logins: Default::default(),
+        separate: Vec::new(),
     };
-    let account = Account::agent(logins, &Default::default());
+    let account = Account::agent(logins, Default::default());
     let repo = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
     let raw = RawRequest {
         method: HttpMethod::Patch,

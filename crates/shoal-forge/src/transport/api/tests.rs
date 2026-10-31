@@ -33,11 +33,10 @@ printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
     let agent = || {
         let logins = AgentLogins {
             launch: Box::new(Bin(dir.path().to_owned())),
-            fj_home: None,
-            fj: false,
-            tea: false,
+            logins: Default::default(),
+            separate: Vec::new(),
         };
-        Account::agent(logins, &Default::default())
+        Account::agent(logins, Default::default())
     };
     let memory = crate::transport::memory::Memory::default();
     let account = || agent().remembering(memory.clone());
@@ -144,20 +143,4 @@ async fn forms_carry_the_file_under_its_field_and_a_plain_name() {
                  Content-Type: image/png\r\n\r\npng\r\n--{boundary}--\r\n"
         )
     );
-}
-
-#[test]
-fn fj_tokens_are_read_per_host_and_refused_when_malformed() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("keys.json");
-    std::fs::write(
-        &path,
-        r#"{"hosts":{"forge.example":{"type":"Application","token":"abc123"},
-                "bad.example":{"type":"Application","token":"a\"b"}},"aliases":{}}"#,
-    )
-    .unwrap();
-    assert_eq!(fj_token(&path, "forge.example").unwrap(), "abc123");
-    assert!(format!("{:#}", fj_token(&path, "other.example").unwrap_err()).contains("no login"));
-    assert!(fj_token(&path, "bad.example").is_err());
-    assert!(fj_token(&dir.path().join("missing"), "forge.example").is_err());
 }

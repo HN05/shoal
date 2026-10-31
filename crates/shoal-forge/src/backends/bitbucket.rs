@@ -1,11 +1,10 @@
 //! Bitbucket Cloud: its REST shapes, and the credentials Shoal sends to it.
-//! Bitbucket has no official CLI to own a login, so a user-configured
-//! command supplies a token for each request; Shoal stores none.
+//! Bitbucket has no official CLI to own a login, so requests sign in with
+//! the token the account's login for the host fetches.
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
@@ -156,7 +155,15 @@ impl Backend for Bitbucket {
     }
 
     fn login_hint(&self) -> &'static str {
-        "Bitbucket API request failed; private repositories need [machine.bitbucket] token_command"
+        "Bitbucket API request failed; private repositories need a token under [machine.forges.\"bitbucket.org\"]"
+    }
+
+    /// An access token is a bearer token; an API token signs in with its email.
+    fn authorization(&self, token: &str, email: Option<&str>) -> String {
+        match email {
+            Some(email) => format!("Basic {}", BASE64.encode(format!("{email}:{token}"))),
+            None => format!("Bearer {token}"),
+        }
     }
 
     async fn send(
@@ -166,7 +173,7 @@ impl Backend for Bitbucket {
         request: &Request,
     ) -> Result<Response> {
         let url = format!("{API}/{}", request.endpoint);
-        let authorization = account.bitbucket_authorization().await?;
+        let authorization = account.authorization(repo).await?;
         repo.curl_send(&url, authorization, request).await
     }
 
@@ -893,76 +900,6 @@ impl RestReads for Bitbucket {
             .await?;
         verdicts(&pull)
     }
-}
-
-/// The `[machine.bitbucket]` global config: how to sign in to Bitbucket Cloud.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Credentials {
-    /// Argument array whose standard output is an access token, or an
-    /// Atlassian API token when `email` is set.
-    pub token_command: Vec<String>,
-    /// The Atlassian account email an API token belongs to.
-    pub email: Option<String>,
-}
-
-impl Credentials {
-    pub fn validate(&self) -> Result<()> {
-        if let Some(program) = self.token_command.first() {
-            ensure!(
-                !program.is_empty(),
-                "machine.bitbucket.token_command must name a program"
-            );
-        }
-        ensure!(
-            self.token_command.iter().all(|word| !word.contains('\0')),
-            "machine.bitbucket.token_command contains NUL"
-        );
-        if let Some(email) = &self.email {
-            ensure!(
-                !self.token_command.is_empty(),
-                "machine.bitbucket.email needs machine.bitbucket.token_command"
-            );
-            ensure!(
-                email.contains('@') && email.chars().all(|c| c.is_ascii_graphic()),
-                "machine.bitbucket.email must be an email address"
-            );
-        }
-        Ok(())
-    }
-
-    /// The curl config line that signs a request in, or none without a
-    /// configured token, which reaches only public repositories.
-    pub(crate) async fn authorization(&self) -> Result<Option<Vec<u8>>> {
-        let Some((program, args)) = self.token_command.split_first() else {
-            return Ok(None);
-        };
-        let mut command = tokio::process::Command::new(program);
-        command.args(args);
-        let token = shoal_subprocess::Run::new(command)
-            .timeout(crate::transport::api::TIMEOUT)
-            .output()
-            .await
-            .context("run machine.bitbucket.token_command")?;
-        Ok(Some(authorization(token.trim(), self.email.as_deref())?))
-    }
-}
-
-/// An access token is a bearer token; an API token signs in with its email.
-fn authorization(token: &str, email: Option<&str>) -> Result<Vec<u8>> {
-    // The value goes into a curl config line; anything but a plain token is refused.
-    ensure!(
-        !token.is_empty()
-            && token
-                .chars()
-                .all(|c| c.is_ascii_graphic() && !matches!(c, '"' | '\\')),
-        "machine.bitbucket.token_command printed no token or an unexpected token format"
-    );
-    let value = match email {
-        Some(email) => format!("Basic {}", BASE64.encode(format!("{email}:{token}"))),
-        None => format!("Bearer {token}"),
-    };
-    Ok(format!("header = \"Authorization: {value}\"\n").into_bytes())
 }
 
 /// Bitbucket's strategy for each merge method; rebasing fast-forwards.

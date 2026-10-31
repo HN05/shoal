@@ -38,13 +38,14 @@ impl Context {
         crate::cli::progress::run(self.json, message, work).await
     }
 
-    /// Your own forge logins, with the Bitbucket credentials the global
-    /// config names.
+    /// Your own forge logins: the tokens the global config names.
     pub fn forge_account(&self) -> Result<crate::forge::account::Account> {
         let config = crate::config::Config::load(&self.paths)?;
-        Ok(crate::forge::account::Account::user(
-            &config.machine.bitbucket,
-        ))
+        let logins = config
+            .machine
+            .forges
+            .logins(crate::config::forges::Whose::User);
+        Ok(crate::forge::account::Account::user(logins))
     }
 
     /// Classify pasted links of the forge hosts the global config pins as

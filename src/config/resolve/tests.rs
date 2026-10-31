@@ -8,7 +8,7 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[agent.forge_clis]\nfj = '/fj'\nfj_home = '/fj-home'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\n\
+[agent.forge_clis]\nfj = '/fj'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\n\
 [agent.templates]\nworker = 'agent'\nchat = 'chat'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\

@@ -1,10 +1,7 @@
 //! REST requests and the ways backends send them as an [`Account`]: through
 //! a CLI's `api` command, which owns its login, or through curl with a token
 //! passed on stdin, never placed on a command line.
-use std::{
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
@@ -620,49 +617,6 @@ fn upload_args(upload: &Upload) -> Result<Vec<String>> {
             format!("@{path}"),
         ],
     })
-}
-
-/// A curl config line, so the token never appears on a command line.
-pub(crate) fn authorization(token: String) -> Vec<u8> {
-    format!("header = \"Authorization: token {token}\"\n").into_bytes()
-}
-
-/// Where fj keeps the user's logins.
-pub(crate) fn fj_keys_path() -> Result<PathBuf> {
-    let data = std::env::var_os("XDG_DATA_HOME")
-        .filter(|dir| !dir.is_empty())
-        .map(PathBuf::from);
-    Ok(fj_keys_at(&home_dir()?, data))
-}
-
-/// Where fj run with `home` keeps its logins; `data` is its XDG data
-/// directory, which Linux honors.
-pub(crate) fn fj_keys_at(home: &Path, data: Option<PathBuf>) -> PathBuf {
-    if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/forgejo-cli.forgejo-cli/keys.json")
-    } else {
-        data.unwrap_or_else(|| home.join(".local/share"))
-            .join("forgejo-cli/keys.json")
-    }
-}
-
-/// The token fj saved for exactly this host.
-pub(crate) fn fj_token(path: &Path, host: &str) -> Result<String> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("read fj logins at {}; run fj auth login", path.display()))?;
-    let keys: serde_json::Value = serde_json::from_str(&text).context("parse fj logins")?;
-    let token = keys["hosts"][host]["token"]
-        .as_str()
-        .with_context(|| format!("fj has no login for {host}; run fj auth login"))?;
-    // The token goes into a curl config line; anything but a plain token is refused.
-    ensure!(
-        !token.is_empty()
-            && token
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')),
-        "fj's login for {host} has an unexpected token format"
-    );
-    Ok(token.to_owned())
 }
 
 /// The user's home directory, where the CLIs keep their logins.

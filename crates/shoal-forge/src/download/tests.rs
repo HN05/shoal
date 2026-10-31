@@ -31,11 +31,10 @@ fn cli_printing(dir: &std::path::Path, program: &str, response: &str) -> Account
     );
     let logins = AgentLogins {
         launch: Box::new(Bin(dir.to_owned())),
-        fj_home: None,
-        fj: false,
-        tea: false,
+        logins: Default::default(),
+        separate: Vec::new(),
     };
-    Account::agent(logins, &Default::default())
+    Account::agent(logins, Default::default())
 }
 
 #[test]

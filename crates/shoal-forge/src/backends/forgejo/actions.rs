@@ -4,10 +4,9 @@ use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::tea;
 use crate::{
     ForgeRepo,
-    account::{Account, ForgejoLogin},
+    account::Account,
     backends::Backend,
     ci::{
         JobState,
@@ -15,7 +14,7 @@ use crate::{
     },
     items::link::ItemKind,
     transport::{
-        api::{Request, TIMEOUT, authorization, curl_body},
+        api::{Request, TIMEOUT, curl_body},
         programs,
     },
 };
@@ -178,16 +177,7 @@ pub(crate) fn job_location(repo: &ForgeRepo, target: &str) -> Result<(u64, usize
 
 /// Read plaintext logs without following redirects or exposing the login.
 pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str) -> Result<String> {
-    let token = match account.forgejo_login(&repo.host).await? {
-        ForgejoLogin::Tea(login) => {
-            let request = Request::get(endpoint.to_owned());
-            return tea::send(account, &login, &request, MAX_LOG_BYTES)
-                .await
-                .context("fetch Forgejo job log (maximum 8 MiB)");
-        }
-        ForgejoLogin::Token(token) => Some(token),
-        ForgejoLogin::Anonymous => None,
-    };
+    let authorization = account.authorization(repo).await?;
     let url = format!("{}://{}/api/v1/{endpoint}", repo.web_scheme, repo.host);
     let mut curl = Command::new(programs::CURL);
     curl.args([
@@ -206,7 +196,7 @@ pub(crate) async fn job_log(repo: &ForgeRepo, account: &Account, endpoint: &str)
         &url,
     ]);
     let output = shoal_subprocess::Run::new(curl)
-        .input(token.map(authorization).unwrap_or_default())
+        .input(authorization.unwrap_or_default())
         .timeout(TIMEOUT)
         // curl appends a newline and a three-digit HTTP status.
         .output_limit(MAX_LOG_BYTES + 4)

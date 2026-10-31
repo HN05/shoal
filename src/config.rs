@@ -347,7 +347,6 @@ impl Config {
         machine.overload.validate()?;
         machine.simulators.validate()?;
         machine.git_profiles.validate()?;
-        machine.bitbucket.validate()?;
         machine.forges.validate()?;
         for name in [&repository.git_profile, &repository.agent.git_profile]
             .into_iter()
