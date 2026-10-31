@@ -39,6 +39,7 @@ pub(crate) mod refusal;
 mod requests;
 pub mod resources;
 mod restart_recovery;
+pub(crate) mod reviews;
 pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
