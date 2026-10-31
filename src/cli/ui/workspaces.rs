@@ -327,22 +327,70 @@ pub async fn pick_workspace(
     pick(ctx, "Workspace> ", entries)
 }
 
-/// Pick a workspace, as [`pick_workspace`] offers them, or one of `chats`,
-/// listed after them by name. Returns the chosen workspace's or chat's ID.
-pub async fn pick_workspace_or_chat(
+/// The space, a workspace or chat, a command acts on: the one `explicit`
+/// names, else the current workspace, else one picked among the workspaces
+/// and running chats.
+pub async fn select_space(ctx: &Context, explicit: Option<String>) -> Result<String> {
+    let space = match resolve_workspace(ctx, explicit, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) => id,
+        Resolution::Picker(workspaces) => {
+            let chats = client::chats(&ctx.paths).await?;
+            pick_space(ctx, workspaces, &chats, SPACE).await?
+        }
+    };
+    recent::record(ctx, &space).await;
+    Ok(space)
+}
+
+/// [`select_space`] for a command that also acts on every space: `None`
+/// when `--all` was passed or picked.
+pub async fn select_space_filter(ctx: &Context, scope: WorkspaceScope) -> Result<Option<String>> {
+    if scope.all {
+        return Ok(None);
+    }
+    match resolve_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await? {
+        Resolution::Workspace(id) => Ok(Some(id)),
+        Resolution::Picker(workspaces) => {
+            let chats = client::chats(&ctx.paths).await?;
+            let mut entries = space_entries(ctx, workspaces, &chats).await;
+            entries.push((ALL_ID.to_owned(), ALL_SPACES.to_owned()));
+            require_argument(ctx, "space", SPACE)?;
+            let id = pick(ctx, "Space> ", entries)?;
+            Ok((id != ALL_ID).then_some(id))
+        }
+    }
+}
+
+/// The command's argument that names the space it acts on.
+const SPACE: &str = "space";
+
+/// How the space picker names `--all`.
+const ALL_SPACES: &str = "All spaces";
+
+/// Pick a space: a workspace, as [`pick_workspace`] offers them, or one of
+/// `chats`, listed after them by name, for the command's `argument`.
+/// Returns the chosen workspace's or chat's ID.
+pub async fn pick_space(
     ctx: &Context,
     workspaces: Vec<Workspace>,
     chats: &[Chat],
+    argument: &str,
 ) -> Result<String> {
+    let entries = space_entries(ctx, workspaces, chats).await;
+    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+    require_argument(ctx, "space", argument)?;
+    pick(ctx, "Space> ", entries)
+}
+
+/// The picker entries for `workspaces`, then `chats`.
+async fn space_entries(ctx: &Context, workspaces: Vec<Workspace>, chats: &[Chat]) -> Entries {
     let mut entries = workspace_entries(ctx, workspaces, true).await;
     entries.extend(chat_entries(
         chats,
         Palette::stderr(ctx.json),
         picker_width(),
     ));
-    ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
-    require_argument(ctx, "workspace or chat", WORKSPACE)?;
-    pick(ctx, "Workspace or chat> ", entries)
+    entries
 }
 
 /// Pick one of `chats`, listed by name. Returns the chosen chat's ID.

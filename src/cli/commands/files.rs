@@ -9,7 +9,7 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
-        ui::{self, Fallback},
+        ui,
     },
     daemon::workspace_files::{AttachedFile, FileSource},
     protocol::FileMethod,
@@ -97,8 +97,8 @@ pub(super) async fn remove(
     // choice of every workspace.
     let space = match current_chat(&scope.workspace) {
         Some(chat) if !scope.all => Some(chat),
-        _ if names.is_empty() && ids.is_empty() => ui::select_workspace_filter(ctx, scope).await?,
-        _ => Some(ui::select_workspace(ctx, scope.workspace, Fallback::CurrentDirectory).await?),
+        _ if names.is_empty() && ids.is_empty() => ui::select_space_filter(ctx, scope).await?,
+        _ => Some(ui::select_space(ctx, scope.workspace).await?),
     };
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;
@@ -170,12 +170,12 @@ async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> 
 }
 
 /// The workspace or chat whose files a command acts on: the one `explicit`
-/// names, else the chat this process runs under, else the current workspace
-/// or one picked.
+/// names, else the chat this process runs under, else the current workspace,
+/// else one picked among the workspaces and running chats.
 async fn select_space(ctx: &Context, explicit: Option<String>) -> Result<String> {
     match current_chat(&explicit) {
         Some(chat) => Ok(chat),
-        None => ui::select_workspace(ctx, explicit, Fallback::CurrentDirectory).await,
+        None => ui::select_space(ctx, explicit).await,
     }
 }
 

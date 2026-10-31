@@ -67,6 +67,9 @@ enum Target {
     Repositories,
     /// Workspaces, each described by why the command would refuse it.
     Workspaces(Need),
+    /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
+    /// running chats.
+    Spaces(Need),
     /// Workspaces described by what `shoal resume` restores in them.
     ResumeWorkspaces,
     /// Removed workspaces `shoal work restore` can open again, then existing
@@ -115,14 +118,16 @@ pub fn command() -> Command {
             leaf = child;
         }
         typed.need = Need::of_matches(&path, leaf);
-        typed.workspace = value(leaf, "workspace").or_else(|| {
-            leaf.try_get_many::<OsString>("")
-                .ok()
-                .flatten()
-                .and_then(|mut args| args.next())
-                .filter(|arg| !arg.to_string_lossy().starts_with('-'))
-                .and_then(|arg| arg.to_str().map(str::to_owned))
-        });
+        typed.workspace = value(leaf, "workspace")
+            .or_else(|| value(leaf, "space"))
+            .or_else(|| {
+                leaf.try_get_many::<OsString>("")
+                    .ok()
+                    .flatten()
+                    .and_then(|mut args| args.next())
+                    .filter(|arg| !arg.to_string_lossy().starts_with('-'))
+                    .and_then(|arg| arg.to_str().map(str::to_owned))
+            });
         typed.named = leaf
             .try_get_many::<String>("workspace")
             .ok()
@@ -192,11 +197,10 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
     let need = typed
         .need
         .unwrap_or_else(|| Need::of_command(&path.iter().map(String::as_str).collect::<Vec<_>>()));
-    // A workspace argument beside `--all` offers it first among the names,
-    // so the flag itself is not listed again after them.
-    let offer_all = ["workspace", "all"]
-        .iter()
-        .all(|id| command.get_arguments().any(|arg| arg.get_id() == id));
+    // A workspace or space argument beside `--all` offers it first among the
+    // names, so the flag itself is not listed again after them.
+    let has = |id: &str| command.get_arguments().any(|arg| arg.get_id() == id);
+    let offer_all = (has("workspace") || has("space")) && has("all");
     command
         .mut_args(|arg| {
             let arg = own_first(arg);
@@ -213,6 +217,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
                 ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces(need)),
+                ("space", _, _) => Some(Target::Spaces(need)),
                 ("name", "acquire", "port") => Some(Target::Ports),
                 ("pool", "acquire" | "release", "resource" | "repo")
                 | ("resource", "acquire", "repo") => Some(Target::Pools),
@@ -226,7 +231,10 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 let typed = typed.clone();
                 let offer_all = offer_all
                     && !typed.all
-                    && matches!(target, Target::Workspaces(_) | Target::ResumeWorkspaces);
+                    && matches!(
+                        target,
+                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeWorkspaces
+                    );
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
                     if offer_all && "--all".starts_with(current.to_string_lossy().as_ref()) {
@@ -405,7 +413,10 @@ impl Typed {
         let Ok(mut values) = values else {
             return vec![];
         };
-        let workspaces = matches!(target, Target::Workspaces(_) | Target::ResumeWorkspaces);
+        let workspaces = matches!(
+            target,
+            Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeWorkspaces
+        );
         values.retain(|value| {
             value.get_value().to_str().is_some_and(|s| {
                 s.starts_with(current)
@@ -471,7 +482,7 @@ impl Typed {
                 .collect());
         }
         let workspaces = client::workspaces(&paths).await?;
-        if let Target::Workspaces(need) = target {
+        if let Target::Workspaces(need) | Target::Spaces(need) = target {
             let availability = Availability::load(need, &paths, &workspaces).await;
             let mut candidates: Vec<_> = workspaces
                 .iter()
@@ -487,6 +498,8 @@ impl Typed {
             // Attaching reaches running chats' sessions too.
             if need == Need::Session {
                 candidates.extend(session_chat_candidates(&paths).await?);
+            } else if matches!(target, Target::Spaces(_)) {
+                candidates.extend(chat_candidates(&paths).await?);
             }
             return Ok(candidates);
         }
@@ -554,6 +567,7 @@ impl Typed {
             Target::Commands
             | Target::Repositories
             | Target::Workspaces(_)
+            | Target::Spaces(_)
             | Target::ResumeWorkspaces
             | Target::RestorableWorkspaces
             | Target::ApprovalRequests
@@ -582,6 +596,15 @@ async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
 }
 
 /// Unique display names, with IDs, sources, and paths as prefix-matched extras.
+/// The running chats, by name.
+async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
+    Ok(client::chats(paths)
+        .await?
+        .into_iter()
+        .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
+        .collect())
+}
+
 /// The running chats with an agent session, by name.
 async fn session_chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
     let chats = client::chats(paths).await?;

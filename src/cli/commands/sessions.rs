@@ -100,7 +100,7 @@ impl Target {
             .filter(|chat| attachable.contains(&chat.id))
             .collect();
         let workspaces = client::workspaces(&ctx.paths).await?;
-        let id = ui::pick_workspace_or_chat(ctx, workspaces, &chats).await?;
+        let id = ui::pick_space(ctx, workspaces, &chats, "workspace").await?;
         if let Some(chat) = chats.into_iter().find(|chat| chat.id == id) {
             return Ok(Self::Chat(Box::new(chat)));
         }

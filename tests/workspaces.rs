@@ -20271,8 +20271,44 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     in_chat(&["files", "add", "draft.md"]);
     let deleted = in_chat(&["files", "rm", "draft.md", "--yes"]);
     assert_eq!(deleted[0]["name"], "draft.md", "{deleted}");
-    // The user reaches them by the chat's name.
+    // The user reaches them by the chat's name, which completion offers,
+    // or picks the chat among the spaces.
     assert_eq!(fixture.ok(&["files", "planning"]), added);
+    let state = fixture.root.path().join("state");
+    let words = [
+        "shoal",
+        "--state-dir",
+        state.to_str().unwrap(),
+        "files",
+        "add",
+        "report.md",
+        "--space",
+        "pl",
+    ];
+    let completed = fixture
+        .command()
+        .arg("--")
+        .args(words)
+        .env("SHOAL_COMPLETE", "bash")
+        .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
+        .output()
+        .unwrap();
+    assert!(completed.status.success(), "{completed:?}");
+    let completed = String::from_utf8(completed.stdout).unwrap();
+    assert!(
+        completed.lines().any(|line| line == "planning"),
+        "{completed}"
+    );
+    let (output, rows) = fixture.pick(&["files", "--print"], &chat, "");
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        rows.lines().any(|row| row.starts_with(chat.as_str())),
+        "{rows}"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("report.md"),
+        "{output:?}"
+    );
 
     // Once the chat ends, its files stay listed with when they go.
     agent.kill().unwrap();
