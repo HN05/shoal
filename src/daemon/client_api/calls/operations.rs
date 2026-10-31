@@ -158,6 +158,8 @@ pub(super) async fn open_pr(
         draft: params.draft,
         labels: params.labels,
         reviewers: params.reviewers,
+        assignees: Vec::new(),
+        milestone: None,
         attachments: Vec::new(),
     };
     let workspace = params.workspace;
