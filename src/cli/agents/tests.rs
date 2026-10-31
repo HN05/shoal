@@ -282,3 +282,22 @@ fn a_launch_profile_opens_its_app_by_its_own_mode() {
     // A profile that sets no mode of its own launches the CLI.
     assert!(!opens_app("claude-cli"));
 }
+
+#[test]
+fn a_reviewer_needs_only_its_review_command_installed() {
+    let config = crate::config::Config::from_toml(
+        "[agents.present]\ncommand = ['sh']\nreview = ['{prompt}', '{schema}']\n\
+         [agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    ensure_reviewer_available("present", &settings).unwrap();
+    let refused = ensure_reviewer_available("absent", &settings).unwrap_err();
+    assert!(
+        refused
+            .to_string()
+            .contains("no-such-reviewer is not installed"),
+        "{refused}"
+    );
+    assert!(ensure_reviewer_available("unknown", &settings).is_err());
+}

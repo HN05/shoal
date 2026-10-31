@@ -310,13 +310,13 @@ async fn queue(
 ) -> Result<i32> {
     let agent = match agent.or_else(|| configured_reviewer(settings)) {
         Some(agent) => agent,
-        None => match crate::cli::agents::pick_default_agent(ctx, settings)? {
+        None => match crate::cli::agents::pick_reviewer(ctx, settings)? {
             Some(agent) => agent,
             None => return Ok(0),
         },
     };
     // Refused here, before the daemon queues a review it could not run.
-    crate::cli::agents::ensure_available(agent.name(), settings)?;
+    crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
     let review: Review = client::reviews(
         &ctx.paths,
         ReviewMethod::RunReview {

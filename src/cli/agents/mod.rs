@@ -550,6 +550,27 @@ pub(super) async fn default_agent(
 
 /// The picker standing in for a missing `agent.default`.
 pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
+    let search_path = std::env::var_os("PATH").unwrap_or_default();
+    pick_agent(ctx, settings, |name| {
+        installed(name, &settings.launchers, &search_path)
+    })
+}
+
+/// The picker standing in for a missing reviewer: the agents with a review
+/// template whose review command is installed.
+pub(in crate::cli) fn pick_reviewer(ctx: &Context, settings: &Effective) -> Result<Option<Agent>> {
+    pick_agent(ctx, settings, |name| {
+        settings.launch(name).arguments.review.is_some()
+            && ensure_reviewer_available(name, settings).is_ok()
+    })
+}
+
+/// A picker of the agents `available` accepts, with “No agent”.
+fn pick_agent(
+    ctx: &Context,
+    settings: &Effective,
+    available: impl Fn(&str) -> bool,
+) -> Result<Option<Agent>> {
     ensure!(
         ctx.interactive(),
         "no agent selected; pass --agent or set agent.default in the repository or global config"
@@ -557,7 +578,7 @@ pub(super) fn pick_default_agent(ctx: &Context, settings: &Effective) -> Result<
     let search_path = std::env::var_os("PATH").unwrap_or_default();
     let mut choices: Vec<_> = names(settings)
         .into_iter()
-        .filter(|name| installed(name, &settings.launchers, &search_path))
+        .filter(|name| available(name))
         .map(|name| (name.parse().ok(), name))
         .collect();
     // A picker cannot run without fzf. Treat that as “No agent” so callers
@@ -622,6 +643,19 @@ pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &O
             .into_iter()
             .all(|program| program_available(program, search_path))
     })
+}
+
+/// Refuse a reviewer whose review command's program is missing. A review
+/// runs without a session, so it needs no terminal host.
+pub(in crate::cli) fn ensure_reviewer_available(name: &str, settings: &Effective) -> Result<()> {
+    let program = settings
+        .launchers
+        .get(name)
+        .and_then(|argv| argv.first())
+        .with_context(|| {
+            format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
+        })?;
+    ensure_program(name, program)
 }
 
 /// Refuse an agent that cannot run under `settings` before anything starts.
