@@ -3,11 +3,10 @@
 //! what continues it on another machine.
 use anyhow::{Context, Result, ensure};
 
-use super::PresentSpace;
 use crate::{
     config::Effective,
     daemon::workspace::Manager,
-    model::{Chat, Repository},
+    model::{Chat, PresentSpace, Repository},
     removal::{InspectionPolicy, RemovalResult, UnsavedWork},
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };

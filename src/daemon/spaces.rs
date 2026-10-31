@@ -3,18 +3,7 @@
 use anyhow::Result;
 
 use super::workspace::Manager;
-use crate::model::{Chat, Workspace};
-
-/// The workspace or running chat a selector names.
-#[derive(Debug, Clone)]
-#[allow(
-    clippy::large_enum_variant,
-    reason = "a lookup's result, read once by the request that made it"
-)]
-pub(crate) enum PresentSpace {
-    Workspace(Workspace),
-    Chat(Chat),
-}
+use crate::model::PresentSpace;
 
 impl Manager {
     /// The workspace or running chat `selector` names, by name or ID; the

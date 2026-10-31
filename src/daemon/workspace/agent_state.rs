@@ -7,9 +7,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
-    daemon::spaces::PresentSpace,
     execution::recovery,
-    model::{AgentStatus, Chat, Execution},
+    model::{AgentStatus, Chat, Execution, PresentSpace},
     process::{execution::Processes, identity::Scan},
     protocol::TurnEnd,
     state::{AgentState, ExecutionState, TurnFailure},

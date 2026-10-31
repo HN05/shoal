@@ -1,6 +1,6 @@
-//! `shoal move`: moving workspaces to another Shoal, where `export` removes a
-//! workspace and writes it to a file, `import` opens it again from one and
-//! `ssh` pipes one into the other, and moving repositories to another root
+//! `shoal move`: moving spaces to another Shoal, where `export` ends a space
+//! here and writes it to a file, `import` continues it from one and `ssh`
+//! pipes one into the other, and moving repositories to another root
 //! directory.
 mod export;
 mod import;
@@ -31,14 +31,14 @@ pub(super) async fn run(ctx: &Context, command: MoveCommand) -> Result<i32> {
             export::export_all(ctx, repository, directory, confirmation.yes).await
         }
         MoveCommand::Export(ExportArgs {
-            workspace,
+            space,
             repository: None,
             output,
             confirmation,
             ..
         }) => {
             let file = output.map_or_else(standard_output, Ok)?;
-            export::export(ctx, workspace, file, confirmation.yes).await
+            export::export(ctx, space, file, confirmation.yes).await
         }
         MoveCommand::Import(ImportArgs {
             files,

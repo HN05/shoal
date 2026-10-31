@@ -95,6 +95,34 @@ pub async fn select_workspaces(ctx: &Context, names: Vec<String>) -> Result<Vec<
     Ok(selected)
 }
 
+/// The spaces, workspaces or chats, a command that acts on several takes:
+/// those named, each once and in order, otherwise the chat this process
+/// runs in, otherwise the current workspace, otherwise those picked among
+/// the workspaces and running chats. A name no workspace has stays as
+/// given, for a chat or the daemon's refusal.
+pub async fn select_spaces(ctx: &Context, names: Vec<String>) -> Result<Vec<String>> {
+    if let Some(chat) = current_chat(&names.first().cloned()) {
+        return Ok(vec![chat]);
+    }
+    let mut selected = named_workspaces(ctx, names).await?;
+    if selected.is_empty() {
+        selected = match resolve_workspace(ctx, None, Fallback::CurrentDirectory).await? {
+            Resolution::Workspace(id) => vec![id],
+            Resolution::Picker(workspaces) => {
+                let chats = client::chats(&ctx.paths).await?;
+                require_argument(ctx, "spaces", SPACE)?;
+                let entries = space_entries(ctx, workspaces, &chats).await;
+                ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
+                pick_many(ctx, "Spaces> ", entries)?
+            }
+        };
+    }
+    for space in &selected {
+        recent::record(ctx, space).await;
+    }
+    Ok(selected)
+}
+
 /// The workspace IDs `names` select, each once and in order, so a workspace
 /// named both by its name and by its ID is acted on once. A name no
 /// workspace has stays as given, for the daemon to refuse.

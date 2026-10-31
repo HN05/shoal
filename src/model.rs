@@ -811,6 +811,27 @@ pub struct Chat {
     pub session: Option<String>,
 }
 
+/// A space as it exists: a workspace or a running chat, which share one
+/// namespace of IDs and names.
+#[derive(Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a lookup's result, read once by the request that made it"
+)]
+pub enum PresentSpace {
+    Workspace(Workspace),
+    Chat(Chat),
+}
+
+impl PresentSpace {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Workspace(workspace) => &workspace.name,
+            Self::Chat(chat) => &chat.name,
+        }
+    }
+}
+
 /// A place Shoal created for a workspace, which closes with it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OwnedPlace {

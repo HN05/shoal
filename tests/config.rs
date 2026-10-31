@@ -99,7 +99,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("skill install", "cannot install user-level skills"),
         ("shell recover /", "cannot navigate outside their worktree"),
         ("work restore", "cannot reopen removed workspaces"),
-        ("move export -o -", "cannot export workspaces"),
+        ("move export -o -", "cannot export spaces"),
         ("move import -", "cannot import workspaces"),
         ("alerts", "cannot read or clear notifications"),
         ("alerts clear", "cannot read or clear notifications"),

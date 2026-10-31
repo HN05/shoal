@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
-    daemon::{scope::Caller, spaces::PresentSpace, workspace::Manager},
-    model::{Chat, HandedBack, Repository, Workspace},
+    daemon::{scope::Caller, workspace::Manager},
+    model::{Chat, HandedBack, PresentSpace, Repository, Workspace},
     state::{WorkspaceState, states},
 };
 

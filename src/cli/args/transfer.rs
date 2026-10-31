@@ -49,8 +49,8 @@ pub enum MoveCommand {
 // Arguments of `shoal move export`.
 #[derive(Debug, Args)]
 pub struct ExportArgs {
-    #[arg(conflicts_with = "all", value_name = "WORKSPACE")]
-    pub workspace: Vec<String>,
+    #[arg(conflicts_with = "all", value_name = "SPACE")]
+    pub space: Vec<String>,
     /// Export every workspace of the repository --repo names.
     #[arg(long, requires = "repository")]
     pub all: bool,
@@ -89,8 +89,8 @@ pub struct ImportArgs {
 pub struct SshArgs {
     /// SSH destination: a host, user@host or a ~/.ssh/config alias.
     pub host: String,
-    #[arg(conflicts_with = "all", value_name = "WORKSPACE")]
-    pub workspace: Vec<String>,
+    #[arg(conflicts_with = "all", value_name = "SPACE")]
+    pub space: Vec<String>,
     /// Move every workspace of the repository --repo names.
     #[arg(long, requires = "repository")]
     pub all: bool,

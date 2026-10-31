@@ -1,4 +1,4 @@
-//! `shoal move ssh`: hand workspaces to another machine's Shoal, as
+//! `shoal move ssh`: hand spaces to another machine's Shoal, as
 //! `shoal move export | ssh <host> shoal move import --resume` does, once
 //! `ssh` reaches Shoal there.
 use std::path::Path;
@@ -8,13 +8,7 @@ use serde_json::Value;
 
 use super::export::{self, ExportDirectory, PlannedExport};
 use crate::{
-    cli::{
-        args::transfer::SshArgs,
-        client,
-        context::Context,
-        ui::{self, Fallback},
-    },
-    model::Workspace,
+    cli::{args::transfer::SshArgs, context::Context, ui},
     subprocess::{Run, diagnostic},
 };
 
@@ -27,9 +21,9 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
         host: args.host,
         shoal: args.shoal,
     };
-    let workspaces = match args.repository {
-        Some(repository) => export::repository_workspaces(ctx, repository).await?,
-        None => selected(ctx, args.workspace).await?,
+    let spaces = match args.repository {
+        Some(repository) => export::repository_spaces(ctx, repository).await?,
+        None => export::selected_spaces(ctx, args.space).await?,
     };
     ctx.progress(
         &format!("Reaching Shoal on {}", remote.host),
@@ -38,14 +32,13 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     .await?;
     let staging = tempfile::tempdir()?;
     let directory = ExportDirectory::create(staging.path().to_owned())?;
-    let heading = match workspaces.as_slice() {
-        [workspace] => format!("Move {} to {}", workspace.name, remote.host),
-        _ => format!("Move {} workspaces to {}", workspaces.len(), remote.host),
+    let heading = match spaces.as_slice() {
+        [space] => format!("Move {} to {}", space.name(), remote.host),
+        _ => format!("Move {} spaces to {}", spaces.len(), remote.host),
     };
     let operation = ("move", "move");
     let yes = args.confirmation.yes;
-    let planned =
-        export::check_exports(ctx, &workspaces, &directory, yes, &heading, operation).await?;
+    let planned = export::check_exports(ctx, &spaces, &directory, yes, &heading, operation).await?;
     let mut report = ui::Report::new("moved", "move");
     for planned in planned {
         let name = planned.name().to_owned();
@@ -60,9 +53,9 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
     let (moved, failed) = report.counts();
     let summary = match (moved, failed) {
         (1, 0) => String::new(),
-        (_, 0) => format!("Moved {moved} workspaces to {}", remote.host),
+        (_, 0) => format!("Moved {moved} spaces to {}", remote.host),
         _ => format!(
-            "Moved {moved} of {} workspaces to {}; {failed} failed",
+            "Moved {moved} of {} spaces to {}; {failed} failed",
             moved + failed,
             remote.host
         ),
@@ -84,23 +77,6 @@ fn moved(name: &str, host: &str, imported: &Value) -> String {
         _ => message.push_str("; its agents continue there"),
     }
     message
-}
-
-/// The workspaces `names` selects, or the current one or one the picker
-/// offers without names.
-async fn selected(ctx: &Context, names: Vec<String>) -> Result<Vec<Workspace>> {
-    let selectors = match names.len() {
-        0 | 1 => {
-            let named = names.into_iter().next();
-            vec![ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?]
-        }
-        _ => ui::select_workspaces(ctx, names).await?,
-    };
-    let mut workspaces = Vec::new();
-    for selector in selectors {
-        workspaces.push(client::inspect(&ctx.paths, selector).await?.workspace);
-    }
-    Ok(workspaces)
 }
 
 /// Remove and export the planned workspace, then import it on `remote`,

@@ -1,5 +1,5 @@
-//! `shoal move export`: remove workspaces and write each to a file, or to
-//! standard output.
+//! `shoal move export`: end spaces here, removing workspaces and stopping
+//! chats' agents, and write each to a file, or to standard output.
 use std::{
     io::Write,
     path::{Path, PathBuf},
@@ -14,7 +14,7 @@ use crate::{
         context::Context,
         ui::{self, Fallback},
     },
-    model::Workspace,
+    model::{Chat, PresentSpace},
     protocol::RemovalMethod,
     removal::{RemovalCheck, UnsavedWork},
     transfer::ExportedSpace,
@@ -22,10 +22,10 @@ use crate::{
 
 use super::STANDARD_STREAM;
 
-/// `shoal move export`: remove the workspace, or take an already removed one, and
-/// write it to `file`. Several workspaces, or any written to a directory,
-/// go to a file each in it. The destination is checked before a picker
-/// opens.
+/// `shoal move export`: end the space here, or take an already removed
+/// workspace, and write it to `file`. Several spaces, or any written to a
+/// directory, go to a file each in it. The destination is checked before a
+/// picker opens.
 pub(super) async fn export(
     ctx: &Context,
     names: Vec<String>,
@@ -34,7 +34,7 @@ pub(super) async fn export(
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     if let [selector] = names.as_slice()
-        && !workspace_exists(ctx, selector).await?
+        && present_space(ctx, selector).await?.is_none()
     {
         let output = Output::reserve(&file)?;
         let exported = export_removed(ctx, selector, &output).await?;
@@ -43,23 +43,23 @@ pub(super) async fn export(
     if names.len() > 1 || file.is_dir() {
         ensure!(
             file != Path::new(STANDARD_STREAM),
-            "several workspaces export to a file each; name a directory with -o"
+            "several spaces export to a file each; name a directory with -o"
         );
-        let mut workspaces = Vec::new();
-        for selector in ui::select_workspaces(ctx, names).await? {
-            workspaces.push(client::inspect(&ctx.paths, selector).await?.workspace);
-        }
-        return export_into(ctx, &workspaces, file, yes).await;
+        let spaces = selected_spaces(ctx, names).await?;
+        return export_into(ctx, &spaces, file, yes).await;
     }
     let output = Output::reserve(&file)?;
     let named = names.into_iter().next();
-    let workspace = ui::select_workspace(ctx, named, Fallback::CurrentDirectory).await?;
-    let exported = export_workspace(ctx, &workspace, yes, &output).await?;
+    let selector = ui::select_space(ctx, named, Fallback::CurrentDirectory).await?;
+    let space = present_space(ctx, &selector)
+        .await?
+        .with_context(|| format!("no space {selector}"))?;
+    let exported = export_space(ctx, space, yes, &output).await?;
     output.report(ctx, &exported)
 }
 
-/// `shoal move export --all`: export every workspace of `repository` to a file of
-/// its own in `directory`.
+/// `shoal move export --all`: export every space of `repository` to a file
+/// of its own in `directory`.
 pub(super) async fn export_all(
     ctx: &Context,
     repository: String,
@@ -67,25 +67,58 @@ pub(super) async fn export_all(
     yes: bool,
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
-    let workspaces = repository_workspaces(ctx, repository).await?;
-    export_into(ctx, &workspaces, directory, yes).await
+    let spaces = repository_spaces(ctx, repository).await?;
+    export_into(ctx, &spaces, directory, yes).await
 }
 
-/// Export `workspaces` to a file each in `directory`, once each one can be
-/// exported, so a workspace that cannot be leaves every other one in place.
+/// The workspace or running chat `selector` names, by ID or name.
+async fn present_space(ctx: &Context, selector: &str) -> Result<Option<PresentSpace>> {
+    let named = |id: &str, name: &str| id == selector || name == selector;
+    let workspace = client::workspaces(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|workspace| named(&workspace.id, &workspace.name));
+    if let Some(workspace) = workspace {
+        return Ok(Some(PresentSpace::Workspace(workspace)));
+    }
+    Ok(client::chats(&ctx.paths)
+        .await?
+        .into_iter()
+        .find(|chat| named(&chat.id, &chat.name))
+        .map(PresentSpace::Chat))
+}
+
+/// The spaces `names` selects, or the current one or those the picker
+/// offers without names.
+pub(super) async fn selected_spaces(
+    ctx: &Context,
+    names: Vec<String>,
+) -> Result<Vec<PresentSpace>> {
+    let mut spaces = Vec::new();
+    for selector in ui::select_spaces(ctx, names).await? {
+        let space = present_space(ctx, &selector)
+            .await?
+            .with_context(|| format!("no space {selector}"))?;
+        spaces.push(space);
+    }
+    Ok(spaces)
+}
+
+/// Export `spaces` to a file each in `directory`, once each one can be
+/// exported, so a space that cannot be leaves every other one in place.
 async fn export_into(
     ctx: &Context,
-    workspaces: &[Workspace],
+    spaces: &[PresentSpace],
     directory: PathBuf,
     yes: bool,
 ) -> Result<i32> {
     let directory = ExportDirectory::create(directory)?;
     let heading = format!(
-        "Export {} workspaces to {}",
-        workspaces.len(),
+        "Export {} spaces to {}",
+        spaces.len(),
         directory.shown.display()
     );
-    let planned = check_exports(ctx, workspaces, &directory, yes, &heading, EXPORT).await?;
+    let planned = check_exports(ctx, spaces, &directory, yes, &heading, EXPORT).await?;
     export_each(ctx, planned, &directory).await
 }
 
@@ -97,13 +130,13 @@ const EXPORT: Operation = ("export", "export");
 pub(super) fn ensure_unscoped_export(ctx: &Context) -> Result<()> {
     ensure!(
         !crate::env::inherits_scope(&ctx.paths.state),
-        "workspace processes cannot export workspaces; ask the user to run shoal move export"
+        "workspace processes cannot export spaces; ask the user to run shoal move export"
     );
     Ok(())
 }
 
 /// Where an export goes: a new file whose directory takes a file before
-/// the workspace is removed, so an unwritable destination fails first, or a
+/// the space ends, so an unwritable destination fails first, or a
 /// temporary file copied to standard output.
 enum Output {
     Stream { directory: tempfile::TempDir },
@@ -188,42 +221,45 @@ async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Resul
     Ok(exported)
 }
 
-/// Export the workspace to `output` once its checkpoint can keep every
-/// unsaved file, `output` lies outside it and the user lets its holds go;
-/// a removed workspace with that name or ID is exported from its record.
-async fn export_workspace(
+/// Export `space` to `output` once it can end for the export and the user
+/// lets it end.
+async fn export_space(
     ctx: &Context,
-    workspace: &str,
+    space: PresentSpace,
     yes: bool,
     output: &Output,
 ) -> Result<ExportedSpace> {
-    let check = check_export(ctx, workspace, output).await?;
-    ensure_children_exported(&check, &[])?;
-    let action = format!(
-        "Export workspace: {}\nRemoves it here and releases its holds:",
-        check.workspace.name
-    );
-    confirm_holds(ctx, yes, action, &[&check])?;
+    let check = check_export(ctx, space, output).await?;
+    check.ensure_children_exported(&[])?;
+    confirm_ending(ctx, yes, format!("Export {}", check.label()), &[&check])?;
     export_checked(ctx, &check, output).await
 }
 
-/// Remove the workspace `check` describes and export it to `output`.
-async fn export_checked(
-    ctx: &Context,
-    check: &RemovalCheck,
-    output: &Output,
-) -> Result<ExportedSpace> {
-    let method = RemovalMethod::ExportSpace {
-        space: check.workspace.id.clone(),
-        unsaved: UnsavedWork::confirming(check),
-        file: output.file(),
+/// End the space `check` describes and export it to `output`.
+async fn export_checked(ctx: &Context, check: &Checked, output: &Output) -> Result<ExportedSpace> {
+    let exported = match check {
+        Checked::Workspace(check) => {
+            let method = RemovalMethod::ExportSpace {
+                space: check.workspace.id.clone(),
+                unsaved: UnsavedWork::confirming(check),
+                file: output.file(),
+            };
+            super::super::workspaces::leaving(
+                ctx,
+                &check.workspace,
+                request::<ExportedSpace>(&ctx.paths, method),
+            )
+            .await?
+        }
+        Checked::Chat(chat) => {
+            let method = RemovalMethod::ExportSpace {
+                space: chat.id.clone(),
+                unsaved: UnsavedWork::default(),
+                file: output.file(),
+            };
+            request::<ExportedSpace>(&ctx.paths, method).await?
+        }
     };
-    let exported = super::super::workspaces::leaving(
-        ctx,
-        &check.workspace,
-        request::<ExportedSpace>(&ctx.paths, method),
-    )
-    .await?;
     if let Some(error) = exported
         .removal
         .as_ref()
@@ -242,16 +278,79 @@ fn warn(exported: &ExportedSpace) {
     }
 }
 
-async fn workspace_exists(ctx: &Context, selector: &str) -> Result<bool> {
-    Ok(client::workspaces(&ctx.paths)
-        .await?
-        .iter()
-        .any(|workspace| workspace.id == selector || workspace.name == selector))
+/// A space that passed its export check: a workspace with what its removal
+/// would delete, or a running chat whose agent reported a session.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "one per exported space, moved into its planned export"
+)]
+pub(super) enum Checked {
+    Workspace(RemovalCheck),
+    Chat(Chat),
+}
+
+impl Checked {
+    fn name(&self) -> &str {
+        match self {
+            Self::Workspace(check) => &check.workspace.name,
+            Self::Chat(chat) => &chat.name,
+        }
+    }
+
+    /// The space with its kind, as a confirmation names it.
+    fn label(&self) -> String {
+        match self {
+            Self::Workspace(check) => format!("workspace {}", check.workspace.name),
+            Self::Chat(chat) => format!("chat {}", chat.name),
+        }
+    }
+
+    /// Refuse to export a workspace without the workspaces below it, which
+    /// removing it here would take unexported, unless they are among the
+    /// `exported` too.
+    fn ensure_children_exported(&self, exported: &[&str]) -> Result<()> {
+        match self {
+            Self::Workspace(check) => ensure_children_exported(check, exported),
+            Self::Chat(_) => Ok(()),
+        }
+    }
+}
+
+/// What ending `space` for an export would do, refusing an export that
+/// would lose work or cut its own output off.
+async fn check_export(ctx: &Context, space: PresentSpace, output: &Output) -> Result<Checked> {
+    match space {
+        PresentSpace::Workspace(workspace) => check_workspace_export(ctx, &workspace.id, output)
+            .await
+            .map(Checked::Workspace),
+        PresentSpace::Chat(chat) => check_chat_export(chat).map(Checked::Chat),
+    }
+}
+
+/// Refuse to export a chat whose agent reported no session, which would not
+/// continue elsewhere, or the one this process runs in, which ending the
+/// chat would end before the export finished.
+fn check_chat_export(chat: Chat) -> Result<Chat> {
+    ensure!(
+        chat.session.is_some(),
+        "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
+        chat.name
+    );
+    ensure!(
+        crate::env::chat().as_deref() != Some(chat.id.as_str()),
+        "this process runs in chat {}, which the export ends; export it from another terminal",
+        chat.name
+    );
+    Ok(chat)
 }
 
 /// What removing the workspace for an export would delete, refusing unsaved
 /// files a checkpoint cannot keep and an output the removal would cut off.
-async fn check_export(ctx: &Context, workspace: &str, output: &Output) -> Result<RemovalCheck> {
+async fn check_workspace_export(
+    ctx: &Context,
+    workspace: &str,
+    output: &Output,
+) -> Result<RemovalCheck> {
     let check = request::<RemovalCheck>(
         &ctx.paths,
         RemovalMethod::CheckRemoval {
@@ -296,19 +395,39 @@ fn ensure_children_exported(check: &RemovalCheck, exported: &[&str]) -> Result<(
     Ok(())
 }
 
-/// Ask with `action`, unless `yes` confirms it, before releasing the holds
-/// external sessions keep on the workspaces `checks` describe, naming each
-/// hold's workspace when there are several.
-fn confirm_holds(
-    ctx: &Context,
-    yes: bool,
-    mut action: String,
-    checks: &[&RemovalCheck],
-) -> Result<()> {
-    if yes || checks.iter().all(|check| check.workspace.holds.is_empty()) {
+/// Ask under `heading`, unless `yes` confirms it, before ending the spaces
+/// `checks` describe where that needs the user: a chat, which the user
+/// talks with, or a workspace with holds that external sessions keep, which
+/// the export releases, naming each hold's workspace when there are several.
+fn confirm_ending(ctx: &Context, yes: bool, heading: String, checks: &[&Checked]) -> Result<()> {
+    let chats: Vec<&Chat> = checks
+        .iter()
+        .filter_map(|check| match check {
+            Checked::Chat(chat) => Some(chat),
+            Checked::Workspace(_) => None,
+        })
+        .collect();
+    let held: Vec<&RemovalCheck> = checks
+        .iter()
+        .filter_map(|check| match check {
+            Checked::Workspace(check) if !check.workspace.holds.is_empty() => Some(check),
+            _ => None,
+        })
+        .collect();
+    if yes || (chats.is_empty() && held.is_empty()) {
         return Ok(());
     }
-    for check in checks {
+    let mut action = heading;
+    if !chats.is_empty() {
+        action.push_str("\nEnds these chats here, stopping their agents:");
+        for chat in &chats {
+            action.push_str(&format!("\n  {} ({})", chat.name, chat.agent));
+        }
+    }
+    if !held.is_empty() {
+        action.push_str("\nRemoves the workspaces here and releases these holds:");
+    }
+    for check in &held {
         for hold in &check.workspace.holds {
             action.push_str("\n  ");
             if checks.len() > 1 {
@@ -320,36 +439,39 @@ fn confirm_holds(
             }
         }
     }
-    ensure!(
-        ui::confirm(ctx, &action, "--yes")?,
-        "workspace export canceled"
-    );
+    ensure!(ui::confirm(ctx, &action, "--yes")?, "export canceled");
     Ok(())
 }
 
-/// The workspaces of `repository`, by name.
-pub(super) async fn repository_workspaces(
+/// The spaces of `repository`, by name: its workspaces and running chats.
+pub(super) async fn repository_spaces(
     ctx: &Context,
     repository: String,
-) -> Result<Vec<Workspace>> {
+) -> Result<Vec<PresentSpace>> {
     let repositories = client::repositories(&ctx.paths).await?;
     let repo =
         crate::repository::select(&repositories, ui::repository_selector(repository)?).await?;
-    let mut workspaces: Vec<Workspace> = client::workspaces(&ctx.paths)
+    let workspaces = client::workspaces(&ctx.paths)
         .await?
         .into_iter()
         .filter(|workspace| workspace.repository_id == repo.id)
-        .collect();
+        .map(PresentSpace::Workspace);
+    let chats = client::chats(&ctx.paths)
+        .await?
+        .into_iter()
+        .filter(|chat| chat.repository_id == repo.id)
+        .map(PresentSpace::Chat);
+    let mut spaces: Vec<PresentSpace> = workspaces.chain(chats).collect();
     ensure!(
-        !workspaces.is_empty(),
-        "{} has no workspaces to export",
+        !spaces.is_empty(),
+        "{} has no spaces to export",
         crate::repository::name(repo)
     );
-    workspaces.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(workspaces)
+    spaces.sort_by(|a, b| a.name().cmp(b.name()));
+    Ok(spaces)
 }
 
-/// The directory an export of every workspace goes to, shown as the user
+/// The directory an export of several spaces goes to, shown as the user
 /// named it.
 pub(super) struct ExportDirectory {
     path: PathBuf,
@@ -366,45 +488,46 @@ impl ExportDirectory {
         Ok(Self { path, shown })
     }
 
-    /// The file `workspace` goes to.
-    fn file(&self, workspace: &str) -> PathBuf {
-        self.path.join(Self::file_name(workspace))
+    /// The file the space `name` goes to.
+    fn file(&self, name: &str) -> PathBuf {
+        self.path.join(Self::file_name(name))
     }
 
-    /// The file `workspace` goes to, as the user names it.
-    fn shown_file(&self, workspace: &str) -> PathBuf {
-        self.shown.join(Self::file_name(workspace))
+    /// The file the space `name` goes to, as the user names it.
+    fn shown_file(&self, name: &str) -> PathBuf {
+        self.shown.join(Self::file_name(name))
     }
 
-    fn file_name(workspace: &str) -> String {
-        format!("{workspace}.shoal")
+    fn file_name(name: &str) -> String {
+        format!("{name}.shoal")
     }
 }
 
-/// A workspace that passed its export check, with the file it goes to.
+/// A space that passed its export check, with the file it goes to.
 pub(super) struct PlannedExport {
-    check: RemovalCheck,
+    check: Checked,
     output: Output,
 }
 
 impl PlannedExport {
     pub(super) fn name(&self) -> &str {
-        &self.check.workspace.name
+        self.check.name()
     }
 
-    /// Remove the workspace and export it, returning the file it went to.
+    /// End the space and export it, returning the file it went to.
     pub(super) async fn export(self, ctx: &Context) -> Result<PathBuf> {
         export_checked(ctx, &self.check, &self.output).await?;
         Ok(self.output.file())
     }
 }
 
-/// Check every workspace before exporting any, refusing with each one that
-/// cannot be exported, then let the user release all of their holds at once,
-/// asking under `heading`; `operation` names the batch in refusals.
+/// Check every space before exporting any, refusing with each one that
+/// cannot be exported, then let the user end all of them at once where that
+/// needs the user, asking under `heading`; `operation` names the batch in
+/// refusals.
 pub(super) async fn check_exports(
     ctx: &Context,
-    workspaces: &[Workspace],
+    spaces: &[PresentSpace],
     directory: &ExportDirectory,
     yes: bool,
     heading: &str,
@@ -412,49 +535,45 @@ pub(super) async fn check_exports(
 ) -> Result<Vec<PlannedExport>> {
     let mut planned = Vec::new();
     let mut refusals = Vec::new();
-    let exported: Vec<&str> = workspaces.iter().map(|w| w.name.as_str()).collect();
-    for workspace in workspaces {
+    let exported: Vec<&str> = spaces.iter().map(PresentSpace::name).collect();
+    for space in spaces {
         let export = async {
-            let export = plan_export(ctx, workspace, directory, operation).await?;
-            ensure_children_exported(&export.check, &exported)?;
+            let export = plan_export(ctx, space, directory, operation).await?;
+            export.check.ensure_children_exported(&exported)?;
             Ok::<_, anyhow::Error>(export)
         };
         match export.await {
             Ok(export) => planned.push(export),
-            Err(error) => refusals.push(format!("{}: {error:#}", workspace.name)),
+            Err(error) => refusals.push(format!("{}: {error:#}", space.name())),
         }
     }
     ensure!(
         refusals.is_empty(),
-        "cannot {} these workspaces, so none was removed:\n  {}",
+        "cannot {} these spaces, so none was ended:\n  {}",
         operation.1,
         refusals.join("\n  ")
     );
-    let action = format!("{heading}\nRemoves them here and releases these holds:");
-    let held: Vec<&RemovalCheck> = planned
-        .iter()
-        .map(|export| &export.check)
-        .filter(|check| !check.workspace.holds.is_empty())
-        .collect();
-    confirm_holds(ctx, yes, action, &held)?;
+    let checks: Vec<&Checked> = planned.iter().map(|export| &export.check).collect();
+    confirm_ending(ctx, yes, heading.to_owned(), &checks)?;
     Ok(planned)
 }
 
-/// Reserve the workspace's file in `directory` and check its removal as a
-/// batch's.
+/// Reserve the space's file in `directory` and check it as a batch's.
 async fn plan_export(
     ctx: &Context,
-    workspace: &Workspace,
+    space: &PresentSpace,
     directory: &ExportDirectory,
     operation: Operation,
 ) -> Result<PlannedExport> {
-    let output = Output::reserve(&directory.file(&workspace.name))?;
-    let check = check_export(ctx, &workspace.id, &output).await?;
-    super::super::workspaces::ensure_batch_removable(ctx, &check, operation).await?;
+    let output = Output::reserve(&directory.file(space.name()))?;
+    let check = check_export(ctx, space.clone(), &output).await?;
+    if let Checked::Workspace(check) = &check {
+        super::super::workspaces::ensure_batch_removable(ctx, check, operation).await?;
+    }
     Ok(PlannedExport { check, output })
 }
 
-/// Export each planned workspace, going on after one fails.
+/// Export each planned space, going on after one fails.
 async fn export_each(
     ctx: &Context,
     planned: Vec<PlannedExport>,
@@ -462,7 +581,7 @@ async fn export_each(
 ) -> Result<i32> {
     let mut report = ui::Report::new("exported", "export");
     for PlannedExport { check, output } in planned {
-        let name = &check.workspace.name;
+        let name = check.name();
         match export_checked(ctx, &check, &output).await {
             Ok(exported) => {
                 let message = format!(
@@ -483,11 +602,11 @@ async fn export_each(
     let shown = directory.shown.display();
     let summary = if failed == 0 {
         format!(
-            "Exported {exported} workspaces to {shown}; shoal move import {shown} opens them on another machine"
+            "Exported {exported} spaces to {shown}; shoal move import {shown} opens them on another machine"
         )
     } else {
         format!(
-            "Exported {exported} of {} workspaces to {shown}; {failed} failed",
+            "Exported {exported} of {} spaces to {shown}; {failed} failed",
             exported + failed
         )
     };
