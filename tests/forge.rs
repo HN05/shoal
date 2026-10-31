@@ -844,6 +844,49 @@ fn pr_review_takes_line_comments_from_arguments_and_a_file_and_watches_skip_it()
 }
 
 #[test]
+fn watches_do_not_report_a_forgejo_reviewer_request_as_a_review() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    let responses = |state: &str, reviews: Value| {
+        let mut pull = pull(8, state, "Fix", &[]);
+        pull["head"]["sha"] = json!("head");
+        json!({
+            "GET repos/team/project/pulls/8": {"body": pull},
+            "GET repos/team/project/issues/8/comments?limit=50&page=1":
+                {"body": [{"id": 1, "body": "First"}]},
+            "GET repos/team/project/pulls/8/reviews?limit=50&page=1": {"body": reviews},
+            "GET repos/team/project/commits/head/status?limit=50":
+                {"body": {"total_count": 0, "statuses": []}},
+            "POST repos/team/project/pulls/8/requested_reviewers": {"status": 201, "body": []},
+        })
+    };
+    fixture.respond(responses("open", json!([])));
+    fixture.ok(&["link", "pr", "8", "assigned", "--workspace", "topic"]);
+    let first = fixture.ok(&["watch", "pr", "--workspace", "topic"]);
+    assert_eq!(first["updates"][0]["kind"], "comment", "{first}");
+
+    fixture.ok(&[
+        "pr",
+        "edit",
+        "--workspace",
+        "topic",
+        "--add-reviewer",
+        "lead",
+    ]);
+    // Forgejo records the request as a review with no body or comments.
+    let request = json!([{"id": 3, "body": "", "state": "REQUEST_REVIEW",
+        "comments_count": 0, "user": {"login": "lead"}}]);
+    fixture.respond(responses("closed", request));
+    let closed = fixture.ok(&["watch", "pr", "--workspace", "topic"]);
+    let kinds: Vec<_> = closed["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|update| update["kind"].clone())
+        .collect();
+    assert_eq!(kinds, ["closed"], "{closed}");
+}
+
+#[test]
 fn review_threads_take_replies_and_ask_before_resolving_without_one() {
     let fixture = Fixture::new(Forge::GitHub, "");
     let endpoint = "repos/team/project/pulls/8";

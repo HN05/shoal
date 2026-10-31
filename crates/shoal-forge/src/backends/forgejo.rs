@@ -954,7 +954,8 @@ impl RestReads for Forgejo {
         number: u64,
     ) -> Result<Vec<(String, Entry)>> {
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
-        let reviews = repo.pages(account, &endpoint).await?;
+        let mut reviews = repo.pages(account, &endpoint).await?;
+        reviews.retain(submitted);
         fingerprints(
             &reviews,
             &[
@@ -990,6 +991,12 @@ impl RestReads for Forgejo {
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews"));
         forgejo_reviews(&repo.pages(account, &endpoint).await?)
     }
+}
+
+/// Whether a Forgejo review record is a submitted review. Requesting a
+/// reviewer adds a `REQUEST_REVIEW` record, and a draft is `PENDING`.
+fn submitted(review: &Value) -> bool {
+    !matches!(review["state"].as_str(), Some("PENDING" | "REQUEST_REVIEW"))
 }
 
 /// Forgejo's combined status; a commit without statuses has `"statuses": null`.
