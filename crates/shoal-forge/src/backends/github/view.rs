@@ -27,7 +27,10 @@ pub(crate) async fn details(
     let repository = format!("{}/{}", repo.host, repo.path);
     let (command, extra) = match kind {
         ItemKind::Issue => ("issue", ""),
-        ItemKind::Pr => ("pr", ",headRefName,baseRefName,isDraft,autoMergeRequest"),
+        ItemKind::Pr => (
+            "pr",
+            ",headRefName,baseRefName,isDraft,autoMergeRequest,reviewRequests",
+        ),
     };
     let fields = format!(
         "number,title,body,state,author,labels,createdAt{extra}{}",
@@ -88,6 +91,7 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
         ItemKind::Issue => None,
         ItemKind::Pr => Some(PrDetails {
             auto_merge: auto_merge(&item["autoMergeRequest"])?,
+            reviewers: review_requests(&item["reviewRequests"]),
             ..PrDetails::read(
                 &item["headRefName"],
                 &item["baseRefName"],
@@ -140,6 +144,18 @@ fn auto_merge(request: &Value) -> Result<Option<AutoMerge>> {
     Ok(Some(AutoMerge {
         method: Some(method),
     }))
+}
+
+/// The users and teams asked for a review, which `gh` names by login and
+/// by `owner/team` slug.
+fn review_requests(requests: &Value) -> Vec<String> {
+    requests
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|request| request["slug"].as_str().or(request["login"].as_str()))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The REST ID of the comment at `url`, which `gh` reports only there.

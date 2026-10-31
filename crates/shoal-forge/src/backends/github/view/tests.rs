@@ -30,17 +30,24 @@ fn github_issue_and_pr_details_read_content_and_comments() {
         ("topic", "main", true)
     );
     assert_eq!(pr.auto_merge, None);
+    assert!(pr.reviewers.is_empty());
 
     let mut pull = pull;
     pull["state"] = json!("OPEN");
     pull["autoMergeRequest"] = json!({"mergeMethod": "SQUASH", "enabledBy": {"login": "kim"}});
-    let details = parse_details(&pull.to_string(), ItemKind::Pr, 7).unwrap();
+    pull["reviewRequests"] = json!([{"__typename": "User", "login": "kim"},
+            {"__typename": "Team", "name": "Core", "slug": "o/core"}]);
+    let pr = parse_details(&pull.to_string(), ItemKind::Pr, 7)
+        .unwrap()
+        .pr
+        .unwrap();
     assert_eq!(
-        details.pr.unwrap().auto_merge,
+        pr.auto_merge,
         Some(AutoMerge {
             method: Some(MergeMethod::Squash)
         })
     );
+    assert_eq!(pr.reviewers, ["kim", "o/core"]);
 }
 
 #[test]

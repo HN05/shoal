@@ -455,6 +455,9 @@ fn render_pr(url: &str, state: &str, pr: &PrDetails, palette: Palette) {
     if let Some(review) = pr.review {
         outln!("Review:   {}", palette.review_state(review));
     }
+    if !pr.reviewers.is_empty() {
+        outln!("Reviewers: {}", pr.reviewers.join(", "));
+    }
     outln!("Checks:   {}", pr.checks.len());
     for check in &pr.checks {
         outln!("  {}: {}", check.name, palette.check_result(&check.result));

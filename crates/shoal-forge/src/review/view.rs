@@ -66,6 +66,12 @@ pub struct PrDetails {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_runs: Vec<WaitingRun>,
     pub review: Option<ReviewState>,
+    /// The users and teams the forge lists as the PR's reviewers, named as
+    /// `pr edit --add-reviewer` takes them. GitHub lists only those whose
+    /// review is still requested; Forgejo also those who approved or
+    /// requested changes unasked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reviewers: Vec<String>,
     /// Set while the forge is to merge the open PR once it can.
     #[serde(default)]
     pub auto_merge: Option<AutoMerge>,
@@ -219,6 +225,7 @@ impl PrDetails {
             checks: Vec::new(),
             waiting_runs: Vec::new(),
             review: None,
+            reviewers: Vec::new(),
             auto_merge: None,
         }
     }

@@ -955,6 +955,7 @@ async fn view_details(
     let open = current.item.state == ItemState::Open;
     let pr = current.item.pr.map(|pr| PrDetails {
         auto_merge: auto_merge(&value).filter(|_| open),
+        reviewers: current.reviewers,
         ..PrDetails::new(pr.head, pr.base, pr.draft)
     });
     Ok(Details {

@@ -23,7 +23,7 @@ pub(crate) async fn details(
     let item = repo
         .send(account, &Request::get(repo.item_endpoint(kind, number)))
         .await?;
-    let mut details = parse_details(&item, kind, number)?;
+    let mut details = parse_details(&item, kind, number, repo.owner())?;
     let open = details.state == "open";
     if let Some(pr) = details.pr.as_mut().filter(|_| open) {
         let endpoint = repo.repo_endpoint(&format!("issues/{number}/timeline"));
@@ -65,7 +65,9 @@ pub(crate) async fn discussion(
     parse_reviews(&review_comments(repo, account, number).await?, errors).map(Some)
 }
 
-fn parse_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
+/// Teams that review a PR belong to the organization `owner` that owns its
+/// repository.
+fn parse_details(item: &Value, kind: ItemKind, number: u64, owner: &str) -> Result<Details> {
     ensure!(
         item["number"] == number,
         "Forgejo returned a different item"
@@ -78,11 +80,14 @@ fn parse_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
             );
             None
         }
-        ItemKind::Pr => Some(PrDetails::read(
-            &item["head"]["ref"],
-            &item["base"]["ref"],
-            item["draft"].as_bool().unwrap_or_default(),
-        )?),
+        ItemKind::Pr => Some(PrDetails {
+            reviewers: reviewers(item, owner),
+            ..PrDetails::read(
+                &item["head"]["ref"],
+                &item["base"]["ref"],
+                item["draft"].as_bool().unwrap_or_default(),
+            )?
+        }),
     };
     let state = if item["merged"].as_bool() == Some(true) {
         "merged".to_owned()
@@ -102,6 +107,16 @@ fn parse_details(item: &Value, kind: ItemKind, number: u64) -> Result<Details> {
         reviews: None,
         reactions: Vec::new(),
     })
+}
+
+/// The users and teams with a review request or verdict on the PR.
+fn reviewers(item: &Value, owner: &str) -> Vec<String> {
+    let list = |field: &str| item[field].as_array().into_iter().flatten();
+    let users =
+        list("requested_reviewers").filter_map(|user| user["login"].as_str().map(str::to_owned));
+    let teams = list("requested_reviewers_teams")
+        .filter_map(|team| Some(format!("{owner}/{}", team["name"].as_str()?)));
+    users.chain(teams).collect()
 }
 
 fn parse_comments(comments: &Value) -> Result<Vec<Comment>> {

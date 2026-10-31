@@ -773,10 +773,10 @@ async fn view_details(
         created_at: text(&value["created_on"]).unwrap_or_default(),
         labels: Vec::new(),
         body: current.body,
-        pr: current
-            .item
-            .pr
-            .map(|pr| PrDetails::new(pr.head, pr.base, pr.draft)),
+        pr: current.item.pr.map(|pr| PrDetails {
+            reviewers: current.reviewers,
+            ..PrDetails::new(pr.head, pr.base, pr.draft)
+        }),
         comments: None,
         reviews: None,
         reactions: Vec::new(),

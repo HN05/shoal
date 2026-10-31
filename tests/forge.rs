@@ -1121,6 +1121,25 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
 }
 
 #[test]
+fn pr_views_list_the_reviewers() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let mut closed = pull(8, "closed", "Fix", &[]);
+    closed["requested_reviewers"] = json!([{"login": "kim"}]);
+    closed["requested_reviewers_teams"] = json!([{"name": "core"}]);
+    fixture.respond(json!({"GET repos/team/project/pulls/8": {"body": closed}}));
+    let args = ["view", "pr", "8", "--workspace", "topic", "--no-comments"];
+    let view = &fixture.ok(&args)[0];
+    assert_eq!(
+        view["pr"]["reviewers"],
+        json!(["kim", "team/core"]),
+        "{view}"
+    );
+    let text = fixture.run(&args);
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("Reviewers: kim, team/core"), "{text}");
+}
+
+#[test]
 fn views_count_reactions_and_mark_the_logins_own() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let issue = "repos/team/project/issues/3";

@@ -3211,7 +3211,9 @@ author, labels, description, comments, and reviews with their inline comments,
 with the reactions on the item and each comment where the forge has them, as
 emoji on a terminal in a UTF-8 locale other than the Linux console and by name
 otherwise; a
-PR adds its branches, how many commits its base has that its head lacks (`behind`,
+PR adds its branches, its `reviewers` as `pr edit --add-reviewer` names them (on
+GitHub only those whose review is still requested, on Forgejo and Gitea also those
+who approved or requested changes unasked), how many commits its base has that its head lacks (`behind`,
 left out for a closed PR and on Bitbucket), its `auto_merge` while the forge is to
 merge it once it can, with the `method` where the forge reports it (Forgejo and
 Gitea do not), the merge conflicts, CI checks, runs waiting for approval and

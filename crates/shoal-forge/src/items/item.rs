@@ -71,7 +71,8 @@ pub struct Current {
     /// Whether GitHub would merge the open PR now, which it then refuses
     /// to merge later.
     pub merges_now: bool,
-    /// The usernames of a GitLab merge request's reviewers.
+    /// A GitLab merge request's reviewers by username, or a Bitbucket pull
+    /// request's by account ID.
     pub reviewers: Vec<String>,
     /// GitLab user IDs by username, which its reviewer changes take: the
     /// reviewers', and those of the users an edit adds.

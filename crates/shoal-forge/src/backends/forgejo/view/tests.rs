@@ -7,16 +7,19 @@ fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
     let pull = json!({"number": 541, "title": "Share", "body": "Why", "state": "closed",
             "merged": true, "user": {"login": "dev"}, "labels": [{"name": "type/chore"}],
             "created_at": "2026-10-10T01:00:00+02:00", "head": {"ref": "topic"}, "base": {"ref": "main"},
-            "draft": false, "pull_request": {"merged": true}});
-    let details = parse_details(&pull, ItemKind::Pr, 541).unwrap();
+            "draft": false, "pull_request": {"merged": true},
+            "requested_reviewers": [{"login": "kim"}], "requested_reviewers_teams": [{"name": "core"}]});
+    let details = parse_details(&pull, ItemKind::Pr, 541, "team").unwrap();
     assert_eq!(details.state, "merged");
     assert_eq!(details.labels, ["type/chore"]);
-    assert_eq!(details.pr.unwrap().head, "topic");
-    assert!(parse_details(&pull, ItemKind::Issue, 541).is_err());
+    let pr = details.pr.unwrap();
+    assert_eq!(pr.head, "topic");
+    assert_eq!(pr.reviewers, ["kim", "team/core"]);
+    assert!(parse_details(&pull, ItemKind::Issue, 541, "team").is_err());
 
     let issue = json!({"number": 548, "title": "View", "body": "Text", "state": "open",
             "user": {"login": "HN05"}, "labels": [], "created_at": "t", "pull_request": null});
-    let details = parse_details(&issue, ItemKind::Issue, 548).unwrap();
+    let details = parse_details(&issue, ItemKind::Issue, 548, "team").unwrap();
     assert_eq!(
         (details.state.as_str(), details.body.as_str()),
         ("open", "Text")
