@@ -225,7 +225,23 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
     crate::git::detached::add(&fixture.workspace.path, &checkout, head.trim())
         .await
         .unwrap();
+    // A reviewer that outlived its daemon, no child of this process.
+    let spawned = std::process::Command::new("sh")
+        .args(["-c", "sleep 100000 >/dev/null 2>&1 & echo $!"])
+        .current_dir(&checkout)
+        .output()
+        .unwrap();
+    let survivor: i32 = String::from_utf8_lossy(&spawned.stdout)
+        .trim()
+        .parse()
+        .unwrap();
     manager.recover_reviews().await.unwrap();
+    // SAFETY: signal 0 only checks whether the process exists.
+    assert_ne!(
+        unsafe { libc::kill(survivor, 0) },
+        0,
+        "the survivor runs on"
+    );
     assert!(!checkout.parent().unwrap().exists());
     let review = manager.review(queued).await.unwrap();
     assert_eq!((review.state, review.head), (ReviewState::Queued, None));
