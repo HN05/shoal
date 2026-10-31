@@ -3931,7 +3931,7 @@ fn diff_excludes_new_main_commits_before_and_after_rebase_and_uses_git_configura
 #[test]
 fn review_runs_the_configured_command_or_queues_an_agent_review() {
     let fixture = Fixture::with_config(Some(
-        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n",
+        "agent.default = 'reviewer'\n[commands]\nreview = ['printf', 'manual %s', '{branch}']\n[agents.reviewer]\ncommand = ['printf', '%s|', '{prompt}', '{args}']\n[agents.absent]\ncommand = ['no-such-reviewer']\nreview = ['{prompt}', '{schema}']\n",
     ));
     fixture.add("changes");
     let output = fixture.run(&["review", "run", "changes"]);
@@ -3957,6 +3957,10 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
             &["review", "run", "changes", "--agent", "reviewer"][..],
             "reviewer has no review template",
         ),
+        (
+            &["review", "run", "changes", "--agent", "absent"][..],
+            "no-such-reviewer is not installed",
+        ),
     ] {
         let output = fixture.run(args);
         assert!(!output.status.success(), "{output:?}");
@@ -3965,6 +3969,11 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
             "{output:?}"
         );
     }
+    // Nothing was queued.
+    assert_eq!(
+        fixture.ok(&["review", "list", "changes"]),
+        serde_json::json!([])
+    );
     // Without a configured review command, the agent reviews in the daemon.
     let result = fixture.root.path().join("review.json");
     fs::write(
