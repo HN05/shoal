@@ -149,7 +149,7 @@ command = ["claude"]
 default_mode = "cli"
 
 [agents.codex]
-command = ["codex", "{args}", "-c", "sandbox_workspace_write.network_access=true"]
+command = ["codex", "{args}"]
 # `shoal codex` without --cli/--app: "cli" or "app".
 default_mode = "cli"
 # The model and reasoning effort its agents run with; --model and --effort

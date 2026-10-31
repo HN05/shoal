@@ -274,10 +274,10 @@ review and exporting feedback to an agent.
 CLI agents and chats run in [zmx](https://github.com/neurosnap/zmx) sessions that keep
 running when you detach with Ctrl-\ or close the terminal; `shoal attach` returns
 to one, or to an agent's Herdr tab, by its workspace's or chat's name. Happy sessions run detached, log
-to a file Shoal names, and stop with `shoal stop`. Codex runs in its own sandbox
-with network access, so its Shoal commands reach the daemon, and Claude runs with its
-own settings; use `shoal run --workspace fix-login -- codex` for a
-custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
+to a file Shoal names, and stop with `shoal stop`. Codex and Claude run with
+their own sandbox and approval settings; Shoal turns on network access in Codex's
+sandbox so its commands reach the daemon. Use `shoal run --workspace fix-login -- codex`
+for a custom invocation. Shoal's resource scope is cooperative, not a filesystem sandbox.
 Apps that launch their own processes can request `shoal work env fix-login --json`
 and add the returned variables to each child's environment. Revoke its scope
 with `shoal work env fix-login --revoke <token>`. See

@@ -751,12 +751,16 @@ CLI agents' are:
 command = ["claude"]
 
 [agents.codex]
-command = ["codex", "{args}", "-c", "sandbox_workspace_write.network_access=true"]
+command = ["codex", "{args}"]
 ```
 
 Override their `command` to change the executable or flags; prompt templates,
 trust setup, and agent exit notifications still apply. A `[commands]` entry
-cannot name an agent.
+cannot name an agent. Both run with their own sandbox and approval settings.
+Every Codex launch, chats included, adds
+`-c sandbox_workspace_write.network_access=true`, since Codex's workspace-write
+sandbox otherwise blocks the daemon's socket and allows a single socket only
+along with the network.
 Claude and Codex launches, including Happy's, trust the repository's checkout and
 shared Shoal workspaces directory before launch, creating the agent's user config if
 needed and preserving other settings. Claude Code looks up a worktree's trust under

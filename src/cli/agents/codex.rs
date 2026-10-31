@@ -30,7 +30,7 @@ pub(super) struct Codex;
 
 impl Integration for Codex {
     fn hook_args(&self, proxied: bool) -> std::io::Result<Vec<OsString>> {
-        let mut args = config_overrides(true)?;
+        let mut args = shoal_overrides(true)?;
         if proxied {
             args.push(PROVIDER.into());
         }
@@ -54,7 +54,7 @@ impl Integration for Codex {
     }
 
     fn chat_hook_args(&self) -> std::io::Result<Vec<OsString>> {
-        config_overrides(false)
+        shoal_overrides(false)
     }
 
     /// Codex fires no hook after a failed turn, so the proxy's failure
@@ -105,6 +105,19 @@ impl Integration for Codex {
     fn app(&self) -> Option<&'static App> {
         Some(&APP)
     }
+}
+
+/// The setting that lets Codex's workspace-write sandbox, which blocks the
+/// network, reach Shoal's daemon socket; Codex allows a single socket only
+/// along with the whole network. Git pushes need the network too.
+const DAEMON_ACCESS: [&str; 2] = ["-c", "sandbox_workspace_write.network_access=true"];
+
+/// What every Codex launch takes from Shoal: its hooks, see
+/// [`config_overrides`], and access to the daemon from Codex's sandbox.
+fn shoal_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
+    let mut args = config_overrides(turn_state)?;
+    args.extend(DAEMON_ACCESS.map(OsString::from));
+    Ok(args)
 }
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.

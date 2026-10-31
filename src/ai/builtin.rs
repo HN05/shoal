@@ -56,14 +56,7 @@ pub const PROVIDERS: &[Provider] = &[
     Provider {
         name: "codex",
         integration: IntegrationKind::Codex,
-        // Codex's workspace-write sandbox blocks the network, which Shoal's
-        // daemon socket and Git pushes need.
-        command: &[
-            "codex",
-            "{args}",
-            "-c",
-            "sandbox_workspace_write.network_access=true",
-        ],
+        command: &["codex", "{args}"],
         skill_dir: SkillDir::Home(".agents/skills"),
         instructions: Some(&["-c", "developer_instructions={instructions_toml}"]),
         resume: Some(&["resume", "{session}"]),

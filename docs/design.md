@@ -1224,10 +1224,12 @@ a claude.ai login within its usage limits, while an agent waiting for CI or a
 review idles longer, so a proxied Claude agent gets the 1-hour cache unless its
 environment or settings choose a lifetime.
 
-Agent shortcuts use the execution wrapper: by default Codex CLI keeps its own sandbox and
-approval settings with the sandbox's network access on, which Shoal's daemon socket and
-Git pushes need, and Claude runs with its own settings, plus permission for a workspace's
-agent to run the Shoal commands that finish its assignment, so completion never
+Agent shortcuts use the execution wrapper: by default Codex CLI and Claude run with their
+own sandbox and approval settings. Every Codex launch, chats included, turns on its
+workspace-write sandbox's network access, which reaching the daemon's socket needs since
+Codex allows a single socket only along with the network, whatever the configured
+command. A workspace's Claude agent gets permission to run the Shoal commands that
+finish its assignment, so completion never
 depends on Claude Code's auto-mode check. Every agent, chats included, gets the
 configured `agent.dirs`, `/tmp` by default, as working directories, so it reads what the
 tools it runs leave there without a permission prompt. A workspace's agent also

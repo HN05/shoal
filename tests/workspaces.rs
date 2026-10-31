@@ -60,8 +60,6 @@ const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
-/// The setting the built-in Codex command adds, which lets sandboxed Codex reach the daemon.
-const NETWORK: &str = "sandbox_workspace_write.network_access=true";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -5099,10 +5097,8 @@ exit 7
         assert_eq!(fs::read_to_string(&directive).unwrap(), format!("{path}\n"));
         let args = if mode == "app" {
             format!("\napp\n{path}\nliteral spaces; $(false)\n")
-        } else if agent == "claude" {
-            format!("{name}\nliteral spaces; $(false)\n")
         } else {
-            format!("{name}\nliteral spaces; $(false)\n-c\n{NETWORK}\n")
+            format!("{name}\nliteral spaces; $(false)\n")
         };
         assert!(
             strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
@@ -5221,7 +5217,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
             } else {
                 let stdout = strip_shoal_arguments(&stdout, '\n');
                 let lines: Vec<_> = stdout.lines().collect();
-                assert_eq!(lines[1..], ["literal spaces; $(false)", "-c", NETWORK]);
+                assert_eq!(lines[1..], ["literal spaces; $(false)"]);
                 assert_eq!(lines[0], "default-mode");
             }
             assert_eq!(
@@ -5363,14 +5359,7 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
         );
         assert_eq!(
             strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n'),
-            format!(
-                "shortcut\n--version\nhello with spaces\n{}",
-                if agent == "claude" {
-                    String::new()
-                } else {
-                    format!("-c\n{NETWORK}\n")
-                }
-            )
+            "shortcut\n--version\nhello with spaces\n"
         );
     }
     // Current-directory resolution supplies an ID internally; Claude's
@@ -20575,7 +20564,9 @@ fn without_launch_arguments<'a>(args: &[&'a str]) -> Vec<&'a str> {
         }
         match (arg, args.clone().next()) {
             ("--settings", Some(value)) if value.contains("messages --hook") => {}
-            ("-c", Some(value)) if value.starts_with("hooks.") => {}
+            ("-c", Some(value))
+                if value.starts_with("hooks.")
+                    || *value == "sandbox_workspace_write.network_access=true" => {}
             ("--add-dir", Some(_)) => {}
             _ => {
                 remaining.push(arg);
@@ -25293,8 +25284,13 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         hooks.collect::<Vec<_>>(),
         ["hooks.PostToolUse", "hooks.UserPromptSubmit"]
     );
+    // Its sandbox lets it reach the daemon.
+    assert_eq!(
+        args[6..8],
+        ["-c", "sandbox_workspace_write.network_access=true"]
+    );
     // Codex's default launcher appends its own options after forwarded ones.
-    assert_eq!(after_temp_dirs(&args[6..])[0], "--search");
+    assert_eq!(after_temp_dirs(&args[8..])[0], "--search");
     let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
     assert!(
         codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),

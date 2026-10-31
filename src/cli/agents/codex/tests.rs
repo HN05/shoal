@@ -22,8 +22,14 @@ fn config_overrides_deliver_messages_and_report_state() {
             "hooks.SessionStart",
             "hooks.Stop",
             "hooks.SubagentStart",
-            "hooks.UserPromptSubmit"
+            "hooks.UserPromptSubmit",
+            "sandbox_workspace_write.network_access"
         ]
+    );
+    // Its sandbox lets it reach the daemon.
+    assert_eq!(
+        hooks["sandbox_workspace_write.network_access"],
+        toml::Value::Boolean(true)
     );
     for event in hooks::MESSAGE_EVENTS {
         let groups = &hooks[&format!("hooks.{event}")];
@@ -58,6 +64,7 @@ fn config_overrides_deliver_messages_and_report_state() {
         chat.iter()
             .any(|arg| arg.to_str().unwrap().contains("messages --hook"))
     );
+    assert!(chat.ends_with(&DAEMON_ACCESS.map(OsString::from)));
 }
 
 #[test]
