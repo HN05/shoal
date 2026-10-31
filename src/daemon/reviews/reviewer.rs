@@ -110,20 +110,58 @@ async fn exit(
         .map_err(Stopped::Failed)? as i32;
     // Dropping the run, as a daemon stop does, kills its whole group.
     let mut guard = GroupGuard(Some(group));
+    // The leader stays unreaped until its group is killed, so its ID names
+    // this group alone when the signal is sent.
     let ended = tokio::select! {
-        exited = tokio::time::timeout(TIMEOUT, child.wait()) => match exited {
-            Ok(status) => Ok(Some(status.map_err(|error| Stopped::Failed(error.into()))?.success())),
+        exited = tokio::time::timeout(TIMEOUT, exited_unreaped(group)) => match exited {
+            Ok(exited) => exited.map(|()| true).map_err(|error| Stopped::Failed(error.into())),
             Err(_) => Err(Stopped::TimedOut),
         },
-        _ = cancel.wait_for(|cancelled| *cancelled) => Ok(None),
+        _ = cancel.wait_for(|cancelled| *cancelled) => Ok(false),
     };
-    // The leader is not reaped yet, so its ID still names this group alone.
     // SAFETY: killpg takes no pointers; a group without members is ESRCH.
     unsafe { libc::killpg(group, libc::SIGKILL) };
-    let _ = child.wait().await;
+    let status = child.wait().await;
     // Once reaped, the ID may name another group.
     guard.0 = None;
-    ended
+    match ended? {
+        true => Ok(Some(
+            status
+                .map_err(|error| Stopped::Failed(error.into()))?
+                .success(),
+        )),
+        false => Ok(None),
+    }
+}
+
+/// How often a running reviewer is checked for having exited.
+const EXIT_POLL: Duration = Duration::from_millis(100);
+
+/// Wait for the child `pid` to exit without reaping it, so its ID still
+/// names its process group until the caller reaps it. It polls rather than
+/// blocking a thread, so a paused clock can drive the timeout in tests.
+async fn exited_unreaped(pid: i32) -> std::io::Result<()> {
+    while !has_exited(pid)? {
+        tokio::time::sleep(EXIT_POLL).await;
+    }
+    Ok(())
+}
+
+/// Whether the child `pid` has exited, leaving it unreaped.
+fn has_exited(pid: i32) -> std::io::Result<bool> {
+    loop {
+        // SAFETY: `info` is a valid, writable siginfo_t for waitid to fill.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let flags = libc::WEXITED | libc::WNOWAIT | libc::WNOHANG;
+        if unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, flags) } == 0 {
+            // SAFETY: waitid filled `info`; without an exited child it zeroes the PID.
+            return Ok(unsafe { info.si_pid() } != 0);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
 }
 
 /// The reviewer as its own process group in the checkout, with the
