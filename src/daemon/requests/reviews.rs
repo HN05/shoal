@@ -40,10 +40,14 @@ pub(super) async fn handle(
             workspace,
             repository,
         } => {
-            let ids = manager
-                .review_workspaces(workspace.as_deref(), repository)
-                .await?;
-            Body::Reviews(manager.reviews(ids).await?)
+            let listed = async {
+                let ids = manager
+                    .review_workspaces(workspace.as_deref(), repository)
+                    .await?;
+                manager.reviews(ids).await
+            }
+            .await;
+            return Ok(Answer::pages(listed, Body::Reviews));
         }
         ReviewMethod::ShowReview { workspace, id } => review(match id {
             Some(id) => manager.review(id).await?,

@@ -22,7 +22,7 @@ pub enum ReviewMethod {
         id: Option<i64>,
     },
     /// Reviews of the workspaces, newest first: of one workspace, of a
-    /// repository's, or of all.
+    /// repository's, or of all, in as many frames as they need.
     ListReviews {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,

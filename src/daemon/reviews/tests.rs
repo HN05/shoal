@@ -525,3 +525,62 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
         .unwrap();
     assert_eq!(marks[0].head, head);
 }
+
+#[tokio::test]
+async fn a_long_listing_spans_several_frames() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let fixture = fixture(&[], "").await;
+    let manager = fixture.manager.clone();
+    let id = fixture.workspace.id.clone();
+    let body = "x".repeat(4096);
+    manager
+        .store
+        .run(move |db| {
+            for _ in 0..30 {
+                let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
+                store::start(db, review, "head", "base", 2)?;
+                let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
+                    serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
+                        "findings": [{"path": "a", "line": 1, "severity": "nit",
+                            "title": "Long", "body": body}]}),
+                )?;
+                store::finish(db, review, "absent", &output, 3)?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let request = serde_json::json!({
+        "protocol": crate::protocol::VERSION, "id": 5,
+        "method": {"list_reviews": {"workspace": fixture.workspace.id}}
+    });
+    let (client, stream) = tokio::net::UnixStream::pair().unwrap();
+    let operation = manager.gates.owned_operation().await;
+    let server = crate::daemon::tests::server(manager.clone());
+    let served = tokio::spawn(crate::daemon::serve(stream, server, operation));
+    let mut client = BufReader::new(client);
+    client
+        .get_mut()
+        .write_all(format!("{request}\n").as_bytes())
+        .await
+        .unwrap();
+    let (mut frames, mut listed) = (0, 0);
+    loop {
+        let mut line = String::new();
+        client.read_line(&mut line).await.unwrap();
+        assert!(line.len() <= crate::protocol::MAX_FRAME, "{}", line.len());
+        let response: serde_json::Value = serde_json::from_str(&line).unwrap();
+        match response["type"].as_str() {
+            Some("reviews") => {
+                frames += 1;
+                listed += response["data"].as_array().unwrap().len();
+            }
+            Some("ok") => break,
+            _ => panic!("{response}"),
+        }
+    }
+    assert!(frames > 1, "{frames}");
+    assert_eq!(listed, 30);
+    drop(client);
+    served.await.unwrap().unwrap();
+}
