@@ -14,6 +14,9 @@ impl Manager {
         if let Some(caller) = self.executions.scope(token).await {
             return Ok(Some(caller));
         }
+        if let Some(caller) = self.operations.caller(token) {
+            return Ok(Some(caller));
+        }
         let token = token.to_owned();
         self.store
             .run(move |db| {
@@ -31,24 +34,6 @@ impl Manager {
                     .optional()?)
             })
             .await
-    }
-
-    /// Issue a new token of `workspace_id`'s scope, which lasts until
-    /// [`Self::revoke_workspace_environment`] revokes it or the workspace goes.
-    pub(crate) async fn issue_workspace_scope(&self, workspace_id: &str) -> Result<String> {
-        let workspace_id = workspace_id.to_owned();
-        let token = Uuid::new_v4().to_string();
-        let issued = token.clone();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO workspace_scopes(token,workspace_id) VALUES (?1,?2)",
-                    params![issued, workspace_id],
-                )?;
-                Ok(())
-            })
-            .await?;
-        Ok(token)
     }
 
     pub(crate) async fn workspace_environment(

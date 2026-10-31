@@ -215,15 +215,6 @@ impl Executions {
         self.scopes.lock().await.get(token).cloned()
     }
 
-    /// The scope token issued to connected execution `execution`.
-    pub(crate) async fn token_of(&self, execution: &str) -> Option<String> {
-        let scopes = self.scopes.lock().await;
-        scopes
-            .iter()
-            .find(|(_, caller)| caller.execution_id() == Some(execution))
-            .map(|(token, _)| token.clone())
-    }
-
     /// Forget the scope tokens of a workspace that no longer exists.
     pub(crate) async fn forget_workspace(&self, workspace_id: &str) {
         self.scopes

@@ -7488,6 +7488,62 @@ fn setup_continues_after_the_cli_that_started_it_exits() {
 }
 
 #[test]
+fn an_operation_keeps_its_scope_after_the_execution_that_started_it_ends() {
+    let fixture = Fixture::new();
+    let release = fixture.root.path().join("release-setup");
+    install_test_script(
+        fixture.repo.join("setup.sh"),
+        format!(
+            "#!/bin/sh\ntouch setup-started\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
+            release.display()
+        ),
+    );
+    install_test_script(
+        fixture.repo.join("post-setup.sh"),
+        "#!/bin/sh\ntouch post-setup-ran\n",
+    );
+    commit_resource_config(
+        &fixture.repo,
+        "setup.command = 'setup.sh'\nhooks.post_setup = 'post-setup.sh'\n",
+    );
+    fs::write(&release, "").unwrap();
+    let worker = fixture.add("worker");
+    let path = PathBuf::from(worker["path"].as_str().unwrap());
+    fs::remove_file(&release).unwrap();
+    fs::remove_file(path.join("setup-started")).unwrap();
+    fs::remove_file(path.join("post-setup-ran")).unwrap();
+    // A scoped command reruns setup, then goes with its execution.
+    let mut run = fixture
+        .command()
+        .args(["run", "--workspace", "worker", "--"])
+        .args([env!("CARGO_BIN_EXE_shoal"), "work", "setup", "worker"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    wait_until("setup to start", || path.join("setup-started").exists());
+    let status = fixture.ok(&["status", "worker"]);
+    let command = status["executions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|execution| execution["kind"] != "setup")
+        .and_then(|execution| execution["child"]["pid"].as_i64())
+        .unwrap();
+    unsafe {
+        libc::kill(command as i32, libc::SIGKILL);
+        libc::kill(run.id() as i32, libc::SIGKILL);
+    }
+    // Its wrapper's connection is gone, and with it the token the command
+    // called with.
+    run.wait().unwrap();
+    fs::write(&release, "").unwrap();
+    wait_until("the post-setup hook to run", || {
+        path.join("post-setup-ran").exists()
+    });
+}
+
+#[test]
 fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
     let fixture = Fixture::new();
     let started = fixture.root.path().join("pre-setup-started");
