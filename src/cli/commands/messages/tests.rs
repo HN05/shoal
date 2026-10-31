@@ -20,6 +20,7 @@ fn attached_files_follow_the_message_text() {
     let updates = Updates {
         updates: Vec::new(),
         messages: vec![message("See the crash"), message("")],
+        leftovers: Vec::new(),
         timed_out: false,
         superseded: false,
     };
@@ -89,6 +90,7 @@ fn hook_output_names_the_event_it_answers() {
             message: "Stop the dev server".into(),
             attachments: Vec::new(),
         }],
+        leftovers: Vec::new(),
         timed_out: false,
         superseded: false,
     };

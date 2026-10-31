@@ -47,8 +47,13 @@ pub(super) async fn handle(
         }
         ChatMethod::FreeChatName { name } => Body::ChatName(manager.free_chat_name(name).await?),
         ChatMethod::ChatUpdates { chat } => Body::PrUpdates(manager.chat_updates(&chat).await?),
-        ChatMethod::AcknowledgeChatMessages { chat, ids } => {
+        ChatMethod::AcknowledgeChatMessages {
+            chat,
+            ids,
+            leftovers,
+        } => {
             manager.mark_chat_messages_delivered(&chat, ids).await?;
+            manager.leftovers.delivered(&chat, &leftovers);
             Body::Ok
         }
     }))

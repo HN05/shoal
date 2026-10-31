@@ -538,6 +538,10 @@ pub struct WorkspaceStatus {
     /// The request the agent's proxy waits to retry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
+    /// Processes still running after what started them exited, as the
+    /// cleanup sweep last found them.
+    #[serde(default)]
+    pub leftovers: Vec<crate::daemon::leftovers::Leftover>,
 }
 
 /// The first condition that keeps a workspace from automatic cleanup, in the

@@ -63,6 +63,7 @@ impl Manager {
         inspection.simulators.retain(|simulator| {
             simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
         });
+        let leftovers = self.leftovers.of(&inspection.workspace.id);
         Ok(WorkspaceStatus {
             inspection,
             setup_finished,
@@ -76,6 +77,7 @@ impl Manager {
             issue_status,
             turn_retry,
             proxy_retry,
+            leftovers,
         })
     }
 }

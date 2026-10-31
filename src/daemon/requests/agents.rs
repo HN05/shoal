@@ -43,9 +43,13 @@ pub(super) async fn handle(
             workspace,
             deliveries,
             messages,
+            leftovers,
         } => {
             manager
                 .acknowledge_agent_delivery(&workspace, deliveries, messages)
+                .await?;
+            manager
+                .acknowledge_leftovers(&workspace, &leftovers)
                 .await?;
             Body::Ok
         }

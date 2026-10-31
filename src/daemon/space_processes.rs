@@ -164,7 +164,7 @@ impl Manager {
 }
 
 /// What ties processes to `chat`: its identity and temporary directory.
-fn chat_space(chat: &Chat) -> Space {
+pub(crate) fn chat_space(chat: &Chat) -> Space {
     Space {
         id: chat.id.clone(),
         worktree: None,

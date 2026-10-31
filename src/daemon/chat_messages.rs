@@ -96,7 +96,10 @@ impl Manager {
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
-        Ok(Updates::messages(messages))
+        Ok(Updates {
+            leftovers: self.leftovers.undelivered(chat),
+            ..Updates::messages(messages)
+        })
     }
 
     /// The chat's next messages, once it has any, unless a newer wait or

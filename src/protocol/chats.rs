@@ -60,6 +60,9 @@ pub enum ChatMethod {
     AcknowledgeChatMessages {
         chat: String,
         ids: Vec<i64>,
+        /// The PIDs of the leftovers the hook printed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        leftovers: Vec<u32>,
     },
 }
 

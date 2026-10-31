@@ -135,6 +135,9 @@ pub enum AgentMethod {
         /// Agent messages the watch printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         messages: Vec<i64>,
+        /// The PIDs of the leftovers the hook printed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        leftovers: Vec<u32>,
     },
 }
 

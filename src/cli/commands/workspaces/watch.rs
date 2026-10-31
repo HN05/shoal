@@ -61,6 +61,7 @@ pub(in crate::cli::commands) async fn watch_items(
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
+            leftovers: Vec::new(),
         },
     )
     .await?;
@@ -92,6 +93,7 @@ pub(in crate::cli::commands) async fn wait_for_items(
         Err(_) => Ok(Body::PrUpdates(crate::daemon::links::wait::Updates {
             updates: Vec::new(),
             messages: Vec::new(),
+            leftovers: Vec::new(),
             timed_out: true,
             superseded: false,
         })),

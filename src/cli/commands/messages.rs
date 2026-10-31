@@ -507,6 +507,7 @@ impl Inbox {
             Self::Chat(chat) => ChatMethod::AcknowledgeChatMessages {
                 chat: chat.clone(),
                 ids,
+                leftovers: Vec::new(),
             }
             .into(),
         };
@@ -611,6 +612,7 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
+            leftovers: Vec::new(),
         },
     )
     .await

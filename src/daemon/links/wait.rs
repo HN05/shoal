@@ -47,6 +47,10 @@ pub struct Updates {
     /// Agent messages end a wait on their own, ahead of item activity.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub messages: Vec<AgentMessage>,
+    /// Leftovers of the space its agent has not been told about, which
+    /// only the hook after a tool call delivers.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leftovers: Vec<crate::daemon::leftovers::Leftover>,
     pub timed_out: bool,
     /// A newer wait in the same workspace took over before this one received
     /// updates; they stay pending for the newer wait.
@@ -229,6 +233,7 @@ impl Manager {
     /// delivery.
     pub async fn agent_updates(&self, selector: &str) -> Result<Updates> {
         let workspace = self.workspace(selector).await?;
+        let workspace_id = workspace.id.clone();
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.deliverable_messages(&workspace).await?;
         // The messages share the response with the updates.
@@ -247,6 +252,7 @@ impl Manager {
         Ok(Updates {
             messages,
             updates,
+            leftovers: self.leftovers.undelivered(&workspace_id),
             timed_out: false,
             superseded: false,
         })
@@ -1447,6 +1453,7 @@ impl Updates {
         Self {
             updates: Vec::new(),
             messages: Vec::new(),
+            leftovers: Vec::new(),
             timed_out: false,
             superseded: true,
         }
@@ -1456,6 +1463,7 @@ impl Updates {
         Self {
             updates: Vec::new(),
             messages: Vec::new(),
+            leftovers: Vec::new(),
             timed_out: true,
             superseded: false,
         }
@@ -1465,6 +1473,7 @@ impl Updates {
         Self {
             updates: Vec::new(),
             messages,
+            leftovers: Vec::new(),
             timed_out: false,
             superseded: false,
         }
@@ -1536,6 +1545,7 @@ async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>>>>(
             return Ok(Updates {
                 updates,
                 messages: Vec::new(),
+                leftovers: Vec::new(),
                 timed_out: false,
                 superseded: false,
             });

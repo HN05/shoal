@@ -56,6 +56,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         let updates = Updates {
             updates: Vec::new(),
             messages: Vec::new(),
+            leftovers: Vec::new(),
             timed_out: true,
             superseded: false,
         };

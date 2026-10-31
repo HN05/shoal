@@ -1,5 +1,6 @@
 #[cfg(target_os = "macos")]
 pub mod code_signing;
+pub mod described;
 pub mod execution;
 pub mod identity;
 pub mod load;
