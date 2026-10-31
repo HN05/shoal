@@ -11,7 +11,7 @@ use crate::{
 /// A manager with a chat `name` about a registered repository, whose
 /// process this test reaps once a signal ends it, so the chat ends with it.
 async fn chat(name: &str) -> (tempfile::TempDir, Arc<Manager>, u32) {
-    chat_running(name, "exec sleep 600").await
+    chat_running(name, "exec sleep 6021").await
 }
 
 /// [`chat`] whose process runs the shell `script` with the chat's identity,
@@ -123,7 +123,7 @@ async fn a_chat_ends_with_the_agent_its_launcher_started() {
     let child = directory.path().join("agent-pid");
     // A launcher script that runs the agent as its child rather than
     // replacing itself with it.
-    let script = format!("sleep 600 & echo $! > '{}'; wait", child.display());
+    let script = format!("sleep 6021 & echo $! > '{}'; wait", child.display());
     let (root, manager, pid) = chat_running("launched", &script).await;
     let agent = identity::capture(written_pid(&child).await)
         .unwrap()
@@ -149,7 +149,7 @@ async fn a_chat_ends_with_what_its_process_starts_as_it_stops() {
     // A process that starts another when told to stop, and says so once it
     // will.
     let script = format!(
-        "trap 'sleep 600 & echo $! > \"{}\"; exit 0' TERM; echo $$ > \"{}\"; \
+        "trap 'sleep 6021 & echo $! > \"{}\"; exit 0' TERM; echo $$ > \"{}\"; \
          while :; do sleep 1; done",
         child.display(),
         ready.display()
@@ -185,7 +185,7 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
     // A command in the chat started a workspace's execution, whose wrapper
     // stays among the chat's processes.
     let script = format!(
-        "sleep 600 & echo $! > '{}'; while :; do sleep 1; done",
+        "sleep 6021 & echo $! > '{}'; while :; do sleep 1; done",
         started.display()
     );
     let (root, manager, _) = chat_running("coordinator", &script).await;
