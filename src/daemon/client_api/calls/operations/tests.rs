@@ -155,6 +155,17 @@ async fn operations_outside_the_callers_tree_are_refused() {
     assert_eq!(code(refused.next().await), ErrorCode::ScopeDenied);
     let mut missing = follow("missing").await.unwrap();
     assert_eq!(code(missing.next().await), ErrorCode::NotFound);
+    let cancel = |operation: &str| CancelOperation {
+        operation: operation.into(),
+    };
+    assert_eq!(
+        code(scoped.call(cancel(&theirs.operation)).await),
+        ErrorCode::ScopeDenied
+    );
+    assert_eq!(
+        code(scoped.call(cancel("missing")).await),
+        ErrorCode::NotFound
+    );
 }
 
 #[tokio::test]

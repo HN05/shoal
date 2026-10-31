@@ -39,15 +39,18 @@ pub(super) async fn handle(
     }))
 }
 
-/// A scoped caller starts operations in its own tree; the other requests
-/// check the operation's workspace.
+/// A scoped caller starts operations in its own tree, and reaches only the
+/// operations of that tree.
 impl Scoped for OperationMethod {
-    async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             OperationMethod::StartOperation { spec, .. } => Some(spec.workspace_mut()),
-            OperationMethod::FollowOperation { .. }
-            | OperationMethod::CancelOperation { .. }
-            | OperationMethod::ReportProgress { .. } => None,
+            OperationMethod::FollowOperation { id, .. }
+            | OperationMethod::CancelOperation { id }
+            | OperationMethod::ReportProgress { id, .. } => {
+                manager.operation(id, Some(caller)).await?;
+                None
+            }
         })
     }
 }
