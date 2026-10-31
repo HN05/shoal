@@ -4077,6 +4077,21 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
         json!([{"kind": "ci", "url": other, "title": "deps.yml"}]),
         "{links}"
     );
+    let watched = fixture.ok(&[
+        "watch",
+        "ci",
+        &other,
+        "--workspace",
+        "topic",
+        "--timeout",
+        "600",
+    ]);
+    let update = &watched["updates"][0];
+    assert_eq!(
+        (&update["url"], &update["kind"]),
+        (&json!(other), &json!("ci_completed")),
+        "{watched}"
+    );
     fixture.ok(&["unlink", &other, "related", "--workspace", "topic"]);
 
     // Workspace processes read, link and act only within their repository.

@@ -753,7 +753,10 @@ impl Manager {
         let (_, url) = match kind {
             LinkKind::Pr => forge.pull(input)?,
             LinkKind::Issue => forge.issue(input)?,
-            LinkKind::Ci => forge.run(input)?,
+            // A run's URL may name another repository.
+            LinkKind::Ci => (self.named_run_forge(input).await?)
+                .unwrap_or(forge)
+                .run(input)?,
         };
         Ok(Some((url, kind)))
     }
