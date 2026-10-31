@@ -24,7 +24,6 @@ pub enum ListStatus {
     Working,
     Waiting,
     /// An agent or command without a reported turn state runs.
-    #[value(alias = "running")]
     ProcessRunning,
     ReadyOutdated,
     Inactive,

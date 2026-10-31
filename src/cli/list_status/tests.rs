@@ -16,11 +16,3 @@ fn value_names_spell_the_labels() {
         );
     }
 }
-
-#[test]
-fn the_former_running_name_still_filters() {
-    assert_eq!(
-        ListStatus::from_str("running", false),
-        Ok(ListStatus::ProcessRunning)
-    );
-}

@@ -120,7 +120,6 @@ pub enum RepoCommand {
     /// Delete a repository checkout and all its Shoal workspaces and resources.
     ///
     /// Uncommitted and unpushed work is permanently lost.
-    #[command(alias = "remove")]
     Rm {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,

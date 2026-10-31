@@ -2046,7 +2046,7 @@ delete workspace branches; a branch whose recorded worktree directory is already
 missing is retained because its contents cannot be inspected.
 Interactive calls identify the resolved repository, source, and checkout path before asking
 `Are you sure? [y/N]`; `-y`/`--yes` skips the prompt and is required for scripts
-and `--json`. `repo remove` is an alias.
+and `--json`.
 Linked worktrees outside Shoal must be removed first; prunable stale records do
 not block, locked worktrees do. Shoal refuses redirected paths, a checkout whose
 Git config sets `core.bare` although it has a working tree, and deletions

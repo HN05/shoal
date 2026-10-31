@@ -12498,7 +12498,7 @@ fn repository_removal_preserves_external_worktrees_and_deletes_clone_on_retry() 
     assert!(external.exists() && path.exists());
     git(path, &["worktree", "remove", external.to_str().unwrap()]);
     fs::write(path.join("local-work"), "discarded explicitly").unwrap();
-    fixture.ok(&["repo", "remove", &url, "--yes"]);
+    fixture.ok(&["repo", "rm", &url, "--yes"]);
     assert!(!path.exists());
     assert!(fixture.repo.exists());
     assert_eq!(fixture.ok(&["repo", "ls"]).as_array().unwrap().len(), 1);
