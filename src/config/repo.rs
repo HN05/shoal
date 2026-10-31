@@ -561,13 +561,18 @@ pub struct IdleStopConfig {
     pub enabled: Option<bool>,
 }
 
-/// Whether agent reviews of PRs and issues post their findings to the forge.
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Options)]
+/// Who runs local reviews and whether PR reviews post their findings.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Review)]
 pub struct ReviewConfig {
     #[option(default = true)]
     pub post: Option<bool>,
+    /// The agent that reviews; unset, `agent.default`.
+    pub agent: Option<Agent>,
+    /// The agent that reviews once more when the first reviewer fails for a
+    /// reason other than running too long.
+    pub fallback_agent: Option<Agent>,
 }
 
 /// How agent messages that arrive in quick succession are held to reach the

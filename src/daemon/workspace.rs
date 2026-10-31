@@ -130,6 +130,7 @@ pub struct Manager {
     pub(crate) usage: usage::Usage,
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
+    pub(crate) reviews: crate::daemon::reviews::Reviews,
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
 }
@@ -161,6 +162,7 @@ impl Manager {
             usage: Default::default(),
             seeds: Default::default(),
             forge_memories: Default::default(),
+            reviews: Default::default(),
             proxy_retries: Default::default(),
         }))
     }

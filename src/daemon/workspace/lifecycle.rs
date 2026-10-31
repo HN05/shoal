@@ -912,6 +912,8 @@ impl Manager {
         // Checked again after the reservation, so a worktree restored meanwhile
         // cannot be deleted by an unattended removal.
         let result = async {
+            // Its reviews go with its record.
+            self.stop_workspace_review(&workspace.id).await;
             let present = workspace.path.try_exists()?;
             let post_remove = if present {
                 self.ensure_no_pending_rename(&workspace.id).await?;

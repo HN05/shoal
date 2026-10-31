@@ -19,6 +19,7 @@ mod recovery;
 mod removal;
 mod repositories;
 mod resources;
+mod reviews;
 mod secrets;
 mod simulators;
 pub(super) mod workspaces;
@@ -65,6 +66,7 @@ pub(super) async fn handle(
         Operation::Notification(method) => notifications::handle(&server.manager, method).await,
         Operation::Operations(method) => operations::handle(&server.manager, method, caller).await,
         Operation::Question(method) => questions::handle(&server.manager, method, caller).await,
+        Operation::Review(method) => reviews::handle(&server.manager, method, caller).await,
         Operation::Approval(method) => approvals::handle(&server.manager, method, caller).await,
         Operation::Port(method) => ports::handle(&server.manager, method, caller).await,
         Operation::Secret(method) => secrets::handle(&server.manager, method, caller).await,

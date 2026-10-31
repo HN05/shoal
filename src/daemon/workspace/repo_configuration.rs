@@ -98,6 +98,16 @@ impl Manager {
         ))
     }
 
+    /// [`Self::workspace_settings`] with the template files beside the global
+    /// config, which a review's instructions read.
+    pub(crate) async fn workspace_settings_with_templates(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<Effective> {
+        let config = Config::load_with_templates(&self.paths)?;
+        config.resolve(&self.workspace_layers(workspace).await?)
+    }
+
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
         let file = config::repo::load(&workspace.path)?;
         self.config_layers(&workspace.repository_id, file).await

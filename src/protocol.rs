@@ -44,6 +44,7 @@ mod recovery;
 mod removal;
 mod repositories;
 mod resources;
+mod reviews;
 mod secrets;
 mod simulators;
 mod workspaces;
@@ -68,11 +69,12 @@ pub use recovery::RecoveryMethod;
 pub use removal::RemovalMethod;
 pub use repositories::RepositoryMethod;
 pub use resources::ResourceMethod;
+pub use reviews::ReviewMethod;
 pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 177;
+pub const VERSION: u32 = 178;
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -240,6 +242,7 @@ pub enum Operation {
     Notification(NotificationMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),
+    Review(ReviewMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),
     Secret(SecretMethod),
@@ -309,6 +312,7 @@ impl Operation {
             Self::Notification(method) => method.lifetime(),
             Self::Operations(method) => method.lifetime(),
             Self::Question(method) => method.lifetime(),
+            Self::Review(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Repository(_)
             | Self::Removal(_)
@@ -375,6 +379,7 @@ from_domains!(
     Notification(NotificationMethod),
     Operations(OperationMethod),
     Question(QuestionMethod),
+    Review(ReviewMethod),
     Approval(ApprovalMethod),
     Port(PortMethod),
     Secret(SecretMethod),
@@ -589,6 +594,8 @@ response_bodies! {
     AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
     Question(crate::daemon::questions::Question),
     Questions(crate::daemon::questions::Listing),
+    Review(Box<crate::reviews::Review>),
+    Reviews(Vec<crate::reviews::Review>),
     Notification(Notification),
     Sent(crate::daemon::notifications::Sent),
     EventItem(EventItem),

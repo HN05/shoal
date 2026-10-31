@@ -80,6 +80,7 @@ impl Scoped for Operation {
             Operation::Notification(method) => method.scope(manager, caller).await,
             Operation::Operations(method) => method.scope(manager, caller).await,
             Operation::Question(method) => method.scope(manager, caller).await,
+            Operation::Review(method) => method.scope(manager, caller).await,
             Operation::Approval(method) => method.scope(manager, caller).await,
             Operation::Port(method) => method.scope(manager, caller).await,
             Operation::Secret(method) => method.scope(manager, caller).await,
