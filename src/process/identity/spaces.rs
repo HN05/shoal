@@ -67,7 +67,9 @@ const TERMINAL_SERVERS: [&str; 4] = ["zmx", "tmux", "screen", "herdr"];
 
 /// The untracked processes of each of `spaces`, by space ID: none of them is
 /// one of `tracked`, such as an execution's wrapper or a chat's agent, a
-/// process one of them started, or one that started one of them.
+/// process one of them started, or one that started one of them, nor a hook
+/// that a tracked process the inventory does not list, such as the daemon
+/// running the survey, still runs.
 pub async fn survey(
     spaces: Vec<Space>,
     tracked: Vec<Identity>,
@@ -129,19 +131,30 @@ impl<'a> Survey<'a> {
     /// The processes of `tracked`, those they started, those that started
     /// them, and terminal servers.
     fn excluded(&self, tracked: &[Identity]) -> HashSet<u32> {
-        let tracked: HashSet<u32> = tracked
-            .iter()
-            .filter(|identity| {
+        let (listed, unlisted): (Vec<&Identity>, Vec<&Identity>) =
+            tracked.iter().partition(|identity| {
                 self.lineages
                     .get(&identity.pid)
                     .is_some_and(|lineage| lineage.identity == **identity)
-            })
+            });
+        let listed: HashSet<u32> = listed.iter().map(|identity| identity.pid).collect();
+        // The inventory never lists the process running it, such as the
+        // daemon, whose running hooks carry a workspace's identity.
+        let unlisted: HashSet<u32> = unlisted
+            .iter()
+            .filter(|identity| super::alive(identity).unwrap_or(false))
             .map(|identity| identity.pid)
             .collect();
         let mut excluded: HashSet<u32> =
-            tracked.iter().flat_map(|pid| self.ancestry(*pid)).collect();
+            listed.iter().flat_map(|pid| self.ancestry(*pid)).collect();
         for pid in self.lineages.keys() {
-            if self.ancestry(*pid).iter().any(|pid| tracked.contains(pid))
+            let ancestry = self.ancestry(*pid);
+            let unlisted_hook = self.marks.get(pid).is_some_and(|marks| marks.hook)
+                && ancestry
+                    .last()
+                    .is_some_and(|oldest| unlisted.contains(&self.lineages[oldest].parent_pid));
+            if ancestry.iter().any(|pid| listed.contains(pid))
+                || unlisted_hook
                 || self.terminal_server(*pid)
             {
                 excluded.insert(*pid);

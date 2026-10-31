@@ -188,3 +188,35 @@ async fn a_chat_finds_processes_by_its_marker_and_temporary_directory() {
     assert_eq!(listed(&found, &marked.identity), Some(true), "{found:?}");
     assert_eq!(listed(&found, &in_tmp.identity), Some(true), "{found:?}");
 }
+
+/// The daemon runs the survey, which never lists it, and the hooks it runs
+/// carry a workspace's identity; its other children do not stay its.
+#[tokio::test]
+async fn hooks_the_surveying_process_runs_are_not_found() {
+    let root = tempfile::tempdir().unwrap();
+    let space = workspace(root.path());
+    let start = |hook: bool| {
+        let mut command = isolated_command("sh", root.path());
+        command.env(crate::env::WORKSPACE_ID, &space.id).args([
+            "-c",
+            &format!("exec {}", runs_until_stopped(&this_binary())),
+        ]);
+        if hook {
+            command.env(crate::env::HOOK, "post_setup");
+        }
+        command.spawn().unwrap()
+    };
+    let (hook, other) = (start(true), start(false));
+    let capture = |pid| super::super::capture(pid).unwrap().unwrap();
+    let (hook, other) = (
+        (capture(hook.id().unwrap()), hook),
+        (capture(other.id().unwrap()), other),
+    );
+    let surveying = capture(std::process::id());
+
+    let found = untracked(&space, vec![]).await;
+    assert_eq!(listed(&found, &hook.0), Some(false), "{found:?}");
+    let found = untracked(&space, vec![surveying]).await;
+    assert_eq!(listed(&found, &hook.0), None, "{found:?}");
+    assert_eq!(listed(&found, &other.0), Some(false), "{found:?}");
+}

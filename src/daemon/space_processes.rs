@@ -91,7 +91,7 @@ impl Manager {
     }
 
     /// The processes Shoal tracks: every execution's wrapper and command,
-    /// and every chat's agent.
+    /// every chat's agent, and the daemon, which runs hooks.
     async fn tracked_processes(&self) -> Result<Vec<Identity>> {
         let executions = self.store.run(|db| store::all_executions(db)).await?;
         let mut tracked: Vec<Identity> = executions
@@ -100,6 +100,7 @@ impl Manager {
             .flatten()
             .collect();
         tracked.extend(self.chat_processes().await?);
+        tracked.extend(identity::capture(std::process::id())?);
         Ok(tracked)
     }
 

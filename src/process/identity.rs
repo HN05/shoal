@@ -413,6 +413,8 @@ struct Marks {
     chat: Option<String>,
     /// The run directory of a one-shot agent run.
     oneshot: Option<String>,
+    /// It runs one of the hooks the daemon starts.
+    hook: bool,
 }
 
 /// The marker a scan attributes processes by.
@@ -439,6 +441,7 @@ impl Marks {
             workspace: value(crate::env::WORKSPACE_ID),
             chat: value(crate::env::CHAT),
             oneshot: value(crate::env::ONESHOT_RUN),
+            hook: value(crate::env::HOOK).is_some(),
         }
     }
 
