@@ -600,3 +600,22 @@ async fn a_long_listing_spans_several_frames() {
     drop(client);
     served.await.unwrap().unwrap();
 }
+
+#[tokio::test]
+async fn removing_the_repository_stops_its_reviews_first() {
+    let fixture = fixture(&[("slow", "exec sleep 100000")], "agent = 'slow'").await;
+    let manager = &fixture.manager;
+    let queued = manager
+        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .await
+        .unwrap();
+    let mut changed = manager.store.watch_changes();
+    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
+        changed.changed().await.unwrap();
+    }
+    manager
+        .remove_repository(fixture.workspace.repository_id.as_str())
+        .await
+        .unwrap();
+    assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
+}
