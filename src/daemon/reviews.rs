@@ -10,11 +10,11 @@ use super::{log, workspace::Manager};
 use crate::{
     agent::Agent,
     config::Effective,
-    model::Workspace,
     reviews::{FindingId, Outcome, Review, ReviewTarget},
 };
 
 mod delivery;
+pub(crate) mod gate;
 mod history;
 mod post;
 mod reviewer;

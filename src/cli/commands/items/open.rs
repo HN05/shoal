@@ -19,7 +19,7 @@ use crate::{
     git,
     model::Workspace,
     protocol::{
-        ItemMethod, WorkspaceMethod,
+        ItemMethod, ReviewMethod, WorkspaceMethod,
         operations::{Failure, OperationSpec, Step},
     },
 };
@@ -78,6 +78,10 @@ pub(in crate::cli::commands) async fn push_and_open(
         },
     )
     .await?;
+    let gate = ReviewMethod::CheckPrGate {
+        workspace: workspace.id.clone(),
+    };
+    client::request::<()>(&ctx.paths, gate).await?;
     reporter.step(Step::PushStarted).await?;
     push(ctx, &workspace).await?;
     reporter.step(Step::Pushed).await?;

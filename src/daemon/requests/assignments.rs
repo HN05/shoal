@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use super::super::{
     answer::Answer,
+    reviews::gate::Gate,
     scope::{Caller, Scoped},
     workspace::Manager,
 };
@@ -26,7 +27,14 @@ pub(super) async fn handle(
         AssignmentMethod::MarkReady {
             workspace,
             selection,
-        } => Body::ReviewMarks(manager.mark_ready(&workspace, selection).await?),
+        } => {
+            // Only a workspace process's mark waits for a review.
+            if caller.is_some() {
+                let gated = manager.workspace(&workspace).await?;
+                manager.require_review(&gated, Gate::Ready).await?;
+            }
+            Body::ReviewMarks(manager.mark_ready(&workspace, selection).await?)
+        }
         AssignmentMethod::ClearReady {
             workspace,
             selection,

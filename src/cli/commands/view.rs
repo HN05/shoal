@@ -77,7 +77,7 @@ async fn view(
         views.extend(latest.map(|review| {
             Shown::Review(ShownReview {
                 kind: "review",
-                review,
+                review: Box::new(review),
             })
         }));
     }
@@ -99,7 +99,7 @@ enum Shown {
 struct ShownReview {
     kind: &'static str,
     #[serde(flatten)]
-    review: crate::reviews::Review,
+    review: Box<crate::reviews::Review>,
 }
 
 /// A linked CI run, as `view ci` shows it, or why it could not be read.

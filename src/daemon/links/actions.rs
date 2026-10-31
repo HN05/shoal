@@ -8,7 +8,7 @@ use super::{
 };
 use crate::{
     config::{repo::Opening, resolve::Effective},
-    daemon::{events, scope::Caller, workspace::Manager},
+    daemon::{events, reviews::gate::Gate, scope::Caller, workspace::Manager},
     forge::{
         ForgeRepo,
         account::Account,
@@ -326,6 +326,9 @@ impl Manager {
                 (item, None, None)
             }
             None => {
+                if caller.is_some() {
+                    self.require_review(&workspace, Gate::Pr).await?;
+                }
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
                     .await?;
                 let pull = NewPull {
@@ -379,6 +382,29 @@ impl Manager {
                 .chain(checked)
                 .collect(),
         }))
+    }
+
+    /// Whether `shoal pr open` from a workspace process would open a new PR
+    /// that its review gate refuses; checked before anything is pushed.
+    pub(crate) async fn check_pr_review_gate(&self, selector: &str) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        if !self
+            .workspace_settings(&workspace)
+            .await?
+            .review
+            .require_for_pr
+        {
+            return Ok(());
+        }
+        let (forge, account) = self.workspace_forge_account(&workspace).await?;
+        let head_repository = head_repository(&workspace.path, &workspace.branch, &forge).await?;
+        let existing = forge
+            .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
+            .await?;
+        match existing {
+            Some(_) => Ok(()),
+            None => self.require_review(&workspace, Gate::Pr).await,
+        }
     }
 
     /// Record an item the workspace just created as opened and, with `link`,

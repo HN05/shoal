@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::model::Workspace;
 use crate::{
     reviews::{FailureReason, ReviewState, Severity},
     test_support::{configure, install_test_script, manager, repository},
@@ -442,4 +443,73 @@ async fn workspace_processes_act_on_the_reviews_of_their_tree_only() {
         .await
         .unwrap();
     assert!(matches!(own, ReviewMethod::ShowReview { workspace: Some(id), .. } if id == child.id));
+}
+
+#[tokio::test]
+async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
+    use super::gate::Gate;
+    let fixture = fixture(
+        &[("fake", "cat '{review}'")],
+        "agent = 'fake'\nrequire_for_ready = true",
+    )
+    .await;
+    let manager = &fixture.manager;
+    let workspace = &fixture.workspace;
+    manager.require_review(workspace, Gate::Pr).await.unwrap();
+
+    let mut ended = manager.reviews.ended.subscribe();
+    let refused = manager
+        .require_review(workspace, Gate::Ready)
+        .await
+        .unwrap_err();
+    let refused = refused.to_string();
+    assert!(
+        refused.contains("marking work ready needs a finished review of HEAD"),
+        "{refused}"
+    );
+    assert!(
+        refused.contains("whose findings arrive as a message"),
+        "{refused}"
+    );
+    ended.changed().await.unwrap();
+
+    let review = manager.latest_review(&workspace.id).await.unwrap();
+    let refused = manager
+        .require_review(workspace, Gate::Ready)
+        .await
+        .unwrap_err();
+    let refused = refused.to_string();
+    assert!(
+        refused.contains(&format!(
+            "review {} of HEAD has unresolved findings",
+            review.id
+        )),
+        "{refused}"
+    );
+    assert!(
+        refused.contains(&format!(
+            "{} should-fix at tracked:1: Unclear",
+            review.findings[0].id
+        )),
+        "{refused}"
+    );
+    // Unresolved findings at HEAD need answers, not another review.
+    assert_eq!(
+        manager.latest_review(&workspace.id).await.unwrap().id,
+        review.id
+    );
+
+    manager
+        .resolve_finding(
+            review.findings[0].id,
+            Some(Outcome::WontFix {
+                reason: "The name matches the file".into(),
+            }),
+        )
+        .await
+        .unwrap();
+    manager
+        .require_review(workspace, Gate::Ready)
+        .await
+        .unwrap();
 }
