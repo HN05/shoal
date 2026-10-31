@@ -31,7 +31,30 @@ pub struct NewReview {
     pub body: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<LineComment>,
+    /// The head commit the review covers. When the PR's head has moved past
+    /// it, the review is refused with [`HeadMoved`] before anything is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
 }
+
+/// A review bound to a commit the PR's head has moved past, refused before
+/// anything was sent.
+#[derive(Debug)]
+pub struct HeadMoved {
+    pub reviewed: String,
+}
+
+impl std::fmt::Display for HeadMoved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the PR's head moved past {}, so the review was not sent",
+            self.reviewed
+        )
+    }
+}
+
+impl std::error::Error for HeadMoved {}
 
 states!(ReviewVerdict {
     /// Comments without approving or requesting changes.
@@ -235,6 +258,14 @@ impl ForgeRepo {
     ) -> Result<Acted> {
         let _submitting = Submitting::start(self.item_url(ItemKind::Pr, number)?).await;
         let current = self.read(account, ItemKind::Pr, number).await?;
+        if let Some(reviewed) = &review.commit
+            && current.head_sha.as_ref() != Some(reviewed)
+        {
+            return Err(HeadMoved {
+                reviewed: reviewed.clone(),
+            }
+            .into());
+        }
         self.kind.check_review(self, account, number).await?;
         let diff = if review.comments.is_empty() {
             Diff::default()
