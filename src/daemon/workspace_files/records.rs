@@ -1,30 +1,30 @@
 //! The store's records of attached files: which copy belongs to which
 //! workspace or chat, how it came, and the removed workspaces and ended chats
-//! whose files stay. An owner is gone when neither a workspace nor a chat has
+//! whose files stay. A space is gone when neither a workspace nor a chat has
 //! its ID; its removal or end record says how long its files stay.
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use super::{AttachedFile, Attacher, FileSource, Owner, layout::Copy};
+use super::{AttachedFile, Attacher, FileSource, Space, layout::Copy};
 
-const COLUMNS: &str = "id,owner,source,name,title,path,bytes,created_at,attached_by,
+const COLUMNS: &str = "id,space,source,name,title,path,bytes,created_at,attached_by,
     COALESCE((SELECT expires_at FROM removed_workspaces r
-            WHERE r.workspace_id=workspace_files.owner_id
-                AND workspace_files.owner_id NOT IN (SELECT id FROM workspaces)),
-        (SELECT expires_at FROM ended_chats e WHERE e.chat_id=workspace_files.owner_id)),
-    owner_id IN (SELECT id FROM chats) OR owner_id IN (SELECT chat_id FROM ended_chats)";
+            WHERE r.workspace_id=workspace_files.space_id
+                AND workspace_files.space_id NOT IN (SELECT id FROM workspaces)),
+        (SELECT expires_at FROM ended_chats e WHERE e.chat_id=workspace_files.space_id)),
+    space_id IN (SELECT id FROM chats) OR space_id IN (SELECT chat_id FROM ended_chats)";
 
 /// The owners of attached files that are gone.
-const GONE: &str = "owner_id NOT IN (SELECT id FROM workspaces)
-    AND owner_id NOT IN (SELECT id FROM chats)";
+const GONE: &str = "space_id NOT IN (SELECT id FROM workspaces)
+    AND space_id NOT IN (SELECT id FROM chats)";
 
 fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
-    let owner: String = row.get(1)?;
+    let space: String = row.get(1)?;
     let (workspace, chat) = match row.get(10)? {
-        true => (None, Some(owner)),
-        false => (Some(owner), None),
+        true => (None, Some(space)),
+        false => (Some(space), None),
     };
     Ok(AttachedFile {
         id: row.get(0)?,
@@ -51,8 +51,8 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AttachedFile> {
     })
 }
 
-fn owner(row: &rusqlite::Row<'_>) -> rusqlite::Result<Owner> {
-    Ok(Owner {
+fn space(row: &rusqlite::Row<'_>) -> rusqlite::Result<Space> {
+    Ok(Space {
         id: row.get(0)?,
         name: row.get(1)?,
         repository_id: row.get(2)?,
@@ -60,13 +60,13 @@ fn owner(row: &rusqlite::Row<'_>) -> rusqlite::Result<Owner> {
     })
 }
 
-/// Record the `copies` as attached to the workspace or chat `owner_id` from
+/// Record the `copies` as attached to the space `space_id` from
 /// `source` by `attacher`, unknown when none, in the caller's transaction. A
 /// copy already recorded, as when the same files are sent again, keeps its
-/// record and takes any new title; none is recorded for an owner that is gone.
+/// record and takes any new title; none is recorded for a space that is gone.
 pub(crate) fn record(
     tx: &Connection,
-    owner_id: &str,
+    space_id: &str,
     source: FileSource,
     attacher: Option<&Attacher>,
     copies: &[Copy],
@@ -80,7 +80,7 @@ pub(crate) fn record(
             .unwrap_or_default();
         tx.execute(
             "INSERT INTO workspace_files
-                (owner_id,owner,parent_id,repository_id,source,name,title,path,bytes,
+                (space_id,space,parent_id,repository_id,source,name,title,path,bytes,
                     created_at,attached_by)
                 SELECT id,name,parent,repository_id,?2,?3,?4,?5,?6,unixepoch(),?7
                 FROM (SELECT id,name,parent_workspace_id AS parent,repository_id
@@ -89,7 +89,7 @@ pub(crate) fn record(
                 WHERE true
                 ON CONFLICT(path) DO UPDATE SET title=COALESCE(excluded.title,title)",
             params![
-                owner_id,
+                space_id,
                 source,
                 name,
                 copy.title,
@@ -106,13 +106,13 @@ pub(crate) fn record(
 /// their order.
 pub(super) fn record_all(
     db: &mut Connection,
-    owner_id: &str,
+    space_id: &str,
     source: FileSource,
     attacher: &Attacher,
     copies: &[Copy],
 ) -> Result<Vec<AttachedFile>> {
     let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-    record(&tx, owner_id, source, Some(attacher), copies)?;
+    record(&tx, space_id, source, Some(attacher), copies)?;
     let records = {
         let mut statement = tx.prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE path=?1"
@@ -126,13 +126,13 @@ pub(super) fn record_all(
     Ok(records)
 }
 
-/// The files of the workspace or chat `owner_id`, oldest first.
-pub(super) fn list(db: &Connection, owner_id: &str) -> Result<Vec<AttachedFile>> {
+/// The files of the space `space_id`, oldest first.
+pub(super) fn list(db: &Connection, space_id: &str) -> Result<Vec<AttachedFile>> {
     Ok(db
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM workspace_files WHERE owner_id=?1 ORDER BY id"
+            "SELECT {COLUMNS} FROM workspace_files WHERE space_id=?1 ORDER BY id"
         ))?
-        .query_map([owner_id], row)?
+        .query_map([space_id], row)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -143,8 +143,8 @@ pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedF
     Ok(db
         .prepare(&format!(
             "SELECT {COLUMNS} FROM workspace_files WHERE repository_id=?1
-                AND owner_id NOT IN (SELECT workspace_id FROM executions)
-                AND owner_id NOT IN (SELECT id FROM chats)
+                AND space_id NOT IN (SELECT workspace_id FROM executions)
+                AND space_id NOT IN (SELECT id FROM chats)
                 ORDER BY id"
         ))?
         .query_map([repository_id], row)?
@@ -153,29 +153,29 @@ pub(super) fn idle(db: &Connection, repository_id: &str) -> Result<Vec<AttachedF
 
 /// The latest removed workspace or ended chat with that name or ID whose
 /// files are kept.
-pub(super) fn gone_owner(db: &Connection, selector: &str) -> Result<Option<Owner>> {
+pub(super) fn gone_space(db: &Connection, selector: &str) -> Result<Option<Space>> {
     Ok(db
         .query_row(
             &format!(
-                "SELECT owner_id,owner,repository_id,parent_id FROM workspace_files
-                    WHERE (owner_id=?1 OR owner=?1) AND {GONE}
+                "SELECT space_id,space,repository_id,parent_id FROM workspace_files
+                    WHERE (space_id=?1 OR space=?1) AND {GONE}
                     ORDER BY id DESC LIMIT 1"
             ),
             [selector],
-            owner,
+            space,
         )
         .optional()?)
 }
 
 /// The removed workspaces and ended chats whose files are kept, those that
 /// attached them first oldest first.
-pub(super) fn kept(db: &Connection) -> Result<Vec<Owner>> {
+pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
     Ok(db
         .prepare(&format!(
-            "SELECT owner_id,owner,repository_id,parent_id FROM workspace_files
-                WHERE {GONE} GROUP BY owner_id ORDER BY MIN(id)"
+            "SELECT space_id,space,repository_id,parent_id FROM workspace_files
+                WHERE {GONE} GROUP BY space_id ORDER BY MIN(id)"
         ))?
-        .query_map([], owner)?
+        .query_map([], space)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -184,9 +184,9 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Owner>> {
 pub(super) fn expired(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
     Ok(db
         .prepare(&format!(
-            "SELECT DISTINCT owner_id FROM workspace_files WHERE repository_id=?1 AND {GONE}
-                AND owner_id NOT IN (SELECT workspace_id FROM removed_workspaces)
-                AND owner_id NOT IN (SELECT chat_id FROM ended_chats)"
+            "SELECT DISTINCT space_id FROM workspace_files WHERE repository_id=?1 AND {GONE}
+                AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
+                AND space_id NOT IN (SELECT chat_id FROM ended_chats)"
         ))?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
@@ -202,11 +202,11 @@ pub(super) fn forget(db: &mut Connection, ids: &[i64]) -> Result<()> {
     Ok(())
 }
 
-/// Forget every record of the removed workspace or ended chat `owner_id`.
-pub(super) fn forget_owner(db: &mut Connection, owner_id: &str) -> Result<()> {
+/// Forget every record of the removed workspace or ended chat `space_id`.
+pub(super) fn forget_space(db: &mut Connection, space_id: &str) -> Result<()> {
     let tx = db.transaction()?;
-    tx.execute("DELETE FROM workspace_files WHERE owner_id=?1", [owner_id])?;
-    tx.execute("DELETE FROM ended_chats WHERE chat_id=?1", [owner_id])?;
+    tx.execute("DELETE FROM workspace_files WHERE space_id=?1", [space_id])?;
+    tx.execute("DELETE FROM ended_chats WHERE chat_id=?1", [space_id])?;
     tx.commit()?;
     Ok(())
 }
@@ -216,13 +216,13 @@ pub(super) fn forget_owner(db: &mut Connection, owner_id: &str) -> Result<()> {
 /// goes.
 pub(crate) fn keep_ended_chat(tx: &Transaction<'_>, chat_id: &str, expires_at: i64) -> Result<()> {
     tx.execute(
-        "UPDATE workspace_files SET owner=(SELECT name FROM chats WHERE id=?1)
-            WHERE owner_id=?1",
+        "UPDATE workspace_files SET space=(SELECT name FROM chats WHERE id=?1)
+            WHERE space_id=?1",
         [chat_id],
     )?;
     tx.execute(
         "INSERT OR REPLACE INTO ended_chats(chat_id,expires_at) SELECT ?1,?2
-            WHERE EXISTS(SELECT 1 FROM workspace_files WHERE owner_id=?1)",
+            WHERE EXISTS(SELECT 1 FROM workspace_files WHERE space_id=?1)",
         params![chat_id, expires_at],
     )?;
     Ok(())
@@ -243,12 +243,12 @@ pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
 /// its own parent, in the transaction that deletes it, before its row goes.
 pub(crate) fn forget_removed(tx: &Transaction<'_>, workspace_id: &str) -> Result<()> {
     tx.execute(
-        "DELETE FROM workspace_files WHERE owner_id=?1 AND source!=?2",
+        "DELETE FROM workspace_files WHERE space_id=?1 AND source!=?2",
         params![workspace_id, FileSource::Result],
     )?;
     tx.execute(
-        "UPDATE workspace_files SET owner=(SELECT name FROM workspaces WHERE id=?1)
-            WHERE owner_id=?1",
+        "UPDATE workspace_files SET space=(SELECT name FROM workspaces WHERE id=?1)
+            WHERE space_id=?1",
         [workspace_id],
     )?;
     tx.execute(

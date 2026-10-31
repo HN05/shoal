@@ -147,10 +147,11 @@ pub struct AttachedFile {
     pub expires_at: Option<i64>,
 }
 
-/// The workspace or chat whose attached files a request names: one that
-/// exists, or a removed workspace or ended chat whose files are kept.
+/// The space, a workspace or chat, whose attached files a request names:
+/// one that exists, or a removed workspace or ended chat whose files are
+/// kept.
 #[derive(Debug, Clone)]
-pub(crate) struct Owner {
+pub(crate) struct Space {
     pub(crate) id: String,
     pub(crate) name: String,
     pub(crate) repository_id: String,
@@ -158,7 +159,7 @@ pub(crate) struct Owner {
     pub(crate) parent_id: Option<String>,
 }
 
-impl From<Workspace> for Owner {
+impl From<Workspace> for Space {
     fn from(workspace: Workspace) -> Self {
         Self {
             id: workspace.id,
@@ -169,7 +170,7 @@ impl From<Workspace> for Owner {
     }
 }
 
-impl From<Chat> for Owner {
+impl From<Chat> for Space {
     fn from(chat: Chat) -> Self {
         Self {
             id: chat.id,
@@ -185,15 +186,15 @@ impl From<Chat> for Owner {
 const ADDED: &str = "shoal files add";
 
 /// Copies of `files`, attached to `message` for the workspace or chat
-/// `owner_id`, made off the async runtime. Callers hold the gate of the
+/// `space_id`, made off the async runtime. Callers hold the gate of the
 /// repository's attached files.
 pub(crate) async fn keep(
     layout: Layout,
-    owner_id: &str,
+    space_id: &str,
     message: &str,
     files: Vec<NewFile>,
 ) -> Result<Kept> {
-    let (id, message) = (owner_id.to_owned(), message.to_owned());
+    let (id, message) = (space_id.to_owned(), message.to_owned());
     tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
 }
 
@@ -259,29 +260,29 @@ impl Manager {
     /// The files attached to the workspace or chat `selector` names, or
     /// kept for a removed workspace or ended chat of that name, oldest first.
     pub async fn attached_files(&self, selector: &str) -> Result<Vec<AttachedFile>> {
-        let owner = self.file_owner(selector).await?;
-        self.store.run(move |db| records::list(db, &owner.id)).await
+        let space = self.file_space(selector).await?;
+        self.store.run(move |db| records::list(db, &space.id)).await
     }
 
     /// The workspace or running chat `selector` names, or else the latest
     /// removed workspace or ended chat of that name or ID whose files are
     /// kept.
-    pub(crate) async fn file_owner(&self, selector: &str) -> Result<Owner> {
-        let error = match self.present_file_owner(selector).await {
-            Ok(owner) => return Ok(owner),
+    pub(crate) async fn file_space(&self, selector: &str) -> Result<Space> {
+        let error = match self.present_space(selector).await {
+            Ok(space) => return Ok(space),
             Err(error) => error,
         };
         let selector = selector.to_owned();
         let gone = self
             .store
-            .run(move |db| records::gone_owner(db, &selector))
+            .run(move |db| records::gone_space(db, &selector))
             .await?;
         gone.ok_or(error)
     }
 
     /// The workspace or running chat `selector` names, by name or ID; the
     /// error is the workspace lookup's when neither has it.
-    async fn present_file_owner(&self, selector: &str) -> Result<Owner> {
+    async fn present_space(&self, selector: &str) -> Result<Space> {
         let error = match self.workspace(selector).await {
             Ok(workspace) => return Ok(workspace.into()),
             Err(error) => error,
@@ -330,16 +331,16 @@ impl Manager {
         names: Vec<String>,
         ids: Vec<i64>,
     ) -> Result<Vec<AttachedFile>> {
-        let owner = self.file_owner(selector).await?;
-        let (repo, _files) = self.lock_repository_files(&owner.repository_id).await?;
-        let id = owner.id.clone();
+        let space = self.file_space(selector).await?;
+        let (repo, _files) = self.lock_repository_files(&space.repository_id).await?;
+        let id = space.id.clone();
         let mut files = self.store.run(move |db| records::list(db, &id)).await?;
         if !names.is_empty() || !ids.is_empty() {
             let missing = missing_selection(&files, &names, &ids);
             ensure!(
                 missing.is_empty(),
                 "{} has no attached file {}",
-                owner.name,
+                space.name,
                 missing.join(", ")
             );
             files.retain(|file| names.contains(&file.name) || ids.contains(&file.id));
@@ -394,24 +395,24 @@ impl Manager {
         attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
-        let owner = self.present_file_owner(selector).await?;
-        let (layout, _files) = self.lock_files(&owner).await?;
-        let kept = keep(layout, &owner.id, ADDED, files).await?;
-        self.record_or_discard(&owner.id, FileSource::Added, attacher, kept)
+        let space = self.present_space(selector).await?;
+        let (layout, _files) = self.lock_files(&space).await?;
+        let kept = keep(layout, &space.id, ADDED, files).await?;
+        self.record_or_discard(&space.id, FileSource::Added, attacher, kept)
             .await
     }
 
     /// Record the copies `kept` as attached to the workspace or chat
-    /// `owner_id` from `source` by `attacher` and return their records, or
+    /// `space_id` from `source` by `attacher` and return their records, or
     /// delete the copies made for them when that fails.
     async fn record_or_discard(
         &self,
-        owner_id: &str,
+        space_id: &str,
         source: FileSource,
         attacher: &Attacher,
         kept: Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let recorded = self.record_kept(owner_id, source, attacher, &kept).await;
+        let recorded = self.record_kept(space_id, source, attacher, &kept).await;
         if recorded.is_err() {
             discard(kept).await;
         }
@@ -419,15 +420,15 @@ impl Manager {
     }
 
     /// Record the copies `kept` as attached to the workspace or chat
-    /// `owner_id` from `source` by `attacher`, and return their records.
+    /// `space_id` from `source` by `attacher`, and return their records.
     async fn record_kept(
         &self,
-        owner_id: &str,
+        space_id: &str,
         source: FileSource,
         attacher: &Attacher,
         kept: &Kept,
     ) -> Result<Vec<AttachedFile>> {
-        let (id, attacher) = (owner_id.to_owned(), attacher.clone());
+        let (id, attacher) = (space_id.to_owned(), attacher.clone());
         let copies = kept.copies.clone();
         self.store
             .run(move |db| records::record_all(db, &id, source, &attacher, &copies))
@@ -446,32 +447,32 @@ impl Manager {
         Ok((repo, guard))
     }
 
-    /// Hold the gate of the files attached to the workspace or chat `owner`,
+    /// Hold the gate of the files attached to the workspace or chat `space`,
     /// with where its repository keeps them, once the workspace is still
     /// there and not being removed, or the chat still runs. A registration
     /// older than the repository's directory reserves it first, under the Git
     /// gate, which is never taken while holding this one.
-    pub(crate) async fn lock_files(&self, owner: &Owner) -> Result<(Layout, OwnedMutexGuard<()>)> {
+    pub(crate) async fn lock_files(&self, space: &Space) -> Result<(Layout, OwnedMutexGuard<()>)> {
         let repo = self
-            .reserve_repository_directory(&owner.repository_id)
+            .reserve_repository_directory(&space.repository_id)
             .await?;
         let guard = self.gates.lock_message_files(&repo.id).await;
         // A move, removal or end may have finished while this waited.
-        self.ensure_attachable(&owner.id).await?;
+        self.ensure_attachable(&space.id).await?;
         let repo = self.repository(&repo.id).await?;
         let layout = Layout::of(&repo).context("the repository has no directory")?;
         Ok((layout, guard))
     }
 
-    /// Refuse attaching files to the workspace or chat `owner_id` once the
+    /// Refuse attaching files to the space `space_id` once the
     /// workspace is being removed or is gone, or the chat has ended.
-    async fn ensure_attachable(&self, owner_id: &str) -> Result<()> {
-        match self.workspace(owner_id).await {
+    async fn ensure_attachable(&self, space_id: &str) -> Result<()> {
+        match self.workspace(space_id).await {
             Ok(workspace) => ensure!(
                 workspace.state != WorkspaceState::Removing,
                 "the workspace is being removed"
             ),
-            Err(error) if self.running_chat(owner_id).await?.is_none() => return Err(error),
+            Err(error) if self.running_chat(space_id).await?.is_none() => return Err(error),
             Err(_) => {}
         }
         Ok(())

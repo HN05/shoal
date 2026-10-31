@@ -82,25 +82,28 @@ pub(in crate::cli::commands) async fn run(
             }
         }
         CoordinationCommand::Files {
-            command: Some(FilesCommand::Add { files, workspace }),
+            command: Some(FilesCommand::Add { files, space }),
             ..
-        } => files::add(&ctx, workspace, files).await,
+        } => files::add(&ctx, space, files).await,
         CoordinationCommand::Files {
             command:
                 Some(FilesCommand::Rm {
                     files: names,
-                    workspace,
+                    space,
                     all,
                     confirmation,
                 }),
             ..
         } => {
-            let scope = crate::cli::args::WorkspaceScope { workspace, all };
+            let scope = crate::cli::args::WorkspaceScope {
+                workspace: space,
+                all,
+            };
             files::remove(&ctx, scope, names, vec![], confirmation.yes).await
         }
         CoordinationCommand::Files {
             command: None,
-            workspace,
+            space,
             path,
             print,
         } => {
@@ -109,7 +112,7 @@ pub(in crate::cli::commands) async fn run(
                 (false, true) => files::Listing::Print,
                 (false, false) => files::Listing::Menu,
             };
-            files::list(&ctx, workspace, listing).await
+            files::list(&ctx, space, listing).await
         }
         CoordinationCommand::Done {
             workspace,

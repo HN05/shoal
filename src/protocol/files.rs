@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Requests about the files attached to workspaces.
+/// Requests about the files attached to spaces: workspaces and chats.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(
@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum FileMethod {
     /// The files attached to a workspace or chat, oldest first.
-    ListFiles { workspace: String },
+    ListFiles { space: String },
     /// Attach copies of files to a workspace or chat without a message.
     AddFiles {
-        workspace: String,
+        space: String,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::daemon::workspace_files::NewFile>,
         /// The chat whose agent sends the request, which attaches them.
@@ -24,7 +24,7 @@ pub enum FileMethod {
     /// those of every workspace without a running agent or command and of
     /// every ended chat.
     RemoveFiles {
-        workspace: Option<String>,
+        space: Option<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         names: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

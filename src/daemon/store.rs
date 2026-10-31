@@ -442,7 +442,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (95, EXECUTION_AGENT_PARENTS, None),
     (96, FILE_TITLES, None),
     (97, CHAT_QUESTIONS, None),
-    (98, FILE_OWNERS, None),
+    (98, FILE_SPACES, None),
     (99, ENDED_CHATS, None),
 ];
 
@@ -473,8 +473,8 @@ const FILE_TITLES: &str = "ALTER TABLE workspace_files ADD COLUMN title TEXT;";
 
 /// The workspace or chat each file is attached to, whose IDs never collide,
 /// and its name then.
-const FILE_OWNERS: &str = "ALTER TABLE workspace_files RENAME COLUMN workspace_id TO owner_id;
-    ALTER TABLE workspace_files RENAME COLUMN workspace TO owner;";
+const FILE_SPACES: &str = "ALTER TABLE workspace_files RENAME COLUMN workspace_id TO space_id;
+    ALTER TABLE workspace_files RENAME COLUMN workspace TO space;";
 
 /// The ended chats whose attached files stay until `expires_at`.
 const ENDED_CHATS: &str = "CREATE TABLE ended_chats (

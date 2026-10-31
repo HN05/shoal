@@ -20289,7 +20289,7 @@ fn a_chats_agent_attaches_files_the_user_lists_after_the_chat_ends() {
     assert!(kept[0]["expires_at"].is_i64(), "{kept}");
     assert_eq!(kept[0]["chat"], "planning", "{kept}");
     assert_eq!(fs::read_to_string(&copy).unwrap(), "Plan");
-    let deleted = fixture.ok(&["files", "rm", "--workspace", "planning"]);
+    let deleted = fixture.ok(&["files", "rm", "--space", "planning"]);
     assert_eq!(deleted[0]["path"], added[0]["path"], "{deleted}");
     assert!(!copy.exists());
 }

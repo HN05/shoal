@@ -3780,18 +3780,18 @@ settle_seconds = 5 # Default: 5; at most 60
 ### Attached files
 
 ```sh
-shoal files [name]          # Pick among a workspace's or chat's files, or list them
-shoal files [name] --print  # List them on a terminal too
-shoal files [name] --path   # Only the paths of Shoal's copies
+shoal files [space]          # Pick among a workspace's or chat's files, or list them
+shoal files [space] --print  # List them on a terminal too
+shoal files [space] --path   # Only the paths of Shoal's copies
 shoal done --attach report.md    # Hand back a file with the completion
-shoal files add notes.md [--workspace W]  # Attach files without a message
+shoal files add notes.md [--space S]      # Attach files without a message
 shoal files add 'chart.html#Latency by region'  # Attach a file with a title
-shoal files rm [FILE...] [--workspace W]  # Delete a workspace's or chat's files, or those with these names
+shoal files rm [FILE...] [--space S]      # Delete a space's files, or those with these names
 shoal files rm --all                      # Delete the files of every idle workspace and ended chat
 ```
 
-`shoal files` lists the files attached to a workspace or [chat](#chats), or on
-a terminal opens a picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
+`shoal files` lists the files attached to a space, a workspace or
+[chat](#chats), or on a terminal opens a picker over them with a `+ Add file` row: Enter prints a text file, Ctrl-Y its
 copy's path, Ctrl-O opens it in the application the desktop chooses and prints
 its path, Ctrl-D deletes that copy as `rm` does, and Ctrl-A, or Enter on the
 add row, asks for a file to add. Workspace processes cannot open files.
@@ -3806,9 +3806,10 @@ long as its removal record, `cleanup.restore.retention_days` like its
 them, with when they go, and deletes them with `rm`. A chat's files outlive
 the chat the same way: they stay for `cleanup.restore.retention_days` after it
 ends, listed under its last name. Disk space cleanup
-deletes them sooner when nothing else frees enough space. A chat's name or ID
-names its files wherever a workspace's names a workspace's; run from a chat's
-agent outside any workspace, `shoal files`, `add` and `rm` act on its chat.
+deletes them sooner when nothing else frees enough space. A space is named by
+the workspace's or chat's name or ID, and `--workspace` is another name for
+`--space`; run from a chat's agent outside any workspace, `shoal files`, `add`
+and `rm` act on its chat.
 `--json` gives each as a record with `workspace` or `chat`, the name of what it
 is attached to, `source`, `path`, `bytes`, `title` when it has one, and
 `attached_by`:

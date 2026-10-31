@@ -352,25 +352,25 @@ async fn delete_results(
     filesystem: &mut Filesystem,
     available: impl Fn(&Path) -> io::Result<u64>,
 ) -> Result<()> {
-    for owner in manager.kept_results().await? {
+    for space in manager.kept_results().await? {
         if filesystem.free >= settings.cleanup_free_bytes() {
             break;
         }
         let deleted = manager
-            .delete_results_in(&owner, |path| filesystem.holds(path))
+            .delete_results_in(&space, |path| filesystem.holds(path))
             .await;
         let (kind, message) = match deleted {
             Ok(false) => continue,
             Ok(true) => {
                 log!(
                     "disk space cleanup deleted the kept files of {}",
-                    owner.name
+                    space.name
                 );
                 (
                     NotificationKind::ResultsDeleted,
                     format!(
                         "Deleted the kept files of {}, for disk space; {}",
-                        owner.name,
+                        space.name,
                         filesystem.describe()
                     ),
                 )
@@ -379,7 +379,7 @@ async fn delete_results(
                 NotificationKind::CleanupFailed,
                 format!(
                     "Disk space cleanup could not delete the kept files of {}: {error:#}",
-                    owner.name
+                    space.name
                 ),
             ),
         };

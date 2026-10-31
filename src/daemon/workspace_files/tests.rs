@@ -580,7 +580,7 @@ async fn results_outlive_removal_as_long_as_its_record() {
             )
             .await;
         let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-            workspace: "audit".into(),
+            space: "audit".into(),
         });
         let authorized = scope::authorize(&manager, Some(token), &mut list).await;
         assert_eq!(authorized.is_ok(), allowed, "{token}");
@@ -647,7 +647,7 @@ async fn results_stay_reachable_when_a_workspace_between_goes() {
         )
         .await;
     let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-        workspace: "bottom".into(),
+        space: "bottom".into(),
     });
     scope::authorize(&manager, Some("top"), &mut list)
         .await
@@ -1186,7 +1186,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         )
         .await;
     let mut list = crate::protocol::Operation::from(FileMethod::ListFiles {
-        workspace: chat.name.clone(),
+        space: chat.name.clone(),
     });
     assert!(
         scope::authorize(&manager, Some("worker"), &mut list)

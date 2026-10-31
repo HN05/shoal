@@ -327,7 +327,7 @@ fn historical_database(version: i64) -> Result<Connection> {
         db.execute_batch(CHAT_QUESTIONS)?;
     }
     if version >= 98 {
-        db.execute_batch(FILE_OWNERS)?;
+        db.execute_batch(FILE_SPACES)?;
     }
     if version >= 99 {
         db.execute_batch(ENDED_CHATS)?;

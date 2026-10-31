@@ -38,7 +38,9 @@ instead of the PR delivery guidance below.
     Shoal's generic code, which passes each callback only what it reads.
 - A chat gets every workspace feature that does not need a worktree or branch.
   Flag a change that adds or extends such a feature for workspaces only, unless
-  its PR says why it cannot apply to chats.
+  its PR says why it cannot apply to chats. A space is a workspace or a chat:
+  flag a flag, text or name that says workspace for something a chat also
+  takes.
 - Safety of user work: removal goes through the one shared path, preserves
   work and leases on failure, never adopts moved or replaced worktrees, stops
   every verified process carrying the workspace identity, and never signals a

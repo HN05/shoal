@@ -178,7 +178,7 @@ fn recorded_use(db: &Connection, id: &str) -> Result<bool> {
             WHERE repository_id=?1 AND expires_at > unixepoch()
         UNION ALL SELECT 1 FROM removed_workspaces
             WHERE repository_id=?1 AND expires_at > unixepoch()
-        UNION ALL SELECT 1 FROM ended_chats JOIN workspace_files ON owner_id=chat_id
+        UNION ALL SELECT 1 FROM ended_chats JOIN workspace_files ON space_id=chat_id
             WHERE repository_id=?1 AND expires_at > unixepoch()",
         [id],
     )

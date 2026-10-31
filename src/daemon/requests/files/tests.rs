@@ -24,7 +24,7 @@ async fn long_file_listings_go_in_pages() {
             for n in 0..1000 {
                 db.execute(
                     "INSERT INTO workspace_files
-                        (owner_id,owner,repository_id,source,name,path,bytes,created_at)
+                        (space_id,space,repository_id,source,name,path,bytes,created_at)
                         VALUES (?1,'receiver',?2,'added','notes.md',?3,1,0)",
                     rusqlite::params![id, repository_id, format!("/attachments/{n:0>64}/notes.md")],
                 )?;
@@ -36,7 +36,7 @@ async fn long_file_listings_go_in_pages() {
     let answer = handle(
         &manager,
         FileMethod::ListFiles {
-            workspace: workspace.name.clone(),
+            space: workspace.name.clone(),
         },
         None,
     )
@@ -78,7 +78,7 @@ async fn deleting_by_name_needs_a_workspace() {
     let refused = handle(
         &manager,
         FileMethod::RemoveFiles {
-            workspace: None,
+            space: None,
             names: vec!["notes.md".into()],
             ids: vec![],
         },

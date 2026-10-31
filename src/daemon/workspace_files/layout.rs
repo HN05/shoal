@@ -192,22 +192,22 @@ impl Layout {
     }
 
     /// The directories that may hold the files kept for the workspace or
-    /// chat `owner_id` after it is gone: a chat's own, and the results a
+    /// chat `space_id` after it is gone: a chat's own, and the results a
     /// workspace handed back.
-    pub(crate) fn kept(&self, owner_id: &str) -> [PathBuf; 2] {
+    pub(crate) fn kept(&self, space_id: &str) -> [PathBuf; 2] {
         [
-            self.root.join(owner_id),
-            self.root.join(RESULTS).join(owner_id),
+            self.root.join(space_id),
+            self.root.join(RESULTS).join(space_id),
         ]
     }
 
-    /// Delete the files kept for the workspace or chat `owner_id` after it
+    /// Delete the files kept for the space `space_id` after it
     /// is gone.
-    pub(crate) fn remove_kept(&self, owner_id: &str) -> Result<()> {
+    pub(crate) fn remove_kept(&self, space_id: &str) -> Result<()> {
         if !is_marked_dir(&self.root, &self.owner) {
             return Ok(());
         }
-        for directory in self.kept(owner_id) {
+        for directory in self.kept(space_id) {
             ensure!(
                 self.contains(&directory),
                 "{} is not among the repository's attached files",
