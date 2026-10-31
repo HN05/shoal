@@ -129,19 +129,14 @@ impl Manager {
     /// the session the package continues and its package is made, so the
     /// session's files stop changing and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
-        let Some(session) = chat.session.clone() else {
+        let repo = self.repository(&chat.repository_id).await?;
+        let Some(continues) = crate::transfer::continue_chat(&chat, crate::repository::name(&repo))
+        else {
             anyhow::bail!(
                 "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
                 chat.name
             );
         };
-        let repo = self.repository(&chat.repository_id).await?;
-        let continues = format!(
-            "chat {name} ended here; shoal chat {repo} --name {name} --agent {agent} --session {session} continues it",
-            name = chat.name,
-            repo = crate::repository::name(&repo),
-            agent = chat.agent,
-        );
         let id = chat.id.clone();
         let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
         self.end_chat(&id).await?;

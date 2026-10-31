@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use super::export::{self, ExportDirectory, PlannedExport};
 use crate::{
-    cli::{args::transfer::SshArgs, context::Context, ui},
+    cli::{args::transfer::SshArgs, client, context::Context, ui},
+    model::Chat,
     subprocess::{Run, diagnostic},
 };
 
@@ -91,24 +92,41 @@ async fn move_one(
     resume: bool,
 ) -> Result<Value> {
     let name = planned.name().to_owned();
-    let keeps_record = planned.keeps_record();
+    let chat = planned.chat().cloned();
     let file = planned.export(ctx).await?;
     let error = match remote.import(&file, resume).await {
         Ok(imported) => return Ok(imported),
         Err(error) => error,
     };
-    if keeps_record {
+    let Some(chat) = chat else {
         return Err(error.context(format!(
             "{name} is removed here; shoal work restore {name} opens it here again, unless {} opened it",
             remote.host
         )));
+    };
+    match keep_package(ctx, &name, &file) {
+        Ok(kept) => Err(error.context(format!(
+            "{name} ended here; shoal move import {} continues it here again, unless {} started it",
+            kept.display(),
+            remote.host
+        ))),
+        Err(keeping) => Err(error.context(format!(
+            "{}, unless {} started it; its package could not be kept: {keeping:#}",
+            continues_here(ctx, &chat).await,
+            remote.host
+        ))),
     }
-    let kept = keep_package(ctx, &name, &file)?;
-    Err(error.context(format!(
-        "{name} ended here; shoal move import {} continues it here again, unless {} started it",
-        kept.display(),
-        remote.host
-    )))
+}
+
+/// How `chat`, which ended here, continues here without its package.
+async fn continues_here(ctx: &Context, chat: &Chat) -> String {
+    let repositories = client::repositories(&ctx.paths).await.unwrap_or_default();
+    let repository = repositories
+        .iter()
+        .find(|repository| repository.id == chat.repository_id)
+        .map_or(chat.repository_id.as_str(), crate::repository::name);
+    crate::transfer::continue_chat(chat, repository)
+        .unwrap_or_else(|| format!("chat {} ended here", chat.name))
 }
 
 /// Keep the package `file` of the space `name`, whose import failed, where

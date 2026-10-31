@@ -515,11 +515,14 @@ impl PlannedExport {
         self.check.name()
     }
 
-    /// Whether the space keeps a record here once it ends, from which it
-    /// opens again without its package: a removed workspace does, a chat
-    /// does not.
-    pub(super) fn keeps_record(&self) -> bool {
-        matches!(self.check, Checked::Workspace(_))
+    /// The chat the export ends, which keeps no record here once it ends,
+    /// unlike a removed workspace, from which it opens again without its
+    /// package.
+    pub(super) fn chat(&self) -> Option<&Chat> {
+        match &self.check {
+            Checked::Chat(chat) => Some(chat),
+            Checked::Workspace(_) => None,
+        }
     }
 
     /// End the space and export it, returning the file it went to.
