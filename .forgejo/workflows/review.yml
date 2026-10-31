@@ -1,10 +1,12 @@
 name: review
 # One review when a PR opens, one per request label, and none while the PR is a
 # draft (a `WIP:` or `[WIP]` title prefix). Taking a PR out of draft is a title
-# edit: an `edited` event whose previous title (`changes.title.from`) had the
-# prefix requests one review, which also consumes any request label added while
-# the PR was a draft. The job runs the action on that event directly, because a
-# label added with the job token starts no workflow on Forgejo.
+# edit and requests one review, which also consumes any request label added
+# while the PR was a draft. Forgejo's payload for an edit carries no previous
+# title, so the job reads the PR's timeline: an edit reviews when the latest
+# title change removed the prefix and no review-bot review followed it. The job
+# runs the action on that edit itself, because a label added with the job token
+# starts no workflow on Forgejo.
 on:
   pull_request:
     types: [opened, reopened, labeled, label_updated, edited]
@@ -12,11 +14,10 @@ on:
 concurrency:
   # Default requests share the configured reviewer's queue. Claude and Codex
   # requests use independent queues, including when both labels are present.
-  # Events the job skips (drafts and other edits) queue apart from reviews.
+  # Draft events, which the job skips, queue apart from reviews.
   group: >-
     review-${{ github.event.pull_request.number }}-${{
-    ((github.event.pull_request.draft ||
-      (github.event.action == 'edited' && !(startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]')))) && 'skipped') ||
+    (github.event.pull_request.draft && 'draft') ||
     (github.event.label.name == 'review/claude' && 'claude') ||
     (github.event.label.name == 'review/codex' && 'codex') ||
     (!github.event.label && contains(github.event.pull_request.labels.*.name, 'review/claude') && !contains(github.event.pull_request.labels.*.name, 'review/codex') && 'claude') ||
@@ -31,7 +32,7 @@ jobs:
       !contains(github.event.pull_request.labels.*.name, 'review/none') &&
       !github.event.pull_request.draft &&
       (github.event.action == 'opened' || github.event.action == 'reopened' ||
-       (github.event.action == 'edited' && (startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]'))) ||
+       github.event.action == 'edited' ||
        ((github.event.action == 'label_updated' || github.event.action == 'labeled') &&
         ((github.event.label.name == 'review/default' ||
           github.event.label.name == 'review/codex' ||
@@ -48,7 +49,49 @@ jobs:
         - /var/lib/review-bot/claude:/var/lib/review-bot/claude
         - /var/lib/review-bot/codex:/var/lib/review-bot/codex
     steps:
+      - name: Check that the edit took the PR out of draft
+        id: undraft
+        if: github.event.action == 'edited'
+        env:
+          TOKEN: ${{ github.token }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        shell: python3 {0}
+        run: |
+          import json, os, urllib.request
+          from datetime import datetime
+
+          def pages(path):
+              items, page = [], 1
+              while True:
+                  request = urllib.request.Request(f"{os.environ['API']}/{path}?page={page}&limit=50",
+                                                   headers={"Authorization": f"token {os.environ['TOKEN']}"})
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      batch = json.load(response)
+                  if not batch:
+                      return items
+                  items += batch
+                  page += 1
+
+          def draft(title):
+              return (title or "").upper().startswith(("WIP:", "[WIP]"))
+
+          number = os.environ["NUMBER"]
+          changes = [item for item in pages(f"issues/{number}/timeline") if item.get("type") == "change_title"]
+          latest = max(changes, key=lambda item: datetime.fromisoformat(item["created_at"]), default=None)
+          review = latest is not None and draft(latest["old_title"]) and not draft(latest["new_title"])
+          if review:
+              changed = datetime.fromisoformat(latest["created_at"])
+              review = not any("<!-- review-bot" in (item.get("body") or "")
+                               and datetime.fromisoformat(item["submitted_at"]) >= changed
+                               for item in pages(f"pulls/{number}/reviews") if item.get("submitted_at"))
+              print("The PR left draft" + ("; reviewing it" if review else ", and a review followed"))
+          else:
+              print("The latest title change did not take the PR out of draft")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"review={str(review).lower()}\n")
       - uses: https://git.henriknordvik.com/HN05/review-bot@main
+        if: github.event.action != 'edited' || steps.undraft.outputs.review == 'true'
         with:
           agent: ${{ vars.REVIEW_AGENT || 'codex' }}
           rerun-label: review/default
