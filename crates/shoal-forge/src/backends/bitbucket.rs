@@ -15,7 +15,7 @@ use crate::{
     ci::{
         CiAction, CiCheck, Job, Location, Operation,
         run::NewRun,
-        run_action::Run,
+        run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
     },
     conventions::Lookup,
@@ -739,7 +739,7 @@ impl Backend for Bitbucket {
         Err(capability::unsupported(self, Capability::ReadJobLogs))
     }
 
-    fn run_endpoint(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<String> {
+    fn run_operation(&self, _run: &Run, action: CiAction, _failed: bool) -> Result<RunOperation> {
         Err(capability::unsupported(self, Capability::ci(action)))
     }
 

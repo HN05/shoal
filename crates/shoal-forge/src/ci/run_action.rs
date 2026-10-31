@@ -40,6 +40,15 @@ pub struct Run {
     pub(crate) waiting: bool,
 }
 
+/// The requests that apply an action to a run.
+pub(crate) enum RunOperation {
+    /// POST to this endpoint under the repository's.
+    Post(String),
+    /// POST to the endpoint under the repository's that each failed job's ID
+    /// gives, one job at a time.
+    EachFailedJob(fn(u64) -> String),
+}
+
 /// A run an action reached.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunActed {
@@ -107,13 +116,50 @@ impl ForgeRepo {
         action: CiAction,
         failed: bool,
     ) -> Result<RunActed> {
-        let endpoint = self.kind.run_endpoint(run, action, failed)?;
-        let request = Request::new(HttpMethod::Post, self.repo_endpoint(&endpoint), None);
-        self.send(account, &request).await?;
+        match self.kind.run_operation(run, action, failed)? {
+            RunOperation::Post(endpoint) => self.post(account, &endpoint).await?,
+            RunOperation::EachFailedJob(endpoint) => {
+                self.rerun_failed_jobs(account, run, endpoint).await?
+            }
+        }
         Ok(RunActed {
             url: run.url.clone(),
             action,
         })
+    }
+
+    /// Rerun each failed job of `run` at the endpoint its ID gives. A rerun
+    /// also restarts the jobs that need the rerun one, so the jobs are read
+    /// again before each rerun, and only one still failed is rerun.
+    async fn rerun_failed_jobs(
+        &self,
+        account: &Account,
+        run: &Run,
+        endpoint: fn(u64) -> String,
+    ) -> Result<()> {
+        let mut rerun = Vec::new();
+        loop {
+            let jobs = self.jobs_of(account, run).await?;
+            let Some(job) = jobs
+                .iter()
+                .find(|job| job.state == JobState::Failed && !rerun.contains(&job.id))
+            else {
+                break;
+            };
+            self.post(account, &endpoint(job.id))
+                .await
+                .with_context(|| format!("could not rerun job {}", job.name))?;
+            rerun.push(job.id);
+        }
+        ensure!(!rerun.is_empty(), "no job of {} has failed", run.url);
+        Ok(())
+    }
+
+    /// POST to `endpoint` under the repository's.
+    async fn post(&self, account: &Account, endpoint: &str) -> Result<()> {
+        let request = Request::new(HttpMethod::Post, self.repo_endpoint(endpoint), None);
+        self.send(account, &request).await?;
+        Ok(())
     }
 }
 

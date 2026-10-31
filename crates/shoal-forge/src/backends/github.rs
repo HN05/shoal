@@ -25,7 +25,7 @@ use crate::{
         checks::plain,
         id,
         run::{NewRun, workflow_segment},
-        run_action::Run,
+        run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     conventions::{Lookup, shared_lookups},
@@ -706,13 +706,13 @@ impl Backend for GitHub {
         repo.job_log(account, location).await
     }
 
-    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
+    fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
         let id = run.id;
-        Ok(match (action, failed) {
+        Ok(RunOperation::Post(match (action, failed) {
             (CiAction::Rerun, false) => format!("actions/runs/{id}/rerun"),
             (CiAction::Rerun, true) => format!("actions/runs/{id}/rerun-failed-jobs"),
             (CiAction::Cancel, _) => format!("actions/runs/{id}/cancel"),
-        })
+        }))
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

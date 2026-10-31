@@ -21,7 +21,7 @@ use crate::{
         CiAction, CiCheck, Job, Location, Operation,
         checks::{CheckLog, plain},
         run::NewRun,
-        run_action::Run,
+        run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
     },
     conventions::Lookup,
@@ -676,9 +676,9 @@ pub(crate) trait Backend {
         job: &RunJob,
     ) -> Result<String>;
 
-    /// The endpoint under the repository that applies `action` to `run`;
-    /// `failed` reruns only its failed jobs.
-    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String>;
+    /// The requests that apply `action` to `run`; `failed` reruns only its
+    /// failed jobs.
+    fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation>;
 
     /// The endpoint under the repository that approves `run`, where the
     /// forge approves runs.
@@ -1404,8 +1404,8 @@ impl Backend for ForgeKind {
         dispatch!(self, backend => backend.run_job_log(repo, account, run, job).await)
     }
 
-    fn run_endpoint(&self, run: &Run, action: CiAction, failed: bool) -> Result<String> {
-        dispatch!(self, backend => backend.run_endpoint(run, action, failed))
+    fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
+        dispatch!(self, backend => backend.run_operation(run, action, failed))
     }
 
     fn approve_endpoint(&self, run: &Run) -> Result<String> {

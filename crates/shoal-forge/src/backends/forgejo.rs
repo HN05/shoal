@@ -11,6 +11,7 @@ mod reviewers;
 mod sniff;
 pub(crate) mod threads;
 mod uploads;
+mod version;
 mod view;
 
 use super::{
@@ -28,7 +29,7 @@ use crate::{
         approval::RUNS_PAGE,
         checks::{CheckLog, plain},
         run::NewRun,
-        run_action::Run,
+        run_action::{Run, RunOperation},
         run_view::{RunFilter, RunJob},
     },
     conventions::{Lookup, shared_lookups},
@@ -78,14 +79,15 @@ impl Backend for Forgejo {
         "Forgejo or Gitea"
     }
 
-    /// Shoal does not sign in to the web UI, where Forgejo resolves threads
-    /// and reruns jobs.
+    /// Shoal does not sign in to the web UI, where Forgejo resolves threads,
+    /// and before release 17 reruns jobs, which [`Self::server_support`]
+    /// asks the server about.
     fn support(&self, capability: Capability) -> Support {
         match capability {
             Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::ResolveThreads => Support::Unsupported(Some("reply in the thread instead")),
             Capability::RerunJobs => Support::Unsupported(Some(
-                "rerun them from the web UI, push a fix, or start a new run with shoal ci run",
+                "that needs Forgejo 17 or later; rerun them from the web UI, push a fix, or start a new run with shoal ci run",
             )),
             // Forgejo approves runs only through a web UI route.
             Capability::ApproveRuns => Support::Unsupported(Some("approve them in the web UI")),
@@ -115,6 +117,20 @@ impl Backend for Forgejo {
             | Capability::RequestChanges
             | Capability::Reactions => Support::Supported,
         }
+    }
+
+    /// Forgejo reruns runs and jobs through its API from release 17; Gitea
+    /// does not.
+    async fn server_support(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        capability: Capability,
+    ) -> Result<Support> {
+        if capability == Capability::RerunJobs && version::reruns(repo, account).await? {
+            return Ok(Support::Supported);
+        }
+        Ok(self.support(capability))
     }
 
     fn nests_groups(&self) -> bool {
@@ -773,12 +789,17 @@ impl Backend for Forgejo {
         Ok(self.plain_log(&actions::job_log(repo, account, &endpoint).await?))
     }
 
-    /// Forgejo's API cannot rerun, which the capability refuses first.
-    fn run_endpoint(&self, run: &Run, action: CiAction, _failed: bool) -> Result<String> {
-        match action {
-            CiAction::Cancel => Ok(format!("actions/runs/{}/cancel", run.id)),
-            CiAction::Rerun => Err(capability::unsupported(self, Capability::ci(action))),
-        }
+    /// Forgejo reruns failed jobs one by one; one run accepts several job
+    /// reruns in a row, also while it runs again.
+    fn run_operation(&self, run: &Run, action: CiAction, failed: bool) -> Result<RunOperation> {
+        let id = run.id;
+        Ok(match (action, failed) {
+            (CiAction::Rerun, false) => RunOperation::Post(format!("actions/runs/{id}/rerun")),
+            (CiAction::Rerun, true) => {
+                RunOperation::EachFailedJob(|job| format!("actions/jobs/{job}/rerun"))
+            }
+            (CiAction::Cancel, _) => RunOperation::Post(format!("actions/runs/{id}/cancel")),
+        })
     }
 
     /// Each log line starts with its time.

@@ -57,9 +57,13 @@ fn run_urls_locate_runs_only_in_the_repository() -> Result<()> {
 #[test]
 fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
     let endpoint = |remote: &str, action, failed| -> Result<String> {
-        ForgeRepo::parse(remote)?
+        let operation = ForgeRepo::parse(remote)?
             .kind
-            .run_endpoint(&run(9), action, failed)
+            .run_operation(&run(9), action, failed)?;
+        Ok(match operation {
+            RunOperation::Post(endpoint) => endpoint,
+            RunOperation::EachFailedJob(endpoint) => format!("each of {}", endpoint(7)),
+        })
     };
     let github = "https://github.com/team/repo";
     assert_eq!(
@@ -84,7 +88,16 @@ fn each_forge_acts_on_a_run_its_own_way() -> Result<()> {
         endpoint(gitlab, CiAction::Cancel, false)?,
         "pipelines/9/cancel"
     );
+    // Forgejo reruns failed jobs one by one.
     let forgejo = "https://codeberg.org/team/repo";
+    assert_eq!(
+        endpoint(forgejo, CiAction::Rerun, false)?,
+        "actions/runs/9/rerun"
+    );
+    assert_eq!(
+        endpoint(forgejo, CiAction::Rerun, true)?,
+        "each of actions/jobs/7/rerun"
+    );
     assert_eq!(
         endpoint(forgejo, CiAction::Cancel, false)?,
         "actions/runs/9/cancel"
@@ -151,8 +164,8 @@ fn runs_read_their_branch_workflow_and_state_from_the_forge() -> Result<()> {
 
 #[test]
 fn forges_without_run_actions_refuse_them_before_any_lookup() -> Result<()> {
-    let forgejo = ForgeRepo::parse("https://codeberg.org/team/repo")?;
-    let error = forgejo
+    let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
+    let error = bitbucket
         .require(Capability::ci(CiAction::Rerun))
         .unwrap_err();
     assert!(
@@ -162,5 +175,72 @@ fn forges_without_run_actions_refuse_them_before_any_lookup() -> Result<()> {
     assert!(validate_run_reference("12").is_ok());
     assert!(validate_run_reference("ci.yml").is_err());
     assert!(validate_run_reference("0").is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn forgejo_reruns_each_failed_job_once_skipping_those_a_rerun_restarted() -> Result<()> {
+    use std::sync::{Arc, Mutex};
+
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+    };
+    // `deploy` needs `test`, so rerunning `test` blocks it again.
+    let statuses = Arc::new(Mutex::new(vec![
+        ("build", "success"),
+        ("test", "failure"),
+        ("deploy", "failure"),
+        ("lint", "cancelled"),
+    ]));
+    let jobs = statuses.clone();
+    let server = Server::start(move |request| {
+        let mut jobs = jobs.lock().unwrap();
+        if let Some(id) = request
+            .line
+            .strip_prefix("POST /api/v1/repos/team/repo/actions/jobs/")
+            .and_then(|rest| rest.strip_suffix("/rerun"))
+        {
+            let index: usize = id.parse::<usize>().unwrap() - 1;
+            jobs[index].1 = "waiting";
+            if jobs[index].0 == "test" {
+                jobs[2].1 = "blocked";
+            }
+            return (204, Vec::new(), Vec::new());
+        }
+        let listed: Vec<_> = jobs
+            .iter()
+            .enumerate()
+            .map(|(index, (name, status))| {
+                json!({"id": index + 1, "name": name, "run_id": 9, "status": status})
+            })
+            .collect();
+        (200, Vec::new(), json!(listed).to_string().into())
+    });
+    let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+    let account = agent_on(&server, "agent");
+    forgejo
+        .act_on_run(&account, &run(9), CiAction::Rerun, true)
+        .await?;
+    let posts: Vec<_> = server
+        .received()
+        .into_iter()
+        .map(|request| request.line)
+        .filter(|line| line.starts_with("POST"))
+        .collect();
+    assert_eq!(
+        posts,
+        [
+            "POST /api/v1/repos/team/repo/actions/jobs/2/rerun",
+            "POST /api/v1/repos/team/repo/actions/jobs/4/rerun",
+        ]
+    );
+
+    // A run without failed jobs has nothing to rerun.
+    let error = forgejo
+        .act_on_run(&account, &run(9), CiAction::Rerun, true)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("has failed"), "{error}");
     Ok(())
 }

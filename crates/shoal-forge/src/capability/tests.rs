@@ -35,3 +35,45 @@ fn capabilities_list_every_capability_in_order() -> Result<()> {
     assert_eq!(reopen.map(|entry| entry.supported), Some(false));
     Ok(())
 }
+
+#[tokio::test]
+async fn forgejo_reruns_jobs_only_from_release_17() -> Result<()> {
+    use crate::{
+        backends::ForgeKind,
+        test_support::{Server, agent_on, repo_on},
+    };
+    for (version, supported) in [
+        ("17.0.1+gitea-1.22.0", true),
+        ("16.0.0+gitea-1.22.0", false),
+        ("1.25.0", false),
+    ] {
+        let body = format!(r#"{{"version":"{version}"}}"#);
+        let server = Server::start(move |_| (200, Vec::new(), body.clone().into()));
+        let forgejo = repo_on(&server, ForgeKind::Forgejo, "team/repo");
+        let account = agent_on(&server, "agent");
+        let listed = forgejo.server_capabilities(&account).await?;
+        let rerun = listed
+            .capabilities
+            .iter()
+            .find(|entry| entry.capability == Capability::RerunJobs);
+        assert_eq!(
+            rerun.map(|entry| entry.supported),
+            Some(supported),
+            "{version}"
+        );
+        let required = forgejo
+            .require_on_server(&account, Capability::RerunJobs)
+            .await;
+        assert_eq!(required.is_ok(), supported, "{version}");
+        if let Err(error) = required {
+            assert!(
+                error.to_string().contains("needs Forgejo 17 or later"),
+                "{error}"
+            );
+        }
+        // Only the version is read, once for each question.
+        let lines: Vec<_> = server.received().into_iter().map(|r| r.line).collect();
+        assert_eq!(lines, ["GET /api/v1/version", "GET /api/v1/version"]);
+    }
+    Ok(())
+}

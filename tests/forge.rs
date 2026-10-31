@@ -4237,12 +4237,13 @@ fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
 }
 
 #[test]
-fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
+fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
     let fixture = Fixture::new(Forge::Forgejo, "");
+    let run = json!({"workflow_runs": [
+        {"id": 9331, "index_in_repo": 2765, "prettyref": "topic", "status": "running"}
+    ]});
     fixture.respond(json!({
-        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [
-            {"id": 9331, "index_in_repo": 2765, "prettyref": "topic", "status": "running"}
-        ]}},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": run},
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
@@ -4255,14 +4256,46 @@ fn forgejo_ci_run_actions_cancel_by_run_number_but_cannot_rerun() {
             null
         ])]
     );
+    // The fixture's server runs Forgejo 11, which cannot rerun.
     let output = fixture.run(&["ci", "rerun", "2765", "--workspace", "topic"]);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("Shoal cannot rerun CI jobs on Forgejo or Gitea"),
+        String::from_utf8_lossy(&output.stderr).contains(
+            "Shoal cannot rerun CI jobs on Forgejo or Gitea; that needs Forgejo 17 or later"
+        ),
         "{output:?}"
     );
     assert!(fixture.requests().is_empty());
+
+    fixture.respond(json!({
+        "GET version": {"body": {"version": "17.0.1+gitea-1.22.0"}},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": run},
+        "GET repos/team/project/actions/runs/9331/jobs": {"body": [
+            {"id": 18344, "name": "build", "run_id": 9331, "status": "success"},
+            {"id": 18345, "name": "audit", "run_id": 9331, "status": "failure"},
+            {"id": 18346, "name": "lint", "run_id": 9331, "status": "cancelled"}
+        ]},
+        "POST repos/team/project/actions/runs/9331/rerun": {"status": 204},
+        "POST repos/team/project/actions/jobs/18345/rerun": {"status": 204},
+        "POST repos/team/project/actions/jobs/18346/rerun": {"status": 204},
+    }));
+    let rerun = fixture.ok(&["ci", "rerun", "2765", "--workspace", "topic"]);
+    assert_eq!(rerun["url"], url, "{rerun}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/9331/rerun",
+            null
+        ])]
+    );
+    fixture.ok(&["ci", "rerun", "2765", "--failed", "--workspace", "topic"]);
+    assert_eq!(
+        writes(&fixture),
+        [
+            json!(["POST repos/team/project/actions/jobs/18345/rerun", null]),
+            json!(["POST repos/team/project/actions/jobs/18346/rerun", null])
+        ]
+    );
 }
 
 #[test]

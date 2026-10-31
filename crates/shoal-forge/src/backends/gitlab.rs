@@ -15,7 +15,7 @@ use crate::{
         checks::plain,
         id,
         run::NewRun,
-        run_action::Run,
+        run_action::{Run, RunOperation},
         run_view::{JOBS_PAGE, RunFilter, RunJob},
     },
     conventions::Lookup,
@@ -882,12 +882,12 @@ impl Backend for GitLab {
     }
 
     /// GitLab retries only a pipeline's failed and cancelled jobs.
-    fn run_endpoint(&self, run: &Run, action: CiAction, _failed: bool) -> Result<String> {
+    fn run_operation(&self, run: &Run, action: CiAction, _failed: bool) -> Result<RunOperation> {
         let id = run.id;
-        Ok(match action {
+        Ok(RunOperation::Post(match action {
             CiAction::Rerun => format!("pipelines/{id}/retry"),
             CiAction::Cancel => format!("pipelines/{id}/cancel"),
-        })
+        }))
     }
 
     /// Traces mark each end of a collapsible section.

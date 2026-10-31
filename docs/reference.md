@@ -2784,12 +2784,13 @@ apply only to Bitbucket. An issue or PR number may be written `#42`.
 Forges differ in what Shoal can do there. `shoal forge capabilities` lists each
 capability of the workspace repository's forge, such as resolving review
 threads, rerunning CI jobs, labels or a merge method, and whether the forge has
-it, with what to do instead when it does not; `--json` returns `forge` and
-`capabilities`, each with `capability`, `supported` and an optional `hint`.
+it, asking the server where releases differ, with what to do instead when it
+does not; `--json` returns `forge` and `capabilities`, each with `capability`,
+`supported` and an optional `hint`.
 Outside a workspace, such as in a chat, this command, `shoal forge reactions`
 and `shoal repo labels` read the repository of the registered checkout they run
 in, and with `--repo`, named as for `issue open --repo`, another repository. A
-command that needs a capability the forge lacks fails before sending anything,
+command that needs a capability the forge lacks fails before changing anything,
 naming the forge and the capability.
 
 `shoal forge reactions` lists the reactions the forge allows, under the names
@@ -3198,8 +3199,9 @@ whether it was.
 `shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
 `ci run` or a check links it, or the number in that URL. `rerun` reruns every
 job of a finished run, or with `--failed` only its failed jobs; GitLab retries
-only failed and cancelled jobs either way, and Forgejo, Gitea and Bitbucket
-cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
+only failed and cancelled jobs either way, Forgejo reruns each failed job and
+the jobs that need it, also while the run is running, and Forgejo before 17,
+Gitea and Bitbucket cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
 Processes inside a workspace act only on runs of that workspace's branch, so a
 PR's checks, whose runs may name the PR instead, are acted on through the PR.
 `--json` returns the run's `url` and the `action`.
