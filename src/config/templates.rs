@@ -25,31 +25,38 @@ pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 pub type Files = BTreeMap<String, PathBuf>;
 
 /// Fill one layer's omitted inline templates from the Markdown files in
-/// `directories`, where each file may be in only one of them.
+/// `directories`, where each file may be in only one of them. A file an
+/// inline value overrides is never read.
 pub fn fill(templates: &mut TemplatesConfig, directories: &[PathBuf]) -> Result<Files> {
     let mut files = Files::new();
     for (key, name, value) in [
         ("agent.templates.worker", WORKER_FILE, &mut templates.worker),
         ("agent.templates.chat", CHAT_FILE, &mut templates.chat),
     ] {
-        let found = find(directories, name)?;
-        if let (None, Some((path, text))) = (&value, found) {
-            *value = Some(text);
+        let Some(path) = find(directories, name)? else {
+            continue;
+        };
+        if value.is_none() {
+            *value = crate::fsutil::read_optional(&path)
+                .with_context(|| format!("read {}", path.display()))?;
             files.insert(key.to_owned(), path);
         }
     }
     Ok(files)
 }
 
-/// The one file named `name` among `directories`, with its text.
-fn find(directories: &[PathBuf], name: &str) -> Result<Option<(PathBuf, String)>> {
+/// The one file named `name` among `directories`.
+fn find(directories: &[PathBuf], name: &str) -> Result<Option<PathBuf>> {
     let mut found = Vec::new();
     for path in directories.iter().map(|directory| directory.join(name)) {
-        let text = crate::fsutil::read_optional(&path)
-            .with_context(|| format!("read {}", path.display()))?;
-        found.extend(text.map(|text| (path, text)));
+        if path
+            .try_exists()
+            .with_context(|| format!("read {}", path.display()))?
+        {
+            found.push(path);
+        }
     }
-    if let [(first, _), (second, _), ..] = found.as_slice() {
+    if let [first, second, ..] = found.as_slice() {
         bail!(
             "both {} and {} exist; keep only one {name}",
             first.display(),

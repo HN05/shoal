@@ -226,7 +226,7 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
 
 #[test]
 fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
-    let read = |files: &[(&str, &str)], toml: &str| {
+    let read = |files: &[(&str, &[u8])], toml: &str| {
         let worktree = tempfile::tempdir().unwrap();
         fs::create_dir(worktree.path().join(".shoal")).unwrap();
         for (path, text) in files {
@@ -247,7 +247,7 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
     for directory in ["", ".shoal/"] {
         let worker = format!("{directory}worker-template.md");
         let chat = format!("{directory}chat-template.md");
-        let (templates, files) = read(&[(&worker, "Worker"), (&chat, "Chat")], "").unwrap();
+        let (templates, files) = read(&[(&worker, b"Worker"), (&chat, b"Chat")], "").unwrap();
         assert_eq!(templates.worker.as_deref(), Some("Worker"));
         assert_eq!(templates.chat.as_deref(), Some("Chat"));
         assert_eq!(
@@ -258,11 +258,12 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
             ]
         );
     }
-    // Each template stands alone, and inline TOML wins over its file.
+    // Each template stands alone, and inline TOML wins over its file,
+    // which is never read.
     let (templates, files) = read(
         &[
-            ("worker-template.md", "Worker"),
-            (".shoal/chat-template.md", "Chat"),
+            ("worker-template.md", b"\xff not UTF-8"),
+            (".shoal/chat-template.md", b"Chat"),
         ],
         "agent.templates.worker = 'Inline'",
     )
@@ -277,9 +278,12 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
         )]
     );
     for name in ["worker-template.md", "chat-template.md"] {
-        let error = read(&[(name, "Root"), (&format!(".shoal/{name}"), "Shoal")], "")
-            .unwrap_err()
-            .to_string();
+        let error = read(
+            &[(name, b"Root"), (&format!(".shoal/{name}"), b"Shoal")],
+            "",
+        )
+        .unwrap_err()
+        .to_string();
         assert!(error.starts_with("both "), "{error}");
         assert!(
             error.ends_with(&format!("{name} exist; keep only one {name}")),
