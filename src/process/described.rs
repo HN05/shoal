@@ -31,9 +31,10 @@ pub async fn describe(pids: &[u32]) -> Result<HashMap<u32, Description>> {
         .env("LC_ALL", "C");
     // `ps` exits 1 when one of the processes has exited; its output still
     // lists the others.
-    let output = tokio::time::timeout(timing::PROCESS_INVENTORY_TIMEOUT, command.output())
+    let output = crate::subprocess::Run::new(command)
+        .timeout(timing::PROCESS_INVENTORY_TIMEOUT)
+        .capture()
         .await
-        .context("describing processes timed out")?
         .context("describe processes")?;
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
