@@ -1505,8 +1505,11 @@ leave. It starts only after the recovery interval's healthy readings, one
 restore per interval, and keeps its place meanwhile without holding back the
 entries behind it; a stop, reload or unhealthy reading before the restored agent
 starts returns it to its place. The restored
-agent takes the slot over once it runs. Stopping the workspace or a failed
-restore removes the entry and keeps the recovery record. A daemon restart or a
+agent takes the slot over once it runs. Stopping the workspace or a restore
+Shoal refuses removes the entry and keeps the recovery record. A wrapper that
+exits after its restore is admitted and before the agent starts, as one whose
+binary an upgrade removed can, leaves the restore in the queue as a signal
+stop's restore waits there, opening where the agent ran. A daemon restart or a
 lost connection keeps the order; an entry whose waiting wrapper has not
 reattached within two minutes is removed, leaving its record to `shoal resume`.
 

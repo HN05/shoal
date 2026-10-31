@@ -253,12 +253,16 @@ pub(crate) fn start_environment() -> BTreeMap<String, String> {
 }
 
 /// The variables of a start that comes from no terminal, such as one an
-/// app queues through the client API: no origin and every host's server
-/// unset, so it opens in `terminal.default_host` whatever the daemon's own
-/// environment names.
-pub(crate) fn detached_start_environment() -> BTreeMap<String, String> {
+/// app queues through the client API or the daemon queues for a stopped
+/// agent: `origin`, where that agent ran, and every host's server unset, so
+/// it opens there or, without one, in `terminal.default_host` whatever the
+/// daemon's own environment names.
+pub(crate) fn detached_start_environment(origin: Option<&Origin>) -> BTreeMap<String, String> {
     let mut env = BTreeMap::from([env::output_setting()]);
-    env.insert(env::ORIGIN.to_owned(), NO_ORIGIN.to_owned());
+    let origin = origin
+        .and_then(|origin| serde_json::to_string(origin).ok())
+        .unwrap_or_else(|| NO_ORIGIN.to_owned());
+    env.insert(env::ORIGIN.to_owned(), origin);
     env.extend(server_selection(|_| None));
     env
 }

@@ -128,7 +128,7 @@ pub(crate) fn queued_agent_request(
         agent: agent.into(),
         issue_title: None,
         plan: serde_json::to_string(&plan)?,
-        env: crate::cli::terminal::detached_start_environment(),
+        env: crate::cli::terminal::detached_start_environment(None),
         now: false,
         workspace: Some(workspace.id.clone()),
         after: Vec::new(),

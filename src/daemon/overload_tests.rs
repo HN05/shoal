@@ -1130,6 +1130,59 @@ async fn overload_restores_the_configured_session_and_keeps_waiting_execution_ow
     serving.abort();
 }
 
+/// A wrapper that cannot start the agent it restores, as one whose binary an
+/// upgrade removed cannot, leaves the restore to the agent queue instead of
+/// keeping the agent as one that exited on its own.
+#[tokio::test]
+async fn a_restore_its_wrapper_fails_to_start_waits_in_the_agent_queue() {
+    use crate::execution::recovery::{LastSession, record_path};
+    let (_root, manager, workspace, serving) = fixture().await;
+    let launched = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    let execution = manager
+        .inspect_workspace(&workspace.id)
+        .await
+        .unwrap()
+        .executions
+        .remove(0)
+        .id;
+    assert!(
+        manager
+            .stop_agent_for_overload("test memory pressure")
+            .await
+    );
+    wait_paused(&manager, &workspace).await;
+    wait_restore_queued(&manager).await;
+    fs::remove_file(workspace.path.join("resume.sh")).unwrap();
+    let epoch = manager.overload_recovery.epoch();
+    manager.overload_recovery.publish(Some(epoch));
+    assert_ne!(bounded(launched).await.unwrap().unwrap(), 0);
+    let entries = manager.queue_entries().await.unwrap();
+    let restore = entries
+        .iter()
+        .find(|entry| entry.execution.as_deref() == Some(execution.as_str()));
+    assert_eq!(
+        restore.map(|entry| entry.kind),
+        Some(crate::state::QueueKind::Restore)
+    );
+    assert!(record_path(&manager.paths, &workspace.id, &execution).is_file());
+    assert_eq!(LastSession::all(&manager.paths, &workspace.id).unwrap(), []);
+    let messages: Vec<_> = manager
+        .notifications(false, 10)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|event| event.kind == NotificationKind::AgentExited)
+        .map(|event| event.message)
+        .collect();
+    assert_eq!(messages.len(), 1, "{messages:?}");
+    assert!(
+        messages[0].starts_with("Restore of fixture failed with exit code"),
+        "{messages:?}"
+    );
+    serving.abort();
+}
+
 #[tokio::test]
 async fn an_idle_agent_waiting_for_an_update_lets_a_daemon_update_through() {
     let (_root, manager, workspace, serving) = fixture().await;

@@ -237,6 +237,51 @@ impl Manager {
             .context("the restore already left the agent queue")
     }
 
+    /// Queue the restore of `agent`, stopped as `execution` in `workspace`,
+    /// whose wrapper exited with `code` after its restore was admitted but
+    /// before the agent started, as one whose binary an upgrade removed may.
+    /// Shoal queues it on its own, so an agent stopped between turns waits
+    /// for an update, and starts it where the agent ran. Returns whether it
+    /// is queued; otherwise its record stays for `shoal resume`.
+    pub(crate) async fn queue_failed_restore(
+        &self,
+        workspace: &crate::model::Workspace,
+        agent: &str,
+        execution: &str,
+        code: i32,
+    ) -> bool {
+        let path = recovery::record_path(&self.paths, &workspace.id, execution);
+        let Some(record) = recovery::Record::load(&path).ok().flatten() else {
+            return false;
+        };
+        let env = crate::cli::terminal::detached_start_environment(record.origin.as_ref());
+        let target = Target {
+            id: workspace.id.clone(),
+            repository: workspace.repository_id.clone(),
+            name: workspace.name.clone(),
+        };
+        let queued = async {
+            let restore = Restore::new(target, execution, agent, &env, true)?;
+            let _gate = self.agent_queue.lock_admission().await;
+            self.store.run(move |db| insert(db, &restore)).await
+        };
+        if let Err(error) = queued.await {
+            crate::daemon::log!(
+                "agent queue: cannot queue failed restore of {execution}: {error:#}"
+            );
+            return false;
+        }
+        self.notify(
+            Some(&workspace.name),
+            crate::daemon::notifications::NotificationKind::AgentExited,
+            format!(
+                "Restore of {agent} failed with exit code {code}; its restore waits in the agent queue"
+            ),
+        )
+        .await;
+        true
+    }
+
     /// Queue the restores that stopped agents request once their execution
     /// has ended. A done workspace's agent waits until `shoal resume` names
     /// its workspace.

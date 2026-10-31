@@ -56,6 +56,9 @@ struct Connected {
     started: bool,
     /// The wrapper reattached while waiting to restore its stopped agent.
     awaiting_restore: bool,
+    /// The daemon resumed the stopped agent, whose restored child has not
+    /// started.
+    resuming: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
     stop: watch::Receiver<bool>,
@@ -161,6 +164,7 @@ pub(super) async fn execute(
         reattach,
         started: false,
         awaiting_restore: false,
+        resuming: false,
         stopped: false,
         stop,
     };
@@ -206,6 +210,7 @@ pub(super) async fn reattach(
         reattach: true,
         started: true,
         awaiting_restore: request.awaiting_restore.is_some(),
+        resuming: false,
         stopped: false,
         stop,
     };
@@ -318,6 +323,7 @@ async fn relay(
         reattach,
         started,
         awaiting_restore,
+        resuming,
         stopped,
         stop,
         ..
@@ -374,6 +380,7 @@ async fn relay(
             } => {
                 awaiting_started = false;
                 *started = true;
+                *resuming = false;
                 let _operation = match unattachable.take() {
                     Some(operation) => operation,
                     None => manager.gates.owned_operation().await,
@@ -460,6 +467,7 @@ async fn relay(
                     Action::Resume(ports) => {
                         *handoff_claimed = false;
                         awaiting_started = true;
+                        *resuming = true;
                         sent_stop = false;
                         let executable = crate::cli::installed::started().identity();
                         protocol::write(writer, &Control::Resume { ports, executable }).await?;
@@ -632,6 +640,7 @@ async fn finish(
         workspace,
         agent,
         started,
+        resuming,
         stopped,
         ..
     } = execution;
@@ -667,18 +676,31 @@ async fn finish(
     if let Some(launch) = unrun {
         manager.executions.remember_unrun_launch(launch);
     }
+    // A wrapper that finished before the agent it resumed started failed to
+    // restore it, so its record stays the agent's.
+    let failed_restore = result.as_ref().ok().filter(|_| resuming).copied();
     if let Some(agent) = &agent
         && result.is_ok()
     {
+        let exited = started && !stopped && failed_restore.is_none();
         manager
-            .end_agent_session(&workspace, agent, &execution_id, started && !stopped)
+            .end_agent_session(&workspace, agent, &execution_id, exited)
             .await;
     }
     if (overload_reason.is_some() || restarting) && !handoff_claimed && complete {
         execution_recovery::discard_handoff(manager, &workspace.id, &execution_id);
         overload_reason = None;
     }
-    if let Some(agent) = &agent {
+    let requeued = if let Some(agent) = &agent
+        && let Some(code) = failed_restore
+    {
+        manager
+            .queue_failed_restore(&workspace, &agent.name, &execution_id, code)
+            .await
+    } else {
+        false
+    };
+    if let Some(agent) = agent.as_ref().filter(|_| !requeued) {
         manager
             .notify_agent_exit(
                 &workspace,
