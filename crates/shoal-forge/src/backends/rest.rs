@@ -1,6 +1,7 @@
 //! Reads shared by the forges Shoal reaches through their REST APIs; GitHub
 //! keeps its own activity reads and reads other items with `gh`.
 use anyhow::{Context, Result, ensure};
+use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;
 
 use crate::{
@@ -202,6 +203,24 @@ pub(crate) async fn list_items(
         Ok(search.includes(item.state).then_some(item))
     })
     .await
+}
+
+/// How many listed PRs are read at once.
+const PULL_READS: usize = 8;
+
+/// The PRs `numbers` names, each read in full, in that order.
+pub(crate) async fn read_pulls(
+    repo: &ForgeRepo,
+    account: &Account,
+    numbers: Vec<u64>,
+) -> Result<Vec<Item>> {
+    futures_util::stream::iter(numbers)
+        .map(|number| async move {
+            Ok::<_, anyhow::Error>(repo.read(account, ItemKind::Pr, number).await?.item)
+        })
+        .buffered(PULL_READS)
+        .try_collect()
+        .await
 }
 
 /// The numbers of up to `limit` items a list endpoint under the repository

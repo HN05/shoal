@@ -10,7 +10,7 @@ fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
             "created_at": "2026-10-10T01:00:00+02:00", "head": {"ref": "topic"}, "base": {"ref": "main"},
             "draft": false, "pull_request": {"merged": true},
             "requested_reviewers": [{"login": "kim"}], "requested_reviewers_teams": [{"name": "core"}]});
-    let details = parse_details(&pull, ItemKind::Pr, 541, "team").unwrap();
+    let details = github_rest::details(&pull, ItemKind::Pr, 541, "team").unwrap();
     assert_eq!(details.state, "merged");
     assert_eq!(details.labels, ["type/chore"]);
     assert_eq!(details.assignees, ["kim"]);
@@ -18,11 +18,11 @@ fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
     let pr = details.pr.unwrap();
     assert_eq!(pr.head, "topic");
     assert_eq!(pr.reviewers, ["kim", "team/core"]);
-    assert!(parse_details(&pull, ItemKind::Issue, 541, "team").is_err());
+    assert!(github_rest::details(&pull, ItemKind::Issue, 541, "team").is_err());
 
     let issue = json!({"number": 548, "title": "View", "body": "Text", "state": "open",
             "user": {"login": "HN05"}, "labels": [], "created_at": "t", "pull_request": null});
-    let details = parse_details(&issue, ItemKind::Issue, 548, "team").unwrap();
+    let details = github_rest::details(&issue, ItemKind::Issue, 548, "team").unwrap();
     assert_eq!(
         (details.state.as_str(), details.body.as_str()),
         ("open", "Text")
@@ -88,9 +88,9 @@ fn forgejo_reviews_carry_inline_comments_and_resolution() {
         thread(&reviews[1].comments[0]),
         (23, 23, Some(9), Some(false))
     );
-    let comments =
-        parse_comments(&json!([{"id": 5, "user": {"login": "a"}, "body": "b", "created_at": "c"}]))
-            .unwrap();
+    let comments = github_rest::comments(&[
+        json!({"id": 5, "user": {"login": "a"}, "body": "b", "created_at": "c"}),
+    ]);
     assert_eq!((comments[0].id, comments[0].author.as_str()), (5, "a"));
 }
 

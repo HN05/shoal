@@ -2,7 +2,6 @@
 //! under `/api/v1`, sent with the account's token for the host, else
 //! anonymously.
 use anyhow::{Context, Result, bail, ensure};
-use futures_util::{StreamExt, TryStreamExt};
 use serde_json::{Value, json};
 
 mod actions;
@@ -64,9 +63,6 @@ pub(crate) const DRAFT_PREFIXES: [&str; 2] = ["WIP:", "[WIP]"];
 
 /// Forgejo's default maximum page size.
 const PAGE_SIZE: usize = 50;
-
-/// How many listed PRs are read at once.
-const PULL_READS: usize = 8;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Forgejo;
@@ -221,7 +217,9 @@ impl Backend for Forgejo {
             return rest::list_items(repo, account, kind, &endpoint, search).await;
         }
         let numbers = rest::listed_numbers(repo, account, &endpoint, search.limit).await?;
-        read_pulls(repo, account, numbers).await.hint_login(self)
+        rest::read_pulls(repo, account, numbers)
+            .await
+            .hint_login(self)
     }
 
     /// Forgejo keeps one exclusive label of a scope from the set it is
@@ -1051,17 +1049,6 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
     } else {
         bare.to_owned()
     }
-}
-
-/// The PRs numbered `numbers`, in order, read a few at a time.
-async fn read_pulls(repo: &ForgeRepo, account: &Account, numbers: Vec<u64>) -> Result<Vec<Item>> {
-    futures_util::stream::iter(numbers)
-        .map(|number| async move {
-            Ok::<_, anyhow::Error>(repo.read(account, ItemKind::Pr, number).await?.item)
-        })
-        .buffered(PULL_READS)
-        .try_collect()
-        .await
 }
 
 /// The issue list endpoint that runs `search` for items of `kind`.

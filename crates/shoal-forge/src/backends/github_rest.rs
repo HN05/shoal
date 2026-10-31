@@ -18,7 +18,10 @@ use crate::{
         link::ItemKind,
         reaction::{Listed, Subject},
     },
-    review::{reviewers::team_name, view::login},
+    review::{
+        reviewers::team_name,
+        view::{Comment, Details, PrDetails, labels, login, required, text_field},
+    },
     transport::api::{HttpMethod, Request, encode},
 };
 
@@ -29,6 +32,82 @@ pub(crate) enum Dialect {
     /// Keeps draft state in the title, and a PR's ref as the head of a PR
     /// whose branch is deleted.
     Forgejo,
+}
+
+/// An issue or PR as its REST item reports it, for item views; its
+/// discussion and a PR's automatic merge are read apart. Teams that review
+/// a PR belong to the organization `owner` that owns its repository.
+pub(crate) fn details(item: &Value, kind: ItemKind, number: u64, owner: &str) -> Result<Details> {
+    ensure!(
+        item["number"] == number,
+        "the forge returned a different item"
+    );
+    let pr = match kind {
+        ItemKind::Issue => {
+            ensure!(
+                item["pull_request"].is_null(),
+                "#{number} is a PR, not an issue"
+            );
+            None
+        }
+        ItemKind::Pr => Some(PrDetails {
+            reviewers: reviewers(item, owner),
+            ..PrDetails::read(
+                &item["head"]["ref"],
+                &item["base"]["ref"],
+                item["draft"].as_bool().unwrap_or_default(),
+            )?
+        }),
+    };
+    let state = if item["merged"].as_bool() == Some(true) {
+        "merged".to_owned()
+    } else {
+        required(&item["state"], "state")?
+    };
+    Ok(Details {
+        number,
+        title: required(&item["title"], "title")?,
+        state,
+        author: login(&item["user"]),
+        created_at: text_field(&item["created_at"]),
+        labels: labels(&item["labels"]),
+        assignees: user_names(&item["assignees"], "login"),
+        milestone: text(&item["milestone"]["title"]),
+        body: text_field(&item["body"]),
+        pr,
+        comments: None,
+        reviews: None,
+        reactions: Vec::new(),
+    })
+}
+
+/// The users and teams with a review request on the PR, and on Forgejo
+/// also those with a verdict; GitHub names a team by its slug.
+fn reviewers(item: &Value, owner: &str) -> Vec<String> {
+    let list = |field: &str| item[field].as_array().into_iter().flatten();
+    let users =
+        list("requested_reviewers").filter_map(|user| user["login"].as_str().map(str::to_owned));
+    let teams = list("requested_teams")
+        .chain(list("requested_reviewers_teams"))
+        .filter_map(|team| {
+            let name = team["slug"].as_str().or(team["name"].as_str())?;
+            Some(format!("{owner}/{name}"))
+        });
+    users.chain(teams).collect()
+}
+
+/// An item's comments as its REST comment list reports them.
+pub(crate) fn comments(comments: &[Value]) -> Vec<Comment> {
+    comments
+        .iter()
+        .map(|comment| Comment {
+            id: comment["id"].as_u64().unwrap_or_default(),
+            author: login(&comment["user"]),
+            created_at: text_field(&comment["created_at"]),
+            body: text_field(&comment["body"]),
+            reactions: Vec::new(),
+        })
+        .collect()
 }
 
 /// An item in GitHub's REST shape, read as `dialect` serves it.

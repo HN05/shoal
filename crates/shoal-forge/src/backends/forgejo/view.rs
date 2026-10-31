@@ -1,18 +1,15 @@
 //! Forgejo items as its REST API reports them, for item views.
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result};
 use serde_json::Value;
 
 use super::threads::{review_comments, thread_key, threads};
 use crate::{
     ForgeRepo,
     account::Account,
-    items::{
-        item::{text, user_names},
-        link::ItemKind,
-    },
+    backends::github_rest,
+    items::link::ItemKind,
     review::view::{
-        AutoMerge, Comment, Details, PrDetails, Review, ReviewComment, labels, login, required,
-        review_comment, review_state, text_field,
+        AutoMerge, Details, Review, ReviewComment, login, review_comment, review_state, text_field,
     },
     transport::api::Request,
 };
@@ -26,7 +23,7 @@ pub(crate) async fn details(
     let item = repo
         .send(account, &Request::get(repo.item_endpoint(kind, number)))
         .await?;
-    let mut details = parse_details(&item, kind, number, repo.owner())?;
+    let mut details = github_rest::details(&item, kind, number, repo.owner())?;
     let open = details.state == "open";
     if let Some(pr) = details.pr.as_mut().filter(|_| open) {
         let endpoint = repo.repo_endpoint(&format!("issues/{number}/timeline"));
@@ -61,82 +58,14 @@ pub(crate) async fn discussion(
 ) -> Result<Option<Vec<Review>>> {
     let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
     let comments = repo.send(account, &Request::get(endpoint)).await?;
-    details.comments = Some(parse_comments(&comments)?);
+    let comments = comments
+        .as_array()
+        .context("Forgejo comments are not a list")?;
+    details.comments = Some(github_rest::comments(comments));
     if kind == ItemKind::Issue {
         return Ok(None);
     }
     parse_reviews(&review_comments(repo, account, number).await?, errors).map(Some)
-}
-
-/// Teams that review a PR belong to the organization `owner` that owns its
-/// repository.
-fn parse_details(item: &Value, kind: ItemKind, number: u64, owner: &str) -> Result<Details> {
-    ensure!(
-        item["number"] == number,
-        "Forgejo returned a different item"
-    );
-    let pr = match kind {
-        ItemKind::Issue => {
-            ensure!(
-                item["pull_request"].is_null(),
-                "#{number} is a PR, not an issue"
-            );
-            None
-        }
-        ItemKind::Pr => Some(PrDetails {
-            reviewers: reviewers(item, owner),
-            ..PrDetails::read(
-                &item["head"]["ref"],
-                &item["base"]["ref"],
-                item["draft"].as_bool().unwrap_or_default(),
-            )?
-        }),
-    };
-    let state = if item["merged"].as_bool() == Some(true) {
-        "merged".to_owned()
-    } else {
-        required(&item["state"], "state")?
-    };
-    Ok(Details {
-        number,
-        title: required(&item["title"], "title")?,
-        state,
-        author: login(&item["user"]),
-        created_at: text_field(&item["created_at"]),
-        labels: labels(&item["labels"]),
-        assignees: user_names(&item["assignees"], "login"),
-        milestone: text(&item["milestone"]["title"]),
-        body: text_field(&item["body"]),
-        pr,
-        comments: None,
-        reviews: None,
-        reactions: Vec::new(),
-    })
-}
-
-/// The users and teams with a review request or verdict on the PR.
-fn reviewers(item: &Value, owner: &str) -> Vec<String> {
-    let list = |field: &str| item[field].as_array().into_iter().flatten();
-    let users =
-        list("requested_reviewers").filter_map(|user| user["login"].as_str().map(str::to_owned));
-    let teams = list("requested_reviewers_teams")
-        .filter_map(|team| Some(format!("{owner}/{}", team["name"].as_str()?)));
-    users.chain(teams).collect()
-}
-
-fn parse_comments(comments: &Value) -> Result<Vec<Comment>> {
-    Ok(comments
-        .as_array()
-        .context("Forgejo comments are not a list")?
-        .iter()
-        .map(|comment| Comment {
-            id: comment["id"].as_u64().unwrap_or_default(),
-            author: login(&comment["user"]),
-            created_at: text_field(&comment["created_at"]),
-            body: text_field(&comment["body"]),
-            reactions: Vec::new(),
-        })
-        .collect())
 }
 
 /// Each review with the inline comments Forgejo lists under it, replies
