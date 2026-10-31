@@ -3164,10 +3164,11 @@ Processes inside a workspace act only on runs of that workspace's branch, so a
 PR's checks, whose runs may name the PR instead, are acted on through the PR.
 `--json` returns the run's `url` and the `action`.
 
-A run's URL may name another repository than the workspace's, and outside a
-workspace it names the run's repository. `ci rerun`, `ci cancel`, `view ci` and
-`link ci` then act there with the user's own logins, as merging does; processes
-inside a workspace read, link and act only on runs of its own repository.
+A run's URL may name another repository than that of the workspace or
+checkout, and outside both it names the run's repository. `ci rerun`, `ci
+cancel`, `view ci` and `link ci` then act there with the user's own logins, as
+merging does; processes inside a workspace read, link and act only on runs of
+its own repository.
 
 Without a run, `shoal ci rerun` reruns failed jobs on the current head of the
 linked PR or the one `--pr` names, and `shoal ci cancel` cancels running ones:
