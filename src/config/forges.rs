@@ -83,13 +83,26 @@ impl Forges {
         logins
     }
 
-    /// The hosts the agent account has a token of its own for.
-    pub fn agent_token_hosts(&self) -> Vec<&str> {
+    /// What tells the token settings of `whose` apart, empty without any,
+    /// so a changed setting names another account; a written token stands
+    /// as its hash.
+    pub fn identity(&self, whose: Whose) -> String {
         self.0
             .iter()
-            .filter(|(_, forge)| forge.agent_token.is_some())
-            .map(|(host, _)| host.as_str())
-            .collect()
+            .filter_map(|(host, forge)| {
+                let (token, email) = forge.credentials(whose);
+                let source = match token? {
+                    Value::Written(token) => {
+                        let mut hasher = std::hash::DefaultHasher::new();
+                        std::hash::Hash::hash(token, &mut hasher);
+                        format!("written {:x}", std::hash::Hasher::finish(&hasher))
+                    }
+                    other => format!("{other:?}"),
+                };
+                Some(format!("{host} {source} {email:?}"))
+            })
+            .collect::<Vec<_>>()
+            .join("; ")
     }
 
     pub fn validate(&self) -> Result<()> {

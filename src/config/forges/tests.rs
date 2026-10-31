@@ -34,9 +34,20 @@ email = "me@example.com"
     forges.validate().unwrap();
     assert_eq!(forges.pinned("git.example.com"), None);
     assert!(forges.pins().is_empty());
-    assert_eq!(forges.agent_token_hosts(), ["git.example.com"]);
-    // A written token never shows.
+    assert_eq!(
+        forges.identity(Whose::Agent),
+        "git.example.com Env { env: \"AGENT_TOKEN\" } None"
+    );
+    // A written token never shows, though a changed one names another account.
     assert!(!format!("{forges:?}").contains("written"));
+    let user = forges.identity(Whose::User);
+    assert!(!user.contains("\"written\""), "{user}");
+    let changed: Forges =
+        toml::from_str("[\"bitbucket.org\"]\ntoken = \"other\"\nemail = \"me@example.com\"\n")
+            .unwrap();
+    let identity = changed.identity(Whose::User);
+    assert!(identity.starts_with("bitbucket.org written "), "{identity}");
+    assert!(!user.contains(&identity), "{user}");
 
     for (text, error) in [
         (

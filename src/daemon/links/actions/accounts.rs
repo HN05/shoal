@@ -3,7 +3,11 @@
 use anyhow::{Context, Result};
 
 use crate::{
-    config::{Config, forges::Whose, resolve::Effective},
+    config::{
+        Config,
+        forges::{Forges, Whose},
+        resolve::Effective,
+    },
     daemon::workspace::Manager,
     forge::{
         ForgeRepo,
@@ -30,14 +34,18 @@ impl Place {
     }
 }
 
-/// The forge memory of the user's own logins.
-const USER_LOGINS: &str = "user";
+/// What names the account of the user's own tokens, `forges` sets, in
+/// forge memories.
+fn user_identity(forges: &Forges) -> String {
+    format!("user {}", forges.identity(Whose::User))
+}
 
 impl Manager {
     /// The user's own logins, which reads and the user's decisions use.
     pub(crate) fn user_account(&self) -> Account {
-        Account::user(self.config().machine.forges.logins(Whose::User))
-            .remembering(self.forge_memories.of(USER_LOGINS))
+        let forges = &self.config().machine.forges;
+        Account::user(forges.logins(Whose::User))
+            .remembering(self.forge_memories.of(&user_identity(forges)))
     }
 
     pub(in crate::daemon::links) async fn agent_account(
@@ -69,10 +77,11 @@ impl Manager {
             separate: auth.separate_forges(),
         };
         // An agent with the user's logins shares what the user's requests taught.
-        let tokens = forges.agent_token_hosts();
+        let tokens = forges.identity(Whose::Agent);
+        let user = user_identity(forges);
         let identity = match auth.forge_identity()? {
-            None if tokens.is_empty() => USER_LOGINS.to_owned(),
-            wrappers => format!("agent {} {tokens:?}", wrappers.unwrap_or_default()),
+            None if tokens.is_empty() => user,
+            wrappers => format!("agent {} {tokens} {user}", wrappers.unwrap_or_default()),
         };
         Ok(Account::agent(logins, forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&identity)))
