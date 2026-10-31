@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::state::states;
 
+mod failure;
 pub mod output;
 
 states!(

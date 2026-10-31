@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "verdict", "findings", "checked"],
+  "properties": {
+    "summary": {
+      "type": "string",
+      "description": "One sentence, two at most, on the state of the changes. Never a description of them."
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "comment", "request_changes"]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "line", "severity", "title", "body"],
+        "properties": {
+          "path": { "type": "string", "description": "File path relative to the repository root." },
+          "line": { "type": "integer", "minimum": 1, "description": "Line number in the new version of the file." },
+          "severity": { "type": "string", "enum": ["blocker", "should-fix", "nit"] },
+          "title": { "type": "string", "description": "One line, at most 80 characters." },
+          "body": { "type": "string", "description": "At most three short sentences: what is wrong, why it matters, the fix. Markdown." }
+        }
+      }
+    },
+    "checked": {
+      "type": "array",
+      "description": "One entry for each earlier finding resolved fixed.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding", "result"],
+        "properties": {
+          "finding": { "type": "string", "description": "The earlier finding's ID, such as 17.2." },
+          "result": { "type": "string", "enum": ["confirmed", "still-present"] }
+        }
+      }
+    }
+  }
+}
