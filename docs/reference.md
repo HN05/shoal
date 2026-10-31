@@ -1325,9 +1325,13 @@ repository's local config directory for the chat of a local `repo setup`. An emp
 launcher's words before `{args}`, or all of them, followed by these arguments,
 which name the prompt `{prompt}` and the output schema as a file, `{schema}`, or
 its text, `{schema_json}`; `{output}` names a file the result goes to instead of
-standard output. Claude Code's prints its JSON result read-only with Claude's
-`--json-schema`, and Codex's runs `codex exec` in a read-only sandbox with
-`--output-schema`; a tool without one cannot review.
+standard output. Claude Code's prints its JSON result with Claude's
+`--json-schema`, loads no user, project or local settings, denies every tool but
+reading, searching and `git diff`, `log`, `show` and `blame`, and runs commands in
+Claude's sandbox, so it stays read-only whatever those settings allow; without a
+sandbox on the machine, such as bubblewrap on Linux, it fails. Codex's runs
+`codex exec` in a read-only sandbox with `--output-schema`. A tool without one
+cannot review.
 `agent.dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an

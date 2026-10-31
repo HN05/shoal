@@ -505,7 +505,19 @@ fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
     ));
     let claude = arguments(&agents, "claude");
     assert!(!claude.review_writes_output());
-    assert!(claude.review_args(&fields).unwrap().contains(&"{}".into()));
+    let args = claude.review_args(&fields).unwrap();
+    assert!(args.contains(&"{}".into()));
+    // Read-only whatever settings it would otherwise load.
+    for flag in ["--setting-sources=", "--permission-mode=dontAsk"] {
+        assert!(args.contains(&flag.into()), "{args:?}");
+    }
+    let sandbox = args
+        .iter()
+        .find_map(|arg| arg.to_str()?.strip_prefix("--settings="))
+        .unwrap();
+    let sandbox: serde_json::Value = serde_json::from_str(sandbox).unwrap();
+    assert_eq!(sandbox["sandbox"]["enabled"], true);
+    assert_eq!(sandbox["sandbox"]["allowUnsandboxedCommands"], false);
     assert!(arguments(&agents, "grok").review_args(&fields).is_some());
     assert_eq!(arguments(&agents, "pi").review_args(&fields), None);
 

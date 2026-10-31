@@ -114,8 +114,15 @@ pub const PROVIDERS: &[Provider] = &[
             "json",
             "--json-schema",
             "{schema_json}",
+            // Read-only whatever the user's or the reviewed repository's
+            // settings allow: none of them load, anything not approved here
+            // is denied, and the sandbox keeps commands from writing
+            // outside the checkout, as `git diff --output` would.
+            "--setting-sources=",
+            "--permission-mode=dontAsk",
+            "--tools=Read,Grep,Glob,Bash",
             "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
-            "--disallowedTools=Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent",
+            "--settings={\"sandbox\":{\"enabled\":true,\"failIfUnavailable\":true,\"autoAllowBashIfSandboxed\":false,\"allowUnsandboxedCommands\":false}}",
         ]),
         review_result: &output::CLAUDE,
     },
