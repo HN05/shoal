@@ -641,11 +641,12 @@ async fn finish(
     };
     // A restart whose stop the agent never took saved a handoff for nothing.
     let restarting = agent.is_some() && manager.restart_before_resume(&execution_id).await;
-    if agent.is_some() && result.is_ok() {
+    // Setup instead fails on what it leaves running, and landing runs Git.
+    if kind == ExecutionKind::Command && result.is_ok() {
         manager
             .executions
             .set_completing(&execution_id, Completing::StoppingSurvivors);
-        manager.stop_exited_agent_processes(&execution_id).await;
+        manager.stop_exited_processes(&execution_id).await;
     }
     // The record goes with the execution, so a start waiting on it learns
     // from the daemon that its command never ran.

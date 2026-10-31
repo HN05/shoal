@@ -359,12 +359,12 @@ impl Manager {
         Ok(Pause::Paused)
     }
 
-    /// Stop what an agent that reported its exit left running outside its
-    /// process group, such as background shell commands, so nothing outlives
-    /// it. Its turn is kept first, while that work still shows whether it
-    /// was in flight. The completion scan that follows decides whether
-    /// anything survived.
-    pub(crate) async fn stop_exited_agent_processes(&self, id: &str) {
+    /// Stop what a command or agent that reported its exit left running
+    /// outside its process group, such as background shell commands, so
+    /// nothing outlives it. An agent's turn is kept first, while that work
+    /// still shows whether it was in flight. The completion scan that follows
+    /// decides whether anything survived.
+    pub(crate) async fn stop_exited_processes(&self, id: &str) {
         let query_id = id.to_owned();
         let stopped = async {
             let record = self
@@ -380,7 +380,7 @@ impl Manager {
                 .await
         };
         if let Err(error) = stopped.await {
-            log!("processes of exited agent {id} not stopped: {error:#}");
+            log!("processes of exited execution {id} not stopped: {error:#}");
         }
     }
 

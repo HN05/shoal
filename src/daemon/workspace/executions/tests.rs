@@ -863,7 +863,7 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
         let mut command = background_process(background.then_some(id.as_str()));
 
         // The agent's exit stops that command before the execution ends.
-        manager.stop_exited_agent_processes(&id).await;
+        manager.stop_exited_processes(&id).await;
         command.kill().await.unwrap();
         command.wait().await.unwrap();
         manager

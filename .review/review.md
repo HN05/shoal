@@ -499,7 +499,8 @@ configured command for another agent, plus proven child
   while its host still verifies the launch ownership. Failed demo closes persist
   beyond execution deletion and retry at startup or cleanup. The daemon owns
   state and prepares each execution kind before shared registration through one
-  request. Reported exits clear executions and permit setup readiness only after
+  request. A reported agent or command exit first stops its identity-verified
+  processes outside its process group; setup and landing do not. Reported exits clear executions and permit setup readiness only after
   marker, child and group survivors are gone and environment visibility is complete;
   a settled empty environment is readable evidence, not an unreadable process; the
   reporting wrapper may remain alive awaiting acknowledgement.

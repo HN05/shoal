@@ -2157,9 +2157,10 @@ cannot be a same-user process Shoal started. One whose exec has not yet
 published its environment, or that no ancestor attributes, is read again within a
 bounded settle wait before it counts as unreadable, so a short-lived helper launchd
 adopted while running a platform binary no longer blocks once it exits or execs a
-program whose environment lacks the execution's marker. An agent's reported
-exit first stops its verified processes outside its process group, so background
-shell commands do not outlive it. A reported command
+program whose environment lacks the execution's marker. A reported agent or
+command exit first stops its verified processes outside its process group, so
+background shell commands do not outlive it; what should outlive a command
+belongs in a hook or a demo, and setup instead fails on what it leaves running. A reported command
 exit clears its execution and permits setup readiness only when marker, child and
 group evidence has no survivors and environment visibility is complete; a settled
 empty environment is readable evidence, except a macOS platform binary's, which

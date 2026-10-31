@@ -11988,10 +11988,10 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_i
 }
 
 #[test]
-fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
+fn a_finished_command_stops_the_detached_children_it_leaves() {
     let fixture = Fixture::new();
-    fixture.add("detached");
-    let script = "import os, subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)";
+    let workspace = fixture.add("detached");
+    let script = "import pathlib, subprocess, sys; child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'], start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); pathlib.Path('child-pid').write_text(str(child.pid))";
     let output = fixture.run(&[
         "run",
         "--workspace",
@@ -12001,26 +12001,18 @@ fn reconcile_finds_detached_tagged_children_even_after_the_command_exits() {
         "-c",
         script,
     ]);
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(String::from_utf8_lossy(&output.stderr).contains("surviving or unverified"));
-    let report = recovery_report(&fixture, &["detached"]);
-    assert!(
-        !report[0]["executions"][0]["processes"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
-    repaired_workspaces(
-        &fixture,
-        &["detached", "--repair", "--stop", "--acknowledge-stopped"],
-    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(!stderr.contains("surviving or unverified"), "{stderr}");
     assert_eq!(
         fixture.ok(&["status", "detached"])["executions"],
         serde_json::json!([])
+    );
+    let pid = fs::read_to_string(Path::new(workspace["path"].as_str().unwrap()).join("child-pid"))
+        .unwrap();
+    assert!(
+        !process_running(pid.parse().unwrap()),
+        "the command's detached child survived its exit"
     );
 }
 

@@ -33,7 +33,7 @@ const UNRUN_LAUNCHES: usize = 64;
 pub(crate) enum Completing {
     /// Waiting for the daemon to start recording the completion.
     Reported,
-    /// Stopping the processes an exited agent left behind.
+    /// Stopping the processes an exited command left behind.
     StoppingSurvivors,
     /// Scanning for processes the execution left behind.
     Verifying,
