@@ -71,6 +71,9 @@ pub const RESOURCE_LEASE: &str = "SHOAL_RESOURCE_LEASE";
 pub const DONE_CHOICE: &str = "SHOAL_DONE_CHOICE";
 /// JSON array of the ready-for-review marks passed to post-ready hooks.
 pub const REVIEW_MARKS: &str = "SHOAL_REVIEW_MARKS";
+/// Marks a local review's reviewer and the processes it starts with the run
+/// directory, so the daemon stops only them after it was killed.
+pub const REVIEW_RUN: &str = "SHOAL_REVIEW_RUN";
 /// Shortcut or configured agent name passed to agent-exit hooks.
 pub const AGENT: &str = "SHOAL_AGENT";
 /// Reported exit code, empty when the agent disconnected without reporting.
