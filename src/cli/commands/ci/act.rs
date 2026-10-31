@@ -25,8 +25,17 @@ use crate::{
 pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     // Refuse bad arguments before the workspace picker asks for anything.
     validate_run(args.workflow.as_deref(), args.branch.as_deref())?;
-    let workspace =
-        ui::select_workspace(ctx, args.workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace = match &args.workflow {
+        Some(workflow) => super::input_workspace(ctx, args.workspace, workflow).await?,
+        None => {
+            let fallback = ui::Fallback::CurrentDirectory;
+            Some(ui::select_workspace(ctx, args.workspace, fallback).await?)
+        }
+    };
+    let follow = match workspace {
+        Some(_) => "find it with shoal ci list and follow it with shoal link ci <URL> opened",
+        None => "find it in the forge's web UI",
+    };
     let started: StartedRun = client::request(
         &ctx.paths,
         CiMethod::StartCiRun {
@@ -40,7 +49,7 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     for warning in &started.warnings {
         eprintln!("{warning}");
     }
-    ctx.emit(&started_text(&started), &started)?;
+    ctx.emit(&started_text(&started, follow), &started)?;
     Ok(0)
 }
 
@@ -182,8 +191,8 @@ fn outcome(action: CiAction) -> &'static str {
 }
 
 /// The run that started, its URL where the forge reports one, and whether
-/// the workspace links and watches it.
-fn started_text(started: &StartedRun) -> String {
+/// the workspace links and watches it, or otherwise how to `follow` it.
+fn started_text(started: &StartedRun, follow: &str) -> String {
     let run = match &started.workflow {
         Some(workflow) => format!("{workflow} on {}", started.branch),
         None => started.branch.clone(),
@@ -193,9 +202,6 @@ fn started_text(started: &StartedRun) -> String {
             "Run started for {run}: {url}\nLinked as opened; shoal watch reports when it finishes."
         ),
         Some(url) => format!("Run started for {run}: {url}"),
-        None => format!(
-            "Run started for {run}; find it with shoal ci list and follow it with \
-             shoal link ci <URL> opened"
-        ),
+        None => format!("Run started for {run}; {follow}"),
     }
 }

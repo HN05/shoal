@@ -75,14 +75,20 @@ pub(super) async fn handle(
             inputs,
         } => Body::CiRunStarted(
             manager
-                .start_ci_run(&workspace, workflow, branch, inputs)
+                .start_ci_run(
+                    workspace.as_deref(),
+                    workflow,
+                    branch,
+                    inputs,
+                    caller.is_some(),
+                )
                 .await?,
         ),
     }))
 }
 
 impl Scoped for CiMethod {
-    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, _: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
@@ -99,13 +105,8 @@ impl Scoped for CiMethod {
             }
             CiMethod::ViewCiRun { workspace, .. }
             | CiMethod::CiRunJobs { workspace, .. }
-            | CiMethod::CiRunJobLog { workspace, .. } => Some(caller.own_by_default(workspace)),
-            CiMethod::StartCiRun {
-                workspace, branch, ..
-            } => {
-                manager.own_branch(workspace, branch.as_deref()).await?;
-                Some(workspace)
-            }
+            | CiMethod::CiRunJobLog { workspace, .. }
+            | CiMethod::StartCiRun { workspace, .. } => Some(caller.own_by_default(workspace)),
         })
     }
 }

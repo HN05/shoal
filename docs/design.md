@@ -1965,10 +1965,11 @@ PR's head without one, and `view ci` reads a run as `view` reads an issue or PR.
 Run numbers overlap issue and PR numbers, so only a number after `ci` names a
 run. Workspace processes act only on runs of their own branch, which
 the daemon reads from the run before acting, and read any run of their repository.
-A run URL of another repository is the user's to act on: the daemon reads,
-links, reruns and cancels it with the user's own logins, as it merges, also
-outside a workspace, and refuses workspace processes, which stay within their
-own repository.
+A run or workflow URL of another repository is the user's to act on: the
+daemon starts, reads, links, reruns and cancels runs there with the user's own
+logins, as it merges, also outside a workspace, and refuses workspace
+processes, which stay within their own repository. A workflow file's URL also
+names the branch a run starts on.
 Forges hold the runs of fork and first-time contributors' PRs for approval, which
 leaves such a PR without checks; `view` and `status` report the waiting runs
 beside the checks, which stay exactly what the forge reports, so watches and

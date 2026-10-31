@@ -3118,6 +3118,7 @@ as the forge then reports it: `kind`, `number`, `url`, `title`, `state` (`open`,
 ```sh
 shoal ci run deps.yml                    # start a workflow run on the workspace's branch
 shoal ci run deps.yml --branch main --input level=full
+shoal ci run https://github.com/team/tool/actions/workflows/ci.yml   # a workflow by its link
 shoal ci rerun                           # rerun every failed job on the linked PR's head
 shoal ci cancel --pr 12 --check rust     # cancel one running check of PR 12
 shoal ci rerun 2765 --failed             # rerun a run's failed jobs
@@ -3131,19 +3132,26 @@ shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
-`--branch` names, with each repeated `--input NAME=VALUE`. It is a new run, not
-a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
+`--branch` names, with each repeated `--input NAME=VALUE`. It also takes a
+workflow's web URL: its page, GitHub's `…/actions/workflows/<file>` or
+Forgejo's `…/actions?workflow=<file>`, or the URL of its file on a branch,
+`…/blob/<branch>/.github/workflows/<file>` or
+`…/src/branch/<branch>/.forgejo/workflows/<file>`, whose branch it runs on
+unless `--branch` names another. A URL of another repository starts the run
+there, on its default branch unless a branch is named, and needs no workspace.
+It is a new run, not a rerun of a PR's checks. On GitHub and GitLab, a run on the PR's head commit
 reports checks there like any other run. Forgejo attaches a dispatched run to no
 commit, so a failed check stays failed for `shoal view` and PR cleanup. GitHub,
 Forgejo and Gitea dispatch the named workflow file, or a GitHub workflow ID,
 which needs a `workflow_dispatch` trigger; GitLab runs the branch's pipeline,
 taking no workflow and passing inputs to its `spec:inputs`; Bitbucket runs the named
 custom pipeline, or the branch's own without one, with the inputs as its
-variables. The daemon starts it as the [agent account](#agent-accounts), and
-processes inside a workspace may start runs only on that workspace's branch.
+variables. The daemon starts it as the [agent account](#agent-accounts), or in
+another repository with the user's own logins, and processes inside a workspace
+may start runs only on that workspace's branch.
 `--json` returns `workflow`, `branch` and the run's `url` where the forge
-reports it, which GitHub and Gitea do not. A run with a URL is
-[linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
+reports it, which GitHub and Gitea do not. Inside a workspace, a run with a URL
+is [linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
 Bitbucket's it does not, so `shoal watch` reports when it finishes; `linked` says
 whether it was.
 

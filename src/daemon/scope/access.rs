@@ -184,20 +184,6 @@ impl Manager {
         self.workspace_below(caller, target, REFUSAL).await
     }
 
-    /// Refuse a `branch` other than `workspace`'s own.
-    pub(in crate::daemon) async fn own_branch(
-        &self,
-        workspace: &str,
-        branch: Option<&str>,
-    ) -> Result<()> {
-        let own = self.workspace(workspace).await?.branch;
-        ensure!(
-            branch.is_none_or(|branch| branch == own),
-            "workspace processes start CI runs only on their workspace's branch"
-        );
-        Ok(())
-    }
-
     /// Question `id` for the caller to answer, which must be one of a
     /// workspace below its own. The answer binds to the question returned,
     /// `shown` when given, and refuses it once a later question reuses its

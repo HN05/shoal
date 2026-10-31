@@ -3581,6 +3581,112 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
 }
 
 #[test]
+fn workflow_links_start_runs_in_their_repository_on_their_branch() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    let own = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
+    let other = "POST repos/other/tool/actions/workflows/ci.yml/dispatches";
+    fixture.respond(json!({
+        own: {"status": 204},
+        other: {"status": 204},
+        "GET repos/other/tool": {"body": {"full_name": "other/tool", "default_branch": "trunk"}},
+    }));
+    // A workflow's page in the workspace's repository runs on its branch.
+    let page = "https://github.com/team/project/actions/workflows/deps.yml";
+    let started = fixture.ok(&["ci", "run", page, "--workspace", "topic"]);
+    assert_eq!(
+        started,
+        json!({"workflow": "deps.yml", "branch": "topic"}),
+        "{started}"
+    );
+    // A workflow file's URL also names the branch.
+    let file = "https://github.com/team/project/blob/release/1/.github/workflows/deps.yml";
+    let started = fixture.ok(&["ci", "run", file, "--workspace", "topic"]);
+    assert_eq!(started["branch"], "release/1", "{started}");
+    assert_eq!(
+        writes(&fixture),
+        [
+            json!([own, {"ref": "topic", "inputs": {}}]),
+            json!([own, {"ref": "release/1", "inputs": {}}])
+        ]
+    );
+    // Outside a workspace, another repository's run starts on its default
+    // branch.
+    let started = fixture.ok(&[
+        "ci",
+        "run",
+        "https://github.com/other/tool/actions/workflows/ci.yml",
+    ]);
+    assert_eq!(
+        started,
+        json!({"workflow": "ci.yml", "branch": "trunk"}),
+        "{started}"
+    );
+    assert_eq!(
+        writes(&fixture),
+        [json!([other, {"ref": "trunk", "inputs": {}}])]
+    );
+    let output = fixture.run(&["ci", "run", "https://github.com/team/project/pull/8"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("expected a workflow URL"),
+        "{output:?}"
+    );
+}
+
+#[test]
+fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let dispatch = "POST repos/other/project/actions/workflows/deps.yml/dispatches";
+    fixture.respond(json!({
+        "GET repos/other/project": {"body": {"default_branch": "main"}},
+        dispatch: {"status": 201, "body": {"id": 50, "run_number": 5}},
+    }));
+    let other = fixture.web.replace("/team/project", "/other/project");
+    let page = format!("{other}/actions?workflow=deps.yml");
+    let started = fixture.ok(&["ci", "run", &page, "--workspace", "topic"]);
+    assert_eq!(
+        (&started["branch"], &started["url"], &started["linked"]),
+        (
+            &json!("main"),
+            &json!(format!("{other}/actions/runs/5")),
+            &json!(true)
+        ),
+        "{started}"
+    );
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    assert_eq!(links["opened"][0]["url"], started["url"], "{links}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "main", "inputs": {}, "return_run_info": true}])]
+    );
+
+    // Workspace processes start runs only in their repository, on their branch.
+    let exported = fixture.ok(&["work", "env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    let own_file = format!(
+        "{}/src/branch/main/.forgejo/workflows/deps.yml",
+        fixture.web
+    );
+    for (workflow, error) in [
+        (page.as_str(), "of their own repository"),
+        (own_file.as_str(), "only on their workspace's branch"),
+    ] {
+        let refused = fixture.request_as(
+            json!({"start_ci_run": {"workflow": workflow, "branch": null, "inputs": {}}}),
+            Some(scope),
+        );
+        assert!(
+            refused["data"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains(error),
+            "{workflow}: {refused}"
+        );
+    }
+    assert!(writes(&fixture).is_empty());
+}
+
+#[test]
 fn forgejo_ci_runs_link_the_run_they_start() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";

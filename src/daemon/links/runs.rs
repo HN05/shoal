@@ -29,31 +29,45 @@ use crate::{
 use self::place::workspace_context;
 
 impl Manager {
-    /// Start `workflow` on `branch`, by default the workspace's, and link the
-    /// run as opened where the forge reports it, so watches follow it.
+    /// Start `workflow`, named by its file or ID or by its web URL, on
+    /// `branch`, by default the one the URL names, and link the run as
+    /// opened in the workspace where the forge reports it, so watches follow
+    /// it. Workspace processes start runs only on their workspace's branch.
     pub async fn start_ci_run(
         &self,
-        selector: &str,
+        selector: Option<&str>,
         workflow: Option<String>,
         branch: Option<String>,
         inputs: BTreeMap<String, String>,
+        scoped: bool,
     ) -> Result<StartedRun> {
-        let (workspace, forge, account) = self.run_forge(selector).await?;
+        let (place, workflow, linked) = self
+            .workflow_place(workspace_context(selector).as_ref(), workflow, scoped)
+            .await?;
+        let branch = match branch.or(linked) {
+            Some(branch) => branch,
+            None => place.default_branch().await?,
+        };
+        if scoped {
+            on_own_branch_name(place.own_workspace(), &branch)?;
+        }
         let run = NewRun {
             workflow,
-            branch: branch.unwrap_or_else(|| workspace.branch.clone()),
+            branch,
             inputs,
         };
-        // Refuse before the run starts what would refuse its link after.
-        let id = workspace.id.clone();
-        self.store
-            .run(move |db| super::ensure_accepts_links(db, &id))
-            .await?;
-        let mut started = forge
-            .start_run(&account, &run)
-            .await
+        if let Some(workspace) = &place.workspace {
+            // Refuse before the run starts what would refuse its link after.
+            let id = workspace.id.clone();
+            self.store
+                .run(move |db| super::ensure_accepts_links(db, &id))
+                .await?;
+        }
+        let mut started = (place.forge.start_run(&place.account, &run).await)
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
-        self.link_started(&workspace.id, &forge, &mut started).await;
+        if let Some(workspace) = &place.workspace {
+            (self.link_started(&workspace.id, &place.forge, &mut started)).await;
+        }
         Ok(started)
     }
 
@@ -217,6 +231,16 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
         url,
         title: started.workflow.clone(),
     })
+}
+
+/// Refuse a run started on any branch but the workspace's, or in another
+/// repository.
+fn on_own_branch_name(workspace: Option<&Workspace>, branch: &str) -> Result<()> {
+    ensure!(
+        workspace.is_some_and(|workspace| workspace.branch == branch),
+        "workspace processes start CI runs only on their workspace's branch"
+    );
+    Ok(())
 }
 
 /// Refuse a run on any branch but the workspace's, or of another repository.

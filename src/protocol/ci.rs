@@ -66,9 +66,12 @@ pub enum CiMethod {
         run: Option<String>,
         pr: Option<String>,
     },
-    /// Start a CI workflow run on a branch, by default the workspace's.
+    /// Start a CI workflow run on a branch, by default the one a workflow
+    /// file's URL names, the workspace's, or the default branch of another
+    /// repository a workflow URL names, which needs no workspace.
     StartCiRun {
-        workspace: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         workflow: Option<String>,
         branch: Option<String>,
         inputs: std::collections::BTreeMap<String, String>,

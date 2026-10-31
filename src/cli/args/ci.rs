@@ -9,7 +9,8 @@ use crate::cli::args::item_reference;
 pub enum CiCommand {
     /// List the newest CI runs, on the workspace's branch by default.
     List(ListArgs),
-    /// Start a workflow run on a branch.
+    /// Start a workflow run on a branch, also in another repository by the
+    /// workflow's URL.
     ///
     /// It is a new run, not a rerun of a PR's checks; on Forgejo a failed
     /// check stays failed.
@@ -90,14 +91,18 @@ pub struct ListArgs {
 // Arguments of `shoal ci run`.
 #[derive(Debug, Args)]
 pub struct RunArgs {
-    /// Workflow file or ID, such as ci.yml, or a Bitbucket custom pipeline;
-    /// GitLab runs the branch's pipeline and takes none.
+    /// Workflow file or ID, such as ci.yml, a Bitbucket custom pipeline, or
+    /// the web URL of a workflow or its file, also of another repository,
+    /// which workspace processes cannot start; GitLab runs the branch's
+    /// pipeline and takes none.
     pub workflow: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Workspace to use; defaults to the current workspace, or else the
+    /// picker unless a URL names the workflow.
     #[arg(long)]
     pub workspace: Option<String>,
-    /// Branch to run on; defaults to the workspace's branch, the only one
-    /// workspace processes may run on.
+    /// Branch to run on; defaults to the branch a workflow file's URL names,
+    /// then the workspace's, the only one workspace processes may run on, or
+    /// in another repository its default branch.
     #[arg(long)]
     pub branch: Option<String>,
     /// Pass a workflow input; repeat for more.

@@ -1,12 +1,12 @@
 //! Where a CI run request acts: the repository of the workspace or
 //! registered checkout it comes from as its agent account, or another
 //! repository a run or workflow URL names as the user's own logins, which
-//! workspace processes may not use.
+//! workspace processes may not use, and the branch a run starts on there.
 use anyhow::{Context, Result, ensure};
 
 use crate::{
     daemon::workspace::Manager,
-    forge::{ForgeRepo, IssueInput, account::Account},
+    forge::{ForgeRepo, IssueInput, account::Account, ci::workflow::is_workflow_url},
     model::Workspace,
     protocol::ItemContext,
 };
@@ -30,6 +30,20 @@ impl RunPlace {
     /// The workspace whose own repository the request acts in.
     pub fn own_workspace(&self) -> Option<&Workspace> {
         self.workspace.as_ref().filter(|_| self.own)
+    }
+
+    /// The branch a run starts on when nothing names one: the workspace's
+    /// in its own repository, otherwise the repository's default branch.
+    pub async fn default_branch(&self) -> Result<String> {
+        match self.own_workspace() {
+            Some(workspace) => Ok(workspace.branch.clone()),
+            None => (self.forge.default_branch(&self.account).await).with_context(|| {
+                format!(
+                    "could not read the default branch of {}; name one with --branch",
+                    self.forge.repository_url()
+                )
+            }),
+        }
     }
 }
 
@@ -83,6 +97,24 @@ impl Manager {
     ) -> Result<RunPlace> {
         let named = self.named_run_forge(input).await?;
         self.run_place(context, named, scoped).await
+    }
+
+    /// Where a request starts the workflow `input` names, by its file or ID
+    /// or by its web URL, with the workflow and the branch the URL names.
+    pub(in crate::daemon::links) async fn workflow_place(
+        &self,
+        context: Option<&ItemContext>,
+        input: Option<String>,
+        scoped: bool,
+    ) -> Result<(RunPlace, Option<String>, Option<String>)> {
+        let Some(url) = input.as_deref().filter(|input| is_workflow_url(input)) else {
+            let place = self.run_place(context, None, scoped).await?;
+            return Ok((place, input, None));
+        };
+        let hosts = self.forge_hosts();
+        let (named, link) = ForgeRepo::resolve_workflow_url(url, &hosts).await?;
+        let place = self.run_place(context, Some(named), scoped).await?;
+        Ok((place, Some(link.workflow), link.branch))
     }
 
     /// The repository the run URL `input` names, or none for a run number.
