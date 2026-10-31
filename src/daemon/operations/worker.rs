@@ -62,6 +62,9 @@ pub(super) fn spawn(
     if let Some(env) = env {
         command.env_clear().envs(env);
     }
+    // The worker outlives its caller: no execution's process inventory may
+    // count it, or that execution's end would stop it as a survivor.
+    command.env_remove(crate::env::EXECUTION_ID);
     match token {
         Some(token) => command.env(crate::env::SCOPE_TOKEN, token),
         None => command.env_remove(crate::env::SCOPE_TOKEN),

@@ -7512,31 +7512,15 @@ fn an_operation_keeps_its_scope_after_the_execution_that_started_it_ends() {
     fs::remove_file(&release).unwrap();
     fs::remove_file(path.join("setup-started")).unwrap();
     fs::remove_file(path.join("post-setup-ran")).unwrap();
-    // A scoped command reruns setup, then goes with its execution.
-    let mut run = fixture
-        .command()
-        .args(["run", "--workspace", "worker", "--"])
-        .args([env!("CARGO_BIN_EXE_shoal"), "work", "setup", "worker"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    wait_until("setup to start", || path.join("setup-started").exists());
-    let status = fixture.ok(&["status", "worker"]);
-    let command = status["executions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|execution| execution["kind"] != "setup")
-        .and_then(|execution| execution["child"]["pid"].as_i64())
-        .unwrap();
-    unsafe {
-        libc::kill(command as i32, libc::SIGKILL);
-        libc::kill(run.id() as i32, libc::SIGKILL);
-    }
-    // Its wrapper's connection is gone, and with it the token the command
-    // called with.
-    run.wait().unwrap();
+    // A scoped command reruns setup, drops its CLI and ends normally, so its
+    // execution's end stops whatever still carries its identity.
+    let command = format!(
+        "'{}' work setup worker >/dev/null 2>&1 & cli=$!; while [ ! -e '{}' ]; do sleep 0.1; done; kill -9 $cli",
+        env!("CARGO_BIN_EXE_shoal"),
+        path.join("setup-started").display()
+    );
+    let output = fixture.run(&["run", "--workspace", "worker", "--", "sh", "-c", &command]);
+    assert!(output.status.success(), "{output:?}");
     fs::write(&release, "").unwrap();
     wait_until("the post-setup hook to run", || {
         path.join("post-setup-ran").exists()
