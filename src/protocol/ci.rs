@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Requests about CI checks and workflow runs of a workspace's repository,
-/// or for those that act on them, of a registered checkout's.
+/// or for those that act on them, of a registered checkout's, or of another
+/// repository a run's URL names.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CiMethod {
@@ -19,21 +20,32 @@ pub enum CiMethod {
         checks: Vec<String>,
     },
     /// Rerun or cancel one CI workflow run, named by its web URL or the
-    /// number in it; `failed` reruns only its failed jobs.
+    /// number in it; `failed` reruns only its failed jobs. A run of another
+    /// repository than the context's, or without a context, is named by its
+    /// URL.
     CiRunAction {
         #[serde(flatten)]
-        context: super::ItemContext,
+        context: Option<super::ItemContext>,
         run: String,
         action: crate::forge::ci::CiAction,
         failed: bool,
     },
     /// One CI workflow run.
-    ViewCiRun { workspace: String, run: String },
+    ViewCiRun {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
+        run: String,
+    },
     /// A CI workflow run's jobs, sent in pages.
-    CiRunJobs { workspace: String, run: String },
+    CiRunJobs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
+        run: String,
+    },
     /// The log of one job of a CI workflow run.
     CiRunJobLog {
-        workspace: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         run: String,
         job: crate::forge::ci::run_view::JobRef,
     },

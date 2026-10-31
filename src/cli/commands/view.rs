@@ -155,25 +155,24 @@ fn in_selection_order(
 }
 
 /// Each selected run with its jobs and failed jobs' logs, read through the
-/// workspace.
+/// workspace, or outside one by its URL.
 async fn read_runs(ctx: &Context, context: &ItemContext, selected: &Selected) -> Vec<ShownRun> {
     let mut runs = Vec::new();
     for item in &selected.items {
         if item.kind != LinkKind::Ci {
             continue;
         }
-        let read = match context {
-            ItemContext::Workspace(workspace) => ci::read_view(ctx, workspace, &item.url)
-                .await
-                .map(RunRead::Read),
-            ItemContext::Checkout(_) => Err(anyhow::anyhow!(
-                "a CI run is read through a workspace; run this in one or pass --workspace"
-            )),
+        let workspace = match context {
+            ItemContext::Workspace(workspace) => Some(workspace.as_str()),
+            ItemContext::Checkout(_) => None,
         };
-        let read = read.unwrap_or_else(|error| RunRead::Failed {
-            url: item.url.clone(),
-            errors: vec![format!("{error:#}")],
-        });
+        let read = ci::read_view(ctx, workspace, &item.url).await;
+        let read = read
+            .map(RunRead::Read)
+            .unwrap_or_else(|error| RunRead::Failed {
+                url: item.url.clone(),
+                errors: vec![format!("{error:#}")],
+            });
         runs.push(ShownRun {
             kind: LinkKind::Ci,
             read,

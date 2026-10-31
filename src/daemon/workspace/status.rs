@@ -136,8 +136,8 @@ impl Manager {
         })
     }
 
-    /// The issue or PR whose URL `selection` names, when it is of another
-    /// repository than the workspace's.
+    /// The issue, PR or CI run whose URL `selection` names, when it is of
+    /// another repository than the workspace's.
     async fn item_elsewhere(
         &self,
         workspace: &Workspace,
@@ -160,7 +160,11 @@ impl Manager {
                 let (_, url) = forge.pull(input)?;
                 (forge, url)
             }
-            link::LinkKind::Ci => return Ok(None),
+            link::LinkKind::Ci => {
+                let forge = self.run_url_forge(input).await?;
+                let (_, url) = forge.run(input)?;
+                (forge, url)
+            }
         };
         let remote = repository::remote_url_from_path(&workspace.path)
             .await?

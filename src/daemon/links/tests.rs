@@ -51,7 +51,7 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
     let issue = "https://github.com/team/repo/issues/40";
     let pr = "https://github.com/team/repo/pull/41";
     manager
-        .link_item(&id, LinkKind::Issue, "40", Relation::Opened, None)
+        .link_item(&id, LinkKind::Issue, "40", Relation::Opened, None, false)
         .await
         .unwrap();
     manager
@@ -61,15 +61,16 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
             issue,
             Relation::Opened,
             Some("Follow-up".into()),
+            false,
         )
         .await
         .unwrap();
     manager
-        .link_item(&id, LinkKind::Pr, "41", Relation::Related, None)
+        .link_item(&id, LinkKind::Pr, "41", Relation::Related, None, false)
         .await
         .unwrap();
     manager
-        .link_item(&id, LinkKind::Issue, "40", Relation::Related, None)
+        .link_item(&id, LinkKind::Issue, "40", Relation::Related, None, false)
         .await
         .unwrap();
 
@@ -97,7 +98,8 @@ async fn recorded_relations_are_kept_apart_from_the_assignment() {
                 LinkKind::Issue,
                 "https://github.com/other/repo/issues/1",
                 Relation::Related,
-                None
+                None,
+                false,
             )
             .await
             .is_err()
@@ -148,6 +150,7 @@ async fn assigned_relation_uses_the_issue_link() {
             "7",
             Relation::Assigned,
             Some("Fix".into()),
+            false,
         )
         .await
         .unwrap();
@@ -182,7 +185,7 @@ async fn a_moved_worktree_takes_no_recorded_relations() {
     std::fs::remove_dir_all(&path).unwrap();
     assert!(
         manager
-            .link_item(&id, LinkKind::Issue, "40", Relation::Related, None)
+            .link_item(&id, LinkKind::Issue, "40", Relation::Related, None, false)
             .await
             .is_err()
     );

@@ -3123,6 +3123,7 @@ shoal ci cancel --pr 12 --check rust     # cancel one running check of PR 12
 shoal ci rerun 2765 --failed             # rerun a run's failed jobs
 shoal ci cancel https://forge.example/team/repo/actions/runs/2765
 shoal view ci 2765                       # a run's state, its jobs and failed jobs' logs
+shoal view ci https://github.com/team/tool/actions/runs/12   # a run of another repository
 shoal ci list --workflow deps.yml        # the newest runs on the workspace's branch
 shoal ci list --pr 12                    # the runs on PR 12's head commit
 shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
@@ -3154,6 +3155,11 @@ cannot rerun. `cancel` cancels a running run on every forge but Bitbucket.
 Processes inside a workspace act only on runs of that workspace's branch, so a
 PR's checks, whose runs may name the PR instead, are acted on through the PR.
 `--json` returns the run's `url` and the `action`.
+
+A run's URL may name another repository than the workspace's, and outside a
+workspace it names the run's repository. `ci rerun`, `ci cancel`, `view ci` and
+`link ci` then act there with the user's own logins, as merging does; processes
+inside a workspace read, link and act only on runs of its own repository.
 
 Without a run, `shoal ci rerun` reruns failed jobs on the current head of the
 linked PR or the one `--pr` names, and `shoal ci cancel` cancels running ones:

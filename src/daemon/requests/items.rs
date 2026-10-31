@@ -139,7 +139,7 @@ pub(super) async fn handle(
             title,
         } => {
             manager
-                .link_item(&workspace, kind, &url, relation, title)
+                .link_item(&workspace, kind, &url, relation, title, caller.is_some())
                 .await?;
             Body::Ok
         }

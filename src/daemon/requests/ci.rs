@@ -8,7 +8,7 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::protocol::{Body, CiMethod};
+use crate::protocol::{Body, CiMethod, ItemContext};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -17,7 +17,9 @@ pub(super) async fn handle(
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
         CiMethod::CiRunJobs { workspace, run } => {
-            let listed = manager.ci_run_jobs(&workspace, run).await;
+            let listed = manager
+                .ci_run_jobs(workspace.as_deref(), run, caller.is_some())
+                .await;
             return Ok(Answer::pages(listed, Body::CiRunJobs));
         }
         CiMethod::ListCiRuns {
@@ -46,20 +48,26 @@ pub(super) async fn handle(
             failed,
         } => Body::CiRunActed(
             manager
-                .ci_run_action(&context, run, action, failed, caller.is_some())
+                .ci_run_action(context.as_ref(), run, action, failed, caller.is_some())
                 .await?,
         ),
         CiMethod::ApproveCiRuns { context, run, pr } => {
             Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr).await?)
         }
-        CiMethod::ViewCiRun { workspace, run } => {
-            Body::CiRun(manager.view_ci_run(&workspace, run).await?)
-        }
+        CiMethod::ViewCiRun { workspace, run } => Body::CiRun(
+            manager
+                .view_ci_run(workspace.as_deref(), run, caller.is_some())
+                .await?,
+        ),
         CiMethod::CiRunJobLog {
             workspace,
             run,
             job,
-        } => Body::CheckLog(manager.ci_run_job_log(&workspace, run, job).await?),
+        } => Body::CheckLog(
+            manager
+                .ci_run_job_log(workspace.as_deref(), run, job, caller.is_some())
+                .await?,
+        ),
         CiMethod::StartCiRun {
             workspace,
             workflow,
@@ -74,19 +82,24 @@ pub(super) async fn handle(
 }
 
 impl Scoped for CiMethod {
-    async fn scope(&mut self, manager: &Manager, _: &Caller) -> Result<Option<&mut String>> {
+    async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
             }
-            CiMethod::CiAction { context, .. } | CiMethod::CiRunAction { context, .. } => {
+            CiMethod::CiAction { context, .. } => Some(super::items::context_workspace(context)?),
+            // A workspace process acts from its own workspace, so only on
+            // runs of its repository.
+            CiMethod::CiRunAction { context, .. } => {
+                let context = context.get_or_insert_with(|| own_context(caller));
                 Some(super::items::context_workspace(context)?)
             }
-            CiMethod::CheckLog { workspace, .. }
-            | CiMethod::ViewCiRun { workspace, .. }
+            CiMethod::CheckLog { workspace, .. } | CiMethod::ListCiRuns { workspace, .. } => {
+                Some(workspace)
+            }
+            CiMethod::ViewCiRun { workspace, .. }
             | CiMethod::CiRunJobs { workspace, .. }
-            | CiMethod::CiRunJobLog { workspace, .. }
-            | CiMethod::ListCiRuns { workspace, .. } => Some(workspace),
+            | CiMethod::CiRunJobLog { workspace, .. } => Some(caller.own_by_default(workspace)),
             CiMethod::StartCiRun {
                 workspace, branch, ..
             } => {
@@ -95,4 +108,9 @@ impl Scoped for CiMethod {
             }
         })
     }
+}
+
+/// The caller's own workspace as the context of a request that names none.
+fn own_context(caller: &Caller) -> ItemContext {
+    ItemContext::Workspace(caller.workspace_id.clone())
 }

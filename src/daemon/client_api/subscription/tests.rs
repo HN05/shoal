@@ -148,6 +148,7 @@ mod streams {
                 "40",
                 Relation::Related,
                 None,
+                false,
             )
             .await
             .unwrap();

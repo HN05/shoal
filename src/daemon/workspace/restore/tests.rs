@@ -452,11 +452,25 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
         &["remote", "add", "origin", "https://github.com/acme/repo"],
     );
     manager
-        .link_item(&workspace.id, LinkKind::Pr, "3", Relation::Related, None)
+        .link_item(
+            &workspace.id,
+            LinkKind::Pr,
+            "3",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap();
     manager
-        .link_item(&workspace.id, LinkKind::Pr, "4", Relation::Related, None)
+        .link_item(
+            &workspace.id,
+            LinkKind::Pr,
+            "4",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap();
     manager
@@ -475,6 +489,7 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             "7",
             Relation::Assigned,
             None,
+            false,
         )
         .await
         .unwrap();
@@ -494,7 +509,14 @@ async fn a_removal_record_keeps_links_made_until_removal_starts() {
             .is_err()
     );
     let error = manager
-        .link_item(&workspace.id, LinkKind::Pr, "5", Relation::Related, None)
+        .link_item(
+            &workspace.id,
+            LinkKind::Pr,
+            "5",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap_err();
     assert!(

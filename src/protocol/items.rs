@@ -109,7 +109,8 @@ pub enum ItemMethod {
         repository: Option<String>,
     },
     /// Linked items, or an explicit one, for the CLI to look up; with
-    /// `elsewhere`, also an issue or PR of another repository by its URL.
+    /// `elsewhere`, also an issue, PR or CI run of another repository by its
+    /// URL.
     SelectItems {
         workspace: String,
         selection: crate::forge::items::link::Selection,

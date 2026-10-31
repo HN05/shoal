@@ -152,7 +152,8 @@ the PR stays failed. When `ci run` says it linked the run as opened, a watch
 reports when it finishes instead of you polling it;
 `shoal link ci <run-url> related` follows another run, such as one that
 outlives its PR. `shoal ci rerun <run-url>` (`--failed` for failed jobs
-only) and `shoal ci cancel <run-url>` act on one run of your branch.
+only) and `shoal ci cancel <run-url>` act on one run of your branch; runs of
+other repositories are the user's to read, link and act on.
 `shoal view ci <run-url>` shows a run's jobs and the log tails of failed ones,
 and `shoal ci list` the newest runs on your branch, or on a PR's head with `--pr N`.
 A PR from a fork or first-time contributor can show runs that wait for approval

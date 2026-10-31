@@ -1,5 +1,6 @@
 //! `shoal ci` and `shoal view ci`: list, start, read, rerun and cancel CI runs
-//! of the workspace's repository, and the checks on a PR's head.
+//! of the workspace's repository, or of another one by their URLs, and the
+//! checks on a PR's head.
 mod act;
 mod read;
 
@@ -7,9 +8,9 @@ use anyhow::Result;
 
 pub(super) use self::read::{read_view, render_run, view};
 use crate::{
-    cli::{args::ci::CiCommand, context::Context},
+    cli::{args::ci::CiCommand, context::Context, ui},
     forge::{
-        ForgeRepo,
+        ForgeRepo, IssueInput,
         capability::Capability,
         ci::{CiAction, run_view::RunFilter},
     },
@@ -30,6 +31,25 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
         CiCommand::Rerun { target, failed } => act::act(ctx, target, CiAction::Rerun, failed).await,
         CiCommand::Cancel { target } => act::act(ctx, target, CiAction::Cancel, false).await,
         CiCommand::Approve { subject } => act::approve(ctx, subject).await,
+    }
+}
+
+/// The workspace a request about the run or workflow `input` names comes
+/// from: the named or current one, which a run number needs, or otherwise
+/// none for a URL outside a workspace.
+async fn input_workspace(
+    ctx: &Context,
+    workspace: Option<String>,
+    input: &str,
+) -> Result<Option<String>> {
+    if workspace.is_some() || IssueInput::parse(input) != IssueInput::Url {
+        let fallback = ui::Fallback::CurrentDirectory;
+        return Ok(Some(ui::select_workspace(ctx, workspace, fallback).await?));
+    }
+    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
+        Ok(workspace) => Ok(Some(workspace)),
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => Ok(None),
+        Err(error) => Err(error),
     }
 }
 

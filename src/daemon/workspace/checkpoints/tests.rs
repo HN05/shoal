@@ -223,7 +223,14 @@ async fn links_cannot_change_while_a_checkpoint_is_restored() {
         .unwrap();
     let error = f
         .manager
-        .link_item(&f.workspace.id, LinkKind::Pr, "5", Relation::Related, None)
+        .link_item(
+            &f.workspace.id,
+            LinkKind::Pr,
+            "5",
+            Relation::Related,
+            None,
+            false,
+        )
         .await
         .unwrap_err();
     assert!(

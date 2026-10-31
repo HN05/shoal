@@ -1,5 +1,8 @@
 //! Starting, reading, rerunning and cancelling CI workflow runs of the
-//! workspace's repository, as its agent account.
+//! workspace's repository as its agent account, or of another repository as
+//! the user.
+mod place;
+
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
@@ -22,6 +25,8 @@ use crate::{
     model::{LinkedItem, Relation, Workspace},
     protocol::ItemContext,
 };
+
+use self::place::workspace_context;
 
 impl Manager {
     /// Start `workflow` on `branch`, by default the workspace's, and link the
@@ -68,49 +73,66 @@ impl Manager {
         }
     }
 
-    /// Rerun or cancel the run `input` names in the repository of `context`;
-    /// workspace processes act only on runs of their workspace's branch.
+    /// Rerun or cancel the run `input` names in the repository of `context`,
+    /// or of its URL; workspace processes act only on runs of their
+    /// workspace's branch.
     pub async fn ci_run_action(
         &self,
-        context: &ItemContext,
+        context: Option<&ItemContext>,
         input: String,
         action: CiAction,
         failed: bool,
         scoped: bool,
     ) -> Result<RunActed> {
         validate_run_reference(&input)?;
-        let place = self.place(context).await?;
-        let (forge, account) = self.place_forge_account(&place).await?;
+        let place = self.run_input_place(context, &input, scoped).await?;
+        let (forge, account) = (&place.forge, &place.account);
         let run = forge
-            .find_run(&account, &input, action)
+            .find_run(account, &input, action)
             .await
             .with_context(|| format!("could not {action} CI run {input}"))?;
         // Scope keeps workspace processes in their workspace.
-        if scoped && let Some(workspace) = place.workspace() {
-            on_own_branch(workspace, &run)?;
+        if scoped {
+            on_own_branch(place.own_workspace(), &run)?;
         }
         forge
-            .act_on_run(&account, &run, action, failed)
+            .act_on_run(account, &run, action, failed)
             .await
             .with_context(|| format!("could not {action} {}", run.url))
     }
 
     /// The run `input` names.
-    pub async fn view_ci_run(&self, selector: &str, input: String) -> Result<Run> {
+    pub async fn view_ci_run(
+        &self,
+        selector: Option<&str>,
+        input: String,
+        scoped: bool,
+    ) -> Result<Run> {
         validate_run_reference(&input)?;
-        let (_, forge, account) = self.run_forge(selector).await?;
-        forge
-            .view_run(&account, &input)
+        let place = self
+            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
+            .await?;
+        place
+            .forge
+            .view_run(&place.account, &input)
             .await
             .with_context(|| format!("could not read CI run {input}"))
     }
 
     /// Every job of the run `input` names.
-    pub async fn ci_run_jobs(&self, selector: &str, input: String) -> Result<Vec<RunJob>> {
+    pub async fn ci_run_jobs(
+        &self,
+        selector: Option<&str>,
+        input: String,
+        scoped: bool,
+    ) -> Result<Vec<RunJob>> {
         validate_run_reference(&input)?;
-        let (_, forge, account) = self.run_forge(selector).await?;
-        forge
-            .run_jobs(&account, &input)
+        let place = self
+            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
+            .await?;
+        place
+            .forge
+            .run_jobs(&place.account, &input)
             .await
             .with_context(|| format!("could not read the jobs of CI run {input}"))
     }
@@ -118,14 +140,18 @@ impl Manager {
     /// The log of the job `job` of the run `input` names.
     pub async fn ci_run_job_log(
         &self,
-        selector: &str,
+        selector: Option<&str>,
         input: String,
         job: JobRef,
+        scoped: bool,
     ) -> Result<CheckLog> {
         validate_run_reference(&input)?;
-        let (_, forge, account) = self.run_forge(selector).await?;
-        forge
-            .run_job_log(&account, &input, &job)
+        let place = self
+            .run_input_place(workspace_context(selector).as_ref(), &input, scoped)
+            .await?;
+        place
+            .forge
+            .run_job_log(&place.account, &input, &job)
             .await
             .with_context(|| format!("could not read a job log of CI run {input}"))
     }
@@ -193,10 +219,10 @@ fn started_link(forge: &ForgeRepo, started: &StartedRun) -> Option<LinkedItem> {
     })
 }
 
-/// Refuse a run on any branch but the workspace's.
-fn on_own_branch(workspace: &Workspace, run: &Run) -> Result<()> {
+/// Refuse a run on any branch but the workspace's, or of another repository.
+fn on_own_branch(workspace: Option<&Workspace>, run: &Run) -> Result<()> {
     ensure!(
-        run.branch.as_deref() == Some(workspace.branch.as_str()),
+        workspace.is_some_and(|workspace| run.branch.as_deref() == Some(&workspace.branch)),
         "workspace processes act only on CI runs of their workspace's branch; \
          use --pr for a PR's checks"
     );

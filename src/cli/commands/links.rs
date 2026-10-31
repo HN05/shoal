@@ -54,7 +54,7 @@ pub(super) async fn select_in_context(
 
 /// The items `selection` names: in the workspace, where it may name linked
 /// ones, or in the repository of the registered checkout. With `elsewhere`,
-/// an issue or PR URL of another repository selects that item.
+/// an issue, PR or CI run URL of another repository selects that item.
 pub(super) async fn select_items(
     ctx: &Context,
     context: &ItemContext,
@@ -78,8 +78,8 @@ pub(super) async fn select_items(
 }
 
 /// The item `selection` names in the repository of its registered checkout,
-/// where nothing is linked, or with `elsewhere` in the repository its issue
-/// or PR URL names.
+/// where nothing is linked, or with `elsewhere` in the repository its issue,
+/// PR or CI run URL names.
 async fn checkout_selected(
     ctx: &Context,
     repository: &str,
@@ -116,7 +116,7 @@ async fn checkout_selected(
     })
 }
 
-/// The repository of the issue or PR whose URL `input` is.
+/// The repository of the issue, PR or CI run whose URL `input` is.
 async fn item_url_forge(
     ctx: &Context,
     kind: Option<LinkKind>,
@@ -129,7 +129,8 @@ async fn item_url_forge(
     Ok(Some(match kind {
         Some(LinkKind::Issue) => ForgeRepo::resolve_issue_url(input, &hosts).await?,
         Some(LinkKind::Pr) => ForgeRepo::resolve_pull_url(input, &hosts).await?,
-        _ => return Ok(None),
+        Some(LinkKind::Ci) => ForgeRepo::resolve_run_url(input, &hosts).await?,
+        None => return Ok(None),
     }))
 }
 

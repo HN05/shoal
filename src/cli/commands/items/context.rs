@@ -63,15 +63,10 @@ async fn select_context(
         let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory);
         return Ok(ItemContext::Workspace(workspace.await?));
     }
-    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
-        Ok(workspace) => return Ok(ItemContext::Workspace(workspace)),
-        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
-        Err(error) => return Err(error),
+    if let Some(context) = current_context(ctx).await? {
+        return Ok(context);
     }
     let repos = client::repositories(&ctx.paths).await?;
-    if let Some(repo) = super::super::issues::current_checkout(&repos).await? {
-        return Ok(ItemContext::Checkout(repo.id.clone()));
-    }
     if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
         && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
     {
@@ -80,6 +75,20 @@ async fn select_context(
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
     Ok(ItemContext::Workspace(workspace))
+}
+
+/// The workspace, else the registered checkout, the current directory is in.
+pub(in crate::cli::commands) async fn current_context(
+    ctx: &Context,
+) -> Result<Option<ItemContext>> {
+    match ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectoryOnly).await {
+        Ok(workspace) => return Ok(Some(ItemContext::Workspace(workspace))),
+        Err(error) if error.is::<ui::NoCurrentWorkspace>() => {}
+        Err(error) => return Err(error),
+    }
+    let repos = client::repositories(&ctx.paths).await?;
+    let checkout = super::super::issues::current_checkout(&repos).await?;
+    Ok(checkout.map(|repo| ItemContext::Checkout(repo.id.clone())))
 }
 
 /// The registered repository `repo` names, a path read from the current

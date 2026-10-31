@@ -3902,25 +3902,97 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
         ])]
     );
 
-    // A run of another repository, or no run at all, is refused.
+    // Workspace processes act on no run of another repository, and nothing
+    // names a run but its URL or number.
     let other = act(
         "https://github.com/other/project/actions/runs/12",
         "cancel",
-        None,
+        Some(scope),
     );
     assert!(
         other["data"]["message"]
             .as_str()
             .unwrap()
-            .contains("is not a CI run of"),
+            .contains("only on CI runs and workflows of their own repository"),
         "{other}"
     );
+    assert!(fixture.requests().is_empty());
     let output = fixture.run(&["ci", "cancel", "ci.yml"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("by its web URL"),
         "{output:?}"
     );
+}
+
+#[test]
+fn runs_of_another_repository_are_read_linked_and_acted_on_by_the_user() {
+    let fixture = Fixture::new(Forge::Forgejo, "[cleanup.auto]\nenabled=false\n");
+    fixture.respond(json!({
+        "GET repos/other/project/actions/runs?run_number=7": {"body": {"workflow_runs": [
+            {"id": 70, "index_in_repo": 7, "prettyref": "main", "workflow_id": "deps.yml",
+                "status": "failure"}
+        ]}},
+        "GET repos/other/project/actions/runs/70/jobs": {"body": [
+            {"id": 701, "name": "audit", "run_id": 70, "status": "failure"}
+        ]},
+        "GET repos/other/project/actions/jobs/701/logs": {"body": "advisory found\n"},
+        "POST repos/other/project/actions/runs/70/cancel": {"status": 204},
+    }));
+    let other = format!(
+        "{}/actions/runs/7",
+        fixture.web.replace("/team/project", "/other/project")
+    );
+
+    // Outside a workspace, the run's URL names its repository.
+    let view = fixture.ok(&["view", "ci", &other]);
+    assert_eq!(
+        (&view["url"], &view["branch"]),
+        (&json!(other), &json!("main"))
+    );
+    assert_eq!(view["logs"][0]["text"], "advisory found\n", "{view}");
+    let cancelled = fixture.ok(&["ci", "cancel", &other]);
+    assert_eq!(cancelled["url"], other, "{cancelled}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/other/project/actions/runs/70/cancel",
+            null
+        ])]
+    );
+
+    // Inside one, it is viewed, linked and watched like a run of its own.
+    let viewed = fixture.ok(&["view", &other, "--workspace", "topic"]);
+    assert_eq!(viewed[0]["url"], other, "{viewed}");
+    fixture.ok(&["link", &other, "related", "--workspace", "topic"]);
+    let links = &fixture.ok(&["status", "topic"])["workspace"]["links"];
+    assert_eq!(
+        links["related"],
+        json!([{"kind": "ci", "url": other, "title": "deps.yml"}]),
+        "{links}"
+    );
+    fixture.ok(&["unlink", &other, "related", "--workspace", "topic"]);
+
+    // Workspace processes read, link and act only within their repository.
+    let exported = fixture.ok(&["work", "env", "topic"]);
+    let scope = exported["SHOAL_SCOPE_TOKEN"].as_str().unwrap();
+    for method in [
+        json!({"view_ci_run": {"run": other}}),
+        json!({"ci_run_jobs": {"workspace": "topic", "run": other}}),
+        json!({"ci_run_action": {"run": other, "action": "cancel", "failed": false}}),
+        json!({"link_item": {"workspace": "topic", "kind": "ci", "url": other,
+            "relation": "related"}}),
+    ] {
+        let refused = fixture.request_as(method.clone(), Some(scope));
+        assert!(
+            refused["data"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("of their own repository"),
+            "{method}: {refused}"
+        );
+    }
+    assert!(writes(&fixture).is_empty());
 }
 
 #[test]

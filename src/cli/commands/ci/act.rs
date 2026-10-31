@@ -6,15 +6,18 @@ use crate::{
     cli::{
         args::ci::{RunArgs, Subject, Target},
         client,
-        commands::items::select_item_context,
+        commands::items::{current_context, select_item_context},
         context::Context,
         ui,
     },
-    forge::ci::{
-        CiActed, CiAction,
-        approval::RunsApproved,
-        run::{StartedRun, validate_run},
-        run_action::{RunActed, validate_run_reference},
+    forge::{
+        IssueInput,
+        ci::{
+            CiActed, CiAction,
+            approval::RunsApproved,
+            run::{StartedRun, validate_run},
+            run_action::{RunActed, validate_run_reference},
+        },
     },
     protocol::{CiMethod, ItemContext},
 };
@@ -53,10 +56,15 @@ pub(super) async fn act(
     if let Some(run) = &subject.run {
         validate_run_reference(run)?;
     }
-    let context = subject_context(ctx, &subject).await?;
-    match subject.run {
-        Some(run) => act_on_run(ctx, context, run, action, failed).await,
-        None => act_on_checks(ctx, context, subject.pr, action, target.checks).await,
+    match subject.run.clone() {
+        Some(run) => {
+            let context = run_context(ctx, &subject, &run).await?;
+            act_on_run(ctx, context, run, action, failed).await
+        }
+        None => {
+            let context = subject_context(ctx, &subject).await?;
+            act_on_checks(ctx, context, subject.pr, action, target.checks).await
+        }
     }
 }
 
@@ -93,6 +101,17 @@ async fn subject_context(ctx: &Context, subject: &Subject) -> Result<ItemContext
     .await
 }
 
+/// Where the run `run` is acted on: as [`subject_context`] selects, except
+/// that a run's URL, which names its repository, needs no workspace or
+/// checkout.
+async fn run_context(ctx: &Context, subject: &Subject, run: &str) -> Result<Option<ItemContext>> {
+    let named = subject.workspace.is_some() || subject.repo.name.is_some();
+    if named || IssueInput::parse(run) != IssueInput::Url {
+        return Ok(Some(subject_context(ctx, subject).await?));
+    }
+    current_context(ctx).await
+}
+
 /// One line per approved run.
 fn approved_text(approved: &RunsApproved) -> String {
     approved
@@ -105,7 +124,7 @@ fn approved_text(approved: &RunsApproved) -> String {
 
 async fn act_on_run(
     ctx: &Context,
-    context: ItemContext,
+    context: Option<ItemContext>,
     run: String,
     action: CiAction,
     failed: bool,

@@ -26,24 +26,25 @@ pub(in crate::cli::commands) async fn view(
     if web {
         return open(ctx, items.workspace, run).await;
     }
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace = super::input_workspace(ctx, items.workspace, &run).await?;
+    let workspace = workspace.as_deref();
     if let Some(job) = job {
-        let log = job_log(ctx, &workspace, &run, job).await?;
+        let log = job_log(ctx, workspace, &run, job).await?;
         ctx.show(&log, items_view::render_log)?;
         return Ok(0);
     }
     let view = ctx
-        .progress("Reading run", read_view(ctx, &workspace, &run))
+        .progress("Reading run", read_view(ctx, workspace, &run))
         .await?;
     ctx.show(&view, render_run)?;
     Ok(0)
 }
 
-/// The run `run` names with its jobs and the log tails of its failed jobs.
+/// The run `run` names with its jobs and the log tails of its failed jobs,
+/// read through the workspace, or without one by the run's URL.
 pub(in crate::cli::commands) async fn read_view(
     ctx: &Context,
-    workspace: &str,
+    workspace: Option<&str>,
     run: &str,
 ) -> Result<RunView> {
     let mut view = read_run(ctx, workspace, run).await?;
@@ -54,14 +55,14 @@ pub(in crate::cli::commands) async fn read_view(
 /// Open the run in the browser, by its URL the forge reports.
 async fn open(ctx: &Context, workspace: Option<String>, run: String) -> Result<i32> {
     items_view::may_open_browser(ctx)?;
-    let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
+    let workspace = super::input_workspace(ctx, workspace, &run).await?;
     let run: Run = client::request(&ctx.paths, CiMethod::ViewCiRun { workspace, run }).await?;
     items_view::open_urls(ctx, vec![run.url])
 }
 
 /// The run with its jobs, which arrive in pages of their own.
-async fn read_run(ctx: &Context, workspace: &str, run: &str) -> Result<RunView> {
-    let (workspace, input) = (workspace.to_owned(), run.to_owned());
+async fn read_run(ctx: &Context, workspace: Option<&str>, run: &str) -> Result<RunView> {
+    let (workspace, input) = (workspace.map(str::to_owned), run.to_owned());
     let run = client::request(
         &ctx.paths,
         CiMethod::ViewCiRun {
@@ -87,7 +88,7 @@ async fn read_run(ctx: &Context, workspace: &str, run: &str) -> Result<RunView> 
 }
 
 /// Add the logs of the run's failed jobs, recording those it cannot read.
-async fn read_failed_logs(ctx: &Context, workspace: &str, run: &str, view: &mut RunView) {
+async fn read_failed_logs(ctx: &Context, workspace: Option<&str>, run: &str, view: &mut RunView) {
     let failed = view
         .jobs
         .iter()
@@ -104,11 +105,16 @@ async fn read_failed_logs(ctx: &Context, workspace: &str, run: &str, view: &mut 
     }
 }
 
-async fn job_log(ctx: &Context, workspace: &str, run: &str, job: JobRef) -> Result<CheckLog> {
+async fn job_log(
+    ctx: &Context,
+    workspace: Option<&str>,
+    run: &str,
+    job: JobRef,
+) -> Result<CheckLog> {
     client::request(
         &ctx.paths,
         CiMethod::CiRunJobLog {
-            workspace: workspace.into(),
+            workspace: workspace.map(Into::into),
             run: run.into(),
             job,
         },

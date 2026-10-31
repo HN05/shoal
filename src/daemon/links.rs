@@ -30,6 +30,7 @@ use crate::{
     },
     forge::items::link::{ItemKind, LinkKind},
     model::{LinkedItem, Relation},
+    protocol::ItemContext,
     state::WorkspaceState,
 };
 
@@ -41,6 +42,7 @@ impl Manager {
         input: &str,
         relation: Relation,
         title: Option<String>,
+        scoped: bool,
     ) -> Result<()> {
         match (relation, kind) {
             (Relation::Assigned, LinkKind::Issue) => self.set_issue(selector, input, title).await,
@@ -52,7 +54,7 @@ impl Manager {
                 "a CI run cannot be assigned, because assigned items drive completion \
                  and cleanup; link it as opened or related"
             ),
-            (relation, LinkKind::Ci) => self.record_run(selector, relation, input).await,
+            (relation, LinkKind::Ci) => self.record_run(selector, relation, input, scoped).await,
             (relation, kind) => {
                 self.record_item(selector, relation, kind, input, title)
                     .await
@@ -85,19 +87,28 @@ impl Manager {
     }
 
     /// Record an opened or related run named by number or URL, once the
-    /// forge shows it, with its workflow as its title.
-    async fn record_run(&self, selector: &str, relation: Relation, input: &str) -> Result<()> {
-        let (workspace, forge, account) = self.run_forge(selector).await?;
-        let (_, url) = forge.run(input)?;
-        let run = forge
-            .view_run(&account, &url)
-            .await
+    /// forge shows it, with its workflow as its title; workspace processes
+    /// link only runs of their own repository.
+    async fn record_run(
+        &self,
+        selector: &str,
+        relation: Relation,
+        input: &str,
+        scoped: bool,
+    ) -> Result<()> {
+        let context = ItemContext::Workspace(selector.into());
+        let place = (self.run_input_place(Some(&context), input, scoped)).await?;
+        let (_, url) = place.forge.run(input)?;
+        let run = (place.forge.view_run(&place.account, &url).await)
             .with_context(|| format!("could not read CI run {url}"))?;
         let item = LinkedItem {
             kind: LinkKind::Ci,
             url,
             title: run.workflow,
         };
+        let workspace = place
+            .workspace
+            .context("a CI run is linked to a workspace")?;
         self.record_items(&workspace.id, vec![(relation, item)])
             .await
     }
@@ -238,8 +249,8 @@ impl Manager {
         Ok(())
     }
 
-    /// The canonical URL of an issue, PR or CI run of the workspace's
-    /// repository.
+    /// The canonical URL of an issue or PR of the workspace's repository, or
+    /// of a CI run of any.
     async fn item_url(
         &self,
         workspace: &crate::model::Workspace,
@@ -249,7 +260,13 @@ impl Manager {
         Ok(match kind {
             LinkKind::Issue => self.issue_forge(workspace, input).await?.2,
             LinkKind::Pr => self.pr_forge(workspace, input).await?.2,
-            LinkKind::Ci => self.workspace_forge(workspace).await?.run(input)?.1,
+            LinkKind::Ci => {
+                let forge = match self.named_run_forge(input).await? {
+                    Some(forge) => forge,
+                    None => self.workspace_forge(workspace).await?,
+                };
+                forge.run(input)?.1
+            }
         })
     }
 }
