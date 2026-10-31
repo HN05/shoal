@@ -162,6 +162,70 @@ pub(crate) fn moved_prompt(handoff: Option<&str>) -> String {
     prompt
 }
 
+/// What a restore command of agent `name` in `workspace` is built from:
+/// the message it continues with and the arguments that keep its model and
+/// effort.
+struct RestoreCommand<'a> {
+    paths: &'a Paths,
+    settings: &'a crate::config::Effective,
+    name: &'a str,
+    workspace: &'a Workspace,
+    prompt: &'a std::ffi::OsStr,
+    model_args: Vec<OsString>,
+}
+
+impl RestoreCommand<'_> {
+    /// The agent's configured `argv` restore command, with its model, effort
+    /// and proxy arguments, and whether it carries the prompt.
+    async fn configured(self, argv: &[String]) -> Result<(Vec<OsString>, bool)> {
+        let mut command = configured::expand_with_fields(
+            self.paths,
+            &self.settings.resume_commands,
+            self.name,
+            self.workspace,
+            vec![],
+            &[("{prompt}", self.prompt)],
+        )
+        .await?;
+        crate::cli::agents::insert_options(&mut command, self.model_args);
+        // Without Shoal's hooks it still goes through the agent's proxy.
+        crate::cli::agents::with_proxy_args(self.settings, self.name, &mut command);
+        Ok((command, argv.iter().any(|arg| arg.contains("{prompt}"))))
+    }
+
+    /// The agent's launcher with `resume_args`, its model, effort and
+    /// workspace arguments, and the prompt.
+    async fn resumed(self, mut args: Vec<OsString>) -> Result<Vec<OsString>> {
+        args.extend(self.model_args);
+        args.extend(
+            crate::cli::agents::workspace_args(
+                self.paths,
+                self.settings,
+                self.name,
+                self.workspace,
+            )
+            .await?,
+        );
+        let takes_field = self
+            .settings
+            .launchers
+            .get(self.name)
+            .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
+        if !takes_field {
+            args.push(self.prompt.to_owned());
+        }
+        configured::expand_with_fields(
+            self.paths,
+            &self.settings.launchers,
+            self.name,
+            self.workspace,
+            args,
+            &[("{prompt}", self.prompt)],
+        )
+        .await
+    }
+}
+
 /// The agent a restore continues: its name, the model and effort it ran
 /// with, and the session it reported, if any.
 pub(crate) struct Restored<'a> {
@@ -231,48 +295,20 @@ impl Recovery {
             .resume_args(restored.session);
         let automatic = configured.is_some() || resume_args.is_some();
         let message = resumed_prompt(stop, handoff);
-        let prompt = std::ffi::OsStr::new(&message);
-        // A restore runs with what the agent ran with, or not at all, so the
-        // record stays for once its templates take the values again.
-        let model_args = crate::cli::agents::model_args(&settings, &name, restored.model)?;
-        let (command, handoff_delivered) = if let Some(argv) = configured {
-            let mut command = configured::expand_with_fields(
-                paths,
-                &settings.resume_commands,
-                &name,
-                workspace,
-                vec![],
-                &[("{prompt}", prompt)],
-            )
-            .await?;
-            crate::cli::agents::insert_options(&mut command, model_args);
-            // Without Shoal's hooks it still goes through the agent's proxy.
-            crate::cli::agents::with_proxy_args(&settings, &name, &mut command);
-            (command, argv.iter().any(|arg| arg.contains("{prompt}")))
-        } else if let Some(mut args) = resume_args {
-            args.extend(model_args);
-            args.extend(
-                crate::cli::agents::workspace_args(paths, &settings, &name, workspace).await?,
-            );
-            let takes_field = settings
-                .launchers
-                .get(&name)
-                .is_some_and(|argv| argv.iter().any(|arg| arg.contains("{prompt}")));
-            if !takes_field {
-                args.push(prompt.to_owned());
-            }
-            let command = configured::expand_with_fields(
-                paths,
-                &settings.launchers,
-                &name,
-                workspace,
-                args,
-                &[("{prompt}", prompt)],
-            )
-            .await?;
-            (command, true)
-        } else {
-            (vec![], false)
+        let restore = RestoreCommand {
+            paths,
+            settings: &settings,
+            name: &name,
+            workspace,
+            prompt: std::ffi::OsStr::new(&message),
+            // A restore runs with what the agent ran with, or not at all, so
+            // the record stays for once its templates take the values again.
+            model_args: crate::cli::agents::model_args(&settings, &name, restored.model)?,
+        };
+        let (command, handoff_delivered) = match (configured, resume_args) {
+            (Some(argv), _) => restore.configured(argv).await?,
+            (None, Some(args)) => (restore.resumed(args).await?, true),
+            (None, None) => (vec![], false),
         };
         let proxy = crate::cli::agents::launch_proxy(&settings, &name)?.cloned();
         Ok(Self {

@@ -107,7 +107,7 @@ pub enum Worker<'a> {
     /// of earlier releases start it, so it only gains optional arguments.
     TakeOver {
         workspace: &'a str,
-        agent: &'a str,
+        agent: &'a TrackedAgent,
         connection: i32,
         record: Option<&'a Path>,
         log: Option<&'a Path>,
@@ -300,10 +300,10 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 TAKE_OVER.into(),
                 workspace.into(),
                 "--agent".into(),
-                agent.into(),
-                "--connection".into(),
-                connection.to_string().into(),
+                agent.name.as_str().into(),
             ]);
+            args.extend(model_args(&agent.model));
+            args.extend(["--connection".into(), connection.to_string().into()]);
             if let Some(record) = record {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);
             }

@@ -77,7 +77,7 @@ pub(super) fn ensure_restorable(recovery: &super::recovery::Recovery) -> Result<
 /// restores.
 pub(super) struct Handover<'a> {
     pub workspace: &'a str,
-    pub agent: &'a str,
+    pub agent: &'a super::TrackedAgent,
     /// The recovery record the agent resumes from.
     pub record: Option<&'a Path>,
 }

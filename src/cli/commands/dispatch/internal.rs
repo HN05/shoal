@@ -95,13 +95,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::TakeOver {
             workspace,
             agent,
+            model,
             connection,
             record,
             log,
         } => {
             let taken = crate::execution::TakenOver {
                 workspace,
-                agent,
+                agent: TrackedAgent {
+                    name: agent,
+                    model: model.into(),
+                },
                 connection,
                 record,
                 log,
