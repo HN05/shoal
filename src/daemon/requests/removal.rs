@@ -10,6 +10,7 @@ use super::super::{
     workspace::Manager,
 };
 use crate::{
+    process::identity,
     protocol::{Body, RemovalMethod},
     removal::InspectionPolicy,
 };
@@ -34,6 +35,18 @@ pub(super) async fn handle(
                 .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by)
                 .await?;
             Body::Ok
+        }
+        RemovalMethod::StopProcesses {
+            space,
+            selection,
+            requester,
+        } => {
+            let requester = requester.and_then(|pid| identity::capture(pid).ok().flatten());
+            Body::StoppedProcesses(
+                manager
+                    .stop_space_processes(&space, selection, requester)
+                    .await?,
+            )
         }
         RemovalMethod::CheckRemoval {
             workspace,
@@ -117,6 +130,9 @@ impl Scoped for RemovalMethod {
                     .await
                     .map(Some)
             }
+            // Its own processes too: a scoped caller's shells and their
+            // commands descend from its execution, which keeps them.
+            RemovalMethod::StopProcesses { space, .. } => Ok(Some(space)),
             _ => Err(denied()),
         }
     }

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     daemon::{store, workspace::Manager},
-    model::Workspace,
+    model::{Chat, Workspace},
     process::identity::{
         self, Identity,
         spaces::{self, Space, Untracked},
@@ -33,11 +33,48 @@ impl Selection {
     }
 }
 
+/// What a stop of a space's processes stopped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Stopped {
+    /// The name of the workspace or chat.
+    pub space: String,
+    /// How many processes it stopped.
+    pub processes: usize,
+}
+
 /// Stopping a parent detaches the processes it started, which may start
 /// others meanwhile; each round stops what the one before it left.
 const ROUNDS: usize = 3;
 
 impl Manager {
+    /// Stop the untracked processes that `selection` takes of the workspace
+    /// or chat `selector` names, as [`Self::stop_untracked`] does. The
+    /// worktree ties processes to a workspace once it is verified to be its.
+    pub(crate) async fn stop_space_processes(
+        &self,
+        selector: &str,
+        selection: Selection,
+        requester: Option<Identity>,
+    ) -> Result<Stopped> {
+        let (name, space) = match self.workspace(selector).await {
+            Ok(workspace) => {
+                let verified =
+                    workspace.path.is_dir() && self.verify_worktree(&workspace).await.is_ok();
+                let space = self.workspace_space(&workspace, verified).await?;
+                (workspace.name, space)
+            }
+            Err(error) => {
+                let chat = self.running_chat(selector).await?.ok_or(error)?;
+                (chat.name.clone(), chat_space(&chat))
+            }
+        };
+        let processes = self.stop_untracked(space, selection, requester).await?;
+        Ok(Stopped {
+            space: name,
+            processes,
+        })
+    }
+
     /// What ties processes to `workspace`, through its worktree too when
     /// `worktree` is set, which the caller verified is the workspace's.
     pub(crate) async fn workspace_space(
@@ -123,6 +160,15 @@ impl Manager {
             .filter(|process| selection.takes(process))
             .map(|process| process.identity)
             .collect())
+    }
+}
+
+/// What ties processes to `chat`: its identity and temporary directory.
+fn chat_space(chat: &Chat) -> Space {
+    Space {
+        id: chat.id.clone(),
+        worktree: None,
+        tmp_dir: chat.tmp_dir.clone(),
     }
 }
 

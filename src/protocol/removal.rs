@@ -13,6 +13,15 @@ pub enum RemovalMethod {
         #[serde(default)]
         acknowledge_unproven: bool,
     },
+    /// Stop the untracked processes of the workspace or chat `space` that
+    /// `selection` takes, other than process `requester` and the processes
+    /// that started it.
+    StopProcesses {
+        space: String,
+        selection: crate::daemon::space_processes::Selection,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        requester: Option<u32>,
+    },
     CheckRemoval {
         workspace: String,
         #[serde(default)]

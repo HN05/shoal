@@ -74,7 +74,7 @@ pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
 
-pub const VERSION: u32 = 178;
+pub const VERSION: u32 = 179;
 /// The first protocol whose wrappers read [`Control::RestoreWaits`].
 pub const RESTORE_WAITS: u32 = 174;
 pub const MAX_FRAME: usize = 64 * 1024;
@@ -583,6 +583,7 @@ response_bodies! {
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
+    StoppedProcesses(crate::daemon::space_processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
