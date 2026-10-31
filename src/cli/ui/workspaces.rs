@@ -352,13 +352,23 @@ pub async fn select_space_filter(ctx: &Context, scope: WorkspaceScope) -> Result
         Resolution::Workspace(id) => Ok(Some(id)),
         Resolution::Picker(workspaces) => {
             let chats = client::chats(&ctx.paths).await?;
-            let mut entries = space_entries(ctx, workspaces, &chats).await;
-            entries.push((ALL_ID.to_owned(), ALL_SPACES.to_owned()));
-            require_argument(ctx, "space", SPACE)?;
-            let id = pick(ctx, "Space> ", entries)?;
-            Ok((id != ALL_ID).then_some(id))
+            pick_space_or_all(ctx, workspaces, &chats).await
         }
     }
+}
+
+/// Pick a space as [`pick_space`] offers them, or every space after them:
+/// `None` for that.
+async fn pick_space_or_all(
+    ctx: &Context,
+    workspaces: Vec<Workspace>,
+    chats: &[Chat],
+) -> Result<Option<String>> {
+    let mut entries = space_entries(ctx, workspaces, chats).await;
+    entries.push((ALL_ID.to_owned(), ALL_SPACES.to_owned()));
+    require_argument(ctx, "space", SPACE)?;
+    let id = pick(ctx, "Space> ", entries)?;
+    Ok((id != ALL_ID).then_some(id))
 }
 
 /// The command's argument that names the space it acts on.
