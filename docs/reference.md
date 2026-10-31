@@ -2226,7 +2226,7 @@ workspace's stopped commands go to its restored agent, or without one stay
 for `shoal resume`.
 
 Every repository is checked before the first moves: none may have a running
-chat, queued agent launches, a workspace in another lifecycle
+chat, queued agent launches, a queued or running review, a workspace in another lifecycle
 operation, a checkout leased as a repository resource, another repository's
 checkout or workspace or Shoal's state inside its directory, or a process
 other than those commands and agents whose working directory is inside it, so

@@ -59,6 +59,9 @@ impl Manager {
         let settings = self.workspace_settings(&workspace).await?;
         let agent = reviewing_agent(&settings, agent)?;
         let (id, now) = (workspace.id.clone(), now());
+        // A repository move, which refuses while a review is queued, holds
+        // the registry gate, so no review is queued while one runs.
+        let _registry = self.gates.lock_registry().await;
         let queued = self
             .store
             .run(move |db| store::queue(db, &id, &target, &agent, &model, now))

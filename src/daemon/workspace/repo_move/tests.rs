@@ -647,6 +647,39 @@ async fn a_plan_lists_running_executions_that_the_move_refuses() -> Result<()> {
 }
 
 #[tokio::test]
+async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
+    let (_temp, manager, repo, workspace, _root) = cloned().await?;
+    // Nothing runs it here, so it stays queued.
+    manager
+        .store
+        .run({
+            let id = workspace.id.clone();
+            move |db| {
+                crate::daemon::reviews::store::queue(
+                    db,
+                    &id,
+                    &crate::reviews::ReviewTarget::Workspace,
+                    "claude",
+                    &Default::default(),
+                    1,
+                )
+            }
+        })
+        .await?;
+    let error = manager
+        .move_repositories(Layout::Regular)
+        .await
+        .err()
+        .context("moved with a review queued")?;
+    assert!(
+        format!("{error:#}").contains("a review of the repository is queued or running"),
+        "{error:#}"
+    );
+    assert!(repo.workspaces_dir.as_ref().is_some_and(|dir| dir.exists()));
+    Ok(())
+}
+
+#[tokio::test]
 async fn deleting_files_behind_a_move_deletes_them_at_the_new_place() -> Result<()> {
     let (temp, manager, repo, workspace, root) = cloned().await?;
     let file = temp.path().join("notes.md");
