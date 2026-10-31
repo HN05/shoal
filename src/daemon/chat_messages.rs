@@ -1,7 +1,8 @@
-//! Messages for a chat about the workspaces it coordinates. Like agent
-//! messages, delivery deletes them; a chat that ends before receiving them
-//! gives them to the user as the notifications they would have been.
-use anyhow::{Result, ensure};
+//! Messages for a chat about the workspaces it coordinates, and from the
+//! user. Like agent messages, delivery deletes them; a chat that ends before
+//! receiving them gives them to the user as the notifications they would
+//! have been.
+use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::daemon::{
@@ -12,26 +13,38 @@ use crate::daemon::{
 };
 
 impl Manager {
-    /// Queue `message` about the workspace named `workspace` for the chat
-    /// coordinating it. `kind` is the notification the user receives instead
-    /// if the chat ends first; without one the message is dropped then. An
-    /// identical unread message is not repeated.
+    /// Queue a message from the user for the running chat `chat` names by ID
+    /// or name. It is dropped if the chat ends first.
+    pub async fn send_chat_message(&self, chat: &str, message: String) -> Result<()> {
+        crate::validate::agent_message(&message)?;
+        let chat = self
+            .running_chat(chat)
+            .await?
+            .with_context(|| format!("no running chat {chat}"))?;
+        self.queue_chat_message(&chat.id, None, None, None, message)
+            .await
+    }
+
+    /// Queue `message` for the chat, about the workspace named `workspace`
+    /// it coordinates, if any. `kind` is the notification the user receives
+    /// instead if the chat ends first; without one the message is dropped
+    /// then. An identical unread message is not repeated.
     pub(crate) async fn queue_chat_message(
         &self,
         chat: &str,
-        workspace: &str,
+        workspace: Option<&str>,
         workspace_id: Option<&str>,
         kind: Option<NotificationKind>,
         message: String,
     ) -> Result<()> {
-        let (chat, workspace) = (chat.to_owned(), workspace.to_owned());
+        let (chat, workspace) = (chat.to_owned(), workspace.map(str::to_owned));
         let workspace_id = workspace_id.map(str::to_owned);
         let queued = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let about = About {
-                    name: Some(workspace),
+                    name: workspace,
                     id: workspace_id,
                     subject: None,
                 };
@@ -46,7 +59,8 @@ impl Manager {
         Ok(())
     }
 
-    /// The chat's unread messages, oldest first, each naming its workspace.
+    /// The chat's unread messages, oldest first, each naming its workspace
+    /// unless it comes from the user.
     pub async fn chat_messages(&self, chat: &str) -> Result<Vec<AgentMessage>> {
         let chat = chat.to_owned();
         self.store
@@ -57,14 +71,15 @@ impl Manager {
                             WHERE chat_id=?1 ORDER BY id",
                     )?
                     .query_map([chat], |row| {
+                        let (workspace, message): (String, String) = (row.get(2)?, row.get(3)?);
                         Ok(AgentMessage {
                             id: row.get(0)?,
                             created_at: row.get(1)?,
-                            message: format!(
-                                "{}: {}",
-                                row.get::<_, String>(2)?,
-                                row.get::<_, String>(3)?
-                            ),
+                            message: if workspace.is_empty() {
+                                message
+                            } else {
+                                format!("{workspace}: {message}")
+                            },
                             attachments: Vec::new(),
                         })
                     })?
@@ -123,8 +138,8 @@ impl Manager {
     }
 }
 
-/// Queue a message about the named workspace in the caller's transaction,
-/// returning whether it was new.
+/// Queue a message about the named workspace, or from the user without one,
+/// in the caller's transaction, returning whether it was new.
 fn insert(
     tx: &Transaction<'_>,
     chat: &str,

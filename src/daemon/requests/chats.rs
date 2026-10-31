@@ -37,6 +37,10 @@ pub(super) async fn handle(
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
         ChatMethod::RenameChat { chat, name } => Body::Chat(manager.rename_chat(chat, name).await?),
+        ChatMethod::SendChatMessage { chat, message } => {
+            manager.send_chat_message(&chat, message).await?;
+            Body::Ok
+        }
         ChatMethod::CheckChatName { name } => {
             manager.check_chat_name(name).await?;
             Body::Ok
@@ -57,6 +61,7 @@ impl Scoped for ChatMethod {
             ChatMethod::StartChat { .. }
             | ChatMethod::MoveChat { .. }
             | ChatMethod::RenameChat { .. }
+            | ChatMethod::SendChatMessage { .. }
             | ChatMethod::CheckChatName { .. }
             | ChatMethod::FreeChatName { .. }
             | ChatMethod::ChatUpdates { .. }

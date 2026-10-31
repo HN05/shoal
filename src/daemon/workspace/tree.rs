@@ -78,7 +78,7 @@ impl Manager {
                     .await
             }
             Ok(Some(Coordinator::Chat(chat))) => {
-                self.queue_chat_message(&chat, name, workspace_id, kind, message)
+                self.queue_chat_message(&chat, Some(name), workspace_id, kind, message)
                     .await
             }
             Ok(None) => return false,

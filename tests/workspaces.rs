@@ -25092,7 +25092,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
         serde_json::from_str(&fs::read_to_string(home.join("chat-hook")).unwrap()).unwrap();
     assert_eq!(
         hook["hookSpecificOutput"]["additionalContext"],
-        "New Shoal messages about the workspaces this chat coordinates:\n- chat-worker: Tests pass"
+        "New Shoal messages for this chat:\n- chat-worker: Tests pass"
     );
     // A delivered message does not come back, and never reached the user.
     assert_eq!(

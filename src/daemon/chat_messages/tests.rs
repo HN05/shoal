@@ -174,6 +174,36 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
 }
 
 #[tokio::test]
+async fn the_user_messages_a_chat_without_naming_a_workspace() {
+    let (temp, manager) = manager().await;
+    let (chat, _) = chat_and_worker(&temp, &manager).await;
+    let manager = std::sync::Arc::new(manager);
+    let waiting = tokio::spawn({
+        let (manager, chat) = (manager.clone(), chat.id.clone());
+        async move { manager.wait_chat_messages(&chat).await }
+    });
+    manager
+        .send_chat_message(&chat.name, "Pick a new name".into())
+        .await
+        .unwrap();
+    let woken = waiting.await.unwrap().unwrap();
+    assert_eq!(woken.messages[0].message, "Pick a new name");
+
+    // Sent again before the chat reads it, by ID this time, it collapses.
+    manager
+        .send_chat_message(&chat.id, "Pick a new name".into())
+        .await
+        .unwrap();
+    assert_eq!(received(&manager, &chat).await, ["Pick a new name"]);
+
+    let error = manager
+        .send_chat_message("missing", "Pick a new name".into())
+        .await
+        .unwrap_err();
+    assert_eq!(error.to_string(), "no running chat missing");
+}
+
+#[tokio::test]
 async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;

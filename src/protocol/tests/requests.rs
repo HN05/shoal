@@ -101,6 +101,7 @@ const REQUESTS: &[&str] = &[
     r#"{"move_chat":{"chat":"c1","pid":5}}"#,
     r#""list_chats""#,
     r#"{"rename_chat":{"chat":"app-chat","name":"topic"}}"#,
+    r#"{"send_chat_message":{"chat":"app-chat","message":"Rebase onto main"}}"#,
     r#"{"check_chat_name":{"name":"app-chat"}}"#,
     r#"{"free_chat_name":{"name":"app-chat"}}"#,
     r#"{"chat_updates":{"chat":"c1"}}"#,

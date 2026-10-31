@@ -32,6 +32,12 @@ pub enum ChatMethod {
         chat: String,
         name: String,
     },
+    /// A message from the user to the agent of the running chat `chat`, by
+    /// ID or name.
+    SendChatMessage {
+        chat: String,
+        message: String,
+    },
     /// Refuse a name a new chat could not take now.
     CheckChatName {
         name: String,

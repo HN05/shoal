@@ -479,7 +479,7 @@ impl Inbox {
     fn hook_context(&self, updates: &Updates) -> String {
         let heading = match self {
             Self::Workspace(_) => "New Shoal messages for this workspace:",
-            Self::Chat(_) => "New Shoal messages about the workspaces this chat coordinates:",
+            Self::Chat(_) => "New Shoal messages for this chat:",
         };
         hook_context(heading, updates)
     }
