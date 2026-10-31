@@ -181,7 +181,7 @@ fn dynamic_completion_covers_nested_commands_flags_and_paths_without_daemon() {
         (vec!["shoal", "open"], "opencode"),
         (vec!["shoal", "add", "--agent", "gr"], "grok"),
         (vec!["shoal", "add", "--agent", "dro"], "droid"),
-        (vec!["shoal", "review", "--agent", "cl"], "claude"),
+        (vec!["shoal", "review", "run", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "cl"], "claude"),
         (vec!["shoal", "add", "--agent", "happy-cl"], "happy-claude"),
         (vec!["shoal", "happy", "co"], "codex"),

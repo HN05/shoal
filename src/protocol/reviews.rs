@@ -27,7 +27,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<String>,
+        repository: Option<crate::repository::Selector>,
     },
     /// Review `id`, else the workspace's newest.
     ShowReview {
@@ -44,14 +44,17 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<i64>,
     },
+    /// `workspace` is the finding's, which scope checks fill in.
     ReplyToFinding {
-        workspace: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         finding: FindingId,
         body: String,
     },
     /// Resolve a finding with `outcome`, or reopen it without one.
     ResolveFinding {
-        workspace: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        workspace: Option<String>,
         finding: FindingId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         outcome: Option<Outcome>,

@@ -90,6 +90,9 @@ pub struct Workspace {
     pub holds: Vec<WorkspaceHold>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    /// Its newest local review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_review: Option<crate::reviews::ReviewStatus>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStatus>,
     #[serde(default)]
@@ -411,6 +414,7 @@ impl Workspace {
             git_dir_id: None,
             holds: Vec::new(),
             review: Vec::new(),
+            latest_review: None,
             agent_state: None,
             base_workspace: None,
             stacked_workspaces: Vec::new(),

@@ -22,7 +22,7 @@ pub enum ItemsCommand {
         #[command(flatten)]
         items: RelationArgs,
     },
-    /// Wait for activity on linked items, one kind, or an explicit item.
+    /// Wait for activity on linked items, one kind, or an explicit item; `watch review` waits for a local review to end.
     Watch {
         #[command(flatten)]
         items: ItemArgs,
@@ -34,9 +34,10 @@ pub enum ItemsCommand {
         #[arg(long, hide = true, requires = "workspace")]
         resume: bool,
     },
-    /// Show linked items, one kind, or a selected issue, PR or CI run: `view ci 2765`.
+    /// Show linked items, one kind, or a selected issue, PR, CI run or review: `view ci 2765`.
     ///
-    /// Issues and PRs show their status and discussion, and CI runs their jobs.
+    /// Issues and PRs show their status and discussion, CI runs their jobs,
+    /// and `view review` the workspace's latest local review with its findings.
     View(ViewArgs),
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
@@ -111,8 +112,8 @@ impl RelationArgs {
 
 #[derive(Debug, Args)]
 pub struct ItemArgs {
-    /// pr/issue/ci to select a kind, an issue or PR number, or an issue, PR or
-    /// CI run URL.
+    /// pr/issue/ci/review to select a kind, an issue or PR number, or an
+    /// issue, PR or CI run URL.
     #[arg(value_parser = item_reference)]
     pub kind_or_url: Option<String>,
     /// Number or URL when a kind is supplied.
@@ -127,5 +128,22 @@ impl ItemArgs {
     /// Whether the selection names CI runs, which no number alone does.
     pub fn selects_ci(&self) -> bool {
         self.kind_or_url.as_deref() == Some("ci")
+    }
+
+    /// Whether the selection names a local review, by its ID when it has
+    /// one: `view review 17`.
+    pub fn selects_review(&self) -> bool {
+        self.kind_or_url.as_deref() == Some("review")
+    }
+
+    /// The review ID a review selection names.
+    pub fn review_id(&self) -> anyhow::Result<Option<i64>> {
+        self.item
+            .as_deref()
+            .map(|id| {
+                id.parse()
+                    .map_err(|_| anyhow::anyhow!("{id:?} is not a review ID; reviews are numbers"))
+            })
+            .transpose()
     }
 }

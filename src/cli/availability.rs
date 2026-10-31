@@ -64,16 +64,17 @@ impl Need {
             ["link" | "unlink"] | ["issue", "open"] => Self::Links,
             [
                 "run" | "edit" | "claude" | "codex" | "t3" | "happy" | "land" | "split" | "done"
-                | "review" | "watch" | "ready" | "acquire" | "release",
+                | "watch" | "ready" | "acquire" | "release",
                 ..,
             ]
+            | ["review", "run"]
             | ["pr", "open"]
             | ["questions", "ask"]
             | ["demo", "start"] => Self::Ready,
             [
                 "status" | "diff" | "conflicts" | "rm" | "leases" | "messages" | "files"
                 | "questions" | "approvals" | "view" | "resume" | "catalog" | "history" | "config"
-                | "pr" | "issue" | "alerts" | "demo" | "queue",
+                | "pr" | "issue" | "alerts" | "demo" | "queue" | "review",
                 ..,
             ] => Self::Any,
             [group, ..] if *group == internal::GROUP => Self::Any,

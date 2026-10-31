@@ -45,6 +45,19 @@ pub(super) fn status_cell(status: ListStatus) -> Cell {
     (status.label().into(), Some(status.style()))
 }
 
+/// The workspace's status followed by its latest review's, such as
+/// `waiting, review 17 finished: 1 blocker`.
+fn workspace_status_cell(workspace: &Workspace, status: ListStatus) -> Cell {
+    let (label, style) = status_cell(status);
+    match &workspace.latest_review {
+        Some(review) => (
+            format!("{label}, review {} {}", review.id, review.status),
+            style,
+        ),
+        None => (label, style),
+    }
+}
+
 fn usage_cell(workspace: &Workspace) -> Cell {
     (
         workspace
@@ -95,7 +108,7 @@ pub fn workspace_rows(
         .iter()
         .map(|w| {
             let status = ListStatus::of_workspace(w, stopped.contains(&w.id));
-            (status, status_cell(status))
+            (status, workspace_status_cell(w, status))
         })
         .collect();
     rows_with_status(workspaces, repositories, statuses, palette, width, true)
@@ -194,7 +207,7 @@ fn tree_workspace_row(
         [
             (name, Some(Style::Heading)),
             (String::new(), None),
-            status_cell(status),
+            workspace_status_cell(workspace, status),
             usage_cell(workspace),
             (
                 workspace.links.issue_title.clone().unwrap_or_default(),
