@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Requests about CI checks and workflow runs of a workspace's repository.
+/// Requests about CI checks and workflow runs of a workspace's repository,
+/// or for those that act on them, of a registered checkout's.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CiMethod {
@@ -11,7 +12,8 @@ pub enum CiMethod {
     },
     /// Rerun failed or cancel running checks on a PR's head; none named means all.
     CiAction {
-        workspace: String,
+        #[serde(flatten)]
+        context: super::ItemContext,
         item: Option<String>,
         action: crate::forge::ci::CiAction,
         checks: Vec<String>,
@@ -19,7 +21,8 @@ pub enum CiMethod {
     /// Rerun or cancel one CI workflow run, named by its web URL or the
     /// number in it; `failed` reruns only its failed jobs.
     CiRunAction {
-        workspace: String,
+        #[serde(flatten)]
+        context: super::ItemContext,
         run: String,
         action: crate::forge::ci::CiAction,
         failed: bool,
@@ -46,7 +49,8 @@ pub enum CiMethod {
     /// names, by default the linked one, that waits for approval, as the
     /// user.
     ApproveCiRuns {
-        workspace: String,
+        #[serde(flatten)]
+        context: super::ItemContext,
         run: Option<String>,
         pr: Option<String>,
     },

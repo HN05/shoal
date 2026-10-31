@@ -15,7 +15,7 @@ use crate::{
         run::{StartedRun, validate_run},
         run_action::{RunActed, validate_run_reference},
     },
-    protocol::CiMethod,
+    protocol::{CiMethod, ItemContext},
 };
 
 pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
@@ -55,8 +55,17 @@ pub(super) async fn act(
     let workspace =
         ui::select_workspace(ctx, subject.workspace, ui::Fallback::CurrentDirectory).await?;
     match subject.run {
-        Some(run) => act_on_run(ctx, workspace, run, action, failed).await,
-        None => act_on_checks(ctx, workspace, subject.pr, action, target.checks).await,
+        Some(run) => act_on_run(ctx, ItemContext::Workspace(workspace), run, action, failed).await,
+        None => {
+            act_on_checks(
+                ctx,
+                ItemContext::Workspace(workspace),
+                subject.pr,
+                action,
+                target.checks,
+            )
+            .await
+        }
     }
 }
 
@@ -71,7 +80,7 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
     let approved: RunsApproved = client::request(
         &ctx.paths,
         CiMethod::ApproveCiRuns {
-            workspace,
+            context: ItemContext::Workspace(workspace),
             run: subject.run,
             pr: subject.pr,
         },
@@ -93,7 +102,7 @@ fn approved_text(approved: &RunsApproved) -> String {
 
 async fn act_on_run(
     ctx: &Context,
-    workspace: String,
+    context: ItemContext,
     run: String,
     action: CiAction,
     failed: bool,
@@ -101,7 +110,7 @@ async fn act_on_run(
     let acted: RunActed = client::request(
         &ctx.paths,
         CiMethod::CiRunAction {
-            workspace,
+            context,
             run,
             action,
             failed,
@@ -116,7 +125,7 @@ async fn act_on_run(
 /// linked one.
 async fn act_on_checks(
     ctx: &Context,
-    workspace: String,
+    context: ItemContext,
     item: Option<String>,
     action: CiAction,
     checks: Vec<String>,
@@ -124,7 +133,7 @@ async fn act_on_checks(
     let acted: CiActed = client::request(
         &ctx.paths,
         CiMethod::CiAction {
-            workspace,
+            context,
             item,
             action,
             checks,

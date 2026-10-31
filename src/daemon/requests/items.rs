@@ -206,7 +206,7 @@ impl Scoped for ItemMethod {
 
 /// The workspace `context` names: a workspace process acts on items from its
 /// workspace, never from a registered checkout.
-fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
+pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
     match context {
         ItemContext::Workspace(workspace) => Ok(workspace),
         ItemContext::Checkout(_) => bail!(

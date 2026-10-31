@@ -1,22 +1,23 @@
 //! Rerunning failed and cancelling running CI jobs on a PR's current head,
-//! as the workspace's agent account.
+//! as the agent account of the workspace or registered checkout.
 use anyhow::{Context, Result};
 
-use super::actions::linked;
+use super::actions::named_or_linked;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
         ci::{CiActed, CiAction, checks::validate_check_name},
         items::link::ItemKind,
     },
+    protocol::ItemContext,
 };
 
 impl Manager {
     /// Rerun the failed, or cancel the running, `checks` of a PR in the
-    /// workspace's repository, or every such CI job when none is named.
+    /// repository of `context`, or every such CI job when none is named.
     pub async fn ci_action(
         &self,
-        selector: &str,
+        context: &ItemContext,
         item: Option<String>,
         action: CiAction,
         checks: Vec<String>,
@@ -24,21 +25,18 @@ impl Manager {
         for check in &checks {
             validate_check_name(check)?;
         }
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let forge = self.workspace_forge(&workspace).await?;
-        let input = match item {
-            Some(input) => input,
-            None => linked(&workspace, ItemKind::Pr)?,
-        };
+        let place = self.place(context).await?;
+        let (forge, account) = self.place_forge_account(&place).await?;
+        let input = named_or_linked(item, place.workspace(), ItemKind::Pr)?;
         let (number, url) = forge.pull(&input)?;
-        let account = self.agent_account(&workspace).await?;
         let plan = forge
             .plan_ci(&account, number, action, &checks)
             .await
             .with_context(|| format!("could not {action} checks of {url}"))?;
         let (sent, result) = forge.post_ci(&account, &plan.endpoints).await;
-        if sent > 0 {
+        if sent > 0
+            && let Some(workspace) = place.workspace()
+        {
             self.record_ci_action(&workspace.id, &url, action).await?;
         }
         result.with_context(|| {

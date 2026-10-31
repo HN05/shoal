@@ -20,6 +20,7 @@ use crate::{
         items::link::LinkKind,
     },
     model::{LinkedItem, Relation, Workspace},
+    protocol::ItemContext,
 };
 
 impl Manager {
@@ -67,24 +68,26 @@ impl Manager {
         }
     }
 
-    /// Rerun or cancel the run `input` names; workspace processes act only
-    /// on runs of their workspace's branch.
+    /// Rerun or cancel the run `input` names in the repository of `context`;
+    /// workspace processes act only on runs of their workspace's branch.
     pub async fn ci_run_action(
         &self,
-        selector: &str,
+        context: &ItemContext,
         input: String,
         action: CiAction,
         failed: bool,
         scoped: bool,
     ) -> Result<RunActed> {
         validate_run_reference(&input)?;
-        let (workspace, forge, account) = self.run_forge(selector).await?;
+        let place = self.place(context).await?;
+        let (forge, account) = self.place_forge_account(&place).await?;
         let run = forge
             .find_run(&account, &input, action)
             .await
             .with_context(|| format!("could not {action} CI run {input}"))?;
-        if scoped {
-            on_own_branch(&workspace, &run)?;
+        // Scope keeps workspace processes in their workspace.
+        if scoped && let Some(workspace) = place.workspace() {
+            on_own_branch(workspace, &run)?;
         }
         forge
             .act_on_run(&account, &run, action, failed)

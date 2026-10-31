@@ -11,7 +11,25 @@ use crate::{
     },
     fsutil::expand_home,
     model::{Repository, Workspace},
+    protocol::ItemContext,
 };
+
+/// Where an action on a repository's items runs: a workspace, its worktree
+/// verified, or the registered checkout of a repository without one.
+pub(in crate::daemon::links) enum Place {
+    Workspace(Box<Workspace>),
+    Checkout(Repository),
+}
+
+impl Place {
+    /// The workspace, whose linked items an action may default to.
+    pub(in crate::daemon::links) fn workspace(&self) -> Option<&Workspace> {
+        match self {
+            Self::Workspace(workspace) => Some(workspace),
+            Self::Checkout(_) => None,
+        }
+    }
+}
 
 /// The forge memory of the user's own logins.
 const USER_LOGINS: &str = "user";
@@ -128,5 +146,36 @@ impl Manager {
             self.checkout_forge(repository).await?,
             self.checkout_agent_account(repository).await?,
         ))
+    }
+
+    /// Where `context` runs, with the workspace's worktree verified.
+    pub(in crate::daemon::links) async fn place(&self, context: &ItemContext) -> Result<Place> {
+        Ok(match context {
+            ItemContext::Workspace(selector) => {
+                let workspace = self.workspace(selector).await?;
+                self.verify_worktree(&workspace).await?;
+                Place::Workspace(Box::new(workspace))
+            }
+            ItemContext::Checkout(selector) => Place::Checkout(self.repository(selector).await?),
+        })
+    }
+
+    /// The forge of the place's `origin`, with the agent account acting there.
+    pub(in crate::daemon::links) async fn place_forge_account(
+        &self,
+        place: &Place,
+    ) -> Result<(ForgeRepo, Account)> {
+        match place {
+            Place::Workspace(workspace) => self.workspace_forge_account(workspace).await,
+            Place::Checkout(repository) => self.checkout_forge_account(repository).await,
+        }
+    }
+
+    /// The forge of the place's `origin`.
+    pub(in crate::daemon::links) async fn place_forge(&self, place: &Place) -> Result<ForgeRepo> {
+        match place {
+            Place::Workspace(workspace) => self.workspace_forge(workspace).await,
+            Place::Checkout(repository) => self.checkout_forge(repository).await,
+        }
     }
 }

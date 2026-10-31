@@ -34,23 +34,23 @@ pub(super) async fn handle(
             check,
         } => Body::CheckLog(manager.check_log(&workspace, &selection, &check).await?),
         CiMethod::CiAction {
-            workspace,
+            context,
             item,
             action,
             checks,
-        } => Body::CiActed(manager.ci_action(&workspace, item, action, checks).await?),
+        } => Body::CiActed(manager.ci_action(&context, item, action, checks).await?),
         CiMethod::CiRunAction {
-            workspace,
+            context,
             run,
             action,
             failed,
         } => Body::CiRunActed(
             manager
-                .ci_run_action(&workspace, run, action, failed, caller.is_some())
+                .ci_run_action(&context, run, action, failed, caller.is_some())
                 .await?,
         ),
-        CiMethod::ApproveCiRuns { workspace, run, pr } => {
-            Body::CiRunsApproved(manager.approve_ci_runs(&workspace, run, pr).await?)
+        CiMethod::ApproveCiRuns { context, run, pr } => {
+            Body::CiRunsApproved(manager.approve_ci_runs(&context, run, pr).await?)
         }
         CiMethod::ViewCiRun { workspace, run } => {
             Body::CiRun(manager.view_ci_run(&workspace, run).await?)
@@ -79,9 +79,10 @@ impl Scoped for CiMethod {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
             }
+            CiMethod::CiAction { context, .. } | CiMethod::CiRunAction { context, .. } => {
+                Some(super::items::context_workspace(context)?)
+            }
             CiMethod::CheckLog { workspace, .. }
-            | CiMethod::CiAction { workspace, .. }
-            | CiMethod::CiRunAction { workspace, .. }
             | CiMethod::ViewCiRun { workspace, .. }
             | CiMethod::CiRunJobs { workspace, .. }
             | CiMethod::CiRunJobLog { workspace, .. }

@@ -1,9 +1,9 @@
-//! Approving the CI runs a forge holds for approval, as the user: approval
-//! lets a fork's or first-time contributor's code run, so it is the user's
-//! decision.
+//! Approving the CI runs a forge holds for approval, as the user, from a
+//! workspace or a registered checkout: approval lets a fork's or first-time
+//! contributor's code run, so it is the user's decision.
 use anyhow::{Context, Result};
 
-use super::actions::linked;
+use super::actions::named_or_linked;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
@@ -13,20 +13,21 @@ use crate::{
         items::link::{ItemKind, LinkKind},
     },
     model::Workspace,
+    protocol::ItemContext,
 };
 
 impl Manager {
-    /// Approve the run `run` names, otherwise every waiting run on the head
-    /// of the PR `pr` names or the linked PR.
+    /// Approve the run `run` names in the repository of `context`, otherwise
+    /// every waiting run on the head of the PR `pr` names or the linked PR.
     pub async fn approve_ci_runs(
         &self,
-        selector: &str,
+        context: &ItemContext,
         run: Option<String>,
         pr: Option<String>,
     ) -> Result<RunsApproved> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let forge = self.workspace_forge(&workspace).await?;
+        let place = self.place(context).await?;
+        let workspace = place.workspace();
+        let forge = self.place_forge(&place).await?;
         let account = self.user_account();
         let approved = match run {
             Some(input) => {
@@ -34,12 +35,11 @@ impl Manager {
                     .approve_run(&account, &input)
                     .await
                     .with_context(|| format!("could not approve CI run {input}"))?;
-                self.record_approval(&workspace.id, LinkKind::Ci, &url)
-                    .await?;
+                self.record_approval(workspace, LinkKind::Ci, &url).await?;
                 vec![url]
             }
             None => {
-                self.approve_pr_runs(&workspace, &forge, &account, pr)
+                self.approve_pr_runs(workspace, &forge, &account, pr)
                     .await?
             }
         };
@@ -50,15 +50,12 @@ impl Manager {
     /// fails.
     async fn approve_pr_runs(
         &self,
-        workspace: &Workspace,
+        workspace: Option<&Workspace>,
         forge: &ForgeRepo,
         account: &Account,
         pr: Option<String>,
     ) -> Result<Vec<String>> {
-        let input = match pr {
-            Some(input) => input,
-            None => linked(workspace, ItemKind::Pr)?,
-        };
+        let input = named_or_linked(pr, workspace, ItemKind::Pr)?;
         let (number, url) = forge.pull(&input)?;
         let waiting = forge
             .pr_waiting_runs(account, number)
@@ -76,8 +73,7 @@ impl Manager {
             }
         }
         if !approved.is_empty() {
-            self.record_approval(&workspace.id, LinkKind::Pr, &url)
-                .await?;
+            self.record_approval(workspace, LinkKind::Pr, &url).await?;
         }
         match failure {
             Some(error) => Err(error.context(format!(
@@ -89,10 +85,18 @@ impl Manager {
         }
     }
 
-    /// Record the approval as a change to the run or PR, as rerunning and
-    /// cancelling are.
-    async fn record_approval(&self, id: &str, kind: LinkKind, url: &str) -> Result<()> {
-        let (id, url) = (id.to_owned(), url.to_owned());
+    /// Record the approval as a change of the workspace to the run or PR, as
+    /// rerunning and cancelling are; a registered checkout records none.
+    async fn record_approval(
+        &self,
+        workspace: Option<&Workspace>,
+        kind: LinkKind,
+        url: &str,
+    ) -> Result<()> {
+        let Some(workspace) = workspace else {
+            return Ok(());
+        };
+        let (id, url) = (workspace.id.clone(), url.to_owned());
         self.store
             .run(move |db| events::record_item(db, &id, kind, &url, "approve"))
             .await

@@ -44,8 +44,7 @@ impl Manager {
                     .await
             }
             ItemContext::Checkout(selector) => {
-                let input = input
-                    .context("outside a workspace, nothing is linked; pass a number or URL")?;
+                let input = input.context(NOTHING_LINKED)?;
                 self.checkout_item_action(selector, kind, &input, action)
                     .await
             }
@@ -571,6 +570,23 @@ pub(super) async fn head_repository(
     );
     Ok(Some(pushed.path))
 }
+
+/// The item `input` names, else the workspace's linked one of `kind`;
+/// outside a workspace nothing is linked.
+pub(super) fn named_or_linked(
+    input: Option<String>,
+    workspace: Option<&Workspace>,
+    kind: ItemKind,
+) -> Result<String> {
+    match (input, workspace) {
+        (Some(input), _) => Ok(input),
+        (None, Some(workspace)) => linked(workspace, kind),
+        (None, None) => bail!(NOTHING_LINKED),
+    }
+}
+
+/// Why an action outside a workspace needs its item named.
+const NOTHING_LINKED: &str = "outside a workspace, nothing is linked; pass a number or URL";
 
 pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
     match kind {

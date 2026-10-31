@@ -3427,6 +3427,21 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     ]);
     assert_eq!(rerun["checks"], json!(["rust"]), "{rerun}");
     assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
+
+    // A registered checkout acts too, but links nothing to default to.
+    let repository = fixture.ok(&["status", "topic"])["workspace"]["repository_id"].clone();
+    let in_checkout = |item: Value| {
+        fixture.request(json!({"ci_action": {"checkout": repository, "item": item,
+            "action": "rerun", "checks": ["rust"]}}))
+    };
+    let rerun = in_checkout(json!("8"));
+    assert_eq!(rerun["data"]["checks"], json!(["rust"]), "{rerun}");
+    assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
+    let refused = in_checkout(Value::Null);
+    assert!(
+        refused.to_string().contains("nothing is linked"),
+        "{refused}"
+    );
 }
 
 #[test]
