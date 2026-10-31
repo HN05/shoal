@@ -259,7 +259,7 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
         &manager.paths,
         &workspace.id,
         "stopped",
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -347,7 +347,7 @@ async fn the_agents_ai_tool_decides_its_prompt_cache_lifetime() {
     manager
         .track_agent(
             &started.plan.id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

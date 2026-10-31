@@ -100,6 +100,7 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         7,
         manager.clone(),
         Reattach {
+            model: Default::default(),
             execution: detaching.clone(),
             wrapper: wrapper.clone(),
             child: Some(wrapper.clone()),

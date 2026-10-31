@@ -5,7 +5,10 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{cli::args::approvals::Decision, paths::Paths, sessions::HostName};
+use crate::{
+    agent::ModelChoice, cli::args::approvals::Decision, execution::TrackedAgent, paths::Paths,
+    sessions::HostName,
+};
 
 /// The hidden command that holds every worker below.
 pub const GROUP: &str = "internal";
@@ -47,7 +50,7 @@ pub enum Worker<'a> {
     Detached {
         workspace: &'a str,
         log: &'a Path,
-        agent: Option<&'a str>,
+        agent: Option<&'a TrackedAgent>,
         command: &'a [OsString],
     },
     /// A tool run through its secret launcher in `launchers`; the launcher
@@ -58,7 +61,7 @@ pub enum Worker<'a> {
     /// the place of that host closes once the workspace is done.
     Session {
         workspace: &'a str,
-        agent: &'a str,
+        agent: &'a TrackedAgent,
         records: &'a [PathBuf],
         command: &'a [OsString],
         /// The host that opened the place.
@@ -109,6 +112,16 @@ pub enum Worker<'a> {
         record: Option<&'a Path>,
         log: Option<&'a Path>,
     },
+}
+
+/// The worker options that carry `model`, as `--model` and `--effort` take
+/// them.
+fn model_args(model: &ModelChoice) -> Vec<OsString> {
+    [("--model", &model.model), ("--effort", &model.effort)]
+        .into_iter()
+        .filter_map(|(flag, value)| Some([flag.into(), value.as_deref()?.into()]))
+        .flatten()
+        .collect()
 }
 
 /// This executable for a command a terminal or session runs as typed,
@@ -194,7 +207,8 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 log.as_os_str().to_owned(),
             ]);
             if let Some(agent) = agent {
-                args.extend(["--agent".into(), agent.into()]);
+                args.extend(["--agent".into(), agent.name.as_str().into()]);
+                args.extend(model_args(&agent.model));
             }
             args.push("--".into());
             args.extend_from_slice(command);
@@ -215,7 +229,8 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
             host,
             close_in,
         } => {
-            args.extend([SESSION.into(), workspace.into(), agent.into()]);
+            args.extend([SESSION.into(), workspace.into(), agent.name.as_str().into()]);
+            args.extend(model_args(&agent.model));
             args.extend(["--host".into(), host.as_str().into()]);
             for record in records {
                 args.extend(["--record".into(), record.as_os_str().to_owned()]);

@@ -804,10 +804,14 @@ impl Manager {
         if request.awaiting_restore.is_none() {
             self.remove_restore(&request.execution).await;
         }
-        if let Some(agent) = &request.agent {
+        if let Some(name) = &request.agent {
+            let agent = crate::execution::TrackedAgent {
+                name: name.clone(),
+                model: request.model.clone(),
+            };
             self.track_agent(
                 &request.execution,
-                agent,
+                &agent,
                 &workspace.id,
                 &workspace.name,
                 request.recover,

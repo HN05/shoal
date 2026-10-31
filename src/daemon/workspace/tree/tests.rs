@@ -361,6 +361,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
     for (workspace, stopped_by) in [(&child, &parent), (&grandchild, &child)] {
         for (execution, stopped_by) in [("ours", Some(stopped_by.id.clone())), ("users", None)] {
             crate::execution::recovery::LastSession {
+                model: Default::default(),
                 execution: execution.into(),
                 agent: "claude".into(),
                 session: None,
@@ -855,7 +856,7 @@ async fn tracked_agents_without_turn_states_coordinate_and_report() {
         manager
             .track_agent(
                 &started.plan.id,
-                "droid",
+                &crate::execution::TrackedAgent::named("droid"),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -905,7 +906,7 @@ async fn an_agent_waiting_for_its_restore_keeps_its_workspaces_activity() {
     manager
         .track_agent(
             &started.plan.id,
-            "droid",
+            &crate::execution::TrackedAgent::named("droid"),
             &child.id,
             &child.name,
             true,

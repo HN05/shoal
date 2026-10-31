@@ -88,7 +88,7 @@ impl Running {
             &manager.paths,
             &workspace.id,
             "earlier",
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             None,
             None,
         )

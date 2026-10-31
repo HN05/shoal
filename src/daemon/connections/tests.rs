@@ -95,6 +95,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         .unwrap()
         .unwrap();
     let execute = ExecutionMethod::Execute {
+        model: Default::default(),
         workspace: workspace.name.clone(),
         wrapper: wrapper.clone(),
         kind: crate::daemon::workspace::ExecutionKind::Command,
@@ -116,6 +117,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         assert!(message.contains("limit of 1 long-lived"), "{message}");
     }
     let reattach = Method::Reattach(protocol::Reattachment::Reattach(protocol::Reattach {
+        model: Default::default(),
         execution: "running".into(),
         wrapper,
         child: None,

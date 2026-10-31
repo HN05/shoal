@@ -620,6 +620,7 @@ async fn reattachment_requires_the_recorded_identities_and_scope_token() {
         .unwrap();
     assert!(manager.caller(&token).await.unwrap().is_none());
     let request = Reattach {
+        model: Default::default(),
         execution: id.clone(),
         wrapper: wrapper.clone(),
         child: Some(wrapper.clone()),
@@ -707,6 +708,7 @@ async fn a_wrapper_awaiting_a_restore_reattaches_after_its_child_was_forgotten()
         .unwrap();
     let id = started.plan.id.clone();
     let request = Reattach {
+        model: Default::default(),
         execution: id.clone(),
         wrapper: wrapper.clone(),
         child: Some(wrapper.clone()),
@@ -761,6 +763,7 @@ async fn a_wrapper_between_runs_reattaches_after_its_child_was_forgotten() {
         .unwrap();
     let id = started.plan.id.clone();
     let request = Reattach {
+        model: Default::default(),
         execution: id.clone(),
         wrapper: wrapper.clone(),
         child: Some(wrapper.clone()),
@@ -818,6 +821,7 @@ async fn setup_executions_cannot_reattach() {
     manager.detach_execution(&started.plan.id).await;
     let error = manager
         .reattach_execution(&Reattach {
+            model: Default::default(),
             execution: started.plan.id.clone(),
             wrapper: wrapper.clone(),
             child: None,
@@ -859,7 +863,15 @@ async fn an_idle_agent_with_work_outside_its_group_keeps_a_working_turn() {
             .unwrap();
         // A signal stop saved the agent, which leaves a background command
         // it started running in a process group of its own.
-        save_record(&manager.paths, &workspace.id, &id, "claude", None, None).unwrap();
+        save_record(
+            &manager.paths,
+            &workspace.id,
+            &id,
+            &crate::execution::TrackedAgent::named("claude"),
+            None,
+            None,
+        )
+        .unwrap();
         let mut command = background_process(background.then_some(id.as_str()));
 
         // The agent's exit stops that command before the execution ends.

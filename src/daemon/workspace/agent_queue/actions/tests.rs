@@ -309,7 +309,7 @@ async fn only_restorable_agents_move_and_only_for_unscoped_callers() {
     manager
         .track_agent(
             &execution,
-            "custom",
+            &crate::execution::TrackedAgent::named("custom"),
             &api.id,
             &api.name,
             false,

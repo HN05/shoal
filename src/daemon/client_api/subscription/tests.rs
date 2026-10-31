@@ -339,8 +339,13 @@ mod streams {
         let daemon = TestDaemon::start().await;
         let workspace = daemon.workspace("paused").await;
         let paths = &daemon.manager.paths;
-        crate::execution::recovery::LastSession::save(paths, &workspace.id, "claude", "execution")
-            .unwrap();
+        crate::execution::recovery::LastSession::save(
+            paths,
+            &workspace.id,
+            &crate::execution::TrackedAgent::named("claude"),
+            "execution",
+        )
+        .unwrap();
         let client = daemon.client().await;
         let mut subscription = client.subscribe(vec![Topic::Workspaces]).await.unwrap();
         subscription.next().await.unwrap();

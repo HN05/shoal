@@ -28,11 +28,12 @@ async fn running_agents_are_warned_once_per_signal_until_the_repeat_interval() {
             agents.push((workspace, execution));
         }
     }
+    let claude = crate::execution::TrackedAgent::named("claude");
     let track = |index: usize| {
         let (workspace, execution) = &agents[index];
         manager.track_agent(
             &execution.plan.id,
-            "claude",
+            &claude,
             &workspace.id,
             &workspace.name,
             false,
@@ -105,7 +106,14 @@ async fn agents_with_nothing_running_are_warned_without_waking() {
             .unwrap();
         let id = execution.plan.id.clone();
         manager
-            .track_agent(&id, "claude", &workspace.id, name, false, Duration::ZERO)
+            .track_agent(
+                &id,
+                &crate::execution::TrackedAgent::named("claude"),
+                &workspace.id,
+                name,
+                false,
+                Duration::ZERO,
+            )
             .await;
         manager
             .set_agent_state(name, turn, Some(id), None)

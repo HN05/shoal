@@ -32,12 +32,31 @@ pub use supervise::exit_code;
 use terminal::clear_terminal;
 pub(crate) use terminal::{reset_input_modes, run_in_terminal};
 
+/// An agent a tracked wrapper runs: its name, as `--agent` names it, and
+/// the model and effort it runs with, which its restores keep.
+#[derive(Debug, Clone)]
+pub struct TrackedAgent {
+    pub name: String,
+    pub model: crate::agent::ModelChoice,
+}
+
+#[cfg(test)]
+impl TrackedAgent {
+    /// Agent `name` running with the tool's own model and effort.
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            model: Default::default(),
+        }
+    }
+}
+
 /// `agent` names a Shoal agent shortcut; the daemon tells the user when it exits.
 pub async fn run(
     paths: &Paths,
     workspace: String,
     command: Vec<OsString>,
-    agent: Option<String>,
+    agent: Option<TrackedAgent>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
     let ran_agent = agent.is_some();
@@ -74,7 +93,7 @@ pub async fn run_recovery(
     paths: &Paths,
     workspace: String,
     command: Vec<OsString>,
-    agent: String,
+    agent: TrackedAgent,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a restore command is required");
@@ -97,7 +116,7 @@ pub async fn run_detached_wrapper(
     workspace: String,
     log: PathBuf,
     command: Vec<OsString>,
-    agent: Option<String>,
+    agent: Option<TrackedAgent>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
     run_tracked(paths, workspace, command, Mode::Detached { log }, agent).await

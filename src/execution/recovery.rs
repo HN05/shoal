@@ -13,6 +13,7 @@ mod claim;
 pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
 
 use crate::{
+    agent::ModelChoice,
     cli::{client, commands::configured},
     fsutil::{Permissions, ReplaceOptions},
     model::Workspace,
@@ -26,6 +27,8 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct Recovery {
     pub agent: String,
+    /// The model and effort the agent runs with, which its restore keeps.
+    pub model: ModelChoice,
     pub command: Vec<OsString>,
     pub automatic: bool,
     /// Whether `command` carries the handoff message as the agent's prompt.
@@ -81,6 +84,9 @@ pub struct Record {
     /// turns were kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn: Option<AgentState>,
+    /// The model and effort the agent ran with, which its restore keeps.
+    #[serde(default, flatten)]
+    pub model: ModelChoice,
 }
 
 /// Why and when Shoal stopped an agent, which its restore tells it.
@@ -156,19 +162,58 @@ pub(crate) fn moved_prompt(handoff: Option<&str>) -> String {
     prompt
 }
 
+/// The agent a restore continues: its name, the model and effort it ran
+/// with, and the session it reported, if any.
+pub(crate) struct Restored<'a> {
+    pub agent: &'a str,
+    pub model: &'a ModelChoice,
+    pub session: Option<&'a str>,
+}
+
+/// The arguments that restore agent `name` with `model`; none, with a
+/// warning, when its templates no longer take a value it ran with.
+fn resumed_model_args(
+    settings: &crate::config::Effective,
+    name: &str,
+    model: &ModelChoice,
+) -> Vec<OsString> {
+    crate::cli::agents::model_args(settings, name, model).unwrap_or_else(|error| {
+        eprintln!("warning: restoring {name} with its own model and effort: {error:#}");
+        Vec::new()
+    })
+}
+
 impl Recovery {
-    pub(super) async fn for_launch(paths: &Paths, workspace_id: &str, agent: &str) -> Self {
+    /// The agent it restores, with the model and effort it runs with.
+    pub(crate) fn tracked(&self) -> super::TrackedAgent {
+        super::TrackedAgent {
+            name: self.agent.clone(),
+            model: self.model.clone(),
+        }
+    }
+
+    pub(super) async fn for_launch(
+        paths: &Paths,
+        workspace_id: &str,
+        agent: &super::TrackedAgent,
+    ) -> Self {
         let resolved = async {
             let workspace = client::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
-            Self::resolve(paths, &workspace, agent, None, None, None).await
+            let restored = Restored {
+                agent: &agent.name,
+                model: &agent.model,
+                session: None,
+            };
+            Self::resolve(paths, &workspace, restored, None, None).await
         }
         .await;
         resolved.unwrap_or_else(|error| {
             eprintln!("warning: automatic agent recovery unavailable: {error:#}");
             Self {
-                agent: agent.replace(' ', "-"),
+                agent: agent.name.replace(' ', "-"),
+                model: agent.model.clone(),
                 command: vec![],
                 automatic: false,
                 handoff_delivered: false,
@@ -177,24 +222,26 @@ impl Recovery {
         })
     }
 
-    /// Ask the restored session to continue, telling it about its `stop` and
-    /// including `handoff` where the command accepts a prompt: agents with
-    /// resume arguments and `{prompt}` in its `resume_command`. Resume
-    /// arguments restore `session` when known, otherwise the workspace's
-    /// latest session.
+    /// Ask the `restored` session to continue, telling it about its `stop`
+    /// and including `handoff` where the command accepts a prompt: agents
+    /// with resume arguments and `{prompt}` in its `resume_command`. Resume
+    /// arguments restore its session when known, otherwise the workspace's
+    /// latest session, with its model and effort.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
-        agent: &str,
+        restored: Restored<'_>,
         handoff: Option<&str>,
-        session: Option<&str>,
         stop: Option<&Stop>,
     ) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
-        let name = agent.replace(' ', "-");
+        let name = restored.agent.replace(' ', "-");
         let configured = settings.resume_commands.get(&name);
-        let resume_args = settings.launch(&name).arguments.resume_args(session);
+        let resume_args = settings
+            .launch(&name)
+            .arguments
+            .resume_args(restored.session);
         let automatic = configured.is_some() || resume_args.is_some();
         let message = resumed_prompt(stop, handoff);
         let prompt = std::ffi::OsStr::new(&message);
@@ -212,6 +259,7 @@ impl Recovery {
             crate::cli::agents::with_proxy_args(&settings, &name, &mut command);
             (command, argv.iter().any(|arg| arg.contains("{prompt}")))
         } else if let Some(mut args) = resume_args {
+            args.extend(resumed_model_args(&settings, &name, restored.model));
             args.extend(
                 crate::cli::agents::workspace_args(paths, &settings, &name, workspace).await?,
             );
@@ -238,6 +286,7 @@ impl Recovery {
         let proxy = crate::cli::agents::launch_proxy(&settings, &name)?.cloned();
         Ok(Self {
             agent: name,
+            model: restored.model.clone(),
             command,
             automatic,
             handoff_delivered: handoff_delivered && handoff.is_some(),
@@ -261,8 +310,12 @@ impl Recovery {
             return launched();
         };
         let stop = Stop::of(&record, path);
-        let session = record.session.as_deref();
-        match Self::resolve(paths, workspace, &self.agent, None, session, Some(&stop)).await {
+        let restored = Restored {
+            agent: &self.agent,
+            model: &self.model,
+            session: record.session.as_deref(),
+        };
+        match Self::resolve(paths, workspace, restored, None, Some(&stop)).await {
             Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
             Ok(_) => launched(),
             Err(error) => {
@@ -283,7 +336,7 @@ impl Recovery {
         place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.agent, reason, Stage::Stopped, place);
+        let record = Record::new(&self.tracked(), reason, Stage::Stopped, place);
         save_restorable(paths, workspace_id, id, record, restorer)
     }
 
@@ -298,7 +351,7 @@ impl Recovery {
         place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.agent, reason, Stage::Stopping, place);
+        let record = Record::new(&self.tracked(), reason, Stage::Stopping, place);
         save_restorable(paths, workspace_id, id, record, restorer)
     }
 }
@@ -358,9 +411,15 @@ fn earlier_place<'de, D: serde::Deserializer<'de>>(
 }
 
 impl Record {
-    fn new(agent: &str, reason: Option<&str>, stage: Stage, origin: Option<Origin>) -> Self {
+    /// The record of `agent`, stopped for `reason`.
+    fn new(
+        agent: &super::TrackedAgent,
+        reason: Option<&str>,
+        stage: Stage,
+        origin: Option<Origin>,
+    ) -> Self {
         Self {
-            agent: agent.replace(' ', "-"),
+            agent: agent.name.replace(' ', "-"),
             stop_reason: reason.map(str::to_owned),
             stage: Some(stage),
             origin,
@@ -368,6 +427,7 @@ impl Record {
             session: None,
             moved: false,
             turn: None,
+            model: agent.model.clone(),
         }
     }
 
@@ -383,6 +443,7 @@ impl Record {
             origin: self.origin,
             stopped_by: None,
             stop: Some(stop),
+            model: self.model,
         }
     }
 
@@ -430,7 +491,7 @@ pub(crate) fn save_record(
     paths: &Paths,
     workspace_id: &str,
     id: &str,
-    agent: &str,
+    agent: &super::TrackedAgent,
     reason: Option<&str>,
     turn: Option<AgentState>,
 ) -> Result<PathBuf> {
@@ -770,6 +831,9 @@ pub struct LastSession {
     /// own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop: Option<Stop>,
+    /// The model and effort the agent ran with, which its restore keeps.
+    #[serde(default, flatten)]
+    pub model: ModelChoice,
 }
 
 /// The key of a last session saved without its execution.
@@ -794,16 +858,23 @@ impl LastSession {
             .join(format!("{execution}{LAST_SESSION_SUFFIX}"))
     }
 
-    /// Save execution `id` of `agent` as one of the workspace's last sessions.
-    pub(crate) fn save(paths: &Paths, workspace_id: &str, agent: &str, id: &str) -> Result<()> {
+    /// Save execution `id` of `agent` as one of the workspace's last
+    /// sessions.
+    pub(crate) fn save(
+        paths: &Paths,
+        workspace_id: &str,
+        agent: &super::TrackedAgent,
+        id: &str,
+    ) -> Result<()> {
         Self {
             execution: id.to_owned(),
-            agent: agent.replace(' ', "-"),
+            agent: agent.name.replace(' ', "-"),
             session: reported_session(paths, workspace_id, id),
             moved: false,
             origin: None,
             stopped_by: None,
             stop: None,
+            model: agent.model.clone(),
         }
         .write(paths, workspace_id)
     }

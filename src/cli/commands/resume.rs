@@ -10,7 +10,8 @@ use crate::{
         workspace::Discarded,
     },
     execution::recovery::{
-        LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume, saved_at,
+        LastSession, Record, Recovery, RecoveryClaim, Restored, Saved, SavedCommand, claim,
+        consume, saved_at,
     },
     model::{Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
@@ -390,14 +391,18 @@ async fn restore(
     let mut records = vec![path];
     if session.moved {
         records.extend(commands.into_iter().map(|command| command.path));
-        return start_moved(ctx, workspace, &session.agent, handoff.as_deref(), records).await;
+        return start_moved(ctx, workspace, &session, handoff.as_deref(), records).await;
     }
+    let restored = Restored {
+        agent: &session.agent,
+        model: &session.model,
+        session: session.session.as_deref(),
+    };
     let recovery = Recovery::resolve(
         &ctx.paths,
         workspace,
-        &session.agent,
+        restored,
         handoff.as_deref(),
-        session.session.as_deref(),
         session.stop.as_ref(),
     )
     .await?;
@@ -408,16 +413,18 @@ async fn restore(
     launch(ctx, workspace, recovery, records).await
 }
 
-/// Start `agent` as a new agent is started, since its session is not
-/// available where the workspace moved, telling it the workspace moved; it
-/// consumes `records` once it has started.
+/// Start the agent of `session` as a new agent is started, with the model
+/// and effort it ran with, since its session is not available where the
+/// workspace moved, telling it the workspace moved; it consumes `records`
+/// once it has started.
 async fn start_moved(
     ctx: &Context,
     workspace: &Workspace,
-    agent: &str,
+    session: &LastSession,
     handoff: Option<&str>,
     records: Vec<PathBuf>,
 ) -> Result<i32> {
+    let agent = &session.agent;
     let launch: crate::agent::Agent = agent
         .parse()
         .with_context(|| format!("cannot start agent {agent} of the moved workspace"))?;
@@ -426,6 +433,7 @@ async fn start_moved(
     let options = crate::cli::agents::LaunchOptions {
         tracked: true,
         replaces: records,
+        model: session.model.clone(),
         ..Default::default()
     };
     crate::cli::agents::launch_agent(
@@ -460,11 +468,12 @@ async fn launch(
     }
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
+    let agent = recovery.tracked();
     if let Some(code) = terminal::run_agent(
         ctx,
         &settings,
         workspace,
-        &recovery.agent,
+        &agent,
         &records,
         &recovery.command,
     )
@@ -477,7 +486,7 @@ async fn launch(
         &ctx.paths,
         workspace.id.clone(),
         recovery.command,
-        recovery.agent,
+        agent,
         records,
     )
     .await

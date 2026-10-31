@@ -35,7 +35,7 @@ pub async fn launch_detached(
     command: Vec<OsString>,
     clear: &[&str],
     env: &[(&str, String)],
-    agent: Option<&str>,
+    agent: Option<&super::TrackedAgent>,
 ) -> Result<DetachedLaunch> {
     let launch = DetachedCommand::prepare(paths, workspace, log, command, clear, env, agent)?;
     launch.start().await
@@ -78,7 +78,7 @@ impl DetachedCommand {
         command: Vec<OsString>,
         clear: &[&str],
         env: &[(&str, String)],
-        agent: Option<&str>,
+        agent: Option<&super::TrackedAgent>,
     ) -> Result<Self> {
         ensure!(workspace.path.is_dir(), "workspace directory is missing");
         let file = prepare_detached_log(&log, workspace, &command)?;

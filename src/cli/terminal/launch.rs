@@ -25,6 +25,7 @@ use crate::{
     },
     config::Effective,
     env,
+    execution::TrackedAgent,
     model::{Repository, Workspace},
     sessions::Origin,
 };
@@ -456,7 +457,7 @@ pub(in crate::cli) async fn run_agent(
     ctx: &Context,
     settings: &Effective,
     workspace: &Workspace,
-    agent: &str,
+    agent: &TrackedAgent,
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Option<i32>> {
@@ -485,7 +486,7 @@ pub(in crate::cli) async fn run_agent(
     match run {
         AgentRun::Session(attaches) => {
             let owner = Owner::Workspace(&workspace.id);
-            let session = attaches.run_agent(&start, owner, agent).await?;
+            let session = attaches.run_agent(&start, owner, &agent.name).await?;
             report_detach(attaches, &workspace.name, &session).await?;
         }
         AgentRun::Place(places) => {
@@ -502,7 +503,7 @@ fn agent_worker(
     ctx: &Context,
     host: &Configured,
     workspace: &Workspace,
-    agent: &str,
+    agent: &TrackedAgent,
     records: &[PathBuf],
     command: &[OsString],
 ) -> Result<Vec<OsString>> {

@@ -59,7 +59,7 @@ impl Manager {
             &self.paths,
             &agent.workspace_id,
             id,
-            &agent.name,
+            &agent.tracked(),
             Some(&protection.reason),
             agent.turn,
         )

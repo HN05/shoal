@@ -43,8 +43,12 @@ impl Manager {
             .store
             .run(move |db| store::execution_agent(db, &id))
             .await?;
-        let Some(agent) = agent else {
+        let Some(name) = agent else {
             return Ok(());
+        };
+        let agent = crate::execution::TrackedAgent {
+            name,
+            model: execution.model.clone(),
         };
         let workspace = self.workspace(&execution.workspace_id).await?;
         self.keep_agent_session(&workspace, &agent, &execution.id)

@@ -61,6 +61,7 @@ fn a_workspace_records_its_execution_agents_and_created_places() {
         Origin::created(HostName::Zmx, "shell".to_owned()),
     );
     let execution = |origin: &Origin, agent: Option<&str>| Execution {
+        model: Default::default(),
         id: origin.id().to_owned(),
         workspace_id: "workspace".into(),
         state: crate::state::ExecutionState::Running,

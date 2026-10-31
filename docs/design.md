@@ -1184,6 +1184,17 @@ environments, such as a second login, without losing that setup. Its `env` and
 `env_remove` apply to its launches after `[env]`; Shoal reads where the agent
 keeps its config from them, so they can move that directory but not remove its
 variable.
+An agent's model and reasoning effort are `model` and `effort` options of its
+tool, which a setting that chooses an agent, such as `[agent] default`, may set
+beside it for that use, and `--model` and `--effort` override for one launch.
+Values pass through unchanged, since each tool names its models and effort
+levels differently; the tool receives them through `model_args` and
+`effort_args` templates, built in for Claude and Codex, and a launch with a value
+its tool has no template for is refused rather than run without it. Claude's
+effort variable overrides its flag, so a launch with an effort sets both. The
+execution and its recovery records keep the values, so restores, `shoal resume`
+and reports use what the agent started with rather than the configuration at
+that time. Desktop apps take neither and say so.
 Turn retry defaults to on for Claude and its launch profiles, off for other
 tools, and is overridden per tool with `retry`. Backoff is built in, and no
 failure a retry can fix has a deadline: an agent waits out an outage or a weekly

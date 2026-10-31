@@ -37,6 +37,7 @@ async fn a_preparation_that_hangs_gives_up_at_its_limit() {
 #[test]
 fn an_agent_without_a_resume_command_is_not_taken_over() {
     let recovery = |command: Vec<std::ffi::OsString>, automatic| super::super::recovery::Recovery {
+        model: Default::default(),
         agent: "custom".into(),
         command,
         automatic,

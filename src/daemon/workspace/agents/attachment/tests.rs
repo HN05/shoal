@@ -29,7 +29,7 @@ async fn only_the_agents_workspace_reports_its_attachment() {
     manager
         .track_agent(
             &id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,

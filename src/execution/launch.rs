@@ -52,7 +52,7 @@ pub(super) async fn run_tracked(
     workspace: String,
     command: Vec<OsString>,
     mode: Mode,
-    agent: Option<String>,
+    agent: Option<super::TrackedAgent>,
 ) -> Result<i32> {
     let launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
     launch.run_to_end(paths, &mode).await
@@ -297,7 +297,7 @@ async fn prepare_tracked_launch(
     workspace: String,
     command: Vec<OsString>,
     mode: &Mode,
-    agent: Option<String>,
+    agent: Option<super::TrackedAgent>,
 ) -> Result<TrackedLaunch> {
     // An agent's proxy reports through the installed binary after an
     // upgrade, so the binary is read now, before the upgrade can replace it.
@@ -306,7 +306,7 @@ async fn prepare_tracked_launch(
     }
     let place = terminal_place(mode).await;
     let mut auth =
-        prepare_agent_launch(paths, &workspace, mode, agent.as_deref(), place.as_ref()).await?;
+        prepare_agent_launch(paths, &workspace, mode, agent.as_ref(), place.as_ref()).await?;
     let recovery = if let Some(agent) = &agent {
         Some(recovery::Recovery::for_launch(paths, &workspace, agent).await)
     } else {
@@ -314,7 +314,7 @@ async fn prepare_tracked_launch(
     };
     let recover = recovery.as_ref().is_some_and(|recovery| recovery.automatic);
     let (mut link, plan) =
-        open_execution(paths, workspace, mode, agent.clone(), recover, place).await?;
+        open_execution(paths, workspace, mode, agent.as_ref(), recover, place).await?;
     // The daemon has registered the execution, so a launch that fails from
     // here reports its end, which lets the daemon forget it.
     let command = match ready_command(paths, &plan, command, mode, auth.as_mut()).await {
@@ -328,7 +328,7 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
-        agent,
+        agent: agent.map(|agent| agent.name),
     })
 }
 
@@ -349,8 +349,18 @@ async fn prepare_taken_over_launch(
         ..
     } = taken;
     let mut link = takeover::connection(connection)?;
+    // The record keeps the model and effort the agent ran with.
+    let model = record
+        .as_deref()
+        .and_then(|path| recovery::Record::load(path).ok().flatten())
+        .map(|record| record.model)
+        .unwrap_or_default();
+    let tracked = super::TrackedAgent {
+        name: agent.clone(),
+        model,
+    };
     let registered = async {
-        let (place, auth, recovery) = prepare_restore(paths, &workspace, &agent, mode).await?;
+        let (place, auth, recovery) = prepare_restore(paths, &workspace, &tracked, mode).await?;
         let plan = takeover::register_again(&mut link, place).await?;
         anyhow::Ok((auth, recovery, plan, this_wrapper()?))
     }
@@ -364,7 +374,7 @@ async fn prepare_taken_over_launch(
         paths,
         &plan,
         wrapper,
-        Some(agent.clone()),
+        Some(&tracked),
         recovery.automatic,
     );
     let (command, proxy) = recovery
@@ -395,7 +405,7 @@ async fn prepare_taken_over_launch(
 async fn prepare_restore(
     paths: &Paths,
     workspace: &str,
-    agent: &str,
+    agent: &super::TrackedAgent,
     mode: &Mode,
 ) -> Result<(Option<Origin>, Option<AgentLaunch>, recovery::Recovery)> {
     takeover::within_preparation_limit(async {
@@ -447,7 +457,7 @@ async fn open_execution(
     paths: &Paths,
     workspace: String,
     mode: &Mode,
-    agent: Option<String>,
+    agent: Option<&super::TrackedAgent>,
     recover: bool,
     place: Option<Origin>,
 ) -> Result<(Link, ExecutionPlan)> {
@@ -461,7 +471,8 @@ async fn open_execution(
             .then(crate::env::queue_entry)
             .flatten()
             .map(str::to_owned),
-        agent: agent.clone(),
+        agent: agent.map(|agent| agent.name.clone()),
+        model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
         recover,
         reattach: mode.reattaches(),
         demo: match mode {
@@ -496,7 +507,7 @@ fn allow_reattach(
     paths: &Paths,
     plan: &ExecutionPlan,
     wrapper: Identity,
-    agent: Option<String>,
+    agent: Option<&super::TrackedAgent>,
     recover: bool,
 ) {
     link.allow_reattach(
@@ -507,7 +518,8 @@ fn allow_reattach(
             child: None,
             group_id: 0,
             scope_token: plan.scope_token.clone(),
-            agent,
+            agent: agent.map(|agent| agent.name.clone()),
+            model: agent.map(|agent| agent.model.clone()).unwrap_or_default(),
             recover,
             running_ms: 0,
             awaiting_restore: None,
@@ -520,7 +532,7 @@ async fn prepare_agent_launch(
     paths: &Paths,
     workspace: &str,
     mode: &Mode,
-    agent: Option<&str>,
+    agent: Option<&super::TrackedAgent>,
     place: Option<&Origin>,
 ) -> Result<Option<AgentLaunch>> {
     let has_agent = agent.is_some();
@@ -539,7 +551,7 @@ async fn prepare_agent_launch(
     };
     // An agent Shoal cannot point at its proxy does not start.
     let routed = match agent {
-        Some(agent) => crate::cli::agents::launch_proxy(&settings, agent)?.cloned(),
+        Some(agent) => crate::cli::agents::launch_proxy(&settings, &agent.name)?.cloned(),
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
@@ -551,9 +563,9 @@ async fn prepare_agent_launch(
         )?,
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
-        integration: agent.map(|agent| settings.integration(agent)),
+        integration: agent.map(|agent| settings.integration(&agent.name)),
         environment: agent
-            .map(|agent| settings.launch(agent).environment.clone())
+            .map(|agent| settings.launch(&agent.name).environment_with(&agent.model))
             .unwrap_or_default(),
         home: paths.home.clone(),
         routed,
