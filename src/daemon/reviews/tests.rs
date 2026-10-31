@@ -247,21 +247,20 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
             .parse::<i32>()
             .unwrap()
     };
-    let (survivor, bystander) = (detached(true), detached(false));
+    let identity = |pid: i32| {
+        crate::process::identity::capture(pid as u32)
+            .unwrap()
+            .unwrap()
+    };
+    let (survivor, bystander) = (identity(detached(true)), identity(detached(false)));
     manager.recover_reviews().await.unwrap();
-    // SAFETY: signal 0 only checks whether the process exists.
-    assert_ne!(
-        unsafe { libc::kill(survivor, 0) },
-        0,
-        "the survivor runs on"
-    );
-    assert_eq!(
-        unsafe { libc::kill(bystander, 0) },
-        0,
-        "the bystander was stopped"
-    );
-    // SAFETY: the bystander is this test's own sleep.
-    unsafe { libc::kill(bystander, libc::SIGKILL) };
+    // Alive as recovery judges it: a stopped orphan may wait to be reaped.
+    let alive = |process| crate::process::identity::alive(process).unwrap();
+    assert!(!alive(&survivor), "the survivor runs on");
+    assert!(alive(&bystander), "the bystander was stopped");
+    crate::process::identity::stop_verified(&[bystander])
+        .await
+        .unwrap();
     assert!(!checkout.parent().unwrap().exists());
     let review = manager.review(queued).await.unwrap();
     assert_eq!((review.state, review.head), (ReviewState::Queued, None));
@@ -686,6 +685,11 @@ async fn removing_the_repository_stops_its_reviews_first() {
 #[tokio::test]
 async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over() {
     use std::os::unix::fs::PermissionsExt;
+    // Root deletes past permissions, as in CI's containers.
+    // SAFETY: geteuid has no arguments or memory-safety preconditions.
+    if unsafe { libc::geteuid() } == 0 {
+        return;
+    }
     let fixture = fixture(&[], "").await;
     let manager = &fixture.manager;
     let id = fixture.workspace.id.clone();

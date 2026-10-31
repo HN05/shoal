@@ -3919,8 +3919,8 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
         result.display()
     )));
     fixture.add("agent-only");
+    // The daemon may start it before replying, so its state is not checked.
     let queued = fixture.ok(&["review", "run", "agent-only"]);
-    assert_eq!(queued["state"], "queued", "{queued}");
     let id = queued["id"].to_string();
     let review = fixture.ok(&["watch", "review", &id]);
     assert_eq!(review["state"], "finished", "{review}");
