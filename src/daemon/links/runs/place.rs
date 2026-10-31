@@ -41,9 +41,13 @@ impl RunPlace {
         self.workspace.as_ref().filter(|_| self.own)
     }
 
-    /// The branch a run starts on when nothing names one: the workspace's
-    /// in its own repository, otherwise the repository's default branch.
-    pub async fn default_branch(&self) -> Result<String> {
+    /// The branch a run starts on: the `named` one, otherwise the
+    /// workspace's in its own repository, or else the repository's default
+    /// branch.
+    pub async fn run_branch(&self, named: Option<String>) -> Result<String> {
+        if let Some(branch) = named {
+            return Ok(branch);
+        }
         match self.own_workspace() {
             Some(workspace) => Ok(workspace.branch.clone()),
             None => (self.forge.default_branch(&self.account).await).with_context(|| {

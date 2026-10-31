@@ -44,10 +44,7 @@ impl Manager {
         let (place, workflow, linked) = self
             .workflow_place(workspace_context(selector).as_ref(), workflow, scoped)
             .await?;
-        let branch = match branch.or(linked) {
-            Some(branch) => branch,
-            None => place.default_branch().await?,
-        };
+        let branch = place.run_branch(branch.or(linked)).await?;
         if scoped {
             on_own_branch_name(place.own_workspace(), &branch)?;
         }
@@ -58,10 +55,7 @@ impl Manager {
         };
         if let Some(workspace) = &place.workspace {
             // Refuse before the run starts what would refuse its link after.
-            let id = workspace.id.clone();
-            self.store
-                .run(move |db| super::ensure_accepts_links(db, &id))
-                .await?;
+            self.ensure_links_accepted(&workspace.id).await?;
         }
         let mut started = (place.forge.start_run(&place.account, &run).await)
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
@@ -69,6 +63,14 @@ impl Manager {
             (self.link_started(&workspace.id, &place.forge, &mut started)).await;
         }
         Ok(started)
+    }
+
+    /// Refuse a workspace that cannot record links, as one being removed.
+    async fn ensure_links_accepted(&self, id: &str) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| super::ensure_accepts_links(db, &id))
+            .await
     }
 
     /// Link the started run where Shoal reads it. The run has started
