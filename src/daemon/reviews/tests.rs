@@ -418,7 +418,12 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
 
 #[tokio::test]
 async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
-    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let slow = until_tests_end();
+    let fixture = fixture(
+        &[("fake", "cat '{review}'"), ("slow", &slow)],
+        "agent = 'fake'",
+    )
+    .await;
     let manager = &fixture.manager;
     let review = fixture.review().await;
     let messages = manager.agent_messages(&fixture.workspace.id).await.unwrap();
@@ -428,12 +433,12 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         "{delivered}"
     );
 
-    configure(manager, "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['sleep']\nreview = ['100000', '{prompt}', '{schema}']\n").await;
+    // A reviewer that runs until it is cancelled.
     let queued = manager
         .queue_review(
             &fixture.workspace.id,
             ReviewTarget::Workspace,
-            None,
+            Some("slow".parse().unwrap()),
             Default::default(),
         )
         .await
@@ -459,7 +464,7 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         .queue_review(
             &fixture.workspace.id,
             ReviewTarget::Workspace,
-            None,
+            Some("slow".parse().unwrap()),
             Default::default(),
         )
         .await
