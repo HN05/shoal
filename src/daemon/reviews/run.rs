@@ -16,7 +16,6 @@ use super::{
     store,
 };
 use crate::{
-    agent::trust::TrustConfig,
     config::{Effective, templates},
     daemon::{log, workspace::Manager},
     model::Workspace,
@@ -189,8 +188,7 @@ impl Manager {
         crate::git::detached::add(&repository.path, &files.checkout(), head).await
     }
 
-    /// One reviewer's run of the review, trusted in its tool's config for
-    /// the run's length.
+    /// One reviewer's run of the review.
     async fn attempt(
         &self,
         settings: &Effective,
@@ -211,15 +209,9 @@ impl Manager {
             log!("{agent} has no review template or launcher");
             return Ended::Failed(FailureReason::ExecutionFailed);
         };
-        let trusted = trust(
-            settings,
-            agent,
-            &reviewer,
-            &self.paths.home,
-            &files.checkout(),
-        );
         let ended = reviewer::run(&reviewer, cancelled).await;
-        end_attempt(trusted, files);
+        // Another reviewer starts without this one's result.
+        let _ = std::fs::remove_file(files.output());
         ended
     }
 
@@ -377,7 +369,7 @@ impl Manager {
     async fn remove_interrupted_runs(&self) -> Result<Vec<i64>> {
         let mut kept = Vec::new();
         for files in run_directories(&self.paths.reviews())? {
-            if let Err(error) = remove_interrupted_run(&files, &self.paths.home).await {
+            if let Err(error) = remove_interrupted_run(&files).await {
                 log!("{}: {error:#}", files.directory.display());
                 kept.extend(files.review());
             }
@@ -417,46 +409,6 @@ fn reviewer_for<'a>(
     })
 }
 
-/// Mark the checkout trusted in the config the reviewer's tool reads, as
-/// workspaces are, so it reads the project's settings; returns the entry to
-/// remove afterwards. Development builds leave user files alone.
-fn trust(
-    settings: &Effective,
-    agent: &str,
-    reviewer: &Reviewer,
-    home: &Path,
-    checkout: &Path,
-) -> Option<(&'static TrustConfig, PathBuf)> {
-    if !crate::build::changes_user_files() {
-        return None;
-    }
-    let entries = settings.tools.get(agent)?.trust?;
-    let added = entries
-        .config(home, &reviewer.environment)
-        .and_then(|config| entries.add(&config, checkout).map(|_| config));
-    match added {
-        Ok(config) => Some((entries, config)),
-        Err(error) => {
-            log!(
-                "could not trust a review checkout for {}: {error:#}",
-                entries.tool
-            );
-            None
-        }
-    }
-}
-
-/// Undo what an attempt set up, so another reviewer starts clean: the
-/// trust entry `trusted` added and the result file.
-fn end_attempt(trusted: Option<(&'static TrustConfig, PathBuf)>, files: &Files) {
-    if let Some((entries, config)) = trusted
-        && let Err(error) = entries.remove(&config, &[canonical(&files.checkout())])
-    {
-        log!("{} trust entry of a review: {error:#}", entries.tool);
-    }
-    let _ = std::fs::remove_file(files.output());
-}
-
 /// The runs a stopped daemon left in `directory`.
 fn run_directories(directory: &Path) -> Result<Vec<Files>> {
     let entries = match std::fs::read_dir(directory) {
@@ -475,9 +427,9 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
 
 /// Remove a run a stopped daemon left: stop its reviewer processes still
 /// working in its checkout, each verified by identity and started with the
-/// run's marker, then remove its trust entries and files. Anyone else's
-/// process there, such as a shell, is left alone.
-async fn remove_interrupted_run(files: &Files, home: &Path) -> Result<()> {
+/// run's marker, then remove its files. Anyone else's process there, such
+/// as a shell, is left alone.
+async fn remove_interrupted_run(files: &Files) -> Result<()> {
     let checkout = canonical(&files.checkout());
     if checkout.is_dir() {
         let mut survivors = crate::process::identities_in(&checkout).await?;
@@ -492,28 +444,7 @@ async fn remove_interrupted_run(files: &Files, home: &Path) -> Result<()> {
         }
         crate::process::identity::stop_verified(&survivors).await?;
     }
-    forget_trust(&checkout, home);
     remove_run(files).await
-}
-
-/// Remove trust entries an interrupted review may have left in the tools'
-/// default configs.
-fn forget_trust(checkout: &Path, home: &Path) {
-    if !crate::build::changes_user_files() {
-        return;
-    }
-    let empty = Default::default();
-    for entries in [
-        &crate::agent::trust::CLAUDE_CODE,
-        &crate::agent::trust::CODEX,
-    ] {
-        let removed = entries
-            .config(home, &empty)
-            .and_then(|config| entries.remove(&config, &[checkout.to_owned()]));
-        if let Err(error) = removed {
-            log!("{} trust entry of a review: {error:#}", entries.tool);
-        }
-    }
 }
 
 /// Remove a run's checkout and files.

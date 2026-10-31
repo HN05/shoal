@@ -9,7 +9,6 @@ use anyhow::Result;
 
 use super::IntegrationKind;
 use crate::{
-    agent::trust::{self, TrustConfig},
     config::named_commands::Commands,
     reviews::output::{self, ResultFormat},
 };
@@ -33,8 +32,6 @@ pub struct Provider {
     pub(super) review: Option<&'static [&'static str]>,
     /// How its review result comes back.
     pub(super) review_result: &'static ResultFormat,
-    /// The config file that records the directories it trusts.
-    pub(super) trust: Option<&'static TrustConfig>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -92,7 +89,6 @@ pub const PROVIDERS: &[Provider] = &[
             "{prompt}",
         ]),
         review_result: &output::PLAIN,
-        trust: Some(&trust::CODEX),
     },
     Provider {
         name: "claude",
@@ -122,7 +118,6 @@ pub const PROVIDERS: &[Provider] = &[
             "--disallowedTools=Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent",
         ]),
         review_result: &output::CLAUDE,
-        trust: Some(&trust::CLAUDE_CODE),
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -140,7 +135,6 @@ pub const PROVIDERS: &[Provider] = &[
         effort_variable: None,
         review: None,
         review_result: &output::PLAIN,
-        trust: None,
     },
     Provider {
         name: "pi",
@@ -157,7 +151,6 @@ pub const PROVIDERS: &[Provider] = &[
         effort_variable: None,
         review: None,
         review_result: &output::PLAIN,
-        trust: None,
     },
     Provider {
         name: "grok",
@@ -174,7 +167,6 @@ pub const PROVIDERS: &[Provider] = &[
         effort_variable: None,
         review: None,
         review_result: &output::PLAIN,
-        trust: None,
     },
 ];
 

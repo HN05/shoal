@@ -14,7 +14,7 @@ use super::{
     validate::skill_dir,
 };
 use crate::{
-    agent::{ModelChoice, trust::TrustConfig},
+    agent::ModelChoice,
     reviews::output::{self, ResultFormat},
 };
 
@@ -53,9 +53,6 @@ pub struct Tool {
     /// How its review result comes back: as the built-in tool its lineage
     /// ends at returns it, else as the whole result.
     pub review_result: &'static ResultFormat,
-    /// The config file that records the directories it trusts: the one of
-    /// the built-in tool its lineage ends at.
-    pub trust: Option<&'static TrustConfig>,
 }
 
 /// How long an agent's prompt cache lives after a turn when neither its AI
@@ -208,7 +205,6 @@ fn tool(entries: &Agents, name: &str) -> Tool {
             effort: configured.iter().find_map(|agent| agent.effort.clone()),
         },
         review_result: builtin.map_or(&output::PLAIN, |provider| provider.review_result),
-        trust: builtin.and_then(|provider| provider.trust),
     }
 }
 
