@@ -5817,6 +5817,10 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
         .unwrap();
 
     let leftover = leave("leftover");
+    // An unknown space refuses the batch before any stops.
+    let refused = fixture.run(&["stop", "--leftovers", "procs", "missing"]);
+    assert!(!refused.status.success(), "{refused:?}");
+    assert!(process_running(leftover));
     let output = fixture.root.path().join("stopped.json");
     let run = fixture.run(&[
         "run",

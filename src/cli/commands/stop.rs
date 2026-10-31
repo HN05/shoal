@@ -83,6 +83,7 @@ pub(super) async fn processes(
     let selectors = if selectors.is_empty() {
         vec![ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?]
     } else {
+        ensure_spaces(ctx, &selectors).await?;
         selectors
     };
     let mut report = ui::Report::new("stopped", "stop processes of");
@@ -96,6 +97,30 @@ pub(super) async fn processes(
         }
     }
     report.finish(ctx, "")
+}
+
+/// Refuse `selectors` before any stops when one names no workspace or
+/// running chat this process may reach.
+async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
+    let chats = client::chats(&ctx.paths).await?;
+    let mut refusals = Vec::new();
+    for selector in selectors {
+        let chat = chats
+            .iter()
+            .any(|chat| &chat.id == selector || &chat.name == selector);
+        if chat {
+            continue;
+        }
+        if let Err(error) = client::inspect(&ctx.paths, selector.clone()).await {
+            refusals.push(format!("{selector}: {error:#}"));
+        }
+    }
+    ensure!(
+        refusals.is_empty(),
+        "cannot stop processes of these spaces, so none was stopped:\n  {}",
+        refusals.join("\n  ")
+    );
+    Ok(())
 }
 
 /// Stop the untracked processes of `space` that `selection` takes, other
