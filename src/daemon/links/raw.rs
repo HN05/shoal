@@ -92,7 +92,9 @@ impl Manager {
         method: HttpMethod,
         elsewhere: bool,
     ) -> Result<Account> {
-        let settings = self.workspace_settings(workspace).await?;
+        // One snapshot, so a reload cannot pair a permission with other tokens.
+        let config = self.config();
+        let settings = self.workspace_settings_from(&config, workspace).await?;
         if method != HttpMethod::Get {
             ensure!(
                 !elsewhere,
@@ -103,7 +105,7 @@ impl Manager {
                 "workspace processes can only send GET requests; [permissions] api_writes = \"direct\" lets agents send {method}"
             );
         }
-        Ok(self.agent_account())
+        Ok(self.agent_account_from(&config))
     }
 }
 
