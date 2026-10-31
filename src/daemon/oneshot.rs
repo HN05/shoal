@@ -62,19 +62,23 @@ pub(crate) fn agent_command(
 /// The run directories of one-shot runs whose processes may still be running:
 /// from a run's start until what it left is proven stopped.
 #[derive(Default)]
-pub(crate) struct Runs(std::sync::Mutex<HashSet<PathBuf>>);
+pub(crate) struct Runs {
+    unfinished: std::sync::Mutex<HashSet<PathBuf>>,
+    /// Makes the process inventory fail, so tests reach what a failed
+    /// cleanup leaves.
+    #[cfg(test)]
+    pub(crate) fail_inventory: std::sync::atomic::AtomicBool,
+}
 
 impl Runs {
     /// Stop what every run that has not ended cleanly left, as the daemon
     /// stops after aborting them; a run whose processes are proven stopped
     /// is forgotten.
     pub(crate) async fn stop_all(&self) {
-        let unfinished: Vec<PathBuf> = self.0.lock().unwrap().iter().cloned().collect();
+        let unfinished: Vec<PathBuf> = self.unfinished.lock().unwrap().iter().cloned().collect();
         for files in unfinished {
-            match stop_leftovers(&files).await {
-                Ok(()) => {
-                    self.0.lock().unwrap().remove(&files);
-                }
+            match self.stop_leftovers(&files).await {
+                Ok(()) => self.end(&files),
                 Err(error) => crate::daemon::log!(
                     "stopping what the run in {} left: {error:#}",
                     files.display()
@@ -83,12 +87,30 @@ impl Runs {
         }
     }
 
-    fn start(&self, files: &Path) {
-        self.0.lock().unwrap().insert(files.to_owned());
+    /// Track the run in `files` until what it left is proven stopped, as
+    /// when it starts or when a restarted daemon could not stop it.
+    pub(crate) fn track(&self, files: &Path) {
+        self.unfinished.lock().unwrap().insert(files.to_owned());
     }
 
     fn end(&self, files: &Path) {
-        self.0.lock().unwrap().remove(files);
+        self.unfinished.lock().unwrap().remove(files);
+    }
+
+    /// Stop what the run in `files` left, wherever it works: every process
+    /// carrying the run's marker or started by one that did, verified by
+    /// identity, scanning again after each round of stops until none is
+    /// left. Anyone else's process, such as a shell in the run's
+    /// directory, is left alone.
+    pub(crate) async fn stop_leftovers(&self, files: &Path) -> Result<()> {
+        #[cfg(test)]
+        anyhow::ensure!(
+            !self
+                .fail_inventory
+                .load(std::sync::atomic::Ordering::SeqCst),
+            "process inventory failed"
+        );
+        stop_marked(files).await
     }
 }
 
@@ -111,7 +133,7 @@ pub(crate) struct Run<'a> {
     /// Where the command runs.
     pub directory: &'a Path,
     /// Where its standard output and error go, which also marks its
-    /// processes; see [`stop_leftovers`].
+    /// processes; see [`Runs::stop_leftovers`].
     pub files: &'a Path,
     pub timeout: Duration,
 }
@@ -130,9 +152,10 @@ pub(crate) enum Ended {
 /// it could not be started or waited for, or, as [`LeftRunning`], that what
 /// it left could not be stopped, so the run stays tracked.
 pub(crate) async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
-    run.runs.start(run.files);
+    run.runs.track(run.files);
     let ended = run_group(run, cancel).await;
-    stop_leftovers(run.files)
+    run.runs
+        .stop_leftovers(run.files)
         .await
         .map_err(|error| error.context(LeftRunning))?;
     run.runs.end(run.files);
@@ -177,21 +200,29 @@ pub(crate) fn stderr(files: &Path) -> PathBuf {
     files.join("stderr")
 }
 
-/// Stop the processes the run in `files` left, as a stopped daemon's run or
-/// in another process group, wherever they work: each verified by identity
-/// and carrying the run's marker, or started by one that did. Anyone else's
-/// process, such as a shell in the run's directory, is left alone.
-pub(crate) async fn stop_leftovers(files: &Path) -> Result<()> {
+/// Rounds of stopping after which processes a run left that keep appearing
+/// count as running on.
+const STOP_ROUNDS: usize = 5;
+
+/// [`Runs::stop_leftovers`] itself.
+async fn stop_marked(files: &Path) -> Result<()> {
     let run = files.to_string_lossy().into_owned();
-    let left = crate::process::identity::scan_oneshot_runs([run].into()).await?;
-    if !left.is_empty() {
+    for _ in 0..STOP_ROUNDS {
+        let left = crate::process::identity::scan_oneshot_runs([run.clone()].into()).await?;
+        if left.is_empty() {
+            return Ok(());
+        }
         crate::daemon::log!(
             "stopping {} agent processes the run in {} left",
             left.len(),
             files.display()
         );
+        crate::process::identity::stop_verified(&left).await?;
     }
-    crate::process::identity::stop_verified(&left).await
+    anyhow::bail!(
+        "processes of the run in {} kept appearing while it was stopped",
+        files.display()
+    )
 }
 
 /// How often a running command is checked for having exited.

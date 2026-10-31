@@ -36,12 +36,16 @@ async fn a_reviewer_running_past_the_limit_times_out() {
     assert_eq!(TIMEOUT, Duration::from_secs(30 * 60));
 }
 
-// The paused clock runs out the process inventory's own timeout at once.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let ended = run(&reviewer(&files, &["true"]), &mut cancelled).await;
+    let reviewer = reviewer(&files, &["true"]);
+    reviewer
+        .runs
+        .fail_inventory
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let ended = run(&reviewer, &mut cancelled).await;
     assert_eq!(ended, Ended::LeftRunning);
     assert!(files.directory.exists());
 }

@@ -917,6 +917,47 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     assert!(!run.exists());
 }
 
+#[tokio::test]
+async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
+    let fixture = fixture(&[], "").await;
+    let manager = &fixture.manager;
+    let repository = fixture.workspace.repository_id.as_str().to_owned();
+    let id = fixture.workspace.id.clone();
+    let stuck = manager
+        .store
+        .run(move |db| {
+            let review = store::queue(
+                db,
+                &id,
+                &ReviewTarget::Workspace,
+                "absent",
+                &Default::default(),
+                1,
+            )?
+            .id();
+            store::start(db, review, "head", "base", 2)?;
+            Ok(review)
+        })
+        .await
+        .unwrap();
+    let run = manager.paths.reviews().join(stuck.to_string());
+    std::fs::create_dir_all(run.join("checkout")).unwrap();
+    // What the stopped daemon's reviewer left cannot be proven stopped.
+    manager
+        .oneshot_runs
+        .fail_inventory
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    manager.recover_reviews().await.unwrap();
+    let review = manager.review(stuck).await.unwrap();
+    assert_eq!(review.state, ReviewState::Failed, "{review:?}");
+    assert!(run.join("checkout").exists());
+    // Until a restart, the repository stays held and the slot used.
+    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    let slots = manager.agent_queue.admitted_oneshots();
+    assert_eq!(slots.len(), 1);
+    assert_eq!(slots[0].0, repository);
+}
+
 /// The test process a survivor outlives no longer than.
 const SURVIVOR_OWNER: &str = "REVIEW_TEST_SURVIVOR_OWNER";
 

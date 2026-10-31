@@ -409,6 +409,9 @@ impl Manager {
             Ok(kept) => kept.clone(),
             Err(_) => self.store.run(|db| store::running(db)).await?,
         };
+        for id in &kept {
+            self.hold_unreconciled_run(*id).await;
+        }
         let failed = kept.clone();
         let now = now();
         let requeued = self
@@ -431,15 +434,38 @@ impl Manager {
 
     /// Remove the runs a stopped daemon left, returning the reviews whose
     /// runs could not be removed; their checkouts stay for the next start.
+    /// Hold what review `id`'s run, which could not be stopped or removed,
+    /// may still use until the daemon restarts: its tracking, its checkout
+    /// of the repository and an agent slot there.
+    async fn hold_unreconciled_run(&self, id: i64) {
+        let files = self.paths.reviews().join(id.to_string());
+        self.oneshot_runs.track(&files);
+        match self.store.run(move |db| store::repository_of(db, id)).await {
+            Ok(Some(repository)) => {
+                self.reviews.hold_checkout(id, &repository).keep();
+                self.agent_queue.hold_oneshot(&repository);
+            }
+            Ok(None) => log!("review {id} left a run in a repository Shoal no longer has"),
+            Err(error) => log!("review {id}: {error:#}"),
+        }
+    }
+
     async fn remove_interrupted_runs(&self) -> Result<Vec<i64>> {
         let mut kept = Vec::new();
         for files in run_directories(&self.paths.reviews())? {
-            if let Err(error) = remove_interrupted_run(&files).await {
+            if let Err(error) = self.remove_interrupted_run(&files).await {
                 log!("{}: {error:#}", files.directory.display());
                 kept.extend(files.review());
             }
         }
         Ok(kept)
+    }
+
+    /// Remove a run a stopped daemon left, after stopping its reviewer's
+    /// processes.
+    async fn remove_interrupted_run(&self, files: &Files) -> Result<()> {
+        self.oneshot_runs.stop_leftovers(&files.directory).await?;
+        remove_run(files).await
     }
 }
 
@@ -496,13 +522,6 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
             })
         })
         .collect()
-}
-
-/// Remove a run a stopped daemon left, after stopping its reviewer's
-/// processes.
-async fn remove_interrupted_run(files: &Files) -> Result<()> {
-    oneshot::stop_leftovers(&files.directory).await?;
-    remove_run(files).await
 }
 
 /// Remove a run's checkout and files.

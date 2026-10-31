@@ -75,6 +75,18 @@ pub(crate) fn active(db: &Connection, workspace_id: &str) -> Result<Option<(i64,
         .optional()?)
 }
 
+/// The repository of review `id`'s workspace.
+pub(crate) fn repository_of(db: &Connection, id: i64) -> Result<Option<String>> {
+    Ok(db
+        .query_row(
+            "SELECT repository_id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
+                WHERE reviews.id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// The queued or running reviews of the repository's workspaces.
 pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<i64>> {
     Ok(db

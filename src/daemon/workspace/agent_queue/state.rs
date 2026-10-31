@@ -169,6 +169,16 @@ impl AgentQueue {
         }
     }
 
+    /// Hold a slot in `repository` until the daemon restarts, for a run a
+    /// stopped daemon left whose processes could not be proven stopped.
+    pub(crate) fn hold_oneshot(&self, repository: &str) {
+        let slot = self.request_oneshot(repository, false, || {});
+        if let Some(run) = self.oneshots.lock().unwrap().runs.get(&slot.number) {
+            run.admitted.send_replace(Some(Instant::now()));
+        }
+        slot.keep();
+    }
+
     /// The one-shot requests still waiting, oldest first.
     pub(crate) fn waiting_oneshots(&self) -> Vec<WaitingOneShot> {
         self.oneshots

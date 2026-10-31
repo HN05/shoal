@@ -54,16 +54,16 @@ async fn a_run_past_its_timeout_is_stopped() {
     let ended = run_tracked(&runs, root.path(), &slow, timeout, &mut cancelled).await;
     assert_eq!(ended.unwrap(), Ended::TimedOut);
     // What it left is proven stopped, so it is no longer tracked.
-    assert!(runs.0.lock().unwrap().is_empty());
+    assert!(runs.unfinished.lock().unwrap().is_empty());
 }
 
-// The paused clock runs out the process inventory's own timeout at once, so
-// what the run left cannot be proven stopped.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_run_whose_leftovers_cannot_be_proven_stopped_stays_tracked() {
     let root = tempfile::tempdir().unwrap();
     let (_cancel, mut cancelled) = watch::channel(false);
     let runs = Runs::default();
+    runs.fail_inventory
+        .store(true, std::sync::atomic::Ordering::SeqCst);
     let timeout = Duration::from_secs(60);
     let error = run_tracked(
         &runs,
@@ -75,7 +75,7 @@ async fn a_run_whose_leftovers_cannot_be_proven_stopped_stays_tracked() {
     .await
     .unwrap_err();
     assert!(error.downcast_ref::<LeftRunning>().is_some(), "{error:#}");
-    assert!(runs.0.lock().unwrap().contains(root.path()));
+    assert!(runs.unfinished.lock().unwrap().contains(root.path()));
 }
 
 #[tokio::test]
@@ -173,9 +173,9 @@ async fn stopping_every_unfinished_run_stops_what_an_aborted_one_left() {
         .unwrap();
     assert!(status.success());
     let runs = Runs::default();
-    runs.start(root.path());
+    runs.track(root.path());
     runs.stop_all().await;
-    assert!(runs.0.lock().unwrap().is_empty());
+    assert!(runs.unfinished.lock().unwrap().is_empty());
     let pid: u32 = fs::read_to_string(&pid_file)
         .unwrap()
         .trim()
