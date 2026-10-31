@@ -86,3 +86,87 @@ fn output_is_read_within_its_limits() {
     assert_eq!(read_bounded(&path, 9).unwrap(), None);
     assert_eq!(read_bounded(&root.path().join("missing"), 9).unwrap(), None);
 }
+
+#[tokio::test]
+async fn a_descendant_that_left_the_group_is_stopped_with_the_run() {
+    let root = tempfile::tempdir().unwrap();
+    let pid_file = root.path().join("escaped");
+    let mut escaping = command(&[
+        std::env::current_exe().unwrap().to_str().unwrap(),
+        "--exact",
+        "daemon::oneshot::tests::escape_the_group",
+        "--ignored",
+    ]);
+    escaping
+        .environment
+        .insert(ESCAPE_OWNER.into(), std::process::id().to_string().into());
+    escaping
+        .environment
+        .insert(ESCAPE_PID_FILE.into(), pid_file.clone().into());
+    let (_cancel, mut cancelled) = watch::channel(false);
+    let ended = run_in(root.path(), &escaping, &mut cancelled).await;
+    assert_eq!(ended.unwrap(), Ended::Exited { success: true });
+    let pid: i32 = fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    // Stopped, though not in the run's group; a stopped orphan may wait to
+    // be reaped.
+    let gone = || {
+        crate::process::identity::capture(pid as u32)
+            .unwrap()
+            .is_none_or(|identity| !crate::process::identity::alive(&identity).unwrap())
+    };
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while !gone() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(gone(), "the escaped child {pid} runs on");
+}
+
+/// The test process an escaped child outlives no longer than, and where it
+/// writes its PID.
+const ESCAPE_OWNER: &str = "ONESHOT_TEST_ESCAPE_OWNER";
+const ESCAPE_PID_FILE: &str = "ONESHOT_TEST_ESCAPE_PID_FILE";
+/// Set in the escaped child.
+const ESCAPED: &str = "ONESHOT_TEST_ESCAPED";
+
+/// Starts a child in a process group of its own, as a run's command whose
+/// descendant left its group, then exits; the child sleeps until the test's
+/// process exits, for at most ten minutes.
+#[test]
+#[ignore]
+fn escape_the_group() {
+    let Some(owner) = std::env::var(ESCAPE_OWNER)
+        .ok()
+        .and_then(|owner| owner.parse::<i32>().ok())
+    else {
+        return;
+    };
+    if std::env::var_os(ESCAPED).is_some() {
+        let deadline = std::time::Instant::now() + Duration::from_secs(600);
+        // SAFETY: signal 0 only checks that the process exists.
+        while std::time::Instant::now() < deadline && unsafe { libc::kill(owner, 0) } == 0 {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        return;
+    }
+    use std::os::unix::process::CommandExt as _;
+    let child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "daemon::oneshot::tests::escape_the_group",
+            "--ignored",
+        ])
+        .env(ESCAPED, "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn()
+        .unwrap();
+    let pid_file = std::env::var_os(ESCAPE_PID_FILE).unwrap();
+    fs::write(pid_file, child.id().to_string()).unwrap();
+    // It outlives this process, which exits next, so nothing here waits.
+    std::mem::forget(child);
+}

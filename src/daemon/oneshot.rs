@@ -79,9 +79,22 @@ pub(crate) enum Ended {
 }
 
 /// Run until the command exits, the run's timeout passes or `cancel` turns
-/// true; then kill whatever is left of its process group. An error means it
-/// could not be started or waited for.
+/// true; then kill whatever is left of its process group, and stop what it
+/// started in other groups, which still carries its marker. An error means
+/// it could not be started or waited for.
 pub(crate) async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
+    let ended = run_group(run, cancel).await;
+    if let Err(error) = stop_leftovers(run.files).await {
+        crate::daemon::log!(
+            "stopping what the run in {} left: {error:#}",
+            run.files.display()
+        );
+    }
+    ended
+}
+
+/// [`run`] for the command's own process group.
+async fn run_group(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
     let mut child = command(run)?.spawn().context("start the agent")?;
     let group = child.id().context("agent process ID unavailable")? as i32;
     // Dropping the run, as a daemon stop does, kills its whole group.
@@ -118,16 +131,16 @@ pub(crate) fn stderr(files: &Path) -> PathBuf {
     files.join("stderr")
 }
 
-/// Stop the processes a stopped daemon's run in `files` left, wherever they
-/// work: each verified by identity and carrying the run's marker, or started
-/// by one that did. Anyone else's process, such as a shell in the run's
-/// directory, is left alone.
+/// Stop the processes the run in `files` left, as a stopped daemon's run or
+/// in another process group, wherever they work: each verified by identity
+/// and carrying the run's marker, or started by one that did. Anyone else's
+/// process, such as a shell in the run's directory, is left alone.
 pub(crate) async fn stop_leftovers(files: &Path) -> Result<()> {
     let run = files.to_string_lossy().into_owned();
     let left = crate::process::identity::scan_oneshot_runs([run].into()).await?;
     if !left.is_empty() {
         crate::daemon::log!(
-            "stopping {} agent processes a stopped daemon's run in {} left",
+            "stopping {} agent processes the run in {} left",
             left.len(),
             files.display()
         );
