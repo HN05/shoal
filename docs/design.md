@@ -1161,8 +1161,11 @@ and the next review checks every `fixed` one instead of rereading free text. The
 history a review receives is context, not instructions, and the verdict is shown
 but decides nothing. Failures are typed reasons classified like the bot's, so
 backend output never reaches a message. The 30-minute limit is fixed: a review that
-long has stopped making progress. Reviews take no agent slot, since they are
-short and nothing waits on their turns. A chat has no worktree or branch, so local
+long has stopped making progress. The daemon starts the reviewer as a one-shot
+agent run, which any feature can use: an AI tool's command without a session or
+terminal, in its own process group, killed on timeout, cancel or a daemon stop and
+found again by its marker after a crash. Reviews take no agent slot, since they
+are short and nothing waits on their turns. A chat has no worktree or branch, so local
 reviews do not apply to it; a chat names the workspace it reviews. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.

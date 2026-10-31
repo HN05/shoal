@@ -1,0 +1,228 @@
+//! One-shot agent runs: an AI tool's command started in the background,
+//! without a session or terminal, in a directory its caller chose. It runs
+//! as a process group of its own, which is killed when the run times out, is
+//! cancelled or is dropped, and its output goes to files in a run directory.
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+    process::Stdio,
+    time::Duration,
+};
+
+use anyhow::{Context, Result};
+use tokio::{process::Command, sync::watch};
+
+use crate::config::Effective;
+
+/// An agent's command for one run.
+pub(crate) struct AgentCommand {
+    pub argv: Vec<OsString>,
+    /// Variables added to the daemon's own, without its Shoal variables.
+    pub environment: BTreeMap<String, OsString>,
+    pub remove: BTreeSet<String>,
+}
+
+/// The one-shot command of `agent` with `args`, the arguments of one of its
+/// templates: its launcher's words before `{args}` and its launch
+/// environment over `configured`. `None` for an agent `settings` lacks.
+pub(crate) fn agent_command(
+    settings: &Effective,
+    agent: &str,
+    args: Vec<OsString>,
+    configured: &BTreeMap<String, OsString>,
+    home: &Path,
+) -> Option<AgentCommand> {
+    let tool = settings.tools.get(agent)?;
+    let launcher = settings.launchers.get(agent)?;
+    let mut environment = configured.clone();
+    tool.launch.environment.layer(&mut environment, home);
+    Some(AgentCommand {
+        argv: crate::ai::oneshot_command(launcher, args),
+        environment,
+        remove: tool.launch.environment.remove.clone(),
+    })
+}
+
+/// One run of a command.
+pub(crate) struct Run<'a> {
+    pub command: &'a AgentCommand,
+    /// Where the command runs.
+    pub directory: &'a Path,
+    /// Where its standard output and error go, which also marks its
+    /// processes; see [`stop_leftovers`].
+    pub files: &'a Path,
+    pub timeout: Duration,
+}
+
+/// How a run ended.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Ended {
+    Exited { success: bool },
+    TimedOut,
+    Cancelled,
+}
+
+/// Run until the command exits, the run's timeout passes or `cancel` turns
+/// true; then kill whatever is left of its process group. An error means it
+/// could not be started or waited for.
+pub(crate) async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
+    let mut child = command(run)?.spawn().context("start the agent")?;
+    let group = child.id().context("agent process ID unavailable")? as i32;
+    // Dropping the run, as a daemon stop does, kills its whole group.
+    let mut guard = GroupGuard(Some(group));
+    // The leader stays unreaped until its group is killed, so its ID names
+    // this group alone when the signal is sent.
+    let ended = tokio::select! {
+        exited = tokio::time::timeout(run.timeout, exited_unreaped(group)) => match exited {
+            Ok(exited) => exited.map(|()| None).map_err(anyhow::Error::from),
+            Err(_) => Ok(Some(Ended::TimedOut)),
+        },
+        _ = cancel.wait_for(|cancelled| *cancelled) => Ok(Some(Ended::Cancelled)),
+    };
+    // SAFETY: killpg takes no pointers; a group without members is ESRCH.
+    unsafe { libc::killpg(group, libc::SIGKILL) };
+    let status = child.wait().await;
+    // Once reaped, the ID may name another group.
+    guard.0 = None;
+    match ended? {
+        Some(stopped) => Ok(stopped),
+        None => Ok(Ended::Exited {
+            success: status?.success(),
+        }),
+    }
+}
+
+/// Where a run in `files` writes its standard output.
+pub(crate) fn stdout(files: &Path) -> PathBuf {
+    files.join("stdout")
+}
+
+/// Where a run in `files` writes its standard error.
+pub(crate) fn stderr(files: &Path) -> PathBuf {
+    files.join("stderr")
+}
+
+/// Stop the processes of one-shot runs that a stopped daemon left working in
+/// `directory`, each verified by identity and started with a run's marker.
+/// Anyone else's process there, such as a shell, is left alone.
+pub(crate) async fn stop_leftovers(directory: &Path) -> Result<()> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
+    let mut left = crate::process::identities_in(directory).await?;
+    left.retain(|process| crate::process::identity::started_with(process, crate::env::ONESHOT_RUN));
+    if !left.is_empty() {
+        crate::daemon::log!(
+            "stopping {} agent processes a stopped daemon left in {}",
+            left.len(),
+            directory.display()
+        );
+    }
+    crate::process::identity::stop_verified(&left).await
+}
+
+/// How often a running command is checked for having exited.
+const EXIT_POLL: Duration = Duration::from_millis(100);
+
+/// Wait for the child `pid` to exit without reaping it, so its ID still
+/// names its process group until the caller reaps it. It polls rather than
+/// blocking a thread, so a paused clock can drive the timeout in tests.
+async fn exited_unreaped(pid: i32) -> std::io::Result<()> {
+    while !has_exited(pid)? {
+        tokio::time::sleep(EXIT_POLL).await;
+    }
+    Ok(())
+}
+
+/// Whether the child `pid` has exited, leaving it unreaped.
+fn has_exited(pid: i32) -> std::io::Result<bool> {
+    loop {
+        // SAFETY: `info` is a valid, writable siginfo_t for waitid to fill.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        let flags = libc::WEXITED | libc::WNOWAIT | libc::WNOHANG;
+        if unsafe { libc::waitid(libc::P_PID, pid as libc::id_t, &mut info, flags) } == 0 {
+            // SAFETY: waitid filled `info`; without an exited child it zeroes the PID.
+            return Ok(unsafe { info.si_pid() } != 0);
+        }
+        let error = std::io::Error::last_os_error();
+        if error.kind() != std::io::ErrorKind::Interrupted {
+            return Err(error);
+        }
+    }
+}
+
+/// The command as its own process group in the run's directory, with the
+/// configured variables and none of the daemon's Shoal variables or secrets.
+fn command(run: &Run) -> Result<Command> {
+    let (program, args) = run
+        .command
+        .argv
+        .split_first()
+        .context("empty agent command")?;
+    let mut command = Command::new(program);
+    command.args(args);
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with(crate::env::PREFIX) {
+            command.env_remove(name);
+        }
+    }
+    for name in crate::env::inherited_secret_exports() {
+        command.env_remove(name);
+    }
+    if let Some(path) = crate::env::path_without_secret_tools() {
+        command.env("PATH", path);
+    }
+    crate::env::apply_configured(&mut command, &run.command.environment);
+    for name in &run.command.remove {
+        command.env_remove(name);
+    }
+    command.env(crate::env::ONESHOT_RUN, run.files);
+    command
+        .current_dir(run.directory)
+        .stdin(Stdio::null())
+        .stdout(fs::File::create(stdout(run.files))?)
+        .stderr(fs::File::create(stderr(run.files))?)
+        .process_group(0)
+        .kill_on_drop(true);
+    Ok(command)
+}
+
+/// The file's bytes, unless it is missing, as from a command that wrote
+/// none, or larger than `limit`.
+pub(crate) fn read_bounded(path: &Path, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.len() > limit => Ok(None),
+        Ok(_) => fs::read(path).map(Some),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+/// The last `limit` bytes of the file.
+pub(crate) fn read_tail(path: &Path, limit: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(path)?;
+    let length = file.metadata()?.len();
+    file.seek(SeekFrom::Start(length.saturating_sub(limit)))?;
+    let mut tail = Vec::new();
+    file.take(limit).read_to_end(&mut tail)?;
+    Ok(tail)
+}
+
+/// Kills a run's process group when dropped before its leader is reaped,
+/// while the ID still names that group alone.
+struct GroupGuard(Option<i32>);
+
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        if let Some(group) = self.0 {
+            // SAFETY: killpg takes no pointers.
+            unsafe { libc::killpg(group, libc::SIGKILL) };
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests;

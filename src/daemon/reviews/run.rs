@@ -17,7 +17,7 @@ use super::{
 };
 use crate::{
     config::{Effective, templates},
-    daemon::{log, workspace::Manager},
+    daemon::{log, oneshot, workspace::Manager},
     model::Workspace,
     reviews::{FailureReason, Review, ReviewState, ReviewTarget},
 };
@@ -389,7 +389,6 @@ fn reviewer_for<'a>(
     home: &Path,
 ) -> Option<Reviewer<'a>> {
     let tool = settings.tools.get(agent)?;
-    let launcher = settings.launchers.get(agent)?;
     let arguments = &tool.launch.arguments;
     let args = arguments.review_args(&crate::ai::ReviewFields {
         prompt: instructions,
@@ -397,12 +396,8 @@ fn reviewer_for<'a>(
         schema_json: crate::reviews::output::SCHEMA,
         output: &files.output(),
     })?;
-    let mut environment = configured.clone();
-    tool.launch.environment.layer(&mut environment, home);
     Some(Reviewer {
-        argv: crate::ai::review_command(launcher, args),
-        environment,
-        remove: tool.launch.environment.remove.clone(),
+        command: oneshot::agent_command(settings, agent, args, configured, home)?,
         files,
         writes_output: arguments.review_writes_output(),
         format: tool.review_result,
@@ -425,25 +420,10 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
         .collect()
 }
 
-/// Remove a run a stopped daemon left: stop its reviewer processes still
-/// working in its checkout, each verified by identity and started with the
-/// run's marker, then remove its files. Anyone else's process there, such
-/// as a shell, is left alone.
+/// Remove a run a stopped daemon left, after stopping its reviewer's
+/// processes still working in its checkout.
 async fn remove_interrupted_run(files: &Files) -> Result<()> {
-    let checkout = canonical(&files.checkout());
-    if checkout.is_dir() {
-        let mut survivors = crate::process::identities_in(&checkout).await?;
-        survivors.retain(|survivor| {
-            crate::process::identity::started_with(survivor, crate::env::REVIEW_RUN)
-        });
-        if !survivors.is_empty() {
-            log!(
-                "stopping {} reviewer processes a stopped daemon left",
-                survivors.len()
-            );
-        }
-        crate::process::identity::stop_verified(&survivors).await?;
-    }
+    oneshot::stop_leftovers(&canonical(&files.checkout())).await?;
     remove_run(files).await
 }
 

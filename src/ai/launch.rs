@@ -197,13 +197,13 @@ fn substitute(template: &[String], fields: &[(&str, &str)]) -> Vec<OsString> {
         .collect()
 }
 
-/// A review's command: the launcher's words before `{args}`, or all of them
-/// when it has none, followed by the review's arguments.
-pub fn review_command(launcher: &[String], review: Vec<OsString>) -> Vec<OsString> {
+/// A one-shot run's command: the launcher's words before `{args}`, or all of
+/// them when it has none, followed by the run's arguments.
+pub fn oneshot_command(launcher: &[String], args: Vec<OsString>) -> Vec<OsString> {
     launcher
         .iter()
         .take_while(|word| word.as_str() != "{args}")
         .map(OsString::from)
-        .chain(review)
+        .chain(args)
         .collect()
 }

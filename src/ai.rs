@@ -13,7 +13,7 @@ mod resolve;
 pub mod validate;
 
 pub use builtin::{PROVIDERS, default_commands};
-pub use launch::{Arguments, Environment, ReviewFields, review_command};
+pub use launch::{Arguments, Environment, ReviewFields, oneshot_command};
 pub use resolve::{
     DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers, tools,
 };

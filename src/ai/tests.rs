@@ -518,9 +518,9 @@ fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
         "danger-full-access",
     ]
     .map(String::from);
-    let command = review_command(&launcher, vec!["exec".into()]);
+    let command = oneshot_command(&launcher, vec!["exec".into()]);
     assert_eq!(command, ["codex", "-m", "gpt", "exec"].map(OsString::from));
-    let command = review_command(
+    let command = oneshot_command(
         &["claude".into(), "--model".into(), "opus".into()],
         vec!["-p".into()],
     );

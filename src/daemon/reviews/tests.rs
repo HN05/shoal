@@ -240,7 +240,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
             .current_dir(&checkout);
         command.env(SURVIVOR_OWNER, std::process::id().to_string());
         if marked {
-            command.env(crate::env::REVIEW_RUN, checkout.parent().unwrap());
+            command.env(crate::env::ONESHOT_RUN, checkout.parent().unwrap());
         }
         let spawned = command.output().unwrap();
         String::from_utf8_lossy(&spawned.stdout)

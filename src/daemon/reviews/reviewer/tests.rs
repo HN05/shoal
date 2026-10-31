@@ -12,9 +12,11 @@ fn files() -> (tempfile::TempDir, Files) {
 
 fn reviewer<'a>(files: &'a Files, argv: &[&str]) -> Reviewer<'a> {
     Reviewer {
-        argv: argv.iter().map(OsString::from).collect(),
-        environment: BTreeMap::new(),
-        remove: BTreeSet::new(),
+        command: AgentCommand {
+            argv: argv.iter().map(std::ffi::OsString::from).collect(),
+            environment: Default::default(),
+            remove: Default::default(),
+        },
         files,
         writes_output: false,
         format: &output::PLAIN,
@@ -35,19 +37,6 @@ async fn a_reviewer_running_past_the_limit_times_out() {
 }
 
 #[tokio::test]
-async fn a_cancelled_reviewer_is_stopped() {
-    let (_root, files) = files();
-    let (cancel, mut cancelled) = watch::channel(false);
-    cancel.send_replace(true);
-    let ended = run(
-        &reviewer(&files, &["sh", "-c", &until_tests_end()]),
-        &mut cancelled,
-    )
-    .await;
-    assert_eq!(ended, Ended::Cancelled);
-}
-
-#[tokio::test]
 async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
@@ -64,21 +53,6 @@ async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
         run(&missing, &mut cancelled).await,
         Ended::Failed(FailureReason::ExecutionFailed)
     );
-}
-
-#[test]
-fn reviewer_output_is_read_within_its_limits() {
-    let root = tempfile::tempdir().unwrap();
-    let path = root.path().join("stream");
-    fs::write(&path, b"0123456789").unwrap();
-    assert_eq!(read_tail(&path, 4).unwrap(), b"6789");
-    assert_eq!(read_tail(&path, 64).unwrap(), b"0123456789");
-    assert_eq!(
-        read_bounded(&path, 10).unwrap().as_deref(),
-        Some(&b"0123456789"[..])
-    );
-    assert_eq!(read_bounded(&path, 9).unwrap(), None);
-    assert_eq!(read_bounded(&root.path().join("missing"), 9).unwrap(), None);
 }
 
 #[tokio::test]
