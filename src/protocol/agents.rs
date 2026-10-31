@@ -37,6 +37,12 @@ pub enum AgentMethod {
         #[serde(default, skip_serializing_if = "TurnEnd::is_empty")]
         turn_end: TurnEnd,
     },
+    /// A turn-state report of the caller's agent that failed with `error`,
+    /// which leaves the state shown as last reported.
+    ReportStateFailure {
+        workspace: String,
+        error: String,
+    },
     /// The retry the proxy of `execution` waits to make, which its wrapper
     /// reports; `None` once the proxy succeeded or gave up.
     ReportProxyRetry {

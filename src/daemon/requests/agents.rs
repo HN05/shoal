@@ -89,6 +89,10 @@ pub(super) async fn handle(
                 )
                 .await?,
         ),
+        AgentMethod::ReportStateFailure { workspace, error } => {
+            manager.report_state_failure(&workspace, &error).await?;
+            Body::Ok
+        }
         AgentMethod::ReportUpstreamReset {
             workspace,
             execution,
@@ -195,7 +199,8 @@ impl Scoped for AgentMethod {
             // would keep a child's events from reaching its coordinator.
             AgentMethod::SetAgentState { workspace, .. }
             | AgentMethod::StartWokenTurn { workspace }
-            | AgentMethod::ReportTurnFailure { workspace, .. } => Some(
+            | AgentMethod::ReportTurnFailure { workspace, .. }
+            | AgentMethod::ReportStateFailure { workspace, .. } => Some(
                 manager
                     .own_workspace(
                         caller,

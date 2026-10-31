@@ -318,3 +318,35 @@ async fn pruning_keeps_unread_and_the_newest_read_notifications() {
     assert_eq!(all[1].message, "exit 6");
     assert_eq!(all.iter().filter(|n| !n.read).count(), 2);
 }
+
+#[tokio::test]
+async fn a_failed_state_report_alerts_one_line_that_fits() {
+    use crate::test_support::repository;
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "reporter".into(), None, None, None)
+        .await
+        .unwrap();
+    let error = format!("first\nsecond {}", "x".repeat(600));
+    manager
+        .report_state_failure(&workspace.id, &error)
+        .await
+        .unwrap();
+    let unread = manager.notifications(true, 50).await.unwrap();
+    assert_eq!(unread.len(), 1);
+    assert_eq!(unread[0].kind, NotificationKind::StateReportFailed);
+    assert_eq!(unread[0].workspace.as_deref(), Some("reporter"));
+    assert!(crate::validate::message(&unread[0].message).is_ok());
+    assert!(
+        unread[0]
+            .message
+            .starts_with("agent state report failed; first second x"),
+        "{}",
+        unread[0].message
+    );
+}

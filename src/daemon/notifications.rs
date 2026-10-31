@@ -72,6 +72,8 @@ states!(NotificationKind {
     RepositoryRemoved => "repository_removed",
     /// An API failure ended an agent's turn and Shoal does not retry it.
     TurnFailed => "turn_failed",
+    /// An agent's hook could not report its turn state.
+    StateReportFailed => "state_report_failed",
     /// The daemon's environment or the global config has a problem, such as
     /// a missing tool, found when the daemon starts or reloads its config.
     EnvironmentProblem => "environment_problem",
@@ -335,6 +337,21 @@ impl Manager {
             .record_notification(about, NotificationKind::AgentMessage, message)
             .await?;
         Ok(Sent { notification })
+    }
+
+    /// Tell the user that a turn-state report of the workspace's agent failed
+    /// with `error`, so the state shown for the agent may be out of date.
+    pub async fn report_state_failure(&self, selector: &str, error: &str) -> Result<()> {
+        let workspace = self.workspace(selector).await?;
+        let about = About::workspace(&workspace.name, &workspace.id);
+        let error = error.replace(char::is_control, " ");
+        let message = crate::validate::shorten(
+            format!("agent state report failed; {error}"),
+            crate::validate::MAX_MESSAGE_LEN,
+        );
+        self.record_notification(about, NotificationKind::StateReportFailed, message)
+            .await?;
+        Ok(())
     }
 
     /// Delete the message `id` the workspace sent the user, which the user
