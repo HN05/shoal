@@ -419,14 +419,59 @@ async fn start_in_background(
     if host.closes_when_done {
         argv.extend(["--close-in".into(), name.into()]);
     }
+    open_in_background(ctx, places, beside, &workspace.path, &label, &argv).await
+}
+
+/// Run Shoal with `args` for the chat `name` at the repository's checkout
+/// in a new background place, of the first host that would start a queued
+/// agent, for the user to attach to. Returns how that host reports it.
+pub(in crate::cli) async fn start_chat_in_background(
+    ctx: &Context,
+    settings: &Effective,
+    repository: &Repository,
+    name: &str,
+    args: &[OsString],
+) -> Result<String> {
+    let origin = queued_origin()?;
+    let repo = groups::Repo::Known(repository);
+    let argv = shoal_command(ctx, args)?;
+    groups::first_queued(
+        ctx,
+        settings,
+        origin.as_ref(),
+        &repo,
+        &repository.path,
+        async |host, group| {
+            let Some(places) = host.places() else {
+                return Ok(None);
+            };
+            let beside = Beside::opening(group);
+            open_in_background(ctx, places, beside, &repository.path, name, &argv).await?;
+            Ok(Some(places.background_note(name)))
+        },
+    )
+    .await?
+    .context(NO_QUEUED_HOST)
+}
+
+/// Run `argv` at `cwd` in a new background place of `places` `beside`,
+/// called `label`.
+async fn open_in_background(
+    ctx: &Context,
+    places: &dyn Places,
+    beside: Beside<'_>,
+    cwd: &Path,
+    label: &str,
+    argv: &[OsString],
+) -> Result<()> {
     let start = Start {
         state: &ctx.paths.state,
         origin: beside.origin,
-        cwd: &workspace.path,
-        label: &label,
+        cwd,
+        label,
         focus: false,
         split: beside.split,
-        argv: &argv,
+        argv,
         env: &place_env(ctx)?,
     };
     places.open(&start).await.map(drop)

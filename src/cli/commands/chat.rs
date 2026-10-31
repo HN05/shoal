@@ -47,14 +47,39 @@ pub(super) async fn start(
 pub(super) struct Options {
     /// Agent to start; defaults to `agent.default`, otherwise a picker.
     pub agent: Option<Agent>,
-    /// Run in this terminal instead of a new tab or detached session.
-    pub here: bool,
+    /// Where the chat runs.
+    pub place: ChatPlace,
     /// The chat's name; defaults to the topic's.
     pub name: Option<String>,
     /// The model and effort requested over the configured ones.
     pub model: ModelChoice,
     /// Arguments forwarded to the agent.
     pub args: Vec<OsString>,
+    /// The agent session the chat continues, such as one `shoal move
+    /// import` brought, instead of starting a new one.
+    pub session: Option<String>,
+}
+
+/// Where a chat runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ChatPlace {
+    /// In a new focused place beside this terminal, where a host opens one,
+    /// otherwise here.
+    Beside,
+    /// In this terminal instead of a new tab or detached session.
+    Here,
+    /// In a new background place, for the user to attach to.
+    Background,
+}
+
+impl ChatPlace {
+    /// `--here`, else beside this terminal.
+    pub fn here(here: bool) -> Self {
+        match here {
+            true => Self::Here,
+            false => Self::Beside,
+        }
+    }
 }
 
 impl Options {
@@ -83,7 +108,7 @@ pub(super) struct Topic {
 }
 
 impl Topic {
-    fn repository(repo: &Repository) -> Self {
+    pub(super) fn repository(repo: &Repository) -> Self {
         Self {
             relaunch: vec!["chat".into(), repo.id.clone().into()],
             name: format!("{}-chat", repository::name(repo)),
@@ -120,12 +145,54 @@ pub(super) async fn begin(
     topic: Topic,
     options: Options,
 ) -> Result<i32> {
+    match launch(ctx, repo, settings, topic, options).await? {
+        Started::Exited(code) => Ok(code),
+        Started::Background(chat) => {
+            let message = format!(
+                "Started chat {} in the background; {}",
+                chat.chat, chat.place
+            );
+            ctx.emit(&message, &chat)?;
+            Ok(0)
+        }
+    }
+}
+
+/// How a chat started.
+pub(super) enum Started {
+    /// It ran here, or beside this terminal, or an app that runs it detached
+    /// reported it; the exit code.
+    Exited(i32),
+    /// It runs in a background place.
+    Background(BackgroundChat),
+}
+
+/// A chat started in a background place.
+#[derive(Debug, serde::Serialize)]
+pub(super) struct BackgroundChat {
+    pub chat: String,
+    pub agent: String,
+    pub repository: String,
+    /// Where it runs and how to reach it.
+    pub place: String,
+}
+
+/// Start a chat as [`begin`] does, reporting one started in the background
+/// to the caller.
+pub(super) async fn launch(
+    ctx: &Context,
+    repo: Repository,
+    settings: Effective,
+    topic: Topic,
+    options: Options,
+) -> Result<Started> {
     let Options {
         agent,
-        here,
+        place,
         name: requested,
         model,
         args,
+        session,
     } = options;
     let agent = chat_agent(ctx, &settings, agent)?;
     check_model(&settings, &agent, &model)?;
@@ -133,20 +200,20 @@ pub(super) async fn begin(
     let name = initial_name(ctx, &topic, requested).await?;
     sync(ctx, &repo).await;
     let settings = self::settings(ctx, &repo).await?;
+    let resumed = resumed_args(&settings, &agent, session.as_deref())?;
     let launch = agents::ChatLaunch {
         name,
-        instructions: instructions(&settings, &repo),
-        opening: topic.opening.clone(),
+        instructions: instructions(&settings, &agent, &repo, session.is_some()),
+        opening: topic.opening.clone().filter(|_| session.is_none()),
         directories: topic.directories.clone(),
         model: agents::resolve_model(&settings, agent.name(), model.clone()),
         repository: repo,
         settings,
-        args,
+        args: [resumed.clone(), args.clone()].concat(),
     };
     if let Some(code) = agents::start_chat(ctx, agent.name(), &launch).await? {
-        return Ok(code);
+        return Ok(Started::Exited(code));
     }
-    ensure!(ctx.interactive(), "chat needs a terminal");
     let agents::ChatLaunch {
         repository: repo,
         name,
@@ -155,23 +222,41 @@ pub(super) async fn begin(
         opening,
         directories,
         model: resolved,
-        args,
+        ..
     } = launch;
+    let beside = |name| Beside {
+        topic: &topic,
+        name,
+        agent: &agent,
+        model: &model,
+        args: &args,
+        session: session.as_deref(),
+    };
+    if place == ChatPlace::Background {
+        let note = terminal::start_chat_in_background(
+            ctx,
+            &settings,
+            &repo,
+            &name,
+            &beside(&name).relaunch(),
+        )
+        .await?;
+        return Ok(Started::Background(BackgroundChat {
+            chat: name,
+            agent: agent.name().to_owned(),
+            repository: repo.id,
+            place: note,
+        }));
+    }
+    ensure!(ctx.interactive(), "chat needs a terminal");
     let model_args = agents::model_args(&settings, agent.name(), &resolved)?;
     let name = if asks_name {
         ask_name(ctx, &name).await?
     } else {
         name
     };
-    let beside = Beside {
-        topic: &topic,
-        name: &name,
-        agent: &agent,
-        model: &model,
-        args: &args,
-    };
-    if !here && start_beside(ctx, &settings, &repo, beside).await? {
-        return Ok(0);
+    if place == ChatPlace::Beside && start_beside(ctx, &settings, &repo, beside(&name)).await? {
+        return Ok(Started::Exited(0));
     }
     agents::trust_checkout(ctx, &settings, agent.name(), &repo).await;
     let chat = client::start_chat(
@@ -200,7 +285,7 @@ pub(super) async fn begin(
         &agent,
         instructions,
         opening,
-        args,
+        [resumed, args].concat(),
     )?;
     terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
     run_here(
@@ -210,6 +295,35 @@ pub(super) async fn begin(
         &command,
         &settings.launch(agent.name()).environment_with(&resolved),
     )
+    .map(Started::Exited)
+}
+
+/// The arguments with which `agent` continues `session`, unless the chat
+/// starts a new one; an agent without resume arguments starts a new one,
+/// with a warning.
+fn resumed_args(
+    settings: &Effective,
+    agent: &Agent,
+    session: Option<&str>,
+) -> Result<Vec<OsString>> {
+    let Some(session) = session else {
+        return Ok(Vec::new());
+    };
+    ensure!(
+        crate::execution::recovery::valid_session(session),
+        "invalid agent session ID"
+    );
+    let resumed = settings
+        .launch(agent.name())
+        .arguments
+        .resume_args(Some(session));
+    if resumed.is_none() {
+        eprintln!(
+            "warning: {} has no resume arguments, so the chat starts a new session",
+            agent.name()
+        );
+    }
+    Ok(resumed.unwrap_or_default())
 }
 
 /// `--name`, which [`Options::check_name`] checked, else the topic's name
@@ -330,14 +444,15 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
     ui::pick_choice(ctx, "Agent> ", &choices)?.parse()
 }
 
-/// A chat to start beside this terminal: its topic, name, agent, requested
-/// model and forwarded arguments.
+/// A chat to start in a new place: its topic, name, agent, requested model,
+/// forwarded arguments and the session it continues.
 struct Beside<'a> {
     topic: &'a Topic,
     name: &'a str,
     agent: &'a Agent,
     model: &'a ModelChoice,
     args: &'a [OsString],
+    session: Option<&'a str>,
 }
 
 impl Beside<'_> {
@@ -358,6 +473,9 @@ impl Beside<'_> {
             if let Some(value) = value {
                 chat.extend([flag.into(), value.into()]);
             }
+        }
+        if let Some(session) = self.session {
+            chat.extend(["--session".into(), session.into()]);
         }
         if !self.args.is_empty() {
             chat.push("--".into());
@@ -424,8 +542,18 @@ fn command(
     )
 }
 
-/// The resolved chat template with the repository's name and checkout.
-fn instructions(settings: &Effective, repo: &Repository) -> String {
+/// The resolved chat template with the repository's name and checkout, or
+/// nothing for a chat that `resumes` a session with an agent that takes it
+/// only in its first message, which the session already has.
+fn instructions(settings: &Effective, agent: &Agent, repo: &Repository, resumes: bool) -> String {
+    let in_first_message = settings
+        .launch(agent.name())
+        .arguments
+        .instructions
+        .is_none();
+    if resumes && in_first_message {
+        return String::new();
+    }
     templates::render(
         &settings.agent.templates.chat,
         &[

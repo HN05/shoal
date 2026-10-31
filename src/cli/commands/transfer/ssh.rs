@@ -64,11 +64,14 @@ pub(super) async fn run(ctx: &Context, args: SshArgs) -> Result<i32> {
 }
 
 /// The report of moving `name` to `host`, where the import reported
-/// `imported`.
+/// `imported`: a workspace, or a chat started in the background there.
 fn moved(name: &str, host: &str, imported: &Value) -> String {
     let mut message = format!("Moved {name} to {host}");
     if let Some(path) = imported["workspace"]["path"].as_str() {
         message.push_str(&format!(" at {path}"));
+    }
+    if let Some(place) = imported["place"].as_str() {
+        message.push_str(&format!("; it continues there: {place}"));
     }
     let queued = imported["queued"]["queued"].as_array().map_or(0, Vec::len);
     match queued {
@@ -79,8 +82,8 @@ fn moved(name: &str, host: &str, imported: &Value) -> String {
     message
 }
 
-/// Remove and export the planned workspace, then import it on `remote`,
-/// queueing its agents' restores there when `resume`.
+/// End and export the planned space, then import it on `remote`, queueing
+/// its agents' restores or starting its chat there when `resume`.
 async fn move_one(
     ctx: &Context,
     remote: &Remote,

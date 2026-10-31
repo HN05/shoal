@@ -6538,6 +6538,85 @@ fn export_carries_session_files_that_import_puts_back() {
 }
 
 #[test]
+fn a_chat_moves_with_its_session_and_continues_it() {
+    let fixture = Fixture::with_config(Some(
+        "[agents.claude]\ncommand = ['sh', './chat-agent.sh']\n",
+    ));
+    let home = fixture.root.path();
+    // The agent reports its session as Claude Code's hook does, then talks
+    // until a signal ends it; resumed, it only records its arguments.
+    fs::write(
+        fixture.repo.join("chat-agent.sh"),
+        format!(
+            "printf '%s\\n' \"$@\" > \"$HOME/chat-args\"\n\
+             case \" $* \" in *' --resume '*) exit 0;; esac\n\
+             printf '{{\"session_id\":\"chat-session\"}}' | '{}' internal agent-state idle >/dev/null || exit 3\n\
+             touch \"$HOME/chat-started\"\n\
+             trap 'exit 0' TERM\nwhile :; do sleep 1; done\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    )
+    .unwrap();
+    let projects = home.join(".claude/projects");
+    let project = projects.join("-repo");
+    let repo = fixture.repo.to_str().unwrap();
+    let file = home.join("talk.shoal");
+    let file = file.to_str().unwrap();
+    std::thread::scope(|scope| {
+        let chat = scope.spawn(|| {
+            fixture.interactive_command(
+                fixture
+                    .command()
+                    .current_dir(&fixture.repo)
+                    .args(["chat", "--here", "--agent", "claude", "--name", "talk"]),
+                "",
+            )
+        });
+        wait_until("chat started", || home.join("chat-started").exists());
+        let chats = fixture.ok(&["work", "--chats"]);
+        assert_eq!(chats[0]["session"], "chat-session", "{chats}");
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("chat-session.jsonl"), "{\"turn\":1}\n").unwrap();
+
+        // Ending a chat the user talks with needs a confirmation.
+        let unconfirmed = fixture.run(&["move", "export", "talk", "-o", file]);
+        assert!(!unconfirmed.status.success(), "{unconfirmed:?}");
+        assert!(
+            String::from_utf8_lossy(&unconfirmed.stderr).contains("Ends these chats here"),
+            "{unconfirmed:?}"
+        );
+        let exported = fixture.ok(&["move", "export", "talk", "-o", file, "--yes"]);
+        assert_eq!(exported["manifest"]["kind"], "chat", "{exported}");
+        assert_eq!(exported["manifest"]["name"], "talk", "{exported}");
+        assert_eq!(
+            exported["manifest"]["session_files"][0]["path"], "-repo/chat-session.jsonl",
+            "{exported}"
+        );
+        let (output, transcript) = chat.join().unwrap();
+        assert!(output.status.success(), "{output:?}\n{transcript}");
+    });
+    assert_eq!(fixture.ok(&["work", "--chats"]), serde_json::json!([]));
+
+    // The importing machine has no transcript; the import puts it back and
+    // the chat continues its session under its name, free again.
+    fs::remove_dir_all(&projects).unwrap();
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .env("SHOAL_DEV_USER_FILES", "1")
+            .args(["move", "import", file, "--repo", repo]),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let args = fs::read_to_string(home.join("chat-args")).unwrap();
+    assert!(args.contains("\n--resume\nchat-session\n"), "{args}");
+    assert_eq!(
+        fs::read_to_string(project.join("chat-session.jsonl")).unwrap(),
+        "{\"turn\":1}\n"
+    );
+}
+
+#[test]
 fn export_finds_the_sessions_of_a_profile_only_the_workspace_defines() {
     let fixture = Fixture::with_config(Some("[agents.claude]\ncommand = ['sh', './agent.sh']\n"));
     let workspace = fixture.add("profiled");

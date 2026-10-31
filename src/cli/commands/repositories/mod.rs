@@ -35,10 +35,11 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         } => {
             let options = super::chat::Options {
                 agent,
-                here,
+                place: super::chat::ChatPlace::here(here),
                 name,
                 model: model.into(),
                 args,
+                session: None,
             };
             super::repo_setup::start(ctx, repository, local, options).await
         }

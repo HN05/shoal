@@ -100,7 +100,7 @@ fn clearing_scope_in_a_child_keeps_the_ancestor_scope_for_its_state() {
         ("shell recover /", "cannot navigate outside their worktree"),
         ("work restore", "cannot reopen removed workspaces"),
         ("move export -o -", "cannot export spaces"),
-        ("move import -", "cannot import workspaces"),
+        ("move import -", "cannot import spaces"),
         ("alerts", "cannot read or clear notifications"),
         ("alerts clear", "cannot read or clear notifications"),
         (

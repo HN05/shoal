@@ -37,7 +37,8 @@ use hosts::{Configured, Options, names_places};
 pub(crate) use launch::{detached_start_environment, start_environment};
 pub(in crate::cli) use launch::{
     ensure_background, keeps_agents_in_sessions, launcher_program, rerun_where_stopped,
-    restore_queued, run_agent, run_in_background, start_add, start_chat, start_queued,
+    restore_queued, run_agent, run_in_background, start_add, start_chat, start_chat_in_background,
+    start_queued,
 };
 pub(in crate::cli) use naming::{PlaceName, issue_label, relabel_chat, relabel_places};
 pub(in crate::cli) use prompts::{

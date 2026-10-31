@@ -67,6 +67,9 @@ pub enum AgentsCommand {
         name: Option<String>,
         #[command(flatten)]
         model: ModelArgs,
+        /// Agent session the chat continues, which shoal move import passes.
+        #[arg(long, hide = true)]
+        session: Option<String>,
         /// Arguments forwarded to the agent.
         #[arg(last = true)]
         args: Vec<OsString>,

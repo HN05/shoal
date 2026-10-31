@@ -67,14 +67,16 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             agent,
             name,
             model,
+            session,
             args,
         } => {
             let options = chat::Options {
                 agent,
-                here,
+                place: chat::ChatPlace::here(here),
                 name,
                 model: model.into(),
                 args,
+                session,
             };
             chat::start(&ctx, repository, options).await
         }
@@ -96,10 +98,11 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             };
             let options = chat::Options {
                 agent,
-                here,
+                place: chat::ChatPlace::here(here),
                 name,
                 model: model.into(),
                 args,
+                session: None,
             };
             plan::start(&ctx, issue, repository, pick, options).await
         }
