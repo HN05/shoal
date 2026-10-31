@@ -103,12 +103,14 @@ fn a_root_spotlight_already_skips_keeps_its_place() {
     assert!(fs::symlink_metadata(&root).unwrap().is_dir());
 }
 
-/// A canonical temporary directory whose own name Spotlight does not skip,
-/// unlike `tempfile`'s default `.tmp` prefix, kept until the test ends.
+/// A canonical temporary directory whose path Spotlight does not skip, kept
+/// until the test ends. It lies in `/tmp` and avoids `tempfile`'s default
+/// `.tmp` prefix, since `$TMPDIR` can lie in a hidden directory such as a
+/// Shoal workspace's.
 fn parent() -> Parent {
     let temp = tempfile::Builder::new()
         .prefix("spotlight")
-        .tempdir()
+        .tempdir_in("/tmp")
         .unwrap();
     let path = fs::canonicalize(temp.path()).unwrap();
     Parent { _temp: temp, path }

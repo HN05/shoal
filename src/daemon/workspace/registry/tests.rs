@@ -19,12 +19,13 @@ async fn a_contribution_clones_a_url_and_keeps_an_existing_registration() {
     assert!(!again.contribution);
 }
 
-/// A canonical temporary directory whose name Spotlight does not skip, and
-/// an excluded `root_dir` named `shoal` in it.
+/// A canonical temporary directory whose path Spotlight does not skip, and
+/// an excluded `root_dir` named `shoal` in it. It lies in `/tmp`, since
+/// `$TMPDIR` can lie in a hidden directory such as a Shoal workspace's.
 fn excluded_root() -> (tempfile::TempDir, std::path::PathBuf, super::ConfiguredRoot) {
     let temp = tempfile::Builder::new()
         .prefix("registry")
-        .tempdir()
+        .tempdir_in("/tmp")
         .unwrap();
     let parent = std::fs::canonicalize(temp.path()).unwrap();
     let root = super::ConfiguredRoot {
