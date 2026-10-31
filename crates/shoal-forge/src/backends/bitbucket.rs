@@ -3,7 +3,7 @@
 //! the token the account's login for the host fetches.
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde_json::{Value, json};
 
@@ -51,6 +51,9 @@ use super::{Backend, LoginHint, rest};
 
 /// Bitbucket Cloud's API, which is not served from its web host.
 const API: &str = "https://api.bitbucket.org/2.0";
+
+/// The one host Bitbucket Cloud serves, whose token alone reaches [`API`].
+const HOST: &str = "bitbucket.org";
 /// The page size Bitbucket's lists take by default.
 const PAGE_SIZE: usize = 50;
 
@@ -172,6 +175,12 @@ impl Backend for Bitbucket {
         account: &Account,
         request: &Request,
     ) -> Result<Response> {
+        // Another host's token must never reach Bitbucket Cloud's API.
+        ensure!(
+            repo.host == HOST,
+            "{} is not Bitbucket Cloud, which Shoal reaches only at {HOST}",
+            repo.host
+        );
         let url = format!("{API}/{}", request.endpoint);
         let authorization = account.authorization(repo).await?;
         repo.curl_send(&url, authorization, request).await

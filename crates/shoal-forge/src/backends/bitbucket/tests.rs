@@ -336,3 +336,21 @@ fn comment_authors_are_the_login_by_uuid_not_nickname() {
     assert!(!same_account(&user, &Value::Null).unwrap());
     assert!(same_account(&json!({"nickname": "sam"}), &namesake).is_err());
 }
+
+#[tokio::test]
+async fn only_bitbucket_org_reaches_the_cloud_api() {
+    let other = ForgeRepo::host(
+        "bitbucket.example",
+        "https",
+        crate::backends::ForgeKind::Bitbucket,
+    );
+    let request = Request::get("user".into());
+    let error = Bitbucket
+        .send(&other, &Account::default(), &request)
+        .await
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("bitbucket.example is not Bitbucket Cloud"),
+        "{error:#}"
+    );
+}
