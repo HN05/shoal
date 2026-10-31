@@ -28,6 +28,7 @@ mod protocol;
 mod proxy;
 mod removal;
 mod repository;
+mod reviews;
 mod secrets;
 mod seed;
 mod service;
