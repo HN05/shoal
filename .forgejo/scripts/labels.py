@@ -59,17 +59,21 @@ def existing():
     return ids
 
 
+def sync(name, colour, exclusive, description, ids):
+    """Edit the label of *name* to match, or create it when *ids* has none."""
+    label = {"name": name, "color": f"#{colour}", "exclusive": exclusive,
+             "description": description}
+    if name in ids:
+        api(f"repos/{{owner}}/{{repo}}/labels/{ids[name]}", "-X", "PATCH", data=label)
+        return "updated"
+    api("repos/{owner}/{repo}/labels", data=label)
+    return "created"
+
+
 def main():
     ids = existing()
-    for name, colour, exclusive, description in LABELS:
-        label = {"name": name, "color": f"#{colour}", "exclusive": exclusive,
-                 "description": description}
-        if name in ids:
-            api(f"repos/{{owner}}/{{repo}}/labels/{ids[name]}", "-X", "PATCH", data=label)
-            print(f"updated {name}")
-        else:
-            api("repos/{owner}/{repo}/labels", data=label)
-            print(f"created {name}")
+    for label in LABELS:
+        print(f"{sync(*label, ids)} {label[0]}")
 
 
 if __name__ == "__main__":
