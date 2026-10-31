@@ -11,6 +11,7 @@ use crate::{
         self, Identity,
         spaces::{self, Space, Untracked},
     },
+    state::WorkspaceState,
     tmp_dirs::Layout,
 };
 
@@ -48,31 +49,57 @@ const ROUNDS: usize = 3;
 
 impl Manager {
     /// Stop the untracked processes that `selection` takes of the workspace
-    /// or chat `selector` names, as [`Self::stop_untracked`] does. The
-    /// worktree ties processes to a workspace once it is verified to be its.
+    /// or chat `selector` names, as [`Self::stop_untracked`] does.
     pub(crate) async fn stop_space_processes(
         &self,
         selector: &str,
         selection: Selection,
         requester: Option<Identity>,
     ) -> Result<Stopped> {
-        let (name, space) = match self.workspace(selector).await {
-            Ok(workspace) => {
-                let verified =
-                    workspace.path.is_dir() && self.verify_worktree(&workspace).await.is_ok();
-                let space = self.workspace_space(&workspace, verified).await?;
-                (workspace.name, space)
-            }
+        let workspace = match self.workspace(selector).await {
+            Ok(workspace) => workspace,
             Err(error) => {
                 let chat = self.running_chat(selector).await?.ok_or(error)?;
-                (chat.name.clone(), chat_space(&chat))
+                let processes = self
+                    .stop_untracked(chat_space(&chat), selection, requester)
+                    .await?;
+                return Ok(Stopped {
+                    space: chat.name,
+                    processes,
+                });
             }
         };
-        let processes = self.stop_untracked(space, selection, requester).await?;
+        let processes = self
+            .stop_workspace_untracked(&workspace, selection, requester)
+            .await?;
         Ok(Stopped {
-            space: name,
+            space: workspace.name,
             processes,
         })
+    }
+
+    /// [`Self::stop_untracked`] for `workspace` under a reserved lifecycle,
+    /// so no execution registers between reading the tracked processes and
+    /// signalling: its processes would count as untracked. The worktree ties
+    /// processes to the workspace once it is verified to be its.
+    async fn stop_workspace_untracked(
+        &self,
+        workspace: &Workspace,
+        selection: Selection,
+        requester: Option<Identity>,
+    ) -> Result<usize> {
+        let reserved = self
+            .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
+            .await?;
+        let stopped = async {
+            let verified = workspace.path.is_dir() && self.verify_worktree(workspace).await.is_ok();
+            let space = self.workspace_space(workspace, verified).await?;
+            self.stop_untracked(space, selection, requester).await
+        }
+        .await;
+        self.set_state(&workspace.id, reserved, workspace.error.clone())
+            .await?;
+        stopped
     }
 
     /// What ties processes to `workspace`, through its worktree too when
