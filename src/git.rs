@@ -4,6 +4,7 @@ pub mod bundle;
 pub mod config;
 pub(crate) mod conflicts;
 pub mod default_branch;
+pub mod detached;
 pub mod diff;
 pub mod existing_branch;
 pub mod fetch;
