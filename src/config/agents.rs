@@ -45,6 +45,11 @@ pub struct AgentToolConfig {
     pub model_args: Option<Vec<String>>,
     /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
+    /// Arguments of a one-shot, read-only review, which follow the launcher's
+    /// words before `{args}`: the prompt as `{prompt}`, the output schema as
+    /// a file, `{schema}`, or its text, `{schema_json}`, and `{output}`, a
+    /// file the result goes to instead of standard output.
+    pub review: Option<Vec<String>>,
     /// Variables set for the tool's tracked launches, after the workspace's
     /// `[env]`; a value starting with `~/` names a path under the home.
     #[option(named)]
@@ -169,6 +174,7 @@ pub fn describe(
                 effort: settings.and_then(|agent| agent.effort.clone()),
                 model_args: settings.and_then(|agent| agent.model_args.clone()),
                 effort_args: settings.and_then(|agent| agent.effort_args.clone()),
+                review: settings.and_then(|agent| agent.review.clone()),
                 base: settings.and_then(|agent| agent.base.clone()),
                 env: settings.map(|agent| agent.env.clone()).unwrap_or_default(),
                 env_remove: settings

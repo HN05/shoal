@@ -8,7 +8,10 @@ use std::{
 use anyhow::Result;
 
 use super::IntegrationKind;
-use crate::config::named_commands::Commands;
+use crate::{
+    config::named_commands::Commands,
+    reviews::output::{self, ResultFormat},
+};
 
 /// A provider available without configuration.
 pub struct Provider {
@@ -26,6 +29,9 @@ pub struct Provider {
     /// The variable that sets the reasoning effort over the effort
     /// arguments, which a launch with an effort sets to the same value.
     pub(super) effort_variable: Option<&'static str>,
+    pub(super) review: Option<&'static [&'static str]>,
+    /// How its review result comes back.
+    pub(super) review_result: &'static ResultFormat,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -70,6 +76,19 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: Some(&["-m", "{model}"]),
         effort_args: Some(&["-c", "model_reasoning_effort=\"{effort}\""]),
         effort_variable: None,
+        review: Some(&[
+            "exec",
+            "--sandbox",
+            "read-only",
+            "-c",
+            "approval_policy=\"never\"",
+            "--output-schema",
+            "{schema}",
+            "--output-last-message",
+            "{output}",
+            "{prompt}",
+        ]),
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "claude",
@@ -86,6 +105,19 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: Some(&["--model", "{model}"]),
         effort_args: Some(&["--effort", "{effort}"]),
         effort_variable: Some("CLAUDE_CODE_EFFORT_LEVEL"),
+        // Tool lists take every following argument, so they use the joined
+        // form and the prompt comes first.
+        review: Some(&[
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "json",
+            "--json-schema",
+            "{schema_json}",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
+            "--disallowedTools=Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent",
+        ]),
+        review_result: &output::CLAUDE,
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -101,6 +133,8 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: None,
         effort_args: None,
         effort_variable: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "pi",
@@ -115,6 +149,8 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: None,
         effort_args: None,
         effort_variable: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "grok",
@@ -129,6 +165,8 @@ pub const PROVIDERS: &[Provider] = &[
         model_args: None,
         effort_args: None,
         effort_variable: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
 ];
 

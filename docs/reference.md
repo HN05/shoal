@@ -1035,6 +1035,7 @@ fork = ["--resume", "{session}", "--fork-session"]    # Optional
 add_dir = ["--add-dir", "{directory}"]                # Optional
 model_args = ["--model", "{model}"]                   # Optional
 effort_args = ["--reasoning-effort", "{effort}"]      # Optional
+review = ["exec", "--schema", "{schema}", "{prompt}"] # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
@@ -1058,8 +1059,8 @@ env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
 
 A profile gets its base's hooks, trust entries and waking, and each of its
 launcher (the one in effect for the workspace), `skill_dir`, `instructions`,
-`resume`, `resume_latest`, `fork`, `add_dir`, `model`, `effort`, `model_args`
-and `effort_args` it does not set; a base may itself be a profile.
+`resume`, `resume_latest`, `fork`, `add_dir`, `model`, `effort`, `model_args`,
+`effort_args` and `review` it does not set; a base may itself be a profile.
 
 `model` and `effort` choose the model and reasoning effort a tool's agents run
 with; without them the tool uses its own defaults. Shoal passes the values
@@ -1225,6 +1226,13 @@ entry for every agent and chat, for a workspace's agent the repository's
 workspaces directory, where `shoal split` puts children and its [temporary
 directory](#temporary-directories) lies, and for a chat its temporary directory, plus the
 repository's local config directory for the chat of a local `repo setup`. An empty list gives none.
+`review` runs a [local review](#local-reviews) once, without a session: the
+launcher's words before `{args}`, or all of them, followed by these arguments,
+which name the prompt `{prompt}` and the output schema as a file, `{schema}`, or
+its text, `{schema_json}`; `{output}` names a file the result goes to instead of
+standard output. Claude Code's prints its JSON result read-only with Claude's
+`--json-schema`, and Codex's runs `codex exec` in a read-only sandbox with
+`--output-schema`; a tool without one cannot review.
 `agent.dirs` (default `["/tmp"]`) lists directories every agent may read without
 a permission prompt, such as where the tools it runs leave output. Each entry is
 absolute or starts with `~/`; a repository's list replaces the global one, and an

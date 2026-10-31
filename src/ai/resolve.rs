@@ -14,6 +14,7 @@ use super::{
     validate::skill_dir,
 };
 use crate::agent::ModelChoice;
+use crate::reviews::output::{self, ResultFormat};
 
 /// Every built-in and configured AI tool by name.
 pub type Tools = BTreeMap<String, Tool>;
@@ -47,6 +48,9 @@ pub struct Tool {
     configured_prompt_cache: Option<Duration>,
     /// The `model` and `effort` each configured nearest in its lineage.
     pub model: ModelChoice,
+    /// How its review result comes back: as the built-in tool its lineage
+    /// ends at returns it, else as the whole result.
+    pub review_result: &'static ResultFormat,
 }
 
 /// How long an agent's prompt cache lives after a turn when neither its AI
@@ -198,6 +202,7 @@ fn tool(entries: &Agents, name: &str) -> Tool {
             model: configured.iter().find_map(|agent| agent.model.clone()),
             effort: configured.iter().find_map(|agent| agent.effort.clone()),
         },
+        review_result: builtin.map_or(&output::PLAIN, |provider| provider.review_result),
     }
 }
 
@@ -267,6 +272,10 @@ fn arguments(configured: &[&Agent], builtin: Option<&Provider>) -> Arguments {
         effort_args: pick(
             |agent| agent.effort_args.as_ref(),
             builtin.and_then(|provider| provider.effort_args),
+        ),
+        review: pick(
+            |agent| agent.review.as_ref(),
+            builtin.and_then(|provider| provider.review),
         ),
     }
 }

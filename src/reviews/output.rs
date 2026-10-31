@@ -43,6 +43,7 @@ pub struct Checked {
 
 /// How an AI tool's integration hands back the reviewer's result, which
 /// [`read`] unwraps.
+#[derive(Debug)]
 pub struct ResultFormat {
     /// The failure a successful run's unparseable result text names.
     unparsed: fn(&str) -> Option<FailureReason>,

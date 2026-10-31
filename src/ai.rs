@@ -13,7 +13,7 @@ mod resolve;
 pub mod validate;
 
 pub use builtin::{PROVIDERS, default_commands};
-pub use launch::{Arguments, Environment};
+pub use launch::{Arguments, Environment, ReviewFields, review_command};
 pub use resolve::{
     DEFAULT_PROMPT_CACHE, IntegrationKind, LaunchProfile, Tools, inherit_launchers, tools,
 };
@@ -50,6 +50,9 @@ pub struct Agent {
     pub model_args: Option<Vec<String>>,
     /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
+    /// Arguments of a one-shot, read-only review with `{prompt}`, `{schema}`
+    /// or `{schema_json}`, and optionally `{output}`.
+    pub review: Option<Vec<String>>,
     /// The AI tool this one is a launch profile of: it inherits that tool's
     /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,
