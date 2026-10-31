@@ -109,8 +109,9 @@ impl ForgeRepo {
         subjects: &[Subject],
         login: Option<&str>,
     ) -> Result<Vec<Vec<Reaction>>> {
-        futures_util::stream::iter(subjects)
-            .map(|&subject| async move {
+        // Owned subjects keep the reads Send for callers that spawn them.
+        futures_util::stream::iter(subjects.iter().copied())
+            .map(|subject| async move {
                 let listed = self
                     .listed_reactions(account, kind, number, subject)
                     .await?;

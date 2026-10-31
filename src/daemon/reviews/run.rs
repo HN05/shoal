@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
 
 use super::{
-    now,
+    history, now,
     reviewer::{self, Ended, Files, Reviewer},
     store,
 };
@@ -125,7 +125,9 @@ impl Manager {
         reviewer::write_schema(files)?;
         crate::git::detached::add(&repository.path, &files.checkout(), &commits.head).await?;
         let configured = self.configured_workspace_environment(workspace).await?;
-        let instructions = self.review_instructions(review, workspace, settings, files, commits);
+        let instructions = self
+            .review_instructions(review, workspace, settings, files, commits)
+            .await?;
         let agent = review.agent.clone();
         let ended = self
             .attempt(
@@ -220,16 +222,17 @@ impl Manager {
     }
 
     /// The review's instructions for its checkout.
-    fn review_instructions(
+    /// The review's instructions for its checkout, then its history.
+    async fn review_instructions(
         &self,
-        _review: &Review,
+        review: &Review,
         workspace: &Workspace,
         settings: &Effective,
         files: &Files,
         commits: &Commits,
-    ) -> String {
+    ) -> Result<String> {
         let checkout = files.checkout();
-        templates::review_instructions(
+        let instructions = templates::review_instructions(
             Some(&settings.agent.templates.review),
             &templates::ReviewFields {
                 workspace: &workspace.name,
@@ -237,7 +240,44 @@ impl Manager {
                 path: &checkout.to_string_lossy(),
                 base: &commits.base,
             },
-        )
+        );
+        let (id, workspace_id) = (review.id, workspace.id.clone());
+        let earlier = self
+            .store
+            .run(move |db| store::earlier(db, &workspace_id, id))
+            .await?;
+        let pull = match &review.target {
+            ReviewTarget::Pr { url, .. } => self.pull_discussion(workspace, url).await,
+            ReviewTarget::Workspace => None,
+        };
+        let history = history::history(&earlier, pull.as_ref());
+        Ok(match history.is_empty() {
+            true => instructions,
+            false => format!("{instructions}\n\n{history}"),
+        })
+    }
+
+    /// The PR's description, conversation and reviews as its agent account
+    /// reads them; a review without them still runs.
+    async fn pull_discussion(
+        &self,
+        workspace: &Workspace,
+        url: &str,
+    ) -> Option<crate::forge::review::view::Details> {
+        let (forge, account) = match self.workspace_forge_account(workspace).await {
+            Ok(found) => found,
+            Err(error) => {
+                log!("the discussion of {url}: {error:#}");
+                return None;
+            }
+        };
+        let view = forge
+            .view(&account, crate::forge::items::link::ItemKind::Pr, url, true)
+            .await;
+        for error in &view.errors {
+            log!("the discussion of {url}: {error}");
+        }
+        view.details
     }
 
     /// The commits the review covers: the workspace's committed HEAD against

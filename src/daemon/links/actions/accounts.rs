@@ -89,7 +89,7 @@ impl Manager {
         }
     }
 
-    pub(in crate::daemon::links) async fn workspace_forge_account(
+    pub(crate) async fn workspace_forge_account(
         &self,
         workspace: &Workspace,
     ) -> Result<(ForgeRepo, Account)> {
