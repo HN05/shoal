@@ -1,17 +1,8 @@
 use super::*;
-use crate::account::{AgentLogins, Launch};
-use crate::test_support::install_test_script;
-use std::path::PathBuf;
-use tokio::process::Command;
-
-/// Finds the CLIs only in one directory.
-struct Bin(PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut Command) {
-        command.env("PATH", &self.0);
-    }
-}
+use crate::{
+    backends::ForgeKind,
+    test_support::{Server, agent_on, repo_on},
+};
 
 #[test]
 fn a_fork_remote_keeps_the_origin_url_form() {
@@ -54,40 +45,34 @@ fn only_forges_that_open_pull_requests_from_forks_fork() {
 
 #[tokio::test]
 async fn github_reads_push_access_and_forks_into_the_account() {
-    let dir = tempfile::tempdir().unwrap();
-    let log = dir.path().join("log");
-    let gh = dir.path().join("gh");
-    install_test_script(
-        &gh,
-        &format!(
-            r#"#!/bin/sh
-echo "$*" >> '{log}'
-case "$*" in
-  *forks*) printf 'HTTP/2.0 202 Accepted\n\n{{"full_name":"someone/repo"}}';;
-  *) printf 'HTTP/2.0 200 OK\n\n{{"full_name":"team/repo","permissions":{{"push":false}}}}';;
-esac
-"#,
-            log = log.display()
+    let server = Server::start(|request| match request.line.as_str() {
+        line if line.ends_with("/forks") => {
+            (202, Vec::new(), r#"{"full_name":"someone/repo"}"#.into())
+        }
+        _ => (
+            200,
+            Vec::new(),
+            r#"{"full_name":"team/repo","permissions":{"push":false}}"#.into(),
         ),
-    );
-    let logins = AgentLogins {
-        launch: Box::new(Bin(dir.path().to_owned())),
-        logins: Default::default(),
-        separate: Vec::new(),
-    };
-    let account = Account::agent(logins, Default::default());
-    let repo = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
+    });
+    let account = agent_on(&server, "agent");
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/repo");
     assert!(!repo.pushable(&account).await.unwrap());
     let fork = repo.fork(&account).await.unwrap();
     assert_eq!(
-        fork,
-        ForgeRepo::parse("https://github.com/someone/repo").unwrap()
+        (fork.host.as_str(), fork.path.as_str()),
+        (server.host.as_str(), "someone/repo")
     );
-    let log = std::fs::read_to_string(log).unwrap();
-    let lines: Vec<_> = log.lines().collect();
-    assert!(lines[0].contains("repos/team/repo"), "{log}");
-    assert!(
-        lines[1].contains("POST") && lines[1].contains("repos/team/repo/forks"),
-        "{log}"
+    let lines: Vec<_> = server
+        .received()
+        .into_iter()
+        .map(|request| request.line)
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            "GET /api/v3/repos/team/repo",
+            "POST /api/v3/repos/team/repo/forks"
+        ]
     );
 }

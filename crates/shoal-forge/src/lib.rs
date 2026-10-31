@@ -13,8 +13,8 @@ pub mod raw;
 pub mod repo;
 pub mod review;
 mod state;
-#[cfg(test)]
-mod test_support;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 pub mod transport;
 pub mod updates;
 

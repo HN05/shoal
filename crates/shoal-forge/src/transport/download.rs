@@ -1,53 +1,20 @@
-//! Files fetched from a forge's web host, such as an image in a description:
-//! through a CLI's `api` command, which owns its login, or through curl with
-//! a token passed on stdin. Both follow redirects to the storage that serves
-//! the file; curl and gh send the login only to the host it is for, while
-//! glab keeps its token header on a redirect.
-use anyhow::{Context, Result, bail};
+//! Files fetched from a forge's web host, such as an image in a description,
+//! through curl with the account's token passed on stdin. It follows
+//! redirects to the storage that serves the file and sends the token only
+//! to the host it is for.
+use anyhow::{Context, Result};
 use tokio::process::Command;
 
-use crate::{
-    account::Account,
-    transport::{
-        api::{FILE_TIMEOUT, curl_failure, size},
-        programs,
-        response::{Fetched, last_head},
-    },
+use crate::transport::{
+    api::{FILE_TIMEOUT, curl_failure, size},
+    programs,
+    response::{Fetched, last_head},
 };
 
 /// The largest file Shoal downloads, which is also the largest it attaches.
 pub(crate) const MAX_DOWNLOAD_BYTES: usize = 100 * 1024 * 1024;
 /// Room for the response heads printed with the file.
 const HEAD_BYTES: usize = 64 * 1024;
-
-/// GET the file `target` names through `program api`, such as a full URL
-/// for `gh api` or `--hostname` and an endpoint for `glab api`.
-pub(crate) async fn through_cli(
-    program: &'static str,
-    account: &Account,
-    target: &[&str],
-) -> Result<Fetched> {
-    let mut cli = Command::new(program);
-    cli.env("NO_COLOR", "1")
-        .env("GH_PROMPT_DISABLED", "1")
-        .args(["api", "--include"])
-        .args(target);
-    account.apply(&mut cli);
-    let output = capture(cli, Vec::new())
-        .await
-        .map_err(|error| unrun(error, format!("run {program}; is it installed?")))?;
-    // The CLIs exit with an error for a failed response, whose head says
-    // more; after a successful head, an error means the file was cut off.
-    let failed = !output.status.success();
-    match Fetched::included(output.stdout) {
-        Ok(fetched) if !failed || !(200..300).contains(&fetched.status) => Ok(fetched),
-        Err(error) if !failed => Err(error),
-        _ => bail!(
-            "{program} failed: {}",
-            shoal_subprocess::diagnostic(&output.stderr).trim()
-        ),
-    }
-}
 
 /// GET `url` with curl, passing the authorization header on stdin so no
 /// command line shows it.

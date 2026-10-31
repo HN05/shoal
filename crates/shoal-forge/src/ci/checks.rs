@@ -101,7 +101,8 @@ impl ForgeRepo {
     /// [`MAX_LOG_BYTES`].
     pub(crate) async fn job_log(&self, account: &Account, location: Location) -> Result<String> {
         let endpoint = self.repo_endpoint(&self.kind.job_log_endpoint(location)?);
-        let request = Request::get(endpoint).limited(MAX_LOG_BYTES);
+        // GitHub answers with a redirect to where it keeps the log.
+        let request = Request::get(endpoint).limited(MAX_LOG_BYTES).redirected();
         let log = self
             .read_text(account, &request)
             .await

@@ -1,42 +1,16 @@
-use std::path::PathBuf;
-
 use serde_json::json;
-use tokio::process::Command;
 
 use super::*;
-use crate::account::{AgentLogins, Launch};
-use crate::test_support::install_test_script;
-
-/// Finds the CLIs only in one directory.
-struct Bin(PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut Command) {
-        command.env("PATH", &self.0);
-    }
-}
+use crate::{
+    backends::ForgeKind,
+    test_support::{Server, agent_on, repo_on},
+};
 
 #[tokio::test]
 async fn requests_carry_their_method_and_body_and_return_the_json() {
-    let dir = tempfile::tempdir().unwrap();
-    let gh = dir.path().join("gh");
-    install_test_script(
-        &gh,
-        &format!(
-            // PATH holds only this script, so it reads its input with builtins.
-            "#!/bin/sh\necho \"$*\" > '{0}/args'\nIFS= read -r body\n\
-                 printf '%s' \"$body\" > '{0}/input'\n\
-                 printf 'HTTP/2.0 200 OK\\n\\n{{\"sent\":true}}'\n",
-            dir.path().display()
-        ),
-    );
-    let logins = AgentLogins {
-        launch: Box::new(Bin(dir.path().to_owned())),
-        logins: Default::default(),
-        separate: Vec::new(),
-    };
-    let account = Account::agent(logins, Default::default());
-    let repo = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
+    let server = Server::start(|_| (200, Vec::new(), r#"{"sent":true}"#.into()));
+    let account = agent_on(&server, "agent");
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let raw = RawRequest {
         method: HttpMethod::Patch,
         path: "repos/{owner}/{repo}".into(),
@@ -46,13 +20,9 @@ async fn requests_carry_their_method_and_body_and_return_the_json() {
         repo.raw(&account, &raw).await.unwrap(),
         json!({"sent": true})
     );
-    let args = std::fs::read_to_string(dir.path().join("args")).unwrap();
-    assert!(
-        args.contains("-X PATCH repos/team/repo --include"),
-        "{args}"
-    );
-    let input = std::fs::read_to_string(dir.path().join("input")).unwrap();
-    assert_eq!(input, r#"{"description":"new"}"#);
+    let received = server.received();
+    assert_eq!(received[0].line, "PATCH /api/v3/repos/team/repo");
+    assert_eq!(received[0].body, r#"{"description":"new"}"#);
 }
 
 fn get(path: &str) -> RawRequest {

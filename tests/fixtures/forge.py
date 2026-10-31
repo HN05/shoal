@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""A scripted forge for tests: `gh` or `glab` when installed under that name,
-or a Forgejo API server with `serve <port-file>`.
+"""A scripted forge for tests: `curl` when installed under that name, which
+leaves requests to the loopback server to the real curl, or a Forgejo API
+server with `serve <port-file>`.
 
-Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
-are keyed by "METHOD endpoint"; other gh commands by the longest key their
-arguments start with. A string body is sent as text, anything else as JSON. A list answers successive requests in turn, repeating
-its last entry. Each entry is {"status": 200, "body": ...}, and may add
-"headers" to send, which may replace its JSON Content-Type. The server and `gh api` tag
-each successful body, and answer a request that names its tag in
-If-None-Match with 304. Every request is appended to
-$HOME/forge/requests.jsonl with its body, credentials (the agent's, or an
-Enterprise token gh would send) and status; an uploaded
-file's body is {"file": name, "type": content type, "bytes": size}.
-The server reports a Forgejo version, unlogged, when no response names
+Responses come from $HOME/forge/responses.json, keyed by "METHOD endpoint",
+the endpoint relative to the forge's API root, or the whole URL outside one.
+A string body is sent as text, anything else as JSON. A list answers
+successive requests in turn, repeating its last entry. Each entry is
+{"status": 200, "body": ...}, and may add "headers" to send, which may
+replace its JSON Content-Type. Both tag each
+successful body, and answer a request that names its tag in If-None-Match
+with 304. Every request is appended to $HOME/forge/requests.jsonl with its
+body, its Authorization value and status; an uploaded file's body is
+{"file": name, "type": content type, "bytes": size}, with its "field" in a
+form. The server reports a Forgejo version, unlogged, when no response names
 "GET version", so Shoal recognizes it as Forgejo.
 """
 import hashlib
@@ -31,11 +32,8 @@ def load_responses():
         return json.load(f)
 
 
-def respond(key, body, auth=None, prefix=False, tag=None):
+def respond(key, body, auth=None, tag=None):
     responses = load_responses()
-    if prefix:
-        matches = [k for k in responses if key == k or key.startswith(k + " ")]
-        key = max(matches, key=len) if matches else key
     seen = 0
     if os.path.exists(LOG):
         with open(LOG) as f:
@@ -56,50 +54,89 @@ def etag(answer):
     return '"' + hashlib.sha256(json.dumps(answer).encode()).hexdigest()[:16] + '"'
 
 
-def gh(args):
-    if args[:1] == ["api"]:
-        if "-X" in args:
-            index = args.index("-X")
-            method, endpoint = args[index + 1], args[index + 2]
+# API roots whose endpoints the responses name, longest first.
+API_ROOTS = [
+    re.compile(r"^https://api\.github\.com/"),
+    re.compile(r"^https://api\.bitbucket\.org/2\.0/"),
+    re.compile(r"^https?://[^/]+/api/v[134]/"),
+    re.compile(r"^https?://[^/]+/api/(?=graphql$)"),
+]
+
+
+def endpoint(url):
+    for root in API_ROOTS:
+        if root.match(url):
+            return root.sub("", url, count=1)
+    return url
+
+
+def real_curl(args):
+    """Run the next curl on PATH, for the scripted Forgejo server."""
+    here = os.path.dirname(os.path.abspath(sys.argv[0]))
+    for directory in os.environ["PATH"].split(os.pathsep):
+        program = os.path.join(directory, "curl")
+        if os.path.abspath(directory) != here and os.access(program, os.X_OK):
+            os.execv(program, [program] + args)
+    sys.exit("no curl on PATH")
+
+
+def curl(args):
+    """Answer as curl does with Shoal's arguments: the body and the status
+    on stdout, the head on stderr, the authorization in config on stdin.
+    Requests to the loopback server go to the real curl, so no other
+    request leaves the machine."""
+    if args[-1].startswith("http://127.0.0.1:"):
+        real_curl(args)
+    config = sys.stdin.read()
+    auth = re.search(r'header = "Authorization: ([^"]*)"', config)
+    method, headers, body = "GET", [], None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "-X":
+            method = args[i + 1]
+        elif arg == "-H":
+            headers.append(args[i + 1])
+        elif arg == "--data-binary":
+            data = args[i + 1]
+            if data.startswith("@"):
+                with open(data[1:], "rb") as f:
+                    size = len(f.read())
+                kind = next((h for h in headers if h.startswith("Content-Type: ")), "")
+                body = {
+                    "file": os.path.basename(data[1:]),
+                    "type": kind.removeprefix("Content-Type: "),
+                    "bytes": size,
+                }
+            else:
+                body = json.loads(data)
+        elif arg == "-F":
+            field, _, rest = args[i + 1].partition("=@")
+            path, _, kind = rest.rpartition(";type=")
+            path = path.strip('"').replace('\\"', '"').replace("\\\\", "\\")
+            with open(path, "rb") as f:
+                size = len(f.read())
+            body = {"field": field, "file": os.path.basename(path), "type": kind, "bytes": size}
+        if arg in ("-X", "-H", "--data-binary", "-F", "-w", "-D", "-K", "--max-time", "--max-redirs"):
+            i += 2
         else:
-            # A read such as `gh api --hostname HOST ENDPOINT --paginate`.
-            method, endpoint = "GET", args[args.index("--hostname") + 2]
-        source = args[args.index("--input") + 1] if "--input" in args else None
-        headers = [args[i + 1] for i, arg in enumerate(args) if arg == "-H"]
-        header = next((h for h in headers if h.startswith("Content-Type: ")), "")
-        tag = next((h.removeprefix("If-None-Match: ") for h in headers if h.startswith("If-None-Match: ")), None)
-        if source == "-" and "multipart/form-data" in header:
-            body = form_file(sys.stdin.buffer.read())
-        elif source in (None, "-"):
-            body = json.load(sys.stdin) if source else None
-        else:
-            with open(source, "rb") as f:
-                data = f.read()
-            body = {
-                "file": os.path.basename(source),
-                "type": header.removeprefix("Content-Type: "),
-                "bytes": len(data),
-            }
-        auth = os.environ.get("AGENT") or os.environ.get("GH_ENTERPRISE_TOKEN")
-        status, answer, sent = respond(f"{method} {endpoint}", body, auth, tag=tag)
-        if "--include" in args:
-            if status == 200:
-                sent = {"ETag": etag(answer), **sent}
-            sent = {"Content-Type": "application/json", **sent}
-            head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
-            print(f"HTTP/2.0 {status} Scripted\r\n{head}\r")
-        if isinstance(answer, str):
-            sys.stdout.write(answer)
-        elif answer is not None:
-            print(json.dumps(answer))
-        if status >= 400:
-            print(f"gh: HTTP {status}", file=sys.stderr)
-            sys.exit(1)
-        return
-    status, answer, _ = respond(" ".join(args), None, os.environ.get("AGENT"), prefix=True)
-    if answer is not None:
-        print(answer if isinstance(answer, str) else json.dumps(answer))
-    sys.exit(0 if status < 400 else 1)
+            i += 1
+    url = args[-1]
+    tag = next((h.removeprefix("If-None-Match: ") for h in headers if h.startswith("If-None-Match: ")), None)
+    status, answer, sent = respond(
+        f"{method} {endpoint(url)}", body, auth.group(1) if auth else None, tag=tag
+    )
+    if status == 200:
+        sent = {"ETag": etag(answer), **sent}
+    if "Content-Type" not in sent:
+        sent = {"Content-Type": "application/json", **sent}
+    head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
+    sys.stderr.write(f"HTTP/1.1 {status} Scripted\r\n{head}\r\n")
+    if isinstance(answer, str):
+        sys.stdout.write(answer)
+    elif answer is not None:
+        sys.stdout.write(json.dumps(answer))
+    sys.stdout.write(f"\n{status}")
 
 
 def form_file(data):
@@ -161,4 +198,4 @@ if __name__ == "__main__":
         os.rename(sys.argv[2] + ".tmp", sys.argv[2])
         server.serve_forever()
     else:
-        gh(sys.argv[1:])
+        curl(sys.argv[1:])

@@ -11,12 +11,6 @@ use crate::{
     backends::{Backend, ForgeKind},
     transport::memory::Memory,
 };
-/// Starts a forge CLI as someone other than the user, such as through
-/// their wrappers.
-pub trait Launch: Send + Sync {
-    fn apply(&self, command: &mut tokio::process::Command);
-}
-
 /// Fetches the token of one login, such as by running a command; the
 /// caller owns where it comes from and what a failure names.
 pub trait Token: Send + Sync {
@@ -40,7 +34,7 @@ impl Logins {
     pub fn insert(&mut self, host: &str, login: Login) {
         let signer = Signer {
             login,
-            header: OnceCell::new(),
+            token: OnceCell::new(),
         };
         self.0.insert(host.to_ascii_lowercase(), signer);
     }
@@ -50,17 +44,15 @@ impl Logins {
     }
 }
 
-/// A login and the authorization its token gave, fetched once for the
-/// account's requests and never kept beyond it.
+/// A login and its token, fetched once for the account's requests and
+/// never kept beyond it.
 struct Signer {
     login: Login,
-    header: OnceCell<Vec<u8>>,
+    token: OnceCell<String>,
 }
 
 /// An agent's own logins; the user's stand in for those it leaves unset.
 pub struct AgentLogins {
-    /// Starts the agent's `gh` and `glab`.
-    pub launch: Box<dyn Launch>,
     /// The agent account's tokens.
     pub logins: Logins,
     /// The forges on which the agent has an account of its own, where the
@@ -70,8 +62,6 @@ pub struct AgentLogins {
 
 #[derive(Default)]
 pub struct Account {
-    /// Starts the agent's CLIs; the user's when absent.
-    launch: Option<Box<dyn Launch>>,
     logins: Logins,
     /// The user's tokens, for hosts an agent has none of its own for.
     fallback: Logins,
@@ -81,7 +71,7 @@ pub struct Account {
 }
 
 impl Account {
-    /// The CLIs as Shoal finds them, and the user's tokens.
+    /// The user's tokens.
     pub fn user(logins: Logins) -> Self {
         Self {
             logins,
@@ -93,7 +83,6 @@ impl Account {
     /// the agent itself would, except on its separate forges.
     pub fn agent(agent: AgentLogins, user: Logins) -> Self {
         Self {
-            launch: Some(agent.launch),
             logins: agent.logins,
             fallback: user,
             separate: agent.separate,
@@ -111,24 +100,13 @@ impl Account {
         &self.memory
     }
 
-    /// Select this account's CLI for a request.
-    pub(crate) fn apply(&self, command: &mut tokio::process::Command) {
-        if let Some(launch) = &self.launch {
-            launch.apply(command);
-        }
-    }
-
     /// The curl config line that signs a request to `repo`'s host in, or
     /// none without a token, which reaches only public repositories.
     pub(crate) async fn authorization(&self, repo: &ForgeRepo) -> Result<Option<Vec<u8>>> {
         let Some(signer) = self.signer(&repo.host, repo.kind)? else {
             return Ok(None);
         };
-        let header = signer
-            .header
-            .get_or_try_init(|| signer.authorization(repo.kind))
-            .await?;
-        Ok(Some(header.clone()))
+        signer.authorization(repo.kind).await.map(Some)
     }
 
     /// The login for `host`: the account's own, else the user's unless the
@@ -147,8 +125,12 @@ impl Account {
 }
 
 impl Signer {
+    /// The curl config line that signs a request to a `kind` forge in.
     async fn authorization(&self, kind: ForgeKind) -> Result<Vec<u8>> {
-        let token = self.login.token.fetch().await?;
+        let token = self
+            .token
+            .get_or_try_init(|| self.login.token.fetch())
+            .await?;
         let token = token.trim();
         // The value goes into a curl config line; anything but a plain token is refused.
         ensure!(

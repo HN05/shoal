@@ -2,56 +2,28 @@ use super::*;
 use serde_json::json;
 
 #[test]
-fn github_issue_and_pr_details_read_content_and_comments() {
-    let issue = json!({"number": 4, "title": "Crash", "body": "Steps", "state": "OPEN",
-            "author": {"login": "ann"}, "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z",
-            "assignees": [{"login": "kim", "name": "Kim"}], "milestone": {"number": 2, "title": "v2"},
-            "comments": [{"author": {"login": "bob"}, "createdAt": "2026-01-02T00:00:00Z", "body": "Same here",
-                "url": "https://github.com/o/r/issues/4#issuecomment-41"}]});
-    let details = parse_details(&issue.to_string(), ItemKind::Issue, 4).unwrap();
-    assert_eq!(details.title, "Crash");
-    assert_eq!(details.state, "open");
-    assert_eq!(details.author, "ann");
-    assert_eq!(details.labels, ["bug"]);
-    assert_eq!(details.assignees, ["kim"]);
-    assert_eq!(details.milestone.as_deref(), Some("v2"));
-    assert!(details.pr.is_none());
-    let comment = &details.comments.unwrap()[0];
-    assert_eq!((comment.id, comment.body.as_str()), (41, "Same here"));
-    assert!(parse_details(&issue.to_string(), ItemKind::Issue, 5).is_err());
-
-    let pull = json!({"number": 7, "title": "Fix", "body": "", "state": "MERGED",
-            "author": null, "labels": [], "createdAt": "2026-01-01T00:00:00Z",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": true});
-    let details = parse_details(&pull.to_string(), ItemKind::Pr, 7).unwrap();
-    assert_eq!(details.state, "merged");
+fn reviewers_are_the_requested_users_and_the_owners_teams() {
+    let pull = json!({"number": 7, "title": "Fix", "body": "", "state": "open",
+        "user": null, "labels": [], "created_at": "t0", "draft": false,
+        "head": {"ref": "topic"}, "base": {"ref": "main"},
+        "requested_reviewers": [{"login": "kim"}],
+        "requested_teams": [{"name": "Core", "slug": "core"}]});
+    let details = github_rest::details(&pull, ItemKind::Pr, 7, "o").unwrap();
     assert_eq!(details.author, "ghost");
-    assert!(details.assignees.is_empty() && details.milestone.is_none());
-    assert!(details.comments.is_none());
-    let pr = details.pr.unwrap();
-    assert_eq!(
-        (pr.head.as_str(), pr.base.as_str(), pr.draft),
-        ("topic", "main", true)
-    );
-    assert_eq!(pr.auto_merge, None);
-    assert!(pr.reviewers.is_empty());
+    assert_eq!(details.pr.unwrap().reviewers, ["kim", "o/core"]);
+}
 
-    let mut pull = pull;
-    pull["state"] = json!("OPEN");
-    pull["autoMergeRequest"] = json!({"mergeMethod": "SQUASH", "enabledBy": {"login": "kim"}});
-    pull["reviewRequests"] = json!([{"__typename": "User", "login": "kim"},
-            {"__typename": "Team", "name": "Core", "slug": "o/core"}]);
-    let pr = parse_details(&pull.to_string(), ItemKind::Pr, 7)
-        .unwrap()
-        .pr
-        .unwrap();
+#[test]
+fn automatic_merges_read_their_method() {
+    assert_eq!(auto_merge(&Value::Null).unwrap(), None);
+    let request = json!({"merge_method": "squash", "enabled_by": {"login": "kim"}});
     assert_eq!(
-        pr.auto_merge,
+        auto_merge(&request).unwrap(),
         Some(AutoMerge {
             method: Some(MergeMethod::Squash)
         })
     );
-    assert_eq!(pr.reviewers, ["kim", "o/core"]);
+    assert!(auto_merge(&json!({"merge_method": "fast-forward"})).is_err());
 }
 
 #[test]

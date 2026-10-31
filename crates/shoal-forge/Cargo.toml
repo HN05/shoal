@@ -12,6 +12,8 @@ license.workspace = true
 rusqlite = ["dep:rusqlite"]
 # Take typed names as CLI values.
 clap = ["dep:clap"]
+# A loopback forge for the caller's tests.
+test-support = []
 
 [dependencies]
 anyhow.workspace = true

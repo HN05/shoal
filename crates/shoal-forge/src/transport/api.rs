@@ -1,6 +1,6 @@
-//! REST requests and the ways backends send them as an [`Account`]: through
-//! a CLI's `api` command, which owns its login, or through curl with a token
-//! passed on stdin, never placed on a command line.
+//! REST requests and how backends send them as an [`Account`]: through
+//! curl, with the account's token passed on stdin, never placed on a
+//! command line.
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -51,10 +51,9 @@ pub(crate) struct Request {
     /// Header lines that make a read conditional on the body remembered
     /// for it.
     pub conditions: Vec<String>,
-    /// Environment variables a CLI would read a token from for any host,
-    /// left out so the request carries only a login saved for its own host.
-    pub withheld_tokens: &'static [&'static str],
-    /// The most of the response, in bytes, a CLI may print for it.
+    /// Follow redirects, such as to where a forge keeps a job's log.
+    pub redirects: bool,
+    /// The most of the response, in bytes, it may have.
     pub max_bytes: usize,
 }
 
@@ -81,15 +80,15 @@ impl Request {
             upload: None,
             resend: Resend::Never,
             conditions: Vec::new(),
-            withheld_tokens: &[],
+            redirects: false,
             max_bytes: MAX_RESPONSE_BYTES,
         }
     }
 
-    /// This request without the token variables `tokens`, for a host that
-    /// may not be the forge they are meant for.
-    pub fn withholding(mut self, tokens: &'static [&'static str]) -> Self {
-        self.withheld_tokens = tokens;
+    /// Follow the redirects the forge answers with; curl leaves the
+    /// authorization out of a redirect to another host.
+    pub fn redirected(mut self) -> Self {
+        self.redirects = true;
         self
     }
 
@@ -246,80 +245,6 @@ impl ForgeRepo {
         Ok(response)
     }
 
-    /// Send through `gh api` or `glab api`, which own their logins and
-    /// print the response head before its body.
-    pub(crate) async fn passthrough(
-        &self,
-        program: &'static str,
-        account: &Account,
-        request: &Request,
-    ) -> Result<Response> {
-        let mut cli = Command::new(program);
-        cli.env("NO_COLOR", "1")
-            .env("GH_PROMPT_DISABLED", "1")
-            .args([
-                "api",
-                "--hostname",
-                &self.host,
-                "-X",
-                request.method.as_str(),
-                &request.endpoint,
-                "--include",
-            ]);
-        for condition in &request.conditions {
-            cli.args(["-H", condition]);
-        }
-        let mut input = Vec::new();
-        match &request.upload {
-            // The CLIs cannot build a form, so its body is sent as given.
-            Some(upload @ Upload { field: Some(_), .. }) => {
-                let (content_type, form) = multipart(upload).await?;
-                cli.args([
-                    "-H",
-                    &format!("Content-Type: {content_type}"),
-                    "--input",
-                    "-",
-                ]);
-                input = form;
-            }
-            Some(upload) => {
-                cli.args(["-H", &format!("Content-Type: {}", upload.content_type)])
-                    .arg("--input")
-                    .arg(&upload.path);
-            }
-            None => {
-                if let Some(body) = &request.body {
-                    cli.args(["-H", "Content-Type: application/json", "--input", "-"]);
-                    input = body.to_string().into_bytes();
-                }
-            }
-        }
-        account.apply(&mut cli);
-        for token in request.withheld_tokens {
-            cli.env_remove(token);
-        }
-        let output = shoal_subprocess::Run::new(cli)
-            .input(input)
-            .timeout(request.timeout())
-            .output_limit(request.max_bytes)
-            .capture()
-            .await
-            .map_err(|error| {
-                unrun(
-                    error,
-                    request.max_bytes,
-                    format!("run {program}; is it installed?"),
-                )
-            })?;
-        // The CLIs exit with an error for a failed response, which has a head.
-        match Response::included(&String::from_utf8_lossy(&output.stdout)) {
-            Err(_) if !output.status.success() => {
-                bail!("{}", shoal_subprocess::diagnostic(&output.stderr).trim())
-            }
-            response => response,
-        }
-    }
-
     /// Send with curl, passing the authorization header on stdin so no
     /// command line shows it.
     pub(crate) async fn curl_send(
@@ -346,6 +271,9 @@ impl ForgeRepo {
             ]);
         for condition in &request.conditions {
             curl.args(["-H", condition]);
+        }
+        if request.redirects {
+            curl.args(["-L", "--max-redirs", "5"]);
         }
         if let Some(upload) = &request.upload {
             curl.args(upload_args(upload)?);
@@ -568,33 +496,6 @@ pub(crate) fn http_body(status: u16, body: &str) -> Result<&str> {
     Ok(body)
 }
 
-/// A multipart form with `upload` as its one field, and its content type.
-async fn multipart(upload: &Upload) -> Result<(String, Vec<u8>)> {
-    let field = upload.field.context("a form upload names its field")?;
-    let path = upload.path.clone();
-    let content = tokio::task::spawn_blocking(move || std::fs::read(path))
-        .await?
-        .with_context(|| format!("read {}", upload.path.display()))?;
-    let name: String = upload
-        .path
-        .file_name()
-        .map(|name| name.to_string_lossy())
-        .unwrap_or_default()
-        .chars()
-        .filter(|c| !matches!(c, '"' | '\\' | '\r' | '\n'))
-        .collect();
-    let boundary = format!("shoal-{}", uuid::Uuid::new_v4().simple());
-    let mut form = format!(
-        "--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{name}\"\r\n\
-         Content-Type: {}\r\n\r\n",
-        upload.content_type
-    )
-    .into_bytes();
-    form.extend(content);
-    form.extend(format!("\r\n--{boundary}--\r\n").into_bytes());
-    Ok((format!("multipart/form-data; boundary={boundary}"), form))
-}
-
 /// curl's arguments that send `upload`: a form field, whose quoted file name
 /// escapes what curl reads specially, or the raw body.
 fn upload_args(upload: &Upload) -> Result<Vec<String>> {
@@ -617,13 +518,6 @@ fn upload_args(upload: &Upload) -> Result<Vec<String>> {
             format!("@{path}"),
         ],
     })
-}
-
-/// The user's home directory, where the CLIs keep their logins.
-pub(crate) fn home_dir() -> Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .context("HOME is not set")
 }
 
 #[cfg(test)]

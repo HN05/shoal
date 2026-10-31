@@ -1,5 +1,5 @@
-//! Issue and PR actions against a scripted forge: `gh` on GitHub, `glab` on
-//! GitLab, an HTTP server on Forgejo, all from `fixtures/forge.py`.
+//! Issue and PR actions against a scripted forge: a `curl` that answers for
+//! GitHub, and an HTTP server on Forgejo, both from `fixtures/forge.py`.
 // These tests never restart the daemon.
 #[allow(dead_code)]
 #[path = "support/daemon.rs"]
@@ -47,8 +47,8 @@ impl Drop for Fixture {
 }
 
 /// The user's and the agent account's tokens on the scripted forge.
-const AGENT_TOKEN: &str =
-    "[machine.forges.\"{forge}\"]\ntoken = \"usertoken\"\nagent_token = \"agenttoken\"\n";
+const AGENT_TOKEN: &str = "[machine.forges.\"{forge}\"]\ntype = \"{type}\"\n\
+    token = \"usertoken\"\nagent_token = \"agenttoken\"\n";
 
 /// Start the Forgejo server in `root` and return it with its `host:port`.
 fn serve(root: &Path) -> (Child, String) {
@@ -65,14 +65,10 @@ fn serve(root: &Path) -> (Child, String) {
 }
 
 impl Fixture {
+    /// `config` names the forge's host as `{forge}` and its type as `{type}`;
+    /// unless `config` sets the host's table, its type is pinned and the user
+    /// has the token `usertoken` there.
     fn new(forge: Forge, config: &str) -> Self {
-        Self::with_daemon_env(forge, config, &[])
-    }
-
-    /// A fixture whose daemon also has `env` in its environment.
-    /// `config` names the forge's host as `{forge}`; on Forgejo the user has
-    /// the token `usertoken` there unless `config` sets the host's tokens.
-    fn with_daemon_env(forge: Forge, config: &str, env: &[(&str, &str)]) -> Self {
         let root = tempfile::tempdir_in("/tmp").unwrap();
         fs::create_dir_all(root.path().join("forge")).unwrap();
         fs::write(root.path().join("forge/responses.json"), "{}").unwrap();
@@ -82,17 +78,22 @@ impl Fixture {
         let host = server
             .as_ref()
             .map_or_else(|| "github.com".to_owned(), |(_, host)| host.clone());
-        let mut config = config.replace("{forge}", &host);
+        let kind = match forge {
+            Forge::GitHub => "github",
+            Forge::Forgejo => "forgejo",
+        };
+        let mut config = config.replace("{forge}", &host).replace("{type}", kind);
         let table = format!("[machine.forges.\"{host}\"]");
-        if forge == Forge::Forgejo && !config.contains(&table) {
-            config.push_str(&format!("\n{table}\ntoken = \"usertoken\"\n"));
+        if !config.contains(&table) {
+            config.push_str(&format!(
+                "\n{table}\ntype = \"{kind}\"\ntoken = \"usertoken\"\n"
+            ));
         }
         fs::create_dir_all(root.path().join(".config/shoal")).unwrap();
         fs::write(root.path().join(".config/shoal/config.toml"), config).unwrap();
         let repo = init_repo(root.path(), "repo", &[("tracked", "committed\n")]);
         git(&repo, &["update-ref", "refs/remotes/origin/main", "HEAD"]);
         let mut launch = support::cli(root.path());
-        launch.envs(env.iter().copied());
         let daemon = DaemonGuard::start(root.path(), &mut launch);
         let mut fixture = Self {
             _daemon: daemon,
@@ -103,10 +104,11 @@ impl Fixture {
         };
         fixture.ok(&["repo", "add", fixture.repo.to_str().unwrap()]);
         fixture.ok(&["add", fixture.repo.to_str().unwrap(), "topic"]);
+        // Every forge request goes through the scripted curl.
+        fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
+        std::os::unix::fs::symlink(&script, fixture.root.path().join("bin/curl")).unwrap();
         let origin = match forge {
             Forge::GitHub => {
-                fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
-                std::os::unix::fs::symlink(&script, fixture.root.path().join("bin/gh")).unwrap();
                 fixture.web = "https://github.com/team/project".into();
                 "git@github.com:team/project.git".to_owned()
             }
@@ -194,6 +196,20 @@ impl Fixture {
     }
 }
 
+/// GitHub's search request for `query`, page `page`.
+fn github_search(query: &str, page: u32) -> String {
+    let query: String = query
+        .bytes()
+        .map(|byte| match byte {
+            b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                char::from(byte).to_string()
+            }
+            _ => format!("%{byte:02X}"),
+        })
+        .collect();
+    format!("GET search/issues?q={query}&sort=created&order=desc&per_page=100&page={page}")
+}
+
 fn pull(number: u64, state: &str, title: &str, labels: &[&str]) -> Value {
     json!({"number": number, "title": title, "state": state, "draft": false,
         "merged": state == "merged", "node_id": "PR_node",
@@ -234,7 +250,7 @@ fn item_actions_send_rest_requests_and_record_events() {
                 "pr": {"head": "topic", "base": "main", "draft": false}})
         );
         let auth = match forge {
-            Forge::GitHub => Value::Null,
+            Forge::GitHub => json!("Bearer usertoken"),
             Forge::Forgejo => json!("token usertoken"),
         };
         assert_eq!(
@@ -446,9 +462,9 @@ fn label_pr(fixture: &Fixture) -> Value {
 
 #[test]
 fn unknown_hosts_are_asked_once_which_forge_they_serve() {
-    // A token gh reads for every Enterprise host stays out of the probe.
-    let fixture =
-        Fixture::with_daemon_env(Forge::GitHub, "", &[("GH_ENTERPRISE_TOKEN", "enterprise")]);
+    // The host's token goes to each forge's endpoint on the host, never elsewhere.
+    let config = "[machine.forges.\"ghe.invalid\"]\ntoken = \"enterprise\"\n";
+    let fixture = Fixture::new(Forge::GitHub, config);
     git(
         &fixture.repo,
         &[
@@ -478,12 +494,26 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
         assert_eq!(labels[0]["name"], "bug");
     }
     let label_list = "GET repos/team/project/labels?per_page=100&page=1";
+    let requests = fixture.requests();
+    let (probes, reads) = requests.split_at(3);
+    let mut probes: Vec<String> = probes
+        .iter()
+        .map(|request| format!("{} {}", request[0], request[2]))
+        .collect();
+    probes.sort();
     assert_eq!(
-        fixture.requests(),
+        probes,
         [
-            json!(["GET meta", null, null]),
-            json!([label_list, null, null]),
-            json!([label_list, null, null]),
+            "\"GET meta\" \"Bearer enterprise\"",
+            "\"GET version\" \"Bearer enterprise\"",
+            "\"GET version\" \"token enterprise\"",
+        ]
+    );
+    assert_eq!(
+        reads,
+        [
+            json!([label_list, null, "Bearer enterprise"]),
+            json!([label_list, null, "Bearer enterprise"]),
         ]
     );
     let response = label_pr(&fixture);
@@ -492,10 +522,10 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
         response["data"]["url"],
         "https://ghe.invalid/team/project/pull/8"
     );
-    // Once the host is known to be GitHub, gh's own requests use the token.
+    // Once the host is known to be GitHub, it is not asked again.
     let requests = fixture.requests();
     assert!(requests.iter().all(|request| request[0] != "GET meta"));
-    assert_eq!(requests[0][2], "enterprise", "{requests:?}");
+    assert_eq!(requests[0][2], "Bearer enterprise", "{requests:?}");
     // A pasted link of the host names its forge before anything is asked.
     let url = "https://ghe.invalid/team/project/pull/8";
     let linked = fixture.ok(&["link", url, "related", "--workspace", "topic"]);
@@ -585,17 +615,11 @@ fn changes_use_the_agent_account_and_merges_the_users() {
             format!("[agent.forge_clis]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\n{AGENT_TOKEN}");
         let fixture = Fixture::new(forge, &config);
         let root = fixture.root.path();
-        for (name, body) in [
-            (
-                "agent-gh",
-                "AGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"",
-            ),
-            ("agent-fj", "exit 1"),
-        ] {
-            support::install_test_script(root.join(name), format!("#!/bin/sh\n{body}\n"));
+        for name in ["agent-gh", "agent-fj"] {
+            support::install_test_script(root.join(name), "#!/bin/sh\nexit 1\n");
         }
         let (agent, user) = match forge {
-            Forge::GitHub => (json!("agent"), Value::Null),
+            Forge::GitHub => (json!("Bearer agenttoken"), json!("Bearer usertoken")),
             Forge::Forgejo => (json!("token agenttoken"), json!("token usertoken")),
         };
         let endpoint = "repos/team/project/pulls/8";
@@ -911,7 +935,7 @@ fn review_threads_take_replies_and_ask_before_resolving_without_one() {
     let sent = fixture.requests();
     assert_eq!(
         sent[2],
-        json!([format!("POST {endpoint}/comments/5/replies"), {"body": "Fixed"}, null])
+        json!([format!("POST {endpoint}/comments/5/replies"), {"body": "Fixed"}, "Bearer usertoken"])
     );
     assert_eq!(sent[3][0], "POST graphql");
     assert!(
@@ -1052,9 +1076,6 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
         open["base"]["ref"] = json!("release/2");
         fixture.respond(json!({
             "GET repos/team/project/pulls/8": {"body": open},
-            "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
-                "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
-                "headRefName": "topic", "baseRefName": "release/2", "isDraft": false}},
             compare: {"body": count},
             "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
         }));
@@ -1071,9 +1092,6 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
         // A closed PR is not compared.
         fixture.respond(json!({
             "GET repos/team/project/pulls/8": {"body": pull(8, "closed", "Fix", &[])},
-            "pr view 8": {"body": {"number": 8, "state": "CLOSED", "title": "Fix", "body": "",
-                "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
-                "headRefName": "topic", "baseRefName": "main", "isDraft": false}},
             "GET repos/team/project/issues/8/timeline?limit=50&page=1": {"body": []},
         }));
         fixture.requests();
@@ -1089,8 +1107,6 @@ fn pr_views_count_the_base_commits_the_head_lacks() {
 
     // GitLab counts them on the merge request when asked.
     let fixture = Fixture::new(Forge::GitHub, "");
-    let root = fixture.root.path();
-    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
     let remote = "git@gitlab.com:team/project.git";
     git(&fixture.repo, &["remote", "set-url", "origin", remote]);
     let request = json!({"iid": 8, "title": "Fix", "state": "opened", "description": "",
@@ -1224,16 +1240,13 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "GET repos/team/project/issues/8": {"body": {"number": 8, "title": "Fix",
             "state": "open", "labels": [], "pull_request": {}}},
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
-            "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
-            "comments": [{"author": {"login": "ann"}, "createdAt": "t1", "body": "Nice",
-                "url": "https://github.com/team/project/pull/8#issuecomment-6"}]}},
-        "GET repos/team/project/pulls/8/reviews": {"body": [[{"id": 11, "state": "COMMENTED",
-            "user": {"login": "bot"}, "body": "", "submitted_at": "t2"}]]},
-        "GET repos/team/project/pulls/8/comments": {"body": [[{"id": 5,
+        "GET repos/team/project/issues/8/comments?per_page=100&page=1": {"body": [{"id": 6,
+            "user": {"login": "ann"}, "created_at": "t1", "body": "Nice"}]},
+        "GET repos/team/project/pulls/8/reviews?per_page=100&page=1": {"body": [{"id": 11,
+            "state": "COMMENTED", "user": {"login": "bot"}, "body": "", "submitted_at": "t2"}]},
+        "GET repos/team/project/pulls/8/comments?per_page=100&page=1": {"body": [{"id": 5,
             "pull_request_review_id": 11, "user": {"login": "bot"}, "path": "a.rs",
-            "line": 3, "body": "Why?", "created_at": "t2"}]]},
+            "line": 3, "body": "Why?", "created_at": "t2"}]},
         "POST graphql": {"body": threads},
         "GET user": {"body": {"login": "me"}},
         "GET repos/team/project/pulls/comments/5/reactions?per_page=100&page=1": {"body": []},
@@ -1263,8 +1276,8 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
     let issue = ["issue", "react", "+1", "--workspace", "topic", "8"];
     assert!(!fixture.run(&issue).status.success());
     let mut writes = writes(&fixture);
-    // gh reads the PR's comments with `pr view`, and its threads by GraphQL.
-    writes.retain(|request| request[0] != "POST graphql" && request[0] != "pr view 8");
+    // The PR's review threads are read by GraphQL.
+    writes.retain(|request| request[0] != "POST graphql");
     assert_eq!(
         writes,
         [
@@ -1432,14 +1445,12 @@ fn github_comment_edits_reach_inline_comments() {
         "nodes": [{"id": "T_1", "isResolved": false, "comments": {"nodes": [{"databaseId": 5}]}}]}}}}});
     fixture.respond(json!({
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
-            "author": {"login": "ann"}, "labels": [], "createdAt": "t0",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": false, "comments": []}},
-        "GET repos/team/project/pulls/8/reviews": {"body": [[{"id": 11, "state": "COMMENTED",
-            "user": {"login": "me"}, "body": "", "submitted_at": "t2"}]]},
-        "GET repos/team/project/pulls/8/comments": {"body": [[{"id": 5,
+        "GET repos/team/project/issues/8/comments?per_page=100&page=1": {"body": []},
+        "GET repos/team/project/pulls/8/reviews?per_page=100&page=1": {"body": [{"id": 11,
+            "state": "COMMENTED", "user": {"login": "me"}, "body": "", "submitted_at": "t2"}]},
+        "GET repos/team/project/pulls/8/comments?per_page=100&page=1": {"body": [{"id": 5,
             "pull_request_review_id": 11, "user": {"login": "me"}, "path": "a.rs",
-            "line": 3, "body": "Wy?", "created_at": "t2"}]]},
+            "line": 3, "body": "Wy?", "created_at": "t2"}]},
         "POST graphql": {"body": threads},
         "GET user": {"body": {"login": "Me"}},
         "PATCH repos/team/project/pulls/comments/5": {"body": {"id": 5, "body": "Why?"}},
@@ -1457,7 +1468,7 @@ fn github_comment_edits_reach_inline_comments() {
     ]);
     assert_eq!(edited["number"], 8, "{edited}");
     let mut writes = writes(&fixture);
-    writes.retain(|request| request[0] != "POST graphql" && request[0] != "pr view 8");
+    writes.retain(|request| request[0] != "POST graphql");
     assert_eq!(
         writes,
         [json!(["PATCH repos/team/project/pulls/comments/5", {"body": "Why?"}])]
@@ -1577,11 +1588,10 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
 }
 
 #[test]
-fn gitlab_uploads_send_a_form_through_the_agents_glab() {
-    // The scripted gh answers as glab on a GitLab remote too.
-    let fixture = Fixture::new(Forge::GitHub, "[agent.forge_clis]\nglab = '~/agent-glab'\n");
-    let root = fixture.root.path();
-    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
+fn gitlab_uploads_send_a_form_as_the_agent() {
+    // The scripted curl answers for GitLab too.
+    let config = "[machine.forges.\"gitlab.com\"]\nagent_token = \"agenttoken\"\n";
+    let fixture = Fixture::new(Forge::GitHub, config);
     git(
         &fixture.repo,
         &[
@@ -1591,8 +1601,6 @@ fn gitlab_uploads_send_a_form_through_the_agents_glab() {
             "git@gitlab.com:team/project.git",
         ],
     );
-    let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
-    support::install_test_script(fixture.root.path().join("agent-glab"), wrapper);
     let [_, image, _] = attachment_files(&fixture);
     let project = "projects/team%2Fproject";
     fixture.respond(json!({
@@ -1623,11 +1631,11 @@ fn gitlab_uploads_send_a_form_through_the_agents_glab() {
         [
             (
                 json!({"field": "file", "file": "login.png", "type": "image/png", "bytes": 3}),
-                json!("agent")
+                json!("Bearer agenttoken")
             ),
             (
                 json!({"body": "![login.png](/uploads/1/login.png)"}),
-                json!("agent")
+                json!("Bearer agenttoken")
             ),
         ]
     );
@@ -2133,8 +2141,6 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     let endpoint = "repos/team/project/pulls/8";
     let issue = json!({"number": 3, "title": "Bug", "state": "open", "labels": []});
     fixture.respond(json!({
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "headRefName": "topic",
-            "commits": []}},
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &["ready"])},
         format!("PATCH {endpoint}"): {"body": {}},
         "PUT repos/team/project/issues/8/labels": {"body": []},
@@ -2185,7 +2191,7 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
     assert_eq!(commented["url"], "https://github.com/team/project/issues/3");
     assert_eq!(
         fixture.requests()[1],
-        json!(["POST repos/team/project/issues/3/comments", {"body": "Seen twice\n"}, null])
+        json!(["POST repos/team/project/issues/3/comments", {"body": "Seen twice\n"}, "Bearer usertoken"])
     );
 
     // Merging is the user's: a workspace process is refused before any request.
@@ -2291,8 +2297,6 @@ fn issues_open_with_labels_and_link_on_request() {
                     {"body": created},
                 ]),
             },
-            "issue view 40": {"body": {"number": 40, "state": "OPEN", "title": "Flaky",
-                "body": "", "comments": []}},
         }));
         let link = if forge == Forge::GitHub {
             &["--link"][..]
@@ -2324,7 +2328,6 @@ fn issues_open_with_labels_and_link_on_request() {
             .requests()
             .into_iter()
             .filter(|request| !request[0].as_str().unwrap().starts_with("GET"))
-            .filter(|request| !request[0].as_str().unwrap().starts_with("issue view"))
             .map(|request| (request[0].clone(), request[1].clone()))
             .collect();
         match forge {
@@ -2374,8 +2377,8 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             Forge::Forgejo => "GET repos/team/project/pulls?state=open&limit=50&page=1",
         };
         fixture.respond(json!({
-            "issue view 34": {"body": {"number": 34, "state": "OPEN", "title": "Fix API timeout",
-                "body": "", "comments": []}},
+            "GET repos/team/project/issues/34": {"body": {"number": 34, "state": "open",
+                "title": "Fix API timeout", "body": "", "labels": []}},
             list: {"body": []},
             "POST repos/team/project/pulls": {"status": 201, "body": {"number": 9}},
             "GET repos/team/project/pulls/9": {"body": pull(9, "open", "Fix", &[])},
@@ -2710,9 +2713,9 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
 fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({
-        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels,assignees,milestone --search=flaky watch":
-            {"body": [{"number": 40, "title": "Flaky watch", "state": "OPEN",
-                "labels": [{"name": "bug"}]}]},
+        github_search("repo:team/project is:issue is:open flaky watch", 1):
+            {"body": {"items": [{"number": 40, "title": "Flaky watch", "state": "open",
+                "labels": [{"name": "bug"}]}]}},
     }));
     let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
     assert_eq!(
@@ -2759,15 +2762,19 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         assert!(stderr.contains("names no repository"), "{args:?}: {stderr}");
     }
     // A listing longer than one protocol frame arrives in several.
-    let long: Vec<Value> = (1..=400)
-        .map(|number| {
-            json!({"number": number, "title": "x".repeat(250), "state": "OPEN",
-            "labels": [{"name": "bug"}]})
+    let pages: serde_json::Map<String, Value> = (0..4)
+        .map(|page| {
+            let items: Vec<Value> = (1..=100)
+                .map(|number| {
+                    json!({"number": page * 100 + number, "title": "x".repeat(250),
+                        "state": "open", "labels": [{"name": "bug"}]})
+                })
+                .collect();
+            let key = github_search("repo:team/project is:issue is:open", page + 1);
+            (key, json!({"body": {"items": items}}))
         })
         .collect();
-    fixture.respond(json!({
-        "issue list --repo=github.com/team/project --state=open --limit=400": {"body": long},
-    }));
+    fixture.respond(Value::Object(pages));
     let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "--limit", "400"]);
     let numbers: Vec<u64> = listed
         .as_array()
@@ -2871,8 +2878,8 @@ fn lists_search_another_repository_with_the_same_filters() {
 fn issue_open_with_link_refuses_before_creating_when_an_issue_is_linked() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({
-        "issue view 34": {"body": {"number": 34, "state": "OPEN", "title": "Assignment",
-            "body": "", "comments": []}},
+        "GET repos/team/project/issues/34": {"body": {"number": 34, "state": "open",
+            "title": "Assignment", "body": "", "labels": []}},
     }));
     fixture.ok(&["link", "issue", "34", "assigned", "--workspace", "topic"]);
     fixture.requests();
@@ -3004,17 +3011,14 @@ fn failed_check_responses() -> Value {
 #[test]
 fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_checks() {
     for gitlab in [false, true] {
-        let fixture = Fixture::new(
-            Forge::GitHub,
-            "[agent.forge_clis]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n",
+        // Wrappers give the agent its own accounts, which their tokens sign in to.
+        let config = format!(
+            "[agent.forge_clis]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n{AGENT_TOKEN}\
+             [machine.forges.\"gitlab.com\"]\nagent_token = \"agenttoken\"\n"
         );
-        let root = fixture.root.path();
-        let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
-        support::install_test_script(root.join("agent-gh"), wrapper);
-        support::install_test_script(root.join("agent-glab"), wrapper);
+        let fixture = Fixture::new(Forge::GitHub, &config);
         let external = "https://coverage.example/7";
         let (job, log, responses) = if gitlab {
-            std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
             git(
                 &fixture.repo,
                 &[
@@ -3067,7 +3071,9 @@ fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_check
         let requests = fixture.requests();
         assert_eq!(requests.last().unwrap()[0], log.as_str());
         assert!(
-            requests.iter().all(|request| request[2] == "agent"),
+            requests
+                .iter()
+                .all(|request| request[2] == "Bearer agenttoken"),
             "{requests:?}"
         );
 
@@ -3305,9 +3311,6 @@ fn github_views_and_watches_read_timed_out_jobs_but_not_commit_statuses() {
     let mut open = pull(8, "open", "Fix", &[]);
     open["head"]["sha"] = json!("head");
     fixture.respond(json!({
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
-            "author": {"login": "agent"}, "labels": [], "createdAt": "t0",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": false, "commits": []}},
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/issues/8/comments?per_page=100&page=1": {"body": []},
         "GET repos/team/project/pulls/8/reviews?per_page=100&page=1": {"body": []},
@@ -3874,12 +3877,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     };
     let url = |id: u64| format!("https://github.com/team/project/actions/runs/{id}");
     fixture.respond(json!({
-        "pr view 8": {"body": {"number": 8, "state": "OPEN", "title": "Fix", "body": "",
-            "author": {"login": "contributor"}, "labels": [], "createdAt": "t0",
-            "headRefName": "topic", "baseRefName": "main", "isDraft": false,
-            "headRefOid": "head", "baseRefOid": "base", "commits": [], "comments": [],
-            "reviews": [], "mergeable": "MERGEABLE", "statusCheckRollup": []}},
-        "GET repos/team/project/pulls/8/comments": {"body": [[]]},
+        "GET repos/team/project/pulls/8/comments?per_page=100&page=1": {"body": []},
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/actions/runs?head_sha=head&status=action_required&per_page=50&page=1":
             {"body": {"total_count": 1, "workflow_runs": [run(21, "action_required")]}},
@@ -3926,7 +3924,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
         [json!([
             "POST repos/team/project/actions/runs/21/approve",
             null,
-            null
+            "Bearer usertoken"
         ])]
     );
     let output = fixture.run(&["ci", "approve", "22", "--workspace", "topic"]);
@@ -5089,8 +5087,8 @@ fn item_commands_act_from_a_registered_checkout() {
         "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
             "state": "open", "labels": []}},
         "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
-        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels,assignees,milestone --search=flaky":
-            {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
+        github_search("repo:team/project is:issue is:open flaky", 1):
+            {"body": {"items": [{"number": 40, "title": "Flaky", "state": "open", "labels": []}]}},
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "GET repos/team/project": {"body": {"owner": {"login": "team", "type": "User"}}},
         "GET repos/team/project/assignees?per_page=100&page=1": {"body": [{"login": "kim"}]},
@@ -5401,12 +5399,6 @@ fn agents_open_issues_directly_on_another_forge_when_allowed() {
         Forge::Forgejo,
         "[permissions]\nissue_other_repositories = 'direct'\n",
     );
-    fs::create_dir_all(fixture.root.path().join("bin")).unwrap();
-    std::os::unix::fs::symlink(
-        fixture.root.path().join("forge.py"),
-        fixture.root.path().join("bin/gh"),
-    )
-    .unwrap();
     fixture.respond(json!({
         "POST repos/them/tool/issues": {"status": 201, "body": {"number": 5}},
         "GET repos/them/tool/issues/5": {"body": {"number": 5, "title": "Crash",
@@ -5637,10 +5629,10 @@ fn downloads_read_files_on_the_forge_with_its_login() {
 
 #[test]
 fn gitlab_downloads_read_an_upload_from_its_api_route() {
-    // The scripted gh answers as glab on a GitLab remote too.
-    let fixture = Fixture::new(Forge::GitHub, "[agent.forge_clis]\nglab = '~/agent-glab'\n");
+    // The scripted curl answers for GitLab too.
+    let config = "[machine.forges.\"gitlab.com\"]\nagent_token = \"agenttoken\"\n";
+    let fixture = Fixture::new(Forge::GitHub, config);
     let root = fixture.root.path();
-    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
     git(
         &fixture.repo,
         &[
@@ -5650,8 +5642,6 @@ fn gitlab_downloads_read_an_upload_from_its_api_route() {
             "git@gitlab.com:team/project.git",
         ],
     );
-    let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
-    support::install_test_script(root.join("agent-glab"), wrapper);
     let endpoint = "projects/team%2Fproject/uploads/0123abcd/shot.png";
     fixture.respond(json!({
         format!("GET {endpoint}"): {"body": "PNG", "headers": {"Content-Type": "image/png"}},
@@ -5672,6 +5662,6 @@ fn gitlab_downloads_read_an_upload_from_its_api_route() {
         .collect();
     assert_eq!(
         requests,
-        [(json!(format!("GET {endpoint}")), json!("agent"))]
+        [(json!(format!("GET {endpoint}")), json!("Bearer agenttoken"))]
     );
 }

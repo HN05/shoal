@@ -13,7 +13,6 @@ use std::path::PathBuf;
 pub struct ForgeClis {
     pub fj: Option<PathBuf>,
     pub gh: Option<PathBuf>,
-    /// The agent's `glab`, which sends GitLab requests as the agent.
     pub glab: Option<PathBuf>,
     pub tea: Option<PathBuf>,
 }
@@ -83,11 +82,14 @@ impl ForgeClis {
     /// The forges on which a wrapper gives the agent an account of its
     /// own, so the user's token never stands in for its missing one.
     pub fn separate_forges(&self) -> Vec<ForgeKind> {
-        if self.fj.is_some() || self.tea.is_some() {
-            vec![ForgeKind::Forgejo]
-        } else {
-            Vec::new()
-        }
+        [
+            (ForgeKind::GitHub, self.gh.is_some()),
+            (ForgeKind::GitLab, self.glab.is_some()),
+            (ForgeKind::Forgejo, self.fj.is_some() || self.tea.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(forge, wrapped)| wrapped.then_some(forge))
+        .collect()
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -116,12 +118,6 @@ pub struct Launch {
 
 struct Wrappers {
     directory: tempfile::TempDir,
-}
-
-impl crate::forge::account::Launch for Launch {
-    fn apply(&self, command: &mut tokio::process::Command) {
-        Launch::apply(self, command);
-    }
 }
 
 impl Launch {

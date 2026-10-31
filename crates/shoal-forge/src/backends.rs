@@ -82,16 +82,14 @@ impl ForgeKind {
 
     /// What this process learned `host` serves, else the well-known hosts by
     /// name, else `linked`, the forge whose routes a link of the host uses;
-    /// failing all three a host glab has a login for, or whose name has a
-    /// `gitlab` label, counts as GitLab and any other as Forgejo or Gitea.
+    /// failing all three a host whose name has a `gitlab` label counts as
+    /// GitLab and any other as Forgejo or Gitea.
     pub(crate) fn detect(host: &str, linked: Option<Self>) -> Self {
         crate::hosts::learned(host)
             .or_else(|| Self::named(host))
             .or(linked)
             .unwrap_or_else(|| {
-                if host.split(['.', ':']).any(|label| label == "gitlab")
-                    || gitlab::glab::has_login(host)
-                {
+                if host.split(['.', ':']).any(|label| label == "gitlab") {
                     Self::GitLab
                 } else {
                     Self::Forgejo

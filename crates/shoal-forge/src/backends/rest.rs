@@ -1,5 +1,5 @@
 //! Reads shared by the forges Shoal reaches through their REST APIs; GitHub
-//! keeps its own activity reads and reads other items with `gh`.
+//! keeps its own activity reads.
 use anyhow::{Context, Result, ensure};
 use futures_util::{StreamExt, TryStreamExt};
 use serde_json::Value;

@@ -1,6 +1,6 @@
 //! A forge's HTTP response as a transport reads it: the status, the headers
 //! that precede the body, and the body as text or, for a file, as bytes.
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use crate::transport::api::http_body;
 
@@ -37,17 +37,6 @@ impl Response {
     pub fn success_body(&self) -> Result<&str> {
         http_body(self.status, &self.body)
     }
-
-    /// A response printed with its head first, as `gh api --include` does;
-    /// interim `1xx` heads before the final one are skipped.
-    pub fn included(text: &str) -> Result<Self> {
-        let ((status, headers), start) = included_head(text.as_bytes())?;
-        Ok(Self {
-            status,
-            headers,
-            body: text[start..].to_owned(),
-        })
-    }
 }
 
 /// A response whose body is a file, kept as bytes.
@@ -57,19 +46,6 @@ pub(crate) struct Fetched {
     /// Names in lowercase, in the order received.
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
-}
-
-impl Fetched {
-    /// A response printed with its head first, as `gh api --include` does.
-    pub fn included(mut output: Vec<u8>) -> Result<Self> {
-        let ((status, headers), start) = included_head(&output)?;
-        output.drain(..start);
-        Ok(Self {
-            status,
-            headers,
-            body: output,
-        })
-    }
 }
 
 impl Headed for Fetched {
@@ -90,27 +66,8 @@ fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
         .map(|(_, value)| value.as_str())
 }
 
-/// The status and headers of the head `output` prints before its body, and
-/// where the body starts; interim `1xx` heads before the final one are
-/// skipped.
-fn included_head(output: &[u8]) -> Result<(Head, usize)> {
-    let mut start = 0;
-    loop {
-        let rest = &output[start..];
-        let (head_end, body_start) = split_head(rest).context("the response has no headers")?;
-        let head = String::from_utf8_lossy(&rest[..head_end]);
-        let (status, headers) = parse_head(&head).context("the response has no HTTP status")?;
-        if (100..200).contains(&status) && rest[body_start..].starts_with(b"HTTP/") {
-            start += body_start;
-            continue;
-        }
-        return Ok(((status, headers), start + body_start));
-    }
-}
-
-/// The headers of the last response head in `text`, which a tool writes
-/// apart from the body, such as curl's `--dump-header` or tea's `--include`
-/// on standard error; none when it has no head.
+/// The headers of the last response head in `text`, which curl's
+/// `--dump-header` writes apart from the body; none when it has no head.
 pub(crate) fn last_head(text: &str) -> Vec<(String, String)> {
     let start = text
         .match_indices("HTTP/")
@@ -121,19 +78,6 @@ pub(crate) fn last_head(text: &str) -> Vec<(String, String)> {
         .and_then(|at| parse_head(&text[at..]))
         .map(|(_, headers)| headers)
         .unwrap_or_default()
-}
-
-/// Where the first blank line in `bytes` starts and where it ends.
-fn split_head(bytes: &[u8]) -> Option<(usize, usize)> {
-    [&b"\r\n\r\n"[..], b"\n\n"]
-        .into_iter()
-        .filter_map(|blank| {
-            let at = bytes
-                .windows(blank.len())
-                .position(|window| window == blank)?;
-            Some((at, at + blank.len()))
-        })
-        .min()
 }
 
 /// The status and headers of a head, which ends at its first blank line.

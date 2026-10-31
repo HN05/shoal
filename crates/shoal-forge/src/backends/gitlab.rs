@@ -39,13 +39,12 @@ use crate::{
     },
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
-        download, programs,
+        download,
         response::{Fetched, Response},
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
 
-pub(crate) mod glab;
 mod reactions;
 mod review;
 mod uploads;
@@ -55,21 +54,10 @@ use super::{Backend, LoginHint, rest};
 #[derive(Clone, Copy)]
 pub(crate) struct GitLab;
 
-/// The variables glab takes a token from instead of its saved logins.
-const ENV_TOKENS: &[&str] = &[
-    "GITLAB_TOKEN",
-    "GITLAB_ACCESS_TOKEN",
-    "OAUTH_TOKEN",
-    "CI_JOB_TOKEN",
-];
-
 impl Backend for GitLab {
-    /// GitLab reports its version with the revision it was built from. Only
-    /// glab's login for the host is sent, never a token it would read from
-    /// the environment for any host.
+    /// GitLab reports its version with the revision it was built from.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
-        let request = Request::get("version".into()).withholding(ENV_TOKENS);
-        let version = host.send(account, &request).await?;
+        let version = host.send(account, &Request::get("version".into())).await?;
         Ok(version["version"].is_string() && version["revision"].is_string())
     }
 
@@ -153,7 +141,7 @@ impl Backend for GitLab {
     }
 
     fn login_hint(&self) -> &'static str {
-        "GitLab API request failed; check `glab auth login` for the host"
+        "GitLab API request failed; private projects need a token under [machine.forges.\"<host>\"]"
     }
 
     async fn send(
@@ -162,7 +150,12 @@ impl Backend for GitLab {
         account: &Account,
         request: &Request,
     ) -> Result<Response> {
-        repo.passthrough(programs::GLAB, account, request).await
+        let url = format!(
+            "{}://{}/api/v4/{}",
+            repo.web_scheme, repo.host, request.endpoint
+        );
+        let authorization = account.authorization(repo).await?;
+        repo.curl_send(&url, authorization, request).await
     }
 
     fn page_size(&self) -> (&'static str, usize) {
@@ -914,8 +907,9 @@ impl Backend for GitLab {
     /// is read from the API route that serves the same upload.
     async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
         let endpoint = uploads::api_route(url)?;
-        let target = ["--hostname", repo.host.as_str(), endpoint.as_str()];
-        download::through_cli(programs::GLAB, account, &target).await
+        let url = format!("{}://{}/api/v4/{endpoint}", repo.web_scheme, repo.host);
+        let authorization = account.authorization(repo).await?;
+        download::with_curl(&url, authorization).await
     }
 
     async fn check_uploads(

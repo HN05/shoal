@@ -30,12 +30,6 @@ fn logins(hosts: &[(&str, &'static str)], fetches: &Arc<AtomicUsize>) -> Logins 
     logins
 }
 
-struct Unchanged;
-
-impl Launch for Unchanged {
-    fn apply(&self, _command: &mut tokio::process::Command) {}
-}
-
 fn repo(host: &str) -> ForgeRepo {
     ForgeRepo::parse(&format!("https://{host}/team/project")).unwrap()
 }
@@ -53,7 +47,6 @@ async fn agents_use_their_own_token_then_the_users_outside_separate_forges() {
         &fetches,
     );
     let agent = AgentLogins {
-        launch: Box::new(Unchanged),
         logins: logins(&[("Agent.Example", "agent-a")], &fetches),
         separate: Vec::new(),
     };
@@ -75,7 +68,6 @@ async fn agents_use_their_own_token_then_the_users_outside_separate_forges() {
     assert_eq!(fetches.load(Ordering::SeqCst), 2);
 
     let separate = AgentLogins {
-        launch: Box::new(Unchanged),
         logins: Logins::default(),
         separate: vec![ForgeKind::Forgejo],
     };
@@ -105,4 +97,20 @@ async fn malformed_tokens_are_refused() {
             .unwrap()
             .contains("token abc\"")
     );
+}
+
+#[tokio::test]
+async fn each_forge_signs_in_with_its_own_scheme_from_one_fetch() {
+    let fetches = Arc::new(AtomicUsize::new(0));
+    let account = Account::user(logins(&[("forge.example", "abc")], &fetches));
+    let on = |kind| ForgeRepo::host("forge.example", "https", kind);
+    let header = |bytes: Option<Vec<u8>>| String::from_utf8(bytes.unwrap()).unwrap();
+    let github = account.authorization(&on(ForgeKind::GitHub)).await.unwrap();
+    let forgejo = account
+        .authorization(&on(ForgeKind::Forgejo))
+        .await
+        .unwrap();
+    assert!(header(github).contains("Bearer abc"));
+    assert!(header(forgejo).contains("token abc"));
+    assert_eq!(fetches.load(Ordering::SeqCst), 1);
 }

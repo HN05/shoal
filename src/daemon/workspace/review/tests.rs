@@ -4,12 +4,14 @@ use crate::{
         events::{EventItem, EventKind},
         scope::{self, Caller},
     },
-    forge::ForgeRepo,
+    forge::{ForgeRepo, test_support::Server},
     protocol::AssignmentMethod,
-    test_support::{commit, git, install_test_script, manager, repository},
+    test_support::{commit, configure, git, install_test_script, manager, repository},
 };
-
-const REMOTE: &str = "https://github.com/acme/widgets.git";
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 fn select(kind: Option<LinkKind>, input: Option<&str>) -> Selection {
     Selection {
@@ -48,19 +50,17 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
         .unwrap();
     // Draft state and convention warnings are covered below; this forge
     // only keeps marking away from a real one.
-    let forge_dir = temp.path().join("forge");
-    std::fs::create_dir(&forge_dir).unwrap();
-    let gh = fake_gh(&forge_dir);
-    let config = format!(
-        "[pr]\nundraft_on_ready = false\n[agent.forge_clis]\ngh = '{}'\n",
-        gh.display()
-    );
+    let github = FakeGitHub::start(&manager).await;
+    let config = "[pr]\nundraft_on_ready = false\n".to_owned();
     manager
         .write_local_config(&repo.id, Some(config))
         .await
         .unwrap();
-    git(&workspace.path, &["remote", "add", "origin", REMOTE]);
-    let forge = ForgeRepo::parse(REMOTE).unwrap();
+    git(
+        &workspace.path,
+        &["remote", "add", "origin", &github.remote()],
+    );
+    let forge = ForgeRepo::parse(&github.remote()).unwrap();
     let (_, pr) = forge.pull("12").unwrap();
     let (_, issue) = forge.issue("7").unwrap();
     let head = current_head(&workspace).await.unwrap();
@@ -333,42 +333,83 @@ async fn post_ready_hook_receives_marks_and_its_failure_keeps_them() {
     }));
 }
 
-/// A `gh` that serves PR 12 of [`REMOTE`] with the draft state in `state`
-/// and no labels, and the repository's one label; changes draft state
-/// through GraphQL, and fails while `fail` exists.
-fn fake_gh(dir: &std::path::Path) -> std::path::PathBuf {
-    let gh = dir.join("gh-agent");
-    let state = dir.join("state");
-    let fail = dir.join("fail");
-    let log = dir.join("log");
-    install_test_script(
-        &gh,
-        &format!(
-            r#"#!/bin/sh
-input=$(cat)
-echo "$*" >> '{log}'
-[ -e '{fail}' ] && {{ printf 'HTTP/2.0 403 Forbidden\n\n{{"message":"forbidden"}}\n'; exit 1; }}
-printf 'HTTP/2.0 200 OK\n\n'
-case "$*" in
-  *graphql*)
-    case "$input" in
-      *markPullRequestReadyForReview*) echo false > '{state}' ;;
-      *convertPullRequestToDraft*) echo true > '{state}' ;;
-    esac
-    echo '{{"data":{{}}}}' ;;
-  */labels*)
-    echo '[{{"name":"type/bug","description":"Broken"}}]' ;;
-  *pulls/12*)
-    printf '{{"number":12,"title":"Fix","state":"open","draft":%s,"node_id":"PR_1","head":{{"ref":"ready"}},"base":{{"ref":"main"}},"labels":[]}}' "$(cat '{state}')" ;;
-esac
-"#,
-            log = log.display(),
-            fail = fail.display(),
-            state = state.display(),
-        ),
-    );
-    std::fs::write(&state, "true\n").unwrap();
-    gh
+/// A GitHub on a loopback port that serves PR 12 of acme/widgets with its
+/// draft state and no labels, and the repository's one label; it changes
+/// draft state through GraphQL, and refuses every request while it fails.
+struct FakeGitHub {
+    server: Server,
+    draft: Arc<AtomicBool>,
+    fail: Arc<AtomicBool>,
+}
+
+impl FakeGitHub {
+    /// Serve a draft PR, and give the agent a token for the host.
+    async fn start(manager: &Manager) -> Self {
+        let draft = Arc::new(AtomicBool::new(true));
+        let fail = Arc::new(AtomicBool::new(false));
+        let (state, failing) = (draft.clone(), fail.clone());
+        let server = Server::start(move |request| {
+            if failing.load(Ordering::SeqCst) {
+                return (403, Vec::new(), r#"{"message":"forbidden"}"#.into());
+            }
+            let body = if request.line.ends_with("/graphql") {
+                if request.body.contains("markPullRequestReadyForReview") {
+                    state.store(false, Ordering::SeqCst);
+                } else if request.body.contains("convertPullRequestToDraft") {
+                    state.store(true, Ordering::SeqCst);
+                }
+                r#"{"data":{}}"#.to_owned()
+            } else if request.line.contains("/labels") {
+                r#"[{"name":"type/bug","description":"Broken"}]"#.to_owned()
+            } else if request.line.contains("pulls/12") {
+                format!(
+                    r#"{{"number":12,"title":"Fix","state":"open","draft":{},"node_id":"PR_1","head":{{"ref":"ready"}},"base":{{"ref":"main"}},"labels":[]}}"#,
+                    state.load(Ordering::SeqCst)
+                )
+            } else {
+                return (404, Vec::new(), r#"{"message":"not found"}"#.into());
+            };
+            (200, Vec::new(), body.into())
+        });
+        let github = Self {
+            server,
+            draft,
+            fail,
+        };
+        let host = &github.server.host;
+        // Pins are this process's, which parallel tests replace; an answer stays.
+        crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::GitHub);
+        configure(
+            manager,
+            &format!(
+                "[cleanup]\ngrace_minutes = 0\n\
+                 [machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"
+            ),
+        )
+        .await;
+        github
+    }
+
+    fn remote(&self) -> String {
+        format!("http://{}/acme/widgets.git", self.server.host)
+    }
+
+    fn draft(&self) -> bool {
+        self.draft.load(Ordering::SeqCst)
+    }
+
+    fn fail(&self, failing: bool) {
+        self.fail.store(failing, Ordering::SeqCst);
+    }
+
+    /// How many draft changes it received.
+    fn mutations(&self) -> usize {
+        self.server
+            .received()
+            .iter()
+            .filter(|request| request.line.ends_with("/graphql"))
+            .count()
+    }
 }
 
 #[tokio::test]
@@ -383,16 +424,15 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .create_workspace(&repo.id, "ready".into(), None, None, None)
         .await
         .unwrap();
-    git(&workspace.path, &["remote", "add", "origin", REMOTE]);
-    let forge_dir = temp.path().join("forge");
-    std::fs::create_dir(&forge_dir).unwrap();
-    let gh = fake_gh(&forge_dir);
-    let config = |extra: &str| format!("[agent.forge_clis]\ngh = '{}'\n{extra}", gh.display());
-    manager
-        .write_local_config(&repo.id, Some(config("")))
-        .await
+    let github = FakeGitHub::start(&manager).await;
+    git(
+        &workspace.path,
+        &["remote", "add", "origin", &github.remote()],
+    );
+    let (_, pr) = ForgeRepo::parse(&github.remote())
+        .unwrap()
+        .pull("12")
         .unwrap();
-    let (_, pr) = ForgeRepo::parse(REMOTE).unwrap().pull("12").unwrap();
     let id = workspace.id.clone();
     let registration = serde_json::json!({ "url": pr });
     manager
@@ -406,13 +446,8 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         })
         .await
         .unwrap();
-    let draft = || std::fs::read_to_string(forge_dir.join("state")).unwrap() == "true\n";
-    let mutations = || {
-        std::fs::read_to_string(forge_dir.join("log"))
-            .unwrap_or_default()
-            .matches("graphql")
-            .count()
-    };
+    let draft = || github.draft();
+    let mutations = || github.mutations();
 
     // Marking undrafts by default, and a PR already out of draft is left alone.
     // The unlabeled PR comes back with a warning that is never stored.
@@ -465,7 +500,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     manager
         .write_local_config(
             &repo.id,
-            Some(config(
+            Some(String::from(
                 "[pr]\nundraft_on_ready = false\ndraft_on_unready = true\n",
             )),
         )
@@ -477,7 +512,10 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
     manager
-        .write_local_config(&repo.id, Some(config("[pr]\ndraft_on_unready = true\n")))
+        .write_local_config(
+            &repo.id,
+            Some(String::from("[pr]\ndraft_on_unready = true\n")),
+        )
         .await
         .unwrap();
     manager
@@ -492,7 +530,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     assert!(draft());
 
     // A forge failure keeps the mark either way, so the command can be retried.
-    std::fs::write(forge_dir.join("fail"), "").unwrap();
+    github.fail(true);
     let error = manager
         .mark_ready(&workspace.id, Selection::default())
         .await
@@ -500,13 +538,13 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     assert!(format!("{error:#}").contains("still a draft"), "{error:#}");
     let marks = || async { manager.workspace(&workspace.id).await.unwrap().review.len() };
     assert_eq!(marks().await, 1);
-    std::fs::remove_file(forge_dir.join("fail")).unwrap();
+    github.fail(false);
     manager
         .mark_ready(&workspace.id, Selection::default())
         .await
         .unwrap();
     assert!(!draft());
-    std::fs::write(forge_dir.join("fail"), "").unwrap();
+    github.fail(true);
     let pr_only = || select(Some(LinkKind::Pr), Some("12"));
     let error = manager
         .clear_ready(&workspace.id, pr_only(), Some(true))
@@ -514,7 +552,7 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap_err();
     assert!(format!("{error:#}").contains("kept the marks"), "{error:#}");
     assert_eq!(marks().await, 1);
-    std::fs::remove_file(forge_dir.join("fail")).unwrap();
+    github.fail(false);
     manager
         .clear_ready(&workspace.id, pr_only(), Some(true))
         .await

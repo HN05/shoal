@@ -1,67 +1,40 @@
 use super::*;
-use crate::account::{AgentLogins, Launch};
-use crate::test_support::install_test_script;
-
-/// Finds the CLIs only in one directory.
-struct Bin(PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut Command) {
-        command.env("PATH", &self.0);
-    }
-}
+use crate::{
+    backends::ForgeKind,
+    test_support::{Server, agent_on, repo_on},
+};
 
 #[tokio::test]
 async fn repeated_reads_send_the_validators_and_keep_the_unchanged_body() {
-    let dir = tempfile::tempdir().unwrap();
-    let log = dir.path().join("log");
-    // Like gh, a 304 prints its head and exits with an error.
-    let gh = dir.path().join("gh");
-    install_test_script(
-        &gh,
-        &format!(
-            r#"#!/bin/sh
-echo "$*" >> '{log}'
-case "$*" in
-  *"If-None-Match: \"v1\""*) printf 'HTTP/2.0 304 Not Modified\n\n'; exit 1;;
-esac
-printf 'HTTP/2.0 200 OK\nETag: "v1"\n\n{{"number":7}}'
-"#,
-            log = log.display()
-        ),
-    );
-    let agent = || {
-        let logins = AgentLogins {
-            launch: Box::new(Bin(dir.path().to_owned())),
-            logins: Default::default(),
-            separate: Vec::new(),
-        };
-        Account::agent(logins, Default::default())
-    };
+    let server = Server::start(|request| match request.header("If-None-Match") {
+        Some("\"v1\"") => (304, Vec::new(), Vec::new()),
+        _ => (200, vec!["ETag: \"v1\"".into()], r#"{"number":7}"#.into()),
+    });
     let memory = crate::transport::memory::Memory::default();
-    let account = || agent().remembering(memory.clone());
-    let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
+    let account = || agent_on(&server, "agent").remembering(memory.clone());
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/project");
     let read = Request::get("repos/team/project/issues/7".into());
     for _ in 0..2 {
         let body = repo.send(&account(), &read).await.unwrap();
         assert_eq!(body, serde_json::json!({"number": 7}));
     }
-    let log = std::fs::read_to_string(log).unwrap();
-    let lines: Vec<_> = log.lines().collect();
-    assert_eq!(lines.len(), 2, "{log}");
-    assert!(!lines[0].contains("If-None-Match"), "{log}");
-    assert!(lines[1].ends_with("-H If-None-Match: \"v1\""), "{log}");
+    let received = server.received();
+    assert_eq!(received.len(), 2, "{received:?}");
+    assert_eq!(received[0].line, "GET /api/v3/repos/team/project/issues/7");
+    assert_eq!(received[0].header("Authorization"), Some("Bearer agent"));
+    assert_eq!(received[0].header("If-None-Match"), None);
+    assert_eq!(received[1].header("If-None-Match"), Some("\"v1\""));
     // A change is not conditional, and an account without the memory
     // reads in full.
     let edit = Request::new(HttpMethod::Patch, read.endpoint.clone(), None);
     repo.send(&account(), &edit).await.unwrap();
-    repo.send(&agent(), &read).await.unwrap();
-    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    repo.send(&agent_on(&server, "agent"), &read).await.unwrap();
+    let received = server.received();
     assert!(
-        log.lines()
-            .skip(2)
-            .all(|line| !line.contains("If-None-Match")),
-        "{log}"
+        received[2..]
+            .iter()
+            .all(|request| request.header("If-None-Match").is_none()),
+        "{received:?}"
     );
 }
 
@@ -119,28 +92,5 @@ fn github_errors_name_each_validation_failure() {
     assert_eq!(
         error_message(r#"{"type":"error","error":{"message":"Repository not found"}}"#).unwrap(),
         "Repository not found"
-    );
-}
-
-#[tokio::test]
-async fn forms_carry_the_file_under_its_field_and_a_plain_name() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("a\"b.png");
-    std::fs::write(&path, "png").unwrap();
-    let upload = Upload {
-        path,
-        content_type: "image/png",
-        field: Some("file"),
-    };
-    let (content_type, form) = multipart(&upload).await.unwrap();
-    let boundary = content_type
-        .strip_prefix("multipart/form-data; boundary=")
-        .unwrap();
-    assert_eq!(
-        String::from_utf8(form).unwrap(),
-        format!(
-            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"ab.png\"\r\n\
-                 Content-Type: image/png\r\n\r\npng\r\n--{boundary}--\r\n"
-        )
     );
 }

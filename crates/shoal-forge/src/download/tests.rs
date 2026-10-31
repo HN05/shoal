@@ -1,40 +1,16 @@
-use std::path::PathBuf;
-
-use tokio::process::Command;
-
 use super::*;
-use crate::account::{AgentLogins, Launch};
-use crate::test_support::install_test_script;
+use crate::{
+    backends::ForgeKind,
+    test_support::{Reply, Server, agent_on, repo_on},
+};
 
-/// Finds the CLIs only in one directory.
-struct Bin(PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut Command) {
-        command.env("PATH", &self.0);
-    }
-}
-
-/// An account whose gh prints `response` after logging its arguments.
-fn gh_printing(dir: &std::path::Path, response: &str) -> Account {
-    cli_printing(dir, "gh", response)
-}
-
-/// An account whose `program` prints `response` after logging its arguments.
-fn cli_printing(dir: &std::path::Path, program: &str, response: &str) -> Account {
-    install_test_script(
-        &dir.join(program),
-        &format!(
-            "#!/bin/sh\necho \"$*\" > '{log}'\nprintf '{response}'\n",
-            log = dir.join("log").display()
-        ),
-    );
-    let logins = AgentLogins {
-        launch: Box::new(Bin(dir.to_owned())),
-        logins: Default::default(),
-        separate: Vec::new(),
-    };
-    Account::agent(logins, Default::default())
+/// A GitHub on a loopback port that answers every request with `reply`,
+/// one of its repositories, and the URL of a file it serves.
+fn github_replying(reply: Reply) -> (Server, ForgeRepo, String) {
+    let server = Server::start(move |_| reply.clone());
+    let repo = repo_on(&server, ForgeKind::GitHub, "team/project");
+    let url = format!("http://{}/user-attachments/assets/abc", server.host);
+    (server, repo, url)
 }
 
 #[test]
@@ -74,36 +50,36 @@ fn only_urls_on_the_forge_are_downloaded() {
 
 #[tokio::test]
 async fn a_download_keeps_the_bytes_and_their_type() {
-    let dir = tempfile::tempdir().unwrap();
-    let account = gh_printing(
-        dir.path(),
-        "HTTP/2.0 200 OK\\r\\nContent-Type: Image/PNG; charset=binary\\r\\n\\r\\n\\211PNG\\r\\n\\032\\n\\377",
-    );
-    let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
-    let url = "https://github.com/user-attachments/assets/abc";
-    let download = repo.download(&account, url).await.unwrap();
+    let png = b"\x89PNG\r\n\x1a\n\xff".to_vec();
+    let content = vec!["Content-Type: Image/PNG; charset=binary".to_owned()];
+    let (server, repo, url) = github_replying((200, content, png.clone()));
+    let download = repo
+        .download(&agent_on(&server, "agent"), &url)
+        .await
+        .unwrap();
     assert_eq!(download.content_type.as_deref(), Some("image/png"));
-    assert_eq!(download.bytes, b"\x89PNG\r\n\x1a\n\xff");
-    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
-    assert_eq!(log.trim(), format!("api --include {url}"));
+    assert_eq!(download.bytes, png);
+    let received = server.received();
+    assert_eq!(received[0].line, "GET /user-attachments/assets/abc");
+    assert_eq!(received[0].header("Authorization"), Some("Bearer agent"));
 }
 
 #[tokio::test]
 async fn a_sign_in_page_or_failure_is_not_a_download() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
-    let url = "https://github.com/user-attachments/assets/abc";
-    let account = gh_printing(
-        dir.path(),
-        "HTTP/2.0 200 OK\\nContent-Type: text/html; charset=utf-8\\n\\n<html>Sign in</html>",
-    );
-    let error = repo.download(&account, url).await.unwrap_err();
+    let html = vec!["Content-Type: text/html; charset=utf-8".to_owned()];
+    let (server, repo, url) = github_replying((200, html, b"<html>Sign in</html>".to_vec()));
+    let error = repo
+        .download(&agent_on(&server, "agent"), &url)
+        .await
+        .unwrap_err();
     assert!(format!("{error:#}").contains("web page"), "{error:#}");
-    let account = gh_printing(
-        dir.path(),
-        "HTTP/2.0 404 Not Found\\nContent-Type: application/json\\n\\n{\"message\":\"Not Found\"}",
-    );
-    let error = repo.download(&account, url).await.unwrap_err();
+    let json = vec!["Content-Type: application/json".to_owned()];
+    let missing = br#"{"message":"Not Found"}"#.to_vec();
+    let (server, repo, url) = github_replying((404, json, missing));
+    let error = repo
+        .download(&agent_on(&server, "agent"), &url)
+        .await
+        .unwrap_err();
     assert!(
         format!("{error:#}").contains("HTTP 404: Not Found"),
         "{error:#}"
@@ -112,22 +88,25 @@ async fn a_sign_in_page_or_failure_is_not_a_download() {
 
 #[tokio::test]
 async fn gitlab_reads_an_upload_from_its_api_route() {
-    let dir = tempfile::tempdir().unwrap();
-    let account = cli_printing(
-        dir.path(),
-        "glab",
-        "HTTP/2.0 200 OK\\r\\nContent-Type: image/png\\r\\n\\r\\nPNG",
+    let png = vec!["Content-Type: image/png".to_owned()];
+    let server = Server::start(move |_| (200, png.clone(), b"PNG".to_vec()));
+    let repo = repo_on(&server, ForgeKind::GitLab, "team/project");
+    let url = format!(
+        "http://{}/-/project/42/uploads/0123abcd/shot.png",
+        server.host
     );
-    let repo = ForgeRepo::parse("https://gitlab.example.com/team/project").unwrap();
-    let url = "https://gitlab.example.com/-/project/42/uploads/0123abcd/shot.png";
-    let download = repo.download(&account, url).await.unwrap();
+    let download = repo
+        .download(&agent_on(&server, "agent"), &url)
+        .await
+        .unwrap();
     assert_eq!(download.content_type.as_deref(), Some("image/png"));
     assert_eq!(download.bytes, b"PNG");
-    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    let received = server.received();
     assert_eq!(
-        log.trim(),
-        "api --include --hostname gitlab.example.com projects/42/uploads/0123abcd/shot.png"
+        received[0].line,
+        "GET /api/v4/projects/42/uploads/0123abcd/shot.png"
     );
+    assert_eq!(received[0].header("Authorization"), Some("Bearer agent"));
 }
 
 #[tokio::test]
@@ -150,26 +129,18 @@ async fn forges_without_downloads_refuse_before_sending() {
 
 #[tokio::test]
 async fn downloads_keep_to_the_forges_rate_limit() {
-    let dir = tempfile::tempdir().unwrap();
+    let limited = vec!["Retry-After: 30".to_owned()];
+    let (server, repo, url) = github_replying((429, limited, Vec::new()));
     let memory = crate::transport::memory::Memory::default();
-    let account = || {
-        gh_printing(
-            dir.path(),
-            "HTTP/2.0 429 Too Many Requests\\nRetry-After: 30\\n\\n",
-        )
-        .remembering(memory.clone())
-    };
-    let repo = ForgeRepo::parse("https://github.com/team/project").unwrap();
-    let url = "https://github.com/user-attachments/assets/abc";
     // A refusal records the limit, and the next download waits it out
     // without asking the forge again.
-    let log = dir.path().join("log");
-    for asked in [true, false] {
-        let error = repo.download(&account(), url).await.unwrap_err();
+    for asked in [1, 1] {
+        let account = agent_on(&server, "agent").remembering(memory.clone());
+        let error = repo.download(&account, &url).await.unwrap_err();
         assert!(
             crate::transport::limits::rate_limited(&error).is_some(),
             "{error:#}"
         );
-        assert_eq!(std::fs::remove_file(&log).is_ok(), asked);
+        assert_eq!(server.received().len(), asked);
     }
 }

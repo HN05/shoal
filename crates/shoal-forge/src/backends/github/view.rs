@@ -1,23 +1,15 @@
-//! GitHub items as `gh` and its REST API report them, for item views.
-use anyhow::{Context, Result, ensure};
+//! GitHub items as its REST API reports them, for item views.
+use anyhow::{Context, Result};
 use serde_json::Value;
 
-use super::{
-    Query, gh,
-    threads::{GitHubThread, threads},
-};
+use super::threads::{GitHubThread, threads};
 use crate::{
     ForgeRepo,
     account::Account,
-    items::{
-        action::MergeMethod,
-        item::{text, user_names},
-        link::ItemKind,
-    },
-    review::view::{
-        AutoMerge, Comment, Details, PrDetails, Review, labels, login, required, review_comment,
-        review_state, text_field,
-    },
+    backends::github_rest,
+    items::{action::MergeMethod, link::ItemKind},
+    review::view::{AutoMerge, Details, Review, login, review_comment, review_state, text_field},
+    transport::api::Request,
 };
 
 pub(crate) async fn details(
@@ -27,30 +19,22 @@ pub(crate) async fn details(
     number: u64,
     comments: bool,
 ) -> Result<Details> {
-    let id = number.to_string();
-    let repository = format!("{}/{}", repo.host, repo.path);
-    let (command, extra) = match kind {
-        ItemKind::Issue => ("issue", ""),
-        ItemKind::Pr => (
-            "pr",
-            ",headRefName,baseRefName,isDraft,autoMergeRequest,reviewRequests",
-        ),
+    let read = Request::get(repo.item_endpoint(kind, number));
+    let item = repo.send(account, &read);
+    let discussion = async {
+        if !comments {
+            return Ok(None);
+        }
+        let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
+        repo.pages(account, &endpoint).await.map(Some)
     };
-    let fields = format!(
-        "number,title,body,state,author,labels,assignees,milestone,createdAt{extra}{}",
-        if comments { ",comments" } else { "" }
-    );
-    let args = [
-        command,
-        "view",
-        &id,
-        "--repo",
-        &repository,
-        "--json",
-        &fields,
-    ];
-    let output = gh(account, &args, Query::View).await?;
-    parse_details(&output, kind, number)
+    let (item, discussion) = tokio::try_join!(item, discussion)?;
+    let mut details = github_rest::details(&item, kind, number, repo.owner())?;
+    if let Some(pr) = details.pr.as_mut() {
+        pr.auto_merge = auto_merge(&item["auto_merge"])?;
+    }
+    details.comments = discussion.as_deref().map(github_rest::comments);
+    Ok(details)
 }
 
 /// Reviews with their inline comments; issues have none.
@@ -64,21 +48,8 @@ pub(crate) async fn reviews(
         return Ok(None);
     }
     let pages = |resource: &'static str| {
-        let endpoint = format!("repos/{}/pulls/{number}/{resource}", repo.path);
-        async move {
-            let args = [
-                "api",
-                "--hostname",
-                &repo.host,
-                &endpoint,
-                "--paginate",
-                "--slurp",
-            ];
-            let output = gh(account, &args, Query::View).await?;
-            let pages: Vec<Vec<Value>> = serde_json::from_str(&output)
-                .with_context(|| format!("invalid gh {resource} response"))?;
-            Ok::<_, anyhow::Error>(pages.into_iter().flatten().collect::<Vec<_>>())
-        }
+        let endpoint = repo.repo_endpoint(&format!("pulls/{number}/{resource}"));
+        async move { repo.pages(account, &endpoint).await }
     };
     let (reviews, comments, threads) = tokio::try_join!(
         pages("reviews"),
@@ -88,88 +59,20 @@ pub(crate) async fn reviews(
     parse_reviews(&reviews, &comments, &threads).map(Some)
 }
 
-fn parse_details(output: &str, kind: ItemKind, number: u64) -> Result<Details> {
-    let item: Value = serde_json::from_str(output).context("invalid gh response")?;
-    ensure!(item["number"] == number, "gh returned a different item");
-    let pr = match kind {
-        ItemKind::Issue => None,
-        ItemKind::Pr => Some(PrDetails {
-            auto_merge: auto_merge(&item["autoMergeRequest"])?,
-            reviewers: review_requests(&item["reviewRequests"]),
-            ..PrDetails::read(
-                &item["headRefName"],
-                &item["baseRefName"],
-                item["isDraft"].as_bool().unwrap_or_default(),
-            )?
-        }),
-    };
-    let comments = match item.get("comments") {
-        Some(comments) => Some(
-            comments
-                .as_array()
-                .context("gh comments are not a list")?
-                .iter()
-                .map(|comment| Comment {
-                    id: comment_id(&comment["url"]),
-                    author: login(&comment["author"]),
-                    created_at: text_field(&comment["createdAt"]),
-                    body: text_field(&comment["body"]),
-                    reactions: Vec::new(),
-                })
-                .collect(),
-        ),
-        None => None,
-    };
-    Ok(Details {
-        number,
-        title: required(&item["title"], "title")?,
-        state: required(&item["state"], "state")?.to_ascii_lowercase(),
-        author: login(&item["author"]),
-        created_at: text_field(&item["createdAt"]),
-        labels: labels(&item["labels"]),
-        assignees: user_names(&item["assignees"], "login"),
-        milestone: text(&item["milestone"]["title"]),
-        body: text_field(&item["body"]),
-        pr,
-        comments,
-        reviews: None,
-        reactions: Vec::new(),
-    })
-}
-
+/// The automatic merge GitHub reports for a PR, if one is set.
 fn auto_merge(request: &Value) -> Result<Option<AutoMerge>> {
     if request.is_null() {
         return Ok(None);
     }
-    let method = match request["mergeMethod"].as_str() {
-        Some("MERGE") => MergeMethod::Merge,
-        Some("REBASE") => MergeMethod::Rebase,
-        Some("SQUASH") => MergeMethod::Squash,
+    let method = match request["merge_method"].as_str() {
+        Some("merge") => MergeMethod::Merge,
+        Some("rebase") => MergeMethod::Rebase,
+        Some("squash") => MergeMethod::Squash,
         method => anyhow::bail!("unknown auto-merge method {method:?}"),
     };
     Ok(Some(AutoMerge {
         method: Some(method),
     }))
-}
-
-/// The users and teams asked for a review, which `gh` names by login and
-/// by `owner/team` slug.
-fn review_requests(requests: &Value) -> Vec<String> {
-    requests
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|request| request["slug"].as_str().or(request["login"].as_str()))
-        .map(str::to_owned)
-        .collect()
-}
-
-/// The REST ID of the comment at `url`, which `gh` reports only there.
-fn comment_id(url: &Value) -> u64 {
-    url.as_str()
-        .and_then(|url| url.rsplit_once("#issuecomment-"))
-        .and_then(|(_, id)| id.parse().ok())
-        .unwrap_or_default()
 }
 
 /// REST reviews and inline comments; each comment belongs to the review that

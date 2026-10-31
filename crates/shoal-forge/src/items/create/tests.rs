@@ -1,45 +1,24 @@
 use super::*;
-use crate::test_support::install_test_script;
 use crate::{
-    account::{AgentLogins, Launch},
+    backends::ForgeKind,
+    test_support::{Server, agent_on, repo_on},
     transport::{api::HttpMethod, memory::Memory},
 };
 use serde_json::json;
-use std::path::PathBuf;
-use tokio::process::Command;
-
-/// Finds the CLIs only in one directory.
-struct Bin(PathBuf);
-
-impl Launch for Bin {
-    fn apply(&self, command: &mut Command) {
-        command.env("PATH", &self.0);
-    }
-}
 
 #[tokio::test]
 async fn an_issue_whose_read_fails_after_posting_comes_back_as_posted() {
-    let dir = tempfile::tempdir().unwrap();
-    let log = dir.path().join("log");
-    let gh = dir.path().join("gh");
     // Posting spends the account's last request until the limit resets.
-    install_test_script(
-        &gh,
-        &format!(
-            r#"#!/bin/sh
-echo "$*" >> '{log}'
-printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n\n{{"number":7}}'
-"#,
-            log = log.display()
-        ),
-    );
-    let logins = AgentLogins {
-        launch: Box::new(Bin(dir.path().to_owned())),
-        logins: Default::default(),
-        separate: Vec::new(),
-    };
-    let account = Account::agent(logins, Default::default()).remembering(Memory::default());
-    let github = ForgeRepo::parse("https://github.com/team/repo").unwrap();
+    let server = Server::start(|_| {
+        let limit = ["X-RateLimit-Remaining: 0", "X-RateLimit-Reset: 600"];
+        (
+            201,
+            limit.map(String::from).into(),
+            r#"{"number":7}"#.into(),
+        )
+    });
+    let account = agent_on(&server, "agent").remembering(Memory::default());
+    let github = repo_on(&server, ForgeKind::GitHub, "team/repo");
     let issue = NewIssue {
         title: "Flaky".into(),
         body: "Seen twice".into(),
@@ -54,7 +33,7 @@ printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n
         Item {
             kind: ItemKind::Issue,
             number: 7,
-            url: "https://github.com/team/repo/issues/7".into(),
+            url: format!("http://{}/team/repo/issues/7", server.host),
             title: "Flaky".into(),
             state: ItemState::Open,
             labels: vec!["bug".into()],
@@ -69,8 +48,7 @@ printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n
         "{unfinished}"
     );
     // The read was refused without reaching the forge.
-    let log = std::fs::read_to_string(log).unwrap();
-    assert_eq!(log.lines().count(), 1, "{log}");
+    assert_eq!(server.received().len(), 1);
 }
 
 #[test]

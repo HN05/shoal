@@ -75,6 +75,7 @@ rustix = { version = "1", features = ["fs"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [dev-dependencies]
+shoal-forge = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 
 # Release code with symbols for samplers; scripts/profile_shoal.py builds it.

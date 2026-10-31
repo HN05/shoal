@@ -1,9 +1,12 @@
 use serde_json::json;
 
 use crate::{
-    forge::raw::{HttpMethod, RawRequest},
+    forge::{
+        raw::{HttpMethod, RawRequest},
+        test_support::Server,
+    },
     protocol::ItemContext,
-    test_support::{git, install_test_script, manager, repository},
+    test_support::{configure, git, manager, repository},
 };
 
 #[tokio::test]
@@ -18,29 +21,32 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .create_workspace(&repo.id, "api".into(), None, None, None)
         .await
         .unwrap();
-    git(
-        &path,
-        &["remote", "add", "origin", "https://github.com/team/repo"],
-    );
-    let gh = root.path().join("gh-agent");
-    let log = root.path().join("log");
-    install_test_script(
-        &gh,
-        &format!(
-            "#!/bin/sh\necho \"$*\" >> '{}'\nprintf 'HTTP/2.0 200 OK\\n\\n{{\"ok\":true}}'\n",
-            log.display()
-        ),
-    );
-    let auth = format!("[agent.forge_clis]\ngh = '{}'\n", gh.display());
-    manager
-        .write_local_config(&repo.id, Some(auth.clone()))
-        .await
-        .unwrap();
+    let server = Server::start(|_| (200, Vec::new(), r#"{"ok":true}"#.into()));
+    let host = &server.host;
+    // Pins are this process's, which parallel tests replace; an answer stays.
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::GitHub);
+    let origin = format!("http://{host}/team/repo");
+    git(&path, &["remote", "add", "origin", &origin]);
+    configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
+    )
+    .await;
     let context = ItemContext::Workspace(workspace.id.clone());
     let request = |method| RawRequest {
         method,
         path: "repos/{owner}/{repo}".into(),
         body: None,
+    };
+    let sent = || -> Vec<String> {
+        let received = server.received();
+        assert!(
+            received
+                .iter()
+                .all(|request| request.header("Authorization") == Some("Bearer agent")),
+            "{received:?}"
+        );
+        received.into_iter().map(|request| request.line).collect()
     };
 
     let read = manager
@@ -53,14 +59,12 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .await
         .unwrap_err();
     assert!(format!("{error:#}").contains("api_writes"), "{error:#}");
-    let sent = std::fs::read_to_string(&log).unwrap();
-    assert_eq!(sent.lines().count(), 1, "{sent}");
-    assert!(sent.contains("-X GET repos/team/repo"), "{sent}");
+    assert_eq!(sent(), ["GET /api/v3/repos/team/repo"]);
 
     manager
         .write_local_config(
             &repo.id,
-            Some(format!("{auth}[permissions]\napi_writes = 'direct'\n")),
+            Some("[permissions]\napi_writes = 'direct'\n".into()),
         )
         .await
         .unwrap();
@@ -68,8 +72,7 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         .forge_api(&context, &request(HttpMethod::Patch), None, true)
         .await
         .unwrap();
-    let sent = std::fs::read_to_string(&log).unwrap();
-    assert!(sent.contains("-X PATCH repos/team/repo"), "{sent}");
+    assert_eq!(sent()[1], "PATCH /api/v3/repos/team/repo");
 
     // Another repository is only read, whatever the workspace's allows.
     let read = manager
@@ -90,9 +93,9 @@ async fn agents_read_as_their_account_and_write_only_when_allowed() {
         format!("{error:#}").contains("GET requests to another repository"),
         "{error:#}"
     );
-    let sent = std::fs::read_to_string(&log).unwrap();
-    assert_eq!(sent.lines().count(), 3, "{sent}");
-    assert!(sent.contains("-X GET repos/team/tool"), "{sent}");
+    let sent = sent();
+    assert_eq!(sent.len(), 3, "{sent:?}");
+    assert_eq!(sent[2], "GET /api/v3/repos/team/tool");
 }
 
 #[tokio::test]
@@ -107,27 +110,21 @@ async fn agents_download_from_their_forge_as_their_account() {
         .create_workspace(&repo.id, "download".into(), None, None, None)
         .await
         .unwrap();
-    git(
-        &path,
-        &["remote", "add", "origin", "https://github.com/team/repo"],
-    );
-    let gh = root.path().join("gh-agent");
-    let log = root.path().join("log");
-    install_test_script(
-        &gh,
-        &format!(
-            "#!/bin/sh\necho \"$*\" >> '{}'\nprintf 'HTTP/2.0 200 OK\\nContent-Type: image/png\\n\\nPNG'\n",
-            log.display()
-        ),
-    );
-    manager
-        .write_local_config(
-            &repo.id,
-            Some(format!("[agent.forge_clis]\ngh = '{}'\n", gh.display())),
-        )
-        .await
-        .unwrap();
-    let url = "https://github.com/user-attachments/assets/abc";
+    let server = Server::start(|_| {
+        let png = vec!["Content-Type: image/png".to_owned()];
+        (200, png, b"PNG".to_vec())
+    });
+    let host = &server.host;
+    // Pins are this process's, which parallel tests replace; an answer stays.
+    crate::forge::hosts::learn(host, crate::forge::backends::ForgeKind::GitHub);
+    let origin = format!("http://{host}/team/repo");
+    git(&path, &["remote", "add", "origin", &origin]);
+    configure(
+        &manager,
+        &format!("[machine.forges.\"{host}\"]\ntype = \"github\"\nagent_token = \"agent\"\n"),
+    )
+    .await;
+    let url = &format!("http://{host}/user-attachments/assets/abc");
 
     let download = manager
         .forge_download(
@@ -153,6 +150,8 @@ async fn agents_download_from_their_forge_as_their_account() {
         format!("{error:#}").contains("not on the repository's forge"),
         "{error:#}"
     );
-    let sent = std::fs::read_to_string(&log).unwrap();
-    assert_eq!(sent.trim(), format!("api --include {url}"));
+    let received = server.received();
+    assert_eq!(received.len(), 1, "{received:?}");
+    assert_eq!(received[0].line, "GET /user-attachments/assets/abc");
+    assert_eq!(received[0].header("Authorization"), Some("Bearer agent"));
 }

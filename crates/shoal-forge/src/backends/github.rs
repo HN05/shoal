@@ -13,10 +13,10 @@ mod view;
 use super::{
     Backend, LoginHint,
     github_rest::{self, Dialect},
-    image, link,
+    image, link, rest,
 };
 use crate::{
-    ForgeRepo, MERGED_HINT,
+    ForgeRepo,
     account::Account,
     capability::{Capability, Support},
     ci::{
@@ -33,8 +33,7 @@ use crate::{
         action::{Edit, MergeMethod, UpdateMethod},
         attach::{Attachment, Holder, Media},
         create::{Head, NewIssue, NewPull},
-        issue::require_open,
-        item::{Current, Item, ItemState, PrSummary, text},
+        item::{Current, Item, ItemState, text},
         link::ItemKind,
         list,
         reaction::{Listed, Subject},
@@ -51,7 +50,7 @@ use crate::{
     },
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
-        download, programs,
+        download,
         response::{Fetched, Response},
     },
     updates::{DISCUSSION, Snapshot},
@@ -60,21 +59,15 @@ use crate::{
 #[derive(Clone, Copy)]
 pub(crate) struct GitHub;
 
-/// The variables gh takes a token from instead of its saved logins.
-const ENV_TOKENS: &[&str] = &[
-    "GH_TOKEN",
-    "GITHUB_TOKEN",
-    "GH_ENTERPRISE_TOKEN",
-    "GITHUB_ENTERPRISE_TOKEN",
-];
+/// GitHub.com's API host; an Enterprise Server serves its API under
+/// `/api/v3` of its own host.
+const API: &str = "https://api.github.com";
 
 impl Backend for GitHub {
     /// GitHub's metadata names its SSH keys' password policy, and an
-    /// Enterprise Server its version. Only gh's login for the host is sent,
-    /// never a token it would read from the environment for any host.
+    /// Enterprise Server its version.
     async fn serves(&self, host: &ForgeRepo, account: &Account) -> Result<bool> {
-        let request = Request::get("meta".into()).withholding(ENV_TOKENS);
-        let meta = host.send(account, &request).await?;
+        let meta = host.send(account, &Request::get("meta".into())).await?;
         Ok(["verifiable_password_authentication", "installed_version"]
             .iter()
             .any(|field| meta.get(field).is_some()))
@@ -151,7 +144,7 @@ impl Backend for GitHub {
     }
 
     fn login_hint(&self) -> &'static str {
-        "check `gh auth login` and repository access"
+        "GitHub API request failed; private repositories need a token under [machine.forges.\"<host>\"]"
     }
 
     async fn send(
@@ -160,7 +153,9 @@ impl Backend for GitHub {
         account: &Account,
         request: &Request,
     ) -> Result<Response> {
-        repo.passthrough(programs::GH, account, request).await
+        let authorization = account.authorization(repo).await?;
+        repo.curl_send(&api_url(repo, &request.endpoint), authorization, request)
+            .await
     }
 
     /// GraphQL reports a failed mutation in a successful response.
@@ -190,6 +185,8 @@ impl Backend for GitHub {
         true
     }
 
+    /// GitHub filters by text only through its search, which leaves out
+    /// a PR's branches, so each listed PR is read in full.
     async fn list_items(
         &self,
         repo: &ForgeRepo,
@@ -197,40 +194,19 @@ impl Backend for GitHub {
         kind: ItemKind,
         search: &list::Search,
     ) -> Result<Vec<Item>> {
-        let noun = match kind {
-            ItemKind::Issue => "issue",
-            ItemKind::Pr => "pr",
-        };
-        let args = list_args(repo, kind, search);
-        let args: Vec<&str> = args.iter().map(String::as_str).collect();
-        let text = gh(account, &args, Query::List).await?;
-        let listed: Vec<ListedItem> = serde_json::from_str(&text)
-            .with_context(|| format!("invalid gh {noun} list response"))?;
-        listed
-            .into_iter()
-            .map(|item| item.into_item(repo, kind))
-            .collect()
-    }
-
-    async fn issue_state(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: u64,
-    ) -> Result<ItemState> {
-        let id = number.to_string();
-        let repo = format!("{}/{}", repo.host, repo.path);
-        let args = [
-            "issue",
-            "view",
-            &id,
-            "--repo",
-            &repo,
-            "--json",
-            "number,state",
-        ];
-        let output = gh(account, &args, Query::Issue).await?;
-        reported_state(&output, number)
+        let found = searched(repo, account, kind, search)
+            .await
+            .hint_login(self)?;
+        if kind == ItemKind::Issue {
+            return found
+                .iter()
+                .map(|value| Ok(repo.current(kind, item_number(value)?, value)?.item))
+                .collect();
+        }
+        let numbers = found.iter().map(item_number).collect::<Result<_>>()?;
+        rest::read_pulls(repo, account, numbers)
+            .await
+            .hint_login(self)
     }
 
     async fn open_issue_dependencies(
@@ -241,112 +217,6 @@ impl Backend for GitHub {
     ) -> Result<Vec<String>> {
         let endpoint = format!("issues/{number}/dependencies/blocked_by");
         github_rest::open_dependencies(repo, account, &endpoint).await
-    }
-
-    async fn issue_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: u64,
-    ) -> Result<(String, String)> {
-        let id = number.to_string();
-        let repo = format!("{}/{}", repo.host, repo.path);
-        let args = [
-            "issue",
-            "view",
-            &id,
-            "--repo",
-            &repo,
-            "--json",
-            "number,title,body,state",
-        ];
-        let text = gh(account, &args, Query::Issue).await?;
-        require_open(reported_state(&text, number)?)?;
-        #[derive(serde::Deserialize)]
-        struct GitHubIssue {
-            number: u64,
-            title: String,
-            body: Option<String>,
-        }
-        let issue: GitHubIssue =
-            serde_json::from_str(&text).context("invalid gh issue response")?;
-        ensure!(issue.number == number, "gh returned a different issue");
-        Ok((issue.title, issue.body.unwrap_or_default()))
-    }
-
-    async fn pull_details(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: u64,
-    ) -> Result<(String, String, String)> {
-        let id = number.to_string();
-        let repo = format!("{}/{}", repo.host, repo.path);
-        let fields = "number,title,headRefName,baseRefName,isCrossRepository";
-        let args = ["pr", "view", &id, "--repo", &repo, "--json", fields];
-        #[derive(serde::Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Pull {
-            number: u64,
-            title: String,
-            head_ref_name: String,
-            base_ref_name: String,
-            is_cross_repository: bool,
-        }
-        let output = gh(account, &args, Query::Pull("")).await?;
-        let pull: Pull = serde_json::from_str(&output).context("invalid gh PR response")?;
-        ensure!(pull.number == number, "gh returned a different PR");
-        ensure!(
-            !pull.is_cross_repository,
-            "PR #{number} comes from a fork; only branches in this repository can be opened"
-        );
-        Ok((pull.title, pull.head_ref_name, pull.base_ref_name))
-    }
-
-    async fn merged_commits(
-        &self,
-        repo: &ForgeRepo,
-        account: &Account,
-        number: u64,
-        branch: &str,
-    ) -> Result<Option<Vec<String>>> {
-        let number = number.to_string();
-        let output = gh(
-            account,
-            &[
-                "pr",
-                "view",
-                &number,
-                "--repo",
-                &format!("{}/{}", repo.host, repo.path),
-                "--json",
-                "number,state,headRefName,commits",
-            ],
-            Query::Pull(MERGED_HINT),
-        )
-        .await?;
-        #[derive(serde::Deserialize)]
-        struct Commit {
-            oid: String,
-        }
-        #[derive(serde::Deserialize)]
-        struct Pull {
-            number: u64,
-            state: String,
-            #[serde(rename = "headRefName")]
-            branch: String,
-            commits: Vec<Commit>,
-        }
-        let pull: Pull = serde_json::from_str(&output)?;
-        ensure!(
-            pull.number.to_string() == number && pull.branch == branch,
-            "PR does not match the workspace branch"
-        );
-        ensure!(
-            matches!(pull.state.as_str(), "OPEN" | "CLOSED" | "MERGED"),
-            "unknown PR state"
-        );
-        Ok((pull.state == "MERGED").then(|| pull.commits.into_iter().map(|c| c.oid).collect()))
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
@@ -663,7 +533,7 @@ impl Backend for GitHub {
         view::details(repo, account, kind, number, comments).await
     }
 
-    /// `gh` reads the comments with the item; this reads the reviews.
+    /// The comments are read with the item; this reads the reviews.
     async fn view_discussion(
         &self,
         repo: &ForgeRepo,
@@ -863,10 +733,11 @@ impl Backend for GitHub {
         Ok(false)
     }
 
-    /// gh sends its login only to the host a URL names, so the storage an
-    /// attachment redirects to gets none.
-    async fn download(&self, _repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        download::through_cli(programs::GH, account, &[url]).await
+    /// curl sends the token only to the host a URL names, so the storage
+    /// an attachment redirects to gets none.
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        let authorization = account.authorization(repo).await?;
+        download::with_curl(url, authorization).await
     }
 
     /// GitHub uploads name the repository by its numeric ID.
@@ -947,164 +818,88 @@ impl Backend for GitHub {
 
 /// The `gh issue list` or `gh pr list` arguments for `search`. Values go
 /// in `--flag=value` form, so one starting with `-` stays a value.
-fn list_args(repo: &ForgeRepo, kind: ItemKind, search: &list::Search) -> Vec<String> {
-    let (noun, fields) = match kind {
-        ItemKind::Issue => ("issue", "number,title,state,labels,assignees,milestone"),
-        ItemKind::Pr => (
-            "pr",
-            "number,title,state,labels,assignees,milestone,headRefName,baseRefName,isDraft",
-        ),
+/// Where `endpoint` is under GitHub's API, which takes GraphQL at
+/// `graphql` on GitHub.com and `/api/graphql` on an Enterprise Server. An
+/// endpoint that is already a URL, such as one on GitHub's upload host,
+/// stays as it is.
+fn api_url(repo: &ForgeRepo, endpoint: &str) -> String {
+    if endpoint.starts_with("https://") {
+        return endpoint.to_owned();
+    }
+    if repo.host == "github.com" {
+        return format!("{API}/{endpoint}");
+    }
+    let root = format!("{}://{}/api", repo.web_scheme, repo.host);
+    match endpoint {
+        "graphql" => format!("{root}/graphql"),
+        _ => format!("{root}/v3/{endpoint}"),
+    }
+}
+
+/// The most items one search page returns.
+const SEARCH_PAGE: usize = 100;
+
+/// Up to `search.limit` issues or PRs of the repository that GitHub's
+/// search matches, newest first.
+async fn searched(
+    repo: &ForgeRepo,
+    account: &Account,
+    kind: ItemKind,
+    search: &list::Search,
+) -> Result<Vec<Value>> {
+    let query = encode(&search_query(repo, kind, search), false);
+    let mut found = Vec::new();
+    for page in 1.. {
+        let endpoint = format!(
+            "search/issues?q={query}&sort=created&order=desc&per_page={SEARCH_PAGE}&page={page}"
+        );
+        let response = repo.send(account, &Request::get(endpoint)).await?;
+        let items = response["items"]
+            .as_array()
+            .context("GitHub's search returned no item list")?;
+        found.extend(items.iter().cloned());
+        if items.len() < SEARCH_PAGE || found.len() >= search.limit {
+            break;
+        }
+    }
+    found.truncate(search.limit);
+    Ok(found)
+}
+
+/// GitHub's search query for `search` among the repository's items of `kind`.
+fn search_query(repo: &ForgeRepo, kind: ItemKind, search: &list::Search) -> String {
+    let kind = match kind {
+        ItemKind::Issue => "issue",
+        ItemKind::Pr => "pr",
     };
-    let mut args: Vec<String> = [noun, "list"].map(String::from).into();
-    args.extend([
-        format!("--repo={}/{}", repo.host, repo.path),
-        // gh counts merged PRs as closed.
-        format!("--state={}", search.state),
-        format!("--limit={}", search.limit),
-        format!("--json={fields}"),
-    ]);
-    args.extend(search.labels.iter().map(|label| format!("--label={label}")));
-    args.extend(
+    let mut terms = vec![format!("repo:{}", repo.path), format!("is:{kind}")];
+    match search.state {
+        list::StateFilter::Open => terms.push("is:open".into()),
+        // GitHub counts merged PRs as closed.
+        list::StateFilter::Closed => terms.push("is:closed".into()),
+        list::StateFilter::All => {}
+    }
+    terms.extend(
+        search
+            .labels
+            .iter()
+            .map(|label| format!("label:\"{label}\"")),
+    );
+    terms.extend(
         search
             .author
             .iter()
-            .map(|author| format!("--author={author}")),
+            .map(|author| format!("author:{author}")),
     );
-    args.extend(search.text.iter().map(|text| format!("--search={text}")));
-    args
+    terms.extend(search.text.clone());
+    terms.join(" ")
 }
 
-/// An issue or PR as `gh issue list` or `gh pr list` reports it.
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ListedItem {
-    number: u64,
-    title: String,
-    state: String,
-    labels: Vec<ListedLabel>,
-    #[serde(default)]
-    assignees: Vec<ListedUser>,
-    milestone: Option<ListedMilestone>,
-    head_ref_name: Option<String>,
-    base_ref_name: Option<String>,
-    is_draft: Option<bool>,
-}
-
-#[derive(serde::Deserialize)]
-struct ListedLabel {
-    name: String,
-}
-
-#[derive(serde::Deserialize)]
-struct ListedUser {
-    login: String,
-}
-
-#[derive(serde::Deserialize)]
-struct ListedMilestone {
-    title: String,
-}
-
-impl ListedItem {
-    fn into_item(self, repo: &ForgeRepo, kind: ItemKind) -> Result<Item> {
-        let state = match self.state.as_str() {
-            "OPEN" => ItemState::Open,
-            "CLOSED" => ItemState::Closed,
-            "MERGED" if kind == ItemKind::Pr => ItemState::Merged,
-            state => bail!("unrecognized gh state {state:?}"),
-        };
-        let pr = match kind {
-            ItemKind::Issue => None,
-            ItemKind::Pr => Some(PrSummary {
-                head: self
-                    .head_ref_name
-                    .context("gh listed a PR without its head")?,
-                base: self
-                    .base_ref_name
-                    .context("gh listed a PR without its base")?,
-                draft: self.is_draft.unwrap_or_default(),
-            }),
-        };
-        Ok(Item {
-            kind,
-            number: self.number,
-            url: repo.item_url(kind, self.number)?,
-            title: self.title,
-            state,
-            labels: self.labels.into_iter().map(|label| label.name).collect(),
-            assignees: self.assignees.into_iter().map(|user| user.login).collect(),
-            milestone: self.milestone.map(|milestone| milestone.title),
-            pr,
-        })
-    }
-}
-
-/// What a `gh` read is for, which decides its timeout and error guidance.
-#[derive(Clone, Copy)]
-pub(crate) enum Query {
-    Issue,
-    Pull(&'static str),
-    List,
-    /// Reading an issue or PR for `shoal view`.
-    View,
-}
-
-/// Run `gh` as `account`, the CLI that reads GitHub's items.
-pub(crate) async fn gh(account: &Account, args: &[&str], query: Query) -> Result<String> {
-    let tool = programs::GH;
-    let mut command = tokio::process::Command::new(tool);
-    command.args(args).env("NO_COLOR", "1");
-    account.apply(&mut command);
-    let seconds = match query {
-        Query::Issue | Query::List | Query::View => 30,
-        Query::Pull(_) => 20,
-    };
-    let output = shoal_subprocess::Run::new(command)
-        .timeout(std::time::Duration::from_secs(seconds))
-        .capture()
-        .await;
-    query.response(tool, output)
-}
-
-impl Query {
-    fn response(self, tool: &str, output: std::io::Result<std::process::Output>) -> Result<String> {
-        match self {
-            Self::Issue => {
-                shoal_subprocess::checked_output(tool, output).with_context(|| {
-                    format!("{tool} issue lookup failed; install it and check `{tool} auth login` and repository access before using --issue")
-                })
-            }
-            Self::Pull(hint) => shoal_subprocess::checked_output(tool, output)
-                .with_context(|| format!("PR lookup requires {tool} and its existing login{hint}")),
-            Self::List => shoal_subprocess::checked_output(tool, output).with_context(|| {
-                format!("{tool} search failed; install it and check `{tool} auth login` and repository access")
-            }),
-            Self::View => shoal_subprocess::checked_output(tool, output).with_context(|| {
-                format!("{tool} lookup failed; install it and check `{tool} auth login` and repository access")
-            }),
-        }
-    }
-}
-
-/// The state `gh issue view --json number,state` reports.
-fn reported_state(output: &str, number: u64) -> Result<ItemState> {
-    #[derive(serde::Deserialize)]
-    #[serde(rename_all = "UPPERCASE")]
-    enum State {
-        Open,
-        Closed,
-    }
-    #[derive(serde::Deserialize)]
-    struct Issue {
-        number: u64,
-        state: State,
-    }
-    let issue: Issue = serde_json::from_str(output).context("invalid gh issue response")?;
-    ensure!(issue.number == number, "gh returned a different issue");
-    Ok(match issue.state {
-        State::Open => ItemState::Open,
-        State::Closed => ItemState::Closed,
-    })
+fn item_number(value: &Value) -> Result<u64> {
+    value["number"]
+        .as_u64()
+        .filter(|number| *number > 0)
+        .context("listed item has no number")
 }
 
 /// GitHub changes draft state only through GraphQL.

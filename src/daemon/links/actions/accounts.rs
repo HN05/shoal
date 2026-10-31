@@ -52,14 +52,14 @@ impl Manager {
         &self,
         workspace: &Workspace,
     ) -> Result<Account> {
-        // One snapshot, so a reload cannot pair a profile with another map.
+        // One snapshot, so a reload cannot pair the wrappers with other tokens.
         let config = self.config();
         let settings = self.workspace_settings_from(&config, workspace).await?;
         self.agent_account_from(&config, &settings)
     }
 
-    /// The agent account `settings` select, with the Git profiles of
-    /// `config`, the snapshot they were resolved from.
+    /// The agent account `settings` select, with the tokens of `config`,
+    /// the snapshot they were resolved from.
     pub(in crate::daemon::links) fn agent_account_from(
         &self,
         config: &Config,
@@ -68,11 +68,6 @@ impl Manager {
         let auth = &settings.agent.forge_clis;
         let forges = &config.machine.forges;
         let logins = AgentLogins {
-            launch: Box::new(auth.prepare(
-                settings.agent.git_profile.as_deref(),
-                &self.paths,
-                &config.machine.git_profiles,
-            )?),
             logins: forges.logins(Whose::Agent),
             separate: auth.separate_forges(),
         };
@@ -137,7 +132,7 @@ impl Manager {
         &self,
         repository: &Repository,
     ) -> Result<Account> {
-        // One snapshot, so a reload cannot pair a profile with another map.
+        // One snapshot, so a reload cannot pair the wrappers with other tokens.
         let config = self.config();
         let settings = self
             .repository_settings_from(&config, &repository.id)
