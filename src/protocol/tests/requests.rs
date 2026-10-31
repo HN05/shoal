@@ -84,6 +84,7 @@ const REQUESTS: &[&str] = &[
     r#"{"set_agent_state":{"workspace":"fix","state":"idle","session":"s1","turn_end":{"prompt_cache_secs":3600,"final_message":"Which one?"}}}"#,
     r#"{"start_woken_turn":{"workspace":"fix"}}"#,
     r#"{"report_turn_failure":{"workspace":"fix","failure":"rate_limited","turn_end":{"prompt_cache_secs":300}}}"#,
+    r#"{"report_state_failure":{"workspace":"fix","error":"Operation not permitted (os error 1)"}}"#,
     r#"{"report_proxy_retry":{"workspace":"fix","execution":"e1","retry":{"failure":"overloaded","attempt":2,"next_at":1700000000}}}"#,
     r#"{"report_upstream_reset":{"workspace":"fix","execution":"e1","resets_at":1700000000}}"#,
     r#"{"report_attached":{"workspace":"fix","execution":"e1","attached":true}}"#,
