@@ -209,7 +209,7 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 }
                 ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
                 ("name", _, "run") => Some(Target::Commands),
-                ("repository" | "repository_override", _, _) => Some(Target::Repositories),
+                ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
                 ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces(need)),

@@ -2931,7 +2931,10 @@ in titles and descriptions, repeated `--label` keeps items with every label,
 `--author` those a login opened, and `--state open|closed|all` defaults to open,
 with merged PRs counted as closed. `--limit` caps the list at 1 to 1000 items,
 30 by default. `--repo` searches another repository, named as for
-`issue open --repo`. Workspace processes search as the agent account, anyone else
+`issue open --repo`; for anyone but a workspace process, one that names a
+registered repository is searched through its checkout, needing no workspace,
+as `issue open`, `repo labels`, `forge capabilities`, `forge reactions` and
+`forge api` use it. Workspace processes search as the agent account, anyone else
 with your own logins. Each line shows an item's number, state (`draft` for an
 open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.

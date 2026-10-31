@@ -4881,6 +4881,49 @@ fn item_commands_act_from_a_registered_checkout() {
 }
 
 #[test]
+fn item_commands_act_in_a_named_repository_without_a_workspace() {
+    let fixture = Fixture::new(Forge::GitHub, "");
+    fixture.respond(json!({
+        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky":
+            {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
+        "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
+    }));
+    // Outside every workspace and checkout, as a client such as Quay runs.
+    let outside = |args: &[&str]| {
+        fixture
+            .command()
+            .current_dir(fixture.root.path())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let read = |args: &[&str]| {
+        let output = outside(&[&["--json"][..], args].concat());
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+
+    let listed = read(&["issue", "list", "flaky", "--repo", "repo"]);
+    assert_eq!(listed[0]["url"], format!("{}/issues/40", fixture.web));
+    let labels = read(&["repo", "labels", "--repo", "repo"]);
+    assert_eq!(labels[0]["name"], "bug", "{labels}");
+
+    let refused = |args: &[&str], message: &str| {
+        let output = outside(args);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains(message), "{args:?}: {stderr}");
+    };
+    // Where --repo names any repository, it stays a forge repository for a
+    // workspace process.
+    let shoal = env!("CARGO_BIN_EXE_shoal");
+    let list = ["issue", "list", "--repo", "repo"];
+    refused(
+        &[&["run", "--workspace", "topic", "--", shoal][..], &list].concat(),
+        "repo names no repository",
+    );
+}
+
+#[test]
 fn checkout_merges_go_out_without_the_agent_account() {
     // A missing agent wrapper leaves the user's own logins usable.
     let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/missing-fj'\n");

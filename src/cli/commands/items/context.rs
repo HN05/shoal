@@ -1,11 +1,15 @@
 //! Where an item command that needs only a repository runs: a workspace, or
-//! a registered checkout, where `shoal chat` runs its agent.
+//! a registered checkout, where `shoal chat` runs its agent and where the
+//! user names a registered repository to act in without a workspace.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{
     cli::{client, context::Context, ui},
+    env,
+    forge::ForgeRepo,
     model::Repository,
     protocol::ItemContext,
+    repository::{self, NotRegistered},
 };
 
 /// What is missing when nothing gives a non-interactive command its repository.
@@ -34,6 +38,36 @@ pub(in crate::cli::commands) async fn select_context(
     ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
     Ok(ItemContext::Workspace(workspace))
+}
+
+/// The context of a command whose `--repo` names any repository, and the
+/// repository it then names there. The user's command runs in a registered
+/// repository's checkout, without a workspace; any other repository is
+/// reached through the context [`select_context`] selects.
+pub(in crate::cli::commands) async fn select_repo_context(
+    ctx: &Context,
+    workspace: Option<String>,
+    repo: Option<String>,
+) -> Result<(ItemContext, Option<String>)> {
+    if let (None, Some(named)) = (&workspace, &repo)
+        && !env::inherits_scope(&ctx.paths.state)
+        && let Some(checkout) = registered(ctx, named).await?
+    {
+        return Ok((ItemContext::Checkout(checkout.id), None));
+    }
+    // Refuse a bad repository before the workspace picker asks for anything.
+    repo.as_deref().map(ForgeRepo::check_named).transpose()?;
+    Ok((select_context(ctx, workspace).await?, repo))
+}
+
+/// The registered repository `repo` names, if any.
+async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
+    let repos = client::repositories(&ctx.paths).await?;
+    match repository::select(&repos, repo).await {
+        Ok(repo) => Ok(Some(repo.clone())),
+        Err(error) if error.is::<NotRegistered>() => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 /// The repository registered with the checkout ID `repository`.

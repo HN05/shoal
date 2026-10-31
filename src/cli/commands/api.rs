@@ -7,11 +7,10 @@ use anyhow::{Context as _, Result};
 use serde_json::Value;
 
 use crate::{
-    cli::{args::repository::ApiArgs, client, commands::items::select_context, context::Context},
-    forge::{
-        ForgeRepo,
-        raw::{HttpMethod, RawRequest},
+    cli::{
+        args::repository::ApiArgs, client, commands::items::select_repo_context, context::Context,
     },
+    forge::raw::{HttpMethod, RawRequest},
 };
 
 pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
@@ -26,18 +25,13 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
         path: args.path,
         body,
     };
-    // Refuse a bad path or repository before the workspace picker asks for
-    // anything.
+    // Refuse a bad path before the workspace picker asks for anything.
     request.check()?;
-    args.repo
-        .as_deref()
-        .map(ForgeRepo::check_named)
-        .transpose()?;
-    let context = select_context(ctx, args.workspace).await?;
+    let (context, repository) = select_repo_context(ctx, args.workspace, args.repo).await?;
     let response = ctx
         .progress(
             "Requesting",
-            client::forge_api(&ctx.paths, context, request, args.repo),
+            client::forge_api(&ctx.paths, context, request, repository),
         )
         .await?;
     ctx.show(&response, |response| {

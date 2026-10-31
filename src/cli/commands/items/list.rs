@@ -2,17 +2,14 @@
 //! repository of the workspace or registered checkout, or of another one.
 use anyhow::Result;
 
-use super::context::select_context;
+use super::context::select_repo_context;
 
 use crate::{
     cli::{args::changes::ListArgs, client, context::Context},
-    forge::{
-        ForgeRepo,
-        items::{
-            item::{Item, ItemState},
-            link::ItemKind,
-            list::Search,
-        },
+    forge::items::{
+        item::{Item, ItemState},
+        link::ItemKind,
+        list::Search,
     },
     protocol::ItemMethod,
 };
@@ -26,18 +23,14 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
         text: (!query.is_empty()).then_some(query),
         limit: args.limit.into(),
     };
-    // Refuse a bad filter or repository before the workspace picker asks for
-    // anything.
+    // Refuse a bad filter before the workspace picker asks for anything.
     search.check()?;
-    args.repo
-        .as_deref()
-        .map(ForgeRepo::check_named)
-        .transpose()?;
+    let (context, repository) = select_repo_context(ctx, args.workspace, args.repo).await?;
     let method = ItemMethod::ListItems {
-        context: select_context(ctx, args.workspace).await?,
+        context,
         kind,
         search,
-        repository: args.repo,
+        repository,
     };
     let items = ctx
         .progress("Searching", client::pages::<Item>(&ctx.paths, method))

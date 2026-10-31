@@ -9,7 +9,7 @@ use crate::{
         client,
         commands::{
             issues,
-            items::{checkout_repository, select_context},
+            items::{checkout_repository, select_repo_context},
         },
         context::Context,
     },
@@ -28,19 +28,15 @@ pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> R
 /// The repository `--repo` names, or the one of the selected workspace or
 /// registered checkout.
 pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Result<ForgeRepo> {
-    // Refuse a bad repository before the workspace picker asks for anything.
-    args.repo
-        .as_deref()
-        .map(ForgeRepo::check_named)
-        .transpose()?;
-    let own = match select_context(ctx, args.workspace).await? {
+    let (context, named) = select_repo_context(ctx, args.workspace, args.repo).await?;
+    let own = match context {
         ItemContext::Workspace(workspace) => workspace_forge(ctx, workspace).await?,
         ItemContext::Checkout(repository) => {
             let repository = checkout_repository(ctx, &repository).await?;
             issues::origin_forge(ctx, &repository).await?
         }
     };
-    match args.repo {
+    match named {
         Some(named) => own.resolve_named(&named, &ctx.forge_hosts()?).await,
         None => Ok(own),
     }
