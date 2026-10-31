@@ -84,7 +84,12 @@ impl Need {
 
     /// Flags that change the operation also change which workspaces it offers.
     pub fn of_matches(path: &[&str], matches: &clap::ArgMatches) -> Option<Self> {
-        if matches.try_get_one::<bool>("undo").ok().flatten() == Some(&true) {
+        let flag = |name| matches.try_get_one::<bool>(name).ok().flatten() == Some(&true);
+        // Untracked processes do not need a running agent or command.
+        if path == ["stop"] && (flag("processes") || flag("leftovers")) {
+            return Some(Self::Any);
+        }
+        if flag("undo") {
             match path {
                 ["done"] => return Some(Self::Done),
                 ["ready"] => return Some(Self::Marks),

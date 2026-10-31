@@ -635,11 +635,19 @@ Hooks are deliberately untracked user processes with the workspace identity
 but no scope token, because their purpose is to start or stop things that
 outlive the hook (a tmux session, say) without becoming execution survivors.
 Nothing outlives the workspace: removal stops every verified process that still
-carries its identity, including those hooks and exported environments started.
-A detached process running from the worktree belongs to it too, since no live
-process outside the worktree keeps it; this covers platform binaries whose hidden
-environment cannot show the identity. Automatic cleanup counts such a process as
-use instead of stopping it.
+carries its identity, including those hooks and exported environments started,
+and its leftovers. A leftover is a detached process, one launchd or init adopted
+or a descendant of one, that the space's worktree, temporary directory, program
+or identity ties to it, with everything it started: no live process outside the
+space keeps it, and the ties cover platform binaries whose hidden environment
+cannot show the identity and programs built in the worktree that run elsewhere.
+Exclusion follows live ancestry, not environment variables: the processes of
+tracked executions and chat agents, those that started them, and terminal
+session servers are never untracked. `shoal stop` takes the same processes
+through the same operation after the executions, and `--processes` and
+`--leftovers` take them alone, so an agent stops what its own commands left
+behind without stopping itself. Automatic cleanup counts a leftover only the
+worktree ties to the workspace as use instead of stopping it.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;

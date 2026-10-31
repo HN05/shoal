@@ -1,5 +1,6 @@
 //! Stopping keeps agent sessions and commands for `shoal resume`; agents
-//! stay down until it continues them.
+//! stay down until it continues them. The other processes of a workspace,
+//! and with `--processes` or `--leftovers` those of a chat, stop for good.
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use serde_json::json;
@@ -12,6 +13,7 @@ use crate::{
         output::Style,
         ui,
     },
+    daemon::space_processes::{Selection, Stopped},
     execution::recovery,
     model::Workspace,
     protocol::{ErrorCode, RemoteError, RemovalMethod},
@@ -52,22 +54,84 @@ pub(super) async fn run(
 
 async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
     stop(ctx, &workspace, yes).await?;
+    let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
-    let message = if saved {
-        format!(
-            "Workspace processes stopped. {}",
-            continue_hint(&workspace.name)
-        )
-    } else {
-        "Workspace processes stopped".into()
-    };
+    let mut message = "Workspace processes stopped".to_owned();
+    if other.processes > 0 {
+        message = format!("{message}. Stopped {}", other_processes(other.processes));
+    }
+    if saved {
+        message = format!("{message}. {}", continue_hint(&workspace.name));
+    }
     ctx.emit_styled(
         Style::Success,
         &message,
-        json!({"stopped": true, "saved": saved}),
+        json!({"stopped": true, "saved": saved, "other_processes": other.processes}),
     )?;
     Ok(0)
+}
+
+/// Stop the processes Shoal does not track that `selection` takes, of each
+/// space `selectors` names, else of the current chat or workspace, else of
+/// one picked. They are not saved for `shoal resume`.
+pub(super) async fn processes(
+    ctx: &Context,
+    selectors: Vec<String>,
+    selection: Selection,
+) -> Result<i32> {
+    let selectors = if selectors.is_empty() {
+        vec![ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?]
+    } else {
+        selectors
+    };
+    let mut report = ui::Report::new("stopped", "stop processes of");
+    for selector in selectors {
+        match stop_untracked(ctx, &selector, selection).await {
+            Ok(stopped) => {
+                let message = stopped_message(&stopped, selection);
+                report.done(ctx, &message, json!(stopped));
+            }
+            Err(error) => report.failed(ctx, &selector, &error),
+        }
+    }
+    report.finish(ctx, "")
+}
+
+/// Stop the untracked processes of `space` that `selection` takes, other
+/// than this one and the processes that started it.
+async fn stop_untracked(ctx: &Context, space: &str, selection: Selection) -> Result<Stopped> {
+    request(
+        &ctx.paths,
+        RemovalMethod::StopProcesses {
+            space: space.to_owned(),
+            selection,
+            requester: Some(std::process::id()),
+        },
+    )
+    .await
+}
+
+/// What a stop of `selection` reports for `stopped`.
+fn stopped_message(stopped: &Stopped, selection: Selection) -> String {
+    let (one, many) = match selection {
+        Selection::Processes => ("untracked process", "untracked processes"),
+        Selection::Leftovers => ("leftover", "leftovers"),
+    };
+    match stopped.processes {
+        0 => format!("No {many} in {}", stopped.space),
+        1 => format!("Stopped 1 {one} in {}", stopped.space),
+        n => format!("Stopped {n} {many} in {}", stopped.space),
+    }
+}
+
+/// How plain `shoal stop` names the untracked processes it stopped besides
+/// the saved agents and commands.
+fn other_processes(count: usize) -> String {
+    match count {
+        1 => "1 other process".to_owned(),
+        n => format!("{n} other processes"),
+    }
 }
 
 /// Stop `workspace`. An execution Shoal cannot prove ended stops only once
@@ -211,7 +275,7 @@ async fn stop_each(
     resume: &str,
     acknowledge_unproven: bool,
 ) -> Result<i32> {
-    let results = join_all(workspaces.iter().map(|workspace| {
+    let results = join_all(workspaces.iter().map(|workspace| async {
         request::<()>(
             &ctx.paths,
             RemovalMethod::StopWorkspace {
@@ -219,14 +283,20 @@ async fn stop_each(
                 acknowledge_unproven,
             },
         )
+        .await?;
+        stop_untracked(ctx, &workspace.id, Selection::Processes).await
     }))
     .await;
     let mut resumable = Vec::new();
     for (workspace, result) in workspaces.iter().zip(results) {
         let name = workspace.name.as_str();
         match result {
-            Ok(()) => {
-                report.done(ctx, &format!("Stopped {name}"), json!(name));
+            Ok(other) => {
+                let message = match other.processes {
+                    0 => format!("Stopped {name}"),
+                    n => format!("Stopped {name} and {}", other_processes(n)),
+                };
+                report.done(ctx, &message, json!(name));
                 if has_saved_work(ctx, workspace) {
                     resumable.push(name);
                 }

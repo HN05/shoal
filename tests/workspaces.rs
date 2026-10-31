@@ -5776,6 +5776,84 @@ fn stop_and_manual_removal_terminate_connected_executions() {
     }
 }
 
+/// `stop --leftovers` takes only processes left behind, `stop --processes`
+/// every process carrying the workspace's identity too, and plain `stop`
+/// both after its agents and commands. None takes the workspace's own
+/// commands that run them.
+#[test]
+fn stop_levels_take_leftovers_then_every_untracked_process() {
+    use std::os::unix::process::ExitStatusExt as _;
+    let fixture = Fixture::new();
+    let workspace = fixture.add("procs");
+    let path = PathBuf::from(workspace["path"].as_str().unwrap());
+    let leave = |name: &str| -> u32 {
+        let pid_file = fixture.root.path().join(name);
+        let mut leave = Command::new("sh");
+        // In the fixture's group, which a failed test stops.
+        fixture.commands.join(&mut leave);
+        let status = leave
+            .current_dir(&path)
+            .args(["-c", "sleep 300 >/dev/null 2>&1 & echo $! > \"$0\""])
+            .arg(&pid_file)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        fs::read_to_string(&pid_file)
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap()
+    };
+    // Started by this test, which runs, so it is no leftover. This test
+    // binary keeps its environment readable, as `sleep` does not
+    // on macOS.
+    let mut marked = Command::new(std::env::current_exe().unwrap());
+    fixture.commands.join(&mut marked);
+    let mut marked = marked
+        .args(["--exact", "run_until_stopped", "--ignored"])
+        .env("SHOAL_WORKSPACE_ID", workspace["id"].as_str().unwrap())
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    let leftover = leave("leftover");
+    let output = fixture.root.path().join("stopped.json");
+    let run = fixture.run(&[
+        "run",
+        "--workspace",
+        "procs",
+        "--",
+        "sh",
+        "-c",
+        "\"$0\" --json stop --leftovers > \"$1\"",
+        env!("CARGO_BIN_EXE_shoal"),
+        output.to_str().unwrap(),
+    ]);
+    assert!(run.status.success(), "{run:?}");
+    let stopped: Value = serde_json::from_str(&fs::read_to_string(&output).unwrap()).unwrap();
+    assert_eq!(
+        stopped["stopped"],
+        serde_json::json!([{"space": "procs", "processes": 1}])
+    );
+    assert!(!process_running(leftover));
+    assert!(marked.try_wait().unwrap().is_none());
+
+    let stopped = fixture.ok(&["stop", "--processes", "procs"]);
+    assert_eq!(stopped["stopped"][0]["processes"], 1);
+    assert!(marked.wait().unwrap().signal().is_some());
+
+    let leftover = leave("plain");
+    let stopped = fixture.ok(&["stop", "procs"]);
+    assert_eq!(stopped["other_processes"], 1);
+    assert!(!process_running(leftover));
+}
+
+#[test]
+#[ignore = "helper process tests start"]
+fn run_until_stopped() {
+    thread::sleep(Duration::from_secs(300));
+}
+
 #[test]
 fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
     let fixture = Fixture::new();

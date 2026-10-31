@@ -6,7 +6,13 @@ use crate::cli::args::{ConfirmationArgs, WorkspaceTargets, transfer::MoveCommand
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum LifecycleCommand {
-    /// Stop tracked agents and commands, saving them for `shoal resume`; keep the workspaces.
+    /// Stop tracked agents and commands, saving them for `shoal resume`, and the other processes of
+    /// the workspaces; keep the workspaces.
+    ///
+    /// With `--processes` or `--leftovers`, stop only processes Shoal does not track, of workspaces or
+    /// chats, the current one by default. Untracked processes carry the space's identity or are its
+    /// leftovers: processes still running after what started them exited, tied to the space by
+    /// working directory, temporary directory, program or identity, with what they started.
     Stop {
         #[command(flatten)]
         targets: WorkspaceTargets,
@@ -22,6 +28,15 @@ pub enum LifecycleCommand {
         /// as ended, and leaves agents without a running turn alone.
         #[arg(long, conflicts_with_all = ["all", "yes", "skip_children"])]
         interrupt: bool,
+        /// Stop only the processes Shoal does not track, leftovers included.
+        #[arg(
+            long,
+            conflicts_with_all = ["all", "yes", "skip_children", "interrupt", "leftovers"]
+        )]
+        processes: bool,
+        /// Stop only leftovers.
+        #[arg(long, conflicts_with_all = ["all", "yes", "skip_children", "interrupt"])]
+        leftovers: bool,
     },
     /// Remove workspaces and release their resources.
     ///

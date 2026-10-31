@@ -452,6 +452,28 @@ is registered; removal keeps them in its [removal record](#checkpoints-and-resto
 a later stop or overload creates a record for the replacement execution. The original
 task prompt is never replayed.
 
+### Untracked processes
+
+Once its agents and commands have stopped, `shoal stop` stops the workspace's
+untracked processes too, which nothing saves, and counts them as other
+processes. `shoal stop --processes [space...]` stops only the untracked
+processes of workspaces or chats, by default the current one, and
+`shoal stop --leftovers [space...]` only their leftovers; neither takes the
+workspaces below. A space's untracked processes carry its identity
+(`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
+processes whose parent exited, so that launchd or init adopted them, or that
+descend from such a process, working in the worktree or the space's temporary
+directory, running a program inside the worktree, or carrying its identity,
+with every process they started wherever it runs. Never among them are the
+processes of tracked executions and chat agents, the processes that started
+those, terminal session servers such as zmx or tmux, and the process that asks.
+A process whose parent still runs elsewhere, such as a shell the user opened in
+the worktree, is not a leftover. Each process is checked against its PID and
+start time before every signal and gets SIGTERM, then SIGKILL after a grace
+period; a stop names the processes that survive. A workspace process may stop
+the untracked processes and leftovers of its own workspace and those below it,
+and a Claude Code agent runs both forms without a permission prompt.
+
 ### Keeping the machine awake
 
 ```toml
@@ -1348,7 +1370,8 @@ issue prompt, separated by a blank line. Without that placeholder, nonempty cont
 becomes the first forwarded argument. Substitutions happen once; user arguments
 remain literal. Claude and Codex, and their launch profiles, also get Shoal's
 hooks and trust entries, which other tools do without. A workspace's Claude Code agent is also allowed to run the
-`shoal` commands that report on and finish its assignment, with or without `--json`;
+`shoal` commands that report on and finish its assignment, and `shoal stop
+--processes` and `--leftovers`, with or without `--json`;
 the daemon still limits them to its scope. `shoal run <name>` for a `[commands]`
 shortcut remains a plain command invocation without agent prompts or exit
 notifications, expanding `{prompt}` to an empty string.
@@ -2562,12 +2585,11 @@ first, or with `--yes`. Large previews show an omitted-entry count; use
 `git status` for the full list. Every removal of an existing worktree first keeps
 them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 
-Removal stops tracked commands and every verified process that carries the
-workspace's identity, including those hooks and `shoal work env` exports started.
-Removal other than automatic cleanup also stops detached processes running from
-the worktree, which launchd or init adopted when their parent exited, with the
-children they started there, even when their environment hides the identity;
-it leaves unrelated processes alone, including shells the user opened there. Ownership and removal policy are checked again after removal hooks,
+Removal stops tracked commands, then the workspace's
+[untracked processes](#untracked-processes) as `shoal stop --processes` does,
+including those hooks and `shoal work env` exports started. Automatic cleanup
+leaves out leftovers only the worktree ties to the workspace, which keep it as
+activity instead. Ownership and removal policy are checked again after removal hooks,
 and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
 Git protects other checkouts. Failed ancestry or exact-ref checks stop removal
@@ -4203,8 +4225,8 @@ processes still block.
 ### Scoped workspace commands
 
 PR watches, merge acknowledgements, `notify`, `messages`, `ask`, `questions`,
-`ready`, `internal agent-state` and `internal turn-failed` are own-workspace scope
-exceptions.
+`ready`, `stop --processes`, `stop --leftovers`, `internal agent-state` and
+`internal turn-failed` are own-workspace scope exceptions.
 Processes carrying a Shoal scope token are confined to their own worktree:
 `status`, inspect, execute, `merge`, `diff`, `work setup`, and resources. They may read
 effective configuration for their own workspace, but cannot change configuration.

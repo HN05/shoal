@@ -210,15 +210,19 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
 }
 
 /// The Shoal commands with which a workspace's agent reports on and finishes
-/// its own assignment. Claude Code's auto mode may refuse them as writes to an
-/// outside system; the daemon still limits them to the agent's scope.
-const LIFECYCLE_COMMANDS: [&str; 6] = [
+/// its own assignment, and stops the processes its commands left behind.
+/// Claude Code's auto mode may refuse them as writes to an outside system;
+/// the daemon still limits them to the agent's scope. Plain `stop` is not
+/// among them: in the agent's own workspace it stops the agent.
+const LIFECYCLE_COMMANDS: [&str; 8] = [
     "done",
     "ready",
     "alerts send",
     "questions ask",
     "pr",
     "issue",
+    "stop --processes",
+    "stop --leftovers",
 ];
 
 /// Rules allowing each lifecycle command, with or without arguments and

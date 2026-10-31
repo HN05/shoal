@@ -1,9 +1,12 @@
 use anyhow::Result;
 
-use crate::cli::{
-    args::lifecycle::LifecycleCommand,
-    commands::{cleanup, stop, transfer, turns, workspaces},
-    context::Context,
+use crate::{
+    cli::{
+        args::lifecycle::LifecycleCommand,
+        commands::{cleanup, stop, transfer, turns, workspaces},
+        context::Context,
+    },
+    daemon::space_processes::Selection,
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleCommand) -> Result<i32> {
@@ -15,9 +18,19 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
         } => turns::interrupt(&ctx, targets.workspace).await,
         LifecycleCommand::Stop {
             targets,
+            processes: true,
+            ..
+        } => stop::processes(&ctx, targets.workspace, Selection::Processes).await,
+        LifecycleCommand::Stop {
+            targets,
+            leftovers: true,
+            ..
+        } => stop::processes(&ctx, targets.workspace, Selection::Leftovers).await,
+        LifecycleCommand::Stop {
+            targets,
             yes,
             skip_children,
-            interrupt: false,
+            ..
         } => stop::run(&ctx, targets, yes, skip_children).await,
         LifecycleCommand::Rm {
             workspace,

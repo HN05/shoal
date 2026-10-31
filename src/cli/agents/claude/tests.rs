@@ -82,15 +82,22 @@ fn settings_deliver_messages_report_state_and_wake_the_idle_agent() {
             "{handler}"
         );
     }
-    // The agent may finish its own assignment without a permission check.
+    // The agent may finish its own assignment and stop what its commands
+    // left running without a permission check.
     let allow = settings["permissions"]["allow"].as_array().unwrap();
     for rule in [
         "Bash(shoal done)",
         "Bash(shoal --json done)",
         "Bash(shoal --json done *)",
         "Bash(shoal --json pr *)",
+        "Bash(shoal stop --leftovers)",
+        "Bash(shoal --json stop --processes *)",
     ] {
         assert!(allow.contains(&json!(rule)), "{rule}: {allow:?}");
+    }
+    // Plain stop would stop the agent itself.
+    for rule in ["Bash(shoal stop)", "Bash(shoal stop *)"] {
+        assert!(!allow.contains(&json!(rule)), "{rule}: {allow:?}");
     }
 }
 
