@@ -8,13 +8,19 @@
 #
 # A draft PR (Forgejo's draft state is a `WIP:` or `[WIP]` title prefix) runs
 # no checks, and pushing to it starts none. Taking it out of draft is a title
-# edit, so the `edited` type is admitted and runs the checks only when the
-# previous title (`changes.title.from`) had the prefix; other edits skip. Runs
-# that skip use their own concurrency group, so they never cancel a real run,
-# and their rust job takes another name, so its skipped status never lands on
-# the required check, where Forgejo ranks `skipped` above `success`. The run
-# condition is repeated in the concurrency group, the gate's `if` and the rust
-# job's name; keep the three copies identical.
+# edit, so the `edited` type is admitted, but Forgejo's payload for an edit
+# carries no previous title. The undraft job decides at runtime instead: a
+# ready PR's head gets a run when it is opened or pushed, so an edit runs the
+# checks only when the head has no rust status and no running gate, which is
+# the case right after the PR leaves draft. Edits queue apart from other runs,
+# so they never cancel one.
+#
+# The rust job takes its name from a matrix that waits on the gate's output.
+# Forgejo posts no commit status for such a job until the gate has finished,
+# and none when the gate is skipped, so drafts and other edits never post to
+# the required check. A skipped status there would count as passing: Forgejo
+# ranks `skipped` above `success`. The undraft job names the rust and gate
+# contexts; keep them in step with the job names.
 #
 # No JavaScript actions (actions/checkout, actions/cache): the runner would have
 # to inject Node into the job container, which does not work under Podman. Hence
@@ -41,8 +47,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ !(github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]')))) && 'skipped-' || '' }}${{ github.ref }}
-  cancel-in-progress: true
+  # Drafts and edits get groups of their own; edits queue instead of cancelling,
+  # so a later edit never cancels the run that leaving draft started.
+  group: >-
+    ci-${{ (github.event.pull_request.draft && 'draft-') ||
+    (github.event.action == 'edited' && 'edited-') || '' }}${{ github.ref }}
+  cancel-in-progress: ${{ github.event.action != 'edited' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -52,16 +62,52 @@ env:
   CARGO_PROFILE_TEST_DEBUG: "0"
 
 jobs:
+  undraft:
+    name: undraft (edits run the checks only after leaving draft)
+    if: github.event.action == 'edited' && !github.event.pull_request.draft
+    runs-on: docker
+    container:
+      image: git.henriknordvik.com/hn05/ci-shoal:1.98
+    outputs:
+      run: ${{ steps.statuses.outputs.run }}
+    steps:
+      - name: Look for checks on the PR's head
+        id: statuses
+        env:
+          TOKEN: ${{ github.token }}
+          API: ${{ github.api_url }}/repos/${{ github.repository }}/commits/${{ github.event.pull_request.head.sha }}/status
+        run: |
+          set -o pipefail
+          # A failed lookup must not drop the checks: fall through to running them.
+          checks=$(curl -sf --max-time 20 -H "Authorization: token $TOKEN" "$API" | jq -r '.statuses[]
+              | select(.context == "ci / rust (fmt, clippy, test, scripts) (pull_request)"
+                  or (.context == "ci / gate (docs-only PRs skip the checks) (pull_request)" and .status != "skipped"))
+              | "\(.context): \(.status)"') \
+            || { echo "status lookup failed; running the checks"; checks=""; }
+          if [ -n "$checks" ]; then
+            printf 'The head already has checks:\n%s\n' "$checks"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "The PR has left draft: running the checks"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   gate:
     name: gate (docs-only PRs skip the checks)
+    needs: undraft
+    # The undraft job runs only for edits; a failed one leaves its output empty
+    # and the checks run.
     if: >-
-      github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]')))
+      !cancelled() && !github.event.pull_request.draft &&
+      needs.undraft.outputs.run != 'false'
     runs-on: docker
     container:
       # Same local image as the rust job; it carries curl and jq.
       image: git.henriknordvik.com/hn05/ci-shoal:1.98
     outputs:
       docs_only: ${{ steps.labels.outputs.docs_only }}
+      # Names the rust job through its matrix (see the top of the file).
+      checks: fmt, clippy, test, scripts
     steps:
       - name: Read the PR's area labels
         id: labels
@@ -91,12 +137,16 @@ jobs:
           fi
 
   rust:
-    name: >-
-      ${{ (github.event_name != 'pull_request' || (!github.event.pull_request.draft && (github.event.action != 'edited' || startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]')))) && 'rust (fmt, clippy, test, scripts)' || 'rust (draft or PR edit, not run)' }}
+    # Named `rust (fmt, clippy, test, scripts)` by its matrix, which waits on
+    # the gate (see the top of the file). A skipped gate skips this job without
+    # a status.
+    name: rust
     needs: gate
-    # A failed gate leaves the output empty and every check runs; a skipped one
-    # (a draft or an edit that does not leave draft) skips this job too.
-    if: "!cancelled() && needs.gate.result != 'skipped'"
+    # A failed gate leaves docs_only empty and every check runs.
+    if: "!cancelled()"
+    strategy:
+      matrix:
+        checks: ["${{ needs.gate.outputs.checks }}"]
     runs-on: docker
     container:
       # Built from .forgejo/ci-image/Containerfile on the runner host; the tag is
