@@ -147,6 +147,18 @@ pub fn invoked_executable() -> io::Result<PathBuf> {
     ))
 }
 
+/// The app bundle `executable` is the main program of, as in
+/// `Shoal.app/Contents/MacOS/shoal`.
+pub fn app_bundle(executable: &Path) -> Option<&Path> {
+    let directory = executable.parent()?;
+    let bundle = directory.parent()?.parent()?;
+    (directory.ends_with("Contents/MacOS")
+        && bundle
+            .extension()
+            .is_some_and(|extension| extension == "app"))
+    .then_some(bundle)
+}
+
 // Trust argv[0] only while it names the running binary.
 fn invoked_path(
     arg: Option<std::ffi::OsString>,

@@ -83,6 +83,28 @@ fn packaged_skills_link_is_optional_and_explicit_paths_take_precedence() {
 }
 
 #[test]
+fn packaged_skills_link_sits_beside_an_app_bundle() {
+    let root = tempfile::tempdir().unwrap();
+    let macos = root.path().join("Shoal.app/Contents/MacOS");
+    let source = root.path().join("skills");
+    fs::create_dir_all(&macos).unwrap();
+    fs::write(macos.join("shoal"), "binary").unwrap();
+    for (name, _) in SKILLS {
+        fs::create_dir_all(source.join(name)).unwrap();
+        fs::write(skill_file(&source, name), "packaged").unwrap();
+    }
+    symlink(&source, root.path().join("shoal-skills")).unwrap();
+    let launcher = root.path().join("shoal");
+    symlink(macos.join("shoal"), &launcher).unwrap();
+    assert_eq!(packaged_source(None, &launcher).unwrap(), Some(source));
+    // Only an app bundle's executable looks outside its own directory.
+    let plain = root.path().join("Plain/Contents/MacOS");
+    fs::create_dir_all(&plain).unwrap();
+    fs::write(plain.join("shoal"), "binary").unwrap();
+    assert_eq!(packaged_source(None, &plain.join("shoal")).unwrap(), None);
+}
+
+#[test]
 fn packaged_skills_replace_recorded_links_with_copies_that_follow_upgrades() {
     let root = tempfile::tempdir().unwrap();
     let directory = root.path().join("skills");

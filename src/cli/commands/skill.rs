@@ -398,9 +398,10 @@ fn skill_file(directory: &Path, name: &str) -> PathBuf {
 }
 
 fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
-    let link = fs::canonicalize(executable)
-        .context("resolve packaged executable")?
-        .with_file_name("shoal-skills");
+    let executable = fs::canonicalize(executable).context("resolve packaged executable")?;
+    let link = package_directory(&executable)
+        .context("missing packaged executable directory")?
+        .join("shoal-skills");
     let target = match fs::read_link(&link) {
         Ok(target) => target,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -424,6 +425,16 @@ fn packaged_link_source(executable: &Path) -> Result<Option<PathBuf>> {
         }
     }
     Ok(Some(source))
+}
+
+/// The directory a package keeps its files in: the executable's, or the one
+/// holding its app bundle, since a file added inside a signed bundle breaks
+/// the bundle's signature.
+fn package_directory(executable: &Path) -> Option<&Path> {
+    match crate::fsutil::app_bundle(executable) {
+        Some(bundle) => bundle.parent(),
+        None => executable.parent(),
+    }
 }
 
 fn install(path: &Path, contents: &str) -> Result<()> {
