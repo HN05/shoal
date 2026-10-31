@@ -64,6 +64,7 @@ impl Manager {
         self.reviews.cancels.lock().unwrap().insert(id, cancel);
         if let Err(error) = self.review_once(id, &mut cancelled).await {
             log!("review {id}: {error:#}");
+            let _operation = self.gates.operation().await;
             let now = now();
             let failed = self
                 .store
@@ -121,11 +122,8 @@ impl Manager {
         files: &Files,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Result<(String, Ended)> {
-        let repository = self.repository(workspace.repository_id.as_str()).await?;
-        std::fs::create_dir_all(&files.directory)
-            .with_context(|| format!("create {}", files.directory.display()))?;
-        reviewer::write_schema(files)?;
-        crate::git::detached::add(&repository.path, &files.checkout(), &commits.head).await?;
+        self.prepare_checkout(workspace, &commits.head, files)
+            .await?;
         let configured = self.configured_workspace_environment(workspace).await?;
         let instructions = self
             .review_instructions(review, workspace, settings, files, commits)
@@ -169,6 +167,21 @@ impl Manager {
         })
     }
 
+    /// The run's directory with the output schema and a detached checkout
+    /// of `head`.
+    async fn prepare_checkout(
+        &self,
+        workspace: &Workspace,
+        head: &str,
+        files: &Files,
+    ) -> Result<()> {
+        let repository = self.repository(workspace.repository_id.as_str()).await?;
+        std::fs::create_dir_all(&files.directory)
+            .with_context(|| format!("create {}", files.directory.display()))?;
+        reviewer::write_schema(files)?;
+        crate::git::detached::add(&repository.path, &files.checkout(), head).await
+    }
+
     /// One reviewer's run of the review, trusted in its tool's config for
     /// the run's length.
     async fn attempt(
@@ -209,7 +222,8 @@ impl Manager {
     }
 
     /// Record how the run ended, post a finished PR review and deliver the
-    /// review; a cancel already recorded and delivered it.
+    /// review, under an operation guard; a cancel already recorded and
+    /// delivered it.
     async fn record_end(
         &self,
         id: i64,
@@ -217,6 +231,9 @@ impl Manager {
         reviewer: &str,
         ended: Ended,
     ) -> Result<()> {
+        // A managed update waits for the review's posting and delivery,
+        // which a restart would not redo once the result is recorded.
+        let _operation = self.gates.operation().await;
         let reviewer = reviewer.to_owned();
         let now = now();
         let recorded = self
