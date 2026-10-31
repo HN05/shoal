@@ -7519,10 +7519,12 @@ fn interrupting_the_cli_during_the_pre_setup_hook_stops_setup_as_it_starts() {
     let stderr = lines(add.stderr.take().unwrap());
     wait_until("the pre-setup hook to start", || started.exists());
     assert_eq!(unsafe { libc::kill(add.id() as i32, libc::SIGTERM) }, 0);
-    // The CLI says so once the daemon signalled the worker, before its setup
-    // listens for signals.
+    // The worker says so once it is cancelled, before its setup listens for
+    // signals.
     wait_until("the cancel to reach the worker", || {
-        stderr.try_iter().any(|line| line.starts_with("Cancelling"))
+        stderr
+            .try_iter()
+            .any(|line| line == "Operation cancelled; stopping its work")
     });
     fs::write(&release, "").unwrap();
     let status = wait_for("the CLI to stop", || add.try_wait().unwrap());
@@ -7540,7 +7542,7 @@ fn interrupting_the_cli_stops_the_post_setup_hook_and_what_ignores_sigterm_below
     install_test_script(
         fixture.repo.join("post-setup.sh"),
         format!(
-            "#!/bin/sh\n(trap '' TERM; exec python3 -c 'import time; time.sleep(60)') &\necho $! > '{}'\nwait\n",
+            "#!/bin/sh\nsh -c 'trap \"\" TERM; echo $$ > \"$0\"; exec python3 -c \"import time; time.sleep(60)\"' '{}' &\nwait\n",
             pid_file.display()
         ),
     );

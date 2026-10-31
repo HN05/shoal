@@ -2,6 +2,8 @@
 //! standard input, does the work with the caller's scope, and reports its
 //! steps and its end. What it and its processes write reaches the daemon
 //! as the operation's output.
+use std::io::Write as _;
+
 use anyhow::{Context as _, Result, ensure};
 use tokio::{
     signal::unix::{SignalKind, signal},
@@ -78,6 +80,8 @@ fn cancellation() -> Result<watch::Receiver<bool>> {
             _ = interrupt.recv() => {}
         }
         crate::execution::cancel();
+        // The operation shows this as its output, once nothing starts anew.
+        let _ = writeln!(std::io::stderr(), "Operation cancelled; stopping its work");
     });
     Ok(crate::execution::cancellation())
 }
