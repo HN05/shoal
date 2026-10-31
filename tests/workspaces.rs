@@ -5817,9 +5817,24 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
         .unwrap();
 
     let leftover = leave("leftover");
-    // An unknown space refuses the batch before any stops.
+    // An unknown space, or a workspace in another lifecycle operation,
+    // refuses the batch before any stops.
     let refused = fixture.run(&["stop", "--leftovers", "procs", "missing"]);
     assert!(!refused.status.success(), "{refused:?}");
+    fixture.add("busy");
+    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    db.execute(
+        "UPDATE workspaces SET state='stopping' WHERE name='busy'",
+        [],
+    )
+    .unwrap();
+    let refused = fixture.run(&["stop", "--leftovers", "procs", "busy"]);
+    assert!(
+        String::from_utf8_lossy(&refused.stderr).contains("busy: workspace is stopping"),
+        "{refused:?}"
+    );
+    db.execute("UPDATE workspaces SET state='ready' WHERE name='busy'", [])
+        .unwrap();
     assert!(process_running(leftover));
     let output = fixture.root.path().join("stopped.json");
     let run = fixture.run(&[

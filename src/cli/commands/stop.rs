@@ -99,27 +99,20 @@ pub(super) async fn processes(
     report.finish(ctx, "")
 }
 
-/// Refuse `selectors` before any stops when one names no workspace or
-/// running chat this process may reach.
+/// Refuse `selectors` before any stops when one names neither a running
+/// chat nor a workspace that stopping accepts.
 async fn ensure_spaces(ctx: &Context, selectors: &[String]) -> Result<()> {
     let chats = client::chats(&ctx.paths).await?;
-    let mut refusals = Vec::new();
-    for selector in selectors {
-        let chat = chats
-            .iter()
-            .any(|chat| &chat.id == selector || &chat.name == selector);
-        if chat {
-            continue;
-        }
-        if let Err(error) = client::inspect(&ctx.paths, selector.clone()).await {
-            refusals.push(format!("{selector}: {error:#}"));
-        }
-    }
-    ensure!(
-        refusals.is_empty(),
-        "cannot stop processes of these spaces, so none was stopped:\n  {}",
-        refusals.join("\n  ")
-    );
+    let workspaces: Vec<String> = selectors
+        .iter()
+        .filter(|selector| {
+            !chats
+                .iter()
+                .any(|chat| &&chat.id == selector || &&chat.name == selector)
+        })
+        .cloned()
+        .collect();
+    inspect_each(ctx, &workspaces).await?;
     Ok(())
 }
 
