@@ -5161,10 +5161,8 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
             "state": "open", "labels": []}},
         "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
-        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels,assignees,milestone --search=flaky":
-            {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
-        "issue view 40": {"body": {"number": 40, "state": "OPEN", "title": "Flaky",
-            "body": "", "comments": []}},
+        github_search("repo:team/project is:issue is:open flaky", 1):
+            {"body": {"items": [{"number": 40, "title": "Flaky", "state": "open", "labels": []}]}},
         "GET repos/team/project/labels?per_page=100&page=1": {"body": [{"name": "bug"}]},
         "GET repos/team/project/pulls/8": {"body": open},
         "GET repos/team/project/commits/head/check-runs?filter=latest&per_page=100": {"body": {
