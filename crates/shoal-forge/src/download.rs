@@ -37,19 +37,35 @@ impl ForgeRepo {
     /// Refuse a URL that is not on this repository's forge, whose login
     /// must not reach another host.
     pub fn check_download(&self, url: &str) -> Result<()> {
-        let rest = url
-            .strip_prefix("https://")
-            .or_else(|| url.strip_prefix(&format!("{}://", self.web_scheme)))
-            .with_context(|| format!("{url} is not a {} URL", self.web_scheme))?;
-        let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+        let (scheme, authority) = split_url(url)?;
         ensure!(
-            authority.eq_ignore_ascii_case(&self.host)
-                && !url.chars().any(|c| c.is_whitespace() || c.is_control()),
+            (scheme == "https" || scheme == self.web_scheme)
+                && authority.eq_ignore_ascii_case(&self.host),
             "{url} is not on the repository's forge at {}",
             self.host
         );
         Ok(())
     }
+}
+
+/// Refuse what is not an HTTP or HTTPS URL with a host, before any
+/// repository is known.
+pub fn check_url(url: &str) -> Result<()> {
+    split_url(url).map(drop)
+}
+
+/// The scheme and authority of the HTTP or HTTPS URL `url`.
+fn split_url(url: &str) -> Result<(&str, &str)> {
+    let (scheme, rest) = url
+        .split_once("://")
+        .filter(|(scheme, _)| matches!(*scheme, "http" | "https"))
+        .with_context(|| format!("{url} is not an HTTP or HTTPS URL"))?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    ensure!(
+        !authority.is_empty() && !url.chars().any(|c| c.is_whitespace() || c.is_control()),
+        "{url} is not a valid URL"
+    );
+    Ok((scheme, authority))
 }
 
 impl Fetched {

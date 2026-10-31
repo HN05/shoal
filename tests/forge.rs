@@ -5328,16 +5328,36 @@ fn downloads_read_files_on_the_forge_with_its_login() {
     let output = fixture.run(&["forge", "download", &url, "-o", "-", "--workspace", "topic"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"PNG");
-    // A workspace process downloads as its agent account.
+    // A workspace process downloads as its agent account, and a chat in the
+    // registered checkout with the user's logins.
     scoped(&fixture, &["forge", "download", &url, "-o", saved_arg]);
+    let in_checkout = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["forge", "download", &url, "-o", saved_arg])
+        .output()
+        .unwrap();
+    assert!(in_checkout.status.success(), "{in_checkout:?}");
     assert_eq!(
         fixture.requests(),
         [
             json!(["GET /attachments/a1", null, "token usertoken"]),
             json!(["GET /attachments/a1", null, "token usertoken"]),
             json!(["GET /attachments/a1", null, "token agenttoken"]),
+            json!(["GET /attachments/a1", null, "token usertoken"]),
         ]
     );
+
+    // A malformed URL fails before a workspace is chosen.
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["forge", "download", "not-a-url", "-o", saved_arg])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("not an HTTP or HTTPS URL"), "{stderr}");
 
     // The login goes to no other host.
     let output = fixture.run(&[

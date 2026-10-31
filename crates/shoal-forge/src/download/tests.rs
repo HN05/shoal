@@ -52,6 +52,10 @@ fn only_urls_on_the_forge_are_downloaded() {
     ] {
         assert!(github.check_download(url).is_err(), "{url}");
     }
+    for url in ["not-a-url", "ftp://github.com/a", "https:///a", "https://"] {
+        assert!(check_url(url).is_err(), "{url}");
+    }
+    check_url("http://example.com/shot.png").unwrap();
     // A forge served over HTTP links its files over HTTP too.
     let local = ForgeRepo::parse("http://git.local:3000/team/project.git").unwrap();
     local

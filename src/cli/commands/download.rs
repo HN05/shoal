@@ -22,7 +22,9 @@ struct Written {
 }
 
 pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
-    // Refuse a bad repository before the workspace picker asks for anything.
+    // Refuse a bad URL or repository before the workspace picker asks for
+    // anything.
+    crate::forge::download::check_url(&args.url)?;
     args.repo
         .as_deref()
         .map(ForgeRepo::check_named)
