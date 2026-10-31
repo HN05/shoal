@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use super::Lifetime;
 use crate::reviews::{FindingId, Outcome, ReviewTarget};
 
-/// Requests about local reviews and the answers to their findings.
+/// Requests about local reviews and the answers to their findings. Reviews
+/// come back as pieces of their JSON, in as many frames as they need.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewMethod {
@@ -36,7 +37,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         id: Option<i64>,
     },
-    /// Long-lived: review `id`, else the workspace's queued or running one,
+    /// Long-lived: the ID of review `id`, else of the workspace's latest,
     /// once it ends.
     AwaitReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,3 +73,8 @@ impl ReviewMethod {
         }
     }
 }
+
+/// A piece of the JSON of a review response, which the client joins.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReviewPiece(pub String);

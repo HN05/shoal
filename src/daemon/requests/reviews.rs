@@ -8,15 +8,14 @@ use super::super::{
     scope::{Caller, Scoped},
     workspace::Manager,
 };
-use crate::protocol::{Body, ReviewMethod};
+use crate::protocol::{self, Body, ReviewMethod, ReviewPiece};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
     method: ReviewMethod,
     caller: Option<&Caller>,
 ) -> Result<Answer> {
-    let review = |review| Body::Review(Box::new(review));
-    Ok(Answer::Body(match method {
+    let shown = match method {
         ReviewMethod::AwaitReview { workspace, id } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
@@ -24,48 +23,61 @@ pub(super) async fn handle(
                     Some(id) => id,
                     None => manager.latest_review(&named(workspace)?).await?.id,
                 };
-                Ok(Body::Review(Box::new(manager.await_review(id).await?)))
+                Ok(Body::ReviewId(manager.await_review(id).await?.id))
             }));
+        }
+        ReviewMethod::CheckPrGate { workspace } => {
+            if caller.is_some() {
+                manager.check_pr_review_gate(&workspace).await?;
+            }
+            return Ok(Answer::Body(Body::Ok));
         }
         ReviewMethod::RunReview {
             workspace,
             target,
             agent,
-        } => review(manager.queue_review(&workspace, target, agent).await?),
+        } => pieces(manager.queue_review(&workspace, target, agent).await),
         ReviewMethod::CancelReview { workspace, id } => {
             let by = caller.map(|caller| caller.workspace_id.clone());
-            review(manager.cancel_review(workspace.as_deref(), id, by).await?)
+            pieces(manager.cancel_review(workspace.as_deref(), id, by).await)
         }
         ReviewMethod::ListReviews {
             workspace,
             repository,
-        } => {
-            let listed = async {
+        } => pieces(
+            async {
                 let ids = manager
                     .review_workspaces(workspace.as_deref(), repository)
                     .await?;
                 manager.reviews(ids).await
             }
-            .await;
-            return Ok(Answer::pages(listed, Body::Reviews));
-        }
-        ReviewMethod::ShowReview { workspace, id } => review(match id {
-            Some(id) => manager.review(id).await?,
-            None => manager.latest_review(&named(workspace)?).await?,
+            .await,
+        ),
+        ReviewMethod::ShowReview { workspace, id } => pieces(match id {
+            Some(id) => manager.review(id).await,
+            None => match named(workspace) {
+                Ok(workspace) => manager.latest_review(&workspace).await,
+                Err(error) => Err(error),
+            },
         }),
-        ReviewMethod::CheckPrGate { workspace } => {
-            if caller.is_some() {
-                manager.check_pr_review_gate(&workspace).await?;
-            }
-            Body::Ok
-        }
         ReviewMethod::ReplyToFinding { finding, body, .. } => {
-            review(manager.reply_to_finding(finding, body).await?)
+            pieces(manager.reply_to_finding(finding, body).await)
         }
         ReviewMethod::ResolveFinding {
             finding, outcome, ..
-        } => review(manager.resolve_finding(finding, outcome).await?),
-    }))
+        } => pieces(manager.resolve_finding(finding, outcome).await),
+    };
+    Ok(Answer::pages(shown, Body::ReviewPieces))
+}
+
+/// Reviews as pieces of their JSON, each fitting a frame: one review's
+/// findings and replies may outgrow a frame of their own.
+fn pieces<T: serde::Serialize>(shown: Result<T>) -> Result<Vec<ReviewPiece>> {
+    let json = serde_json::to_string(&shown?)?;
+    Ok(protocol::text_pieces(&json)
+        .into_iter()
+        .map(ReviewPiece)
+        .collect())
 }
 
 /// The workspace a request without a review ID names.

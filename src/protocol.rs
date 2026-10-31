@@ -67,7 +67,7 @@ pub use recovery::RecoveryMethod;
 pub use removal::RemovalMethod;
 pub use repositories::RepositoryMethod;
 pub use resources::ResourceMethod;
-pub use reviews::ReviewMethod;
+pub use reviews::{ReviewMethod, ReviewPiece};
 pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
 pub use workspaces::WorkspaceMethod;
@@ -587,8 +587,8 @@ response_bodies! {
     AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
     Question(crate::daemon::questions::Question),
     Questions(crate::daemon::questions::Listing),
-    Review(Box<crate::reviews::Review>),
-    Reviews(Vec<crate::reviews::Review>),
+    ReviewPieces(Vec<ReviewPiece>),
+    ReviewId(i64),
     Notification(Notification),
     Sent(crate::daemon::notifications::Sent),
     EventItem(EventItem),

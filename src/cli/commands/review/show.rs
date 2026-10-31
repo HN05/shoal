@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews: Vec<Review> = client::pages(
+    let reviews: Vec<Review> = client::reviews(
         &ctx.paths,
         ReviewMethod::ListReviews {
             workspace,
@@ -51,8 +51,8 @@ pub(in crate::cli::commands) async fn view(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review: Box<Review> =
-        client::request(&ctx.paths, ReviewMethod::ShowReview { workspace, id }).await?;
+    let review: Review =
+        client::reviews(&ctx.paths, ReviewMethod::ShowReview { workspace, id }).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -65,8 +65,12 @@ pub(in crate::cli::commands) async fn watch(
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let review: Box<Review> =
-        client::request(&ctx.paths, ReviewMethod::AwaitReview { workspace, id }).await?;
+    let id: i64 = client::request(&ctx.paths, ReviewMethod::AwaitReview { workspace, id }).await?;
+    let method = ReviewMethod::ShowReview {
+        workspace: None,
+        id: Some(id),
+    };
+    let review: Review = client::reviews(&ctx.paths, method).await?;
     ctx.show(&review, |review| render(review, Palette::stdout(ctx.json)))?;
     Ok(0)
 }
@@ -78,10 +82,7 @@ pub(in crate::cli::commands) async fn latest(ctx: &Context, workspace: &str) -> 
         workspace: Some(workspace.to_owned()),
         id: None,
     };
-    client::request::<Box<Review>>(&ctx.paths, method)
-        .await
-        .ok()
-        .map(|review| *review)
+    client::reviews(&ctx.paths, method).await.ok()
 }
 
 /// The workspace a request without a review ID names.

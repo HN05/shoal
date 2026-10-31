@@ -236,6 +236,17 @@ pub async fn forge_api(
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
+/// What a review request returns, a review or a listing of them,
+/// reassembled from the pieces of JSON the daemon sends it in.
+pub async fn reviews<T: serde::de::DeserializeOwned>(
+    paths: &Paths,
+    method: crate::protocol::ReviewMethod,
+) -> Result<T> {
+    let pieces = pages::<crate::protocol::ReviewPiece>(paths, method).await?;
+    let json: String = pieces.into_iter().map(|piece| piece.0).collect();
+    serde_json::from_str(&json).context("the daemon sent an invalid review")
+}
+
 /// The file at `url` on the forge of `context`'s repository, or of the one
 /// `repository` names, reassembled from the pieces the daemon sends it in.
 pub async fn forge_download(
