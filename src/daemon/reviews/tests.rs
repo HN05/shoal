@@ -314,9 +314,10 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
     crate::git::detached::add(&fixture.workspace.path, &checkout, head.trim())
         .await
         .unwrap();
-    // A reviewer that outlived its daemon, and someone's shell in the
-    // checkout, neither a child of this process.
-    let detached = |marked: bool| {
+    // Reviewer processes that outlived their daemon, in the checkout and
+    // after changing directory, and someone's shell in the checkout, none a
+    // child of this process.
+    let detached = |marked: bool, directory: &std::path::Path| {
         // This test binary, whose environment can be read, unlike that of
         // the platform's own executables on macOS.
         let mut command = std::process::Command::new("sh");
@@ -326,7 +327,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
                 "\"$0\" --exact daemon::reviews::tests::sleep_as_a_survivor --ignored >/dev/null 2>&1 & echo $!",
             ])
             .arg(std::env::current_exe().unwrap())
-            .current_dir(&checkout);
+            .current_dir(directory);
         command.env(SURVIVOR_OWNER, std::process::id().to_string());
         if marked {
             command.env(crate::env::ONESHOT_RUN, checkout.parent().unwrap());
@@ -342,11 +343,14 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
             .unwrap()
             .unwrap()
     };
-    let (survivor, bystander) = (identity(detached(true)), identity(detached(false)));
+    let survivor = identity(detached(true, &checkout));
+    let moved = identity(detached(true, &fixture.workspace.path));
+    let bystander = identity(detached(false, &checkout));
     manager.recover_reviews().await.unwrap();
     // Alive as recovery judges it: a stopped orphan may wait to be reaped.
     let alive = |process| crate::process::identity::alive(process).unwrap();
     assert!(!alive(&survivor), "the survivor runs on");
+    assert!(!alive(&moved), "the survivor elsewhere runs on");
     assert!(alive(&bystander), "the bystander was stopped");
     crate::process::identity::stop_verified(&[bystander])
         .await

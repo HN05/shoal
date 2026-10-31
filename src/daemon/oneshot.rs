@@ -118,20 +118,18 @@ pub(crate) fn stderr(files: &Path) -> PathBuf {
     files.join("stderr")
 }
 
-/// Stop the processes of one-shot runs that a stopped daemon left working in
-/// `directory`, each verified by identity and started with a run's marker.
-/// Anyone else's process there, such as a shell, is left alone.
-pub(crate) async fn stop_leftovers(directory: &Path) -> Result<()> {
-    if !directory.is_dir() {
-        return Ok(());
-    }
-    let mut left = crate::process::identities_in(directory).await?;
-    left.retain(|process| crate::process::identity::started_with(process, crate::env::ONESHOT_RUN));
+/// Stop the processes a stopped daemon's run in `files` left, wherever they
+/// work: each verified by identity and carrying the run's marker, or started
+/// by one that did. Anyone else's process, such as a shell in the run's
+/// directory, is left alone.
+pub(crate) async fn stop_leftovers(files: &Path) -> Result<()> {
+    let run = files.to_string_lossy().into_owned();
+    let left = crate::process::identity::scan_oneshot_runs([run].into()).await?;
     if !left.is_empty() {
         crate::daemon::log!(
-            "stopping {} agent processes a stopped daemon left in {}",
+            "stopping {} agent processes a stopped daemon's run in {} left",
             left.len(),
-            directory.display()
+            files.display()
         );
     }
     crate::process::identity::stop_verified(&left).await

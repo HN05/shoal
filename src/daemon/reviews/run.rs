@@ -1,11 +1,7 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
 //! runs its reviewer in a detached checkout, falls back to a second
 //! reviewer once, and records what it found.
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{collections::HashSet, path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
@@ -481,9 +477,9 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
 }
 
 /// Remove a run a stopped daemon left, after stopping its reviewer's
-/// processes still working in its checkout.
+/// processes.
 async fn remove_interrupted_run(files: &Files) -> Result<()> {
-    oneshot::stop_leftovers(&canonical(&files.checkout())).await?;
+    oneshot::stop_leftovers(&files.directory).await?;
     remove_run(files).await
 }
 
@@ -496,8 +492,4 @@ async fn remove_run(files: &Files) -> Result<()> {
         }
         _ => Ok(()),
     }
-}
-
-fn canonical(path: &Path) -> PathBuf {
-    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
 }

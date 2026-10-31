@@ -342,6 +342,14 @@ pub async fn scan_workspaces(ids: HashSet<String>) -> Result<Vec<(String, Identi
         .collect())
 }
 
+/// Live same-user processes of the one-shot runs whose run directories are
+/// `runs`, wherever they work: those started with a run's marker and what
+/// they started.
+pub async fn scan_oneshot_runs(runs: HashSet<String>) -> Result<Vec<Identity>> {
+    let scan = scan_marked(Marker::OneShot, runs).await?;
+    Ok(scan.processes.into_iter().map(|p| p.identity).collect())
+}
+
 /// Inventory processes whose environment sets `marker` to one of `ids`; each
 /// match records the value it carries.
 async fn scan_marked(marker: Marker, ids: HashSet<String>) -> Result<Scan> {
@@ -435,6 +443,8 @@ struct Marks {
     execution: Option<String>,
     workspace: Option<String>,
     chat: Option<String>,
+    /// The run directory of a one-shot agent run.
+    oneshot: Option<String>,
 }
 
 /// The marker a scan attributes processes by.
@@ -443,6 +453,7 @@ enum Marker {
     Execution,
     Workspace,
     Chat,
+    OneShot,
 }
 
 impl Marks {
@@ -459,6 +470,7 @@ impl Marks {
             execution: value(crate::env::EXECUTION_ID),
             workspace: value(crate::env::WORKSPACE_ID),
             chat: value(crate::env::CHAT),
+            oneshot: value(crate::env::ONESHOT_RUN),
         }
     }
 
@@ -468,6 +480,7 @@ impl Marks {
             Marker::Workspace => self.workspace.as_deref(),
             // A workspace's process a chat started belongs to the workspace.
             Marker::Chat => self.chat.as_deref().filter(|_| !self.of_workspace()),
+            Marker::OneShot => self.oneshot.as_deref(),
         }
     }
 
@@ -477,7 +490,10 @@ impl Marks {
     }
 
     fn is_empty(&self) -> bool {
-        self.execution.is_none() && self.workspace.is_none() && self.chat.is_none()
+        self.execution.is_none()
+            && self.workspace.is_none()
+            && self.chat.is_none()
+            && self.oneshot.is_none()
     }
 }
 
