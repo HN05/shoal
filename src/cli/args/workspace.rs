@@ -86,12 +86,19 @@ pub enum WorkCommand {
     },
     /// Give a workspace a short title, which the tabs Shoal opens for it show.
     ///
-    /// `shoal branch rename` renames its Git branch instead.
+    /// With --request, asks the workspace's running agent to choose a title
+    /// that fits the work and set it. `shoal branch rename` renames its Git
+    /// branch instead.
     #[command(allow_missing_positional = true)]
     Rename {
         workspace: Option<String>,
         /// Title of at most 40 characters on one line.
-        title: String,
+        #[arg(required_unless_present = "request")]
+        title: Option<String>,
+        /// Ask the workspace's agent to choose the title; a single argument
+        /// then names the workspace.
+        #[arg(long, conflicts_with = "workspace")]
+        request: bool,
     },
     /// Keep a workspace's HEAD and unsaved files in a checkpoint that shoal work restore returns to.
     Checkpoint {

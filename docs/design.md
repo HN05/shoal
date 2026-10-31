@@ -785,7 +785,9 @@ The CLI owns Herdr tab handoffs after issue lookup and interactive workspace and
 agent choices and labels the tab `<repo>#<number>` for an issue, otherwise with the
 allocated workspace branch by default. An issue number or branch says little about
 the work, so its agent names it with a workspace title, which replaces that
-default and fills a template's `{title}`; setting one relabels the places Shoal
+default and fills a template's `{title}`. The user may set the title or ask the
+agent to choose one, a fixed agent message refused without a running agent,
+which would leave it unread until removal. Setting one relabels the places Shoal
 created for the workspace that the caller's host server reaches, while other
 places take it when they next open. An optional `terminal.herdr.tab_name` template
 follows normal configuration precedence, substitutes repository, branch and issue
@@ -1638,7 +1640,7 @@ chats are listed. Starts, renames and ends are journal events. A workspace belon
 chat that last opened it until that chat ends, and opening it outside a chat
 returns it to the user, so Shoal knows which chat coordinates which workers.
 Having no workspace, a chat keeps its messages in its own queue, which the same
-hooks deliver; a chat that ends gives the user the notifications its unread
+hooks deliver, including the user's request to rename it; a chat that ends gives the user the notifications its unread
 messages stand for, and its workers return to the user even if it is resumed.
 A chat passes a question up by asking the user, who attends it. Holding no
 grant, it receives no approval requests, though with the user's authority it

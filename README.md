@@ -90,6 +90,7 @@ shoal work adopt ../existing-worktree        # Take ownership, including automat
 shoal work adopt --copy ../existing-worktree # Copy work into Shoal's default directory
 shoal branch rename fix-login fix/login      # Rename its branch and workspace together
 shoal work rename fix-login "Login retries"  # Title the tabs Shoal opens for it
+shoal work rename --request fix-login        # Ask its agent to choose the title
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
@@ -166,6 +167,7 @@ shoal demo start web           # Start the configured demo `web` for the user to
 shoal happy claude fix-login   # Detached Happy session, visible in the Happy app
 shoal chat my-project          # Discuss the repository with an agent in its checkout
 shoal chat rename my-project-chat login  # Rename a running chat
+shoal chat rename --request my-project-chat  # Ask its agent to choose the name
 shoal plan --oldest            # Settle the oldest unplanned issue's plan in a chat
 shoal diff fix-login           # Changes since the branch's fork point
 shoal conflicts --workspace fix-login  # Whether the branch merges cleanly into main

@@ -1,4 +1,4 @@
-//! Renaming a running chat.
+//! Renaming a running chat, or asking its agent to.
 use anyhow::Result;
 
 use crate::{
@@ -11,6 +11,9 @@ use crate::{
     model::Chat,
     protocol::ChatMethod,
 };
+
+/// What `shoal chat rename --request` asks the chat's agent.
+const NAME_REQUEST: &str = "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal chat rename <name>`.";
 
 pub(in crate::cli::commands) async fn rename(
     ctx: &Context,
@@ -25,6 +28,20 @@ pub(in crate::cli::commands) async fn rename(
     let renamed = request::<Chat>(&ctx.paths, ChatMethod::RenameChat { chat, name }).await?;
     relabel(ctx, old.as_deref(), &renamed).await;
     ctx.show(&renamed, |chat| outln!("Renamed chat to {}", chat.name))?;
+    Ok(0)
+}
+
+/// Ask the running chat's agent to choose its name. A chat runs as long as
+/// its agent, so the message always has a reader.
+pub(in crate::cli::commands) async fn request_name(
+    ctx: &Context,
+    chat: Option<String>,
+) -> Result<i32> {
+    super::ensure_unscoped(ctx)?;
+    let chat = select(ctx, chat).await?;
+    let message = NAME_REQUEST.into();
+    request::<()>(&ctx.paths, ChatMethod::SendChatMessage { chat, message }).await?;
+    ctx.emit("Asked the chat's agent to choose its name.", ())?;
     Ok(0)
 }
 

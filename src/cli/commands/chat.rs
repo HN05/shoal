@@ -28,7 +28,7 @@ use crate::{
 
 mod rename;
 
-pub(super) use rename::rename;
+pub(super) use rename::{rename, request_name};
 
 pub(super) async fn start(
     ctx: &Context,

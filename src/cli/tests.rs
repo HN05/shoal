@@ -5,7 +5,7 @@ use crate::{
     agent::Agent,
     cli::args::{
         AgentParser, ConfirmationArgs,
-        agents::AgentsCommand,
+        agents::{AgentsCommand, ChatCommand},
         changes::ChangesCommand,
         coordination::CoordinationCommand,
         create::CreateCommand,
@@ -337,6 +337,65 @@ fn agent_mode_flags_do_not_reserve_workspace_names() {
 
         assert!(Cli::try_parse_from(["shoal", agent, "--cli", "--app"]).is_err());
         assert!(Cli::try_parse_from(["shoal", agent, "cli", "workspace"]).is_err());
+    }
+}
+
+#[test]
+fn rename_requests_take_the_space_without_a_name() {
+    let work = |args: &[&str]| {
+        let cli = Cli::try_parse_from(["shoal", "work", "rename"].iter().chain(args))?;
+        let Some(Command::Workspace(WorkspaceCommand::Work {
+            command:
+                Some(WorkCommand::Rename {
+                    workspace,
+                    title,
+                    request,
+                }),
+            ..
+        })) = cli.command
+        else {
+            panic!("expected work rename");
+        };
+        Ok::<_, clap::Error>((workspace, title, request))
+    };
+    let chat = |args: &[&str]| {
+        let cli = Cli::try_parse_from(["shoal", "chat", "rename"].iter().chain(args))?;
+        let Some(Command::Agents(AgentsCommand::Chat {
+            command:
+                Some(ChatCommand::Rename {
+                    chat,
+                    name,
+                    request,
+                }),
+            ..
+        })) = cli.command
+        else {
+            panic!("expected chat rename");
+        };
+        Ok::<_, clap::Error>((chat, name, request))
+    };
+    // A single argument takes the place of the title or name; with
+    // --request, dispatch reads it as the space.
+    let named = |space: &str| (None, Some(space.to_owned()), true);
+    assert_eq!(work(&["--request", "fix"]).unwrap(), named("fix"));
+    assert_eq!(work(&["--request"]).unwrap(), (None, None, true));
+    assert_eq!(chat(&["--request", "talk"]).unwrap(), named("talk"));
+    assert_eq!(chat(&["--request"]).unwrap(), (None, None, true));
+    assert_eq!(
+        work(&["Agent tabs"]).unwrap(),
+        (None, Some("Agent tabs".into()), false)
+    );
+    assert_eq!(
+        chat(&["topic"]).unwrap(),
+        (None, Some("topic".into()), false)
+    );
+    for refused in [
+        work(&["--request", "fix", "Agent tabs"]).map(drop),
+        work(&[]).map(drop),
+        chat(&["--request", "talk", "topic"]).map(drop),
+        chat(&[]).map(drop),
+    ] {
+        assert!(refused.is_err());
     }
 }
 

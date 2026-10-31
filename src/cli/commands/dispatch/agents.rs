@@ -46,9 +46,20 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: AgentsCommand) 
             args,
         } => agents::happy(&ctx, agent, workspace, prompt, args).await,
         AgentsCommand::Chat {
-            command: Some(ChatCommand::Rename { chat, name }),
+            command:
+                Some(ChatCommand::Rename {
+                    chat,
+                    name: Some(name),
+                    request: false,
+                }),
             ..
         } => chat::rename(&ctx, chat, name).await,
+        // Only --request leaves out the name, and its single argument takes
+        // the name's place.
+        AgentsCommand::Chat {
+            command: Some(ChatCommand::Rename { chat, name, .. }),
+            ..
+        } => chat::request_name(&ctx, name.or(chat)).await,
         AgentsCommand::Chat {
             command: None,
             here,

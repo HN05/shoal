@@ -1,16 +1,21 @@
-//! Titling a workspace, which the places Shoal opened for it show.
-use anyhow::Result;
+//! Titling a workspace, which the places Shoal opened for it show, or
+//! asking its agent to.
+use anyhow::{Result, ensure};
 
 use crate::{
     cli::{
         client::request,
+        commands::turns,
         context::Context,
         terminal,
         ui::{self, Fallback},
     },
     model::Workspace,
-    protocol::WorkspaceMethod,
+    protocol::{AgentMethod, WorkspaceMethod},
 };
+
+/// What `shoal work rename --request` asks the workspace's agent.
+const TITLE_REQUEST: &str = "The user asks you to retitle this workspace: name the work as it stands now in two to five words with `shoal work rename \"<title>\"`.";
 
 pub(in crate::cli::commands) async fn title(
     ctx: &Context,
@@ -42,5 +47,33 @@ pub(in crate::cli::commands) async fn title(
             workspace.title.as_deref().unwrap_or_default()
         )
     })?;
+    Ok(0)
+}
+
+/// Ask the workspace's running agent to choose its title, through the
+/// messages `shoal messages send` queues. Without an agent the message
+/// would wait unread until removal, so that is refused.
+pub(in crate::cli::commands) async fn request_title(
+    ctx: &Context,
+    workspace: Option<String>,
+) -> Result<i32> {
+    let selector = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let (workspace, agents) = turns::agents_of(ctx, selector).await?;
+    ensure!(
+        !agents.is_empty(),
+        "{name} has no running agent to ask; set its title with shoal work rename {name} <TITLE>",
+        name = workspace.name
+    );
+    request::<()>(
+        &ctx.paths,
+        AgentMethod::SendAgentMessage {
+            workspace: workspace.id,
+            message: TITLE_REQUEST.into(),
+            attachments: Vec::new(),
+            sender_chat: None,
+        },
+    )
+    .await?;
+    ctx.emit("Asked the workspace's agent to choose its title.", ())?;
     Ok(0)
 }

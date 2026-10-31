@@ -123,13 +123,20 @@ pub enum ChatCommand {
     /// Rename a running chat, `shoal plan` chats included.
     ///
     /// Without a chat, renames the chat this runs in, else the current
-    /// checkout's only running chat, else offers a picker. A chat's zmx
-    /// session keeps its name; `shoal attach` finds it by the new one.
+    /// checkout's only running chat, else offers a picker. With --request,
+    /// asks the chat's agent to choose a name that fits the work and set it.
+    /// A chat's zmx session keeps its name; `shoal attach` finds it by the
+    /// new one.
     #[command(allow_missing_positional = true)]
     Rename {
         /// Running chat, by name.
         chat: Option<String>,
         /// New name, free among workspaces and running chats.
-        name: String,
+        #[arg(required_unless_present = "request")]
+        name: Option<String>,
+        /// Ask the chat's agent to choose the name; a single argument then
+        /// names the chat.
+        #[arg(long, conflicts_with = "chat")]
+        request: bool,
     },
 }

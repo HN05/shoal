@@ -146,7 +146,10 @@ fn runs_turn(state: Option<AgentState>) -> bool {
 }
 
 /// The workspace `selector` names and its connected agents.
-async fn agents_of(ctx: &Context, selector: String) -> Result<(Workspace, Vec<RunningAgent>)> {
+pub(super) async fn agents_of(
+    ctx: &Context,
+    selector: String,
+) -> Result<(Workspace, Vec<RunningAgent>)> {
     let workspace = client::inspect(&ctx.paths, selector).await?.workspace;
     let agents = request(
         &ctx.paths,

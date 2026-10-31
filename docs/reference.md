@@ -530,6 +530,9 @@ most 40 characters that its agent chooses to say what the work is. The Herdr tab
 and Rex windows Shoal opens for the workspace show it in place of the issue label
 or branch, and setting it renames those already open on the server of the Herdr
 or Rex terminal the command runs in. Scoped callers may title their own workspace.
+`shoal work rename --request [WORKSPACE]` sends the workspace's agent an
+[agent message](#agent-messages) asking it to choose the title and set it; it is
+refused while no agent runs there.
 
 `shoal add <link>` recognizes issue, PR and branch URLs. Links select the single
 registered repository with the same origin; `--repo` selects one explicitly and
@@ -1406,7 +1409,9 @@ only running chat, else offers a picker. A Happy chat's log and saved first
 message move to the new name, so it is refused until its session runs. The zmx session keeps the name it started with,
 since `shoal attach` finds the chat's session where the chat runs. A Herdr tab
 or Rex block the chat runs in takes the new name while it still shows the old
-one; one the user named keeps its label. Workspace processes cannot rename chats.
+one; one the user named keeps its label. `shoal chat rename --request [chat]`
+asks the chat's agent to choose the name and set it instead. Workspace processes
+cannot rename chats.
 
 `shoal work` lists the chat by name with the workspaces it
 opened, and [workspace events](#workspace-events) report its start, renames and end. A workspace
@@ -3756,8 +3761,8 @@ Shoal's agent guidance mentions.
 `shoal chat` registers the same message hooks, and for Claude Code the wake
 hook, without turn-state hooks. Under a chat, outside any workspace scope, they
 and `shoal messages` deliver the chat's messages about the workspaces it
-[coordinates](#child-workspaces); a Codex chat receives them after its next tool
-call or prompt.
+[coordinates](#child-workspaces) and those Shoal sends it for the user; a Codex
+chat receives them after its next tool call or prompt.
 An identical message that is still unread is not queued again, and a workspace
 or chat holds at most 50 unread messages of 25,600 bytes in total. Scoped commands may read their own workspace's
 messages and send messages only to the agents of the [workspaces below their own](#child-workspaces). Removing the workspace deletes its messages.

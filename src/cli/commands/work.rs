@@ -15,7 +15,16 @@ pub(super) async fn run(ctx: &Context, command: WorkCommand) -> Result<i32> {
             repository,
             copy,
         } => workspaces::adopt(ctx, path, repository, copy).await,
-        WorkCommand::Rename { workspace, title } => workspaces::title(ctx, workspace, title).await,
+        WorkCommand::Rename {
+            workspace,
+            title: Some(title),
+            request: false,
+        } => workspaces::title(ctx, workspace, title).await,
+        // Only --request leaves out the title, and its single argument
+        // takes the title's place.
+        WorkCommand::Rename {
+            workspace, title, ..
+        } => workspaces::request_title(ctx, title.or(workspace)).await,
         WorkCommand::Checkpoint { workspace, name } => {
             restore::checkpoint(ctx, workspace, name).await
         }

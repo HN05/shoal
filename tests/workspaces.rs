@@ -19952,6 +19952,55 @@ fn the_wake_hook_exits_with_its_agent() {
 }
 
 #[test]
+fn a_title_request_reaches_only_a_running_agent() {
+    let fixture = Fixture::new();
+    fixture.add("titled");
+    let output = fixture.run(&["work", "rename", "--request", "titled"]);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(
+            "titled has no running agent to ask; set its title with shoal work rename titled <TITLE>"
+        ),
+        "{output:?}"
+    );
+    assert_eq!(fixture.ok(&["messages", "titled"]), serde_json::json!([]));
+
+    // The agent runs until the test releases it.
+    let bin = fixture.root.path().join("stub-bin");
+    let (started, release) = (bin.join("started"), bin.join("release"));
+    install_test_script_with_mode(
+        bin.join("claude"),
+        format!(
+            "#!/bin/sh\ntouch '{}'\nwhile [ ! -e '{}' ]; do sleep 0.1; done\n",
+            started.display(),
+            release.display()
+        ),
+        0o700,
+    );
+    let mut agent = fixture
+        .command()
+        .args(["claude", "titled"])
+        .env("PATH", fixture.restricted_path(&bin))
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    // The daemon tracks the agent before its wrapper starts it.
+    wait_until("the agent to start", || started.exists());
+    // An identical request the agent has not read yet collapses.
+    for _ in 0..2 {
+        fixture.ok(&["work", "rename", "--request", "titled"]);
+    }
+    let messages = fixture.ok(&["messages", "titled"]);
+    assert_eq!(messages.as_array().unwrap().len(), 1, "{messages}");
+    assert_eq!(
+        messages[0]["message"],
+        "The user asks you to retitle this workspace: name the work as it stands now in two to five words with `shoal work rename \"<title>\"`."
+    );
+    fs::write(&release, "").unwrap();
+    assert!(agent.wait().unwrap().success());
+}
+
+#[test]
 fn a_message_to_all_skips_workspaces_without_a_running_agent() {
     let fixture = Fixture::new();
     fixture.add("idle");
@@ -26440,6 +26489,43 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     assert!(output.status.success(), "{output:?}");
     assert_eq!(rows.lines().count(), 3, "{rows}");
     assert_eq!(names(), ["picked", "repo-plan-8", "calm"]);
+}
+
+#[test]
+fn a_name_request_reaches_the_chats_agent() {
+    let fixture = Fixture::new();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The chat lasts while this test's process runs.
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "talk", "agent": "claude",
+        "pid": std::process::id()
+    }}));
+    let chat = response["data"]["id"].as_str().unwrap().to_owned();
+    let output = fixture.run(&["chat", "rename", "--request", "talk"]);
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("Asked the chat's agent to choose its name."),
+        "{output:?}"
+    );
+    // The chat's agent reads it as a message from the user, about no
+    // workspace.
+    let output = fixture
+        .command()
+        .env("SHOAL_CHAT", &chat)
+        .args(["--json", "messages"])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let messages: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        messages[0]["message"],
+        "The user asks you to rename this chat: name the work as it stands now in two to five hyphenated words with `shoal chat rename <name>`."
+    );
+    // Workspace processes do not reach chats.
+    fixture.add("worker");
+    let output = scoped_command(&fixture, "worker", &["chat", "rename", "--request", "talk"]);
+    assert!(!output.status.success(), "{output:?}");
 }
 
 #[test]
