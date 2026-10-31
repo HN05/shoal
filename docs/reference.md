@@ -859,7 +859,9 @@ shoal review resolve 17.2 false-positive --reason 'The caller checks the length'
 shoal review resolve 17.2 --undo
 ```
 
-Findings are numbered `<review>.<n>`. `review list` marks a review outdated once
+`watch review` keeps waiting through a daemon restart, and continues from the
+installed binary after an upgrade changes the protocol. Findings are numbered
+`<review>.<n>`. `review list` marks a review outdated once
 the workspace's HEAD has moved past it and counts its unresolved findings. Plain
 `shoal view` in a workspace ends with its latest review, and `shoal work` shows each
 workspace's latest review state. `review resolve` takes one outcome with its data;

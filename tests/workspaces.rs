@@ -4026,6 +4026,50 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     assert_eq!(viewed[0]["id"].to_string(), id);
 }
 
+#[test]
+fn a_review_watch_outlasts_a_daemon_restart() {
+    let files = tempfile::tempdir().unwrap();
+    let result = files.path().join("review.json");
+    fs::write(
+        &result,
+        r#"{"summary":"No issues found.","verdict":"approve","checked":[],"findings":[]}"#,
+    )
+    .unwrap();
+    // The reviewer waits for the gate, for at most a minute.
+    let gate = files.path().join("gate");
+    let script = format!(
+        "i=0; while [ ! -e {} ] && [ $i -lt 600 ]; do sleep 0.1; i=$((i+1)); done; cat {}",
+        gate.display(),
+        result.display()
+    );
+    let mut fixture = Fixture::with_config(Some(&format!(
+        "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['sh']\nreview = ['-c', '{script}', '{{prompt}}', '{{schema}}']\n"
+    )));
+    fixture.add("watched");
+    let id = fixture.ok(&["review", "run", "watched"])["id"].to_string();
+    wait_until("the review to run", || {
+        fixture.ok(&["view", "review", &id])["state"] == "running"
+    });
+    let mut watch = fixture
+        .command()
+        .args(["--json", "watch", "review", &id])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    // The restart stops the reviewer; the review starts over and the watch
+    // waits on.
+    fixture.restart();
+    fs::write(&gate, "").unwrap();
+    if try_wait_for(|| watch.try_wait().unwrap()).is_none() {
+        let _ = watch.kill();
+    }
+    let output = watch.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let review: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(review["state"], "finished", "{review}");
+}
+
 /// An upstream remote served at ssh://git@forge.example/team/project.git;
 /// returns the author's clone.
 fn forge_origin(fixture: &Fixture) -> PathBuf {

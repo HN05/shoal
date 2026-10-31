@@ -6,6 +6,7 @@ use crate::{
     cli::{
         client,
         context::Context,
+        installed::{Executable, arguments},
         output::{Palette, Style},
         ui::{self, Fallback},
     },
@@ -58,14 +59,24 @@ pub(in crate::cli::commands) async fn view(
 }
 
 /// `shoal watch review [ID]`: wait until the review, by default the
-/// workspace's latest, is neither queued nor running, then show it.
+/// workspace's latest, is neither queued nor running, then show it. The wait
+/// outlasts a daemon restart, and an upgrade's protocol change continues it
+/// from the installed binary.
 pub(in crate::cli::commands) async fn watch(
     ctx: &Context,
     id: Option<i64>,
     workspace: Option<String>,
 ) -> Result<i32> {
     let workspace = selected(ctx, id, workspace).await?;
-    let id: i64 = client::request(&ctx.paths, ReviewMethod::AwaitReview { workspace, id }).await?;
+    let executable = Executable::current();
+    let method = || ReviewMethod::AwaitReview {
+        workspace: workspace.clone(),
+        id,
+    };
+    let id = match client::await_reply(&ctx.paths, method, false).await {
+        Ok(body) => i64::try_from(body)?,
+        Err(error) => return Err(executable.resume_or(error, arguments)),
+    };
     let method = ReviewMethod::ShowReview {
         workspace: None,
         id: Some(id),
