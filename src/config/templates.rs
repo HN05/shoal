@@ -12,6 +12,11 @@ pub const WORKER_FILE: &str = "worker-template.md";
 pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
+pub const REVIEW_FILE: &str = "review-template.md";
+/// A review's instructions: the fixed task, read-only rules, output contract
+/// and treatment of history, then the base `agent.templates.review` replaces.
+const REVIEW: &str = include_str!("templates/review.md");
+const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 
 pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
     let path = directory.join(name);
@@ -58,6 +63,49 @@ pub fn chat_first_message(instructions: &str, opening: Option<&str>) -> Option<S
         (true, Some(opening)) => Some(opening.to_owned()),
         (false, _) => Some(format!("{instructions}\n\n{next}")),
     }
+}
+
+/// The part of a review's instructions no layer replaces.
+fn review_fixed() -> &'static str {
+    REVIEW
+        .split_once(REVIEW_BASE_MARKER)
+        .map_or(REVIEW, |(fixed, _)| fixed)
+}
+
+/// The review style `agent.templates.review` starts from.
+pub fn review_base() -> &'static str {
+    REVIEW
+        .split_once(REVIEW_BASE_MARKER)
+        .map_or("", |(_, base)| base)
+}
+
+/// What a review's instructions name.
+pub struct ReviewFields<'a> {
+    pub workspace: &'a str,
+    pub branch: &'a str,
+    /// The review's checkout.
+    pub path: &'a str,
+    /// The commit the changes are compared against.
+    pub base: &'a str,
+}
+
+/// A review's instructions: the fixed part, then `template`, the base with
+/// the repository's additions.
+pub fn review_instructions(template: Option<&str>, fields: &ReviewFields) -> String {
+    let fixed = review_fixed().trim_end();
+    let template = match template.map(str::trim_end) {
+        Some(template) if !template.is_empty() => format!("{fixed}\n\n{template}"),
+        _ => fixed.to_owned(),
+    };
+    render(
+        &template,
+        &[
+            ("{workspace}", fields.workspace),
+            ("{branch}", fields.branch),
+            ("{path}", fields.path),
+            ("{base}", fields.base),
+        ],
+    )
 }
 
 /// How a launched agent receives its issue and PR activity, which

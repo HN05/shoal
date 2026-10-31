@@ -1655,15 +1655,20 @@ ends a lease grant.
 
 ### Prompt templates
 
-`agent.templates.worker` and `agent.templates.chat` in the local config, or
-`worker-template.md` and `chat-template.md` beside it, win over the worktree's TOML values or `worker-template.md` and
-`chat-template.md` in the repository root.
+Each `agent.templates.<name>`, `worker`, `chat` or `review`, may also be written as
+`<name>-template.md`. The local config's value or the file beside it wins over the
+worktree's TOML value or the file in the repository root.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository
 value suppresses local additions while preserving global guidance; an empty
-global value suppresses its base text. Without a global chat template,
-Shoal uses its bundled default as the base. `config show` reports the combined text and the highest
+global value suppresses its base text. Without a global chat or review template,
+Shoal uses its bundled default as the base. A [local review](#local-reviews)'s
+instructions start with the fixed part of the
+[review template](../src/config/templates/review.md), its task, read-only rules,
+output contract and treatment of history, which no layer replaces; the review
+style after it is the base. `{workspace}`, `{branch}`, `{path}`, the review's
+checkout, and `{base}`, the commit it compares against, expand in them. `config show` reports the combined text and the highest
 layer that configured it. Unknown placeholders stay literal. Templates are
 read at launch without a daemon restart. The issue prompt is built in.
 `config show` warns for each layer whose worker template repeats the opening of
@@ -2038,8 +2043,8 @@ A repository's local config is `.shoal/config.toml` in its own directory, beside
 its workspaces and `.checkout` (`~/shoal/my-project/.shoal/config.toml`), for a
 repository that won't accept `.shoal.toml` or settings only you want. It is
 outside every Git tree, so nothing ignores it and `git clean` never touches it.
-It uses the `.shoal.toml` format, plus `[secrets]`, and `worker-template.md` and
-`chat-template.md` beside it work as in the other layers. A relative hook path or
+It uses the `.shoal.toml` format, plus `[secrets]`, and the `<name>-template.md`
+files beside it work as in the other layers. A relative hook path or
 `setup.command` there names a script in that `.shoal` directory, so untracked
 scripts can live beside it; `setup.seed` stays relative to the worktree.
 

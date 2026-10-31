@@ -286,6 +286,9 @@ impl Config {
         if templates.agent.templates.chat.is_none() {
             templates.agent.templates.chat = templates::read(directory, templates::CHAT_FILE)?;
         }
+        if templates.agent.templates.review.is_none() {
+            templates.agent.templates.review = templates::read(directory, templates::REVIEW_FILE)?;
+        }
         Ok(config)
     }
 

@@ -144,6 +144,9 @@ pub struct TemplatesConfig {
     pub worker: Option<String>,
     #[option(template, default = crate::config::templates::CHAT_DEFAULT.into())]
     pub chat: Option<String>,
+    /// A local review's style, after its fixed instructions.
+    #[option(template, default = crate::config::templates::review_base().into())]
+    pub review: Option<String>,
 }
 
 /// Where and how Shoal opens places for a workspace.
@@ -389,6 +392,10 @@ fn read_templates(config: &mut RepoConfig, directory: &Path) -> Result<()> {
     if templates.chat.is_none() {
         templates.chat =
             crate::config::templates::read(directory, crate::config::templates::CHAT_FILE)?;
+    }
+    if templates.review.is_none() {
+        templates.review =
+            crate::config::templates::read(directory, crate::config::templates::REVIEW_FILE)?;
     }
     Ok(())
 }
