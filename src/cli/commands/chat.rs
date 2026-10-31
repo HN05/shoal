@@ -47,7 +47,7 @@ pub(super) async fn start(
 pub(super) struct Options {
     /// Agent to start; defaults to `agent.default`, otherwise a picker.
     pub agent: Option<Agent>,
-    /// Run in the current pane or terminal instead of beside it.
+    /// Run in this terminal instead of a new tab or session.
     pub here: bool,
     /// The chat's name; defaults to the topic's.
     pub name: Option<String>,

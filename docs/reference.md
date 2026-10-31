@@ -858,6 +858,8 @@ zmx refuses the agent as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
 [Rex](#rex) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
+`--here` on `shoal add`, `contribute`, `chat`, `plan` and `repo setup --local`
+runs the launch in this terminal instead of a new tab or session, whatever the host.
 
 Interactive `shoal add` on a terminal outside Herdr and zmx places its launch
 as a Herdr tab would be: an agent that starts with input runs setup and the
@@ -1380,11 +1382,12 @@ default `<repo>-chat`, or `<repo>-chat-2`, `-3`, ... while another holds it.
 On a terminal, `shoal chat` without `--name` asks `Chat name [<default>]:`,
 where empty input takes the default and a taken or invalid name is asked for
 again; JSON and Happy launches take the default without asking. Inside Herdr it
-opens a focused tab labelled with the name regardless of `terminal.focus`, unless `--here` or
+opens a focused tab labelled with the name regardless of `terminal.focus`, unless
 `new_tab = false` keeps it in the current pane, and inside Rex it opens a focused
 window; on a terminal it runs in a zmx
 session named after the chat, which [`shoal attach <name>`](#agents)
-returns to; inside a zmx session or a Herdr pane it runs in place. A Happy chat
+returns to; inside a zmx session or a Herdr pane it runs in place. `--here` runs
+it in this terminal instead of a new tab or session. A Happy chat
 (`happy-claude` or `happy-codex`, see [Agents](#agents)) needs no terminal: it
 starts detached in the checkout as `shoal happy` starts a workspace session, and
 you continue it in the Happy app. Happy's Claude takes the instructions as
