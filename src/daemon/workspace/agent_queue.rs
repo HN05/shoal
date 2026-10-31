@@ -103,10 +103,11 @@ pub(crate) struct Waiting {
 /// The waiting entries that fit, in queue order. `occupied` holds one
 /// repository ID per used slot. Under fixed limits a launch, like a restore
 /// an update woke, needs a free slot and another restore takes back its own;
-/// under dynamic admission each needs room for its load. Those other restores
-/// start only on sustained healthy readings (`recovered`), one per healthy
-/// interval. An entry that waits or does not fit keeps its place and is
-/// passed over; once nothing more can start the pass ends.
+/// under dynamic admission each needs room for its load. Those other restores,
+/// like one-shot runs protection stopped, start only on sustained healthy
+/// readings (`recovered`), one per healthy interval. An entry that waits or
+/// does not fit keeps its place and is passed over; once nothing more can
+/// start the pass ends.
 pub(crate) fn admit(
     occupied: &[String],
     waiting: &[Waiting],
@@ -154,7 +155,8 @@ pub(crate) fn admit(
         *used += 1 - own;
         total += 1 - own;
         starts = starts.map(|starts| starts - 1);
-        recovered &= own == 0;
+        // Each healthy interval restarts one stopped agent or one-shot run.
+        recovered &= own == 0 && entry.work != Work::OneShot { after_stop: true };
         admitted.push(entry.id.clone());
     }
     admitted
@@ -511,7 +513,10 @@ impl Manager {
             .iter()
             .filter_map(|id| restores.get(id))
             .partition(|(_, wake)| *wake == Wake::Recovery);
-        if !recovered.is_empty() {
+        let resumed_oneshot = waiting.iter().any(|entry| {
+            entry.work == (Work::OneShot { after_stop: true }) && admitted.contains(&entry.id)
+        });
+        if !recovered.is_empty() || resumed_oneshot {
             // A stop, reload or unsafe reading since the check withdrew the
             // readings; the pass it wakes decides again.
             let Some(epoch) = published.and_then(|epoch| self.overload_recovery.consume(epoch))

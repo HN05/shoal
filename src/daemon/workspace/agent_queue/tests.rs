@@ -134,6 +134,22 @@ fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
 }
 
 #[test]
+fn stopped_oneshot_runs_restart_one_per_healthy_interval() {
+    let mut queue = waiting(&[("o1", "a"), ("o2", "a"), ("a1", "a")]);
+    for entry in &mut queue[..2] {
+        entry.work = Work::OneShot { after_stop: true };
+    }
+    let fixed = limits(Some(5), &[]);
+    // Without healthy readings both wait; the launch behind them starts.
+    assert_eq!(admit(&[], &queue, &fixed, false), ["a1"]);
+    // One healthy interval restarts one of them, under a fixed limit too.
+    assert_eq!(admit(&[], &queue, &fixed, true), ["o1", "a1"]);
+    // A run nothing stopped needs no healthy readings.
+    queue[1].work = Work::OneShot { after_stop: false };
+    assert_eq!(admit(&[], &queue, &fixed, false), ["o2", "a1"]);
+}
+
+#[test]
 fn restores_between_turns_wait_only_for_an_update_and_a_free_slot() {
     let mut queue = waiting(&[("ra", "a"), ("a1", "a"), ("rb", "b")]);
     let update = |waiting, due| Work::Restore {
