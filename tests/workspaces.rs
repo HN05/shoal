@@ -5848,6 +5848,76 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
     assert!(!process_running(leftover));
 }
 
+/// The sweep finds a process left running from the worktree, which status
+/// lists and the agent's hook names once, with the command that stops it.
+#[test]
+fn leftovers_reach_status_and_the_agent_hook_once() {
+    let mut fixture = Fixture::new();
+    let workspace = fixture.add("leaky");
+    let path = fs::canonicalize(workspace["path"].as_str().unwrap()).unwrap();
+    let pid_file = fixture.root.path().join("leftover");
+    let mut leave = Command::new("sh");
+    // In the fixture's group, which a failed test stops.
+    fixture.commands.join(&mut leave);
+    let status = leave
+        .current_dir(&path)
+        .args(["-c", "sleep 300 >/dev/null 2>&1 & echo $! > \"$0\""])
+        .arg(&pid_file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let pid: u64 = fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+
+    // The daemon sweeps as it starts.
+    fixture.restart();
+    let leftovers = wait_for("the sweep to find the leftover", || {
+        let status = fixture.ok(&["status", "leaky"]);
+        let leftovers = status["leftovers"].as_array().unwrap().clone();
+        (!leftovers.is_empty()).then_some(leftovers)
+    });
+    assert_eq!(leftovers.len(), 1, "{leftovers:?}");
+    assert_eq!(leftovers[0]["pid"], pid);
+    assert_eq!(leftovers[0]["command"], "sleep 300");
+    assert_eq!(leftovers[0]["directory"], path.to_str().unwrap());
+    assert!(leftovers[0]["started_at"].as_u64().unwrap() > 0);
+    let text = fixture.run(&["--text", "status", "leaky"]);
+    assert!(
+        String::from_utf8_lossy(&text.stdout)
+            .contains(&format!("Leftovers:     1\n  {pid}  sleep 300\n")),
+        "{text:?}"
+    );
+
+    let hook = || {
+        let output = fixture.run(&[
+            "run",
+            "--workspace",
+            "leaky",
+            "--",
+            env!("CARGO_BIN_EXE_shoal"),
+            "messages",
+            "--hook",
+        ]);
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+    let notice = hook();
+    let expected = format!(
+        "1 process from this workspace is still running after its parent exited: \
+         sleep 300 (PID {pid}, "
+    );
+    assert!(notice.starts_with(&expected), "{notice}");
+    assert!(
+        notice.ends_with("). Stop it with shoal stop --leftovers.\n"),
+        "{notice}"
+    );
+    assert_eq!(hook(), "");
+    fixture.ok(&["stop", "--leftovers", "leaky"]);
+}
+
 #[test]
 #[ignore = "helper process tests start"]
 fn run_until_stopped() {

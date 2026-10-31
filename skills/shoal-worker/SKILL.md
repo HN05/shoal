@@ -249,6 +249,12 @@ with a `messages` array, and `shoal messages` shows new ones. Each
 message is shown once. Follow it. A message lists each file attached to it,
 such as a screenshot, as an `Attached file:` path you can read.
 
+After a tool call Shoal also names processes your commands left running after
+their parent exited, such as a failed test run's servers. Stop them with
+`shoal stop --leftovers` unless you still need them; `shoal stop --processes`
+stops every process of your workspace that Shoal does not track, never your
+agent or its shells.
+
 ## Questions
 
 When you need the user to decide something, ask in your chat rather than

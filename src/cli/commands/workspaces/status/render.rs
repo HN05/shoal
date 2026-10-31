@@ -103,6 +103,10 @@ fn render_activity(view: &StatusView, palette: Palette) {
         ),
         None => outln!("Usage:         none"),
     }
+    outln!("Leftovers:     {}", status.leftovers.len());
+    for leftover in &status.leftovers {
+        outln!("  {}  {}", leftover.pid, leftover.command);
+    }
 
     outln!("Sessions:      {}", view.sessions.len());
     for session in &view.sessions {

@@ -648,6 +648,11 @@ through the same operation after the executions, and `--processes` and
 `--leftovers` take them alone, so an agent stops what its own commands left
 behind without stopping itself. Automatic cleanup counts a leftover only the
 worktree ties to the workspace as use instead of stopping it.
+Leftovers are reported, not stopped on sight: the cleanup sweep finds every
+space's from one process listing and keeps them in memory, so no tool call
+waits for a scan, and the agent's hook names each new one once, since the agent
+knows whether its own test servers should keep running. They create no
+notification; `shoal status` lists them for the user.
 They use global defaults below repository config.
 The pre-setup hook runs in the daemon after ownership and execution checks,
 with a time limit, while preparation excludes lifecycle and permit changes;

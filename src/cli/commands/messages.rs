@@ -193,7 +193,7 @@ pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32
         }
     })?;
     crate::stdout::flush()?;
-    inbox.delivered(ctx, &messages).await?;
+    inbox.delivered(ctx, &messages, Vec::new()).await?;
     Ok(0)
 }
 
@@ -259,7 +259,7 @@ async fn deliver_to_hook(ctx: &Context, input: &str, deadline: tokio::time::Inst
     let (inbox, updates) = tokio::time::timeout_at(deadline, hook_updates(ctx))
         .await
         .context("the daemon did not answer in time")??;
-    if updates.updates.is_empty() && updates.messages.is_empty() {
+    if updates.updates.is_empty() && updates.messages.is_empty() && updates.leftovers.is_empty() {
         return Ok(());
     }
     outln!("{}", hook_output(input, &inbox.hook_context(&updates)));
@@ -477,24 +477,43 @@ impl Inbox {
 
     /// What an agent hook tells the agent about `updates`.
     fn hook_context(&self, updates: &Updates) -> String {
-        let heading = match self {
-            Self::Workspace(_) => "New Shoal messages for this workspace:",
-            Self::Chat(_) => "New Shoal messages for this chat:",
+        let (heading, space) = match self {
+            Self::Workspace(_) => ("New Shoal messages for this workspace:", "workspace"),
+            Self::Chat(_) => ("New Shoal messages for this chat:", "chat"),
         };
-        hook_context(heading, updates)
+        let mut context = hook_context(heading, updates);
+        if !updates.leftovers.is_empty() {
+            let notice = leftovers::notice(space, &updates.leftovers, crate::time::unix_seconds());
+            context = [context, notice]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+        context
     }
 
-    /// Shown once: the messages and updates a hook printed do not come back.
+    /// Shown once: the messages, updates and leftovers a hook printed do not
+    /// come back.
     async fn acknowledge(&self, ctx: &Context, updates: &Updates) -> Result<()> {
         match self {
             Self::Workspace(workspace) => acknowledge(ctx, workspace.clone(), updates).await,
-            Self::Chat(_) => self.delivered(ctx, &updates.messages).await,
+            Self::Chat(_) => {
+                self.delivered(ctx, &updates.messages, leftover_pids(updates))
+                    .await
+            }
         }
     }
 
-    /// Shown once: exactly the messages a caller printed do not come back.
-    async fn delivered(&self, ctx: &Context, messages: &[AgentMessage]) -> Result<()> {
-        if messages.is_empty() {
+    /// Shown once: exactly the messages and the leftovers `leftovers` names
+    /// that a caller printed do not come back.
+    async fn delivered(
+        &self,
+        ctx: &Context,
+        messages: &[AgentMessage],
+        leftovers: Vec<u32>,
+    ) -> Result<()> {
+        if messages.is_empty() && leftovers.is_empty() {
             return Ok(());
         }
         let ids = messages.iter().map(|message| message.id).collect();
@@ -507,7 +526,7 @@ impl Inbox {
             Self::Chat(chat) => ChatMethod::AcknowledgeChatMessages {
                 chat: chat.clone(),
                 ids,
-                leftovers: Vec::new(),
+                leftovers,
             }
             .into(),
         };
@@ -612,11 +631,21 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
                 .map(|update| update.delivery.clone())
                 .collect(),
             messages: updates.messages.iter().map(|message| message.id).collect(),
-            leftovers: Vec::new(),
+            leftovers: leftover_pids(updates),
         },
     )
     .await
 }
 
+/// The PIDs of the leftovers `updates` tells about.
+fn leftover_pids(updates: &Updates) -> Vec<u32> {
+    updates
+        .leftovers
+        .iter()
+        .map(|leftover| leftover.pid)
+        .collect()
+}
+
+mod leftovers;
 #[cfg(test)]
 mod tests;

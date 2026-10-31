@@ -459,7 +459,13 @@ untracked processes too, which nothing saves, and counts them as other
 processes. `shoal stop --processes [space...]` stops only the untracked
 processes of workspaces or chats, by default the current one, and
 `shoal stop --leftovers [space...]` only their leftovers; neither takes the
-workspaces below. A space's untracked processes carry its identity
+workspaces below. The daemon looks for every space's leftovers in each cleanup sweep, from one
+listing of the machine's processes, and keeps them in memory until the next
+one; the first sweep after a restart finds them again. `shoal status` shows a
+workspace's count and each one's PID and command, and with `--json` a
+`leftovers` list of `pid`, `command`, `directory` and `started_at` in Unix
+seconds. Its agent's hook names each new one once, and they create no
+notification. A space's untracked processes carry its identity
 (`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
 processes whose parent exited, so that launchd or init adopted them, or that
 descend from such a process, working in the worktree or the space's temporary
@@ -3891,9 +3897,11 @@ identical unread messages collapse.
 
 `shoal claude`, `shoal codex` and their automatic or `shoal resume` restores
 register `shoal messages --hook` for the `PostToolUse` and `UserPromptSubmit`
-events, so a working agent receives new messages, and the activity on its linked
-issues and PRs that the daemon has queued for the next watch, as additional
-context after its next tool call or prompt. Activity queued while cleanup or
+events, so a working agent receives new messages, the activity on its linked
+issues and PRs that the daemon has queued for the next watch, and the
+[leftovers](#untracked-processes) of its workspace or chat that it has not been
+told about, with their PIDs, commands, running times and `shoal stop
+--leftovers`, as additional context after its next tool call or prompt. Activity queued while cleanup or
 another item change runs comes with a later delivery, and a hook that has no
 answer from the daemon within 5 seconds, such as while it waits to restart with
 an update, prints nothing and leaves the delivery to the next one. A subagent's
