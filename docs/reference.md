@@ -3807,8 +3807,7 @@ them, with when they go, and deletes them with `rm`. A chat's files outlive
 the chat the same way: they stay for `cleanup.restore.retention_days` after it
 ends, listed under its last name. Disk space cleanup
 deletes them sooner when nothing else frees enough space. A space is named by
-the workspace's or chat's name or ID, and `--workspace` is another name for
-`--space`; run from a chat's agent outside any workspace, `shoal files`, `add`
+the workspace's or chat's name or ID; run from a chat's agent outside any workspace, `shoal files`, `add`
 and `rm` act on its chat.
 `--json` gives each as a record with `workspace` or `chat`, the name of what it
 is attached to, `source`, `path`, `bytes`, `title` when it has one, and

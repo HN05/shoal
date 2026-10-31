@@ -20170,14 +20170,7 @@ fn files_add_attaches_copies_without_a_message() {
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
-        .args([
-            "--json",
-            "files",
-            "add",
-            "notes.md",
-            "--workspace",
-            "receiver",
-        ])
+        .args(["--json", "files", "add", "notes.md", "--space", "receiver"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{output:?}");
@@ -20197,7 +20190,7 @@ fn files_add_attaches_copies_without_a_message() {
             "files",
             "add",
             "chart.html#Latency by region",
-            "--workspace",
+            "--space",
             "receiver",
         ])
         .output()
@@ -20211,16 +20204,16 @@ fn files_add_attaches_copies_without_a_message() {
         String::from_utf8_lossy(&listed.stdout).contains("chart.html  Latency by region"),
         "{listed:?}"
     );
-    let deleted = fixture.ok(&["files", "rm", "chart.html", "--workspace", "receiver"]);
+    let deleted = fixture.ok(&["files", "rm", "chart.html", "--space", "receiver"]);
     assert_eq!(deleted, titled);
     assert_eq!(fixture.ok(&["messages", "receiver"]), serde_json::json!([]));
     // A missing file fails before anything is picked or copied.
-    let missing = fixture.run(&["files", "add", "missing.md", "--workspace", "receiver"]);
+    let missing = fixture.run(&["files", "add", "missing.md", "--space", "receiver"]);
     assert!(!missing.status.success(), "{missing:?}");
 
     // An idle workspace's files go without asking; every workspace's only
     // once confirmed.
-    let deleted = fixture.ok(&["files", "rm", "notes.md", "--workspace", "receiver"]);
+    let deleted = fixture.ok(&["files", "rm", "notes.md", "--space", "receiver"]);
     assert_eq!(deleted, added);
     assert!(!copy.exists());
     let unconfirmed = fixture.run(&["files", "rm", "--all"]);
@@ -20348,7 +20341,7 @@ fn files_rm_refuses_unknown_names_before_asking() {
         .unwrap();
     wait_registered_execution(&fixture, "busy");
     // Without --yes a running workspace would ask first; the name fails sooner.
-    let output = fixture.run(&["--json", "files", "rm", "missing.md", "--workspace", "busy"]);
+    let output = fixture.run(&["--json", "files", "rm", "missing.md", "--space", "busy"]);
     command.kill().unwrap();
     command.wait().unwrap();
     assert!(!output.status.success(), "{output:?}");

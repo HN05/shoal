@@ -29,10 +29,10 @@ when behavior changes, distinguishing decisions from proposals.
   A change that adds or extends such a feature implements it for chats too,
   through the same code path, or its PR says why it cannot apply to them.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
-  code call what applies to both a space (`--space`, keeping `--workspace` as
-  an alias), and say workspace only for what needs a worktree. A command's flag
-  becomes `--space` in the change that lets it act on a chat. Command names stay
-  short: `shoal work` for workspaces, `shoal chat` for chats.
+  code call what applies to both a space (`--space`), and say workspace only
+  for what needs a worktree. A command's flag becomes `--space` in the change
+  that lets it act on a chat. Command names stay short: `shoal work` for
+  workspaces, `shoal chat` for chats.
 - Invoke external tools with argument arrays. Use Worktrunk for worktree
   operations and preserve Shoal's ownership records and cleanup policy.
 - Keep production Git command arguments in the `git` module; callers use named

@@ -77,7 +77,7 @@ pub enum FilesCommand {
         files: Vec<String>,
         /// Space, a workspace or chat, to use; defaults to the current chat
         /// or workspace, or a picker.
-        #[arg(long, alias = "workspace")]
+        #[arg(long)]
         space: Option<String>,
     },
     /// Delete the attached files of a space; asks first when an agent or
@@ -88,7 +88,7 @@ pub enum FilesCommand {
         files: Vec<String>,
         /// Space, a workspace or chat, to use; defaults to the current chat
         /// or workspace, or a picker.
-        #[arg(long, alias = "workspace")]
+        #[arg(long)]
         space: Option<String>,
         /// Delete the files of every workspace without a running agent or
         /// command, and of every ended chat.
