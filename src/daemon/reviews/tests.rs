@@ -542,34 +542,12 @@ async fn a_gate_waits_for_a_review_of_head_with_every_finding_resolved() {
     assert_eq!(marks[0].head, head);
 }
 
-#[tokio::test]
-async fn a_long_listing_spans_several_frames() {
+/// The frames the daemon answers `method` with, and the JSON their review
+/// pieces join into.
+async fn serve_pieces(manager: &Arc<Manager>, method: serde_json::Value) -> (usize, String) {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    let fixture = fixture(&[], "").await;
-    let manager = fixture.manager.clone();
-    let id = fixture.workspace.id.clone();
-    let body = "x".repeat(4096);
-    manager
-        .store
-        .run(move |db| {
-            for _ in 0..30 {
-                let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
-                store::start(db, review, "head", "base", 2)?;
-                let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
-                    serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
-                        "findings": [{"path": "a", "line": 1, "severity": "nit",
-                            "title": "Long", "body": body}]}),
-                )?;
-                store::finish(db, review, "absent", &output, 3)?;
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let request = serde_json::json!({
-        "protocol": crate::protocol::VERSION, "id": 5,
-        "method": {"list_reviews": {"workspace": fixture.workspace.id}}
-    });
+    let request =
+        serde_json::json!({"protocol": crate::protocol::VERSION, "id": 5, "method": method});
     let (client, stream) = tokio::net::UnixStream::pair().unwrap();
     let operation = manager.gates.owned_operation().await;
     let server = crate::daemon::tests::server(manager.clone());
@@ -580,25 +558,90 @@ async fn a_long_listing_spans_several_frames() {
         .write_all(format!("{request}\n").as_bytes())
         .await
         .unwrap();
-    let (mut frames, mut listed) = (0, 0);
+    let (mut frames, mut json) = (0, String::new());
     loop {
         let mut line = String::new();
         client.read_line(&mut line).await.unwrap();
         assert!(line.len() <= crate::protocol::MAX_FRAME, "{}", line.len());
         let response: serde_json::Value = serde_json::from_str(&line).unwrap();
         match response["type"].as_str() {
-            Some("reviews") => {
+            Some("review_pieces") => {
                 frames += 1;
-                listed += response["data"].as_array().unwrap().len();
+                for piece in response["data"].as_array().unwrap() {
+                    json.push_str(piece.as_str().unwrap());
+                }
             }
             Some("ok") => break,
             _ => panic!("{response}"),
         }
     }
-    assert!(frames > 1, "{frames}");
-    assert_eq!(listed, 30);
     drop(client);
     served.await.unwrap().unwrap();
+    (frames, json)
+}
+
+/// Finish review after review of the workspace, each with one finding
+/// whose body is `body`, returning their IDs.
+async fn finished_reviews(
+    manager: &Manager,
+    workspace: &str,
+    count: usize,
+    body: &str,
+) -> Vec<i64> {
+    let (id, body) = (workspace.to_owned(), body.to_owned());
+    manager
+        .store
+        .run(move |db| {
+            let mut ids = Vec::new();
+            for _ in 0..count {
+                let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
+                store::start(db, review, "head", "base", 2)?;
+                let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
+                    serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
+                        "findings": [{"path": "a", "line": 1, "severity": "nit",
+                            "title": "Long", "body": body}]}),
+                )?;
+                store::finish(db, review, "absent", &output, 3)?;
+                ids.push(review);
+            }
+            Ok(ids)
+        })
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_long_listing_spans_several_frames() {
+    let fixture = fixture(&[], "").await;
+    let manager = fixture.manager.clone();
+    finished_reviews(&manager, &fixture.workspace.id, 30, &"x".repeat(4096)).await;
+    let method = serde_json::json!({"list_reviews": {"workspace": fixture.workspace.id}});
+    let (frames, json) = serve_pieces(&manager, method).await;
+    assert!(frames > 1, "{frames}");
+    let listed: Vec<Review> = serde_json::from_str(&json).unwrap();
+    assert_eq!(listed.len(), 30);
+}
+
+#[tokio::test]
+async fn one_review_larger_than_a_frame_is_shown_whole() {
+    let fixture = fixture(&[], "").await;
+    let manager = fixture.manager.clone();
+    let id = finished_reviews(&manager, &fixture.workspace.id, 1, "Long.").await[0];
+    let finding = FindingId {
+        review: id,
+        number: 1,
+    };
+    for _ in 0..9 {
+        manager
+            .reply_to_finding(finding, "y".repeat(crate::validate::MAX_AGENT_MESSAGE_LEN))
+            .await
+            .unwrap();
+    }
+    let method = serde_json::json!({"show_review": {"id": id}});
+    let (frames, json) = serve_pieces(&manager, method).await;
+    assert!(frames > 1, "{frames}");
+    let review: Review = serde_json::from_str(&json).unwrap();
+    assert_eq!(review.findings[0].replies.len(), 9);
 }
 
 #[tokio::test]

@@ -24,8 +24,8 @@ pub(super) async fn cancel(
         Some(_) => None,
         None => Some(ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?),
     };
-    let review: Box<Review> =
-        client::request(&ctx.paths, ReviewMethod::CancelReview { workspace, id }).await?;
+    let review: Review =
+        client::reviews(&ctx.paths, ReviewMethod::CancelReview { workspace, id }).await?;
     ctx.emit(&format!("Review {} cancelled.", review.id), &review)?;
     Ok(0)
 }
@@ -43,7 +43,7 @@ pub(super) async fn reply(
         }
         (None, None) => anyhow::bail!("give the reply as text or with --body-file"),
     };
-    let review: Box<Review> = client::request(
+    let review: Review = client::reviews(
         &ctx.paths,
         ReviewMethod::ReplyToFinding {
             workspace: None,
@@ -66,7 +66,7 @@ pub(super) async fn resolve(
         Some(outcome) => format!("Resolved finding {finding}: {}.", outcome.describe()),
         None => format!("Reopened finding {finding}."),
     };
-    let review: Box<Review> = client::request(
+    let review: Review = client::reviews(
         &ctx.paths,
         ReviewMethod::ResolveFinding {
             workspace: None,
