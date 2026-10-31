@@ -1,7 +1,8 @@
 //! Files fetched from a forge's web host, such as an image in a description:
 //! through a CLI's `api` command, which owns its login, or through curl with
 //! a token passed on stdin. Both follow redirects to the storage that serves
-//! the file and send the login only to the host it is for.
+//! the file; curl and gh send the login only to the host it is for, while
+//! glab keeps its token header on a redirect.
 use anyhow::{Context, Result, bail};
 use tokio::process::Command;
 
@@ -19,16 +20,18 @@ pub(crate) const MAX_DOWNLOAD_BYTES: usize = 100 * 1024 * 1024;
 /// Room for the response heads printed with the file.
 const HEAD_BYTES: usize = 64 * 1024;
 
-/// GET `url` through `program api`, as `gh api` takes a full URL.
+/// GET the file `target` names through `program api`, such as a full URL
+/// for `gh api` or `--hostname` and an endpoint for `glab api`.
 pub(crate) async fn through_cli(
     program: &'static str,
     account: &Account,
-    url: &str,
+    target: &[&str],
 ) -> Result<Fetched> {
     let mut cli = Command::new(program);
     cli.env("NO_COLOR", "1")
         .env("GH_PROMPT_DISABLED", "1")
-        .args(["api", "--include", url]);
+        .args(["api", "--include"])
+        .args(target);
     account.apply(&mut cli);
     let output = capture(cli, Vec::new())
         .await

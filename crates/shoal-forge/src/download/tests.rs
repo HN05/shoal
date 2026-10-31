@@ -17,8 +17,13 @@ impl Launch for Bin {
 
 /// An account whose gh prints `response` after logging its arguments.
 fn gh_printing(dir: &std::path::Path, response: &str) -> Account {
+    cli_printing(dir, "gh", response)
+}
+
+/// An account whose `program` prints `response` after logging its arguments.
+fn cli_printing(dir: &std::path::Path, program: &str, response: &str) -> Account {
     install_test_script(
-        &dir.join("gh"),
+        &dir.join(program),
         &format!(
             "#!/bin/sh\necho \"$*\" > '{log}'\nprintf '{response}'\n",
             log = dir.join("log").display()
@@ -107,12 +112,32 @@ async fn a_sign_in_page_or_failure_is_not_a_download() {
 }
 
 #[tokio::test]
+async fn gitlab_reads_an_upload_from_its_api_route() {
+    let dir = tempfile::tempdir().unwrap();
+    let account = cli_printing(
+        dir.path(),
+        "glab",
+        "HTTP/2.0 200 OK\\r\\nContent-Type: image/png\\r\\n\\r\\nPNG",
+    );
+    let repo = ForgeRepo::parse("https://gitlab.example.com/team/project").unwrap();
+    let url = "https://gitlab.example.com/-/project/42/uploads/0123abcd/shot.png";
+    let download = repo.download(&account, url).await.unwrap();
+    assert_eq!(download.content_type.as_deref(), Some("image/png"));
+    assert_eq!(download.bytes, b"PNG");
+    let log = std::fs::read_to_string(dir.path().join("log")).unwrap();
+    assert_eq!(
+        log.trim(),
+        "api --include --hostname gitlab.example.com projects/42/uploads/0123abcd/shot.png"
+    );
+}
+
+#[tokio::test]
 async fn forges_without_downloads_refuse_before_sending() {
-    let repo = ForgeRepo::parse("https://gitlab.com/team/project").unwrap();
+    let repo = ForgeRepo::parse("https://bitbucket.org/team/project").unwrap();
     let error = repo
         .download(
             &Account::default(),
-            "https://gitlab.com/team/project/uploads/a/b.png",
+            "https://bitbucket.org/repo/abc/images/1-shot.png",
         )
         .await
         .unwrap_err();

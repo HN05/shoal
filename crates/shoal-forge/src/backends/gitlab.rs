@@ -39,8 +39,8 @@ use crate::{
     },
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
-        programs,
-        response::Response,
+        download, programs,
+        response::{Fetched, Response},
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
@@ -48,6 +48,7 @@ use crate::{
 pub(crate) mod glab;
 mod reactions;
 mod review;
+mod uploads;
 
 use super::{Backend, LoginHint, rest};
 
@@ -93,7 +94,6 @@ impl Backend for GitLab {
             )),
             // GitLab holds no pipeline for approval.
             Capability::ApproveRuns => Support::Unsupported(None),
-            Capability::Downloads => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs
@@ -108,6 +108,7 @@ impl Backend for GitLab {
             | Capability::PrMilestones
             | Capability::DraftPrs
             | Capability::Attachments
+            | Capability::Downloads
             | Capability::MergeCommit
             | Capability::SquashMerge
             | Capability::AutoMerge
@@ -907,6 +908,14 @@ impl Backend for GitLab {
             bail!("not a GitLab job");
         };
         Ok(format!("jobs/{job}/trace"))
+    }
+
+    /// GitLab's web routes for uploads take no access token, so the file
+    /// is read from the API route that serves the same upload.
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        let endpoint = uploads::api_route(url)?;
+        let target = ["--hostname", repo.host.as_str(), endpoint.as_str()];
+        download::through_cli(programs::GLAB, account, &target).await
     }
 
     async fn check_uploads(

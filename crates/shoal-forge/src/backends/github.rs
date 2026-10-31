@@ -863,13 +863,13 @@ impl Backend for GitHub {
         Ok(false)
     }
 
-    /// GitHub uploads name the repository by its numeric ID.
     /// gh sends its login only to the host a URL names, so the storage an
     /// attachment redirects to gets none.
     async fn download(&self, _repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
-        download::through_cli(programs::GH, account, url).await
+        download::through_cli(programs::GH, account, &[url]).await
     }
 
+    /// GitHub uploads name the repository by its numeric ID.
     async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
         let repository = repo
             .send(account, &Request::get(format!("repos/{}", repo.path)))

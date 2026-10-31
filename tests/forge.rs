@@ -5451,3 +5451,44 @@ fn downloads_read_files_on_the_forge_with_its_login() {
     assert!(stderr.contains("not on the repository's forge"), "{stderr}");
     assert!(fixture.requests().is_empty());
 }
+
+#[test]
+fn gitlab_downloads_read_an_upload_from_its_api_route() {
+    // The scripted gh answers as glab on a GitLab remote too.
+    let fixture = Fixture::new(Forge::GitHub, "[agent.forge_clis]\nglab = '~/agent-glab'\n");
+    let root = fixture.root.path();
+    std::os::unix::fs::symlink(root.join("forge.py"), root.join("bin/glab")).unwrap();
+    git(
+        &fixture.repo,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "git@gitlab.com:team/project.git",
+        ],
+    );
+    let wrapper = "#!/bin/sh\nAGENT=agent exec python3 \"$HOME/forge.py\" \"$@\"\n";
+    support::install_test_script(root.join("agent-glab"), wrapper);
+    let endpoint = "projects/team%2Fproject/uploads/0123abcd/shot.png";
+    fixture.respond(json!({
+        format!("GET {endpoint}"): {"body": "PNG", "headers": {"Content-Type": "image/png"}},
+    }));
+    let url = "https://gitlab.com/team/project/uploads/0123abcd/shot.png";
+    let saved = root.join("shot.png");
+    let saved_arg = saved.to_str().unwrap();
+    let written = scoped(&fixture, &["forge", "download", url, "-o", saved_arg]);
+    assert_eq!(
+        written,
+        json!({"path": saved, "bytes": 3, "content_type": "image/png"})
+    );
+    assert_eq!(fs::read(&saved).unwrap(), b"PNG");
+    let requests: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .map(|request| (request[0].clone(), request[2].clone()))
+        .collect();
+    assert_eq!(
+        requests,
+        [(json!(format!("GET {endpoint}")), json!("agent"))]
+    );
+}

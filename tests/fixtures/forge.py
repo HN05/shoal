@@ -85,8 +85,9 @@ def gh(args):
         if "--include" in args:
             if status == 200:
                 sent = {"ETag": etag(answer), **sent}
+            sent = {"Content-Type": "application/json", **sent}
             head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
-            print(f"HTTP/2.0 {status} Scripted\r\nContent-Type: application/json\r\n{head}\r")
+            print(f"HTTP/2.0 {status} Scripted\r\n{head}\r")
         if isinstance(answer, str):
             sys.stdout.write(answer)
         elif answer is not None:

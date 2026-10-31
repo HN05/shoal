@@ -3227,14 +3227,22 @@ shoal forge download "$url" -o - > shot.png
 repository `shoal forge api` would use, such as one in a PR's description, with
 the same logins and rate limits, so files of a private repository load; `--repo` names another
 repository whose forge it is on. It refuses a URL on any other host before
-sending anything, so the login reaches only that forge; redirects to the storage that serves the file get no login. `--output`
+sending anything, so the login reaches only that forge; on GitHub, Forgejo and
+Gitea, redirects to the storage that serves the file get no login. `--output`
 names the file to write, or `-` for standard output, and `--json` returns the
 written `path`, its size in `bytes` and the `content_type` the forge sent. A
 response that is a web page, such as a sign-in page the login cannot pass,
 fails instead of being saved, as does a file over 100 MiB. GitHub downloads go
 through `gh api` and Forgejo and Gitea through fj's token, or anonymously
-without one; a tea login cannot download. The `downloads` capability says
-whether the forge has them.
+without one; a tea login cannot download. GitLab's web routes take no access
+token, so a file uploaded to a project or group, at
+`/-/project/<id>/uploads/<secret>/<file>`, `/<project path>/uploads/…`,
+`/-/group/<id>/uploads/…` or `/groups/<group path>/-/uploads/…`, is read
+through `glab api` from the API route for the same upload, which GitLab 17.4
+added; other GitLab URLs are refused. Where GitLab redirects that route to
+object storage, glab sends a personal access token there too. Bitbucket serves
+its files only to a signed-in browser, so it has no downloads. The `downloads`
+capability says whether the forge has them.
 
 ### Linked items and cleanup
 

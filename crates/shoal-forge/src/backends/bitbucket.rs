@@ -93,8 +93,10 @@ impl Backend for Bitbucket {
             | Capability::CancelJobs
             | Capability::ReadJobLogs
             | Capability::ReadRuns
-            | Capability::ApproveRuns
-            | Capability::Downloads => Support::Unsupported(None),
+            | Capability::ApproveRuns => Support::Unsupported(None),
+            Capability::Downloads => Support::Unsupported(Some(
+                "Bitbucket serves images and attached files only to a signed-in browser",
+            )),
             Capability::Reactions => Support::Unsupported(Some("Bitbucket has no reactions")),
             Capability::AutoMerge => {
                 Support::Unsupported(Some("Bitbucket's API cannot merge a pull request later"))

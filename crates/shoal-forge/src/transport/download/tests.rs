@@ -29,7 +29,7 @@ async fn a_cli_that_fails_after_a_successful_head_cut_the_file_off() {
         },
         &Default::default(),
     );
-    let error = through_cli(programs::GH, &account, "https://github.com/a")
+    let error = through_cli(programs::GH, &account, &["https://github.com/a"])
         .await
         .unwrap_err();
     assert_eq!(error.to_string(), "gh failed: stream error");
