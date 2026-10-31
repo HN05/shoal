@@ -333,11 +333,12 @@ impl Manager {
         Ok((request, message))
     }
 
-    /// What the opened item leaves out of the repository's conventions, as
-    /// `issue open` and `pr open` warn once the item exists. The labels the
-    /// conventions require were checked when the item was proposed; refusing
-    /// now would leave the user no way to add them. A failed lookup leaves
-    /// its warnings out.
+    /// What the opened item leaves out of the repository's conventions, and
+    /// a PR's closing reference to the linked issue, as `issue open` and
+    /// `pr open` warn once the item exists. The labels the conventions
+    /// require were checked when the item was proposed; refusing now would
+    /// leave the user no way to add them. A failed lookup leaves its
+    /// warnings out.
     async fn convention_warnings(
         &self,
         request: &ApprovalRequest,
@@ -364,7 +365,17 @@ impl Manager {
             _ => None,
         };
         let required = super::actions::required_labels(&settings, item.kind);
-        conventions::warnings(&forge, &account, &path, item, body, required).await
+        let mut warnings =
+            conventions::warnings(&forge, &account, &path, item, body, required).await;
+        if let (Specification::Pull(pull), Some(workspace)) = (&request.specification, workspace) {
+            warnings.extend(super::actions::closing_warning(
+                workspace,
+                &forge,
+                item,
+                &pull.pull.body,
+            ));
+        }
+        warnings
     }
 
     /// The settings a proposal opens under and the checkout whose templates

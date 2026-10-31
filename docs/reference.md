@@ -3100,8 +3100,12 @@ issues the Markdown files of the first `ISSUE_TEMPLATE` directory or
 `issue_template.md` there, or GitLab's `.gitlab/issue_templates`, where a
 description that has every heading of any template passes. Names match without
 regard to case, front matter is skipped, and a template without headings asks for
-nothing. A warning names the `edit` command that fixes it, and one whose lookup
-fails is left out.
+nothing. `pr open` and `ready` also warn when a PR's description does not close
+the workspace's linked issue, so merging the PR would leave it open: closing
+takes `close`, `fix` or `resolve` in any tense, then an optional colon, before
+`#<number>` or the issue's URL. A PR that leaves part of the issue for later can
+ignore that warning. A warning names the `edit` command that fixes it, and one
+whose lookup fails is left out.
 
 The daemon sends each change through the forge's REST API as the workspace's
 [agent account](#agent-accounts), except `merge`, which uses your login and is

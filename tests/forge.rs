@@ -2435,6 +2435,18 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             (&found["url"], &found["created"]),
             (&json!(url), &json!(false))
         );
+        // The found PR's description does not close the linked issue.
+        let leaves_open = |result: &Value| {
+            result["warnings"].as_array().is_some_and(|warnings| {
+                warnings.iter().any(|warning| {
+                    warning
+                        .as_str()
+                        .is_some_and(|text| text.contains("does not close issue #34"))
+                })
+            })
+        };
+        assert!(!leaves_open(&opened), "{opened}");
+        assert_eq!(leaves_open(&found), forge == Forge::GitHub, "{found}");
         assert!(
             !fixture
                 .requests()

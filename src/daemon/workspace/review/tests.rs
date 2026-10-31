@@ -5,6 +5,7 @@ use crate::{
         scope::{self, Caller},
     },
     forge::{ForgeRepo, test_support::Server},
+    model::Relation,
     protocol::AssignmentMethod,
     test_support::{commit, configure, git, install_test_script, manager, repository},
 };
@@ -559,4 +560,45 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
         .unwrap();
     assert!(draft());
     assert_eq!(marks().await, 0);
+}
+
+#[tokio::test]
+async fn ready_warns_when_a_pr_leaves_the_linked_issue_open() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    let github = FakeGitHub::start(&manager).await;
+    git(
+        &workspace.path,
+        &["remote", "add", "origin", &github.remote()],
+    );
+    let forge = ForgeRepo::parse(&github.remote()).unwrap();
+    let (_, pr) = forge.pull("12").unwrap();
+    let (_, issue) = forge.issue("7").unwrap();
+    for (kind, url) in [(LinkKind::Issue, &issue), (LinkKind::Pr, &pr)] {
+        manager
+            .link_item(&workspace.id, kind, url, Relation::Assigned, None, false)
+            .await
+            .unwrap();
+    }
+
+    // The fake PR's description has no closing reference.
+    let marks = manager
+        .mark_ready(&workspace.id, select(Some(LinkKind::Pr), Some("12")))
+        .await
+        .unwrap();
+    assert!(
+        marks[0].warnings.iter().any(|warning| warning.starts_with(
+            "the description of PR #12 does not close issue #7"
+        )),
+        "{:?}",
+        marks[0].warnings
+    );
 }

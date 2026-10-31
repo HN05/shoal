@@ -16,7 +16,7 @@ use crate::{
         items::{
             action::{Action, Edit, Sent},
             create::{NewPull, PullOptions},
-            item::{Item, ItemState, Opened},
+            item::{Current, Item, ItemState, Opened},
             link::ItemKind,
         },
     },
@@ -147,7 +147,8 @@ impl Manager {
 
     /// Add to each mark what its item leaves out of the repository's
     /// conventions, read as the workspace's agent account. Its description
-    /// was checked when Shoal opened it, so only its labels are.
+    /// was checked against the templates when Shoal opened it, so only its
+    /// labels are, and a PR's closing reference to the linked issue.
     pub(crate) async fn check_conventions(
         &self,
         workspace: &Workspace,
@@ -158,13 +159,18 @@ impl Manager {
             return;
         };
         for mark in marks {
-            let Some(item) = marked_item(&forge, &account, mark).await else {
+            let Some(current) = marked_item(&forge, &account, mark).await else {
                 continue;
             };
+            let item = &current.item;
             let required = required_labels(settings, item.kind);
             mark.warnings =
-                conventions::warnings(&forge, &account, &workspace.path, &item, None, required)
+                conventions::warnings(&forge, &account, &workspace.path, item, None, required)
                     .await;
+            if item.kind == ItemKind::Pr {
+                mark.warnings
+                    .extend(closing_warning(workspace, &forge, item, &current.body));
+            }
         }
     }
 
@@ -320,10 +326,12 @@ impl Manager {
         let existing = forge
             .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
             .await?;
-        let (item, body, unfinished) = match existing {
+        // A found PR's description is the agent's own, so only its closing
+        // reference is checked.
+        let (item, body, unfinished, description) = match existing {
             Some(number) => {
-                let item = forge.read(&account, ItemKind::Pr, number).await?.item;
-                (item, None, None)
+                let current = forge.read(&account, ItemKind::Pr, number).await?;
+                (current.item, None, None, current.body)
             }
             None => {
                 conventions::require(&forge, &account, ItemKind::Pr, required, &options.labels)
@@ -340,7 +348,8 @@ impl Manager {
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
                 let created = forge.create_pull(&account, &pull).await?;
-                (created.item, Some(pull.body), created.unfinished)
+                let sent = Some(pull.body.clone());
+                (created.item, sent, created.unfinished, pull.body)
             }
         };
         let created = body.is_some();
@@ -369,6 +378,7 @@ impl Manager {
             required,
         )
         .await;
+        let closing = closing_warning(&workspace, &forge, &item, &description);
         Ok(OpenOutcome::opened(Opened {
             item,
             created,
@@ -377,6 +387,7 @@ impl Manager {
                 .into_iter()
                 .chain(unfinished)
                 .chain(checked)
+                .chain(closing)
                 .collect(),
         }))
     }
@@ -461,14 +472,27 @@ fn record_opened(
 
 /// The item a mark names as the forge reports it; none for a workspace mark
 /// or a failed read.
-async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Item> {
+async fn marked_item(forge: &ForgeRepo, account: &Account, mark: &ReviewMark) -> Option<Current> {
     let (kind, url) = (mark.kind?, mark.url.as_deref()?);
     let (number, _) = match kind {
         ItemKind::Issue => forge.issue(url),
         ItemKind::Pr => forge.pull(url),
     }
     .ok()?;
-    Some(forge.read(account, kind, number).await.ok()?.item)
+    forge.read(account, kind, number).await.ok()
+}
+
+/// The warning for a PR whose description `body` leaves the workspace's
+/// linked issue open when the PR merges; none without a linked issue in the
+/// PR's repository.
+pub(super) fn closing_warning(
+    workspace: &Workspace,
+    forge: &ForgeRepo,
+    item: &Item,
+    body: &str,
+) -> Option<String> {
+    let (number, url) = forge.issue(workspace.links.issue.as_deref()?).ok()?;
+    conventions::closing::warning(item, body, number, &url)
 }
 
 /// The labels `[pr]` or `[issue]` requires of an item of `kind`.

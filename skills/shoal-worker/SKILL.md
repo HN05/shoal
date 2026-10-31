@@ -35,7 +35,8 @@ Open your PR with `shoal pr open`: it pushes your branch, then links the
 branch's open PR or opens one (`--title`, `--body-file`, `--label`, `--draft`).
 A linked issue supplies the default title and, when no body is supplied,
 `Closes #<number>`. A supplied body is used verbatim; include a closing reference
-yourself when the PR completes the issue. Before opening an issue or PR, read the
+for each issue the PR completes, and `pr open` and `ready` warn when a PR does
+not close the linked issue. Before opening an issue or PR, read the
 repository's contribution rules and forge template for what the description
 needs, and choose labels from `shoal repo labels` (`--repo` for another
 repository), which lists each with its meaning.
