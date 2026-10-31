@@ -60,6 +60,20 @@ pub struct Stack {
 
 impl Stack {
     pub fn new(global: &Config, repository: &ConfigLayers) -> Self {
+        Self::over(
+            global.repository_layer(),
+            global.template_files.clone(),
+            repository,
+        )
+    }
+
+    /// The stack of `global`, the global config's repository layer with its
+    /// templates read from `global_files`, under `repository`'s layers.
+    pub fn over(
+        global: RepoConfig,
+        global_files: templates::Files,
+        repository: &ConfigLayers,
+    ) -> Self {
         let mut warnings = Vec::new();
         let mut normalize = |config: RepoConfig, layer: Layer| {
             warnings.extend(
@@ -72,12 +86,12 @@ impl Stack {
         };
         let layers = [
             normalize(RepoConfig::built_in(), Layer::BuiltInDefault),
-            normalize(global.repository_layer(), Layer::GlobalConfig),
+            normalize(global, Layer::GlobalConfig),
             normalize(repository.worktree_file.clone(), Layer::WorktreeFile),
             normalize(repository.local_config.clone(), Layer::LocalConfig),
         ];
         let template_files = [
-            (global.template_files.clone(), Layer::GlobalConfig),
+            (global_files, Layer::GlobalConfig),
             (
                 repository.worktree_template_files.clone(),
                 Layer::WorktreeFile,
