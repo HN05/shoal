@@ -20519,6 +20519,42 @@ fn agents_report_their_turn_state_from_an_unreadable_directory() {
 }
 
 #[test]
+fn a_failed_turn_state_report_alerts_the_user() {
+    let fixture = Fixture::new();
+    fixture.add("reporter");
+    fixture.add("other");
+    for report in [
+        &["internal", "agent-state", "waiting", "--workspace", "other"][..],
+        &[
+            "internal",
+            "turn-failed",
+            "--integration",
+            "claude",
+            "--workspace",
+            "other",
+        ],
+    ] {
+        let output = scoped_command(&fixture, "reporter", report);
+        assert!(!output.status.success(), "{output:?}");
+    }
+    let alerts = fixture.ok(&["alerts"]);
+    let failures: Vec<&Value> = alerts
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|alert| alert["kind"] == "state_report_failed")
+        .collect();
+    // Both reports fail the same way, which shows once until read.
+    assert_eq!(failures.len(), 1, "{alerts}");
+    assert_eq!(failures[0]["workspace"], "reporter", "{alerts}");
+    assert_eq!(
+        failures[0]["message"],
+        "agent state report failed; scope_denied: workspace processes report agent state only for their own workspace",
+        "{alerts}"
+    );
+}
+
+#[test]
 fn agent_state_reports_from_an_input_that_never_closes() {
     let fixture = Fixture::new();
     fixture.add("reporter");

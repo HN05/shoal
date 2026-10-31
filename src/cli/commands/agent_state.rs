@@ -29,6 +29,17 @@ pub(super) async fn run(
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
+    let reported = report_state(ctx, workspace, state, ends_turn).await;
+    tell_failure(ctx, &reported).await;
+    reported
+}
+
+async fn report_state(
+    ctx: &Context,
+    workspace: Option<String>,
+    state: AgentState,
+    ends_turn: Option<IntegrationKind>,
+) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let event = hook_event();
     let turn_end = ends_turn.map(|integration| TurnEnd {
@@ -64,6 +75,16 @@ pub(super) async fn turn_failed(
     workspace: Option<String>,
     integration: IntegrationKind,
 ) -> Result<i32> {
+    let reported = report_turn_failure(ctx, workspace, integration).await;
+    tell_failure(ctx, &reported).await;
+    reported
+}
+
+async fn report_turn_failure(
+    ctx: &Context,
+    workspace: Option<String>,
+    integration: IntegrationKind,
+) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
     let event = hook_event().unwrap_or_default();
     let failure =
@@ -80,6 +101,26 @@ pub(super) async fn turn_failed(
     )
     .await?;
     emit(ctx, status)
+}
+
+/// Tell the user that a report from a workspace process failed, since the
+/// hooks that report discard the error and the agent's state would stay as
+/// last reported without a word. The scope names the workspace, which the
+/// failure may have kept the report from finding. A daemon the report could
+/// not reach cannot record this either, so its failure is ignored.
+async fn tell_failure(ctx: &Context, reported: &Result<i32>) {
+    let Err(error) = reported else { return };
+    let Some(workspace) = crate::env::is_scoped()
+        .then(|| std::env::var(crate::env::WORKSPACE_ID).ok())
+        .flatten()
+    else {
+        return;
+    };
+    let failure = AgentMethod::ReportStateFailure {
+        workspace,
+        error: format!("{error:#}"),
+    };
+    let _ = request::<()>(&ctx.paths, failure).await;
 }
 
 /// What the hook of an agent with `integration` reports when its turn

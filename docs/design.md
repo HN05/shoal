@@ -1602,7 +1602,8 @@ completion `finished`, which only stopped work and an agent needing input
 outrank. A row's marker groups statuses by what they ask of the user, in a
 shape that reads without color. Like
 ready marks it is a status signal for integrations that never notifies,
-completes, or affects idle cleanup; overload protection reads it only to stop
+completes, or affects idle cleanup, though a failed report from a workspace
+process alerts the user with the error, which the hooks discard; overload protection reads it only to stop
 idle agents first. A workspace keeps the
 latest report; a report from a tracked execution shows only while that
 execution runs and ends with its record, while one from outside lasts until

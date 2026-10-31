@@ -3510,9 +3510,11 @@ agent whose process died, such as with a reboot, shows none, and the state ends
 with the execution's record; one reported from outside lasts until the next
 report or removal. Each change, and each end, is
 a [workspace event](#workspace-events); repeating the current state is not a
-change. Agent state never notifies, records completion, or affects cleanup.
-Scoped callers report only for their own workspace; `--workspace` selects
-another one for unscoped callers.
+change. Agent state never notifies, records completion, or affects cleanup;
+a report from a workspace process that fails, which the hooks would discard,
+leaves the state as last reported and records an [alert](#notifications) with the error.
+Scoped callers report only for their own workspace, which their scope names
+wherever they run; `--workspace` selects another one for unscoped callers.
 
 ### Automatic cleanup
 
@@ -3671,7 +3673,7 @@ The daemon records what happens while you are not looking: a resource or
 simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `shoal stop` when it left processes
-behind), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
+behind), an agent's failed [turn-state report](#agent-state), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
 idle cleanup, automatic cleanup that starts failing, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
