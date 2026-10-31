@@ -249,7 +249,9 @@ leaves it out.
 `.forgejo/workflows/ci.yml` runs on pull requests and pushes to `main`. Its
 `rust` job (the required check) runs `cargo fmt --check`, clippy, `cargo test`
 and the Python release-script tests; a PR whose only `area/` label is
-`area/docs` skips them. Jobs use the image built from
+`area/docs` skips them. A draft PR runs no checks; taking it out of draft
+(removing the `WIP:` title prefix, as `shoal ready` does) starts one run.
+Jobs use the image built from
 `.forgejo/ci-image/Containerfile` (`git.henriknordvik.com/hn05/ci-shoal:<rust
 version>`), so a run installs nothing: new CI tooling goes into the
 Containerfile, and only the owner rebuilds it with `.forgejo/ci-image/build.sh`
