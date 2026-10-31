@@ -24994,8 +24994,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     let args = chat_args(&fixture);
     assert_eq!(args[0], "--append-system-prompt");
     assert!(args[1].contains(checkout.to_str().unwrap()), "{}", args[1]);
-    // The chat's hooks deliver its messages and wake it, but report no
-    // workspace turn state.
+    // The chat's hooks deliver its messages and wake it, and report only
+    // the session the agent starts, not a turn state.
     assert_eq!(args[2], "--settings");
     let hooks: Value = serde_json::from_str(&args[3]).unwrap();
     let command = |event: &str, group: usize| {
@@ -25006,7 +25006,8 @@ fn chat_runs_the_agent_in_the_checkout_in_a_labelled_zmx_session() {
     };
     assert!(command("PostToolUse", 0).ends_with(" messages --hook"));
     assert!(command("Stop", 0).contains(" internal wake "));
-    assert!(!args[3].contains("agent-state"), "{}", args[3]);
+    assert!(command("SessionStart", 0).contains(" internal agent-state idle "));
+    assert_eq!(args[3].matches("agent-state").count(), 1, "{}", args[3]);
     assert_eq!(after_temp_dirs(&args[4..]), ["--model", "fast"]);
     // The checkout is trusted as workspace launches trust theirs.
     let claude: Value =
@@ -25403,21 +25404,25 @@ fn chat_opens_a_focused_herdr_tab_at_the_checkout() {
         "{}",
         args[1]
     );
-    let hooks = args[2..6].chunks(2).map(|flag| {
+    let hooks = args[2..8].chunks(2).map(|flag| {
         assert_eq!(flag[0], "-c");
         flag[1].split_once('=').unwrap().0
     });
     assert_eq!(
         hooks.collect::<Vec<_>>(),
-        ["hooks.PostToolUse", "hooks.UserPromptSubmit"]
+        [
+            "hooks.PostToolUse",
+            "hooks.SessionStart",
+            "hooks.UserPromptSubmit"
+        ]
     );
     // Its sandbox lets it reach the daemon.
     assert_eq!(
-        args[6..8],
+        args[8..10],
         ["-c", "sandbox_workspace_write.network_access=true"]
     );
     // Codex's default launcher appends its own options after forwarded ones.
-    assert_eq!(after_temp_dirs(&args[8..])[0], "--search");
+    assert_eq!(after_temp_dirs(&args[10..])[0], "--search");
     let codex = fs::read_to_string(fixture.root.path().join(".codex/config.toml")).unwrap();
     assert!(
         codex.contains(checkout.to_str().unwrap()) && codex.contains("trusted"),

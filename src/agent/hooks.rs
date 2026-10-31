@@ -51,6 +51,15 @@ pub fn subagent(shoal: &str) -> (&'static str, Value) {
     ("SubagentStart", group)
 }
 
+/// The group that reports the session an agent starts, resumes or clears,
+/// which waits for its first turn; a chat's agent reports only this.
+pub fn session_start(shoal: &str) -> (&'static str, Value) {
+    (
+        "SessionStart",
+        state(shoal, Some(SESSION_START), AgentState::Idle),
+    )
+}
+
 /// The group that reports `state`, for events `matcher` selects.
 pub fn state(shoal: &str, matcher: Option<&str>, state: AgentState) -> Value {
     let mut group = json!({ "hooks": [{

@@ -55,10 +55,16 @@ fn config_overrides_deliver_messages_and_report_state() {
     assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
     let start = start["hooks"][0]["command"].as_str().unwrap();
     assert!(start.contains(" agent-state idle "), "{start}");
+    // A chat's agent reports only its session as it starts.
     let chat = Codex.chat_hook_args().unwrap();
+    let reports: Vec<_> = chat
+        .iter()
+        .map(|arg| arg.to_str().unwrap())
+        .filter(|arg| arg.contains("agent-state"))
+        .collect();
     assert!(
-        chat.iter()
-            .all(|arg| !arg.to_str().unwrap().contains("agent-state"))
+        matches!(reports.as_slice(), [start] if start.starts_with("hooks.SessionStart=")),
+        "{reports:?}"
     );
     assert!(
         chat.iter()

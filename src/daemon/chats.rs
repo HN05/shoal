@@ -69,6 +69,7 @@ impl Manager {
             started_at,
             origin,
             tmp_dir: None,
+            session: None,
         };
         let birth = process.birth.clone();
         let chat = self
@@ -142,6 +143,20 @@ impl Manager {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
         let chat = chat.to_owned();
         self.store.run(move |db| move_to(db, &chat, &process)).await
+    }
+
+    /// Record `session` as the agent session the running chat `id` continues.
+    pub(crate) async fn record_chat_session(&self, id: &str, session: String) -> Result<()> {
+        let id = id.to_owned();
+        self.store
+            .run(move |db| {
+                db.execute(
+                    "UPDATE chats SET session=?2 WHERE id=?1",
+                    params![id, session],
+                )?;
+                Ok(())
+            })
+            .await
     }
 
     /// Running chats in start order, after ending those whose process exited.
@@ -373,7 +388,7 @@ fn running(db: &Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
             "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
-                    chats.started_at,chats.origin,repositories.workspaces_dir
+                    chats.started_at,chats.origin,repositories.workspaces_dir,chats.session
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
              ORDER BY chats.started_at, chats.rowid",
         )?
@@ -392,6 +407,7 @@ fn running(db: &Connection) -> Result<Vec<Chat>> {
                 started_at: row.get(5)?,
                 origin: store::json_column(row, "origin")?,
                 tmp_dir,
+                session: row.get(8)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)

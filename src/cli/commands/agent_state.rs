@@ -1,5 +1,5 @@
 //! `shoal internal agent-state` and `turn-failed`: the turn state, and the
-//! failure that ended a turn, that an agent's hooks report for its workspace.
+//! failure that ended a turn, that an agent's hooks report for its space.
 use std::{
     io::{IsTerminal, Read},
     os::fd::{AsFd, AsRawFd, BorrowedFd},
@@ -21,8 +21,8 @@ use crate::{
     state::{AgentState, TurnFailure},
 };
 
-/// Report `state`, which ends a turn of an agent with integration
-/// `ends_turn` when one is named.
+/// Report `state` for the agent of the space this runs in, which ends a
+/// turn of an agent with integration `ends_turn` when one is named.
 pub(super) async fn run(
     ctx: &Context,
     workspace: Option<String>,
@@ -40,7 +40,7 @@ async fn report_state(
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
+    let workspace = ui::select_space(ctx, workspace, Fallback::OwnWorkspace).await?;
     let event = hook_event();
     let turn_end = ends_turn.map(|integration| TurnEnd {
         final_message: event.as_ref().and_then(final_message),

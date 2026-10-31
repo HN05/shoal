@@ -332,10 +332,17 @@ pub async fn pick_workspace(
 }
 
 /// The space, a workspace or chat, a command acts on: the one `explicit`
-/// names, else the current workspace, else one picked among the workspaces
-/// and running chats.
-pub async fn select_space(ctx: &Context, explicit: Option<String>) -> Result<String> {
-    let space = match resolve_workspace(ctx, explicit, Fallback::CurrentDirectory).await? {
+/// names, else the chat this process runs in, else the workspace `fallback`
+/// chooses, where a picker offers the workspaces and running chats.
+pub async fn select_space(
+    ctx: &Context,
+    explicit: Option<String>,
+    fallback: Fallback,
+) -> Result<String> {
+    if let Some(chat) = current_chat(&explicit) {
+        return Ok(chat);
+    }
+    let space = match resolve_workspace(ctx, explicit, fallback).await? {
         Resolution::Workspace(id) => id,
         Resolution::Picker(workspaces) => {
             let chats = client::chats(&ctx.paths).await?;
@@ -344,6 +351,15 @@ pub async fn select_space(ctx: &Context, explicit: Option<String>) -> Result<Str
     };
     recent::record(ctx, &space).await;
     Ok(space)
+}
+
+/// The chat this process runs in, outside any workspace scope, when no
+/// space is `explicit`.
+pub fn current_chat(explicit: &Option<String>) -> Option<String> {
+    if explicit.is_some() || crate::env::is_scoped() {
+        return None;
+    }
+    crate::env::chat()
 }
 
 /// [`select_space`] for a command that also acts on every space: `None`

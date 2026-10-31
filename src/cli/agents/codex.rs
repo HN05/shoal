@@ -122,7 +122,8 @@ fn shoal_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
 
 /// Codex takes each event's groups as a `-c hooks.<event>=` TOML value.
 /// `turn_state` adds the hooks of a workspace's agent: those that report the
-/// turn's state and the one that briefs its subagents.
+/// turn's state and the one that briefs its subagents; otherwise the agent,
+/// a chat's, reports only its session.
 fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
     let shoal = hooks::shoal()?;
     let state = if turn_state {
@@ -130,7 +131,7 @@ fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
         state.push(hooks::subagent(&shoal));
         state
     } else {
-        Vec::new()
+        vec![hooks::session_start(&shoal)]
     };
     Ok(hooks::by_event(hooks::messages(&shoal).chain(state))
         .into_iter()
@@ -148,10 +149,7 @@ fn config_overrides(turn_state: bool) -> std::io::Result<Vec<OsString>> {
 /// working until its next turn ends.
 fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     vec![
-        (
-            "SessionStart",
-            hooks::state(shoal, Some(hooks::SESSION_START), AgentState::Idle),
-        ),
+        hooks::session_start(shoal),
         (
             "UserPromptSubmit",
             hooks::state(shoal, None, AgentState::Working),

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::OwnedMutexGuard;
 
 use crate::{
-    daemon::{scope::Caller, workspace::Manager},
+    daemon::{scope::Caller, spaces::PresentSpace, workspace::Manager},
     model::{Chat, HandedBack, Repository, Workspace},
     state::{WorkspaceState, states},
 };
@@ -170,6 +170,15 @@ impl From<Workspace> for Space {
     }
 }
 
+impl From<PresentSpace> for Space {
+    fn from(space: PresentSpace) -> Self {
+        match space {
+            PresentSpace::Workspace(workspace) => workspace.into(),
+            PresentSpace::Chat(chat) => chat.into(),
+        }
+    }
+}
+
 impl From<Chat> for Space {
     fn from(chat: Chat) -> Self {
         Self {
@@ -269,7 +278,7 @@ impl Manager {
     /// kept.
     pub(crate) async fn file_space(&self, selector: &str) -> Result<Space> {
         let error = match self.present_space(selector).await {
-            Ok(space) => return Ok(space),
+            Ok(space) => return Ok(space.into()),
             Err(error) => error,
         };
         let selector = selector.to_owned();
@@ -278,19 +287,6 @@ impl Manager {
             .run(move |db| records::gone_space(db, &selector))
             .await?;
         gone.ok_or(error)
-    }
-
-    /// The workspace or running chat `selector` names, by name or ID; the
-    /// error is the workspace lookup's when neither has it.
-    async fn present_space(&self, selector: &str) -> Result<Space> {
-        let error = match self.workspace(selector).await {
-            Ok(workspace) => return Ok(workspace.into()),
-            Err(error) => error,
-        };
-        match self.running_chat(selector).await? {
-            Some(chat) => Ok(chat.into()),
-            None => Err(error),
-        }
     }
 
     /// Copies of the files `results` that `workspace` hands back with its
@@ -395,7 +391,7 @@ impl Manager {
         attacher: &Attacher,
     ) -> Result<Vec<AttachedFile>> {
         ensure!(!files.is_empty(), "give the files to add");
-        let space = self.present_space(selector).await?;
+        let space: Space = self.present_space(selector).await?.into();
         let (layout, _files) = self.lock_files(&space).await?;
         let kept = keep(layout, &space.id, ADDED, files).await?;
         self.record_or_discard(&space.id, FileSource::Added, attacher, kept)

@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 100;
+const SCHEMA_VERSION: i64 = 101;
 
 #[cfg(test)]
 mod benchmark;
@@ -445,6 +445,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (98, FILE_SPACES, None),
     (99, ENDED_CHATS, None),
     (100, EXECUTION_MODELS, None),
+    (101, CHAT_SESSIONS, None),
 ];
 
 /// Whether an agent asked the question in its chat, where the user may
@@ -513,6 +514,10 @@ END;";
 /// The agent each execution runs, which keeps its reported session once the
 /// execution ends without a stop of its own, as at a reboot.
 const EXECUTION_AGENTS: &str = "ALTER TABLE executions ADD COLUMN agent TEXT;";
+
+/// The agent session each chat's hooks reported last, which an export of
+/// the chat continues on another machine.
+const CHAT_SESSIONS: &str = "ALTER TABLE chats ADD COLUMN session TEXT;";
 
 /// The model and effort each execution's agent runs with.
 const EXECUTION_MODELS: &str = "ALTER TABLE executions ADD COLUMN model TEXT;

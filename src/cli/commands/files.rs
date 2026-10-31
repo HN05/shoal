@@ -9,7 +9,7 @@ use crate::{
         client,
         context::Context,
         output::{Palette, Style},
-        ui,
+        ui::{self, Fallback},
     },
     daemon::workspace_files::{AttachedFile, FileSource},
     protocol::FileMethod,
@@ -30,7 +30,7 @@ pub(super) enum Listing {
 
 /// Show the files of the workspace or chat as `listing` asks.
 pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing) -> Result<i32> {
-    let space = select_space(ctx, space).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let files = client::pages::<AttachedFile>(
         &ctx.paths,
         FileMethod::ListFiles {
@@ -65,7 +65,7 @@ pub(super) async fn list(ctx: &Context, space: Option<String>, listing: Listing)
 /// a workspace is picked.
 pub(super) async fn add(ctx: &Context, space: Option<String>, files: Vec<String>) -> Result<i32> {
     let files = super::messages::attachments(&files)?;
-    let space = select_space(ctx, space).await?;
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let method = FileMethod::AddFiles {
         space,
         files,
@@ -95,10 +95,10 @@ pub(super) async fn remove(
 ) -> Result<i32> {
     // Names and records belong to one workspace or chat, so they offer no
     // choice of every workspace.
-    let space = match current_chat(&scope.workspace) {
+    let space = match ui::current_chat(&scope.workspace) {
         Some(chat) if !scope.all => Some(chat),
         _ if names.is_empty() && ids.is_empty() => ui::select_space_filter(ctx, scope).await?,
-        _ => Some(ui::select_space(ctx, scope.workspace).await?),
+        _ => Some(ui::select_space(ctx, scope.workspace, Fallback::CurrentDirectory).await?),
     };
     if let Some(space) = &space {
         check_selected(ctx, space, &names, &ids).await?;
@@ -167,25 +167,6 @@ async fn running_space(ctx: &Context, selector: &str) -> Result<Option<String>> 
         .into_iter()
         .find(|chat| chat.id == selector || chat.name == selector)
         .map(|chat| chat.name))
-}
-
-/// The workspace or chat whose files a command acts on: the one `explicit`
-/// names, else the chat this process runs under, else the current workspace,
-/// else one picked among the workspaces and running chats.
-async fn select_space(ctx: &Context, explicit: Option<String>) -> Result<String> {
-    match current_chat(&explicit) {
-        Some(chat) => Ok(chat),
-        None => ui::select_space(ctx, explicit).await,
-    }
-}
-
-/// The chat this process runs under, outside any workspace scope, when no
-/// workspace or chat is `explicit`.
-fn current_chat(explicit: &Option<String>) -> Option<String> {
-    if explicit.is_some() || crate::env::is_scoped() {
-        return None;
-    }
-    crate::env::chat()
 }
 
 /// The file's name, title, size, how it came, when, read at `now`, when a

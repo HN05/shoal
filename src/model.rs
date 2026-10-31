@@ -806,6 +806,9 @@ pub struct Chat {
     /// repository without a directory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tmp_dir: Option<std::path::PathBuf>,
+    /// The agent session its hooks reported last, which an export continues.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 /// A place Shoal created for a workspace, which closes with it.

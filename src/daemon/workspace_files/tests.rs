@@ -1114,6 +1114,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     ALTER TABLE questions DROP COLUMN in_chat;
     ALTER TABLE executions DROP COLUMN model;
     ALTER TABLE executions DROP COLUMN effort;
+    ALTER TABLE chats DROP COLUMN session;
     PRAGMA user_version=87;";
 
 /// Start a chat named `name` in the repository of `workspace` whose process

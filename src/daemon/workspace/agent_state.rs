@@ -7,8 +7,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use super::Manager;
 use crate::{
+    daemon::spaces::PresentSpace,
     execution::recovery,
-    model::{AgentStatus, Execution},
+    model::{AgentStatus, Chat, Execution},
     process::{execution::Processes, identity::Scan},
     protocol::TurnEnd,
     state::{AgentState, ExecutionState, TurnFailure},
@@ -242,7 +243,12 @@ impl Manager {
         session: Option<String>,
         ending: TurnEnding,
     ) -> Result<AgentStatus> {
-        let id = self.workspace(selector).await?.id;
+        let id = match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => workspace.id,
+            PresentSpace::Chat(chat) => {
+                return self.record_chat_report(&chat, state, session).await;
+            }
+        };
         if let Some(execution) = &execution {
             self.record_agent_turn(execution, state, ending.interrupted_after(state))
                 .await;
@@ -265,6 +271,29 @@ impl Manager {
             self.signals.agent_changed();
         }
         Ok(status)
+    }
+
+    /// Record the agent `session` a chat's hooks report with `state`. A chat
+    /// keeps its agent's session, which its export continues elsewhere, but
+    /// no turn state, so the status is the report's own.
+    async fn record_chat_report(
+        &self,
+        chat: &Chat,
+        state: AgentState,
+        session: Option<String>,
+    ) -> Result<AgentStatus> {
+        if let Some(session) = session {
+            ensure!(
+                recovery::valid_session(&session),
+                "invalid agent session ID"
+            );
+            self.record_chat_session(&chat.id, session).await?;
+        }
+        Ok(AgentStatus {
+            state,
+            since: i64::try_from(crate::time::unix_seconds())?,
+            prompt_cache_expires_at: None,
+        })
     }
 
     /// Record the turn `failure` ended as reported from `execution`, which

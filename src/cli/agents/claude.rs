@@ -184,7 +184,7 @@ fn percent_encode(bytes: &[u8]) -> String {
 /// One `--settings` carries every hook; Claude Code merges it with the user's
 /// own settings, and a later `--settings` would replace it. A `workspace`
 /// agent also reports its turn's state and may run the commands that finish
-/// its assignment. For a proxied agent the wrapper merges these with any
+/// its assignment; a chat's agent reports only its session. For a proxied agent the wrapper merges these with any
 /// others into the one that names the proxy's URL, since these settings win
 /// over the user's own `env` and the inherited environment.
 fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
@@ -196,7 +196,7 @@ fn settings(workspace: bool) -> std::io::Result<Vec<OsString>> {
             lifecycle_rules(),
         )
     } else {
-        (Vec::new(), Vec::new(), Vec::new())
+        (vec![hooks::session_start(&shoal)], Vec::new(), Vec::new())
     };
     let groups = hooks::messages(&shoal)
         .chain(state)
@@ -248,10 +248,7 @@ fn lifecycle_rules() -> Vec<String> {
 /// API error ends reports its failure, which leaves the agent idle.
 fn state_hooks(shoal: &str) -> Vec<(&'static str, Value)> {
     vec![
-        (
-            "SessionStart",
-            hooks::state(shoal, Some(hooks::SESSION_START), AgentState::Idle),
-        ),
+        hooks::session_start(shoal),
         (
             "UserPromptSubmit",
             hooks::state(shoal, None, AgentState::Working),

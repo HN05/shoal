@@ -144,6 +144,57 @@ async fn a_chat_needs_a_running_process() {
 }
 
 #[tokio::test]
+async fn a_chat_keeps_the_session_its_agent_reports() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "reporter".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(chat.session, None);
+    let reported = manager
+        .set_agent_state(
+            "reporter",
+            crate::state::AgentState::Idle,
+            None,
+            Some("session-1".into()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(reported.state, crate::state::AgentState::Idle);
+    // A report without a session, or with another, keeps the latest one.
+    for session in [None, Some("session-2".into())] {
+        manager
+            .set_agent_state(&chat.id, crate::state::AgentState::Idle, None, session)
+            .await
+            .unwrap();
+    }
+    let chats = manager.chats().await.unwrap();
+    assert_eq!(chats[0].session.as_deref(), Some("session-2"));
+    let error = manager
+        .set_agent_state(
+            &chat.id,
+            crate::state::AgentState::Idle,
+            None,
+            Some("../escape".into()),
+        )
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("invalid"), "{error:#}");
+}
+
+#[tokio::test]
 async fn a_moved_chat_lasts_while_its_new_process_runs() {
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");

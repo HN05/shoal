@@ -112,10 +112,18 @@ fn stop_failure_errors_name_the_turn_failure() {
 }
 
 #[test]
-fn chat_settings_deliver_messages_and_wake_without_turn_state() {
+fn chat_settings_deliver_messages_report_the_session_and_wake_without_turn_state() {
     let args = Claude.chat_hook_args().unwrap();
     let settings: Value = serde_json::from_str(args[1].to_str().unwrap()).unwrap();
-    assert!(!settings.to_string().contains("agent-state"), "{settings}");
+    // Only the session start reports, for the chat's session.
+    let start = &settings["hooks"]["SessionStart"][0];
+    assert_eq!(start["matcher"].as_str(), Some(hooks::SESSION_START));
+    let start = start["hooks"][0]["command"].as_str().unwrap();
+    assert!(start.contains(" agent-state idle "), "{start}");
+    for event in ["UserPromptSubmit", "PostToolUse", "Notification"] {
+        let groups = settings["hooks"][event].to_string();
+        assert!(!groups.contains("agent-state"), "{groups}");
+    }
     // A chat belongs to no workspace and finishes no assignment.
     assert!(settings.get("permissions").is_none(), "{settings}");
     assert!(

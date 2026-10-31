@@ -43,6 +43,7 @@ pub mod scope;
 pub mod secrets;
 pub(crate) mod seed;
 mod shutdown_lock;
+pub(crate) mod spaces;
 mod startup;
 mod startup_audit;
 pub mod store;
