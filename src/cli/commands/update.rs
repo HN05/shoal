@@ -1,6 +1,6 @@
-//! Replace a downloaded Shoal binary with the latest GitHub release.
+//! Replace a downloaded Shoal binary or app bundle with the latest GitHub release.
 use std::{
-    fs,
+    fs, io,
     os::unix::fs::PermissionsExt as _,
     path::{Path, PathBuf},
     time::Duration,
@@ -35,7 +35,7 @@ pub(super) async fn run(ctx: &Context) -> Result<i32> {
     }
     ctx.progress(
         &format!("Installing Shoal {}", release.version),
-        release.install(&target),
+        release.install(&Installation::of(&target)),
     )
     .await?;
     ctx.emit(
@@ -58,6 +58,78 @@ fn installed_binary() -> Result<PathBuf> {
         "Homebrew installed this shoal; update it with Homebrew"
     );
     Ok(path)
+}
+
+/// What an update replaces: the binary itself, or the app bundle it runs in.
+#[derive(Debug, PartialEq)]
+enum Installation {
+    Binary(PathBuf),
+    Bundle(PathBuf),
+}
+
+impl Installation {
+    fn of(binary: &Path) -> Self {
+        match crate::fsutil::app_bundle(binary) {
+            Some(bundle) => Self::Bundle(bundle.to_owned()),
+            None => Self::Binary(binary.to_owned()),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::Binary(path) | Self::Bundle(path) => path,
+        }
+    }
+
+    /// The release archive's entry that replaces this installation.
+    fn entry(&self) -> &'static str {
+        match self {
+            Self::Binary(_) => "shoal",
+            Self::Bundle(_) => "Shoal.app",
+        }
+    }
+
+    /// The executable of `unpacked`, the archive's entry.
+    fn executable(&self, unpacked: &Path) -> PathBuf {
+        match self {
+            Self::Binary(_) => unpacked.to_owned(),
+            Self::Bundle(_) => unpacked.join("Contents/MacOS/shoal"),
+        }
+    }
+
+    /// Move `unpacked` over this installation so running commands keep the
+    /// files they started from. A bundle is swapped in one step, so no
+    /// command finds it missing, and the old one stays at `unpacked`.
+    fn replace_with(&self, unpacked: &Path) -> Result<()> {
+        match self {
+            Self::Binary(target) => {
+                fs::set_permissions(unpacked, fs::Permissions::from_mode(0o755))?;
+                fs::rename(unpacked, target)
+            }
+            Self::Bundle(target) => exchange(unpacked, target),
+        }
+        .with_context(|| format!("replace {}", self.path().display()))
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn exchange(from: &Path, to: &Path) -> io::Result<()> {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt as _};
+    let from = CString::new(from.as_os_str().as_bytes())?;
+    let to = CString::new(to.as_os_str().as_bytes())?;
+    // SAFETY: both arguments are NUL-terminated paths that outlive the call.
+    match unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_SWAP) } {
+        0 => Ok(()),
+        _ => Err(io::Error::last_os_error()),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn exchange(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "only macOS installs Shoal as an app bundle",
+    ))
 }
 
 fn homebrew_installed(path: &Path) -> bool {
@@ -136,16 +208,17 @@ impl Release {
             .with_context(|| format!("the latest release has no {platform} archive"))
     }
 
-    /// Download, verify and unpack the archive beside `target`, then move its
-    /// binary over `target` so running commands keep the file they started.
-    async fn install(&self, target: &Path) -> Result<()> {
-        let staging = staging_directory(target)?;
+    /// Download, verify and unpack the archive beside `installation`, then
+    /// replace it with the archive's entry.
+    async fn install(&self, installation: &Installation) -> Result<()> {
+        let staging = staging_directory(installation.path())?;
         let archive = staging.path().join(&self.archive);
         self.download(&archive).await?;
         self.verify(&archive)?;
-        let binary = unpack(&archive, staging.path()).await?;
-        self.check_version(&binary).await?;
-        replace_executable(&binary, target)
+        let unpacked = unpack(&archive, staging.path(), installation.entry()).await?;
+        self.check_version(&installation.executable(&unpacked))
+            .await?;
+        installation.replace_with(&unpacked)
     }
 
     async fn download(&self, destination: &Path) -> Result<()> {
@@ -209,37 +282,32 @@ fn curl() -> Command {
     curl
 }
 
-/// A private directory beside `target`, so the new binary renames over it
+/// A private directory beside `target`, so its replacement renames over it
 /// on the same filesystem.
 fn staging_directory(target: &Path) -> Result<tempfile::TempDir> {
     let directory = target
         .parent()
-        .context("the shoal executable has no directory")?;
+        .context("the shoal installation has no directory")?;
     tempfile::Builder::new()
         .prefix(".shoal-update-")
         .tempdir_in(directory)
         .with_context(|| format!("create a download directory in {}", directory.display()))
 }
 
-fn replace_executable(binary: &Path, target: &Path) -> Result<()> {
-    fs::set_permissions(binary, fs::Permissions::from_mode(0o755))?;
-    fs::rename(binary, target).with_context(|| format!("replace {}", target.display()))
-}
-
-/// Extract the archive's `shoal` binary into `directory`.
-async fn unpack(archive: &Path, directory: &Path) -> Result<PathBuf> {
+/// Extract the archive's `entry` into `directory`.
+async fn unpack(archive: &Path, directory: &Path, entry: &str) -> Result<PathBuf> {
     let mut tar = Command::new(Tool::Tar.program());
     tar.arg("-xzf")
         .arg(archive)
         .arg("-C")
         .arg(directory)
-        .arg("shoal");
+        .arg(entry);
     Run::new(tar)
         .timeout(DOWNLOAD_TIMEOUT)
         .checked()
         .await
-        .context("unpack the release archive")?;
-    Ok(directory.join("shoal"))
+        .with_context(|| format!("unpack {entry} from the release archive"))?;
+    Ok(directory.join(entry))
 }
 
 #[cfg(test)]
