@@ -8,7 +8,10 @@ use std::{
 use anyhow::Result;
 
 use super::IntegrationKind;
-use crate::config::named_commands::Commands;
+use crate::{
+    config::named_commands::Commands,
+    reviews::output::{self, ResultFormat},
+};
 
 /// A provider available without configuration.
 pub struct Provider {
@@ -21,6 +24,9 @@ pub struct Provider {
     pub(super) resume_latest: Option<&'static [&'static str]>,
     pub(super) fork: Option<&'static [&'static str]>,
     pub(super) add_dir: Option<&'static [&'static str]>,
+    pub(super) review: Option<&'static [&'static str]>,
+    /// How its review result comes back.
+    pub(super) review_result: &'static ResultFormat,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,6 +74,19 @@ pub const PROVIDERS: &[Provider] = &[
         // told where to work.
         fork: Some(&["fork", "{session}", "--cd", "{directory}"]),
         add_dir: Some(&["--add-dir", "{directory}"]),
+        review: Some(&[
+            "exec",
+            "--sandbox",
+            "read-only",
+            "-c",
+            "approval_policy=\"never\"",
+            "--output-schema",
+            "{schema}",
+            "--output-last-message",
+            "{output}",
+            "{prompt}",
+        ]),
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "claude",
@@ -81,6 +100,19 @@ pub const PROVIDERS: &[Provider] = &[
         // `--add-dir` takes every following argument up to the next option,
         // which would include a prompt; the joined form takes one.
         add_dir: Some(&["--add-dir={directory}"]),
+        // Tool lists take every following argument, so they use the joined
+        // form and the prompt comes first.
+        review: Some(&[
+            "-p",
+            "{prompt}",
+            "--output-format",
+            "json",
+            "--json-schema",
+            "{schema_json}",
+            "--allowedTools=Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*)",
+            "--disallowedTools=Edit,Write,NotebookEdit,WebFetch,WebSearch,Agent",
+        ]),
+        review_result: &output::CLAUDE,
     },
     // opencode and pi also read `~/.agents/skills`, so they share Codex's copy.
     Provider {
@@ -93,6 +125,8 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "pi",
@@ -104,6 +138,8 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
     Provider {
         name: "grok",
@@ -115,6 +151,8 @@ pub const PROVIDERS: &[Provider] = &[
         resume_latest: None,
         fork: None,
         add_dir: None,
+        review: None,
+        review_result: &output::PLAIN,
     },
 ];
 

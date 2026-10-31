@@ -36,6 +36,11 @@ pub struct AgentToolConfig {
     /// Arguments that give the agent another working directory,
     /// `{directory}`; empty gives none.
     pub add_dir: Option<Vec<String>>,
+    /// Arguments of a one-shot, read-only review, which follow the launcher's
+    /// words before `{args}`: the prompt as `{prompt}`, the output schema as
+    /// a file, `{schema}`, or its text, `{schema_json}`, and `{output}`, a
+    /// file the result goes to instead of standard output.
+    pub review: Option<Vec<String>>,
     /// Variables set for the tool's tracked launches, after the workspace's
     /// `[env]`; a value starting with `~/` names a path under the home.
     #[option(named)]
@@ -156,6 +161,7 @@ pub fn describe(
                 resume_latest: settings.and_then(|agent| agent.resume_latest.clone()),
                 fork: settings.and_then(|agent| agent.fork.clone()),
                 add_dir: settings.and_then(|agent| agent.add_dir.clone()),
+                review: settings.and_then(|agent| agent.review.clone()),
                 base: settings.and_then(|agent| agent.base.clone()),
                 env: settings.map(|agent| agent.env.clone()).unwrap_or_default(),
                 env_remove: settings

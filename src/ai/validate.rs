@@ -64,6 +64,11 @@ pub fn entry(name: &str, agent: &Agent) -> Result<()> {
                 .with_context(|| format!("agents.{name}.{key}"))?;
         }
     }
+    if let Some(argv) = &agent.review {
+        validate_arguments(argv, &["{prompt}"])
+            .and_then(|()| validate_arguments(argv, &["{schema}", "{schema_json}"]))
+            .with_context(|| format!("agents.{name}.review"))?;
+    }
     // An empty `add_dir` turns the built-in one off.
     if let Some(argv) = agent.add_dir.as_ref().filter(|argv| !argv.is_empty()) {
         validate_arguments(argv, &["{directory}"])

@@ -28,7 +28,7 @@ post_resource_acquire = 'acquire'\npre_resource_release = 'release'\npost_setup 
 [issue]\nrequired_labels = ['type/']\nplan_label = 'needs-plan'\nplanned_label = 'planned'\n[review]\npost = false\n[messages]\nsettle_seconds = 2\n[land]\npush = true\n\
 [permissions]\nissue_open = 'propose'\npr_open = 'propose'\nissue_other_repositories = 'direct'\nland = 'direct'\napi_writes = 'direct'\n[agents.reviewer]\ncommand = ['reviewer', '{prompt}']\nresume_command = ['reviewer', '--resume']\ndefault_mode = 'app'\n\
 base = 'claude'\ninstructions = ['--system', '{instructions}']\nresume = ['--resume', '{session}']\nresume_latest = ['--continue']\n\
-fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
+fork = ['--fork', '{session}']\nadd_dir = ['--dir', '{directory}']\nreview = ['-p', '{prompt}', '{schema}']\nenv = { MODE = 'review' }\nenv_remove = ['TOKEN']\nretry = true\n\
 prompt_cache_minutes = 5\n[agents.claude]\ndefault_mode = 'app'\n[agents.codex]\ndefault_mode = 'app'\n";
 
 fn json<T: Serialize>(value: &T) -> Value {

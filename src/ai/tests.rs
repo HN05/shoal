@@ -385,3 +385,67 @@ fn prompt_cache_lifetime_prefers_configured_then_reported_then_the_default() {
         assert!(error.contains(message), "{config}: {error}");
     }
 }
+
+#[test]
+fn reviews_run_with_their_template_after_the_launcher_before_its_args() {
+    let agents = parse(
+        "[agents.codex-review]\nbase = 'codex'\n[agents.grok]\nreview = ['--prompt', '{prompt}', '--schema', '{schema_json}']\n",
+    )
+    .unwrap();
+    let fields = ReviewFields {
+        prompt: "Review it",
+        schema: Path::new("/tmp/schema.json"),
+        schema_json: "{}",
+        output: Path::new("/tmp/review.json"),
+    };
+    let codex = arguments(&agents, "codex-review");
+    let args = codex.review_args(&fields).unwrap();
+    assert!(codex.review_writes_output());
+    assert_eq!(args.first(), Some(&OsString::from("exec")));
+    assert!(args.contains(&"/tmp/review.json".into()));
+    assert_eq!(args.last(), Some(&OsString::from("Review it")));
+    assert!(std::ptr::eq(
+        agents["codex-review"].review_result,
+        &crate::reviews::output::PLAIN
+    ));
+    assert!(std::ptr::eq(
+        agents["claude"].review_result,
+        &crate::reviews::output::CLAUDE
+    ));
+    let claude = arguments(&agents, "claude");
+    assert!(!claude.review_writes_output());
+    assert!(claude.review_args(&fields).unwrap().contains(&"{}".into()));
+    assert!(arguments(&agents, "grok").review_args(&fields).is_some());
+    assert_eq!(arguments(&agents, "pi").review_args(&fields), None);
+
+    let launcher = [
+        "codex",
+        "-m",
+        "gpt",
+        "{args}",
+        "--sandbox",
+        "danger-full-access",
+    ]
+    .map(String::from);
+    let command = review_command(&launcher, vec!["exec".into()]);
+    assert_eq!(command, ["codex", "-m", "gpt", "exec"].map(OsString::from));
+    let command = review_command(
+        &["claude".into(), "--model".into(), "opus".into()],
+        vec!["-p".into()],
+    );
+    assert_eq!(
+        command,
+        ["claude", "--model", "opus", "-p"].map(OsString::from)
+    );
+}
+
+#[test]
+fn review_templates_need_a_prompt_and_a_schema() {
+    for template in ["['{schema}']", "['{prompt}']"] {
+        let error = parse(&format!("[agents.claude]\nreview = {template}\n")).unwrap_err();
+        assert!(
+            format!("{error:#}").contains("agents.claude.review"),
+            "{error:#}"
+        );
+    }
+}

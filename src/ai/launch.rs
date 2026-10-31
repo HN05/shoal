@@ -56,6 +56,18 @@ pub struct Arguments {
     pub resume_latest: Option<Vec<String>>,
     pub fork: Option<Vec<String>>,
     pub add_dir: Option<Vec<String>>,
+    pub review: Option<Vec<String>>,
+}
+
+/// What a review's arguments name.
+pub struct ReviewFields<'a> {
+    pub prompt: &'a str,
+    /// The output schema's file.
+    pub schema: &'a Path,
+    /// The output schema's text.
+    pub schema_json: &'a str,
+    /// The file the result goes to when the arguments name it.
+    pub output: &'a Path,
 }
 
 impl Arguments {
@@ -102,6 +114,34 @@ impl Arguments {
         })
     }
 
+    /// The arguments of a one-shot review with `fields`; `None` when the
+    /// tool has no review template.
+    pub fn review_args(&self, fields: &ReviewFields) -> Option<Vec<OsString>> {
+        let template = self.review.as_ref()?;
+        let (schema, output) = (
+            fields.schema.to_string_lossy(),
+            fields.output.to_string_lossy(),
+        );
+        Some(substitute(
+            template,
+            &[
+                ("{prompt}", fields.prompt),
+                ("{schema}", &schema),
+                ("{schema_json}", fields.schema_json),
+                ("{output}", &output),
+            ],
+        ))
+    }
+
+    /// Whether the review's result goes to `{output}` rather than standard
+    /// output.
+    pub fn review_writes_output(&self) -> bool {
+        self.review
+            .iter()
+            .flatten()
+            .any(|arg| arg.contains("{output}"))
+    }
+
     /// The arguments that give the agent `directory` as another working
     /// directory; none when it takes no such arguments.
     pub fn add_dir_args(&self, directory: &Path) -> Vec<OsString> {
@@ -121,5 +161,16 @@ fn substitute(template: &[String], fields: &[(&str, &str)]) -> Vec<OsString> {
     template
         .iter()
         .map(|arg| crate::config::templates::render(arg, fields).into())
+        .collect()
+}
+
+/// A review's command: the launcher's words before `{args}`, or all of them
+/// when it has none, followed by the review's arguments.
+pub fn review_command(launcher: &[String], review: Vec<OsString>) -> Vec<OsString> {
+    launcher
+        .iter()
+        .take_while(|word| word.as_str() != "{args}")
+        .map(OsString::from)
+        .chain(review)
         .collect()
 }
