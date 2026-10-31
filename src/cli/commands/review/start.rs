@@ -25,6 +25,10 @@ use crate::{
 /// The configured command a manual review runs.
 const MANUAL: &str = "review";
 
+/// Why an agent review refuses arguments after `--`.
+const FORWARDED_ARGS: &str =
+    "arguments after -- go to the configured review command; pass --manual";
+
 #[derive(Clone)]
 pub(super) enum Reviewer {
     Ask,
@@ -103,6 +107,11 @@ pub(super) async fn start(
     model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
+    // Refused before a workspace is picked, opened or updated.
+    ensure!(
+        args.is_empty() || !reviewer.chosen_agent(&target),
+        "{FORWARDED_ARGS}"
+    );
     match target {
         Target::Workspace(workspace) => {
             run(ctx, workspace, reviewer, Subject::Changes, model, args).await
@@ -151,6 +160,16 @@ async fn check_reviewer(
 }
 
 impl Reviewer {
+    /// Whether the options alone choose an agent reviewer for `target`:
+    /// `--agent`, `--model` or `--effort`, or choosing whether to post.
+    fn chosen_agent(&self, target: &Target) -> bool {
+        match self {
+            Reviewer::Agent(_) => true,
+            Reviewer::Ask => matches!(target, Target::Pull { post: Some(_), .. }),
+            Reviewer::Manual => false,
+        }
+    }
+
     /// `--manual`, else `--agent`; a requested `model` chooses an agent
     /// reviewer, since only an agent runs with one.
     pub fn new(manual: bool, agent: Option<Agent>, model: &ModelChoice) -> Self {
@@ -314,10 +333,7 @@ async fn run(
     };
     match reviewer {
         Reviewer::Agent(agent) => {
-            ensure!(
-                args.is_empty(),
-                "arguments after -- go to the configured review command; pass --manual"
-            );
+            ensure!(args.is_empty(), "{FORWARDED_ARGS}");
             let target = subject.target(post.unwrap_or(settings.review.post));
             queue(ctx, workspace, &settings, agent, model, target).await
         }

@@ -3969,6 +3969,12 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
             ][..],
             "reviewer has no review template",
         ),
+        (
+            &[
+                "review", "run", "--pr", "1", "--repo", repo, "--agent", "absent", "--", "extra",
+            ][..],
+            "arguments after -- go to the configured review command",
+        ),
     ] {
         let output = fixture.run(args);
         assert!(!output.status.success(), "{output:?}");
