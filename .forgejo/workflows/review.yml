@@ -3,10 +3,10 @@ name: review
 # draft (a `WIP:` or `[WIP]` title prefix). Taking a PR out of draft is a title
 # edit and requests one review, which also consumes any request label added
 # while the PR was a draft. Forgejo's payload for an edit carries no previous
-# title, so the job reads the PR's timeline: an edit reviews when the latest
-# title change removed the prefix and no review-bot review followed it. The job
-# runs the action on that edit itself, because a label added with the job token
-# starts no workflow on Forgejo.
+# title, so the job reads the PR's timeline: an edit reviews when the PR has
+# left draft since the last review-bot review. The job runs the action on that
+# edit itself, because a label added with the job token starts no workflow on
+# Forgejo.
 on:
   pull_request:
     types: [opened, reopened, labeled, label_updated, edited]
@@ -77,17 +77,23 @@ jobs:
               return (title or "").upper().startswith(("WIP:", "[WIP]"))
 
           number = os.environ["NUMBER"]
+          # When the PR last left draft; later title edits that keep it ready do not hide that.
+          ready = None
           changes = [item for item in pages(f"issues/{number}/timeline") if item.get("type") == "change_title"]
-          latest = max(changes, key=lambda item: datetime.fromisoformat(item["created_at"]), default=None)
-          review = latest is not None and draft(latest["old_title"]) and not draft(latest["new_title"])
+          for item in sorted(changes, key=lambda item: datetime.fromisoformat(item["created_at"])):
+              if draft(item["old_title"]) != draft(item["new_title"]):
+                  ready = None if draft(item["new_title"]) else datetime.fromisoformat(item["created_at"])
+          review = ready is not None
           if review:
-              changed = datetime.fromisoformat(latest["created_at"])
+              # A review finished after leaving draft answers it, unless review-bot marked it
+              # outdated: then it covered a head that was replaced while it ran.
               review = not any("<!-- review-bot" in (item.get("body") or "")
-                               and datetime.fromisoformat(item["submitted_at"]) >= changed
+                               and "<!-- review-bot outdated -->" not in item["body"]
+                               and datetime.fromisoformat(item["submitted_at"]) >= ready
                                for item in pages(f"pulls/{number}/reviews") if item.get("submitted_at"))
               print("The PR left draft" + ("; reviewing it" if review else ", and a review followed"))
           else:
-              print("The latest title change did not take the PR out of draft")
+              print("The PR has not left draft")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               output.write(f"review={str(review).lower()}\n")
       - uses: https://git.henriknordvik.com/HN05/review-bot@main
