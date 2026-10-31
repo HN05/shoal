@@ -674,6 +674,7 @@ fn reviews_need_line_comments_and_their_verdict_and_only_prs_take_them() {
                     body: "Why?".into(),
                 })
                 .collect(),
+            commit: None,
         })
     };
     assert!(

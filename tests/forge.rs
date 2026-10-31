@@ -754,6 +754,17 @@ fn reviews_comment_as_the_agent_and_leave_verdicts_to_the_user() {
     assert!(message.contains("src/a.rs:9: no hunk"), "{refused}");
     assert!(posts().is_empty());
 
+    // A review bound to a commit the head moved past sends nothing.
+    let mut bound = review(
+        "comment",
+        json!([{"path": "src/a.rs", "line": 2, "body": "Why b?"}]),
+    );
+    bound["item_action"]["action"]["commit"] = json!("0ld");
+    let refused = fixture.request_as(bound, Some(&scope));
+    let message = refused["data"]["message"].as_str().unwrap();
+    assert!(message.contains("head moved past 0ld"), "{refused}");
+    assert!(posts().is_empty());
+
     // Verdicts are the user's: refused for the agent, posted as the user otherwise.
     let scoped = fixture.request_as(review("approve", json!([])), Some(&scope));
     let message = scoped["data"]["message"].as_str().unwrap();

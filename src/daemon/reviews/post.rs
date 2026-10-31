@@ -9,11 +9,8 @@ use super::store;
 use crate::{
     daemon::{log, workspace::Manager},
     forge::{
-        items::{
-            action::{Action, Sent},
-            link::ItemKind,
-        },
-        review::submit::{LineComment, NewReview, ReviewVerdict, Side},
+        items::{action::Action, link::ItemKind},
+        review::submit::{HeadMoved, LineComment, NewReview, ReviewVerdict, Side},
     },
     model::Workspace,
     protocol::ItemContext,
@@ -52,9 +49,11 @@ impl Manager {
         }
     }
 
-    /// Submit the review for the commit it covered, `head`. When the PR's
-    /// head moved meanwhile, or the forge refuses the line comments before
-    /// anything reached it, every finding goes in the body.
+    /// Submit the review for the commit it covered, `head`. Line comments
+    /// are bound to it: when the PR's head moved, before Shoal read it or
+    /// before the forge was asked, every finding goes in the body instead.
+    /// Any other failure is not retried, since the review may have reached
+    /// the forge.
     async fn submit_review(
         &self,
         review: &Review,
@@ -75,23 +74,15 @@ impl Manager {
                 .is_some_and(|diff| diff.shows(&finding.path, u64::from(finding.line)))
         };
         let context = ItemContext::Workspace(workspace.id.clone());
-        let submitted = new_review(review, shows, moved.then_some(head));
-        let inline = !submitted.comments.is_empty();
-        let action = Action::Review(submitted);
+        let action = Action::Review(new_review(review, shows, moved.then_some(head)));
         match self
             .item_action(&context, ItemKind::Pr, Some(url.clone()), action)
             .await
         {
             Ok(_) => Ok(url),
-            // A review that reached the forge is not posted again.
-            Err(error) if inline && error.downcast_ref::<Sent>().is_none() => {
-                log!(
-                    "review {}: line comments refused ({error:#}); posting them in the body",
-                    review.id
-                );
-                let current = forge.read(&account, ItemKind::Pr, number).await?;
-                let moved = current.head_sha.as_deref() != Some(head);
-                let action = Action::Review(new_review(review, |_| false, moved.then_some(head)));
+            // Nothing was sent, and the lines no longer match.
+            Err(error) if error.downcast_ref::<HeadMoved>().is_some() => {
+                let action = Action::Review(new_review(review, |_| false, Some(head)));
                 self.item_action(&context, ItemKind::Pr, Some(url.clone()), action)
                     .await?;
                 Ok(url)
@@ -102,9 +93,10 @@ impl Manager {
 }
 
 /// The comment review of `review`: line comments for the findings `inline`
-/// accepts, the summary and every other finding in the body, a note that
-/// it covers `outdated` when newer commits were pushed meanwhile, and the
-/// automated-review note when there are findings.
+/// accepts, bound to the reviewed commit, the summary and every other
+/// finding in the body, a note that it covers `outdated` when newer commits
+/// were pushed meanwhile, and the automated-review note when there are
+/// findings.
 pub(super) fn new_review(
     review: &Review,
     inline: impl Fn(&Finding) -> bool,
@@ -142,6 +134,7 @@ pub(super) fn new_review(
     NewReview {
         verdict: ReviewVerdict::Comment,
         body,
+        commit: (!placed.is_empty()).then(|| review.head.clone()).flatten(),
         comments: placed
             .into_iter()
             .map(|finding| LineComment {

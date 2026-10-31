@@ -13,6 +13,7 @@ fn review(verdict: ReviewVerdict, body: &str, comments: &[(&str, u64, &str)]) ->
                 body: body.into(),
             })
             .collect(),
+        commit: None,
     }
 }
 

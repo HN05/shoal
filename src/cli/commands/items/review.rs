@@ -25,6 +25,7 @@ pub(super) fn review(args: ReviewArgs) -> Result<(Action, &'static str)> {
         verdict,
         body: read_body(args.body)?.unwrap_or_default(),
         comments,
+        commit: None,
     };
     let outcome = match verdict {
         ReviewVerdict::Comment => "Review posted",

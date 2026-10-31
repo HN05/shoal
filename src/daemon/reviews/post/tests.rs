@@ -69,6 +69,8 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
     );
     assert!(posted.body.ends_with(&format!("_{AUTOMATED_NOTE}_")));
     assert!(!posted.body.contains("newer commits"));
+    // Line comments are bound to the commit they were made on.
+    assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
     posted.validate().unwrap();
 }
 
@@ -77,6 +79,7 @@ fn a_review_of_a_moved_head_puts_every_finding_in_the_body() {
     let review = review(vec![finding(1, "src/a.rs", Severity::Blocker)]);
     let posted = new_review(&review, |_| false, Some("0123456789abcdef"));
     assert!(posted.comments.is_empty());
+    assert_eq!(posted.commit, None);
     assert!(
         posted
             .body
