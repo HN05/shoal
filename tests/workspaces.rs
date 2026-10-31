@@ -14926,7 +14926,7 @@ fn issue_lookup_errors_never_create_a_workspace() {
         ),
         (
             "4",
-            Some("#!/bin/sh\nprintf 'bad-json\\n200'\n"),
+            Some("#!/bin/sh\nprintf 'bad-json\\n0 200'\n"),
             "invalid JSON response",
         ),
         (
@@ -14965,8 +14965,8 @@ fn issue_lookup_errors_never_create_a_workspace() {
         &tool,
         r#"#!/bin/sh
 case "$*" in
-  *blocked_by*) printf '[]\n200';;
-  *) printf '{"state":"open","number":4,"title":"Four","body":"","labels":[]}\n200';;
+  *blocked_by*) printf '[]\n0 200';;
+  *) printf '{"state":"open","number":4,"title":"Four","body":"","labels":[]}\n0 200';;
 esac
 "#,
         0o700,
@@ -15332,9 +15332,9 @@ esac
 key=$(printf %s "$path" | tr '/?&=' '____')
 if [ -f "$HOME/api/$key" ]; then
   cat "$HOME/api/$key"
-  printf '\n200'
+  printf '\n0 200'
 else
-  printf '{"message":"no fixture for %s"}\n404' "$key"
+  printf '{"message":"no fixture for %s"}\n0 404' "$key"
 fi
 "#,
     );
@@ -22801,7 +22801,7 @@ fn merged_base_prs_retarget_and_restack_the_workspaces_stacked_on_them() {
                 "cat >/dev/null\n",
                 r#"case "$*" in *PATCH*)
   printf '%s\n' "$@" > "$HOME/curl-args"; cat > "$HOME/curl-stdin"
-  echo "2 main" >> "$HOME/edits"; printf '{}\n200'; exit;;
+  echo "2 main" >> "$HOME/edits"; printf '{}\n0 200'; exit;;
 esac
 cat >/dev/null
 "#,

@@ -2,13 +2,13 @@
 //! through curl with the account's token passed on stdin. It follows
 //! redirects to the storage that serves the file and sends the token only
 //! to the host it is for.
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tokio::process::Command;
 
 use crate::transport::{
     api::{FILE_TIMEOUT, curl_failure, size},
     programs,
-    response::{Fetched, split_heads},
+    response::{Fetched, WRITE_OUT, split_output},
 };
 
 /// The largest file Shoal downloads, which is also the largest it attaches.
@@ -24,22 +24,21 @@ pub(crate) async fn with_curl(url: &str, authorization: Option<Vec<u8>>) -> Resu
     curl.args(["-q", "-sS", "--globoff", "--location", "--max-redirs", "5"])
         .args(["--proto-redir", "=http,https", "--max-time"])
         .arg(FILE_TIMEOUT.as_secs().to_string())
-        // The heads go before the file, which ends with the status.
-        .args(["-D", "-", "-w", "\n%{http_code}", "-K", "-", url]);
+        // The heads go before the file, as for an API request.
+        .args(["-D", "-", "-w", WRITE_OUT, "-K", "-", url]);
     let output = capture(curl, authorization.unwrap_or_default())
         .await
         .map_err(|error| unrun(error, "curl is required to download from this forge"))?;
     if !output.status.success() {
         return Err(curl_failure(&output));
     }
-    let mut stdout = output.stdout;
-    let (headers, rest) = split_heads(&stdout);
-    let heads = stdout.len() - rest.len();
-    stdout.drain(..heads);
-    let (body, status) = split_status(stdout)?;
+    let split = split_output(&output.stdout)?;
+    let mut body = output.stdout;
+    body.truncate(split.body.end);
+    body.drain(..split.body.start);
     Ok(Fetched {
-        status,
-        headers,
+        status: split.status,
+        headers: split.headers,
         body,
     })
 }
@@ -65,21 +64,3 @@ fn unrun(
     }
     anyhow::Error::new(error).context(failure)
 }
-
-/// curl's output split into the file and the status `-w` appends on its
-/// own line.
-fn split_status(mut output: Vec<u8>) -> Result<(Vec<u8>, u16)> {
-    let at = output
-        .iter()
-        .rposition(|&byte| byte == b'\n')
-        .context("curl's output has no HTTP status")?;
-    let status = std::str::from_utf8(&output[at + 1..])
-        .ok()
-        .and_then(|status| status.trim().parse().ok())
-        .context("response has no HTTP status")?;
-    output.truncate(at);
-    Ok((output, status))
-}
-
-#[cfg(test)]
-mod tests;

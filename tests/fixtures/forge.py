@@ -89,7 +89,7 @@ def curl(args):
         real_curl(args)
     config = sys.stdin.read()
     auth = re.search(r'header = "Authorization: ([^"]*)"', config)
-    method, headers, body = "GET", [], None
+    method, headers, body, write_out = "GET", [], None, ""
     i = 0
     while i < len(args):
         arg = args[i]
@@ -97,6 +97,8 @@ def curl(args):
             method = args[i + 1]
         elif arg == "-H":
             headers.append(args[i + 1])
+        elif arg == "-w":
+            write_out = args[i + 1]
         elif arg == "--data-binary":
             data = args[i + 1]
             if data.startswith("@"):
@@ -131,12 +133,15 @@ def curl(args):
     if "Content-Type" not in sent:
         sent = {"Content-Type": "application/json", **sent}
     head = "".join(f"{name}: {value}\r\n" for name, value in sent.items())
-    sys.stdout.write(f"HTTP/1.1 {status} Scripted\r\n{head}\r\n")
+    head = f"HTTP/1.1 {status} Scripted\r\n{head}\r\n" if "-D" in args else ""
+    sys.stdout.write(head)
     if isinstance(answer, str):
         sys.stdout.write(answer)
     elif answer is not None:
         sys.stdout.write(json.dumps(answer))
-    sys.stdout.write(f"\n{status}")
+    sys.stdout.write(
+        write_out.replace("%{size_header}", str(len(head.encode()))).replace("%{http_code}", str(status))
+    )
 
 
 def form_file(data):
