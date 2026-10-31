@@ -440,6 +440,11 @@ fn model_arguments_select_the_model_and_effort_or_name_the_missing_template() {
         launch(&agents, "codex").environment_with(&both),
         Environment::default()
     );
+    assert_eq!(
+        claude.effort_environment(&both),
+        Some(("CLAUDE_CODE_EFFORT_LEVEL", "high".to_owned()))
+    );
+    assert_eq!(launch(&agents, "codex").effort_environment(&both), None);
 }
 
 #[test]

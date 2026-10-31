@@ -332,6 +332,33 @@ struct Beside<'a> {
     args: &'a [OsString],
 }
 
+impl Beside<'_> {
+    /// The `shoal` arguments that start this chat in place where it opens.
+    fn relaunch(&self) -> Vec<OsString> {
+        let mut chat = self.topic.relaunch.clone();
+        chat.extend([
+            "--here".into(),
+            "--name".into(),
+            self.name.into(),
+            "--agent".into(),
+            self.agent.name().into(),
+        ]);
+        for (flag, value) in [
+            ("--model", &self.model.model),
+            ("--effort", &self.model.effort),
+        ] {
+            if let Some(value) = value {
+                chat.extend([flag.into(), value.into()]);
+            }
+        }
+        if !self.args.is_empty() {
+            chat.push("--".into());
+            chat.extend_from_slice(self.args);
+        }
+        chat
+    }
+}
+
 /// Run the chat `beside` describes in a new focused tab or session at the
 /// checkout, where Shoal starts it in place, returning whether it ran there;
 /// otherwise it runs here.
@@ -341,26 +368,7 @@ async fn start_beside(
     repo: &Repository,
     beside: Beside<'_>,
 ) -> Result<bool> {
-    let mut chat = beside.topic.relaunch.clone();
-    chat.extend([
-        "--here".into(),
-        "--name".into(),
-        beside.name.into(),
-        "--agent".into(),
-        beside.agent.name().into(),
-    ]);
-    for (flag, value) in [
-        ("--model", &beside.model.model),
-        ("--effort", &beside.model.effort),
-    ] {
-        if let Some(value) = value {
-            chat.extend([flag.into(), value.into()]);
-        }
-    }
-    if !beside.args.is_empty() {
-        chat.push("--".into());
-        chat.extend_from_slice(beside.args);
-    }
+    let chat = beside.relaunch();
     terminal::start_chat(ctx, settings, repo, beside.name, &chat).await
 }
 
@@ -441,3 +449,6 @@ fn run_here(
     let error = process.exec();
     Err(error).with_context(|| format!("run {}", program.to_string_lossy()))
 }
+
+#[cfg(test)]
+mod tests;

@@ -147,7 +147,7 @@ pub(super) async fn resolve_add_agent(
         Some(agent) => {
             let settings = settings.get().await?;
             let resolved = settings.model(agent.name(), model.clone());
-            agents::model_args(settings, agent.name(), &resolved)?;
+            agents::check_model(settings, agent.name(), &resolved)?;
         }
         None => anyhow::ensure!(
             model.is_empty(),

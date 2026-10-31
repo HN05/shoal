@@ -119,7 +119,7 @@ async fn child_agent(
         agents::ensure_forks(&settings, agent.name())?;
     }
     let resolved = settings.model(agent.name(), model.clone());
-    agents::model_args(&settings, agent.name(), &resolved)?;
+    agents::check_model(&settings, agent.name(), &resolved)?;
     Ok(Some(ChildAgent {
         agent,
         model,
