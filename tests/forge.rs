@@ -5293,3 +5293,64 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     );
     assert!(fixture.requests().is_empty());
 }
+
+#[test]
+fn downloads_read_files_on_the_forge_with_its_login() {
+    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj_home = '~/agent'\n");
+    let origin = fixture.web.strip_suffix("/team/project").unwrap();
+    let host = origin.strip_prefix("http://").unwrap();
+    let keys = if cfg!(target_os = "macos") {
+        "agent/Library/Application Support/forgejo-cli.forgejo-cli/keys.json"
+    } else {
+        "agent/.local/share/forgejo-cli/keys.json"
+    };
+    fixture.write_keys(&fixture.root.path().join(keys), host, "agenttoken");
+    fixture.respond(json!({
+        "GET /attachments/a1": {"body": "PNG", "headers": {"Content-Type": "image/png"}},
+    }));
+    let url = format!("{origin}/attachments/a1");
+    let saved = fixture.root.path().join("shot.png");
+    let saved_arg = saved.to_str().unwrap();
+    let written = fixture.ok(&[
+        "forge",
+        "download",
+        &url,
+        "--output",
+        saved_arg,
+        "--workspace",
+        "topic",
+    ]);
+    assert_eq!(
+        written,
+        json!({"path": saved, "bytes": 3, "content_type": "image/png"})
+    );
+    assert_eq!(fs::read(&saved).unwrap(), b"PNG");
+    let output = fixture.run(&["forge", "download", &url, "-o", "-", "--workspace", "topic"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"PNG");
+    // A workspace process downloads as its agent account.
+    scoped(&fixture, &["forge", "download", &url, "-o", saved_arg]);
+    assert_eq!(
+        fixture.requests(),
+        [
+            json!(["GET /attachments/a1", null, "token usertoken"]),
+            json!(["GET /attachments/a1", null, "token usertoken"]),
+            json!(["GET /attachments/a1", null, "token agenttoken"]),
+        ]
+    );
+
+    // The login goes to no other host.
+    let output = fixture.run(&[
+        "forge",
+        "download",
+        "https://example.com/shot.png",
+        "-o",
+        saved_arg,
+        "--workspace",
+        "topic",
+    ]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("not on the repository's forge"), "{stderr}");
+    assert!(fixture.requests().is_empty());
+}

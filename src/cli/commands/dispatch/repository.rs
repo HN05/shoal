@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::cli::{
     args::repository::{ForgeCommand, RepositoryCommand},
-    commands::{api, capabilities, reactions, repositories},
+    commands::{api, capabilities, download, reactions, repositories},
     context::Context,
 };
 
@@ -14,6 +14,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: RepositoryComma
             }
             ForgeCommand::Reactions(repository) => reactions::reactions(&ctx, repository).await,
             ForgeCommand::Api(args) => api::api(&ctx, args).await,
+            ForgeCommand::Download(args) => download::download(&ctx, args).await,
         },
         RepositoryCommand::Repo {
             command: Some(command),

@@ -6,7 +6,7 @@ Responses come from $HOME/forge/responses.json. `gh api` and HTTP requests
 are keyed by "METHOD endpoint"; other gh commands by the longest key their
 arguments start with. A string body is sent as text, anything else as JSON. A list answers successive requests in turn, repeating
 its last entry. Each entry is {"status": 200, "body": ...}, and may add
-"headers" to send. The server and `gh api` tag
+"headers" to send, which may replace its JSON Content-Type. The server and `gh api` tag
 each successful body, and answer a request that names its tag in
 If-None-Match with 304. Every request is appended to
 $HOME/forge/requests.jsonl with its body, credentials (the agent's, or an
@@ -140,7 +140,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("ETag", etag(answer))
         for name, value in headers.items():
             self.send_header(name, value)
-        self.send_header("Content-Type", "application/json")
+        if "Content-Type" not in headers:
+            self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

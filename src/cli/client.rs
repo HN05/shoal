@@ -236,6 +236,23 @@ pub async fn forge_api(
     serde_json::from_str(&pieces.concat()).context("the daemon sent invalid JSON")
 }
 
+/// The file at `url` on the forge of `context`'s repository, or of the one
+/// `repository` names, reassembled from the pieces the daemon sends it in.
+pub async fn forge_download(
+    paths: &Paths,
+    context: crate::protocol::ItemContext,
+    url: String,
+    repository: Option<String>,
+) -> Result<crate::forge::download::Download> {
+    let method = ItemMethod::ForgeDownload {
+        context,
+        url,
+        repository,
+    };
+    let pieces = pages(paths, method).await?;
+    crate::protocol::DownloadPiece::join(pieces)
+}
+
 /// The settings that apply to `target` after every layer. The global config
 /// is read now, so launch defaults follow it without a daemon restart.
 pub async fn settings(

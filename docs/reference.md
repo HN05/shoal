@@ -3205,6 +3205,26 @@ else sends any request with your own logins.
 api_writes = "direct" # Default: "deny"
 ```
 
+#### Forge downloads
+
+```sh
+shoal forge download https://github.com/user-attachments/assets/1a2b --output shot.png
+shoal forge download "$url" -o - > shot.png
+```
+
+`shoal forge download` saves an image or attached file from the forge of the
+repository `shoal forge api` would use, such as one in a PR's description, with
+the same logins, so files of a private repository load; `--repo` names another
+repository whose forge it is on. It refuses a URL on any other host before
+sending anything, so the login reaches only that forge; redirects to the storage that serves the file get no login. `--output`
+names the file to write, or `-` for standard output, and `--json` returns the
+written `path`, its size in `bytes` and the `content_type` the forge sent. A
+response that is a web page, such as a sign-in page the login cannot pass,
+fails instead of being saved, as does a file over 100 MiB. GitHub downloads go
+through `gh api` and Forgejo and Gitea through fj's token, or anonymously
+without one; a tea login cannot download. The `downloads` capability says
+whether the forge has them.
+
 ### Linked items and cleanup
 
 `shoal link <number-or-url> <relation>` associates an issue or PR with the

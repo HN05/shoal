@@ -1477,7 +1477,11 @@ cannot tell what another method changes, so a scoped caller sends only GET
 unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
 required labels, and only GET in another repository, which that setting does
 not speak for; the path stays under the API root, so the login reaches only
-the API of the forge its repository is on. Forgejo's issue search lists PRs
+the API of the forge its repository is on. `shoal forge download` reads a file
+such as an image in a description the same way, so a client without forge
+logins shows a private repository's images; it takes only URLs on the
+repository's forge host, and the daemon sends the bytes back in frames, since
+the caller, not the daemon, chooses where they go. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
 and drops the open ones. Shoal does not sign in to a

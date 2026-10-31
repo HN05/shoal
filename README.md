@@ -223,6 +223,7 @@ shoal repo labels                  # The repository's labels and what each one m
 shoal forge capabilities            # What the repository's forge supports, such as resolving threads
 shoal forge reactions               # The reactions the repository's forge allows
 shoal forge api 'repos/{owner}/{repo}/branches' # Any path of the forge's API; agents only read
+shoal forge download URL -o shot.png # An image or attached file on the forge, with its login
 shoal ci run deps.yml --input level=full  # Start a workflow run on the workspace's branch
 shoal ci list --pr 44               # The runs on a PR's head; --branch and --workflow filter too
 shoal view ci 2765                  # A run's jobs and failed jobs' logs

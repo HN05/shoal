@@ -17,6 +17,7 @@ pub(crate) mod configured;
 mod contribute;
 mod demo;
 mod dispatch;
+mod download;
 mod events;
 mod files;
 mod holds;

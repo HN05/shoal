@@ -71,7 +71,9 @@ what to do instead; check it before relying on one. When no command covers a
 read, `shoal forge api 'repos/{owner}/{repo}/<path>'` sends a GET to the
 repository's forge API and prints the JSON; use it instead of `gh api` or
 `glab api`; `--repo OWNER/NAME` reads another repository. It refuses other
-methods unless the repository sets `[permissions] api_writes`. File
+methods unless the repository sets `[permissions] api_writes`.
+`shoal forge download <url> --output <file>` saves an image or attached file
+from the forge, such as a screenshot in an issue, with the same login. File
 follow-up work with `shoal issue open --title`; Shoal records it as opened by your
 workspace, and only `--link` assigns it to you. A problem that belongs to another
 repository, such as a tool the project uses, goes there with `--repo OWNER/NAME`

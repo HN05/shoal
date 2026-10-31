@@ -58,6 +58,24 @@ pub struct ApiArgs {
     pub repo: Option<String>,
 }
 
+// Arguments of `shoal forge download`.
+#[derive(Debug, Args)]
+pub struct DownloadArgs {
+    /// URL of an image or attached file on the repository's forge, such as
+    /// one in a PR's description.
+    pub url: String,
+    /// File to write, or `-` for standard output.
+    #[arg(short, long, value_name = "FILE")]
+    pub output: PathBuf,
+    /// Workspace to use; defaults to the current workspace or picker.
+    #[arg(long)]
+    pub workspace: Option<String>,
+    /// Download from another repository's forge: OWNER/NAME on the
+    /// workspace's forge, or a repository URL on any forge.
+    #[arg(long, value_name = "REPOSITORY")]
+    pub repo: Option<String>,
+}
+
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum ForgeCommand {
@@ -71,6 +89,11 @@ pub enum ForgeCommand {
     /// `[permissions] api_writes` lets agents send others to the workspace's
     /// repository; anyone else sends any request with your own logins.
     Api(ApiArgs),
+    /// Download an image or attached file from the repository's forge.
+    ///
+    /// Uses the login Shoal uses there, so files of a private repository
+    /// load; URLs on other hosts are refused.
+    Download(DownloadArgs),
 }
 
 #[derive(Debug, Subcommand)]
