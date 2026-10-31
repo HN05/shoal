@@ -9,6 +9,8 @@ fn item(kind: ItemKind) -> Item {
         title: "Fix".into(),
         state: ItemState::Open,
         labels: Vec::new(),
+        assignees: Vec::new(),
+        milestone: None,
         pr: None,
     }
 }

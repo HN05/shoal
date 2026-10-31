@@ -762,6 +762,16 @@ pub(crate) trait Backend {
     fn label_names_fold_case(&self) -> bool {
         false
     }
+
+    /// The paginated list of the repository's milestones, open and closed.
+    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
+        repo.repo_endpoint("milestones?state=all")
+    }
+
+    /// The title of a listed milestone and the ID edits take for it.
+    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
+        Some((listed["title"].as_str()?.to_owned(), listed["id"].as_u64()?))
+    }
 }
 
 /// Adds a backend's login hint to a failed read.
@@ -1436,6 +1446,14 @@ impl Backend for ForgeKind {
 
     fn label_names_fold_case(&self) -> bool {
         dispatch!(self, backend => backend.label_names_fold_case())
+    }
+
+    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
+        dispatch!(self, backend => backend.milestones_endpoint(repo))
+    }
+
+    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
+        dispatch!(self, backend => backend.milestone(listed))
     }
 }
 

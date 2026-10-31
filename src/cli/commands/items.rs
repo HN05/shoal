@@ -46,7 +46,7 @@ pub(super) async fn pr(ctx: &Context, command: PrCommand) -> Result<i32> {
             return open_pr(ctx, workspace, pull_options(pull)?).await;
         }
         PrCommand::Revert { item, revert } => return revert::revert(ctx, item, revert).await,
-        PrCommand::Edit { item, edit } => (item, Action::Edit(pr_edit(edit)?), "PR updated"),
+        PrCommand::Edit { item, edit } => (item, Action::edit(pr_edit(edit)?), "PR updated"),
         PrCommand::Reviewers { item } => return reviewers::reviewers(ctx, &item).await,
         PrCommand::Comment {
             item,
@@ -114,6 +114,8 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
             body,
             files,
             labels,
+            assignees,
+            milestone,
             link,
         } => {
             let (body, attachments) = read_content(body, files)?;
@@ -121,12 +123,14 @@ pub(super) async fn issue(ctx: &Context, command: IssueCommand) -> Result<i32> {
                 title,
                 body: body.unwrap_or_default(),
                 labels,
+                assignees,
+                milestone,
                 attachments,
             };
             return open_issue(ctx, workspace, issue, repo, link).await;
         }
         IssueCommand::Edit { item, edit } => {
-            (item, Action::Edit(edit_fields(edit)?), "Issue updated")
+            (item, Action::edit(edit_fields(edit)?), "Issue updated")
         }
         IssueCommand::Comment {
             item,

@@ -9,7 +9,11 @@ use super::{
 use crate::{
     ForgeRepo,
     account::Account,
-    items::{action::MergeMethod, link::ItemKind},
+    items::{
+        action::MergeMethod,
+        item::{text, user_names},
+        link::ItemKind,
+    },
     review::view::{
         AutoMerge, Comment, Details, PrDetails, Review, labels, login, required, review_comment,
         review_state, text_field,
@@ -33,7 +37,7 @@ pub(crate) async fn details(
         ),
     };
     let fields = format!(
-        "number,title,body,state,author,labels,createdAt{extra}{}",
+        "number,title,body,state,author,labels,assignees,milestone,createdAt{extra}{}",
         if comments { ",comments" } else { "" }
     );
     let args = [
@@ -84,8 +88,8 @@ pub(crate) async fn reviews(
     parse_reviews(&reviews, &comments, &threads).map(Some)
 }
 
-fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
-    let item: Value = serde_json::from_str(text).context("invalid gh response")?;
+fn parse_details(output: &str, kind: ItemKind, number: u64) -> Result<Details> {
+    let item: Value = serde_json::from_str(output).context("invalid gh response")?;
     ensure!(item["number"] == number, "gh returned a different item");
     let pr = match kind {
         ItemKind::Issue => None,
@@ -123,6 +127,8 @@ fn parse_details(text: &str, kind: ItemKind, number: u64) -> Result<Details> {
         author: login(&item["author"]),
         created_at: text_field(&item["createdAt"]),
         labels: labels(&item["labels"]),
+        assignees: user_names(&item["assignees"], "login"),
+        milestone: text(&item["milestone"]["title"]),
         body: text_field(&item["body"]),
         pr,
         comments,

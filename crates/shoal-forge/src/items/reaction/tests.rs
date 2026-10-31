@@ -64,6 +64,8 @@ fn reactions_go_to_the_item_its_comments_and_its_inline_comments() {
         author: String::new(),
         created_at: String::new(),
         labels: Vec::new(),
+        assignees: Vec::new(),
+        milestone: None,
         body: String::new(),
         pr: None,
         comments: Some(vec![comment(10), comment(11)]),

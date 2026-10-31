@@ -19,6 +19,8 @@ fn pulls_read_the_same_from_both_forges() {
             title: "Fix".into(),
             state: ItemState::Merged,
             labels: vec!["bug".into()],
+            assignees: Vec::new(),
+            milestone: None,
             pr: Some(PrSummary {
                 head: "topic".into(),
                 base: "main".into(),
@@ -61,10 +63,13 @@ fn forgejo_pulls_keep_their_deleted_head_branch() {
 fn issue_reads_refuse_prs_and_other_numbers() {
     let forgejo = ForgeRepo::parse("https://forge.example/team/repo").unwrap();
     let issue = json!({"number": 3, "title": "Bug", "state": "open", "labels": [],
+            "assignees": [{"login": "kim"}, {"login": "lee"}], "milestone": {"id": 5, "title": "v2"},
             "pull_request": null});
     let current = forgejo.current(ItemKind::Issue, 3, &issue).unwrap();
     assert_eq!(current.item.url, "https://forge.example/team/repo/issues/3");
     assert_eq!(current.item.pr, None);
+    assert_eq!(current.item.assignees, ["kim", "lee"]);
+    assert_eq!(current.item.milestone.as_deref(), Some("v2"));
     let pull = json!({"number": 3, "title": "Fix", "state": "open",
             "pull_request": {"merged": false}});
     assert!(forgejo.current(ItemKind::Issue, 3, &pull).is_err());

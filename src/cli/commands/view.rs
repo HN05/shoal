@@ -408,6 +408,12 @@ fn render_details(url: &str, details: &Details, palette: Palette, emoji: bool) {
     if !details.labels.is_empty() {
         outln!("Labels:   {}", details.labels.join(", "));
     }
+    if !details.assignees.is_empty() {
+        outln!("Assignees: {}", details.assignees.join(", "));
+    }
+    if let Some(milestone) = &details.milestone {
+        outln!("Milestone: {milestone}");
+    }
     render_reactions(&details.reactions, 0, emoji);
     if !details.body.trim().is_empty() {
         outln!();

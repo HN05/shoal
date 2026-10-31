@@ -100,6 +100,10 @@ impl Backend for Forgejo {
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
+            | Capability::IssueAssignees
+            | Capability::PrAssignees
+            | Capability::IssueMilestones
+            | Capability::PrMilestones
             | Capability::DraftPrs
             | Capability::Attachments
             | Capability::Downloads
@@ -253,7 +257,7 @@ impl Backend for Forgejo {
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        Ok(github_rest::edit(repo, current, edit, Dialect::Forgejo))
+        github_rest::edit(repo, current, edit, Dialect::Forgejo)
     }
 
     fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request {

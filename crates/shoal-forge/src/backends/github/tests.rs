@@ -18,18 +18,21 @@ fn lists_keep_filter_values_attached_to_their_flags() {
             "--repo=github.com/team/repo",
             "--state=closed",
             "--limit=5",
-            "--json=number,title,state,labels,headRefName,baseRefName,isDraft",
+            "--json=number,title,state,labels,assignees,milestone,headRefName,baseRefName,isDraft",
             "--label=-odd",
             "--author=dev",
             "--search=crash in:title",
         ]
     );
     let listed: ListedItem = serde_json::from_value(json!({"number": 4, "title": "Fix",
-            "state": "MERGED", "labels": [{"name": "bug"}], "headRefName": "topic",
+            "state": "MERGED", "labels": [{"name": "bug"}], "assignees": [{"login": "kim"}],
+            "milestone": {"number": 2, "title": "v2"}, "headRefName": "topic",
             "baseRefName": "main", "isDraft": false}))
     .unwrap();
     let item = listed.into_item(&repo, ItemKind::Pr).unwrap();
     assert_eq!(item.state, ItemState::Merged);
+    assert_eq!(item.assignees, ["kim"]);
+    assert_eq!(item.milestone.as_deref(), Some("v2"));
     assert_eq!(item.url, "https://github.com/team/repo/pull/4");
     assert_eq!(item.pr.unwrap().head, "topic");
 }
@@ -134,6 +137,8 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
             title: "Fix".into(),
             state: ItemState::Merged,
             labels: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
             pr: None,
         },
         node_id: Some("PR_7".into()),
@@ -147,6 +152,7 @@ fn reverts_go_through_graphql_and_report_the_new_branch() {
         merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
+        milestone_id: None,
         replaced_labels: Vec::new(),
     };
     let revert = NewRevert {

@@ -42,7 +42,14 @@ use crate::{
 #[serde(untagged)]
 pub enum OpenOutcome {
     Proposed(Proposed),
-    Opened(Opened),
+    /// Boxed, as the larger by far.
+    Opened(Box<Opened>),
+}
+
+impl OpenOutcome {
+    pub fn opened(opened: Opened) -> Self {
+        Self::Opened(Box::new(opened))
+    }
 }
 
 /// An issue or PR waiting for the user's approval before Shoal opens it.

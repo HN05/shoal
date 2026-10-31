@@ -62,6 +62,8 @@ fn merge_requests_read_branches_drafts_and_conflicts() {
             title: "Draft: Fix".into(),
             state: ItemState::Open,
             labels: vec!["bug".into()],
+            assignees: Vec::new(),
+            milestone: None,
             pr: Some(PrSummary {
                 head: "topic".into(),
                 base: "main".into(),
@@ -238,7 +240,8 @@ fn notes_find_their_discussion() {
 #[test]
 fn issues_use_their_own_numbers_routes_and_states() {
     let issue = json!({"iid": 3, "id": 900, "title": "Bug", "state": "closed",
-            "labels": [{"name": "type/bug"}]});
+            "labels": [{"name": "type/bug"}], "assignees": [{"id": 4, "username": "kim"}],
+            "milestone": {"id": 40, "iid": 1, "title": "v2"}});
     let current = gitlab().current(ItemKind::Issue, 3, &issue).unwrap();
     assert_eq!(
         current.item.url,
@@ -246,6 +249,9 @@ fn issues_use_their_own_numbers_routes_and_states() {
     );
     assert_eq!(current.item.state, ItemState::Closed);
     assert_eq!(current.item.labels, ["type/bug"]);
+    assert_eq!(current.item.assignees, ["kim"]);
+    assert_eq!(current.item.milestone.as_deref(), Some("v2"));
+    assert_eq!(current.user_ids.get("kim"), Some(&4));
     assert!(gitlab().current(ItemKind::Issue, 900, &issue).is_err());
     let mut merged = issue;
     merged["state"] = json!("merged");

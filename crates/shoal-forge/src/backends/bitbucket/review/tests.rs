@@ -15,6 +15,8 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
             title: "Fix".into(),
             state: ItemState::Open,
             labels: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
             pr: None,
         },
         node_id: None,
@@ -28,6 +30,7 @@ fn the_diff_runs_from_the_merge_base_to_the_head() -> Result<()> {
         merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
+        milestone_id: None,
         replaced_labels: Vec::new(),
     };
     assert_eq!(

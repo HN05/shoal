@@ -15,6 +15,8 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
             },
             state: ItemState::Open,
             labels: labels.iter().map(|label| label.to_string()).collect(),
+            assignees: Vec::new(),
+            milestone: None,
             pr: Some(PrSummary {
                 head: "topic".into(),
                 base: "main".into(),
@@ -32,6 +34,7 @@ fn pr(forge: &ForgeRepo, draft: bool, labels: &[&str]) -> Current {
         merges_now: false,
         reviewers: Vec::new(),
         user_ids: Default::default(),
+        milestone_id: None,
         replaced_labels: Vec::new(),
     }
 }
@@ -111,7 +114,7 @@ fn edits_patch_fields_replace_labels_and_change_reviewers() {
         };
         let current = pr(&forge, false, &["bug", "old"]);
         assert_eq!(
-            requests(&forge, &current, Action::Edit(edit)),
+            requests(&forge, &current, Action::edit(edit)),
             [
                 (
                     "PATCH".into(),
@@ -141,7 +144,7 @@ fn edits_patch_fields_replace_labels_and_change_reviewers() {
 #[test]
 fn draft_state_is_a_mutation_on_github_and_a_title_on_forgejo() {
     let [github, forgejo] = forges();
-    let ready = Action::Edit(Edit {
+    let ready = Action::edit(Edit {
         draft: Some(false),
         ..Edit::default()
     });
@@ -165,7 +168,7 @@ fn draft_state_is_a_mutation_on_github_and_a_title_on_forgejo() {
     );
     // Already ready: nothing to send.
     assert!(requests(&forgejo, &pr(&forgejo, false, &[]), ready).is_empty());
-    let draft_with_title = Action::Edit(Edit {
+    let draft_with_title = Action::edit(Edit {
         title: Some("[WIP] Other".into()),
         draft: Some(true),
         ..Edit::default()
@@ -175,7 +178,7 @@ fn draft_state_is_a_mutation_on_github_and_a_title_on_forgejo() {
         json!({"title": "WIP: Other"})
     );
     // A new title alone keeps a Forgejo draft a draft, and a ready PR ready.
-    let retitle = Action::Edit(Edit {
+    let retitle = Action::edit(Edit {
         title: Some("New".into()),
         ..Edit::default()
     });
@@ -377,7 +380,7 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
     let mut current = pr(&gitlab, false, &["bug"]);
     current.reviewers = vec!["kim".into(), "lee".into()];
     current.user_ids = [("kim".into(), 1), ("lee".into(), 2), ("sam".into(), 3)].into();
-    let edit = Action::Edit(Edit {
+    let edit = Action::edit(Edit {
         title: Some("New".into()),
         body: Some("Why".into()),
         base: Some("next".into()),
@@ -397,12 +400,12 @@ fn gitlab_changes_merge_requests_in_one_update_by_user_id() {
                     "add_labels": "a,b", "remove_labels": "bug", "reviewer_ids": [2, 3]})
         )]
     );
-    let unknown = Action::Edit(Edit {
+    let unknown = Action::edit(Edit {
         add_reviewers: vec!["ann".into()],
         ..Edit::default()
     });
     assert!(gitlab.plan(&current, &unknown).is_err());
-    let ready = Action::Edit(Edit {
+    let ready = Action::edit(Edit {
         draft: Some(false),
         ..Edit::default()
     });
@@ -532,11 +535,11 @@ fn automatic_merges_use_each_forges_requests() {
 #[test]
 fn actions_refuse_what_the_item_cannot_take() {
     assert!(
-        Action::Edit(Edit::default())
+        Action::edit(Edit::default())
             .validate(ItemKind::Pr)
             .is_err()
     );
-    let base = Action::Edit(Edit {
+    let base = Action::edit(Edit {
         base: Some("main".into()),
         ..Edit::default()
     });
@@ -592,7 +595,7 @@ fn actions_need_the_capabilities_they_use() -> Result<()> {
     assert!(Action::CancelAutoMerge.validate(ItemKind::Issue).is_err());
     assert_eq!(Action::Reopen.needs(ItemKind::Pr), [Capability::ReopenPrs]);
     assert!(Action::Reopen.needs(ItemKind::Issue).is_empty());
-    let labels = Action::Edit(Edit {
+    let labels = Action::edit(Edit {
         remove_labels: vec!["bug".into()],
         draft: Some(true),
         ..Edit::default()
@@ -623,7 +626,7 @@ fn edits_fail_when_the_forge_shows_their_labels_unchanged() {
     let item = pr(&forgejo, false, &["Bug", "complexity/small"]).item;
     let applied = |action: Action, fold_case: bool| action.ensure_applied(&item, fold_case);
     let edit = |add: &[&str], remove: &[&str]| {
-        Action::Edit(Edit {
+        Action::edit(Edit {
             add_labels: add.iter().map(|label| label.to_string()).collect(),
             remove_labels: remove.iter().map(|label| label.to_string()).collect(),
             ..Edit::default()
@@ -688,4 +691,238 @@ fn reviews_need_line_comments_and_their_verdict_and_only_prs_take_them() {
     );
     let issue = review(ReviewVerdict::Comment, 0).validate(ItemKind::Issue);
     assert_eq!(issue.unwrap_err().to_string(), "issues have no reviews");
+}
+
+#[test]
+fn assignees_and_milestones_go_to_the_issue_endpoint_on_github_and_forgejo() {
+    let [github, forgejo] = forges();
+    let assign = |milestone| {
+        Action::edit(Edit {
+            title: Some("New".into()),
+            add_assignees: vec!["sam".into()],
+            remove_assignees: vec!["kim".into()],
+            milestone: Some(milestone),
+            ..Edit::default()
+        })
+    };
+    for (forge, cleared) in [(&github, Value::Null), (&forgejo, json!(0))] {
+        let mut current = pr(forge, false, &[]);
+        current.item.assignees = vec!["kim".into(), "lee".into()];
+        current.milestone_id = Some(5);
+        let set = assign(MilestoneChange::Set("v2".into()));
+        assert_eq!(
+            requests(forge, &current, set),
+            [
+                (
+                    "PATCH".into(),
+                    "repos/team/repo/pulls/7".into(),
+                    json!({"title": "New"})
+                ),
+                (
+                    "PATCH".into(),
+                    "repos/team/repo/issues/7".into(),
+                    json!({"assignees": ["lee", "sam"], "milestone": 5})
+                ),
+            ]
+        );
+        current.item.kind = ItemKind::Issue;
+        current.item.pr = None;
+        assert_eq!(
+            requests(forge, &current, assign(MilestoneChange::Clear)),
+            [(
+                "PATCH".into(),
+                "repos/team/repo/issues/7".into(),
+                json!({"title": "New", "assignees": ["lee", "sam"], "milestone": cleared})
+            )]
+        );
+        current.milestone_id = None;
+        let unknown = assign(MilestoneChange::Set("v2".into()));
+        assert!(forge.plan(&current, &unknown).is_err());
+    }
+}
+
+#[test]
+fn gitlab_assigns_by_user_id_and_clears_a_milestone_with_id_0() {
+    let gitlab = ForgeRepo::parse("git@gitlab.com:group/sub/repo.git").unwrap();
+    let mut current = pr(&gitlab, false, &[]);
+    current.item.assignees = vec!["kim".into()];
+    current.user_ids = [("kim".into(), 1), ("sam".into(), 3)].into();
+    current.milestone_id = Some(40);
+    let edit = |milestone| {
+        Action::edit(Edit {
+            add_assignees: vec!["sam".into()],
+            remove_assignees: vec!["kim".into()],
+            milestone: Some(milestone),
+            ..Edit::default()
+        })
+    };
+    assert_eq!(
+        requests(&gitlab, &current, edit(MilestoneChange::Set("v2".into()))),
+        [(
+            "PUT".into(),
+            "projects/group%2Fsub%2Frepo/merge_requests/7".into(),
+            json!({"assignee_ids": [3], "milestone_id": 40})
+        )]
+    );
+    assert_eq!(
+        requests(&gitlab, &current, edit(MilestoneChange::Clear))[0].2,
+        json!({"assignee_ids": [3], "milestone_id": 0})
+    );
+    let unknown = Action::edit(Edit {
+        add_assignees: vec!["ann".into()],
+        ..Edit::default()
+    });
+    assert!(gitlab.plan(&current, &unknown).is_err());
+}
+
+#[test]
+fn bitbucket_gives_an_issue_one_assignee_and_a_milestone_by_name() {
+    let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo").unwrap();
+    let mut current = pr(&bitbucket, false, &[]);
+    current.item.kind = ItemKind::Issue;
+    current.item.pr = None;
+    current.item.assignees = vec!["{kim}".into()];
+    let edit = |add: &[&str], remove: &[&str], milestone| {
+        Action::edit(Edit {
+            add_assignees: add.iter().map(|id| id.to_string()).collect(),
+            remove_assignees: remove.iter().map(|id| id.to_string()).collect(),
+            milestone,
+            ..Edit::default()
+        })
+    };
+    assert_eq!(
+        requests(
+            &bitbucket,
+            &current,
+            edit(
+                &["{sam}"],
+                &["{kim}"],
+                Some(MilestoneChange::Set("v2".into()))
+            )
+        ),
+        [(
+            "PUT".into(),
+            "repositories/team/repo/issues/7".into(),
+            json!({"title": "Fix", "assignee": {"account_id": "{sam}"},
+                    "milestone": {"name": "v2"}})
+        )]
+    );
+    assert_eq!(
+        requests(
+            &bitbucket,
+            &current,
+            edit(&[], &["{kim}"], Some(MilestoneChange::Clear))
+        )[0]
+        .2,
+        json!({"title": "Fix", "assignee": null, "milestone": null})
+    );
+    let second = edit(&["{sam}"], &[], None);
+    assert_eq!(
+        bitbucket.plan(&current, &second).unwrap_err().to_string(),
+        "a Bitbucket issue has at most one assignee"
+    );
+}
+
+#[test]
+fn assignees_and_milestones_need_the_capability_for_the_items_kind() -> Result<()> {
+    let edit = Action::edit(Edit {
+        add_assignees: vec!["sam".into()],
+        milestone: Some(MilestoneChange::Clear),
+        ..Edit::default()
+    });
+    assert_eq!(
+        edit.needs(ItemKind::Issue),
+        [Capability::IssueAssignees, Capability::IssueMilestones]
+    );
+    assert_eq!(
+        edit.needs(ItemKind::Pr),
+        [Capability::PrAssignees, Capability::PrMilestones]
+    );
+    assert!(edit.validate(ItemKind::Issue).is_ok() && edit.validate(ItemKind::Pr).is_ok());
+    let bitbucket = ForgeRepo::parse("https://bitbucket.org/team/repo")?;
+    assert!(bitbucket.require_all(edit.needs(ItemKind::Issue)).is_ok());
+    assert_eq!(
+        bitbucket
+            .require_all(edit.needs(ItemKind::Pr))
+            .unwrap_err()
+            .to_string(),
+        "Shoal cannot assign PRs on Bitbucket Cloud; Bitbucket pull requests have no assignees"
+    );
+    for url in [
+        "https://github.com/o/r",
+        "https://gitlab.com/o/r",
+        "https://codeberg.org/o/r",
+    ] {
+        let forge = ForgeRepo::parse(url)?;
+        assert!(forge.require_all(edit.needs(ItemKind::Pr)).is_ok(), "{url}");
+    }
+    Ok(())
+}
+
+#[test]
+fn edits_fail_when_the_forge_shows_their_assignees_or_milestone_unchanged() {
+    let [_, forgejo] = forges();
+    let mut item = pr(&forgejo, false, &[]).item;
+    item.assignees = vec!["Kim".into()];
+    item.milestone = Some("v1".into());
+    let edit = |add: &[&str], remove: &[&str], milestone| {
+        Action::edit(Edit {
+            add_assignees: add.iter().map(|login| login.to_string()).collect(),
+            remove_assignees: remove.iter().map(|login| login.to_string()).collect(),
+            milestone,
+            ..Edit::default()
+        })
+    };
+    let applied = |action: Action| action.ensure_applied(&item, false);
+    // Logins match whatever their case.
+    assert!(applied(edit(&["kim"], &["lee"], None)).is_ok());
+    assert!(applied(edit(&[], &[], Some(MilestoneChange::Set("v1".into())))).is_ok());
+    assert_eq!(
+        applied(edit(&["sam"], &["kim"], None))
+            .unwrap_err()
+            .to_string(),
+        "the forge did not assign sam and did not unassign kim on #7, which has the assignees Kim"
+    );
+    assert_eq!(
+        applied(edit(&[], &[], Some(MilestoneChange::Set("v2".into()))))
+            .unwrap_err()
+            .to_string(),
+        "the forge did not set the milestone v2 on #7, which has the milestone v1"
+    );
+    assert_eq!(
+        applied(edit(&[], &[], Some(MilestoneChange::Clear)))
+            .unwrap_err()
+            .to_string(),
+        "the forge did not clear the milestone on #7, which has the milestone v1"
+    );
+    let bare = pr(&forgejo, false, &[]).item;
+    assert_eq!(
+        edit(&["sam"], &[], Some(MilestoneChange::Set("v2".into())))
+            .ensure_applied(&bare, false)
+            .unwrap_err()
+            .to_string(),
+        "the forge did not assign sam on #7, which has no assignees"
+    );
+}
+
+#[test]
+fn assignee_changes_match_logins_whatever_their_case() {
+    let [github, _] = forges();
+    let mut current = pr(&github, false, &[]);
+    current.item.kind = ItemKind::Issue;
+    current.item.pr = None;
+    current.item.assignees = vec!["Kim".into(), "Lee".into()];
+    let edit = Action::edit(Edit {
+        add_assignees: vec!["lee".into(), "sam".into()],
+        remove_assignees: vec!["kim".into()],
+        ..Edit::default()
+    });
+    assert_eq!(
+        requests(&github, &current, edit),
+        [(
+            "PATCH".into(),
+            "repos/team/repo/issues/7".into(),
+            json!({"assignees": ["Lee", "sam"]})
+        )]
+    );
 }

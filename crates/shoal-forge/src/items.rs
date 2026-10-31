@@ -7,6 +7,7 @@ pub mod issue;
 pub mod item;
 pub mod link;
 pub mod list;
+mod milestone;
 pub mod reaction;
 mod retarget;
 pub mod revert;

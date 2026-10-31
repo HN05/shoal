@@ -6,7 +6,10 @@ use super::threads::{review_comments, thread_key, threads};
 use crate::{
     ForgeRepo,
     account::Account,
-    items::link::ItemKind,
+    items::{
+        item::{text, user_names},
+        link::ItemKind,
+    },
     review::view::{
         AutoMerge, Comment, Details, PrDetails, Review, ReviewComment, labels, login, required,
         review_comment, review_state, text_field,
@@ -101,6 +104,8 @@ fn parse_details(item: &Value, kind: ItemKind, number: u64, owner: &str) -> Resu
         author: login(&item["user"]),
         created_at: text_field(&item["created_at"]),
         labels: labels(&item["labels"]),
+        assignees: user_names(&item["assignees"], "login"),
+        milestone: text(&item["milestone"]["title"]),
         body: text_field(&item["body"]),
         pr,
         comments: None,

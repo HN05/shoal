@@ -134,6 +134,8 @@ fn pull_requests_read_branches_drafts_and_reviewers() {
             title: "Fix".into(),
             state: ItemState::Closed,
             labels: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
             pr: Some(PrSummary {
                 head: "topic".into(),
                 base: "main".into(),
@@ -316,6 +318,20 @@ fn issue_states_fold_into_open_and_closed() {
     }
     let issue = json!({"id": 3, "title": "Bug", "state": "OPEN"});
     assert!(bitbucket().current(ItemKind::Issue, 3, &issue).is_err());
+}
+
+#[test]
+fn issues_read_their_assignee_by_account_id_and_milestone_by_name() {
+    let issue = json!({"id": 3, "title": "Bug", "state": "new",
+            "assignee": {"account_id": "557058:abc", "nickname": "kim"},
+            "milestone": {"id": 2, "name": "v2"}});
+    let current = bitbucket().current(ItemKind::Issue, 3, &issue).unwrap();
+    assert_eq!(current.item.assignees, ["557058:abc"]);
+    assert_eq!(current.item.milestone.as_deref(), Some("v2"));
+    let bare =
+        json!({"id": 3, "title": "Bug", "state": "new", "assignee": null, "milestone": null});
+    let current = bitbucket().current(ItemKind::Issue, 3, &bare).unwrap();
+    assert!(current.item.assignees.is_empty() && current.item.milestone.is_none());
 }
 
 #[test]

@@ -22,7 +22,7 @@ pub(super) async fn open_pr(
 ) -> Result<i32> {
     let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory).await?;
     let opened = match publish(ctx, workspace, options).await? {
-        OpenOutcome::Opened(opened) => opened,
+        OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "PR", &proposed),
     };
     print_warnings(&opened);
@@ -106,7 +106,7 @@ pub(super) async fn open_issue(
     )
     .await?;
     let opened = match outcome {
-        OpenOutcome::Opened(opened) => opened,
+        OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "Issue", &proposed),
     };
     print_warnings(&opened);
@@ -147,6 +147,8 @@ pub(super) fn pull_options(pull: OpenPullArgs) -> Result<PullOptions> {
         draft: (pull.draft || pull.no_draft).then_some(pull.draft),
         labels: pull.labels,
         reviewers: pull.reviewers,
+        assignees: pull.assignees,
+        milestone: pull.milestone,
         attachments,
     })
 }

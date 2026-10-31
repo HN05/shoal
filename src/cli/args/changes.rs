@@ -145,7 +145,7 @@ pub enum PrCommand {
         #[command(flatten)]
         revert: RevertArgs,
     },
-    /// Change a PR's title, description, base, labels, reviewers or draft state.
+    /// Change a PR's title, description, base, labels, reviewers, assignees, milestone or draft state.
     Edit {
         #[command(flatten)]
         item: ItemSelector,
@@ -282,11 +282,17 @@ pub enum IssueCommand {
         /// Add a label; repeat for more.
         #[arg(long = "label", value_name = "LABEL")]
         labels: Vec<String>,
+        /// Assign a user; repeat for more.
+        #[arg(long = "assignee", value_name = "LOGIN")]
+        assignees: Vec<String>,
+        /// Set the milestone, by its title.
+        #[arg(long, value_name = "TITLE")]
+        milestone: Option<String>,
         /// Link the new issue to the workspace.
         #[arg(long)]
         link: bool,
     },
-    /// Change an issue's title, description or labels.
+    /// Change an issue's title, description, labels, assignees or milestone.
     Edit {
         #[command(flatten)]
         item: ItemSelector,
@@ -430,6 +436,12 @@ pub struct OpenPullArgs {
     /// Request a review; repeat for more.
     #[arg(long = "reviewer", value_name = "LOGIN")]
     pub reviewers: Vec<String>,
+    /// Assign a user; repeat for more.
+    #[arg(long = "assignee", value_name = "LOGIN")]
+    pub assignees: Vec<String>,
+    /// Set the milestone, by its title.
+    #[arg(long, value_name = "TITLE")]
+    pub milestone: Option<String>,
 }
 
 // What the PR that reverts a merged one is opened with.
@@ -511,7 +523,8 @@ pub struct VerdictArgs {
     pub request_changes: bool,
 }
 
-// Title, description and label changes either kind of item takes.
+// Title, description, label, assignee and milestone changes either kind of
+// item takes.
 #[derive(Debug, Args)]
 pub struct EditArgs {
     /// New title.
@@ -527,6 +540,18 @@ pub struct EditArgs {
     /// Remove a label; repeat for more.
     #[arg(long = "remove-label", value_name = "LABEL")]
     pub remove_labels: Vec<String>,
+    /// Assign a user; repeat for more.
+    #[arg(long = "add-assignee", value_name = "LOGIN")]
+    pub add_assignees: Vec<String>,
+    /// Unassign a user; repeat for more.
+    #[arg(long = "remove-assignee", value_name = "LOGIN")]
+    pub remove_assignees: Vec<String>,
+    /// Set the milestone, by its title.
+    #[arg(long, value_name = "TITLE", conflicts_with = "clear_milestone")]
+    pub milestone: Option<String>,
+    /// Remove the milestone.
+    #[arg(long)]
+    pub clear_milestone: bool,
 }
 
 // Files to show or link in a description or comment.

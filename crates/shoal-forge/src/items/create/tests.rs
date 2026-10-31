@@ -45,6 +45,8 @@ printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n
         title: "Flaky".into(),
         body: "Seen twice".into(),
         labels: vec!["bug".into()],
+        assignees: Vec::new(),
+        milestone: None,
         attachments: Vec::new(),
     };
     let created = github.create_issue(&account, &issue).await.unwrap();
@@ -57,6 +59,8 @@ printf 'HTTP/2.0 201 Created\nX-RateLimit-Remaining: 0\nX-RateLimit-Reset: 600\n
             title: "Flaky".into(),
             state: ItemState::Open,
             labels: vec!["bug".into()],
+            assignees: Vec::new(),
+            milestone: None,
             pr: None,
         }
     );
@@ -76,6 +80,8 @@ fn issues_carry_labels_on_github_and_label_afterwards_on_forgejo() {
         title: "Flaky".into(),
         body: "Seen twice".into(),
         labels: vec!["bug".into()],
+        assignees: Vec::new(),
+        milestone: None,
         attachments: Vec::new(),
     };
     let github = ForgeRepo::parse("git@github.com:team/repo.git").unwrap();
@@ -119,6 +125,8 @@ fn gitlab_opens_merge_requests_with_draft_titles_and_labeled_issues() {
         title: "Flaky".into(),
         body: "Seen twice".into(),
         labels: vec!["bug".into(), "ci".into()],
+        assignees: Vec::new(),
+        milestone: None,
         attachments: Vec::new(),
     };
     assert_eq!(
@@ -172,6 +180,8 @@ fn bitbucket_opens_pull_requests_and_issues_without_labels() {
         title: "Flaky".into(),
         body: "Seen twice".into(),
         labels: Vec::new(),
+        assignees: Vec::new(),
+        milestone: None,
         attachments: Vec::new(),
     };
     assert_eq!(
@@ -304,4 +314,25 @@ fn each_forge_reads_a_branch_commit_from_its_own_route() {
         fork,
         ForgeRepo::parse("https://github.com/someone/repo").unwrap()
     );
+}
+
+#[test]
+fn new_items_need_the_assignee_and_milestone_capabilities_of_their_kind() {
+    let issue = NewIssue {
+        assignees: vec!["kim".into()],
+        milestone: Some("v2".into()),
+        ..NewIssue::default()
+    };
+    assert_eq!(
+        issue.needs(),
+        [Capability::IssueAssignees, Capability::IssueMilestones]
+    );
+    let pull = NewPull {
+        assignees: vec!["kim".into()],
+        ..NewPull::default()
+    };
+    assert_eq!(pull.needs(), [Capability::PrAssignees]);
+    let bitbucket = ForgeRepo::parse("git@bitbucket.org:workspace/repo.git").unwrap();
+    assert!(bitbucket.require_all(issue.needs()).is_ok());
+    assert!(bitbucket.require_all(pull.needs()).is_err());
 }

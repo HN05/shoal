@@ -137,6 +137,8 @@ impl ForgeRepo {
             title: posted.title,
             state: ItemState::Open,
             labels: Vec::new(),
+            assignees: Vec::new(),
+            milestone: None,
             pr: Some(PrSummary {
                 head,
                 base,

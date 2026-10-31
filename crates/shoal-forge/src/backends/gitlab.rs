@@ -20,7 +20,7 @@ use crate::{
     },
     conventions::Lookup,
     items::{
-        action::{Edit, MergeMethod, UpdateMethod},
+        action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
         attach::{Attachment, Holder},
         create::{Head, NewIssue, NewPull},
         item::{Current, Item, ItemState, PrSummary, text},
@@ -102,6 +102,10 @@ impl Backend for GitLab {
             | Capability::ReadJobLogs
             | Capability::ReopenPrs
             | Capability::Labels
+            | Capability::IssueAssignees
+            | Capability::PrAssignees
+            | Capability::IssueMilestones
+            | Capability::PrMilestones
             | Capability::DraftPrs
             | Capability::Attachments
             | Capability::MergeCommit
@@ -204,12 +208,15 @@ impl Backend for GitLab {
             _ => None,
         };
         let same_project = value["source_project_id"] == value["target_project_id"];
-        let reviewers: Vec<(String, u64)> = value["reviewers"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|user| Some((text(&user["username"])?, user["id"].as_u64()?)))
-            .collect();
+        let users = |field: &str| -> Vec<(String, u64)> {
+            value[field]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|user| Some((text(&user["username"])?, user["id"].as_u64()?)))
+                .collect()
+        };
+        let (reviewers, assignees) = (users("reviewers"), users("assignees"));
         Ok(Current {
             item: Item {
                 kind,
@@ -218,6 +225,8 @@ impl Backend for GitLab {
                 title: text(&value["title"]).context("item has no title")?,
                 state,
                 labels: labels(&value["labels"]),
+                assignees: assignees.iter().map(|(name, _)| name.clone()).collect(),
+                milestone: text(&value["milestone"]["title"]),
                 pr,
             },
             node_id: None,
@@ -237,7 +246,8 @@ impl Backend for GitLab {
             conflict,
             merges_now: false,
             reviewers: reviewers.iter().map(|(name, _)| name.clone()).collect(),
-            user_ids: reviewers.into_iter().collect(),
+            user_ids: reviewers.into_iter().chain(assignees).collect(),
+            milestone_id: None,
             replaced_labels: Vec::new(),
         })
     }
@@ -265,7 +275,7 @@ impl Backend for GitLab {
         edit: &Edit,
         current: &mut Current,
     ) -> Result<()> {
-        for name in &edit.add_reviewers {
+        for name in edit.add_reviewers.iter().chain(&edit.add_assignees) {
             if current.user_ids.contains_key(name) {
                 continue;
             }
@@ -288,7 +298,8 @@ impl Backend for GitLab {
     }
 
     /// One update with every changed field; GitLab adds and removes labels by
-    /// name, keeps draft state in the title and replaces reviewers by ID.
+    /// name, keeps draft state in the title, replaces reviewers and assignees
+    /// by user ID and clears a milestone with ID 0.
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         let item = &current.item;
         let mut fields = serde_json::Map::new();
@@ -318,7 +329,28 @@ impl Backend for GitLab {
             }
         }
         if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
-            fields.insert("reviewer_ids".into(), reviewer_ids(current, edit)?.into());
+            let reviewers = changed_set(
+                &current.reviewers,
+                &edit.add_reviewers,
+                &edit.remove_reviewers,
+            );
+            fields.insert("reviewer_ids".into(), user_ids(current, &reviewers)?.into());
+        }
+        if edit.assigns() {
+            let assignees = edit.assignees_after(&current.item.assignees);
+            fields.insert("assignee_ids".into(), user_ids(current, &assignees)?.into());
+        }
+        match &edit.milestone {
+            Some(MilestoneChange::Set(title)) => {
+                let id = current
+                    .milestone_id
+                    .with_context(|| format!("milestone {title} was not looked up"))?;
+                fields.insert("milestone_id".into(), id.into());
+            }
+            Some(MilestoneChange::Clear) => {
+                fields.insert("milestone_id".into(), 0.into());
+            }
+            None => {}
         }
         if fields.is_empty() {
             return Ok(Vec::new());
@@ -941,6 +973,12 @@ impl Backend for GitLab {
     fn exclusive_label(&self, name: &str, _label: &Value) -> bool {
         name.contains("::")
     }
+
+    /// The project's milestones and those of the groups above it, which
+    /// lists both open and closed ones unless asked for one state.
+    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
+        repo.repo_endpoint("milestones?include_ancestors=true")
+    }
 }
 
 async fn view_details(
@@ -966,6 +1004,8 @@ async fn view_details(
         author: username(&value["author"]),
         created_at: text(&value["created_at"]).unwrap_or_default(),
         labels: current.item.labels,
+        assignees: current.item.assignees,
+        milestone: current.item.milestone,
         body: current.body,
         pr,
         comments: None,
@@ -1121,20 +1161,10 @@ pub(crate) fn draft_title(title: &str, draft: bool) -> String {
     }
 }
 
-/// The reviewers after the edit, by user ID.
-fn reviewer_ids(current: &Current, edit: &Edit) -> Result<Vec<u64>> {
-    let mut names: Vec<&String> = current
-        .reviewers
-        .iter()
-        .filter(|name| !edit.remove_reviewers.contains(name))
-        .collect();
-    for name in &edit.add_reviewers {
-        if !names.contains(&name) {
-            names.push(name);
-        }
-    }
+/// The IDs of the users `names`, which `current` records.
+fn user_ids(current: &Current, names: &[String]) -> Result<Vec<u64>> {
     names
-        .into_iter()
+        .iter()
         .map(|name| {
             current
                 .user_ids

@@ -37,6 +37,12 @@ pub struct Details {
     pub author: String,
     pub created_at: String,
     pub labels: Vec<String>,
+    /// Named as edits take them: logins, or Bitbucket account IDs.
+    #[serde(default)]
+    pub assignees: Vec<String>,
+    /// The milestone's title.
+    #[serde(default)]
+    pub milestone: Option<String>,
     pub body: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr: Option<PrDetails>,

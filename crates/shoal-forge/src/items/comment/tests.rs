@@ -28,6 +28,8 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
         author: "ann".into(),
         created_at: String::new(),
         labels: Vec::new(),
+        assignees: Vec::new(),
+        milestone: None,
         body: String::new(),
         pr: None,
         comments: Some(vec![comment(10, "bob")]),

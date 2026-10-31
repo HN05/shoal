@@ -5,6 +5,7 @@ use serde_json::json;
 fn github_issue_and_pr_details_read_content_and_comments() {
     let issue = json!({"number": 4, "title": "Crash", "body": "Steps", "state": "OPEN",
             "author": {"login": "ann"}, "labels": [{"name": "bug"}], "createdAt": "2026-01-01T00:00:00Z",
+            "assignees": [{"login": "kim", "name": "Kim"}], "milestone": {"number": 2, "title": "v2"},
             "comments": [{"author": {"login": "bob"}, "createdAt": "2026-01-02T00:00:00Z", "body": "Same here",
                 "url": "https://github.com/o/r/issues/4#issuecomment-41"}]});
     let details = parse_details(&issue.to_string(), ItemKind::Issue, 4).unwrap();
@@ -12,6 +13,8 @@ fn github_issue_and_pr_details_read_content_and_comments() {
     assert_eq!(details.state, "open");
     assert_eq!(details.author, "ann");
     assert_eq!(details.labels, ["bug"]);
+    assert_eq!(details.assignees, ["kim"]);
+    assert_eq!(details.milestone.as_deref(), Some("v2"));
     assert!(details.pr.is_none());
     let comment = &details.comments.unwrap()[0];
     assert_eq!((comment.id, comment.body.as_str()), (41, "Same here"));
@@ -23,6 +26,7 @@ fn github_issue_and_pr_details_read_content_and_comments() {
     let details = parse_details(&pull.to_string(), ItemKind::Pr, 7).unwrap();
     assert_eq!(details.state, "merged");
     assert_eq!(details.author, "ghost");
+    assert!(details.assignees.is_empty() && details.milestone.is_none());
     assert!(details.comments.is_none());
     let pr = details.pr.unwrap();
     assert_eq!(

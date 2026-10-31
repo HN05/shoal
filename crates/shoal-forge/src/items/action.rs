@@ -61,7 +61,8 @@ pub(crate) fn after_post(error: anyhow::Error, sent: bool, authored: &[String]) 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Action {
-    Edit(Edit),
+    /// Boxed, as the largest change by far.
+    Edit(Box<Edit>),
     Comment {
         body: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -106,8 +107,80 @@ pub struct Edit {
     pub remove_labels: Vec<String>,
     pub add_reviewers: Vec<String>,
     pub remove_reviewers: Vec<String>,
+    pub add_assignees: Vec<String>,
+    pub remove_assignees: Vec<String>,
+    pub milestone: Option<MilestoneChange>,
     pub draft: Option<bool>,
     pub attachments: Vec<Attachment>,
+}
+
+/// A new milestone for an item, by its title, or none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MilestoneChange {
+    Set(String),
+    Clear,
+}
+
+impl Edit {
+    /// Whether the edit changes the item's assignees.
+    pub(crate) fn assigns(&self) -> bool {
+        !self.add_assignees.is_empty() || !self.remove_assignees.is_empty()
+    }
+
+    /// The assignees of `current` after the edit, in order.
+    pub(crate) fn assignees_after(&self, current: &[String]) -> Vec<String> {
+        changed_set(current, &self.add_assignees, &self.remove_assignees)
+    }
+
+    /// The title of the milestone the edit sets, if it sets one.
+    pub(crate) fn milestone_title(&self) -> Option<&str> {
+        match &self.milestone {
+            Some(MilestoneChange::Set(title)) => Some(title),
+            _ => None,
+        }
+    }
+
+    fn ensure_milestone_applied(&self, item: &Item) -> Result<()> {
+        let applied = match &self.milestone {
+            None => return Ok(()),
+            Some(MilestoneChange::Set(title)) => item.milestone.as_ref() == Some(title),
+            Some(MilestoneChange::Clear) => item.milestone.is_none(),
+        };
+        if applied {
+            return Ok(());
+        }
+        let change = match self.milestone_title() {
+            Some(title) => format!("set the milestone {title}"),
+            None => "clear the milestone".to_owned(),
+        };
+        let has = match &item.milestone {
+            Some(title) => format!("the milestone {title}"),
+            None => "no milestone".to_owned(),
+        };
+        anyhow::bail!(
+            "the forge did not {change} on #{}, which has {has}",
+            item.number
+        )
+    }
+}
+
+/// The users `current` names without `removed`, then with each of `added`
+/// it lacks, keeping the spelling `current` has: logins and account IDs name
+/// the same user whatever their case.
+pub(crate) fn changed_set(current: &[String], added: &[String], removed: &[String]) -> Vec<String> {
+    let names = |set: &[String], name: &str| set.iter().any(|has| has.eq_ignore_ascii_case(name));
+    let mut set: Vec<String> = current
+        .iter()
+        .filter(|name| !names(removed, name))
+        .cloned()
+        .collect();
+    for name in added {
+        if !names(&set, name) {
+            set.push(name.clone());
+        }
+    }
+    set
 }
 
 /// A reply in the review thread of a PR's inline comment, a change to the
@@ -132,6 +205,10 @@ states!(UpdateMethod: ValueEnum {
 });
 
 impl Action {
+    pub fn edit(edit: Edit) -> Self {
+        Self::Edit(Box::new(edit))
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Edit(_) => "edit",
@@ -171,8 +248,18 @@ impl Action {
             Self::Edit(edit) => {
                 let labels = (!edit.add_labels.is_empty() || !edit.remove_labels.is_empty())
                     .then_some(Capability::Labels);
+                let assignees = edit.assigns().then_some(Capability::assignees(kind));
+                let milestone = edit
+                    .milestone
+                    .as_ref()
+                    .map(|_| Capability::milestones(kind));
                 let draft = edit.draft.map(|_| Capability::DraftPrs);
-                labels.into_iter().chain(draft).collect()
+                labels
+                    .into_iter()
+                    .chain(assignees)
+                    .chain(milestone)
+                    .chain(draft)
+                    .collect()
             }
             Self::Reopen if kind == ItemKind::Pr => vec![Capability::ReopenPrs],
             Self::Merge { method, .. } => vec![Capability::merge(*method)],
@@ -205,8 +292,8 @@ impl Action {
         match self {
             Self::Edit(edit) => {
                 ensure!(
-                    *edit != Edit::default(),
-                    "nothing to change; pass a new title, description, attachment, base, label, reviewer or draft state"
+                    **edit != Edit::default(),
+                    "nothing to change; pass a new title, description, attachment, base, label, reviewer, assignee, milestone or draft state"
                 );
                 if edit.base.is_some() {
                     pr_only("base branch")?;
@@ -248,48 +335,77 @@ impl Action {
         Ok(())
     }
 
-    /// Refuse an edit whose labels `item`, as the forge reports it afterwards,
-    /// does not show: a forge can leave out an unknown label, or one of two
-    /// exclusive ones, without an error. `fold_case` is whether names that
-    /// differ only in case name the same label.
+    /// Refuse an edit whose labels, assignees or milestone `item`, as the
+    /// forge reports it afterwards, does not show: a forge can leave out an
+    /// unknown label, one of two exclusive ones, or an assignee it cannot
+    /// assign, without an error. `fold_case` is whether names that differ
+    /// only in case name the same label.
     fn ensure_applied(&self, item: &Item, fold_case: bool) -> Result<()> {
         let Self::Edit(edit) = self else {
             return Ok(());
         };
-        let has = |label: &String| {
-            item.labels
-                .iter()
-                .any(|name| name == label || (fold_case && name.eq_ignore_ascii_case(label)))
-        };
-        // The labels of `labels` that `item` lacks when `added`, or has otherwise.
-        let unapplied = |labels: &[String], added: bool| -> String {
-            let labels: Vec<_> = labels
-                .iter()
-                .filter(|label| has(label) != added)
-                .map(String::as_str)
-                .collect();
-            labels.join(", ")
-        };
-        let problems: Vec<_> = [
-            ("add", unapplied(&edit.add_labels, true)),
-            ("remove", unapplied(&edit.remove_labels, false)),
-        ]
+        let labels = [("add", &edit.add_labels), ("remove", &edit.remove_labels)];
+        ensure_set_applied(
+            item.number,
+            "labels",
+            &item.labels,
+            labels,
+            |name, label| name == label || (fold_case && name.eq_ignore_ascii_case(label)),
+        )?;
+        // Logins name the same user whatever their case.
+        let assignees = [
+            ("assign", &edit.add_assignees),
+            ("unassign", &edit.remove_assignees),
+        ];
+        ensure_set_applied(
+            item.number,
+            "assignees",
+            &item.assignees,
+            assignees,
+            |name, login| name.eq_ignore_ascii_case(login),
+        )?;
+        edit.ensure_milestone_applied(item)
+    }
+}
+
+/// Refuse the changes to `set`, item `number`'s `noun` as the forge reports
+/// them afterwards, that it does not show: the names added first that it
+/// lacks and the names removed second that it has, each change named by its
+/// verb. `same` is whether a name of `set` names the one changed.
+fn ensure_set_applied(
+    number: u64,
+    noun: &str,
+    set: &[String],
+    changes: [(&str, &Vec<String>); 2],
+    same: impl Fn(&str, &str) -> bool,
+) -> Result<()> {
+    let [(add, added), (remove, removed)] = changes;
+    let problems: Vec<_> = [(add, added, true), (remove, removed, false)]
         .into_iter()
-        .filter(|(_, labels)| !labels.is_empty())
-        .map(|(verb, labels)| format!("did not {verb} {labels}"))
+        .filter_map(|(verb, names, added)| {
+            let names: Vec<_> = names
+                .iter()
+                .map(String::as_str)
+                .filter(|name| set.iter().any(|has| same(has, name)) != added)
+                .collect();
+            (!names.is_empty()).then(|| format!("did not {verb} {}", names.join(", ")))
+        })
         .collect();
-        if problems.is_empty() {
-            return Ok(());
-        }
-        let labels = match item.labels.as_slice() {
-            [] => "no labels".to_owned(),
-            labels => format!("the labels {}", labels.join(", ")),
-        };
-        anyhow::bail!(
-            "the forge {} on #{}, which has {labels}",
-            problems.join(" and "),
-            item.number
-        )
+    if problems.is_empty() {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "the forge {} on #{number}, which has {}",
+        problems.join(" and "),
+        listing(noun, set)
+    )
+}
+
+/// `names` as "the <noun> a, b", or "no <noun>".
+fn listing(noun: &str, names: &[String]) -> String {
+    match names {
+        [] => format!("no {noun}"),
+        names => format!("the {noun} {}", names.join(", ")),
     }
 }
 
@@ -397,9 +513,9 @@ impl ForgeRepo {
                 let edit = Edit {
                     body: Some(body),
                     attachments: Vec::new(),
-                    ..edit.clone()
+                    ..Edit::clone(edit)
                 };
-                Ok((Cow::Owned(Action::Edit(edit)), None))
+                Ok((Cow::Owned(Action::edit(edit)), None))
             }
             Action::Comment { body, attachments } if !attachments.is_empty() => {
                 let (body, pending) = self.new_body(account, body, attachments, per_item).await?;
@@ -465,6 +581,9 @@ impl ForgeRepo {
                 self.plan_thread(number, &thread, change)
             }
             Action::Edit(edit) => {
+                if let Some(title) = edit.milestone_title() {
+                    current.milestone_id = Some(self.milestone_id(account, title).await?);
+                }
                 self.kind
                     .prepare_edit(self, account, edit, &mut current)
                     .await?;

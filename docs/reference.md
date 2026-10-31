@@ -2787,6 +2787,7 @@ shoal issue list --label bug flaky  # search by text; --state, --author and --li
 shoal pr list --state all --author dev
 shoal issue list --repo team/review-bot missed  # search another repository
 shoal issue edit --add-label bug    # comment, close and reopen work too
+shoal issue edit 12 --add-assignee kim --milestone v2  # --clear-milestone removes it
 shoal issue open --title "Flaky watch test" --label bug
 shoal issue open --repo team/review-bot --title "Missed finding" # in another repository
 shoal repo labels                        # the repository's labels with their descriptions
@@ -2809,11 +2810,12 @@ description is the supplied `--body` or `--body-file`, or `Closes #<number>`
 when no body is supplied for a linked issue; its base is `--base`, else the base
 workspace's branch, else the default branch. It is a draft with `--draft` or
 `[pr] draft = true`, which `--no-draft` overrides. Draft state, repeated
-`--label` and repeated `--reviewer` apply only to a new PR. Its JSON adds
+`--label`, repeated `--reviewer`, repeated `--assignee` and `--milestone TITLE`
+apply only to a new PR. Its JSON adds
 `created` (false for a PR it found), `linked`, and the `warnings` it prints on
 stderr: [convention](#repository-conventions) warnings, and a failure to label,
-request reviews, attach files or read a new PR once the forge opened it, which
-still records and links the PR as posted.
+request reviews, assign, set the milestone, attach files or read a new PR once
+the forge opened it, which still records and links the PR as posted.
 
 ```toml
 [pr]
@@ -2834,13 +2836,20 @@ Outside all of them, a non-interactive call fails saying so. `edit`
 takes `--title`, `--body` or `--body-file`, and repeated `--add-label` and
 `--remove-label`; PRs also take `--base`, repeated `--add-reviewer` and
 `--remove-reviewer`, which take a team as `owner/team` on GitHub and Forgejo,
-and `--draft` or `--no-draft`. Edits apply in that order,
+and `--draft` or `--no-draft`. Both kinds take repeated `--add-assignee` and
+`--remove-assignee`, and `--milestone TITLE` or `--clear-milestone`. Edits apply in that order,
 and a failed request stops the rest with the forge's message. Labels are
 replaced as a set by name, an added exclusive label replacing the item's
 label of its scope, and an edit whose added labels the item then lacks,
 or whose removed labels it still has, fails naming them and the item's labels;
 Forgejo's draft state is the title's `WIP: ` prefix,
-and GitLab's its `Draft: ` prefix.
+and GitLab's its `Draft: ` prefix. Assignees are replaced as a set by login,
+and a milestone is named by its exact title, open or closed, including a GitLab
+group's; an edit whose assignees or milestone the item then does not show, such
+as a GitHub user who cannot be assigned or a second assignee on GitLab's free
+tier, fails naming them and what the item has. Bitbucket issues take one
+assignee, by account ID, and Bitbucket PRs take neither assignees nor milestones,
+which [`shoal forge capabilities`](#forges) reports.
 `shoal pr reviewers` lists the users and teams a PR can ask for a review,
 except its author, by the `name` that `--add-reviewer` takes, with the forge's
 `display_name` and whether it is a `team`. Users are GitHub's assignable
@@ -2964,15 +2973,17 @@ as `issue open`, `repo labels`, `forge capabilities`, `forge reactions` and
 with your own logins. Each line shows an item's number, state (`draft` for an
 open draft PR), title and labels; JSON lists the items with the fields every
 other item command reports. Bitbucket's `--author` matches a nickname.
-`issue open` takes `--title`, `--body` or `--body-file`, and repeated `--label`;
+`issue open` takes `--title`, `--body` or `--body-file`, repeated `--label`,
+repeated `--assignee` and `--milestone TITLE`;
 the new issue is recorded as opened, and assigned only with `--link`, which fails
 while another issue is assigned. A workspace being removed refuses it. Outside
 a workspace, such as in a chat, it opens the issue in the repository of the
 registered checkout it runs in, under that repository's settings, records it
 nowhere, and refuses `--link`. Its JSON
 adds `created` and `linked`, and `warnings`, on stderr too, with the
-[convention](#repository-conventions) warnings, a failure to label, attach files
-or read the issue once the forge opened it, which still records it as posted,
+[convention](#repository-conventions) warnings, a failure to label, assign, set
+the milestone, attach files or read the issue once the forge opened it, which
+still records it as posted,
 and when removal started before the workspace could record and link the new
 issue.
 
@@ -3260,7 +3271,7 @@ Assigned PRs accumulate without duplicates and must name the recorded workspace
 branch. Assigned items suppress idle cleanup.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
-author, labels, description, comments, and reviews with their inline comments,
+author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
 with the reactions on the item and each comment where the forge has them, as
 emoji on a terminal in a UTF-8 locale other than the Linux console and by name
 otherwise; a

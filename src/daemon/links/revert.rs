@@ -73,7 +73,7 @@ impl Manager {
             required,
         )
         .await;
-        Ok(OpenOutcome::Opened(Opened {
+        Ok(OpenOutcome::opened(Opened {
             item: created.item,
             created: true,
             linked: false,

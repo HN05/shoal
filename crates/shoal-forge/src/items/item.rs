@@ -23,6 +23,12 @@ pub struct Item {
     pub title: String,
     pub state: ItemState,
     pub labels: Vec<String>,
+    /// Named as edits take them: logins, or Bitbucket account IDs.
+    #[serde(default)]
+    pub assignees: Vec<String>,
+    /// The milestone's title.
+    #[serde(default)]
+    pub milestone: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pr: Option<PrSummary>,
 }
@@ -74,9 +80,13 @@ pub struct Current {
     /// A GitLab merge request's reviewers by username, or a Bitbucket pull
     /// request's by account ID.
     pub reviewers: Vec<String>,
-    /// GitLab user IDs by username, which its reviewer changes take: the
-    /// reviewers', and those of the users an edit adds.
+    /// GitLab user IDs by username, which its reviewer and assignee changes
+    /// take: the reviewers' and assignees', and those of the users an edit
+    /// adds.
     pub user_ids: std::collections::BTreeMap<String, u64>,
+    /// The ID the forge takes for the milestone an edit sets, looked up
+    /// before the edit is planned.
+    pub milestone_id: Option<u64>,
     /// The item's labels that a Forgejo edit's added exclusive labels
     /// replace, as the only one an item may have of their scope.
     pub replaced_labels: Vec<String>,
@@ -136,6 +146,16 @@ pub(crate) fn issue_read_kind(number: u64, value: &Value) -> Result<ItemKind> {
 
 pub(crate) fn text(value: &Value) -> Option<String> {
     value.as_str().map(str::to_owned)
+}
+
+/// The `field` of each user in `users`, a list a read may leave out.
+pub(crate) fn user_names(users: &Value, field: &str) -> Vec<String> {
+    users
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|user| text(&user[field]))
+        .collect()
 }
 
 #[cfg(test)]

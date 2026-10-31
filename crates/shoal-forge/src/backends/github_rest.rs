@@ -12,9 +12,9 @@ use crate::{
     account::Account,
     ci::{CiCheck, JobState, check},
     items::{
-        action::Edit,
+        action::{Edit, MilestoneChange},
         create::{Head, NewPull},
-        item::{Current, Item, ItemState, PrSummary, text},
+        item::{Current, Item, ItemState, PrSummary, text, user_names},
         link::ItemKind,
         reaction::{Listed, Subject},
     },
@@ -86,6 +86,8 @@ pub(crate) fn current(
             title,
             state,
             labels,
+            assignees: user_names(&value["assignees"], "login"),
+            milestone: text(&value["milestone"]["title"]),
             pr,
         },
         node_id: text(&value["node_id"]),
@@ -103,6 +105,7 @@ pub(crate) fn current(
         ),
         reviewers: Vec::new(),
         user_ids: Default::default(),
+        milestone_id: None,
         replaced_labels: Vec::new(),
     })
 }
@@ -160,7 +163,7 @@ pub(crate) fn edit(
     current: &Current,
     edit: &Edit,
     dialect: Dialect,
-) -> Vec<Request> {
+) -> Result<Vec<Request>> {
     let item = &current.item;
     let mut requests = Vec::new();
     let mut fields = serde_json::Map::new();
@@ -182,12 +185,29 @@ pub(crate) fn edit(
     if let Some(base) = &edit.base {
         fields.insert("base".into(), base.clone().into());
     }
-    if !fields.is_empty() {
-        requests.push(Request::new(
-            HttpMethod::Patch,
-            repo.item_endpoint(item.kind, item.number),
-            Some(fields.into()),
-        ));
+    let assignment = assignment_fields(current, edit, dialect)?;
+    // Only the issue endpoint changes a PR's assignees and milestone.
+    let issue_fields = match item.kind {
+        ItemKind::Issue => {
+            fields.extend(assignment);
+            serde_json::Map::new()
+        }
+        ItemKind::Pr => assignment,
+    };
+    for (endpoint, fields) in [
+        (repo.item_endpoint(item.kind, item.number), fields),
+        (
+            repo.item_endpoint(ItemKind::Issue, item.number),
+            issue_fields,
+        ),
+    ] {
+        if !fields.is_empty() {
+            requests.push(Request::new(
+                HttpMethod::Patch,
+                endpoint,
+                Some(fields.into()),
+            ));
+        }
     }
     if !edit.add_labels.is_empty() || !edit.remove_labels.is_empty() {
         // Replacing the set takes label names on both forges.
@@ -223,7 +243,32 @@ pub(crate) fn edit(
             ));
         }
     }
-    requests
+    Ok(requests)
+}
+
+/// The issue fields that replace the item's assignees and milestone as
+/// `edit` says. Forgejo clears a milestone with ID 0.
+fn assignment_fields(
+    current: &Current,
+    edit: &Edit,
+    dialect: Dialect,
+) -> Result<serde_json::Map<String, Value>> {
+    let mut fields = serde_json::Map::new();
+    if edit.assigns() {
+        let assignees = edit.assignees_after(&current.item.assignees);
+        fields.insert("assignees".into(), assignees.into());
+    }
+    let milestone = match (&edit.milestone, dialect) {
+        (None, _) => return Ok(fields),
+        (Some(MilestoneChange::Set(title)), _) => current
+            .milestone_id
+            .with_context(|| format!("milestone {title} was not looked up"))?
+            .into(),
+        (Some(MilestoneChange::Clear), Dialect::GitHub) => Value::Null,
+        (Some(MilestoneChange::Clear), Dialect::Forgejo) => 0.into(),
+    };
+    fields.insert("milestone".into(), milestone);
+    Ok(fields)
 }
 
 /// The body that requests or withdraws reviews from `names`, where

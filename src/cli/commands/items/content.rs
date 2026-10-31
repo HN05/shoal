@@ -10,7 +10,7 @@ use crate::{
         changes::{AttachArgs, EditArgs, PrEditArgs},
     },
     forge::items::{
-        action::{Action, Edit},
+        action::{Action, Edit, MilestoneChange},
         attach::{self, Attachment},
         comment::CommentEdit,
     },
@@ -34,6 +34,13 @@ pub(super) fn edit_fields(edit: EditArgs) -> Result<Edit> {
         body,
         add_labels: edit.add_labels,
         remove_labels: edit.remove_labels,
+        add_assignees: edit.add_assignees,
+        remove_assignees: edit.remove_assignees,
+        milestone: match (edit.milestone, edit.clear_milestone) {
+            (Some(title), _) => Some(MilestoneChange::Set(title)),
+            (None, true) => Some(MilestoneChange::Clear),
+            (None, false) => None,
+        },
         attachments,
         ..Edit::default()
     })

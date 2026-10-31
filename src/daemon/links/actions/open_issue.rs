@@ -108,7 +108,7 @@ impl Manager {
         let checked = destination
             .warnings(&account, &workspace.path, &item, &issue, required)
             .await;
-        Ok(OpenOutcome::Opened(Opened {
+        Ok(OpenOutcome::opened(Opened {
             item,
             created: true,
             linked,
@@ -139,7 +139,7 @@ impl Manager {
         let checked = destination
             .warnings(&account, &checkout.path, &item, &issue, required)
             .await;
-        Ok(OpenOutcome::Opened(Opened {
+        Ok(OpenOutcome::opened(Opened {
             item,
             created: true,
             linked: false,

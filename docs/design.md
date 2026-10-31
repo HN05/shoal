@@ -1439,7 +1439,11 @@ stay unmodeled; approvals count as approving reviews. Bitbucket Cloud has no CLI
 to own a login, so a user-configured command supplies its token per lookup, as
 `[secrets]` commands do, and Shoal still stores no token; agents act with the
 user's Bitbucket credentials until a separate agent token is configurable. Forge differences stay in planning, such as Forgejo keeping draft
-state in the title, so callers see the same item either way. Each backend
+state in the title, so callers see the same item either way. Milestones are
+named by title and looked up as the ID each forge takes, and a new item gets its
+assignees and milestone from the edit that finishes it, so one path sets them.
+An edit fails when the item the forge then reports lacks its labels, assignees
+or milestone, because forges drop what they cannot apply without an error. Each backend
 declares the capabilities it has, and a request needing one it lacks is refused
 before anything is sent with one typed error naming the forge and the
 capability, so a backend gains a capability without changes elsewhere;

@@ -10,7 +10,7 @@ use crate::{
     backends::Backend,
     capability::Capability,
     items::{
-        action::{Action, Edit},
+        action::{Action, Edit, MilestoneChange},
         attach::{Attachment, Pending},
         item::{Item, ItemState, PrSummary},
         link::ItemKind,
@@ -23,6 +23,11 @@ pub struct NewIssue {
     pub title: String,
     pub body: String,
     pub labels: Vec<String>,
+    #[serde(default)]
+    pub assignees: Vec<String>,
+    /// The milestone's title.
+    #[serde(default)]
+    pub milestone: Option<String>,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
 }
@@ -39,6 +44,9 @@ pub struct PullOptions {
     pub draft: Option<bool>,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
+    pub assignees: Vec<String>,
+    /// The milestone's title.
+    pub milestone: Option<String>,
     pub attachments: Vec<Attachment>,
 }
 
@@ -55,14 +63,21 @@ pub struct NewPull {
     pub draft: bool,
     pub labels: Vec<String>,
     pub reviewers: Vec<String>,
+    #[serde(default)]
+    pub assignees: Vec<String>,
+    /// The milestone's title.
+    #[serde(default)]
+    pub milestone: Option<String>,
     pub attachments: Vec<Attachment>,
 }
 
 impl NewIssue {
     /// The capabilities the forge needs to open the issue, besides
     /// attachments, which uploads check.
-    fn needs(&self) -> Option<Capability> {
-        (!self.labels.is_empty()).then_some(Capability::Labels)
+    fn needs(&self) -> Vec<Capability> {
+        let labels = (!self.labels.is_empty()).then_some(Capability::Labels);
+        let assignment = assignment_needs(ItemKind::Issue, &self.assignees, &self.milestone);
+        labels.into_iter().chain(assignment).collect()
     }
 }
 
@@ -75,8 +90,26 @@ impl NewPull {
             .head_repository
             .is_some()
             .then_some(Capability::ForkPrs);
-        labels.into_iter().chain(draft).chain(fork).collect()
+        let assignment = assignment_needs(ItemKind::Pr, &self.assignees, &self.milestone);
+        labels
+            .into_iter()
+            .chain(draft)
+            .chain(fork)
+            .chain(assignment)
+            .collect()
     }
+}
+
+/// The capabilities a new item of `kind` needs for its assignees and
+/// milestone.
+fn assignment_needs(
+    kind: ItemKind,
+    assignees: &[String],
+    milestone: &Option<String>,
+) -> impl Iterator<Item = Capability> {
+    let assignees = (!assignees.is_empty()).then_some(Capability::assignees(kind));
+    let milestone = milestone.as_ref().map(|_| Capability::milestones(kind));
+    assignees.into_iter().chain(milestone)
 }
 
 /// An item Shoal opened, as the forge reports it once finished, or as it
@@ -85,7 +118,7 @@ impl NewPull {
 pub struct Created {
     pub item: Item,
     /// Why finishing the item failed after the forge opened it, so it may
-    /// lack labels, reviewers or files.
+    /// lack labels, reviewers, assignees, its milestone or files.
     pub unfinished: Option<String>,
 }
 
@@ -156,7 +189,8 @@ impl ForgeRepo {
     }
 
     /// Post the PR and return it as posted with the edit that finishes it:
-    /// its labels, reviewers and files the forge keeps with the item.
+    /// its labels, reviewers, assignees, milestone and files the forge keeps
+    /// with the item.
     pub async fn post_pull(&self, account: &Account, pull: &NewPull) -> Result<(Item, Edit)> {
         self.require_all(pull.needs())?;
         let per_item = self.check_uploads(account, &pull.attachments).await?;
@@ -183,6 +217,8 @@ impl ForgeRepo {
         let follow_up = Edit {
             add_labels: pull.labels,
             add_reviewers: pull.reviewers,
+            add_assignees: pull.assignees,
+            milestone: pull.milestone.map(MilestoneChange::Set),
             ..pending_edit(pending)
         };
         Ok((posted, follow_up))
@@ -220,8 +256,8 @@ impl ForgeRepo {
     }
 
     /// Post the issue and return it as posted with the edit that finishes it:
-    /// Forgejo's labels, which it takes only by ID on creation, and files the
-    /// forge keeps with the item.
+    /// Forgejo's labels, which it takes only by ID on creation, assignees,
+    /// the milestone, and files the forge keeps with the item.
     pub async fn post_issue(&self, account: &Account, issue: &NewIssue) -> Result<(Item, Edit)> {
         self.require_all(issue.needs())?;
         let per_item = self.check_uploads(account, &issue.attachments).await?;
@@ -244,6 +280,8 @@ impl ForgeRepo {
         let posted = self.posted_item(ItemKind::Issue, &created, issue.title, posted_labels)?;
         let follow_up = Edit {
             add_labels,
+            add_assignees: issue.assignees,
+            milestone: issue.milestone.map(MilestoneChange::Set),
             ..pending_edit(pending)
         };
         Ok((posted, follow_up))
@@ -265,6 +303,8 @@ impl ForgeRepo {
             title,
             state: ItemState::Open,
             labels,
+            assignees: Vec::new(),
+            milestone: None,
             pr: None,
         })
     }
@@ -285,14 +325,14 @@ impl ForgeRepo {
                 .map(|read| read.item)
                 .with_context(|| format!("{opened}, but reading it failed"));
         }
-        self.act(account, kind, number, &Action::Edit(follow_up.clone()))
+        self.act(account, kind, number, &Action::edit(follow_up.clone()))
             .await
             .with_context(|| match kind {
-                ItemKind::Issue => {
-                    format!("{opened}, but labeling it or attaching its files failed")
-                }
+                ItemKind::Issue => format!(
+                    "{opened}, but labeling it, assigning it, setting its milestone or attaching its files failed"
+                ),
                 ItemKind::Pr => format!(
-                    "{opened}, but labeling it, requesting reviews or attaching its files failed"
+                    "{opened}, but labeling it, requesting reviews, assigning it, setting its milestone or attaching its files failed"
                 ),
             })
     }

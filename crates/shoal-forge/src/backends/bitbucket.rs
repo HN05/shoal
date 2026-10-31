@@ -21,7 +21,7 @@ use crate::{
     },
     conventions::Lookup,
     items::{
-        action::{Edit, MergeMethod, UpdateMethod},
+        action::{Edit, MergeMethod, MilestoneChange, UpdateMethod, changed_set},
         attach::{Attachment, Holder},
         comment::Found,
         create::{Head, NewIssue, NewPull},
@@ -80,6 +80,12 @@ impl Backend for Bitbucket {
             )),
             Capability::RevertPrs => Support::Unsupported(Some(capability::GIT_REVERT)),
             Capability::Labels => Support::Unsupported(Some("Bitbucket has no labels")),
+            Capability::PrAssignees => {
+                Support::Unsupported(Some("Bitbucket pull requests have no assignees"))
+            }
+            Capability::PrMilestones => {
+                Support::Unsupported(Some("Bitbucket pull requests have no milestones"))
+            }
             Capability::Attachments => {
                 Support::Unsupported(Some("Bitbucket has no API for attaching files"))
             }
@@ -97,6 +103,8 @@ impl Backend for Bitbucket {
                 "Bitbucket has no API for updating a PR's branch, so update it with Git and push it",
             )),
             Capability::ResolveThreads
+            | Capability::IssueAssignees
+            | Capability::IssueMilestones
             | Capability::DraftPrs
             | Capability::MergeCommit
             | Capability::RebaseMerge
@@ -209,6 +217,8 @@ impl Backend for Bitbucket {
                 title: text(&value["title"]).context("item has no title")?,
                 state,
                 labels: Vec::new(),
+                assignees: text(&value["assignee"]["account_id"]).into_iter().collect(),
+                milestone: text(&value["milestone"]["name"]),
                 pr,
             },
             node_id: None,
@@ -228,6 +238,7 @@ impl Backend for Bitbucket {
                 .filter_map(|user| text(&user["account_id"]))
                 .collect(),
             user_ids: Default::default(),
+            milestone_id: None,
             replaced_labels: Vec::new(),
         })
     }
@@ -248,7 +259,9 @@ impl Backend for Bitbucket {
     }
 
     /// One update of the changed fields. Bitbucket has no labels, keeps
-    /// draft state as a flag, and replaces reviewers by Atlassian account ID.
+    /// draft state as a flag, replaces reviewers by Atlassian account ID,
+    /// gives an issue at most one assignee, by account ID, and takes its
+    /// milestone by name.
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
         if !edit.add_labels.is_empty() || !edit.remove_labels.is_empty() {
             return Err(capability::unsupported(self, Capability::Labels));
@@ -269,20 +282,28 @@ impl Backend for Bitbucket {
             fields["draft"] = draft.into();
         }
         if !edit.add_reviewers.is_empty() || !edit.remove_reviewers.is_empty() {
-            let mut reviewers: Vec<&String> = current
-                .reviewers
-                .iter()
-                .filter(|id| !edit.remove_reviewers.contains(id))
-                .collect();
-            for id in &edit.add_reviewers {
-                if !reviewers.contains(&id) {
-                    reviewers.push(id);
-                }
-            }
+            let reviewers = changed_set(
+                &current.reviewers,
+                &edit.add_reviewers,
+                &edit.remove_reviewers,
+            );
             fields["reviewers"] = reviewers
                 .into_iter()
                 .map(|id| json!({ "account_id": id }))
                 .collect();
+        }
+        if edit.assigns() {
+            fields["assignee"] = match edit.assignees_after(&item.assignees).as_slice() {
+                [] => Value::Null,
+                [id] => json!({ "account_id": id }),
+                _ => bail!("a Bitbucket issue has at most one assignee"),
+            };
+        }
+        if let Some(change) = &edit.milestone {
+            fields["milestone"] = match change {
+                MilestoneChange::Set(name) => json!({ "name": name }),
+                MilestoneChange::Clear => Value::Null,
+            };
         }
         Ok(vec![Request::new(
             HttpMethod::Put,
@@ -750,6 +771,15 @@ impl Backend for Bitbucket {
     fn template_lookups(&self, _kind: ItemKind) -> Vec<(&'static str, Lookup)> {
         Vec::new()
     }
+
+    fn milestones_endpoint(&self, repo: &ForgeRepo) -> String {
+        repo.repo_endpoint("milestones")
+    }
+
+    /// Bitbucket names a milestone, and issue edits take it by name.
+    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
+        Some((text(&listed["name"])?, listed["id"].as_u64()?))
+    }
 }
 
 async fn view_details(
@@ -773,6 +803,8 @@ async fn view_details(
         author: nickname(author),
         created_at: text(&value["created_on"]).unwrap_or_default(),
         labels: Vec::new(),
+        assignees: current.item.assignees,
+        milestone: current.item.milestone,
         body: current.body,
         pr: current.item.pr.map(|pr| PrDetails {
             reviewers: current.reviewers,

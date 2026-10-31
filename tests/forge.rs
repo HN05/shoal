@@ -226,7 +226,8 @@ fn item_actions_send_rest_requests_and_record_events() {
         assert_eq!(
             response["data"],
             json!({"kind": "pr", "number": 8, "url": url, "title": "Fix", "state": "open",
-                "labels": ["bug", "ready"], "pr": {"head": "topic", "base": "main", "draft": false}})
+                "labels": ["bug", "ready"], "assignees": [], "milestone": null,
+                "pr": {"head": "topic", "base": "main", "draft": false}})
         );
         let auth = match forge {
             Forge::GitHub => Value::Null,
@@ -2239,6 +2240,81 @@ fn pr_and_issue_commands_act_on_linked_or_named_items() {
 }
 
 #[test]
+fn issue_edits_set_assignees_and_milestones_that_views_show() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let issue = |assignees: &[&str], milestone: Value| {
+        json!({"number": 3, "title": "Bug", "state": "open", "labels": [], "body": "",
+            "user": {"login": "ann"}, "created_at": "t0", "pull_request": null,
+            "assignees": assignees.iter().map(|login| json!({"login": login})).collect::<Vec<_>>(),
+            "milestone": milestone})
+    };
+    fixture.respond(json!({
+        "GET repos/team/project/issues/3": [
+            {"body": issue(&["kim"], Value::Null)},
+            {"body": issue(&["sam"], json!({"id": 9, "title": "v2"}))},
+        ],
+        "GET repos/team/project/milestones?state=all&limit=50&page=1":
+            {"body": [{"id": 8, "title": "v1"}, {"id": 9, "title": "v2"}]},
+        "PATCH repos/team/project/issues/3": {"body": {}},
+    }));
+    let edited = fixture.ok(&[
+        "issue",
+        "edit",
+        "3",
+        "--workspace",
+        "topic",
+        "--add-assignee",
+        "sam",
+        "--remove-assignee",
+        "kim",
+        "--milestone",
+        "v2",
+    ]);
+    assert_eq!(edited["assignees"], json!(["sam"]), "{edited}");
+    assert_eq!(edited["milestone"], "v2");
+    let patch: Vec<_> = fixture
+        .requests()
+        .into_iter()
+        .filter(|request| request[0] == "PATCH repos/team/project/issues/3")
+        .map(|request| request[1].clone())
+        .collect();
+    assert_eq!(patch, [json!({"assignees": ["sam"], "milestone": 9})]);
+
+    fixture.respond(json!({
+        "GET repos/team/project/issues/3": {"body": issue(&["sam"], json!({"id": 9, "title": "v2"}))},
+    }));
+    let args = [
+        "view",
+        "issue",
+        "3",
+        "--workspace",
+        "topic",
+        "--no-comments",
+    ];
+    let view = &fixture.ok(&args)[0];
+    assert_eq!(
+        (&view["assignees"], &view["milestone"]),
+        (&json!(["sam"]), &json!("v2")),
+        "{view}"
+    );
+    let text = fixture.run(&args);
+    let text = String::from_utf8_lossy(&text.stdout);
+    assert!(text.contains("Assignees: sam\nMilestone: v2\n"), "{text}");
+
+    let both = fixture.run(&[
+        "issue",
+        "edit",
+        "3",
+        "--workspace",
+        "topic",
+        "--milestone",
+        "v2",
+        "--clear-milestone",
+    ]);
+    assert!(!both.status.success());
+}
+
+#[test]
 fn issues_open_with_labels_and_link_on_request() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
         let fixture = Fixture::new(forge, "");
@@ -2674,7 +2750,7 @@ fn auto_merges_are_scheduled_and_cancelled_with_the_merge_command() {
 fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     let fixture = Fixture::new(Forge::GitHub, "");
     fixture.respond(json!({
-        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky watch":
+        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels,assignees,milestone --search=flaky watch":
             {"body": [{"number": 40, "title": "Flaky watch", "state": "OPEN",
                 "labels": [{"name": "bug"}]}]},
     }));
@@ -2682,7 +2758,8 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
     assert_eq!(
         listed,
         json!([{"kind": "issue", "number": 40, "url": format!("{}/issues/40", fixture.web),
-            "title": "Flaky watch", "state": "open", "labels": ["bug"]}])
+            "title": "Flaky watch", "state": "open", "labels": ["bug"], "assignees": [],
+            "milestone": null}])
     );
     let output = fixture.run(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
     assert_eq!(
@@ -4815,7 +4892,7 @@ fn item_commands_act_from_a_registered_checkout() {
         "GET repos/team/project/issues/40": {"body": {"number": 40, "title": "Flaky",
             "state": "open", "labels": []}},
         "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
-        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels --search=flaky":
+        "issue list --repo=github.com/team/project --state=open --limit=30 --json=number,title,state,labels,assignees,milestone --search=flaky":
             {"body": [{"number": 40, "title": "Flaky", "state": "OPEN", "labels": []}]},
         "GET repos/team/project/pulls/8": {"body": pull(8, "open", "Fix", &[])},
         "GET repos/team/project": {"body": {"owner": {"login": "team", "type": "User"}}},

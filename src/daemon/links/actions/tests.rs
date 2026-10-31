@@ -72,6 +72,8 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         title: "Follow-up".into(),
         state: ItemState::Open,
         labels: Vec::new(),
+        assignees: Vec::new(),
+        milestone: None,
         pr: None,
     };
 
@@ -94,9 +96,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
     // Refused before the forge is consulted: the repository has no origin.
     let issue = NewIssue {
         title: "Follow-up".into(),
-        body: String::new(),
-        labels: Vec::new(),
-        attachments: Vec::new(),
+        ..NewIssue::default()
     };
     let context = ItemContext::Workspace(workspace.id.clone());
     let error = manager

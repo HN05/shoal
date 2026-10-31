@@ -6,12 +6,15 @@ use serde_json::json;
 fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
     let pull = json!({"number": 541, "title": "Share", "body": "Why", "state": "closed",
             "merged": true, "user": {"login": "dev"}, "labels": [{"name": "type/chore"}],
+            "assignees": [{"login": "kim"}], "milestone": {"id": 5, "title": "v2"},
             "created_at": "2026-10-10T01:00:00+02:00", "head": {"ref": "topic"}, "base": {"ref": "main"},
             "draft": false, "pull_request": {"merged": true},
             "requested_reviewers": [{"login": "kim"}], "requested_reviewers_teams": [{"name": "core"}]});
     let details = parse_details(&pull, ItemKind::Pr, 541, "team").unwrap();
     assert_eq!(details.state, "merged");
     assert_eq!(details.labels, ["type/chore"]);
+    assert_eq!(details.assignees, ["kim"]);
+    assert_eq!(details.milestone.as_deref(), Some("v2"));
     let pr = details.pr.unwrap();
     assert_eq!(pr.head, "topic");
     assert_eq!(pr.reviewers, ["kim", "team/core"]);

@@ -95,6 +95,10 @@ impl Backend for GitHub {
             | Capability::ApproveRuns
             | Capability::ReopenPrs
             | Capability::Labels
+            | Capability::IssueAssignees
+            | Capability::PrAssignees
+            | Capability::IssueMilestones
+            | Capability::PrMilestones
             | Capability::DraftPrs
             | Capability::Attachments
             | Capability::Downloads
@@ -346,7 +350,7 @@ impl Backend for GitHub {
     }
 
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>> {
-        let mut requests = github_rest::edit(repo, current, edit, Dialect::GitHub);
+        let mut requests = github_rest::edit(repo, current, edit, Dialect::GitHub)?;
         if let Some(draft) = github_rest::draft_change(current, edit) {
             requests.push(draft_request(current, draft)?);
         }
@@ -934,16 +938,21 @@ impl Backend for GitHub {
     fn label_names_fold_case(&self) -> bool {
         true
     }
+
+    /// GitHub's issue edits take a milestone's number.
+    fn milestone(&self, listed: &Value) -> Option<(String, u64)> {
+        Some((text(&listed["title"])?, listed["number"].as_u64()?))
+    }
 }
 
 /// The `gh issue list` or `gh pr list` arguments for `search`. Values go
 /// in `--flag=value` form, so one starting with `-` stays a value.
 fn list_args(repo: &ForgeRepo, kind: ItemKind, search: &list::Search) -> Vec<String> {
     let (noun, fields) = match kind {
-        ItemKind::Issue => ("issue", "number,title,state,labels"),
+        ItemKind::Issue => ("issue", "number,title,state,labels,assignees,milestone"),
         ItemKind::Pr => (
             "pr",
-            "number,title,state,labels,headRefName,baseRefName,isDraft",
+            "number,title,state,labels,assignees,milestone,headRefName,baseRefName,isDraft",
         ),
     };
     let mut args: Vec<String> = [noun, "list"].map(String::from).into();
@@ -973,6 +982,9 @@ struct ListedItem {
     title: String,
     state: String,
     labels: Vec<ListedLabel>,
+    #[serde(default)]
+    assignees: Vec<ListedUser>,
+    milestone: Option<ListedMilestone>,
     head_ref_name: Option<String>,
     base_ref_name: Option<String>,
     is_draft: Option<bool>,
@@ -981,6 +993,16 @@ struct ListedItem {
 #[derive(serde::Deserialize)]
 struct ListedLabel {
     name: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ListedUser {
+    login: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ListedMilestone {
+    title: String,
 }
 
 impl ListedItem {
@@ -1010,6 +1032,8 @@ impl ListedItem {
             title: self.title,
             state,
             labels: self.labels.into_iter().map(|label| label.name).collect(),
+            assignees: self.assignees.into_iter().map(|user| user.login).collect(),
+            milestone: self.milestone.map(|milestone| milestone.title),
             pr,
         })
     }

@@ -9,7 +9,10 @@ use crate::{
     ForgeRepo,
     backends::Backend,
     ci::CiAction,
-    items::action::{MergeMethod, UpdateMethod},
+    items::{
+        action::{MergeMethod, UpdateMethod},
+        link::ItemKind,
+    },
 };
 
 states!(Capability: Variants {
@@ -22,6 +25,10 @@ states!(Capability: Variants {
     ApproveRuns => "approve_runs",
     ReopenPrs => "reopen_prs",
     Labels => "labels",
+    IssueAssignees => "issue_assignees",
+    PrAssignees => "pr_assignees",
+    IssueMilestones => "issue_milestones",
+    PrMilestones => "pr_milestones",
     DraftPrs => "draft_prs",
     Attachments => "attachments",
     Downloads => "downloads",
@@ -53,6 +60,10 @@ impl Capability {
             Self::ApproveRuns => "approve CI runs",
             Self::ReopenPrs => "reopen PRs",
             Self::Labels => "label issues and PRs",
+            Self::IssueAssignees => "assign issues",
+            Self::PrAssignees => "assign PRs",
+            Self::IssueMilestones => "set the milestone of issues",
+            Self::PrMilestones => "set the milestone of PRs",
             Self::DraftPrs => "mark PRs as drafts",
             Self::Attachments => "attach files",
             Self::Downloads => "download images and attached files",
@@ -84,6 +95,20 @@ impl Capability {
         match method {
             UpdateMethod::Merge => Self::UpdateByMerge,
             UpdateMethod::Rebase => Self::UpdateByRebase,
+        }
+    }
+
+    pub fn assignees(kind: ItemKind) -> Self {
+        match kind {
+            ItemKind::Issue => Self::IssueAssignees,
+            ItemKind::Pr => Self::PrAssignees,
+        }
+    }
+
+    pub fn milestones(kind: ItemKind) -> Self {
+        match kind {
+            ItemKind::Issue => Self::IssueMilestones,
+            ItemKind::Pr => Self::PrMilestones,
         }
     }
 

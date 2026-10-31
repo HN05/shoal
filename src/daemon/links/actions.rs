@@ -123,7 +123,7 @@ impl Manager {
         }
         let forge = self.workspace_forge(workspace).await?;
         let account = self.agent_account(workspace).await?;
-        let action = Action::Edit(Edit {
+        let action = Action::edit(Edit {
             draft: Some(draft),
             ..Edit::default()
         });
@@ -369,7 +369,7 @@ impl Manager {
             required,
         )
         .await;
-        Ok(OpenOutcome::Opened(Opened {
+        Ok(OpenOutcome::opened(Opened {
             item,
             created,
             linked,
@@ -534,6 +534,8 @@ async fn new_pull(
         draft: options.draft.unwrap_or(default_draft),
         labels: options.labels,
         reviewers: options.reviewers,
+        assignees: options.assignees,
+        milestone: options.milestone,
         attachments: options.attachments,
     })
 }

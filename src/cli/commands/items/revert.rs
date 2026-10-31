@@ -105,6 +105,8 @@ fn revert_args(args: RevertArgs) -> Result<PullOptions> {
         draft: (args.draft || args.no_draft).then_some(args.draft),
         labels: args.labels,
         reviewers: args.reviewers,
+        assignees: Vec::new(),
+        milestone: None,
         attachments,
     })
 }
@@ -197,7 +199,7 @@ async fn finish(ctx: &Context, workspace: &Workspace) -> Result<()> {
 
 fn report(ctx: &Context, outcome: OpenOutcome, workspace: Option<&Workspace>) -> Result<i32> {
     let opened = match outcome {
-        OpenOutcome::Opened(opened) => opened,
+        OpenOutcome::Opened(opened) => *opened,
         OpenOutcome::Proposed(proposed) => return report_proposed(ctx, "Revert", &proposed),
     };
     print_warnings(&opened);
