@@ -1402,8 +1402,10 @@ the `chat`, `log`, `prompt_file`, `prompt_delivered`, `happy_session_id` and
 `happy_daemon_recorded`. Chats run with your
 authority, not a workspace scope, and workspace processes cannot start one.
 Chats are not tracked executions, so they are never queued, stopped under
-pressure or resumed. The daemon records each chat under its name while its
-agent process runs. Workspaces and running chats share one set of names across
+pressure or restored by `shoal resume`. The daemon records each chat under its
+name while its agent process runs, with the session the agent's session-start
+hook last reported, which [`shoal move`](#move-a-space-to-another-machine)
+continues on another machine. Workspaces and running chats share one set of names across
 repositories: a chat cannot take a workspace's name or a name an unfinished
 rename reserves, and a workspace cannot be created or renamed to a running
 chat's name. The name frees once the chat's process ends.
@@ -2527,75 +2529,91 @@ retention_days = 30
 archive_max_mb = 50
 ```
 
-### Move a workspace to another machine
+### Move a space to another machine
 
 ```sh
 shoal move export topic -o topic.shoal         # remove topic and write it to a file
-shoal move import topic.shoal                  # open it in the repository with the same origin
+shoal move export plan-cache -o plan.shoal     # end the chat plan-cache and write it to a file
+shoal move import topic.shoal                  # continue it in the repository with the same origin
 shoal move export topic | ssh other shoal move import --resume  # agents continue there
-shoal move ssh other topic                # the same, once ssh reaches Shoal there
-shoal move export --repo app --all -o moving   # remove every workspace of app, a file each
+shoal move ssh other plan-cache                # the same, once ssh reaches Shoal there
+shoal move export --repo app --all -o moving   # end every space of app, a file each
 shoal move export topic spike -o moving        # remove both, a file each
-shoal move import moving                       # open every workspace exported to moving
+shoal move import moving                       # continue every space exported to moving
 ```
 
-`shoal move export [workspace] -o <file>` removes the workspace as `shoal rm` does and
-writes its removal record and checkpoint to a new file, or to standard output
-without `-o` or for `-`, refusing a terminal. The daemon writes the file, so it is complete even when the terminal closes
-with the workspace, as its Herdr tab does. It refuses before removing anything
-when the file exists or lies inside the workspace, when the daemon cannot create
-a file in its directory within 30 seconds, when a checkpoint cannot keep
-the uncommitted files, or when `-` would stream from a Herdr pane, Rex block or
-zmx session Shoal opened for the workspace, which closes with it, and asks before releasing holds unless given
-`--yes`. A workspace already removed is exported from its removal record without
-another removal. The checkpoint travels as a Git bundle without the commits of
-the default remote's default branch; a checkpoint that branch already has
-travels without one. Ignored files, leases, permits, approvals, grants and holds
-stay behind; setup rebuilds what the workspace needs.
+`shoal move export [space] -o <file>` ends a workspace or chat here and writes
+it to a new file, or to standard output without `-o` or for `-`, refusing a
+terminal. Its argument names a workspace or chat, else the chat it runs in, else
+the current workspace, else a picker offers both. The daemon writes the file, so
+it is complete even when the terminal closes with the space. It refuses before
+ending anything when the file exists, when the daemon cannot create a file in its
+directory within 30 seconds, or when `-` would stream from a place that closes
+with the space. A workspace is removed as `shoal rm` removes it, and its file
+holds its removal record and checkpoint. The export also refuses one whose file
+lies inside it, or whose uncommitted files a checkpoint cannot keep, and asks
+before releasing holds unless given `--yes`. A workspace already removed is
+exported from its removal record without another removal. The checkpoint
+travels as a Git bundle without the commits of the default remote's default
+branch; a checkpoint that branch already has travels without one. Ignored files,
+leases, permits, approvals, grants and holds stay behind; setup rebuilds what the
+workspace needs. A chat's file holds its name, agent and session: the export
+refuses a chat whose agent reported no session, or the one it runs in, and asks
+before stopping the agent unless given `--yes`; the chat then ends as when its
+agent exits. The file's manifest names its `kind`, `workspace` or `chat`.
 
-`shoal move export <workspace>... -o <directory>`, for several workspaces or those
-the picker selects when `-o` names an existing directory, and
-`shoal move export --repo <repository> --all -o <directory>`, for every workspace of
-the repository, export each to `<workspace>.shoal` in the directory, creating it when
-missing. It checks every workspace as a single export does, that none is in the
-middle of another lifecycle operation, and that the terminal does not close with
-one of them, before removing any: when one cannot
-be exported, it lists each refusal and removes nothing. It asks once before
-releasing all of their holds, then exports each workspace and lists the files it
-wrote; a failure there leaves the remaining ones to export, and the command
-exits 1 naming each failed workspace.
+`shoal move export <space>... -o <directory>`, for several spaces or those the
+picker selects when `-o` names an existing directory, and `shoal move export
+--repo <repository> --all -o <directory>`, for every workspace and running chat
+of the repository, export each to `<name>.shoal` in the directory, creating it
+when missing. It checks every space as a single export does, that no workspace
+is in the middle of another lifecycle operation, and that the terminal does not
+close with one of them, before ending any: when one cannot be exported, it lists
+each refusal and ends nothing. It asks once before ending the chats and releasing
+the workspaces' holds, then exports each space and lists the files it wrote; a
+failure there leaves the remaining ones to export, and the command exits 1
+naming each failed space.
 
 `shoal move import <file>` reads an export, or standard input without a file or for
-`-`, refusing a terminal, and opens it in
-the registered repository with the exported repository's origin, or the one
-`--repo` names. Given several files, or a directory, whose `.shoal` files it
-reads in name order, it imports each one, going on after a failure, lists every
-workspace it opened and exits 1 naming each file it could not import or whose
-`hooks.post_setup` failed. It fetches the default branch when the repository lacks the
-commit the bundle builds on, records the workspace as removed with its
-checkpoint, then restores it as `shoal work restore` does; when that restore fails,
-`shoal work restore <workspace>` retries it. The export carries the files of each
+`-`, refusing a terminal, and continues it in the registered repository with the
+exported repository's origin, or the one `--repo` names. Given several files, or a
+directory, whose `.shoal` files it reads in name order, it imports each one, going
+on after a failure, lists every space it continued and exits 1 naming each file it
+could not import or whose `hooks.post_setup` failed. The export carries the files of each
 session the agents reported, such as Claude Code's and Codex's transcripts, and
 the import puts them where the agent looks for them, keeping a file already
-there unless the imported one continues it, so `shoal resume` continues each session by ID on any machine; a session
+there unless the imported one continues it, so the session continues by ID on any machine; a session
 whose files the export could not read is left out with a warning, and continues
 only on the machine that exported it. `--keep-sessions` keeps every session,
 such as one whose files were copied by hand, and `--new-sessions` none.
-`--resume` then queues the restores of the agents the export stopped, as `shoal
+
+An imported workspace fetches the default branch when the repository lacks the
+commit the bundle builds on, is recorded as removed with its checkpoint, then
+restored as `shoal work restore` does; when that restore fails, `shoal work
+restore <workspace>` retries it. `shoal resume` continues its agents' sessions,
+and `--resume` queues the restores of the agents the export stopped, as `shoal
 resume` does, under the importing machine's agent limits. Every reopen, by import or
 `shoal work restore`, trusts the workspace's path for the agents that resume there. An agent
 without a kept session `shoal resume` starts as `shoal claude` or `shoal codex`
 starts a new one, telling it the workspace moved, instead of running
-its `resume_command`. Workspace processes can neither export nor import.
+its `resume_command`. An imported chat starts in the repository's checkout as
+`shoal chat` starts one, under its name or the lowest free `-2`, `-3`, ...
+variant, with its agent's `resume` arguments for its session, or as a new
+session for an agent without them or a session not kept. A single chat imported
+on a terminal opens beside it; with `--resume`, without a terminal, or among
+several files, it starts in a background place of the host that starts queued
+agents, which the report names. Workspace processes can neither export nor import.
 
-`shoal move ssh <host> [workspace]...`, or `--repo <repository> --all`, runs that
-pipe for each workspace with `ssh <host> shoal --json move import --resume`, after
-`ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing is
-removed. `--shoal <path>` names the program there when the remote shell's `PATH`
-lacks it, and `--no-resume` leaves the agents stopped. It checks the workspaces
-as a batch export does and asks once before releasing their holds. A workspace
-whose import fails stays removed here with the other machine's error, and `shoal
-work restore` opens it again, unless that machine recorded it.
+`shoal move ssh <host> [space]...`, or `--repo <repository> --all`, runs that
+pipe for each space with `ssh <host> shoal --json move import --resume`, after
+`ssh <host> shoal repo ls` shows Shoal answers there; when it does not, nothing
+ends. `--shoal <path>` names the program there when the remote shell's `PATH`
+lacks it, and `--no-resume` leaves the workspaces' agents stopped; chats still
+start in the background there. It checks the spaces as a batch export does and
+asks once before ending them. A workspace whose import fails stays removed here
+with the other machine's error, and `shoal work restore` opens it again, unless
+that machine recorded it; a chat's file stays in `<state>/unmoved`, and the error
+names the `shoal move import` that continues the chat here.
 
 ### Assignment completion
 

@@ -8,30 +8,34 @@ use crate::cli::args::ConfirmationArgs;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum MoveCommand {
-    /// Remove a workspace and write it to a file that shoal move import opens on another machine.
+    /// End a workspace or chat here and write it to a file that shoal move import continues on another machine.
     ///
-    /// The file holds the removal's checkpoint, as a Git bundle without the commits of the
-    /// default branch, the workspace's base, links and stopped agents, and the files of the
-    /// agents' sessions, such as their transcripts. A removed workspace
-    /// is exported without another removal. Without -o, or with `-`, it writes to standard
-    /// output, which must not be a terminal. When -o names a directory, several workspaces, or
-    /// with --all every workspace of the repository, go to a file each in it, once each one can
+    /// A workspace is removed: the file holds its checkpoint, as a Git bundle without the
+    /// commits of the default branch, its base, links and stopped agents. A chat's agent is
+    /// stopped once it has reported its session: the file holds the chat's name and agent.
+    /// Both carry the files of the agents' sessions, such as their transcripts. A removed
+    /// workspace is exported without another removal. Without -o, or with `-`, it writes to
+    /// standard output, which must not be a terminal. When -o names a directory, several spaces,
+    /// or with --all every space of the repository, go to a file each in it, once each one can
     /// be exported.
     Export(ExportArgs),
-    /// Open workspaces shoal move export wrote, in the repository with the same origin.
+    /// Continue workspaces and chats shoal move export wrote, in the repository with the same origin.
     ///
-    /// Fetches the default branch when a file builds on commits the repository lacks. It puts
-    /// the agents' session files where the agents look for them, so shoal resume continues
-    /// their sessions; one the file lacks continues only on the machine that exported it.
-    /// --keep-sessions and --new-sessions override that. Without a file, or with `-`, it reads from standard
-    /// input, which must not be a terminal. A directory imports each .shoal file in it.
+    /// It puts the agents' session files where the agents look for them; a session the file
+    /// lacks continues only on the machine that exported it. --keep-sessions and --new-sessions
+    /// override that. A workspace opens again, fetching the default branch when the file builds
+    /// on commits the repository lacks, and shoal resume continues its agents. A chat starts in
+    /// the repository's checkout, resuming its session: beside this terminal, or in the
+    /// background with --resume or without a terminal. Without a file, or with `-`, it reads
+    /// from standard input, which must not be a terminal. A directory imports each .shoal file
+    /// in it.
     Import(ImportArgs),
-    /// Move workspaces to another machine's Shoal over SSH, where their agents continue.
+    /// Move workspaces and chats to another machine's Shoal over SSH, where their agents continue.
     ///
-    /// Runs shoal move export | ssh HOST shoal move import --resume for each workspace, once
-    /// ssh reaches Shoal there; nothing is removed when it does not. The other machine needs a
-    /// repository with the same origin. A workspace whose import fails stays removed here, and
-    /// shoal work restore opens it again.
+    /// Runs shoal move export | ssh HOST shoal move import --resume for each space, once ssh
+    /// reaches Shoal there; nothing ends when it does not. The other machine needs a repository
+    /// with the same origin. A workspace whose import fails stays removed here, and shoal work
+    /// restore opens it again; a chat's file stays here for shoal move import.
     Ssh(SshArgs),
     /// Move every repository directory, with its workspaces and clone, into root_dir.
     Root {
@@ -51,14 +55,14 @@ pub enum MoveCommand {
 pub struct ExportArgs {
     #[arg(conflicts_with = "all", value_name = "SPACE")]
     pub space: Vec<String>,
-    /// Export every workspace of the repository --repo names.
+    /// Export every workspace and chat of the repository --repo names.
     #[arg(long, requires = "repository")]
     pub all: bool,
-    /// Repository whose workspaces --all exports.
+    /// Repository whose spaces --all exports.
     #[arg(long = "repo", requires = "all")]
     pub repository: Option<String>,
-    /// File to write, or a directory to write a file per workspace in, which several
-    /// workspaces and --all need; defaults to standard output.
+    /// File to write, or a directory to write a file per space in, which several spaces
+    /// and --all need; defaults to standard output.
     #[arg(short, long, required_if_eq("all", "true"))]
     pub output: Option<PathBuf>,
     #[command(flatten)]
@@ -76,10 +80,11 @@ pub struct ImportArgs {
     /// Continue every stopped agent's session, such as one whose files were copied by hand.
     #[arg(long, conflicts_with = "new_sessions")]
     pub keep_sessions: bool,
-    /// Start new sessions even on the machine that exported the workspace.
+    /// Start new sessions even on the machine that exported the space.
     #[arg(long, conflicts_with = "keep_sessions")]
     pub new_sessions: bool,
-    /// Queue the restores of the agents the export stopped, as shoal resume does.
+    /// Queue the restores of the agents the export stopped, as shoal resume does, and start
+    /// chats in the background.
     #[arg(long)]
     pub resume: bool,
 }
@@ -91,13 +96,14 @@ pub struct SshArgs {
     pub host: String,
     #[arg(conflicts_with = "all", value_name = "SPACE")]
     pub space: Vec<String>,
-    /// Move every workspace of the repository --repo names.
+    /// Move every workspace and chat of the repository --repo names.
     #[arg(long, requires = "repository")]
     pub all: bool,
-    /// Repository whose workspaces --all moves.
+    /// Repository whose spaces --all moves.
     #[arg(long = "repo", requires = "all")]
     pub repository: Option<String>,
-    /// Leave the agents stopped on the other machine instead of queueing their restores.
+    /// Leave the agents stopped on the other machine instead of queueing their restores; chats
+    /// still start there, in the background.
     #[arg(long)]
     pub no_resume: bool,
     /// The shoal program on the other machine, when SSH's PATH does not find it.

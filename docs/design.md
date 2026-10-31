@@ -1670,6 +1670,10 @@ A Happy chat has no terminal to focus: like a workspace Happy session it starts
 detached, as Happy's daemon would start it, so the user continues it in the
 Happy app, and the process that recorded the chat hands the record to the
 session's process.
+A chat's agent reports its session through the session-start hook and
+`agent-state` command a workspace's agent uses, which act on the space they run
+in, and the record keeps the session so the chat can move; it records no turn
+state.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan
@@ -2060,7 +2064,13 @@ files are back, one transaction moves the checkpoints to that ID and deletes the
 record. A restore first claims the record, keeping it and its checkpoints from
 expiring for an hour while it runs. Reopening is
 allocation, so scoped callers cannot.
-Moving a workspace to another machine is a removal there and a restore here:
+Moving a space to another machine ends it there and continues it here, through
+one package whose manifest names its kind and one path for both kinds: the
+package carries the agents' sessions and their files the same way, and only
+ending and continuing the space differ. Each package uses the lowest format
+version that reads it, so older importers still read workspace packages and
+refuse a chat's as newer.
+Moving a workspace is a removal there and a restore here:
 export writes the removal record and a Git bundle of its checkpoint from the
 daemon, which outlives a terminal closing with the workspace and checks the
 destination before removing anything. Import records both as a removal of this
@@ -2087,7 +2097,15 @@ machine's terminal places and waiting wrappers, and every reopen trusts the
 workspace's path for those agents, since resuming skips the launch's trust
 setup. Otherwise moved recovery records drop their session, place and wrapper,
 and `shoal resume` starts them through the fresh-agent launch, with its trust
-setup and guidance, told the workspace moved. Export and import move work
+setup and guidance, told the workspace moved. Moving a chat ends its
+agent, since a session that kept growing here would fork from the one that
+continues there, and the user attends a chat, so export asks first; a chat whose
+agent reported no session refuses before ending, since nothing could continue
+it. Import starts the chat through `shoal chat`'s launch with the agent's resume
+arguments, under a free name since its own may be taken there, in the background
+when no terminal attends the import, as queued agents start. A chat keeps no
+record once it ends, so a failed `move ssh` keeps its package where a workspace
+keeps its removal record. Export and import move work
 through any byte stream, and `move ssh` runs that pipe over SSH as a shorthand
 after checking Shoal answers there; Shoal keeps no registry of machines, and
 deciding when and where to move work belongs to a caller outside the core.
