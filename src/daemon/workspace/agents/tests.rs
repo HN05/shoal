@@ -135,7 +135,7 @@ async fn overload_notifications_explain_recovery_policy_and_missing_records() {
         manager
             .track_agent(
                 id,
-                "codex",
+                &crate::execution::TrackedAgent::named("codex"),
                 &workspace.id,
                 &workspace.name,
                 recover,
@@ -225,7 +225,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     manager
         .track_agent(
             &second.plan.id,
-            "second",
+            &crate::execution::TrackedAgent::named("second"),
             &workspace.id,
             &workspace.name,
             false,
@@ -236,7 +236,7 @@ async fn overload_stops_only_one_agent_and_preserves_work_and_leases() {
     manager
         .track_agent(
             &first.plan.id,
-            "first",
+            &crate::execution::TrackedAgent::named("first"),
             &workspace.id,
             &workspace.name,
             false,
@@ -310,7 +310,7 @@ async fn overload_stops_the_agent_idle_longest_before_working_ones() {
         manager
             .track_agent(
                 &execution.plan.id,
-                name,
+                &crate::execution::TrackedAgent::named(name),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -387,7 +387,7 @@ async fn overload_stops_attached_agents_only_after_the_others() {
         manager
             .track_agent(
                 &id,
-                name,
+                &crate::execution::TrackedAgent::named(name),
                 &workspace.id,
                 &workspace.name,
                 false,
@@ -441,7 +441,7 @@ async fn a_turn_reported_after_protection_read_the_turns_counts_as_working() {
     manager
         .track_agent(
             &id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,

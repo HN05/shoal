@@ -14,6 +14,7 @@ async fn unreadable_evidence_blocks_only_while_the_same_process_is_alive() {
         .unwrap();
     let identity = process::capture(child.id().unwrap()).unwrap().unwrap();
     let execution = Execution {
+        model: Default::default(),
         id: "test-execution".into(),
         workspace_id: "test-workspace".into(),
         state: crate::state::ExecutionState::Running,
@@ -60,6 +61,7 @@ async fn unreadable_evidence_outside_the_workspace_does_not_block() -> anyhow::R
         .spawn()?;
     let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
     let execution = Execution {
+        model: Default::default(),
         id: "test-execution".into(),
         workspace_id: "test-workspace".into(),
         state: crate::state::ExecutionState::Running,
@@ -101,6 +103,7 @@ async fn unreadable_evidence_settles_once_it_shows_no_marker() -> anyhow::Result
         .spawn()?;
     let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
     let execution = Execution {
+        model: Default::default(),
         id: "test-execution".into(),
         workspace_id: "test-workspace".into(),
         state: crate::state::ExecutionState::Running,
@@ -134,6 +137,7 @@ async fn unreadable_evidence_blocks_after_its_head_exits_unless_the_head_is_olde
         .spawn()?;
     let identity = process::capture(child.id().context("child PID")?)?.context("child")?;
     let execution = Execution {
+        model: Default::default(),
         id: "test-execution".into(),
         workspace_id: "test-workspace".into(),
         state: crate::state::ExecutionState::Running,
@@ -179,6 +183,7 @@ async fn only_marked_processes_outside_the_group_run_outside_it() {
         .unwrap();
     let identity = process::capture(background.id().unwrap()).unwrap().unwrap();
     let mut execution = Execution {
+        model: Default::default(),
         id: "agent".into(),
         workspace_id: "workspace".into(),
         state: crate::state::ExecutionState::Running,

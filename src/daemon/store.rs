@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 99;
+const SCHEMA_VERSION: i64 = 100;
 
 #[cfg(test)]
 mod benchmark;
@@ -444,6 +444,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (97, CHAT_QUESTIONS, None),
     (98, FILE_SPACES, None),
     (99, ENDED_CHATS, None),
+    (100, EXECUTION_MODELS, None),
 ];
 
 /// Whether an agent asked the question in its chat, where the user may
@@ -512,6 +513,10 @@ END;";
 /// The agent each execution runs, which keeps its reported session once the
 /// execution ends without a stop of its own, as at a reboot.
 const EXECUTION_AGENTS: &str = "ALTER TABLE executions ADD COLUMN agent TEXT;";
+
+/// The model and effort each execution's agent runs with.
+const EXECUTION_MODELS: &str = "ALTER TABLE executions ADD COLUMN model TEXT;
+    ALTER TABLE executions ADD COLUMN effort TEXT;";
 
 /// When the prompt cache of an agent idle since a turn ended expires.
 const PROMPT_CACHE_EXPIRY: &str =
@@ -1093,7 +1098,8 @@ pub fn ports(db: &Connection, workspace_id: Option<&str>) -> Result<Vec<PortRese
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-const EXECUTION_COLUMNS: &str = "id,workspace_id,state,wrapper,child,group_id,origin,agent";
+const EXECUTION_COLUMNS: &str =
+    "id,workspace_id,state,wrapper,child,group_id,origin,agent,model,effort";
 
 fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -1105,6 +1111,10 @@ fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
         group_id: row.get("group_id")?,
         origin: json_column(row, "origin")?,
         agent: row.get("agent")?,
+        model: crate::agent::ModelChoice {
+            model: row.get("model")?,
+            effort: row.get("effort")?,
+        },
     })
 }
 

@@ -346,6 +346,7 @@ fn tracked_execution_requests_require_a_known_kind() {
         (ExecutionKind::Land, "land"),
     ] {
         let method = ExecutionMethod::Execute {
+            model: Default::default(),
             workspace: "worker".into(),
             wrapper: wrapper.clone(),
             kind,

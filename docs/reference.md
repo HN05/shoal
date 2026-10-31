@@ -1025,6 +1025,8 @@ resume = ["--resume", "{session}"]                    # Optional
 resume_latest = ["--continue"]                        # Optional
 fork = ["--resume", "{session}", "--fork-session"]    # Optional
 add_dir = ["--add-dir", "{directory}"]                # Optional
+model_args = ["--model", "{model}"]                   # Optional
+effort_args = ["--reasoning-effort", "{effort}"]      # Optional
 ```
 
 `shoal droid [workspace] -- <args>` (or `shoal run droid`) then starts it in a
@@ -1048,7 +1050,37 @@ env_remove = ["ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]
 
 A profile gets its base's hooks, trust entries and waking, and each of its
 launcher (the one in effect for the workspace), `skill_dir`, `instructions`,
-`resume`, `resume_latest`, `fork` and `add_dir` it does not set; a base may itself be a profile.
+`resume`, `resume_latest`, `fork`, `add_dir`, `model`, `effort`, `model_args`
+and `effort_args` it does not set; a base may itself be a profile.
+
+`model` and `effort` choose the model and reasoning effort a tool's agents run
+with; without them the tool uses its own defaults. Shoal passes the values
+unchanged, so they take whatever names and levels the tool accepts:
+
+```toml
+[agents.codex]
+model = "gpt-5.5"
+effort = "high"
+
+[agent]
+default = "claude"
+effort = "xhigh" # For the default agent only, over [agents.claude] effort
+```
+
+`model` and `effort` beside `[agent] default` apply to launches of the agent it
+names, over the tool's own. `--model` and `--effort` on `shoal add`,
+`contribute`, `split`, `review`, `chat`, `plan`, `repo setup`, `shoal claude`
+and `shoal codex` override both for that launch. The tool receives the values through
+`model_args` and `effort_args`, which name `{model}` and `{effort}`: Claude Code
+gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same
+effort, since the variable otherwise overrides the flag; Codex gets `-m` and `-c
+model_reasoning_effort="<effort>"`. A launch with a value its tool has no
+template for is refused with the template to configure, and `--model` or
+`--effort` without an agent is refused. A restored, resumed or moved agent runs
+with the values it started with, which its execution in `shoal status --json`
+and its recovery records show. A desktop app takes
+neither: `--app` refuses them, and a launch `default_mode = "app"` hands to an
+app warns that it opens with the app's own.
 `env` sets and `env_remove` removes variables for the tool's tracked agents and
 chats, after `[env]`, the agent account and secrets; a value starting with `~/`
 names a path under the home directory. Any AI tool, built-in ones included,

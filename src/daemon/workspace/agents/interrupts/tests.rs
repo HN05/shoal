@@ -22,7 +22,7 @@ async fn agent(manager: &Manager, workspace: &Workspace, name: &str) -> String {
     manager
         .track_agent(
             &id,
-            name,
+            &crate::execution::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             true,

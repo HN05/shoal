@@ -132,7 +132,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
         &exporting.paths,
         &workspace.id,
         "stopped-agent",
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         Some("overload"),
         None,
     )
@@ -344,6 +344,7 @@ fn manifest_with_sessions() -> Manifest {
         stopped_at: 1,
     };
     let last = LastSession {
+        model: Default::default(),
         execution: "quit".into(),
         agent: "codex".into(),
         session: Some("s2".into()),

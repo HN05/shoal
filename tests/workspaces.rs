@@ -5465,6 +5465,68 @@ fn workspace_agents_get_the_agent_and_workspaces_directories_ahead_of_their_prom
 }
 
 #[test]
+fn agents_run_with_the_requested_or_configured_model_and_effort() {
+    let fixture = Fixture::new();
+    fixture.add("models");
+    let config_dir = fixture.root.path().join(".config/shoal");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("config.toml"),
+        "[agent]\ndefault = 'pi'\nmodel = 'pi-model'\n[agents.codex]\nmodel = 'gpt'\neffort = 'low'\n",
+    )
+    .unwrap();
+    let bin = fixture.root.path().join("model-bin");
+    for agent in ["codex", "claude", "pi"] {
+        install_test_script_with_mode(
+            bin.join(agent),
+            "#!/bin/sh\nprintf '%s\\0' \"$@\" \"effort=${CLAUDE_CODE_EFFORT_LEVEL-unset}\"\n",
+            0o700,
+        );
+    }
+    let launch = |args: &[&str]| {
+        fixture
+            .command()
+            .args(args)
+            .env("PATH", fixture.restricted_path(&bin))
+            .env("CLAUDE_CODE_EFFORT_LEVEL", "inherited")
+            .output()
+            .unwrap()
+    };
+    let arguments = |output: std::process::Output| {
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        stdout.split('\0').map(str::to_owned).collect::<Vec<_>>()
+    };
+    let contains = |args: &[String], expected: &[&str]| {
+        args.windows(expected.len())
+            .any(|window| window == expected)
+    };
+    // Flags override the tool's configuration, and Claude's effort variable
+    // follows its flag.
+    let claude = arguments(launch(&[
+        "claude", "models", "--model", "opus", "--effort", "high",
+    ]));
+    assert!(
+        contains(&claude, &["--model", "opus", "--effort", "high"]),
+        "{claude:?}"
+    );
+    assert!(claude.contains(&"effort=high".to_owned()), "{claude:?}");
+    let codex = arguments(launch(&["codex", "models", "--cli", "--effort", "medium"]));
+    assert!(
+        contains(
+            &codex,
+            &["-m", "gpt", "-c", "model_reasoning_effort=\"medium\""]
+        ),
+        "{codex:?}"
+    );
+    // A tool without a template refuses the model `[agent]` sets for it.
+    let output = launch(&["pi", "models"]);
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");
+}
+
+#[test]
 fn worker_templates_resolve_per_launch_and_reach_native_instruction_options() {
     let fixture = Fixture::new();
     let workspace = fixture.add("instructions");

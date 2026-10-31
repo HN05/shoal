@@ -73,7 +73,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         &manager.paths,
         &workspace.id,
         "earlier",
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -102,7 +102,7 @@ async fn a_shutdown_stops_running_work_and_restores_it_only_once_cancelled() {
         &manager.paths,
         &workspace.id,
         &plan.id,
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         None,
         None,
     )
@@ -193,7 +193,15 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
     let open = workspace(root.path(), "open", false);
     let none = HashSet::new();
     assert!(!waits_for_resume(&paths, &open, &none).unwrap());
-    recovery::save_record(&paths, &open.id, "requested", "claude", None, None).unwrap();
+    recovery::save_record(
+        &paths,
+        &open.id,
+        "requested",
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
     let request = paths
         .workspace_state(&open.id)
         .join("requested.restore-request.json");
@@ -205,7 +213,15 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
         ..open.clone()
     };
     assert!(waits_for_resume(&paths, &done, &none).unwrap());
-    recovery::save_record(&paths, &open.id, "unattended", "claude", None, None).unwrap();
+    recovery::save_record(
+        &paths,
+        &open.id,
+        "unattended",
+        &crate::execution::TrackedAgent::named("claude"),
+        None,
+        None,
+    )
+    .unwrap();
     assert!(waits_for_resume(&paths, &open, &none).unwrap());
     let queued = HashSet::from(["unattended".to_owned()]);
     assert!(!waits_for_resume(&paths, &open, &queued).unwrap());
@@ -253,7 +269,7 @@ async fn a_shutdown_keeps_a_protection_stopped_agent_from_resuming() {
     manager
         .track_agent(
             &id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

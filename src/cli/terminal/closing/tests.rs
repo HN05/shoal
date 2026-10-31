@@ -12,6 +12,7 @@ use tokio::{io::BufReader, net::UnixListener};
 async fn kept_completion_waits_for_running_and_unresolved_executions() {
     for state in [ExecutionState::Running, ExecutionState::Unknown] {
         let execution = Execution {
+            model: Default::default(),
             id: "agent".into(),
             workspace_id: "workspace".into(),
             state,
@@ -317,8 +318,15 @@ async fn inspect(
     let paths = Paths::for_test(temp.path());
     paths.prepare().unwrap();
     if stopped {
-        crate::execution::recovery::save_record(&paths, "workspace", "agent", "codex", None, None)
-            .unwrap();
+        crate::execution::recovery::save_record(
+            &paths,
+            "workspace",
+            "agent",
+            &crate::execution::TrackedAgent::named("codex"),
+            None,
+            None,
+        )
+        .unwrap();
     }
     let listener = UnixListener::bind(&paths.socket).unwrap();
     let server = tokio::spawn(async move {

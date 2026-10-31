@@ -174,9 +174,15 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff, None, None)
-            .await
-            .unwrap();
+        let recovery = Recovery::resolve(
+            &manager.paths,
+            &workspace,
+            restored(agent, None),
+            handoff,
+            None,
+        )
+        .await
+        .unwrap();
         assert!(recovery.automatic);
         assert_eq!(recovery.handoff_delivered, handoff.is_some());
         // Restored sessions keep receiving agent messages and may work in
@@ -214,15 +220,74 @@ async fn built_in_restore_child() {
         ("codex", &["codex-fixture", "resume", "s1"][..]),
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Some("s1"), None)
-            .await
-            .unwrap();
+        let recovery = Recovery::resolve(
+            &manager.paths,
+            &workspace,
+            restored(agent, Some("s1")),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
         assert!(recovery.command.starts_with(&restore.collect::<Vec<_>>()));
     }
-    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None, None, None)
-        .await
-        .unwrap();
+    // A restore keeps the model and effort the agent ran with.
+    let model = crate::agent::ModelChoice {
+        model: Some("m1".into()),
+        effort: Some("high".into()),
+    };
+    for (agent, restore) in [
+        (
+            "codex",
+            &[
+                "codex-fixture",
+                "resume",
+                "s1",
+                "-m",
+                "m1",
+                "-c",
+                "model_reasoning_effort=\"high\"",
+            ][..],
+        ),
+        (
+            "claude",
+            &[
+                "claude-fixture",
+                "--resume",
+                "s1",
+                "--model",
+                "m1",
+                "--effort",
+                "high",
+            ][..],
+        ),
+    ] {
+        let restored = crate::execution::recovery::Restored {
+            agent,
+            model: &model,
+            session: Some("s1"),
+        };
+        let recovery = Recovery::resolve(&manager.paths, &workspace, restored, None, None)
+            .await
+            .unwrap();
+        let restore = restore.iter().map(std::ffi::OsString::from);
+        assert!(
+            recovery.command.starts_with(&restore.collect::<Vec<_>>()),
+            "{:?}",
+            recovery.command
+        );
+        assert_eq!(recovery.model, model);
+    }
+    let unsupported = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        restored("custom", None),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert!(!unsupported.automatic);
     assert!(unsupported.command.is_empty());
     fs::write(
@@ -233,9 +298,8 @@ async fn built_in_restore_child() {
     let overridden = Recovery::resolve(
         &manager.paths,
         &workspace,
-        "codex",
+        restored("codex", None),
         Some("handoff"),
-        None,
         None,
     )
     .await
@@ -254,9 +318,8 @@ async fn built_in_restore_child() {
     let prompted = Recovery::resolve(
         &manager.paths,
         &workspace,
-        "codex",
+        restored("codex", None),
         Some("handoff"),
-        None,
         None,
     )
     .await
@@ -271,9 +334,15 @@ async fn built_in_restore_child() {
         ]
         .map(std::ffi::OsString::from)
     );
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, None, None)
-        .await
-        .unwrap();
+    let prompted = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        restored("codex", None),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert!(!prompted.handoff_delivered);
     assert_eq!(
         prompted.command,
@@ -289,9 +358,15 @@ async fn built_in_restore_child() {
         reason: Some("critical memory pressure".into()),
         at: None,
     };
-    let told = Recovery::resolve(&manager.paths, &workspace, "codex", None, None, Some(&stop))
-        .await
-        .unwrap();
+    let told = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        restored("codex", None),
+        None,
+        Some(&stop),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         told.command,
         [
@@ -531,7 +606,7 @@ async fn run_tracked_agent(script: &str) {
         &paths,
         id,
         vec!["sh".into(), "-c".into(), script.into()],
-        Some("fixture".into()),
+        Some(crate::execution::TrackedAgent::named("fixture")),
     )
     .await
     // A daemon crash ends the wrapper with an error, as it does a real one.
@@ -1736,4 +1811,21 @@ async fn critical_disk_space_stops_commands_and_restores_agents_once_space_recov
         "restored"
     );
     serving.abort();
+}
+
+/// The restore of `agent` with the tool's own model and effort, from
+/// `session` when given.
+fn restored<'a>(
+    agent: &'a str,
+    session: Option<&'a str>,
+) -> crate::execution::recovery::Restored<'a> {
+    static OWN: crate::agent::ModelChoice = crate::agent::ModelChoice {
+        model: None,
+        effort: None,
+    };
+    crate::execution::recovery::Restored {
+        agent,
+        model: &OWN,
+        session,
+    }
 }

@@ -214,6 +214,9 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
     db.execute_batch("ALTER TABLE executions DROP COLUMN agent;")?;
     db.execute_batch("ALTER TABLE executions DROP COLUMN asks_in_chat;")?;
     db.execute_batch(
+        "ALTER TABLE executions DROP COLUMN model; ALTER TABLE executions DROP COLUMN effort;",
+    )?;
+    db.execute_batch(
         "DROP INDEX workspaces_base; ALTER TABLE workspaces DROP COLUMN base_workspace_id;",
     )?;
     db.execute_batch(

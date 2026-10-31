@@ -49,6 +49,7 @@ fn stopped_lines_name_the_cause_that_is_saved() {
 #[test]
 fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues_its_restore() {
     let recovery = |automatic| recovery::Recovery {
+        model: Default::default(),
         agent: "claude".into(),
         command: vec![],
         automatic,

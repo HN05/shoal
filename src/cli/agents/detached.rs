@@ -133,30 +133,44 @@ pub(super) async fn start(
         args,
     };
     let prepared = app.prepare(session).await?;
-    let (launch, prepared) = launch_session(ctx, app, &workspace, &files, prepared).await?;
+    let agent = execution::TrackedAgent {
+        name: app.execution_agent(),
+        model,
+    };
+    let (launch, prepared) = launch_session(
+        ctx,
+        &agent,
+        &workspace,
+        &files,
+        prepared,
+        app.not_inherited(),
+    )
+    .await?;
     let delivered = prepared.deliver().await;
     report_session(ctx, app, &workspace, &launch, delivered)?;
     Ok(0)
 }
 
-/// Launch the `prepared` session of `app` in `workspace` as a detached
-/// execution logging beside its other `files`, discarding the preparation
-/// when it cannot start.
+/// Launch the `prepared` session of `agent` in `workspace` as a detached
+/// execution logging beside its other `files`, without the variables of
+/// this process its app must not inherit, discarding the preparation when
+/// it cannot start.
 async fn launch_session(
     ctx: &Context,
-    app: &dyn App,
+    agent: &execution::TrackedAgent,
     workspace: &Workspace,
     files: &Path,
     prepared: Box<dyn Prepared>,
+    not_inherited: &[&str],
 ) -> Result<(DetachedLaunch, Box<dyn Prepared>)> {
     let launched = execution::launch_detached(
         &ctx.paths,
         workspace,
         files.with_extension(crate::paths::SESSION_LOG),
         prepared.command(),
-        app.not_inherited(),
+        not_inherited,
         &prepared.env(),
-        Some(&app.execution_agent()),
+        Some(agent),
     )
     .await;
     match launched {

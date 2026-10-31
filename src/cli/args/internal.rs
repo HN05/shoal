@@ -121,6 +121,8 @@ pub enum InternalCommand {
         log: PathBuf,
         #[arg(long)]
         agent: Option<String>,
+        #[command(flatten)]
+        model: crate::cli::args::ModelArgs,
         #[arg(last = true, required = true)]
         command: Vec<OsString>,
     },
@@ -154,6 +156,8 @@ pub enum InternalCommand {
     Session {
         workspace: String,
         agent: String,
+        #[command(flatten)]
+        model: crate::cli::args::ModelArgs,
         #[arg(long = "record")]
         records: Vec<PathBuf>,
         /// The host that opened the place.

@@ -20,6 +20,7 @@ use super::{
     },
 };
 use crate::{
+    execution::TrackedAgent,
     model::Workspace,
     process::identity::Identity,
     protocol::{self, Body, Control, ErrorCode, ExecutionEvent, Protection, Reattach, Response},
@@ -29,7 +30,7 @@ pub(super) struct ExecutionContext {
     pub workspace: String,
     pub wrapper: Identity,
     pub kind: ExecutionKind,
-    pub agent: Option<String>,
+    pub agent: Option<TrackedAgent>,
     pub recover: bool,
     pub reattach: bool,
     /// The starting queue entry whose slot this agent takes over.
@@ -47,7 +48,7 @@ struct Connected {
     id: String,
     kind: ExecutionKind,
     workspace: Workspace,
-    agent: Option<String>,
+    agent: Option<TrackedAgent>,
     recover: bool,
     /// The wrapper keeps its command running when the daemon shuts down.
     reattach: bool,
@@ -197,7 +198,10 @@ pub(super) async fn reattach(
         id: request.execution,
         kind: ExecutionKind::Command,
         workspace,
-        agent: request.agent,
+        agent: request.agent.map(|name| TrackedAgent {
+            name,
+            model: request.model,
+        }),
         recover: request.recover,
         reattach: true,
         started: true,
@@ -678,7 +682,7 @@ async fn finish(
         manager
             .notify_agent_exit(
                 &workspace,
-                agent,
+                &agent.name,
                 result.as_ref().ok().copied(),
                 complete,
                 overload_reason
@@ -695,7 +699,12 @@ async fn finish(
     // A bounded hook can outlast the wrapper's acknowledgement deadline.
     if let Some(agent) = agent {
         manager
-            .post_agent_exit(&workspace, &agent, result.as_ref().ok().copied(), complete)
+            .post_agent_exit(
+                &workspace,
+                &agent.name,
+                result.as_ref().ok().copied(),
+                complete,
+            )
             .await;
     }
     acknowledged?;

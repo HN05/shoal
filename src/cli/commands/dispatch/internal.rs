@@ -10,6 +10,7 @@ use crate::{
         context::Context,
         terminal,
     },
+    execution::TrackedAgent,
     sessions::HostName,
 };
 
@@ -74,8 +75,13 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             workspace,
             log,
             agent,
+            model,
             command,
         } => {
+            let agent = agent.map(|name| TrackedAgent {
+                name,
+                model: model.into(),
+            });
             crate::execution::run_detached_wrapper(&ctx.paths, workspace, log, command, agent).await
         }
         InternalCommand::SecretTool {
@@ -119,6 +125,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::Session {
             workspace,
             agent,
+            model,
             records,
             command,
             host,
@@ -129,6 +136,10 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             if let Some(host) = close_in {
                 terminal::close_here_when_done(&ctx, host, &workspace).await;
             }
+            let agent = TrackedAgent {
+                name: agent,
+                model: model.into(),
+            };
             run_session(&ctx, workspace, agent, records, command).await
         }
     }
@@ -138,7 +149,7 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
 async fn run_session(
     ctx: &Context,
     workspace: String,
-    agent: String,
+    agent: TrackedAgent,
     records: Vec<std::path::PathBuf>,
     command: Vec<std::ffi::OsString>,
 ) -> Result<i32> {

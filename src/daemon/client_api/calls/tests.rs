@@ -359,7 +359,7 @@ async fn an_agent_stopped_with_a_session_to_resume_shows_as_stopped() {
     crate::execution::recovery::LastSession::save(
         &daemon.manager.paths,
         &workspace.id,
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         "execution",
     )
     .unwrap();

@@ -222,12 +222,20 @@ fn detached_round_trips_literal_arguments_and_globals() {
         "literal ; $value".into(),
         OsString::from_vec(vec![0xff]),
     ];
+    let happy = crate::execution::TrackedAgent {
+        name: "happy-codex".into(),
+        model: crate::agent::ModelChoice {
+            model: Some("gpt; $model".into()),
+            effort: Some("high".into()),
+        },
+    };
     for json in [false, true] {
-        for agent in [None, Some("happy-codex")] {
+        for agent in [None, Some(&happy)] {
             let InternalCommand::Detached {
                 workspace,
                 log: parsed_log,
                 agent: parsed_agent,
+                model,
                 command: parsed_command,
             } = parse(
                 Worker::Detached {
@@ -243,7 +251,15 @@ fn detached_round_trips_literal_arguments_and_globals() {
             };
             assert_eq!(workspace, "workspace-id");
             assert_eq!(parsed_log, log);
-            assert_eq!(parsed_agent.as_deref(), agent);
+            assert_eq!(
+                parsed_agent.as_deref(),
+                agent.map(|agent| agent.name.as_str())
+            );
+            let model = crate::agent::ModelChoice::from(model);
+            assert_eq!(
+                model,
+                agent.map(|agent| agent.model.clone()).unwrap_or_default()
+            );
             assert_eq!(parsed_command, command);
         }
     }
@@ -279,16 +295,22 @@ fn session_round_trips_records_and_literal_arguments() {
         "literal ; $value".into(),
         OsString::from_vec(vec![0xff]),
     ];
-    for (records, close_in) in [
-        (vec![], None),
+    let effort = crate::agent::ModelChoice {
+        model: None,
+        effort: Some("low".into()),
+    };
+    for (records, close_in, model) in [
+        (vec![], None, Default::default()),
         (
             vec![PathBuf::from("/state/a record.json"), "/b".into()],
             Some(HostName::Zmx),
+            effort,
         ),
     ] {
         let InternalCommand::Session {
             workspace,
             agent,
+            model: parsed_model,
             records: parsed_records,
             command: parsed_command,
             host,
@@ -296,7 +318,10 @@ fn session_round_trips_records_and_literal_arguments() {
         } = parse(
             Worker::Session {
                 workspace: "workspace-id",
-                agent: "claude",
+                agent: &crate::execution::TrackedAgent {
+                    name: "claude".into(),
+                    model: model.clone(),
+                },
                 records: &records,
                 command: &command,
                 host: HostName::Rex,
@@ -309,6 +334,7 @@ fn session_round_trips_records_and_literal_arguments() {
         };
         assert_eq!(workspace, "workspace-id");
         assert_eq!(agent, "claude");
+        assert_eq!(crate::agent::ModelChoice::from(parsed_model), model);
         assert_eq!(parsed_records, records);
         assert_eq!(parsed_command, command);
         assert_eq!(host, HostName::Rex);

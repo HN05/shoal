@@ -693,6 +693,9 @@ pub struct Reattach {
     /// Transient agent metadata the daemon lost with its memory.
     #[serde(default)]
     pub agent: Option<String>,
+    /// The model and effort the agent runs with.
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
     #[serde(default)]
     pub recover: bool,
     /// How long the command has run, keeping the overload stop order.

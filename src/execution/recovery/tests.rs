@@ -13,7 +13,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
         &paths,
         "workspace",
         "execution",
-        "codex",
+        &crate::execution::TrackedAgent::named("codex"),
         Some("critical memory pressure"),
         None,
     )
@@ -31,6 +31,7 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
     assert_eq!(record.stage, Some(Stage::Stopping));
     assert!(pending(&paths, "workspace").unwrap());
     let recovery = Recovery {
+        model: Default::default(),
         agent: "codex".into(),
         command: vec![],
         automatic: false,
@@ -47,7 +48,15 @@ fn legacy_records_remain_readable_and_pressure_handoffs_are_private() {
             Restorer::User,
         )
         .unwrap();
-    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
+    save_record(
+        &paths,
+        "workspace",
+        "execution",
+        &crate::execution::TrackedAgent::named("codex"),
+        None,
+        None,
+    )
+    .unwrap();
     let record: Record = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(
         record.stop_reason.as_deref(),
@@ -69,7 +78,15 @@ fn only_a_daemon_saved_stop_counts_as_undelivered() {
     assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
     assert!(path.is_file());
     std::fs::remove_file(&path).unwrap();
-    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
+    save_record(
+        &paths,
+        "workspace",
+        "execution",
+        &crate::execution::TrackedAgent::named("codex"),
+        None,
+        None,
+    )
+    .unwrap();
     assert!(discard_undelivered(&paths, "workspace", "execution").unwrap());
     assert!(!path.exists());
     assert!(!discard_undelivered(&paths, "workspace", "execution").unwrap());
@@ -80,6 +97,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        model: Default::default(),
         agent: "claude".into(),
         command: vec![],
         automatic: true,
@@ -136,10 +154,19 @@ fn the_first_saved_turn_stays_through_later_saves() {
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     assert!(!pending(&paths, "workspace").unwrap());
 
-    save_record(&paths, "workspace", "execution", "codex", None, None).unwrap();
+    save_record(
+        &paths,
+        "workspace",
+        "execution",
+        &crate::execution::TrackedAgent::named("codex"),
+        None,
+        None,
+    )
+    .unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Working).unwrap();
     save_turn(&paths, "workspace", "execution", AgentState::Idle).unwrap();
     let recovery = Recovery {
+        model: Default::default(),
         agent: "codex".into(),
         command: vec![],
         automatic: false,
@@ -159,6 +186,7 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let recovery = Recovery {
+        model: Default::default(),
         agent: "claude".into(),
         command: vec![],
         automatic: true,
@@ -201,7 +229,13 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
         r#"{"agent":"codex","session":"earlier"}"#,
     )
     .unwrap();
-    LastSession::save(&paths, "workspace", "claude code", "execution").unwrap();
+    LastSession::save(
+        &paths,
+        "workspace",
+        &crate::execution::TrackedAgent::named("claude code"),
+        "execution",
+    )
+    .unwrap();
     let mut saved = Saved::load(&paths, "workspace").unwrap();
     assert!(!state.join("last-session.json").exists());
     assert_eq!(saved.sessions.len(), 2);
@@ -243,7 +277,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
         Record {
             session: Some("stopped".into()),
             ..Record::new(
-                "claude",
+                &crate::execution::TrackedAgent::named("claude"),
                 Some("its terminal closed"),
                 Stage::Stopped,
                 Some(herdr_pane("w1:p2")),
@@ -262,6 +296,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     assert_eq!(
         LastSession::all(&paths, "workspace").unwrap(),
         [LastSession {
+            model: Default::default(),
             execution: "execution".into(),
             agent: "claude".into(),
             session: Some("stopped".into()),
@@ -306,7 +341,7 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         &paths,
         "workspace",
         "execution",
-        "claude",
+        &crate::execution::TrackedAgent::named("claude"),
         Some("critical memory pressure"),
         None,
     )

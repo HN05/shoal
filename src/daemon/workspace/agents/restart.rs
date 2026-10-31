@@ -195,7 +195,7 @@ impl Manager {
             &self.paths,
             &agent.workspace_id,
             id,
-            &agent.name,
+            &agent.tracked(),
             Some(&Protection::restart().reason),
             agent.turn,
         )

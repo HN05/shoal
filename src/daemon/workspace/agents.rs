@@ -12,7 +12,9 @@ pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
 use crate::{
+    agent::ModelChoice,
     daemon::notifications::NotificationKind,
+    execution::TrackedAgent,
     process::{execution::Processes, identity as process},
     protocol::timing,
     state::{AgentState, ExecutionState, WorkspaceState},
@@ -36,6 +38,8 @@ pub(crate) struct CallerAgent {
 
 pub(crate) struct Agent {
     name: String,
+    /// The model and effort it runs with, which its recovery records keep.
+    model: ModelChoice,
     workspace: String,
     workspace_id: String,
     started: Instant,
@@ -67,6 +71,14 @@ pub(crate) struct Agent {
 }
 
 impl Agent {
+    /// Its name with the model and effort it runs with.
+    pub(super) fn tracked(&self) -> TrackedAgent {
+        TrackedAgent {
+            name: self.name.clone(),
+            model: self.model.clone(),
+        }
+    }
+
     pub(super) fn cancel_recovery(&mut self) {
         self.overload = None;
         self.update_hold = None;
@@ -147,7 +159,7 @@ impl Manager {
     pub(crate) async fn end_agent_session(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &TrackedAgent,
         execution: &str,
         exited: bool,
     ) {
@@ -166,7 +178,7 @@ impl Manager {
     pub(crate) async fn keep_agent_session(
         &self,
         workspace: &crate::model::Workspace,
-        agent: &str,
+        agent: &TrackedAgent,
         execution: &str,
     ) -> anyhow::Result<()> {
         use crate::execution::recovery::{self, LastSession};
@@ -271,19 +283,20 @@ impl Manager {
     pub(crate) async fn track_agent(
         &self,
         id: &str,
-        name: &str,
+        tracked: &TrackedAgent,
         workspace_id: &str,
         workspace: &str,
         recover: bool,
         running: Duration,
     ) {
-        self.record_execution_agent(id, name).await;
+        self.record_execution_agent(id, tracked).await;
         let connections = self.executions.connections().await;
         let Some(stop) = connections.stop_channel(id) else {
             return;
         };
         let agent = Agent {
-            name: name.into(),
+            name: tracked.name.clone(),
+            model: tracked.model.clone(),
             workspace: workspace.into(),
             workspace_id: workspace_id.into(),
             started: Instant::now()
@@ -305,16 +318,16 @@ impl Manager {
             .await;
     }
 
-    /// Keep the name of the agent execution `id` runs with its record, which
-    /// outlives this daemon, unlike the tracked agent.
-    async fn record_execution_agent(&self, id: &str, name: &str) {
-        let (execution, name) = (id.to_owned(), name.to_owned());
+    /// Keep the name, model and effort of the agent execution `id` runs with
+    /// its record, which outlives this daemon, unlike the tracked agent.
+    async fn record_execution_agent(&self, id: &str, agent: &TrackedAgent) {
+        let (execution, agent) = (id.to_owned(), agent.clone());
         let recorded = self
             .store
             .run(move |db| {
                 db.execute(
-                    "UPDATE executions SET agent=?2 WHERE id=?1",
-                    rusqlite::params![execution, name],
+                    "UPDATE executions SET agent=?2,model=?3,effort=?4 WHERE id=?1",
+                    rusqlite::params![execution, agent.name, agent.model.model, agent.model.effort],
                 )?;
                 Ok(())
             })
@@ -823,7 +836,7 @@ impl Manager {
             &self.paths,
             &agent.workspace_id,
             id,
-            &agent.name,
+            &agent.tracked(),
             Some(&protection.reason),
             turn,
         );

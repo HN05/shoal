@@ -24,7 +24,7 @@ async fn track(manager: &Manager, workspace: &Workspace, id: &str, name: &str, r
     manager
         .track_agent(
             id,
-            name,
+            &crate::execution::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             recover,

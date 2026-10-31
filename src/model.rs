@@ -452,6 +452,9 @@ pub struct Execution {
     /// The agent it runs, when it runs one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
+    /// The model and effort its agent runs with.
+    #[serde(default, flatten)]
+    pub model: crate::agent::ModelChoice,
 }
 
 /// A file a completion handed back: the record of Shoal's copy, which tells a

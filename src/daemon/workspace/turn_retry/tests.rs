@@ -71,7 +71,7 @@ async fn another_agent(
     manager
         .track_agent(
             &started.plan.id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             true,

@@ -109,18 +109,20 @@ pub(super) async fn tracked(
         workspace,
         settings,
         replaces,
+        model,
         ..
     } = launch;
+    let agent = execution::TrackedAgent { name, model };
     if let Some(code) =
-        terminal::run_agent(ctx, &settings, &workspace, &name, &replaces, &command).await?
+        terminal::run_agent(ctx, &settings, &workspace, &agent, &replaces, &command).await?
     {
         return Ok(code);
     }
     terminal::label_current(&ctx.paths, terminal::Owner::Workspace(&workspace.id)).await?;
     if replaces.is_empty() {
-        return execution::run(&ctx.paths, workspace.id, command, Some(name)).await;
+        return execution::run(&ctx.paths, workspace.id, command, Some(agent)).await;
     }
-    execution::run_recovery(&ctx.paths, workspace.id, command, name, replaces).await
+    execution::run_recovery(&ctx.paths, workspace.id, command, agent, replaces).await
 }
 
 /// The agent's configured command with the arguments that fork a session,

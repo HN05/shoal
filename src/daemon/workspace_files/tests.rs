@@ -53,7 +53,7 @@ async fn agent_caller(manager: &Manager, workspace: &Workspace, name: &str) -> C
     manager
         .track_agent(
             caller.execution_id().unwrap(),
-            name,
+            &crate::execution::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             true,
@@ -1112,6 +1112,8 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     ALTER TABLE executions DROP COLUMN agent_execution;
     ALTER TABLE executions DROP COLUMN asks_in_chat;
     ALTER TABLE questions DROP COLUMN in_chat;
+    ALTER TABLE executions DROP COLUMN model;
+    ALTER TABLE executions DROP COLUMN effort;
     PRAGMA user_version=87;";
 
 /// Start a chat named `name` in the repository of `workspace` whose process

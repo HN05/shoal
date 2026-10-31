@@ -45,7 +45,7 @@ async fn agent_named(name: &str) -> Fixture {
     manager
         .track_agent(
             &id,
-            name,
+            &crate::execution::TrackedAgent::named(name),
             &workspace.id,
             &workspace.name,
             false,
@@ -185,7 +185,7 @@ async fn a_mark_outlasts_the_agent_reconnecting_to_a_restarted_daemon() {
     manager
         .track_agent(
             &id,
-            "claude",
+            &crate::execution::TrackedAgent::named("claude"),
             &workspace.id,
             &workspace.name,
             false,
@@ -232,7 +232,14 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
         .unwrap();
     let id = execution.plan.id.clone();
     manager
-        .track_agent(&id, "claude", &child.id, &child.name, false, Duration::ZERO)
+        .track_agent(
+            &id,
+            &crate::execution::TrackedAgent::named("claude"),
+            &child.id,
+            &child.name,
+            false,
+            Duration::ZERO,
+        )
         .await;
     manager
         .set_agent_state(&child.id, AgentState::Working, Some(id.clone()), None)
