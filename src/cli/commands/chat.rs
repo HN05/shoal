@@ -148,11 +148,7 @@ pub(super) async fn begin(
     match launch(ctx, repo, settings, topic, options).await? {
         Started::Exited(code) => Ok(code),
         Started::Background(chat) => {
-            let message = format!(
-                "Started chat {} in the background; {}",
-                chat.chat, chat.place
-            );
-            ctx.emit(&message, &chat)?;
+            ctx.emit(&chat.place, &chat)?;
             Ok(0)
         }
     }
@@ -173,7 +169,7 @@ pub(super) struct BackgroundChat {
     pub chat: String,
     pub agent: String,
     pub repository: String,
-    /// Where it runs and how to reach it.
+    /// Where it runs and how to reach it, as the host that runs it says.
     pub place: String,
 }
 

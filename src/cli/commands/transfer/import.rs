@@ -94,10 +94,7 @@ fn chat_place(ctx: &Context, options: &ImportOptions) -> ChatPlace {
 
 /// The report of an imported chat started in the background.
 fn chat_message(chat: &BackgroundChat) -> String {
-    format!(
-        "Imported chat {}; it continues in the background: {}",
-        chat.chat, chat.place
-    )
+    format!("Imported chat {}. {}", chat.chat, chat.place)
 }
 
 /// A package read for its import: the space, the repository it goes to,

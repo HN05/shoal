@@ -71,7 +71,7 @@ fn moved(name: &str, host: &str, imported: &Value) -> String {
         message.push_str(&format!(" at {path}"));
     }
     if let Some(place) = imported["place"].as_str() {
-        message.push_str(&format!("; it continues there: {place}"));
+        message.push_str(&format!(". On {host}: {place}"));
     }
     let queued = imported["queued"]["queued"].as_array().map_or(0, Vec::len);
     match queued {
