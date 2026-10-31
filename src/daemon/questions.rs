@@ -186,13 +186,13 @@ impl Question {
         if let Some(recommendation) = self.recommendation() {
             text.push_str(&format!(" Recommended: {recommendation}"));
         }
-        shorten(text, crate::validate::MAX_MESSAGE_LEN)
+        crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN)
     }
 
     /// What the user, or the coordinating agent, is told about a withdrawn
     /// question whose notification was already shown.
     fn withdrawal_notification(&self) -> String {
-        shorten(
+        crate::validate::shorten(
             format!(
                 "withdrew question {} (no answer needed): {}",
                 self.id,
@@ -231,7 +231,7 @@ impl Ask {
         let question = if text.is_empty() {
             "The agent asked a question in its chat; attach to its session to read it.".to_owned()
         } else {
-            shorten(text.to_owned(), crate::validate::MAX_AGENT_MESSAGE_LEN)
+            crate::validate::shorten(text.to_owned(), crate::validate::MAX_AGENT_MESSAGE_LEN)
         };
         Self {
             question,
@@ -240,20 +240,6 @@ impl Ask {
             choices: Vec::new(),
         }
     }
-}
-
-/// `text` cut to at most `max` bytes, ending with an ellipsis when cut.
-fn shorten(mut text: String, max: usize) -> String {
-    if text.len() <= max {
-        return text;
-    }
-    let mut end = max - '…'.len_utf8();
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text.truncate(end);
-    text.push('…');
-    text
 }
 
 const SELECT: &str =

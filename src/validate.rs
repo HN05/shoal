@@ -50,6 +50,20 @@ pub fn reason(kind: &str, value: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// `text` cut to at most `max` bytes, ending with an ellipsis when cut.
+pub fn shorten(mut text: String, max: usize) -> String {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max - '…'.len_utf8();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.truncate(end);
+    text.push('…');
+    text
+}
+
 /// Single-line text an agent sends the user; control characters would corrupt
 /// terminal output and its notification escape sequences.
 pub fn message(value: &str) -> Result<()> {
