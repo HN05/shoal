@@ -33,10 +33,8 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
         .create_workspace(&repo.id, "worker".into(), None, None, None)
         .await
         .unwrap();
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let ending = manager
         .start_chat(
             repo.id.clone().into(),
@@ -89,8 +87,7 @@ async fn chats_last_while_their_process_runs_and_own_the_workspaces_they_open() 
 
     // The chat ends with its process, returning its workspace to the user,
     // and its name is free again.
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     assert_eq!(manager.chats().await.unwrap(), [running]);
     assert_eq!(manager.workspace(&workspace.id).await.unwrap().chat, None);
     let next = manager
@@ -165,10 +162,8 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
         )
         .await
         .unwrap();
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let moved = manager.move_chat(&chat.id, process.id()).await.unwrap();
     assert_eq!(
         moved,
@@ -180,8 +175,7 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
     assert_eq!(manager.chats().await.unwrap(), [moved]);
 
     // The recording process still runs, but the chat ends with the new one.
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     assert!(manager.chats().await.unwrap().is_empty());
     let error = manager
         .move_chat(&chat.id, std::process::id())
@@ -198,10 +192,8 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let mut recording = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let recording =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.into(),
@@ -215,8 +207,7 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .unwrap();
     // A sweep finds the recording process ended...
     let recorded = manager.store.run(recorded_processes).await.unwrap();
-    recording.kill().unwrap();
-    recording.wait().unwrap();
+    recording.kill();
     let ended = finished(recorded);
     assert_eq!(ended.len(), 1);
     // ...while the chat moves to its session's process.
@@ -259,10 +250,8 @@ async fn chats_and_workspaces_share_one_namespace() {
     // A chat takes neither a workspace's name nor an invalid one.
     assert!(refusal(start("worker", std::process::id()).await).contains("workspace name"));
     assert!(refusal(start("-talk", std::process::id()).await).contains("chat names must"));
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     start("talk", process.id()).await.unwrap();
     assert!(
         refusal(start("talk", std::process::id()).await)
@@ -303,8 +292,7 @@ async fn chats_and_workspaces_share_one_namespace() {
     assert!(format!("{error:#}").contains("running chat"), "{error:#}");
 
     // The name frees once the chat's process ends, without listing chats.
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
@@ -486,10 +474,8 @@ async fn a_chat_has_its_own_tmpdir_until_it_ends() {
         .register_repository(checkout.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -512,8 +498,7 @@ async fn a_chat_has_its_own_tmpdir_until_it_ends() {
     );
     std::fs::write(tmp_dir.join("scratch"), "garbage").unwrap();
 
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     assert!(manager.chats().await.unwrap().is_empty());
     assert!(!tmp_dir.exists());
 

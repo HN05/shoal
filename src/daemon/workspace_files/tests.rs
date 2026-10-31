@@ -1122,7 +1122,7 @@ async fn chat(
     manager: &Manager,
     workspace: &Workspace,
     name: &str,
-    process: &std::process::Child,
+    process: &crate::test_support::ProcessGroup,
 ) -> crate::model::Chat {
     manager
         .start_chat(
@@ -1145,10 +1145,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
     };
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = chat(&manager, &workspace, "planning", &process).await;
     let report = temp.path().join("report.md");
     std::fs::write(&report, "Plan").unwrap();
@@ -1188,8 +1186,7 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
             .is_err()
     );
 
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     manager.end_finished_chats().await.unwrap();
     manager.expire_results().await.unwrap();
     let files = manager.attached_files("planning").await.unwrap();
@@ -1247,10 +1244,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
 async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&temp, &manager).await;
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = chat(&manager, &workspace, "planning", &process).await;
     let as_chat = Attacher::Chat {
         agent: "claude".into(),
@@ -1277,7 +1272,6 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
         .unwrap();
     assert_eq!(added[0].attached_by, Some(as_chat));
 
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     assert_eq!(manager.attacher(None, Some(&chat.id)).await, Attacher::User);
 }

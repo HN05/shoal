@@ -229,15 +229,12 @@ async fn a_demo_registers_its_next_run_once_the_exited_one_is_released() {
         .unwrap();
     let id = started.plan.id.clone();
     let run = || {
-        let mut child = std::process::Command::new("sleep")
-            .arg("30")
-            .spawn()
-            .unwrap();
+        let child =
+            crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("30"));
         let identity = crate::process::identity::capture(child.id())
             .unwrap()
             .unwrap();
-        child.kill().unwrap();
-        child.wait().unwrap();
+        child.kill();
         identity
     };
     let exited = run();
@@ -270,22 +267,17 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
     let ended = || {
-        let mut process = std::process::Command::new("sleep")
-            .arg("30")
-            .spawn()
-            .unwrap();
+        let process =
+            crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("30"));
         let identity = crate::process::identity::capture(process.id())
             .unwrap()
             .unwrap();
-        process.kill().unwrap();
-        process.wait().unwrap();
+        process.kill();
         identity
     };
     // The wrapper still runs, away from the daemon.
-    let mut away = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let mut away =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let child = ended();
     let started = manager
@@ -315,10 +307,8 @@ async fn stopping_a_demo_whose_wrapper_is_away_stops_its_processes() {
 async fn stopping_an_away_demo_between_runs_ends_its_record() {
     let (temp, manager) = manager().await;
     let (first, _) = workspaces(&manager, temp.path()).await;
-    let mut away = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let mut away =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let wrapper = crate::process::identity::capture(away.id()).unwrap();
     let started = manager
         .begin_execution_running(

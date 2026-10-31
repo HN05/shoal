@@ -219,6 +219,54 @@ impl Drop for Detached {
     }
 }
 
+/// A process a test started as the leader of its own process group.
+/// Dropping it kills the group, so neither the process nor what it started
+/// outlives a test that fails or times out.
+pub struct ProcessGroup {
+    leader: std::process::Child,
+    /// Once the leader is reaped, its ID may name another group.
+    reaped: bool,
+}
+
+impl ProcessGroup {
+    pub fn spawn(command: &mut Command) -> Self {
+        use std::os::unix::process::CommandExt as _;
+        Self {
+            leader: command.process_group(0).spawn().unwrap(),
+            reaped: false,
+        }
+    }
+
+    pub fn id(&self) -> u32 {
+        self.leader.id()
+    }
+
+    /// Wait for the leader to exit on its own or by another's signal.
+    pub fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        let status = self.leader.wait()?;
+        self.reaped = true;
+        Ok(status)
+    }
+
+    /// Kill the group and wait for its leader.
+    pub fn kill(self) {
+        drop(self);
+    }
+}
+
+impl Drop for ProcessGroup {
+    fn drop(&mut self) {
+        if self.reaped {
+            return;
+        }
+        // SAFETY: the unreaped leader keeps its group's ID from naming another.
+        unsafe {
+            libc::kill(-(self.leader.id() as libc::pid_t), libc::SIGKILL);
+        }
+        let _ = self.leader.wait();
+    }
+}
+
 /// `program` run from `dir` without the runner's Shoal variables or
 /// configuration locations.
 pub fn isolated_command(program: &str, dir: &Path) -> tokio::process::Command {

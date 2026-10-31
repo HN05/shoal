@@ -217,10 +217,8 @@ async fn a_contribution_goes_once_its_workspaces_and_checkpoints_are_gone() {
 async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
     let (root, manager) = manager().await;
     let repo = contribution(&manager, root.path()).await;
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             repo.id.clone().into(),
@@ -242,8 +240,7 @@ async fn an_ended_chats_files_keep_a_contribution_until_they_expire() {
         )
         .await
         .unwrap();
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     manager.end_finished_chats().await.unwrap();
     manager.sweep_contributions().await.unwrap();
     assert!(

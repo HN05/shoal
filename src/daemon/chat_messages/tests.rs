@@ -177,10 +177,8 @@ async fn delivery_deletes_chat_messages_and_replaces_a_running_wait() {
 async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
@@ -222,8 +220,7 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
     );
     assert!(user(&manager).await.is_empty());
 
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     manager.end_finished_chats().await.unwrap();
     assert!(received(&manager, &chat).await.is_empty());
     let unread = (
@@ -254,10 +251,8 @@ async fn an_ended_chat_gives_the_user_the_events_it_had_not_received() {
 async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
     let (temp, manager) = manager().await;
     let (_, worker) = chat_and_worker(&temp, &manager).await;
-    let mut process = std::process::Command::new("sleep")
-        .arg("600")
-        .spawn()
-        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
     let chat = manager
         .start_chat(
             worker.repository_id.clone().into(),
@@ -298,8 +293,7 @@ async fn an_ended_chat_keeps_who_sent_the_events_it_hands_over() {
         .await
         .unwrap();
 
-    process.kill().unwrap();
-    process.wait().unwrap();
+    process.kill();
     manager.end_finished_chats().await.unwrap();
     let handed = manager.notifications(true, 50).await.unwrap();
     assert_eq!(handed.len(), 1);
