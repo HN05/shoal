@@ -17,7 +17,10 @@ use std::ffi::OsString;
 use anyhow::{Result, ensure};
 
 use self::{
-    agent::{AddSettings, choose_add_agent, choose_for_picked_issue, resolve_add_agent},
+    agent::{
+        AddSettings, check_chosen_model, choose_add_agent, choose_for_picked_issue,
+        resolve_add_agent,
+    },
     finish::execute_add_with_target,
     handoff::start_beside,
     plan::{check_add_creation, plan_addition},
@@ -72,6 +75,7 @@ pub(in crate::cli::commands) async fn add(
     let after = after_dependencies(ctx, &target, &options.after).await?;
     let settings = AddSettings::new(ctx, &target.selector);
     let agent = choose_add_agent(&settings, agent).await?;
+    check_chosen_model(&settings, &agent, &options.model).await?;
     let picked = match issue {
         Some(_) => None,
         None => pick_add_source(ctx, &target, &mut creation).await?,

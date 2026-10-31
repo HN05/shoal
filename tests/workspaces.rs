@@ -5524,6 +5524,17 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     assert!(!output.status.success(), "{output:?}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");
+    // An addition refuses it before creating anything.
+    let repo = fixture.repo.to_str().unwrap();
+    let output = launch(&["add", repo, "unsupported", "--agent", "pi", "--model", "m1"]);
+    assert!(!output.status.success(), "{output:?}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");
+    let workspaces = fixture.ok(&["work"]);
+    assert!(
+        !workspaces.to_string().contains("unsupported"),
+        "{workspaces}"
+    );
 }
 
 #[test]
