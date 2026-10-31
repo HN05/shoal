@@ -56,3 +56,27 @@ async fn the_result_comes_from_the_output_file_when_the_reviewer_writes_one() {
         Ended::Failed(FailureReason::ExecutionFailed)
     );
 }
+
+#[test]
+fn reviewer_output_is_read_within_its_limits() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("stream");
+    fs::write(&path, b"0123456789").unwrap();
+    assert_eq!(read_tail(&path, 4).unwrap(), b"6789");
+    assert_eq!(read_tail(&path, 64).unwrap(), b"0123456789");
+    assert_eq!(
+        read_bounded(&path, 10).unwrap().as_deref(),
+        Some(&b"0123456789"[..])
+    );
+    assert_eq!(read_bounded(&path, 9).unwrap(), None);
+    assert_eq!(read_bounded(&root.path().join("missing"), 9).unwrap(), None);
+}
+
+#[tokio::test]
+async fn an_oversized_result_is_invalid_output() {
+    let (_root, files) = files();
+    let (_cancel, mut cancelled) = watch::channel(false);
+    let script = format!("head -c {} /dev/zero", RESULT_LIMIT + 1);
+    let ended = run(&reviewer(&files, &["sh", "-c", &script]), &mut cancelled).await;
+    assert_eq!(ended, Ended::Failed(FailureReason::InvalidOutput));
+}
