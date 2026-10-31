@@ -26,8 +26,7 @@ pub(super) async fn start(
     let settings = chat::settings(ctx, &repo).await?;
     options.agent = chat::named_agent(&settings, options.agent)?;
     if let Some(agent) = &options.agent {
-        let model = settings.model(agent.name(), options.model.clone());
-        crate::cli::agents::check_model(&settings, agent.name(), &model)?;
+        chat::check_model(&settings, agent, &options.model)?;
     }
     if local || choose_local(ctx)? {
         local::start(ctx, repo, settings, options).await
