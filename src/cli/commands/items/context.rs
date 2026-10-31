@@ -82,10 +82,12 @@ async fn select_context(
     Ok(ItemContext::Workspace(workspace))
 }
 
-/// The registered repository `repo` names.
+/// The registered repository `repo` names, a path read from the current
+/// directory.
 async fn named(ctx: &Context, repo: &str) -> Result<Repository> {
+    let selector = ui::repository_selector(repo.to_owned())?;
     let repos = client::repositories(&ctx.paths).await?;
-    Ok(repository::select(&repos, repo).await?.clone())
+    Ok(repository::select(&repos, selector).await?.clone())
 }
 
 /// The registered repository `repo` names, if any.

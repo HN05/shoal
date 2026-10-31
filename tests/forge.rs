@@ -4990,6 +4990,16 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
         "repo names no repository",
     );
     assert!(writes(&fixture).is_empty());
+
+    // A path names the repository from the current directory, and a name
+    // that also names another registration is ambiguous.
+    read(&[
+        "issue", "comment", "40", "--body", "Seen", "--repo", "./repo",
+    ]);
+    assert_eq!(writes(&fixture).len(), 1);
+    let other = init_repo(fixture.root.path(), "other", &[("tracked", "other\n")]);
+    fixture.ok(&["repo", "add", other.to_str().unwrap(), "--name", "repo"]);
+    refused(&["issue", "close", "40", "--repo", "repo"], "ambiguous");
 }
 
 #[test]
