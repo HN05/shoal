@@ -1,9 +1,16 @@
 //! Plain-text templates: substitute known fields once, never evaluate their values.
-use std::{fs, io::Write, path::Path};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
-use crate::{config::Config, paths::Paths};
+use crate::{
+    config::{Config, repo::TemplatesConfig},
+    paths::Paths,
+};
 
 pub use super::placeholders::render;
 
@@ -13,9 +20,37 @@ pub const AGENT_GUIDANCE: &str = include_str!("templates/agent.md");
 pub const CHAT_FILE: &str = "chat-template.md";
 pub const CHAT_DEFAULT: &str = include_str!("templates/chat.md");
 
-pub fn read(directory: &Path, name: &str) -> Result<Option<String>> {
-    let path = directory.join(name);
-    crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))
+/// Fill one layer's omitted inline templates from the Markdown files in
+/// `directories`, where each file may be in only one of them.
+pub fn fill(templates: &mut TemplatesConfig, directories: &[PathBuf]) -> Result<()> {
+    for (name, value) in [
+        (WORKER_FILE, &mut templates.worker),
+        (CHAT_FILE, &mut templates.chat),
+    ] {
+        let text = find(directories, name)?;
+        if value.is_none() {
+            *value = text;
+        }
+    }
+    Ok(())
+}
+
+/// The text of the one file named `name` among `directories`.
+fn find(directories: &[PathBuf], name: &str) -> Result<Option<String>> {
+    let mut found = Vec::new();
+    for path in directories.iter().map(|directory| directory.join(name)) {
+        let text = crate::fsutil::read_optional(&path)
+            .with_context(|| format!("read {}", path.display()))?;
+        found.extend(text.map(|text| (path, text)));
+    }
+    if let [(first, _), (second, _), ..] = found.as_slice() {
+        bail!(
+            "both {} and {} exist; keep only one {name}",
+            first.display(),
+            second.display()
+        );
+    }
+    Ok(found.pop().map(|(_, text)| text))
 }
 
 pub fn install(paths: &Paths) -> Result<()> {

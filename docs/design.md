@@ -1700,7 +1700,8 @@ once per request and every use site reads them rather than layering on its own.
 Prompt templates select repository additions by local/worktree precedence and
 append them to global guidance, using the bundled chat template when
 no global one is configured. Empty repository values suppress only the addition.
-Repository-root Markdown files and global files beside `config.toml` sit below
+Repository Markdown files, at the root or in `.shoal/` like the repository
+config and refused in both, and global files beside `config.toml` sit below
 inline TOML values at each level; provenance names the highest configured layer
 and reports the combined text.
 Shoal's agent guidance is built in and precedes every worker template, so

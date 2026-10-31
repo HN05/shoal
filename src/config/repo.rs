@@ -1,5 +1,5 @@
 use crate::agent::Agent;
-use crate::config::options::Options;
+use crate::config::{options::Options, templates};
 use crate::sessions::HostName;
 use crate::state::states;
 use anyhow::{Context, Result, ensure};
@@ -337,7 +337,7 @@ pub fn load_local(repository_dir: &Path) -> Result<RepoConfig> {
         None => RepoConfig::default(),
     };
     resolve_script_paths(&mut config, &directory);
-    read_templates(&mut config, &directory)?;
+    templates::fill(&mut config.agent.templates, &[directory])?;
     Ok(config)
 }
 
@@ -375,22 +375,11 @@ pub fn load(workspace_dir: &Path) -> Result<RepoConfig> {
         }
         None => RepoConfig::default(),
     };
-    read_templates(&mut config, workspace_dir)?;
+    templates::fill(
+        &mut config.agent.templates,
+        &[workspace_dir.to_owned(), workspace_dir.join(".shoal")],
+    )?;
     Ok(config)
-}
-
-/// Fill omitted inline templates from the files in `directory`.
-fn read_templates(config: &mut RepoConfig, directory: &Path) -> Result<()> {
-    let templates = &mut config.agent.templates;
-    if templates.worker.is_none() {
-        templates.worker =
-            crate::config::templates::read(directory, crate::config::templates::WORKER_FILE)?;
-    }
-    if templates.chat.is_none() {
-        templates.chat =
-            crate::config::templates::read(directory, crate::config::templates::CHAT_FILE)?;
-    }
-    Ok(())
 }
 
 impl RepoConfig {

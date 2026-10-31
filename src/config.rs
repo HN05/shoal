@@ -277,15 +277,12 @@ impl Config {
     /// for omitted inline templates, as the CLI reads it for a launch.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
         let mut config = Self::load(paths)?;
-        let directory = Self::path(paths);
-        let directory = directory.parent().context("config has no directory")?;
-        let templates = &mut config.repository;
-        if templates.agent.templates.worker.is_none() {
-            templates.agent.templates.worker = templates::read(directory, templates::WORKER_FILE)?;
-        }
-        if templates.agent.templates.chat.is_none() {
-            templates.agent.templates.chat = templates::read(directory, templates::CHAT_FILE)?;
-        }
+        let path = Self::path(paths);
+        let directory = path.parent().context("config has no directory")?;
+        templates::fill(
+            &mut config.repository.agent.templates,
+            &[directory.to_owned()],
+        )?;
         Ok(config)
     }
 

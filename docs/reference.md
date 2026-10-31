@@ -1653,7 +1653,8 @@ ends a lease grant.
 
 `agent.templates.worker` and `agent.templates.chat` in the local config, or
 `worker-template.md` and `chat-template.md` beside it, win over the worktree's TOML values or `worker-template.md` and
-`chat-template.md` in the repository root.
+`chat-template.md` in the repository root or its `.shoal/` directory. A template
+file in both places is an error naming both.
 The selected repository template is appended after the global TOML value or
 corresponding file beside `config.toml`, with a blank line between nonempty
 templates. Inline TOML wins over Markdown at each level. An empty repository

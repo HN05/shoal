@@ -215,3 +215,50 @@ fn the_local_config_names_scripts_beside_it_and_may_hold_secrets() {
         Some("Local additions")
     );
 }
+
+#[test]
+fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
+    let read = |files: &[(&str, &str)], toml: &str| {
+        let worktree = tempfile::tempdir().unwrap();
+        fs::create_dir(worktree.path().join(".shoal")).unwrap();
+        for (path, text) in files {
+            fs::write(worktree.path().join(path), text).unwrap();
+        }
+        fs::write(worktree.path().join(".shoal.toml"), toml).unwrap();
+        load(worktree.path()).map(|config| config.agent.templates)
+    };
+    for directory in ["", ".shoal/"] {
+        let templates = read(
+            &[
+                (&format!("{directory}worker-template.md"), "Worker"),
+                (&format!("{directory}chat-template.md"), "Chat"),
+            ],
+            "",
+        )
+        .unwrap();
+        assert_eq!(templates.worker.as_deref(), Some("Worker"));
+        assert_eq!(templates.chat.as_deref(), Some("Chat"));
+    }
+    // Each template stands alone, and inline TOML wins over its file.
+    let templates = read(
+        &[
+            ("worker-template.md", "Worker"),
+            (".shoal/chat-template.md", "Chat"),
+        ],
+        "agent.templates.worker = 'Inline'",
+    )
+    .unwrap();
+    assert_eq!(templates.worker.as_deref(), Some("Inline"));
+    assert_eq!(templates.chat.as_deref(), Some("Chat"));
+    for name in ["worker-template.md", "chat-template.md"] {
+        let error = read(&[(name, "Root"), (&format!(".shoal/{name}"), "Shoal")], "")
+            .unwrap_err()
+            .to_string();
+        assert!(error.starts_with("both "), "{error}");
+        assert!(
+            error.ends_with(&format!("{name} exist; keep only one {name}")),
+            "{error}"
+        );
+        assert!(error.contains(&format!(".shoal/{name}")), "{error}");
+    }
+}
