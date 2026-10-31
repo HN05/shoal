@@ -799,9 +799,8 @@ impl Backend for Forgejo {
         download::with_curl(url, authorization).await
     }
 
-    /// tea cannot send a file, so uploads need fj's token. The instance's
-    /// settings are checked here, since an upload they refuse would fail only
-    /// after its comment or item is posted.
+    /// The instance's settings are checked here, since an upload they refuse
+    /// would fail only after its comment or item is posted.
     async fn check_uploads(
         &self,
         repo: &ForgeRepo,
