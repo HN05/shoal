@@ -9,6 +9,15 @@ pub enum ScopeOrder {
     AfterDirectory,
 }
 
+impl ScopeOrder {
+    /// Whether selection with this order consults the current directory: a
+    /// scoped caller that puts its scope first never does, so it needs no
+    /// readable working directory.
+    pub fn reads_directory(self, scoped: bool) -> bool {
+        !(scoped && matches!(self, Self::BeforeDirectory))
+    }
+}
+
 pub struct WorkspaceContext<'a> {
     workspaces: &'a [Workspace],
     current: Option<&'a Workspace>,

@@ -20494,6 +20494,31 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
 }
 
 #[test]
+fn agents_report_their_turn_state_from_an_unreadable_directory() {
+    let fixture = Fixture::new();
+    fixture.add("reporter");
+    let outside = tempfile::tempdir().unwrap();
+    let inside = outside.path().join("locked/inside");
+    std::fs::create_dir_all(&inside).unwrap();
+    // The scope names the workspace, so the hook never reads where it runs.
+    let output = fixture
+        .command()
+        .args(["run", "--workspace", "reporter", "--", "sh", "-c"])
+        .arg(concat!(
+            r#"cd "$1/locked/inside" && chmod 000 "$1/locked" && "#,
+            r#""$0" internal agent-state waiting >/dev/null; reported=$?; "#,
+            r#"chmod 755 "$1/locked" && cd "$1" && "$0" status && exit $reported"#
+        ))
+        .arg(env!("CARGO_BIN_EXE_shoal"))
+        .arg(outside.path())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let shown = String::from_utf8(output.stdout).unwrap();
+    assert!(shown.contains("Agent state:   needs input"), "{shown}");
+}
+
+#[test]
 fn agent_state_reports_from_an_input_that_never_closes() {
     let fixture = Fixture::new();
     fixture.add("reporter");

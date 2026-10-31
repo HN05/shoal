@@ -126,3 +126,11 @@ fn directory_capture_matches_nested_and_symlink_paths() {
             .is_none()
     );
 }
+
+#[test]
+fn only_a_scope_put_first_skips_the_directory() {
+    assert!(!ScopeOrder::BeforeDirectory.reads_directory(true));
+    assert!(ScopeOrder::BeforeDirectory.reads_directory(false));
+    assert!(ScopeOrder::AfterDirectory.reads_directory(true));
+    assert!(ScopeOrder::AfterDirectory.reads_directory(false));
+}

@@ -277,12 +277,16 @@ async fn resolve_workspace(
     // split from it, which the current directory selects.
     let workspaces = client::workspaces(&ctx.paths).await?;
     let scoped = crate::env::is_scoped();
-    let cwd = current_directory()?;
-    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
     let order = match fallback {
         Fallback::OwnWorkspace => ScopeOrder::BeforeDirectory,
         Fallback::CurrentDirectory | Fallback::CurrentDirectoryOnly => ScopeOrder::AfterDirectory,
     };
+    let cwd = if order.reads_directory(scoped) {
+        current_directory()?
+    } else {
+        None
+    };
+    let context = WorkspaceContext::from_directory(&workspaces, cwd.as_deref());
     if let Some(workspace) = context.resolve(None, scoped, order) {
         return Ok(Resolution::Workspace(workspace.id.clone()));
     }
