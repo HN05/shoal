@@ -27,7 +27,6 @@ pub(super) async fn start(
     options: chat::Options,
 ) -> Result<i32> {
     chat::ensure_unscoped(ctx)?;
-    options.check_name(ctx).await?;
     let config = config_file(ctx, repo.id.clone().into()).await?;
     let topic = topic(&repo, &config);
     chat::begin(ctx, repo, settings, topic, options).await

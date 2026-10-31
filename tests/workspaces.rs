@@ -25132,12 +25132,14 @@ fn local_repository_setup_saves_the_config_from_a_chat_in_the_checkout() {
 }
 
 #[test]
-fn repository_setup_refuses_named_arguments_before_asking_where_the_config_goes() {
+fn repository_setup_refuses_named_arguments_before_any_picker() {
     let fixture = Fixture::new();
     let repo = fixture.repo.to_str().unwrap();
+    // Outside the checkout, an omitted repository is picked, too.
     for args in [
         &["repo", "setup", "missing-repository"][..],
         &["repo", "setup", repo, "--agent", "missing-agent"],
+        &["repo", "setup", "--local", "--name", "bad/name"],
     ] {
         let (output, rows) = fixture.pick(args, "1", "");
         assert!(!output.status.success(), "{args:?}: {output:?}");

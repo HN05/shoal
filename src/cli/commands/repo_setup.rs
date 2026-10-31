@@ -18,11 +18,12 @@ pub(super) async fn start(
     local: bool,
     mut options: chat::Options,
 ) -> Result<i32> {
+    // Refuse what the command line names before asking for anything.
+    options.check_name(ctx).await?;
     let selector = super::repositories::chosen(ctx, repository).await?;
     let repos = client::repositories(&ctx.paths).await?;
     let repo = repository::select(&repos, &selector).await?.clone();
     let settings = chat::settings(ctx, &repo).await?;
-    // Refuse what the command line names before asking where the config goes.
     options.agent = chat::named_agent(&settings, options.agent)?;
     if local || choose_local(ctx)? {
         local::start(ctx, repo, settings, options).await
