@@ -31,7 +31,7 @@ pub(in crate::cli::commands) async fn list(
         Some(repository) => Some(ui::repository_selector(repository)?),
         None => None,
     };
-    let reviews: Vec<Review> = client::request(
+    let reviews: Vec<Review> = client::pages(
         &ctx.paths,
         ReviewMethod::ListReviews {
             workspace,
