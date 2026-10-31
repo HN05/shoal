@@ -268,6 +268,18 @@ impl Rex {
             .is_ok_and(|processes| processes.shell_in_foreground())
     }
 
+    /// Whether `block`'s terminal takes input a line at a time, as before a
+    /// shell's line editor starts; `None` when it cannot be read.
+    pub async fn canonical(&self, block: &str) -> Option<bool> {
+        let output = self
+            .run(&["block", "call", "-b", block, "input_mode"])
+            .await
+            .ok()?;
+        serde_json::from_slice::<InputMode>(&output)
+            .ok()
+            .map(|mode| mode.canonical)
+    }
+
     /// Type `text` into `block` exactly as given.
     pub async fn send(&self, block: &str, text: &str) -> Result<()> {
         self.run(&["send", "-b", block, text]).await?;
@@ -584,6 +596,12 @@ struct Process {
     pid: i64,
     #[serde(default)]
     name: String,
+}
+
+/// How a terminal takes typed input.
+#[derive(Deserialize)]
+struct InputMode {
+    canonical: bool,
 }
 
 /// Programs that are shells, by name; a shell that ran `exec` keeps its

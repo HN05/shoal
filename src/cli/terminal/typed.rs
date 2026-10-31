@@ -5,12 +5,21 @@
 //! file before running it, so neither shows on screen or in the shell's
 //! history. Only the shell directive goes to the shell itself, which enters
 //! the workspace through it.
-use std::{collections::BTreeMap, ffi::OsString, os::unix::process::CommandExt, path::Path};
+use std::{
+    collections::BTreeMap, ffi::OsString, os::unix::process::CommandExt, path::Path, time::Duration,
+};
 
 use anyhow::{Context as _, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{cli::internal, env};
+
+/// How long a new place's shell may take to start its line editor. Past it,
+/// Shoal types anyway, as into a shell that has none, whose terminal echoes
+/// the text once.
+const PROMPT_LIMIT: Duration = Duration::from_secs(5);
+/// How often a wait for the line editor reads the terminal's mode.
+const PROMPT_POLL: Duration = Duration::from_millis(50);
 
 /// A command a host types into a new place's shell, with the file that
 /// carries it until the place runs it.
@@ -140,6 +149,22 @@ fn place_command(line: &str, ends_shell: bool) -> [String; 3] {
         "-c".into(),
         format!("set -m; {line}{shell}"),
     ]
+}
+
+/// Wait until a new place's shell reads input through its line editor, at
+/// its prompt, which takes the terminal out of line-at-a-time input, as
+/// `canonical` reads it. Text typed before shows twice: the terminal echoes
+/// it, then the line editor draws it again. A terminal whose mode
+/// `canonical` cannot read is not waited for.
+pub(in crate::cli) async fn await_prompt<Canonical, Read>(mut canonical: Canonical)
+where
+    Canonical: FnMut() -> Read,
+    Read: Future<Output = Option<bool>>,
+{
+    let limit = tokio::time::Instant::now() + PROMPT_LIMIT;
+    while canonical().await == Some(true) && tokio::time::Instant::now() < limit {
+        tokio::time::sleep(PROMPT_POLL).await;
+    }
 }
 
 /// The launch step: run the command `file` carries, after deleting it.

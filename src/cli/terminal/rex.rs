@@ -11,7 +11,7 @@ use futures_util::future::BoxFuture;
 use super::{
     Demo, Host, PlaceState, Session, Start, Watched,
     host::{Demos, Places, Sessions, Types, Watches},
-    typed::Typed,
+    typed::{self, Typed},
 };
 use crate::{
     config::repo::RexPlacement,
@@ -314,7 +314,7 @@ async fn run_at_prompt(
 }
 
 /// Open a background window for the demo and type its worker there, which
-/// needs the block it runs in.
+/// needs the block it runs in, once the shell is at its prompt.
 async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
     let origin = demo
         .origin
@@ -342,6 +342,7 @@ async fn start_demo(demo: &Demo<'_>) -> Result<Origin> {
     };
     // The demo's shell ends with it, so no later command reuses its block.
     let typed = Typed::ending_shell(demo.state, &(demo.worker)(&place)?, demo.env)?;
+    typed::await_prompt(|| server.canonical(place.id())).await;
     server.send(place.id(), typed.text()).await?;
     typed.hand_over()?;
     Ok(place)

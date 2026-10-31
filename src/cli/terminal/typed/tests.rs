@@ -85,3 +85,32 @@ fn a_command_that_ends_its_shell_exits_after_it() {
         " /opt/shoal launch; exit\r"
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn typing_waits_for_the_line_editor() {
+    let mut reads = 0;
+    await_prompt(|| {
+        reads += 1;
+        std::future::ready(Some(reads < 3))
+    })
+    .await;
+    assert_eq!(reads, 3);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_shell_without_a_line_editor_is_typed_into_after_the_limit() {
+    let start = tokio::time::Instant::now();
+    await_prompt(|| std::future::ready(Some(true))).await;
+    assert!(start.elapsed() >= PROMPT_LIMIT);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unreadable_terminal_is_not_waited_for() {
+    let mut reads = 0;
+    await_prompt(|| {
+        reads += 1;
+        std::future::ready(None)
+    })
+    .await;
+    assert_eq!(reads, 1);
+}

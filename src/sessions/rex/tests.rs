@@ -312,3 +312,13 @@ async fn closing_a_block_leaves_its_window_to_rex() {
     assert_eq!(closes.len(), 1);
     assert!(closes[0].contains(&"block".to_owned()));
 }
+
+#[tokio::test]
+async fn a_blocks_input_mode_tells_whether_its_line_editor_runs() {
+    let (_root, rex) = fake(
+        r#"{('block', 'call', '-b', 'block:1', 'input_mode'): (0, '{"echo": false, "canonical": false, "signals": true}'), ('block', 'call', '-b', 'block:2', 'input_mode'): (0, '{"echo": true, "canonical": true, "signals": true}')}"#,
+    );
+    assert_eq!(rex.canonical("block:1").await, Some(false));
+    assert_eq!(rex.canonical("block:2").await, Some(true));
+    assert_eq!(rex.canonical("block:3").await, None);
+}
