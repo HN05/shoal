@@ -6,6 +6,7 @@ pub mod backends;
 pub mod capability;
 pub mod ci;
 pub mod conventions;
+pub mod download;
 pub mod hosts;
 pub mod items;
 pub mod raw;

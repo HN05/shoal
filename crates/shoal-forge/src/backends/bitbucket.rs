@@ -87,7 +87,8 @@ impl Backend for Bitbucket {
             | Capability::CancelJobs
             | Capability::ReadJobLogs
             | Capability::ReadRuns
-            | Capability::ApproveRuns => Support::Unsupported(None),
+            | Capability::ApproveRuns
+            | Capability::Downloads => Support::Unsupported(None),
             Capability::Reactions => Support::Unsupported(Some("Bitbucket has no reactions")),
             Capability::AutoMerge => {
                 Support::Unsupported(Some("Bitbucket's API cannot merge a pull request later"))

@@ -93,6 +93,7 @@ impl Backend for GitLab {
             )),
             // GitLab holds no pipeline for approval.
             Capability::ApproveRuns => Support::Unsupported(None),
+            Capability::Downloads => Support::Unsupported(None),
             Capability::ResolveThreads
             | Capability::RerunJobs
             | Capability::CancelJobs

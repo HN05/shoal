@@ -45,7 +45,11 @@ use crate::{
         thread::Thread,
         view::{Details, Review},
     },
-    transport::{api::Request, resend::Transient, response::Response},
+    transport::{
+        api::Request,
+        resend::Transient,
+        response::{Fetched, Response},
+    },
     updates::Snapshot,
 };
 use bitbucket::Bitbucket;
@@ -693,6 +697,12 @@ pub(crate) trait Backend {
         account: &Account,
         attachments: &[Attachment],
     ) -> Result<bool>;
+
+    /// The response to a GET of `url`, a file on the forge's web host,
+    /// sent as `account`.
+    async fn download(&self, _repo: &ForgeRepo, _account: &Account, _url: &str) -> Result<Fetched> {
+        Err(crate::capability::unsupported(self, Capability::Downloads))
+    }
 
     /// The repository's numeric ID, where the forge's uploads name it.
     async fn repository_id(&self, _repo: &ForgeRepo, _account: &Account) -> Result<Option<u64>> {
@@ -1373,6 +1383,10 @@ impl Backend for ForgeKind {
         attachments: &[Attachment],
     ) -> Result<bool> {
         dispatch!(self, backend => backend.check_uploads(repo, account, attachments).await)
+    }
+
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        dispatch!(self, backend => backend.download(repo, account, url).await)
     }
 
     async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {

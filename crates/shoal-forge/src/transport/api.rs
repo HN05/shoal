@@ -23,8 +23,8 @@ use crate::{
 };
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(30);
-/// Bounds sending an attached file, which may be a large video.
-const UPLOAD_TIMEOUT: Duration = Duration::from_secs(600);
+/// Bounds sending or fetching a file, which may be a large video.
+pub(crate) const FILE_TIMEOUT: Duration = Duration::from_secs(600);
 /// Bounds a response and the head the transport prints with it, unless
 /// the request sets a lower one.
 pub(crate) const MAX_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
@@ -120,7 +120,7 @@ impl Request {
 
     fn timeout(&self) -> Duration {
         if self.upload.is_some() {
-            UPLOAD_TIMEOUT
+            FILE_TIMEOUT
         } else {
             TIMEOUT
         }
@@ -504,7 +504,7 @@ pub(crate) fn unrun(
 }
 
 /// `bytes` in MiB when it is a whole number of them.
-fn size(bytes: usize) -> String {
+pub(crate) fn size(bytes: usize) -> String {
     const MIB: usize = 1024 * 1024;
     if bytes >= MIB && bytes.is_multiple_of(MIB) {
         format!("{} MiB", bytes / MIB)
@@ -514,7 +514,7 @@ fn size(bytes: usize) -> String {
 }
 
 /// The failure curl's exit reports, marked when it may pass.
-fn curl_failure(output: &std::process::Output) -> anyhow::Error {
+pub(crate) fn curl_failure(output: &std::process::Output) -> anyhow::Error {
     let message = format!(
         "curl failed ({}): {}",
         output.status,

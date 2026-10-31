@@ -54,7 +54,8 @@ use crate::{
     },
     transport::{
         api::{HttpMethod, MAX_RESPONSE_BYTES, Request, Upload, authorization, encode, full_page},
-        response::Response,
+        download,
+        response::{Fetched, Response},
     },
     updates::{DISCUSSION, Entry, Snapshot},
 };
@@ -101,6 +102,7 @@ impl Backend for Forgejo {
             | Capability::Labels
             | Capability::DraftPrs
             | Capability::Attachments
+            | Capability::Downloads
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
@@ -789,6 +791,20 @@ impl Backend for Forgejo {
 
     fn failed_step(&self, log: &str) -> Option<String> {
         actions::failed_step(log)
+    }
+
+    /// Forgejo takes fj's token for attachments and raw files on its web
+    /// host; an anonymous request reaches only what anyone may see.
+    async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        match account.forgejo_login(&repo.host).await? {
+            ForgejoLogin::Token(token) => {
+                download::with_curl(url, Some(authorization(token))).await
+            }
+            ForgejoLogin::Anonymous => download::with_curl(url, None).await,
+            ForgejoLogin::Tea(_) => {
+                bail!("tea cannot download files; save an fj login for the host with fj auth login")
+            }
+        }
     }
 
     /// tea cannot send a file, so uploads need fj's token. The instance's

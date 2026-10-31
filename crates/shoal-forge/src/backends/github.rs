@@ -51,8 +51,8 @@ use crate::{
     },
     transport::{
         api::{HttpMethod, Request, Upload, encode, full_page},
-        programs,
-        response::Response,
+        download, programs,
+        response::{Fetched, Response},
     },
     updates::{DISCUSSION, Snapshot},
 };
@@ -97,6 +97,7 @@ impl Backend for GitHub {
             | Capability::Labels
             | Capability::DraftPrs
             | Capability::Attachments
+            | Capability::Downloads
             | Capability::MergeCommit
             | Capability::RebaseMerge
             | Capability::SquashMerge
@@ -859,6 +860,12 @@ impl Backend for GitHub {
     }
 
     /// GitHub uploads name the repository by its numeric ID.
+    /// gh sends its login only to the host a URL names, so the storage an
+    /// attachment redirects to gets none.
+    async fn download(&self, _repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
+        download::through_cli(programs::GH, account, url).await
+    }
+
     async fn repository_id(&self, repo: &ForgeRepo, account: &Account) -> Result<Option<u64>> {
         let repository = repo
             .send(account, &Request::get(format!("repos/{}", repo.path)))
