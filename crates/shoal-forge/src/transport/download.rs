@@ -33,11 +33,16 @@ pub(crate) async fn through_cli(
     let output = capture(cli, Vec::new())
         .await
         .map_err(|error| unrun(error, format!("run {program}; is it installed?")))?;
-    // The CLIs exit with an error for a failed response, which has a head.
-    let diagnostic = shoal_subprocess::diagnostic(&output.stderr);
+    // The CLIs exit with an error for a failed response, whose head says
+    // more; after a successful head, an error means the file was cut off.
+    let failed = !output.status.success();
     match Fetched::included(output.stdout) {
-        Err(_) if !output.status.success() => bail!("{}", diagnostic.trim()),
-        fetched => fetched,
+        Ok(fetched) if !failed || !(200..300).contains(&fetched.status) => Ok(fetched),
+        Err(error) if !failed => Err(error),
+        _ => bail!(
+            "{program} failed: {}",
+            shoal_subprocess::diagnostic(&output.stderr).trim()
+        ),
     }
 }
 
