@@ -60,13 +60,13 @@ impl Manager {
     /// record has expired, or that never had one. A failure keeps what it
     /// concerns for the next pass and does not skip the rest.
     pub async fn expire_results(&self) -> Result<()> {
-        self.store.run(records::forget_expired_chats).await?;
         let mut failed = Vec::new();
         for repo in self.repositories().await? {
             if let Err(error) = self.expire_repository_results(&repo).await {
                 failed.push(format!("{}: {error:#}", repo.path.display()));
             }
         }
+        self.store.run(records::forget_expired_chats).await?;
         ensure!(failed.is_empty(), "{}", failed.join("; "));
         Ok(())
     }

@@ -1155,16 +1155,8 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         .await
         .unwrap();
     let copy = added[0].path.clone();
-    assert!(
-        copy.starts_with(
-            workspace
-                .path
-                .parent()
-                .unwrap()
-                .join(".attachments")
-                .join(&chat.id)
-        )
-    );
+    let attachments = workspace.path.parent().unwrap().join(".attachments");
+    assert!(copy.starts_with(attachments.join(&chat.id)));
     let files = manager.attached_files(&chat.id).await.unwrap();
     assert_eq!(files, added);
     assert_eq!(
@@ -1223,9 +1215,30 @@ async fn a_chats_files_outlive_it_for_the_retention_period() {
         })
         .await
         .unwrap();
+    // Files expiry cannot delete stay listed as the chat's.
+    let directory = attachments.join(&chat.id);
+    if permissions_bind() {
+        use std::os::unix::fs::PermissionsExt;
+        let set = |mode| {
+            std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(mode)).unwrap()
+        };
+        set(0o500);
+        let failed = manager.expire_results().await;
+        set(0o700);
+        assert!(failed.is_err());
+        let files = manager.attached_files("planning").await.unwrap();
+        assert_eq!(files[0].chat.as_deref(), Some("planning"), "{files:?}");
+        assert!(files[0].expires_at.is_some(), "{files:?}");
+    }
     manager.expire_results().await.unwrap();
     assert!(!copy.exists());
     assert!(manager.attached_files("planning").await.is_err());
+    let left: i64 = manager
+        .store
+        .run(|db| Ok(db.query_row("SELECT COUNT(*) FROM ended_chats", [], |row| row.get(0))?))
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
 }
 
 #[tokio::test]

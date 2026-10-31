@@ -181,12 +181,15 @@ pub(super) fn kept(db: &Connection) -> Result<Vec<Space>> {
 
 /// The removed workspaces and ended chats of repository `repository_id`
 /// whose files are kept though their record expired, or that never had one.
+/// An ended chat's record stays until its files are deleted, so a failed
+/// deletion still lists them as the chat's.
 pub(super) fn expired(db: &Connection, repository_id: &str) -> Result<Vec<String>> {
     Ok(db
         .prepare(&format!(
             "SELECT DISTINCT space_id FROM workspace_files WHERE repository_id=?1 AND {GONE}
                 AND space_id NOT IN (SELECT workspace_id FROM removed_workspaces)
-                AND space_id NOT IN (SELECT chat_id FROM ended_chats)"
+                AND space_id NOT IN (SELECT chat_id FROM ended_chats
+                    WHERE expires_at > unixepoch())"
         ))?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
@@ -228,11 +231,12 @@ pub(crate) fn keep_ended_chat(tx: &Transaction<'_>, chat_id: &str, expires_at: i
     Ok(())
 }
 
-/// Forget the ended chats whose files have expired, which leaves the files
-/// to [`expired`].
+/// Forget the expired records of ended chats whose files are gone, as when
+/// `files rm` deleted them all.
 pub(super) fn forget_expired_chats(db: &mut Connection) -> Result<()> {
     db.execute(
-        "DELETE FROM ended_chats WHERE expires_at <= unixepoch()",
+        "DELETE FROM ended_chats WHERE expires_at <= unixepoch()
+            AND chat_id NOT IN (SELECT space_id FROM workspace_files)",
         [],
     )?;
     Ok(())
