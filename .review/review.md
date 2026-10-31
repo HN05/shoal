@@ -347,6 +347,8 @@ instead of the PR delivery guidance below.
   starts the agent past `max_agents`, as `--now` does; the `focus` setting does not.
   JSON, help, noninteractive and `--here` calls run in place. Shell and untracked
   desktop handoffs retain the tab.
+- Each command, flag and value has one name; flag a clap alias, including an
+  old name kept after a rename.
 - Commands refuse invalid given arguments before any prompt for omitted ones;
   interactive `add` has the daemon check its creation request first.
 - Agent pickers offer “No agent”: issue creation continues without a launch,
