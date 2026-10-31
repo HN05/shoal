@@ -56,3 +56,22 @@ fn workspace() -> crate::model::Workspace {
     }))
     .unwrap()
 }
+
+#[test]
+fn review_instructions_keep_their_fixed_part_before_any_template() {
+    let fields = ReviewFields {
+        workspace: "fix-login",
+        branch: "fix/login",
+        path: "/state/reviews/7",
+        base: "abc123",
+    };
+    let built_in = review_instructions(Some(review_base()), &fields);
+    assert!(built_in.starts_with("You are reviewing the committed changes of Shoal workspace fix-login, on branch fix/login, checked out at /state/reviews/7."));
+    assert!(built_in.contains("git diff abc123...HEAD --stat"));
+    assert!(!built_in.contains("<!--"));
+    let replaced = review_instructions(Some("Follow .review/review.md in {path}."), &fields);
+    assert!(replaced.contains("report it in `checked`"));
+    assert!(replaced.ends_with("Follow .review/review.md in /state/reviews/7."));
+    assert!(!replaced.contains("careful senior colleague"));
+    assert!(!review_instructions(None, &fields).contains("careful senior colleague"));
+}

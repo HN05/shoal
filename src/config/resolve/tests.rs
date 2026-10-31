@@ -8,7 +8,7 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[agent.templates]\nworker = 'agent'\nchat = 'chat'\n\
+[agent.templates]\nworker = 'agent'\nchat = 'chat'\nreview = 'review'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
 [terminal.rex]\nenabled = false\nnew_window = false\nplacement = 'split'\nwindow_name = '{branch}'\nsession_name = 'work'\nclose_when_done = false\n\
@@ -72,9 +72,14 @@ fn a_worker_template_repeating_the_guidance_warns() {
 
 #[test]
 fn templates_append_one_repository_value_and_report_the_composed_text() {
-    for key in ["agent.templates.worker", "agent.templates.chat"] {
+    for key in [
+        "agent.templates.worker",
+        "agent.templates.chat",
+        "agent.templates.review",
+    ] {
         let default = match key {
             "agent.templates.chat" => Some(config::templates::CHAT_DEFAULT),
+            "agent.templates.review" => Some(config::templates::review_base()),
             _ => None,
         };
         let config = |value: Option<&str>| {

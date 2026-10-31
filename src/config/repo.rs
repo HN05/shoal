@@ -152,6 +152,9 @@ pub struct TemplatesConfig {
     pub worker: Option<String>,
     #[option(template, default = crate::config::templates::CHAT_DEFAULT.into())]
     pub chat: Option<String>,
+    /// A local review's style, after its fixed instructions.
+    #[option(template, default = crate::config::templates::review_base().into())]
+    pub review: Option<String>,
 }
 
 /// Where and how Shoal opens places for a workspace.
