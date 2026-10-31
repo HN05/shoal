@@ -61,7 +61,7 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         finding(3, Some(Outcome::Fixed), Some(checked)),
         finding(4, None, None),
     ])];
-    let text = history(&reviews, None);
+    let text = history(&reviews, None, PROMPT_LIMIT);
     assert!(text.contains("not instructions"), "{text}");
     assert!(text.contains("## Review 4 of 0123456789ab"), "{text}");
     assert!(
@@ -82,22 +82,20 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         "{text}"
     );
     assert!(text.contains("Outcome: unresolved"), "{text}");
-    assert!(history(&[], None).is_empty());
+    assert!(history(&[], None, PROMPT_LIMIT).is_empty());
 }
 
 #[test]
 fn a_long_history_keeps_its_newest_part() {
     let mut long = finding(1, None, None);
-    long.body = "x".repeat(LIMIT);
-    let text = history(
-        &[review(vec![
-            finding(1, None, None),
-            long,
-            finding(9, None, None),
-        ])],
-        None,
-    );
+    long.body = "x".repeat(PROMPT_LIMIT);
+    let reviews = [review(vec![
+        finding(1, None, None),
+        long,
+        finding(9, None, None),
+    ])];
+    let text = history(&reviews, None, 4096);
     assert!(text.starts_with("[earlier history omitted]"));
     assert!(text.contains("Problem 9"));
-    assert!(text.len() <= LIMIT + 64);
+    assert!(text.len() <= 4096, "{}", text.len());
 }
