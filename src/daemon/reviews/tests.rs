@@ -53,12 +53,19 @@ async fn fixture(reviewers: &[(&str, &str)], review: &str) -> Fixture {
 }
 
 impl Fixture {
+    /// A review of the workspace, once its run ended and delivered it.
     async fn review(&self) -> Review {
+        self.review_of(&self.workspace.id).await
+    }
+
+    async fn review_of(&self, workspace: &str) -> Review {
+        let mut ended = self.manager.reviews.ended.subscribe();
         let queued = self
             .manager
-            .queue_review(&self.workspace.id, ReviewTarget::Workspace, None)
+            .queue_review(workspace, ReviewTarget::Workspace, None)
             .await
             .unwrap();
+        ended.changed().await.unwrap();
         self.manager.await_review(queued.id).await.unwrap()
     }
 }
@@ -275,5 +282,90 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
     assert!(
         prompt.contains("Outcome: fixed; check it and report it in `checked`"),
         "{prompt}"
+    );
+}
+
+#[tokio::test]
+async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let manager = &fixture.manager;
+    let review = fixture.review().await;
+    let messages = manager.agent_messages(&fixture.workspace.id).await.unwrap();
+    let delivered = &messages.last().unwrap().message;
+    assert!(
+        delivered.starts_with(&format!("Review {} finished: 1 should-fix.", review.id)),
+        "{delivered}"
+    );
+
+    configure(manager, "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['sleep']\nreview = ['100000', '{prompt}', '{schema}']\n").await;
+    let queued = manager
+        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .await
+        .unwrap();
+    let before = manager
+        .agent_messages(&fixture.workspace.id)
+        .await
+        .unwrap()
+        .len();
+    manager
+        .cancel_review(None, Some(queued.id), Some(fixture.workspace.id.clone()))
+        .await
+        .unwrap();
+    assert_eq!(
+        manager
+            .agent_messages(&fixture.workspace.id)
+            .await
+            .unwrap()
+            .len(),
+        before
+    );
+    let queued = manager
+        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .await
+        .unwrap();
+    manager
+        .cancel_review(None, Some(queued.id), None)
+        .await
+        .unwrap();
+    let messages = manager.agent_messages(&fixture.workspace.id).await.unwrap();
+    assert!(
+        messages
+            .last()
+            .unwrap()
+            .message
+            .starts_with(&format!("Review {} was cancelled.", queued.id))
+    );
+}
+
+#[tokio::test]
+async fn the_coordinating_agent_hears_one_line() {
+    use crate::state::AgentState;
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let manager = &fixture.manager;
+    let parent = &fixture.workspace;
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    for workspace in [&parent.id, &child.id] {
+        manager
+            .set_agent_state(workspace, AgentState::Working, None, None)
+            .await
+            .unwrap();
+    }
+    let queued = fixture.review_of(&child.id).await;
+    let received: Vec<String> = manager
+        .agent_messages(&parent.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|message| message.message)
+        .collect();
+    assert_eq!(
+        received,
+        [format!(
+            "child: review {} finished: 1 should-fix",
+            queued.id
+        )]
     );
 }
