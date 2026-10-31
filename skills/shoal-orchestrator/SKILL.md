@@ -74,6 +74,21 @@ workspace lifecycle changes, including `review_ready` marks agents set with
 hooks report, which `work` and `status` also show, without consuming notifications; resume from the
 last `id` you handled and resync with `shoal work` after a `gap`.
 
+## Reviews
+
+```sh
+shoal review run fix-login     # Queue a read-only review of its committed HEAD
+shoal review run <pr-url>      # Review a PR in the workspace that owns its branch
+shoal review list fix-login    # Its reviews, newest first, with unresolved findings
+shoal view review 17           # One review in full
+shoal watch review 17          # Wait until it ends
+shoal review cancel 17
+```
+
+A finished review reaches the workspace's agent as a message with its findings,
+and you, coordinating, as one line. The agent resolves each finding; relay a
+finding it asks about to the user.
+
 ## Approval requests
 
 ```sh
