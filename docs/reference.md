@@ -3258,17 +3258,14 @@ Gitea, redirects to the storage that serves the file get no login. `--output`
 names the file to write, or `-` for standard output, and `--json` returns the
 written `path`, its size in `bytes` and the `content_type` the forge sent. A
 response that is a web page, such as a sign-in page the login cannot pass,
-fails instead of being saved, as does a file over 100 MiB. GitHub downloads go
-through `gh api`, and Forgejo and Gitea downloads send the host's
-[token](#forges), or go anonymously without one. GitLab's web routes take no
-access token, so a file uploaded to a project or group, at
+fails instead of being saved, as does a file over 100 MiB. Downloads send the
+host's [token](#forges), or go anonymously without one. GitLab's web routes
+take no access token, so a file uploaded to a project or group, at
 `/-/project/<id>/uploads/<secret>/<file>`, `/<project path>/uploads/…`,
-`/-/group/<id>/uploads/…` or `/groups/<group path>/-/uploads/…`, is read
-through `glab api` from the API route for the same upload, which GitLab 17.4
-added; other GitLab URLs are refused. Where GitLab redirects that route to
-object storage, glab sends a personal access token there too. Bitbucket serves
-its files only to a signed-in browser, so it has no downloads. The `downloads`
-capability says whether the forge has them.
+`/-/group/<id>/uploads/…` or `/groups/<group path>/-/uploads/…`, is read from
+the API route for the same upload, which GitLab 17.4 added; other GitLab URLs
+are refused. Bitbucket serves its files only to a signed-in browser, so it has
+no downloads. The `downloads` capability says whether the forge has them.
 
 ### Linked items and cleanup
 

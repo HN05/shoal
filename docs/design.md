@@ -1506,9 +1506,9 @@ logins shows a private repository's images; it takes only URLs on the
 repository's forge host, and the daemon sends the bytes back in frames, since
 the caller, not the daemon, chooses where they go. GitLab's web routes for
 uploads take no access token, so its backend maps an upload URL to the API
-route for the same file and reads it through glab, like every other GitLab
-request; glab follows a redirect to object storage with its token header,
-which Shoal cannot withhold. Bitbucket's files need a browser session, so it
+route for the same file and reads it with the host's token, like every other
+GitLab request; curl sends the token only to that host, not to object storage
+a redirect leads to. Bitbucket's files need a browser session, so it
 has no downloads. Forgejo's issue search lists PRs
 without their branches, so each listed PR is read in full, and GitLab keeps
 merged merge requests apart from closed ones, so listing closed ones reads all
