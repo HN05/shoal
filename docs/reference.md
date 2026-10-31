@@ -873,7 +873,20 @@ branch, or in one opened from origin whose base is the PR's `origin/<base>`. Eit
 workspace links the PR as `shoal add` does, and the review is stored on it; fork
 PRs are refused. `--repo` selects the PR's repository, which otherwise follows
 `shoal add`. An issue URL is refused: `shoal plan` settles an issue before
-implementation.
+implementation. Unless `[review] post` is false, a finished PR review is posted on
+the PR as a comment review by the workspace's agent account, as
+[`shoal pr review --comment`](#issue-and-pr-actions) submits one: findings on lines the
+PR's diff shows become line comments, the rest go in the body with the summary,
+and a review with findings ends with the automated-review note. It never approves
+or requests changes. When the PR's head moved while the reviewer ran, the review is
+still posted for the commit it covered, with every finding in the body.
+`--post` or `--no-post` overrides the setting for one review and selects an agent
+reviewer. Workspace reviews are never posted, even with a linked PR.
+
+```toml
+[review]
+post = true # Default: true
+```
 
 ### Agents
 

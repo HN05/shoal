@@ -16,6 +16,7 @@ use crate::{
 
 mod delivery;
 mod history;
+mod post;
 mod reviewer;
 mod run;
 pub(crate) mod store;

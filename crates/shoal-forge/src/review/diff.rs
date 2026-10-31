@@ -126,6 +126,21 @@ impl Diff {
         Ok(Self::new(files))
     }
 
+    /// Whether a hunk shows line `line` of `path` in the PR's version, so a
+    /// comment there can be placed.
+    pub fn shows(&self, path: &str, line: u64) -> bool {
+        let comment = LineComment {
+            path: path.to_owned(),
+            line,
+            side: Side::New,
+            body: String::new(),
+        };
+        self.files
+            .iter()
+            .find(|file| file.named_by(&comment))
+            .is_some_and(|file| file.line(&comment).is_some())
+    }
+
     /// Each comment on the line the diff shows for it, refusing all of
     /// them, naming each off the diff, when any is.
     pub fn place<'a>(&'a self, comments: &'a [LineComment]) -> Result<Vec<Placed<'a>>> {

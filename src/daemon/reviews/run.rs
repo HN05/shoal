@@ -107,7 +107,7 @@ impl Manager {
             log!("review {id}: {error:#}");
         }
         let (reviewer, ended) = ended?;
-        self.record_end(id, &reviewer, ended).await
+        self.record_end(id, &workspace, &reviewer, ended).await
     }
 
     /// Check the reviewed commit out and run the reviewers there; returns
@@ -208,9 +208,15 @@ impl Manager {
         ended
     }
 
-    /// Record how the run ended and deliver the review; a cancel already
-    /// recorded and delivered it.
-    async fn record_end(&self, id: i64, reviewer: &str, ended: Ended) -> Result<()> {
+    /// Record how the run ended, post a finished PR review and deliver the
+    /// review; a cancel already recorded and delivered it.
+    async fn record_end(
+        &self,
+        id: i64,
+        workspace: &Workspace,
+        reviewer: &str,
+        ended: Ended,
+    ) -> Result<()> {
         let reviewer = reviewer.to_owned();
         let now = now();
         let recorded = self
@@ -221,9 +227,14 @@ impl Manager {
                 Ended::Cancelled => Ok(false),
             })
             .await?;
-        if recorded {
-            self.deliver_review(id).await;
+        if !recorded {
+            return Ok(());
         }
+        let review = self.store.run(move |db| store::load(db, id)).await?;
+        if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
+            self.post_review(&review, workspace).await;
+        }
+        self.deliver_review(id).await;
         Ok(())
     }
 

@@ -150,3 +150,13 @@ fn comments_off_the_diff_refuse_the_review_naming_each() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn a_diff_shows_the_lines_of_its_hunks_in_the_new_version() -> Result<()> {
+    let diff = Diff::parse(DIFF)?;
+    assert!(diff.shows("src/a.rs", 11));
+    assert!(diff.shows("new.rs", 3));
+    assert!(!diff.shows("src/a.rs", 5));
+    assert!(!diff.shows("src/b.rs", 1));
+    Ok(())
+}
