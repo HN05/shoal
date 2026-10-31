@@ -1,7 +1,9 @@
 //! What a repository asks of its issues and PRs: labels its configuration
 //! requires, a label scheme on the forge, and the forge's description
-//! templates. Shoal checks them where agents open and mark items, so the
-//! repository's conventions reach agents at the moment they apply.
+//! templates, and a PR's closing reference to the issue it works on. Shoal
+//! checks them where agents open and mark items, so the repository's
+//! conventions reach agents at the moment they apply.
+pub mod closing;
 pub mod labels;
 
 use std::path::Path;
