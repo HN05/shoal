@@ -65,12 +65,42 @@ impl Fixture {
         let mut ended = self.manager.reviews.ended.subscribe();
         let queued = self
             .manager
-            .queue_review(workspace, ReviewTarget::Workspace, None)
+            .queue_review(workspace, ReviewTarget::Workspace, None, Default::default())
             .await
             .unwrap();
         ended.changed().await.unwrap();
         self.manager.await_review(queued.id).await.unwrap()
     }
+}
+
+#[tokio::test]
+async fn a_reviewer_runs_with_the_requested_or_configured_model_and_effort() {
+    let script = "printf '%s\\n' \"$@\" > \"$(dirname '{review}')/args\"\ncat '{review}'";
+    let profile = "agent = 'modeled'\n[agents.modeled]\nbase = 'fake'\neffort = 'low'\n\
+        model_args = ['--model', '{model}']\neffort_args = ['--effort', '{effort}']\n";
+    let fixture = fixture(&[("fake", script)], profile).await;
+    let mut ended = fixture.manager.reviews.ended.subscribe();
+    let model = crate::agent::ModelChoice {
+        model: Some("m1".into()),
+        effort: None,
+    };
+    let queued = fixture
+        .manager
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            model.clone(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(queued.model, model);
+    ended.changed().await.unwrap();
+    let review = fixture.manager.await_review(queued.id).await.unwrap();
+    assert_eq!(review.state, ReviewState::Finished, "{review:?}");
+    let args = std::fs::read_to_string(fixture._root.path().join("args")).unwrap();
+    // The selection comes before the review template's arguments.
+    assert!(args.starts_with("--model\nm1\n--effort\nlow\n"), "{args}");
 }
 
 #[tokio::test]
@@ -152,7 +182,12 @@ async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
@@ -184,6 +219,7 @@ async fn a_reviewer_needs_a_review_template() {
             &fixture.workspace.id,
             ReviewTarget::Workspace,
             Some("pi".parse().unwrap()),
+            Default::default(),
         )
         .await
         .unwrap_err();
@@ -193,7 +229,12 @@ async fn a_reviewer_needs_a_review_template() {
     );
     let unset = fixture
         .manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap_err();
     assert!(unset.to_string().contains("review.agent"), "{unset}");
@@ -206,7 +247,16 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
     let id = fixture.workspace.id.clone();
     let queued = manager
         .store
-        .run(move |db| store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1))
+        .run(move |db| {
+            store::queue(
+                db,
+                &id,
+                &ReviewTarget::Workspace,
+                "absent",
+                &Default::default(),
+                1,
+            )
+        })
         .await
         .unwrap()
         .id();
@@ -274,7 +324,12 @@ async fn removing_the_workspace_stops_its_review() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
@@ -338,7 +393,12 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
 
     configure(manager, "[review]\nagent = 'fake'\n[agents.fake]\ncommand = ['sleep']\nreview = ['100000', '{prompt}', '{schema}']\n").await;
     let queued = manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let before = manager
@@ -359,7 +419,12 @@ async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
         before
     );
     let queued = manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     manager
@@ -616,7 +681,15 @@ async fn finished_reviews(
         .run(move |db| {
             let mut ids = Vec::new();
             for _ in 0..count {
-                let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
+                let review = store::queue(
+                    db,
+                    &id,
+                    &ReviewTarget::Workspace,
+                    "absent",
+                    &Default::default(),
+                    1,
+                )?
+                .id();
                 store::start(db, review, "head", "base", 2)?;
                 let output: crate::reviews::output::ReviewerOutput = serde_json::from_value(
                     serde_json::json!({"summary": "Long.", "verdict": "comment", "checked": [],
@@ -671,7 +744,12 @@ async fn removing_the_repository_stops_its_reviews_first() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
-        .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
         .await
         .unwrap();
     let mut changed = manager.store.watch_changes();
@@ -699,7 +777,15 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     let stuck = manager
         .store
         .run(move |db| {
-            let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
+            let review = store::queue(
+                db,
+                &id,
+                &ReviewTarget::Workspace,
+                "absent",
+                &Default::default(),
+                1,
+            )?
+            .id();
             store::start(db, review, "head", "base", 2)?;
             Ok(review)
         })

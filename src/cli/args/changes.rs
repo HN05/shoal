@@ -5,7 +5,7 @@ use clap::{Args, Subcommand};
 
 use crate::{
     agent::Agent,
-    cli::args::{AgentParser, BodyArgs, ConfirmationArgs, item_reference},
+    cli::args::{AgentParser, BodyArgs, ConfirmationArgs, ModelArgs, item_reference},
     reviews::{FindingId, OutcomeKind},
 };
 
@@ -121,11 +121,13 @@ pub enum ReviewCommand {
         #[arg(long, overrides_with = "post", conflicts_with = "manual")]
         no_post: bool,
         /// Run the configured `review` command without asking.
-        #[arg(long, conflicts_with = "agent")]
+        #[arg(long, conflicts_with_all = ["agent", "model", "effort"])]
         manual: bool,
         /// Review with this agent, overriding [review] agent.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,
+        #[command(flatten)]
+        model: ModelArgs,
         /// Arguments forwarded to the configured review command.
         #[arg(last = true)]
         args: Vec<OsString>,

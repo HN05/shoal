@@ -27,6 +27,7 @@ fn review(findings: Vec<Finding>) -> Review {
             post: true,
         },
         agent: "codex".into(),
+        model: Default::default(),
         reviewer: Some("claude".into()),
         state: ReviewState::Finished,
         failure: None,

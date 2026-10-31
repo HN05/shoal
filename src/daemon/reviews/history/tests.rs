@@ -27,6 +27,7 @@ fn review(findings: Vec<Finding>) -> Review {
         workspace: "fix-login".into(),
         target: ReviewTarget::Workspace,
         agent: "claude".into(),
+        model: Default::default(),
         reviewer: Some("claude".into()),
         state: ReviewState::Finished,
         failure: None,

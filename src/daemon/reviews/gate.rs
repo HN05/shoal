@@ -73,7 +73,12 @@ impl Manager {
             }
             None if reviewed.is_none() => {
                 match self
-                    .queue_review(&workspace.id, ReviewTarget::Workspace, None)
+                    .queue_review(
+                        &workspace.id,
+                        ReviewTarget::Workspace,
+                        None,
+                        Default::default(),
+                    )
                     .await
                 {
                     Ok(review) => {

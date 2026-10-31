@@ -14,6 +14,9 @@ pub enum ReviewMethod {
         target: ReviewTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<crate::agent::Agent>,
+        /// The model and effort asked for the agent.
+        #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+        model: crate::agent::ModelChoice,
     },
     /// Cancel review `id`, else the workspace's queued or running one.
     CancelReview {

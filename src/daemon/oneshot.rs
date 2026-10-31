@@ -14,7 +14,7 @@ use std::{
 use anyhow::{Context, Result};
 use tokio::{process::Command, sync::watch};
 
-use crate::config::Effective;
+use crate::{agent::ModelChoice, config::Effective};
 
 /// An agent's command for one run.
 pub(crate) struct AgentCommand {
@@ -24,24 +24,38 @@ pub(crate) struct AgentCommand {
     pub remove: BTreeSet<String>,
 }
 
-/// The one-shot command of `agent` with `args`, the arguments of one of its
-/// templates: its launcher's words before `{args}` and its launch
-/// environment over `configured`. `None` for an agent `settings` lacks.
+/// The one-shot command of `agent` running with `model` and `args`, the
+/// arguments of one of its templates: its launcher's words before `{args}`,
+/// the arguments that select the model and effort, then `args`, with its
+/// launch environment over `configured`.
 pub(crate) fn agent_command(
     settings: &Effective,
     agent: &str,
+    model: &ModelChoice,
     args: Vec<OsString>,
     configured: &BTreeMap<String, OsString>,
     home: &Path,
-) -> Option<AgentCommand> {
-    let tool = settings.tools.get(agent)?;
-    let launcher = settings.launchers.get(agent)?;
+) -> Result<AgentCommand> {
+    let tool = settings
+        .tools
+        .get(agent)
+        .with_context(|| format!("no AI tool runs {agent}"))?;
+    let launcher = settings
+        .launchers
+        .get(agent)
+        .with_context(|| format!("{agent} has no launcher"))?;
+    let selection = tool
+        .launch
+        .arguments
+        .model_args(model)
+        .map_err(|template| anyhow::anyhow!("{agent} has no {template} for {model:?}"))?;
+    let launch = tool.launch.environment_with(model);
     let mut environment = configured.clone();
-    tool.launch.environment.layer(&mut environment, home);
-    Some(AgentCommand {
-        argv: crate::ai::oneshot_command(launcher, args),
+    launch.layer(&mut environment, home);
+    Ok(AgentCommand {
+        argv: crate::ai::oneshot_command(launcher, selection.into_iter().chain(args).collect()),
         environment,
-        remove: tool.launch.environment.remove.clone(),
+        remove: launch.remove,
     })
 }
 

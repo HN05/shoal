@@ -46,12 +46,32 @@ async fn one_review_is_queued_or_running_per_workspace() {
     let store = store(&directory).await;
     store
         .run(|db| {
-            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", 1)?;
+            let model = crate::agent::ModelChoice {
+                model: Some("opus".into()),
+                effort: None,
+            };
+            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", &model, 1)?;
             assert!(matches!(first, Queued::New(_)));
-            let again = queue(db, "work", &ReviewTarget::Workspace, "codex", 2)?;
+            assert_eq!(load(db, first.id())?.unwrap().model, model);
+            let again = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "codex",
+                &Default::default(),
+                2,
+            )?;
             assert_eq!(again, Queued::Existing(first.id()));
             assert!(start(db, first.id(), "head", "base", 3)?);
-            let refused = queue(db, "work", &ReviewTarget::Workspace, "claude", 4).unwrap_err();
+            let refused = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "claude",
+                &Default::default(),
+                4,
+            )
+            .unwrap_err();
             assert!(
                 refused.to_string().contains("shoal review cancel"),
                 "{refused}"
@@ -60,7 +80,7 @@ async fn one_review_is_queued_or_running_per_workspace() {
             assert_eq!(cancelled_by(db, first.id())?.as_deref(), Some("work"));
             assert!(!cancel(db, first.id(), None, 6)?);
             assert!(matches!(
-                queue(db, "work", &ReviewTarget::Workspace, "claude", 7)?,
+                queue(db, "work", &ReviewTarget::Workspace, "claude", &Default::default(), 7)?,
                 Queued::New(id) if id > first.id()
             ));
             Ok(())
@@ -75,7 +95,15 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
     let store = store(&directory).await;
     store
         .run(|db| {
-            let first = queue(db, "work", &ReviewTarget::Workspace, "claude", 1)?.id();
+            let first = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "claude",
+                &Default::default(),
+                1,
+            )?
+            .id();
             start(db, first, "one", "base", 2)?;
             assert!(finish(db, first, "claude", &output(2, Vec::new()), 3)?);
             let finding = FindingId {
@@ -104,7 +132,15 @@ async fn findings_are_numbered_answered_and_checked_by_a_later_review() {
                 .is_err()
             );
 
-            let second = queue(db, "work", &ReviewTarget::Workspace, "codex", 6)?.id();
+            let second = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "codex",
+                &Default::default(),
+                6,
+            )?
+            .id();
             start(db, second, "two", "base", 7)?;
             let checked = vec![
                 Checked {
@@ -157,7 +193,15 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
     let store = store(&directory).await;
     store
         .run(|db| {
-            let id = queue(db, "work", &ReviewTarget::Workspace, "claude", 1)?.id();
+            let id = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "claude",
+                &Default::default(),
+                1,
+            )?
+            .id();
             start(db, id, "head", "base", 2)?;
             assert_eq!(requeue_running(db, &[])?, 1);
             let review = load(db, id)?.unwrap();
@@ -179,7 +223,15 @@ async fn removing_the_workspace_deletes_its_reviews() {
     let store = store(&directory).await;
     store
         .run(|db| {
-            let id = queue(db, "work", &ReviewTarget::Workspace, "claude", 1)?.id();
+            let id = queue(
+                db,
+                "work",
+                &ReviewTarget::Workspace,
+                "claude",
+                &Default::default(),
+                1,
+            )?
+            .id();
             start(db, id, "head", "base", 2)?;
             finish(db, id, "claude", &output(1, Vec::new()), 3)?;
             reply(

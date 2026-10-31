@@ -286,6 +286,10 @@ pub struct Review {
     pub target: ReviewTarget,
     /// The agent asked to review.
     pub agent: String,
+    /// The model and effort asked for `agent`; what it leaves out follows
+    /// the agent's configuration.
+    #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
+    pub model: crate::agent::ModelChoice,
     /// The agent that produced the result, which differs from `agent` after
     /// a fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]

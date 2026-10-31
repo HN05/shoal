@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS reviews (
     -- The JSON target: the workspace, or a PR and whether to post there.
     target TEXT NOT NULL,
     agent TEXT NOT NULL,
+    -- The JSON model and effort asked for the agent, when any.
+    model TEXT,
     reviewer TEXT,
     state TEXT NOT NULL CHECK(state IN ('queued','running','finished','failed','cancelled')),
     failure TEXT CHECK(failure IN ('usage-limit','quota-exhausted','rate-limit',

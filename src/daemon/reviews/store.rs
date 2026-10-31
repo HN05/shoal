@@ -3,10 +3,13 @@
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
-use crate::reviews::{
-    Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewState,
-    ReviewTarget,
-    output::{Checked, ReviewerOutput},
+use crate::{
+    agent::ModelChoice,
+    reviews::{
+        Check, FailureReason, Finding, FindingId, Outcome, Posted, Reply, Review, ReviewState,
+        ReviewTarget,
+        output::{Checked, ReviewerOutput},
+    },
 };
 
 /// What queueing a review found.
@@ -33,6 +36,7 @@ pub(crate) fn queue(
     workspace_id: &str,
     target: &ReviewTarget,
     agent: &str,
+    model: &ModelChoice,
     now: i64,
 ) -> Result<Queued> {
     if let Some((id, state)) = active(db, workspace_id)? {
@@ -44,11 +48,15 @@ pub(crate) fn queue(
         return Ok(Queued::Existing(id));
     }
     db.execute(
-        "INSERT INTO reviews(workspace_id,target,agent,state,created_at) VALUES (?1,?2,?3,?4,?5)",
+        "INSERT INTO reviews(workspace_id,target,agent,model,state,created_at)
+            VALUES (?1,?2,?3,?4,?5,?6)",
         params![
             workspace_id,
             serde_json::to_string(target)?,
             agent,
+            (!model.is_empty())
+                .then(|| serde_json::to_string(model))
+                .transpose()?,
             ReviewState::Queued,
             now
         ],
@@ -270,7 +278,7 @@ fn require_finding(db: &Connection, id: FindingId) -> Result<()> {
 }
 
 const COLUMNS: &str = "reviews.id,workspace_id,workspaces.name,target,agent,reviewer,reviews.state,
-    failure,head,base,created_at,started_at,ended_at,summary,verdict,posted";
+    failure,head,base,created_at,started_at,ended_at,summary,verdict,posted,reviews.model";
 
 /// Review `id` with its findings.
 pub(crate) fn load(db: &Connection, id: i64) -> Result<Option<Review>> {
@@ -358,6 +366,7 @@ pub(crate) fn earlier(db: &Connection, workspace_id: &str, id: i64) -> Result<Ve
 fn review(row: &Row) -> rusqlite::Result<Review> {
     let target: String = row.get(3)?;
     let posted: Option<String> = row.get(15)?;
+    let model: Option<String> = row.get(16)?;
     Ok(Review {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
@@ -379,6 +388,11 @@ fn review(row: &Row) -> rusqlite::Result<Review> {
             .as_deref()
             .map(|posted| json(15, posted))
             .transpose()?,
+        model: model
+            .as_deref()
+            .map(|model| json(16, model))
+            .transpose()?
+            .unwrap_or_default(),
         outdated: None,
     })
 }

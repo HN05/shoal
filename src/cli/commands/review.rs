@@ -20,12 +20,14 @@ pub(super) async fn run(ctx: &Context, command: ReviewCommand) -> Result<i32> {
             no_post,
             manual,
             agent,
+            model,
             args,
         } => {
             let post = (post || no_post).then_some(post);
             let target = start::Target::new(workspace, pr, repository, post)?;
-            let reviewer = start::Reviewer::new(manual, agent);
-            start::start(ctx, target, reviewer, args).await
+            let model = model.into();
+            let reviewer = start::Reviewer::new(manual, agent, &model);
+            start::start(ctx, target, reviewer, model, args).await
         }
         ReviewCommand::List {
             workspace,

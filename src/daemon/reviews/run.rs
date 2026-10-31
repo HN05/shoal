@@ -16,6 +16,7 @@ use super::{
     store,
 };
 use crate::{
+    agent::ModelChoice,
     config::{Effective, templates},
     daemon::{log, oneshot, workspace::Manager},
     model::Workspace,
@@ -52,6 +53,15 @@ pub(crate) async fn run(manager: Arc<Manager>) {
             }
         }
     }
+}
+
+/// What every reviewer of a run gets.
+struct Run<'a> {
+    settings: &'a Effective,
+    /// The workspace's configured variables.
+    configured: std::collections::BTreeMap<String, std::ffi::OsString>,
+    instructions: String,
+    files: &'a Files,
 }
 
 /// The commits a run reviews.
@@ -136,23 +146,19 @@ impl Manager {
     ) -> Result<(String, Ended)> {
         self.prepare_checkout(workspace, &commits.head, files)
             .await?;
-        let configured = self
-            .configured_environment_from(workspace, settings)
-            .await?;
-        let instructions = self
-            .review_instructions(review, workspace, settings, files, commits)
-            .await?;
+        let run = Run {
+            settings,
+            configured: self
+                .configured_environment_from(workspace, settings)
+                .await?,
+            instructions: self
+                .review_instructions(review, workspace, settings, files, commits)
+                .await?,
+            files,
+        };
         let agent = review.agent.clone();
-        let ended = self
-            .attempt(
-                settings,
-                &agent,
-                &configured,
-                &instructions,
-                files,
-                cancelled,
-            )
-            .await;
+        let model = settings.model(&agent, review.model.clone());
+        let ended = self.attempt(&run, &agent, &model, cancelled).await;
         let fallback = settings
             .review
             .fallback_agent
@@ -165,16 +171,8 @@ impl Manager {
                     "review {}: {agent} failed ({reason}); {fallback} reviews instead",
                     review.id
                 );
-                let ended = self
-                    .attempt(
-                        settings,
-                        &fallback,
-                        &configured,
-                        &instructions,
-                        files,
-                        cancelled,
-                    )
-                    .await;
+                let model = settings.model(&fallback, Default::default());
+                let ended = self.attempt(&run, &fallback, &model, cancelled).await;
                 (fallback, ended)
             }
             (ended, _) => (agent, ended),
@@ -196,30 +194,24 @@ impl Manager {
         crate::git::detached::add(&repository.path, &files.checkout(), head).await
     }
 
-    /// One reviewer's run of the review.
+    /// One reviewer's attempt at `run`: agent `agent` with `model`.
     async fn attempt(
         &self,
-        settings: &Effective,
+        run: &Run<'_>,
         agent: &str,
-        configured: &std::collections::BTreeMap<String, std::ffi::OsString>,
-        instructions: &str,
-        files: &Files,
+        model: &ModelChoice,
         cancelled: &mut watch::Receiver<bool>,
     ) -> Ended {
-        let Some(reviewer) = reviewer_for(
-            settings,
-            agent,
-            configured,
-            instructions,
-            files,
-            &self.paths.home,
-        ) else {
-            log!("{agent} has no review template or launcher");
-            return Ended::Failed(FailureReason::ExecutionFailed);
+        let reviewer = match reviewer_for(run, agent, model, &self.paths.home) {
+            Ok(reviewer) => reviewer,
+            Err(error) => {
+                log!("review by {agent}: {error:#}");
+                return Ended::Failed(FailureReason::ExecutionFailed);
+            }
         };
         let ended = reviewer::run(&reviewer, cancelled).await;
         // Another reviewer starts without this one's result.
-        let _ = std::fs::remove_file(files.output());
+        let _ = std::fs::remove_file(run.files.output());
         ended
     }
 
@@ -387,25 +379,35 @@ impl Manager {
 }
 
 /// The reviewer `agent` with the review's fields, if it has a launcher and
-/// a review template.
+/// The reviewer `agent` with `model`: its review template's arguments for
+/// this run, after its launcher and the arguments selecting the model.
 fn reviewer_for<'a>(
-    settings: &Effective,
+    run: &Run<'a>,
     agent: &str,
-    configured: &std::collections::BTreeMap<String, std::ffi::OsString>,
-    instructions: &str,
-    files: &'a Files,
+    model: &ModelChoice,
     home: &Path,
-) -> Option<Reviewer<'a>> {
-    let tool = settings.tools.get(agent)?;
+) -> Result<Reviewer<'a>> {
+    let Run {
+        settings,
+        configured,
+        instructions,
+        files,
+    } = run;
+    let tool = settings
+        .tools
+        .get(agent)
+        .with_context(|| format!("no AI tool runs {agent}"))?;
     let arguments = &tool.launch.arguments;
-    let args = arguments.review_args(&crate::ai::ReviewFields {
-        prompt: instructions,
-        schema: &files.schema(),
-        schema_json: crate::reviews::output::SCHEMA,
-        output: &files.output(),
-    })?;
-    Some(Reviewer {
-        command: oneshot::agent_command(settings, agent, args, configured, home)?,
+    let args = arguments
+        .review_args(&crate::ai::ReviewFields {
+            prompt: instructions,
+            schema: &files.schema(),
+            schema_json: crate::reviews::output::SCHEMA,
+            output: &files.output(),
+        })
+        .with_context(|| format!("{agent} has no review template"))?;
+    Ok(Reviewer {
+        command: oneshot::agent_command(settings, agent, model, args, configured, home)?,
         files,
         writes_output: arguments.review_writes_output(),
         format: tool.review_result,

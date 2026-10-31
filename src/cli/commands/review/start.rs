@@ -5,7 +5,7 @@ use std::{ffi::OsString, path::Path};
 use anyhow::{Context as _, Result, bail, ensure};
 
 use crate::{
-    agent::Agent,
+    agent::{Agent, ModelChoice},
     cli::{
         client,
         context::Context,
@@ -94,15 +94,19 @@ enum Subject {
     },
 }
 
-/// Review the target with the chosen reviewer, forwarding `args` to it.
+/// Review the target with the chosen reviewer, an agent with `model`, or
+/// forward `args` to the configured review command.
 pub(super) async fn start(
     ctx: &Context,
     target: Target,
     reviewer: Reviewer,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     match target {
-        Target::Workspace(workspace) => run(ctx, workspace, reviewer, Subject::Changes, args).await,
+        Target::Workspace(workspace) => {
+            run(ctx, workspace, reviewer, Subject::Changes, model, args).await
+        }
         Target::Pull {
             input,
             repository,
@@ -116,16 +120,38 @@ pub(super) async fn start(
                 "shoal review <url> --repo <repository>",
             )
             .await?;
-            pull_request(ctx, &repo, &input, reviewer, post, args).await
+            check_reviewer_model(ctx, &repo, &reviewer, &model).await?;
+            pull_request(ctx, &repo, &input, reviewer, post, model, args).await
         }
     }
 }
 
+/// Refuse an agent reviewer's `model` before a PR's workspace is opened or
+/// updated: that of the named agent, else the configured reviewer.
+async fn check_reviewer_model(
+    ctx: &Context,
+    repo: &Repository,
+    reviewer: &Reviewer,
+    model: &ModelChoice,
+) -> Result<()> {
+    let Reviewer::Agent(agent) = reviewer else {
+        return Ok(());
+    };
+    let settings = super::super::chat::settings(ctx, repo).await?;
+    match agent.clone().or_else(|| configured_reviewer(&settings)) {
+        Some(agent) => super::super::chat::check_model(&settings, &agent, model),
+        None => Ok(()),
+    }
+}
+
 impl Reviewer {
-    pub fn new(manual: bool, agent: Option<Agent>) -> Self {
+    /// `--manual`, else `--agent`; a requested `model` chooses an agent
+    /// reviewer, since only an agent runs with one.
+    pub fn new(manual: bool, agent: Option<Agent>, model: &ModelChoice) -> Self {
         match (manual, agent) {
             (true, _) => Reviewer::Manual,
             (false, Some(agent)) => Reviewer::Agent(Some(agent)),
+            (false, None) if !model.is_empty() => Reviewer::Agent(None),
             (false, None) => Reviewer::Ask,
         }
     }
@@ -139,6 +165,7 @@ async fn pull_request(
     input: &str,
     reviewer: Reviewer,
     post: Option<bool>,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let remote = crate::repository::remote_url_from_path(&repo.path)
@@ -202,7 +229,7 @@ async fn pull_request(
         }
     };
     let subject = Subject::Pull { pull, post };
-    run(ctx, Some(workspace), reviewer, subject, args).await
+    run(ctx, Some(workspace), reviewer, subject, model, args).await
 }
 
 /// Fast-forward a reused workspace to the PR's pushed head so the review sees
@@ -247,6 +274,7 @@ async fn run(
     workspace: Option<String>,
     reviewer: Reviewer,
     subject: Subject,
+    model: ModelChoice,
     args: Vec<OsString>,
 ) -> Result<i32> {
     ensure!(
@@ -285,7 +313,7 @@ async fn run(
                 "arguments after -- go to the configured review command; pass --manual"
             );
             let target = subject.target(post.unwrap_or(settings.review.post));
-            queue(ctx, workspace, &settings, agent, target).await
+            queue(ctx, workspace, &settings, agent, model, target).await
         }
         _ => super::super::configured::run(ctx, MANUAL, Some(workspace), args).await,
     }
@@ -301,12 +329,14 @@ fn configured_reviewer(settings: &Effective) -> Option<Agent> {
         .or_else(|| settings.agent.default.clone())
 }
 
-/// Queue a review by `agent`, else the configured reviewer, else one picked.
+/// Queue a review by `agent`, else the configured reviewer, else one picked,
+/// with `model`.
 async fn queue(
     ctx: &Context,
     workspace: String,
     settings: &Effective,
     agent: Option<Agent>,
+    model: ModelChoice,
     target: ReviewTarget,
 ) -> Result<i32> {
     let agent = match agent.or_else(|| configured_reviewer(settings)) {
@@ -317,6 +347,7 @@ async fn queue(
         },
     };
     // Refused here, before the daemon queues a review it could not run.
+    super::super::chat::check_model(settings, &agent, &model)?;
     crate::cli::agents::ensure_reviewer_available(agent.name(), settings)?;
     let review: Review = client::reviews(
         &ctx.paths,
@@ -324,6 +355,7 @@ async fn queue(
             workspace,
             target,
             agent: Some(agent),
+            model,
         },
     )
     .await?;

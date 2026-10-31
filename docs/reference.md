@@ -818,7 +818,9 @@ launch, and holds it while its reviewer runs; `shoal queue` does not list it. A 
 has no changes of its own, so name a workspace there.
 
 The reviewer is `--agent`, else `[review] agent`, else `agent.default`, else one you
-pick, and needs a [`review` template](#agents). A reviewer still running after 30
+pick, and needs a [`review` template](#agents). It runs with `--model` and `--effort`
+over its [configured model and effort](#agents), which the review keeps if it starts
+over; the fallback agent runs with its own configured ones. A reviewer still running after 30
 minutes is stopped and the review fails as `timed-out`; after any other failure,
 `fallback_agent` reviews once more. A failed review records why as one of
 `usage-limit`, `quota-exhausted`, `rate-limit`, `authentication-failed`,
@@ -1171,7 +1173,7 @@ effort = "xhigh" # For the default agent only, over [agents.claude] effort
 
 `model` and `effort` beside `[agent] default` apply to launches of the agent it
 names, over the tool's own. `--model` and `--effort` on `shoal add`,
-`contribute`, `split`, `review`, `chat`, `plan`, `repo setup`, `shoal claude`
+`contribute`, `split`, `review run`, `chat`, `plan`, `repo setup`, `shoal claude`
 and `shoal codex` override both for that launch. The tool receives the values through
 `model_args` and `effort_args`, which name `{model}` and `{effort}`: Claude Code
 gets `--model` and `--effort`, with `CLAUDE_CODE_EFFORT_LEVEL` set to the same

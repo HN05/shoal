@@ -5531,7 +5531,9 @@ fn agents_run_with_the_requested_or_configured_model_and_effort() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");
     // So does a review, before looking up the PR it opens a workspace for.
-    let output = launch(&["review", "--pr", "1", "--repo", repo, "--agent", "pi"]);
+    let output = launch(&[
+        "review", "run", "--pr", "1", "--repo", repo, "--agent", "pi",
+    ]);
     assert!(!output.status.success(), "{output:?}");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("set [agents.pi] model_args"), "{stderr}");

@@ -45,13 +45,15 @@ impl Default for Reviews {
 
 impl Manager {
     /// Queue a review of the workspace by `agent`, else `[review] agent`, else
-    /// `agent.default`, or return the one already queued. A running review
-    /// refuses another.
+    /// `agent.default`, with `model` over the agent's configured model and
+    /// effort, or return the one already queued. A running review refuses
+    /// another.
     pub async fn queue_review(
         &self,
         selector: &str,
         target: ReviewTarget,
         agent: Option<Agent>,
+        model: crate::agent::ModelChoice,
     ) -> Result<Review> {
         let workspace = self.workspace(selector).await?;
         let settings = self.workspace_settings(&workspace).await?;
@@ -59,7 +61,7 @@ impl Manager {
         let (id, now) = (workspace.id.clone(), now());
         let queued = self
             .store
-            .run(move |db| store::queue(db, &id, &target, &agent, now))
+            .run(move |db| store::queue(db, &id, &target, &agent, &model, now))
             .await?;
         self.reviews.queued.notify_one();
         self.review(queued.id()).await
