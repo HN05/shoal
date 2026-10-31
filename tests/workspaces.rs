@@ -1074,7 +1074,17 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     assert!(!path.join("resumed").exists());
 
     // Without a file, a piped export writes to standard output and a piped
-    // import reads standard input.
+    // import reads standard input. An origin that is a local path selects
+    // the repository, as a URL does.
+    let origin = fixture.root.path().join("origin.git");
+    git(
+        fixture.root.path(),
+        &["init", "--quiet", "--bare", "origin.git"],
+    );
+    git(
+        &fixture.repo,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
     let exported = fixture
         .command()
         .args(["move", "export", "moving"])
@@ -1087,7 +1097,7 @@ fn export_and_import_move_a_workspace_through_a_file_or_a_pipe() {
     );
     let mut import = fixture
         .command()
-        .args(["--json", "move", "import", "--repo", repo])
+        .args(["--json", "move", "import"])
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

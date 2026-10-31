@@ -188,3 +188,29 @@ fn equivalent_transports_match_without_conflating_hosts_paths_or_ports() {
     }
     assert_ne!(url_key("file:///repo.git"), url_key("file:///repo"));
 }
+
+#[tokio::test]
+async fn a_local_origin_path_selects_the_checkout_cloned_from_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let origin = temp.path().join("origin.git");
+    let checkout = temp.path().join("checkout");
+    git::run(temp.path(), &["init", "--quiet", "--bare", "origin.git"])
+        .await
+        .unwrap();
+    git::run(
+        temp.path(),
+        &["clone", "--quiet", origin.to_str().unwrap(), "checkout"],
+    )
+    .await
+    .unwrap();
+    let mut other = repository("other", "/tmp/missing-checkout", None);
+    other.source = "/tmp/missing-checkout".into();
+    let mut cloned = repository("cloned", checkout.to_str().unwrap(), None);
+    cloned.source = checkout.to_str().unwrap().into();
+    let repositories = [other, cloned];
+    let selector = Selector::Path {
+        value: origin.to_str().unwrap().into(),
+        path: std::fs::canonicalize(&origin).unwrap(),
+    };
+    assert_eq!(select(&repositories, selector).await.unwrap().id, "cloned");
+}

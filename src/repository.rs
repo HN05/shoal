@@ -213,6 +213,11 @@ pub async fn select(
     {
         return Ok(repo);
     }
+    if let Some(path) = &canonical
+        && let Some(repo) = find_by_origin_path(repositories, path).await
+    {
+        return Ok(repo);
+    }
     Err(NotRegistered {
         value: value.to_owned(),
         path: canonical,
@@ -257,6 +262,26 @@ pub async fn find_by_identity<'a>(
         }
     }
     Ok(None)
+}
+
+/// The registered checkout whose origin is the local repository at `path`, as
+/// a URL selects the checkout whose origin is that URL.
+async fn find_by_origin_path<'a>(
+    repositories: &'a [Repository],
+    path: &Path,
+) -> Option<&'a Repository> {
+    for repo in repositories {
+        // An unavailable checkout, or one without origin, matches nothing.
+        let Ok(Some(origin)) = remote_url_from_path(&repo.path).await else {
+            continue;
+        };
+        let origin = origin.strip_prefix("file://").unwrap_or(&origin);
+        // Git reads a relative origin from the checkout.
+        if std::fs::canonicalize(repo.path.join(origin)).is_ok_and(|origin| origin == path) {
+            return Some(repo);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
