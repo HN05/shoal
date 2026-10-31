@@ -50,9 +50,9 @@ impl Need {
             ["attach"] => Self::Session,
             ["cd"] => Self::Directory,
             ["stop" | "restart"] => Self::Running,
-            ["repo", "labels"] | ["forge", "capabilities" | "reactions" | "api"] | ["ci", ..] => {
-                Self::Any
-            }
+            ["repo", "labels"]
+            | ["forge", "capabilities" | "reactions" | "api" | "download"]
+            | ["ci", ..] => Self::Any,
             ["work", "setup"] => Self::Setup,
             ["work", "restore" | "rename"] | ["move", "export" | "ssh"] => Self::Any,
             ["work", "checkpoint"] => Self::Checkpoint,
