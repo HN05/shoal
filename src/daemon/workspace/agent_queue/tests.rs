@@ -1215,7 +1215,9 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
     limit_globally(&manager, 1);
     let first = add(&manager, &repo, "first").await.entry.unwrap();
     let launch = add(&manager, &repo, "launch").await.entry.unwrap();
-    let mut review = manager.agent_queue.request_oneshot(repo.id.as_str());
+    let mut review = manager
+        .agent_queue
+        .request_oneshot(repo.id.as_str(), false, || {});
     let workspace = manager
         .create_workspace(&repo.id, "first".into(), None, None, None)
         .await
@@ -1242,4 +1244,41 @@ async fn a_oneshot_run_goes_ahead_of_launches_and_holds_its_slot() {
     drop(review);
     manager.dispatch_queue().await.unwrap();
     assert!(started(&launch.id));
+}
+
+#[tokio::test]
+async fn protection_stops_oneshot_runs_which_wait_for_recovery_to_run_again() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 2);
+    let stops = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = stops.clone();
+    let mut run = manager
+        .agent_queue
+        .request_oneshot(repo.id.as_str(), false, move || {
+            counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        });
+    manager.dispatch_queue().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), run.admitted())
+        .await
+        .unwrap();
+    // Protection stops the run before any agent.
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    assert_eq!(stops.load(std::sync::atomic::Ordering::SeqCst), 1);
+    drop(run);
+
+    let mut again = manager
+        .agent_queue
+        .request_oneshot(repo.id.as_str(), true, || {});
+    manager.dispatch_queue().await.unwrap();
+    crate::test_support::assert_pending(again.admitted()).await;
+    publish_recovery(&manager);
+    manager.dispatch_queue().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), again.admitted())
+        .await
+        .unwrap();
 }

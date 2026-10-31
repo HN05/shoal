@@ -7,7 +7,12 @@ use std::{
 };
 use tokio::sync::{OwnedRwLockReadGuard, watch};
 
-use super::{GuardMode, Manager, agent_queue::Grant, agent_turns::Turn, capacity::Activity};
+use super::{
+    GuardMode, Manager,
+    agent_queue::{Grant, OneShotStop},
+    agent_turns::Turn,
+    capacity::Activity,
+};
 pub(crate) use crate::protocol::Protection;
 
 use crate::daemon::log;
@@ -753,7 +758,13 @@ impl Manager {
             .any(|agent| Processes::runs_outside_group(agent, &scan)))
     }
 
+    /// Stop one agent under `reason`: the newest one-shot run first, which
+    /// has no session to lose and starts over once readings are healthy.
     pub(crate) async fn stop_agent_for_overload(&self, reason: &str) -> bool {
+        if self.agent_queue.stop_oneshots(OneShotStop::Newest) > 0 {
+            log!("{reason}: stopped a one-shot agent run");
+            return true;
+        }
         !self
             .stop_agents(&Protection::load(reason), Select::One)
             .await

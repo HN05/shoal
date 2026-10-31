@@ -55,6 +55,13 @@ pub(crate) async fn run(manager: Arc<Manager>) {
     }
 }
 
+/// How one pass of a review ended.
+enum Pass {
+    Ended,
+    /// Protection stopped its run and queued the review again.
+    Stopped,
+}
+
 /// What every reviewer of a run gets.
 struct Run<'a> {
     settings: &'a Effective,
@@ -74,41 +81,79 @@ impl Manager {
     /// Run queued review `id` to its end. A failure to prepare it fails it,
     /// as the reviewer could not run.
     async fn run_review(&self, id: i64) {
-        let (cancel, mut cancelled) = watch::channel(false);
-        self.reviews.cancels.lock().unwrap().insert(id, cancel);
-        if let Err(error) = self.review_once(id, &mut cancelled).await {
-            log!("review {id}: {error:#}");
-            let _operation = self.gates.operation().await;
-            let now = now();
-            let failed = self
-                .store
-                .run(move |db| store::fail(db, id, None, FailureReason::ExecutionFailed, now))
-                .await;
-            match failed {
-                Ok(true) => self.deliver_review(id).await,
-                Ok(false) => {}
-                Err(error) => log!("review {id}: {error:#}"),
+        let mut after_stop = false;
+        loop {
+            let (cancel, mut cancelled) = watch::channel(false);
+            let cancel = Arc::new(cancel);
+            self.reviews
+                .cancels
+                .lock()
+                .unwrap()
+                .insert(id, cancel.clone());
+            match self
+                .review_once(id, &cancel, &mut cancelled, after_stop)
+                .await
+            {
+                Ok(Pass::Stopped) => {
+                    log!("review {id}: protection stopped it; it runs again once load recovers");
+                    after_stop = true;
+                }
+                Ok(Pass::Ended) => break,
+                Err(error) => {
+                    self.fail_unprepared(id, error).await;
+                    break;
+                }
             }
         }
         self.reviews.cancels.lock().unwrap().remove(&id);
         self.reviews.ended.send_modify(|ended| *ended += 1);
     }
 
-    async fn review_once(&self, id: i64, cancelled: &mut watch::Receiver<bool>) -> Result<()> {
+    /// Fail review `id`, which could not be prepared, as its reviewer could
+    /// not run.
+    async fn fail_unprepared(&self, id: i64, error: anyhow::Error) {
+        log!("review {id}: {error:#}");
+        let _operation = self.gates.operation().await;
+        let now = now();
+        let failed = self
+            .store
+            .run(move |db| store::fail(db, id, None, FailureReason::ExecutionFailed, now))
+            .await;
+        match failed {
+            Ok(true) => self.deliver_review(id).await,
+            Ok(false) => {}
+            Err(error) => log!("review {id}: {error:#}"),
+        }
+    }
+
+    /// Run queued review `id` once it has an agent slot, which protection
+    /// stops by sending `cancel`; a run it stopped asks for one `after_stop`.
+    async fn review_once(
+        &self,
+        id: i64,
+        cancel: &Arc<watch::Sender<bool>>,
+        cancelled: &mut watch::Receiver<bool>,
+        after_stop: bool,
+    ) -> Result<Pass> {
         let Some(review) = self.store.run(move |db| store::load(db, id)).await? else {
-            return Ok(());
+            return Ok(Pass::Ended);
         };
         if review.state != ReviewState::Queued {
-            return Ok(());
+            return Ok(Pass::Ended);
         }
         let workspace = self.workspace(&review.workspace_id).await?;
-        let mut slot = self
-            .agent_queue
-            .request_oneshot(workspace.repository_id.as_str());
+        let stop = cancel.clone();
+        let mut slot = self.agent_queue.request_oneshot(
+            workspace.repository_id.as_str(),
+            after_stop,
+            move || {
+                stop.send_replace(true);
+            },
+        );
         tokio::select! {
             () = slot.admitted() => {}
             // A cancel or the workspace's removal recorded the review's end.
-            _ = cancelled.wait_for(|cancelled| *cancelled) => return Ok(()),
+            _ = cancelled.wait_for(|cancelled| *cancelled) => return Ok(Pass::Ended),
         }
         let settings = self.workspace_settings_with_templates(&workspace).await?;
         let commits = self.review_commits(&workspace, &review.target).await?;
@@ -118,7 +163,7 @@ impl Manager {
             .run(move |db| store::start(db, id, &head, &base, now))
             .await?
         {
-            return Ok(());
+            return Ok(Pass::Ended);
         }
         let files = Files {
             directory: self.paths.reviews().join(id.to_string()),
@@ -213,18 +258,23 @@ impl Manager {
     }
 
     /// Record how the run ended, post a finished PR review and deliver the
-    /// review, under an operation guard; a cancel already recorded and
-    /// delivered it.
+    /// review, under an operation guard. A cancel already recorded and
+    /// delivered it; a run that ended cancelled while still running was
+    /// stopped by protection, and its review is queued again.
     async fn record_end(
         &self,
         id: i64,
         workspace: &Workspace,
         reviewer: &str,
         ended: Ended,
-    ) -> Result<()> {
+    ) -> Result<Pass> {
         // A managed update waits for the review's posting and delivery,
         // which a restart would not redo once the result is recorded.
         let _operation = self.gates.operation().await;
+        if ended == Ended::Cancelled {
+            let requeued = self.store.run(move |db| store::requeue(db, id)).await?;
+            return Ok(if requeued { Pass::Stopped } else { Pass::Ended });
+        }
         let reviewer = reviewer.to_owned();
         let now = now();
         let recorded = self
@@ -236,14 +286,14 @@ impl Manager {
             })
             .await?;
         if !recorded {
-            return Ok(());
+            return Ok(Pass::Ended);
         }
         let review = self.store.run(move |db| store::load(db, id)).await?;
         if let Some(review) = review.filter(|review| review.state == ReviewState::Finished) {
             self.post_review(&review, workspace).await;
         }
         self.deliver_review(id).await;
-        Ok(())
+        Ok(Pass::Ended)
     }
 
     /// The review's instructions for its checkout, then its history.

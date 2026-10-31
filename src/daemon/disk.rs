@@ -19,7 +19,7 @@ use super::{
     events::EventCause,
     notifications::NotificationKind,
     warnings::{self, Signal, Warnings},
-    workspace::{Manager, Protection},
+    workspace::{Manager, Protection, agent_queue::OneShotStop},
 };
 use crate::daemon::log;
 use crate::{
@@ -449,6 +449,10 @@ async fn stop_executions(
             agent.name,
             agent.workspace
         );
+    }
+    let oneshots = manager.agent_queue.stop_oneshots(OneShotStop::All);
+    if oneshots > 0 {
+        log!("disk space protection stopped {oneshots} one-shot agent runs: {low}");
     }
     let workspaces = workspaces_with_unprotected_executions(manager).await?;
     let (low, reason) = (&low, &protection.reason);

@@ -178,6 +178,43 @@ async fn a_fallback_reviewer_produces_the_review() {
 }
 
 #[tokio::test]
+async fn a_review_protection_stops_is_queued_again() {
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
+    let manager = &fixture.manager;
+    let queued = manager
+        .queue_review(
+            &fixture.workspace.id,
+            ReviewTarget::Workspace,
+            None,
+            Default::default(),
+        )
+        .await
+        .unwrap();
+    let mut changed = manager.store.watch_changes();
+    while manager.review(queued.id).await.unwrap().state != ReviewState::Running {
+        changed.changed().await.unwrap();
+    }
+    assert!(
+        manager
+            .stop_agent_for_overload("critical memory pressure")
+            .await
+    );
+    while manager.review(queued.id).await.unwrap().state != ReviewState::Queued {
+        changed.changed().await.unwrap();
+    }
+    let review = manager.review(queued.id).await.unwrap();
+    assert_eq!((review.head, review.started_at), (None, None));
+    // It waits for healthy readings; a cancel still ends it.
+    let mut ended = manager.reviews.ended.subscribe();
+    let cancelled = manager
+        .cancel_review(None, Some(queued.id), None)
+        .await
+        .unwrap();
+    assert_eq!(cancelled.state, ReviewState::Cancelled);
+    ended.changed().await.unwrap();
+}
+
+#[tokio::test]
 async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;

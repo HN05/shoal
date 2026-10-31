@@ -28,7 +28,7 @@ pub(crate) struct Reviews {
     /// Wakes the scheduler when a review is queued.
     queued: tokio::sync::Notify,
     /// Stops each review that has started to run.
-    cancels: std::sync::Mutex<HashMap<i64, watch::Sender<bool>>>,
+    cancels: std::sync::Mutex<HashMap<i64, std::sync::Arc<watch::Sender<bool>>>>,
     /// Counts the runs that ended, for waits on one.
     ended: watch::Sender<u64>,
 }

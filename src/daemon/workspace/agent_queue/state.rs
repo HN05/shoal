@@ -38,8 +38,28 @@ struct OneShots {
 /// A one-shot run's request for a slot in `repository`.
 struct OneShot {
     repository: String,
+    /// Whether protection stopped its earlier run, so it waits for healthy
+    /// readings as a stopped agent's restore does.
+    after_stop: bool,
     /// When admission gave it a slot, which it holds until it ends.
     admitted: watch::Sender<Option<Instant>>,
+    /// Stops the run for protection.
+    stop: Box<dyn Fn() + Send + Sync>,
+}
+
+/// Which admitted one-shot runs protection stops.
+pub(crate) enum OneShotStop {
+    /// The run that started last.
+    Newest,
+    All,
+}
+
+/// A one-shot request waiting for a slot.
+pub(crate) struct WaitingOneShot {
+    /// Its queue ID, which no stored entry has.
+    pub id: String,
+    pub repository: String,
+    pub after_stop: bool,
 }
 
 /// The queue ID of one-shot request `number`, which no stored entry has.
@@ -119,8 +139,14 @@ impl AgentQueue {
 
     /// Ask for a slot in `repository` for a one-shot run, such as a review,
     /// which waits in the queue ahead of launches; the request and the slot
-    /// end with the returned value.
-    pub(crate) fn request_oneshot(&self, repository: &str) -> OneShotSlot<'_> {
+    /// end with the returned value. Protection calls `stop` to stop the run;
+    /// a run it stopped asks again `after_stop`.
+    pub(crate) fn request_oneshot(
+        &self,
+        repository: &str,
+        after_stop: bool,
+        stop: impl Fn() + Send + Sync + 'static,
+    ) -> OneShotSlot<'_> {
         let (admitted, waiting) = watch::channel(None);
         let mut oneshots = self.oneshots.lock().unwrap();
         let number = oneshots.next;
@@ -129,7 +155,9 @@ impl AgentQueue {
             number,
             OneShot {
                 repository: repository.to_owned(),
+                after_stop,
                 admitted,
+                stop: Box::new(stop),
             },
         );
         drop(oneshots);
@@ -141,17 +169,38 @@ impl AgentQueue {
         }
     }
 
-    /// The one-shot requests still waiting, oldest first, by queue ID with
-    /// their repository.
-    pub(crate) fn waiting_oneshots(&self) -> Vec<(String, String)> {
+    /// The one-shot requests still waiting, oldest first.
+    pub(crate) fn waiting_oneshots(&self) -> Vec<WaitingOneShot> {
         self.oneshots
             .lock()
             .unwrap()
             .runs
             .iter()
             .filter(|(_, run)| run.admitted.borrow().is_none())
-            .map(|(number, run)| (oneshot_id(*number), run.repository.clone()))
+            .map(|(number, run)| WaitingOneShot {
+                id: oneshot_id(*number),
+                repository: run.repository.clone(),
+                after_stop: run.after_stop,
+            })
             .collect()
+    }
+
+    /// Stop the admitted one-shot runs `which` picks, returning how many.
+    pub(crate) fn stop_oneshots(&self, which: OneShotStop) -> usize {
+        let oneshots = self.oneshots.lock().unwrap();
+        let mut admitted: Vec<&OneShot> = oneshots
+            .runs
+            .values()
+            .filter(|run| run.admitted.borrow().is_some())
+            .collect();
+        if let OneShotStop::Newest = which {
+            admitted.sort_by_key(|run| *run.admitted.borrow());
+            admitted.drain(..admitted.len().saturating_sub(1));
+        }
+        for run in &admitted {
+            (run.stop)();
+        }
+        admitted.len()
     }
 
     /// The repository of each one-shot run holding a slot, with how long it

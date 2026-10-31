@@ -104,6 +104,16 @@ pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
     )?)
 }
 
+/// Queue running review `id` again, as after protection stopped its run;
+/// false when it is no longer running.
+pub(crate) fn requeue(db: &Connection, id: i64) -> Result<bool> {
+    Ok(db.execute(
+        "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL
+            WHERE id=?1 AND state='running'",
+        [id],
+    )? == 1)
+}
+
 /// The reviews that are running.
 pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
     Ok(db

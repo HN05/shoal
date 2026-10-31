@@ -98,7 +98,7 @@ impl Manager {
                     .await?
                 {
                     Work::Restore { wake, .. } => wake,
-                    Work::Launch | Work::OneShot => continue,
+                    Work::Launch | Work::OneShot { .. } => continue,
                 }
             } else if waiters.contains(&restore.execution) {
                 self.restore_wake(workspace_id, &restore.execution, false)

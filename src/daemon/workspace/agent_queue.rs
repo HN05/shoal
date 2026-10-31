@@ -54,8 +54,11 @@ impl Limits {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Work {
     Launch,
-    /// A one-shot run, which the daemon starts without a session.
-    OneShot,
+    /// A one-shot run, which the daemon starts without a session; one
+    /// protection stopped waits for healthy readings `after_stop`.
+    OneShot {
+        after_stop: bool,
+    },
     /// A stopped agent's restore. `waiting` says its agent waits for it with
     /// every process stopped.
     Restore {
@@ -122,7 +125,8 @@ pub(crate) fn admit(
             break;
         }
         let own = match entry.work {
-            Work::Launch | Work::OneShot => 0,
+            Work::OneShot { after_stop: true } if !recovered => continue,
+            Work::Launch | Work::OneShot { .. } => 0,
             Work::Restore {
                 waiting: true,
                 wake: Wake::Slot | Wake::Update { due: true },
@@ -582,10 +586,12 @@ impl Manager {
             .agent_queue
             .waiting_oneshots()
             .into_iter()
-            .map(|(id, repository)| Waiting {
-                id,
-                repository,
-                work: Work::OneShot,
+            .map(|oneshot| Waiting {
+                id: oneshot.id,
+                repository: oneshot.repository,
+                work: Work::OneShot {
+                    after_stop: oneshot.after_stop,
+                },
             });
         waiting.splice(first_launch..first_launch, oneshots);
         Ok(WaitingWork {
@@ -1284,7 +1290,7 @@ mod state;
 mod stopped;
 mod wake;
 
-pub(crate) use state::AgentQueue;
+pub(crate) use state::{AgentQueue, OneShotStop};
 pub(crate) use wake::Grant;
 
 #[cfg(test)]

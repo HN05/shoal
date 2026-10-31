@@ -1166,7 +1166,9 @@ agent run, which any feature can use: an AI tool's command without a session or
 terminal, in its own process group, killed on timeout, cancel or a daemon stop and
 found again by its marker after a crash. A one-shot run takes an agent slot like
 any agent and waits in the agent queue ahead of launches, since it reviews work
-already done that an agent waits on. A chat has no worktree or branch, so local
+already done that an agent waits on. Protection stops a one-shot run before
+any agent, since it has no session to lose; it asks for a slot again and waits
+for healthy readings, as a stopped agent's restore does. A chat has no worktree or branch, so local
 reviews do not apply to it; a chat names the workspace it reviews. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
 fast-forwarding it to the pushed head; local commits ahead stay, divergence is refused.

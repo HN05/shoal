@@ -1593,6 +1593,9 @@ done or its restore waits in the queue; `shoal done`, the agent's exit,
 `resume --discard` and removal free it.
 A [local review](#local-reviews)'s reviewer also uses a slot while it runs; a
 queued review waits ahead of every launch and starts as soon as a slot is free.
+Overload protection stops a running reviewer before any agent, and disk
+protection stops every reviewer; the review is queued again and starts over
+once readings are healthy.
 
 `shoal add` with an agent asks the daemon for a slot after resolving the issue,
 branch and agent. When none is free it prints the entry's place and returns
