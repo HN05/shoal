@@ -15,7 +15,7 @@ use crate::{
 
 pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
     let body = args.input.as_deref().map(read_json).transpose()?;
-    // As with gh, a body makes the request a POST unless it names a method.
+    // As with curl, a body makes the request a POST unless it names a method.
     let method = args.method.unwrap_or(match body {
         Some(_) => HttpMethod::Post,
         None => HttpMethod::Get,

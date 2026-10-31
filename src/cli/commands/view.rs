@@ -1,5 +1,4 @@
-//! Show issues, PRs and linked CI runs as the forge reports them, without gh
-//! or fj.
+//! Show issues, PRs and linked CI runs as the forge reports them.
 use anyhow::{Context as _, Result, ensure};
 
 use serde::Serialize;

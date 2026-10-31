@@ -2711,7 +2711,7 @@ Shoal sends every request to the forge's API with curl, signed in with the
 `token` set for the host in the same table: GitHub.com at `api.github.com`, a
 GitHub Enterprise Server under `/api/v3`, GitLab under `/api/v4`, Forgejo and
 Gitea under `/api/v1`, and Bitbucket Cloud at `api.bitbucket.org`. It runs no
-`gh`, `glab`, `fj` or `tea`. Changes Shoal makes
+forge CLI. Changes Shoal makes
 for a workspace use the host's `agent_token`, as [agent accounts](#agent-accounts)
 describe. Each is the token as written, `{ env = "<variable>" }`, or
 `{ cmd = [...] }`, an argument array whose output is the token:
@@ -3352,7 +3352,7 @@ PRs whose head branch is in a fork. Watches return on comments,
 reviews, completed CI checks, new merge conflicts, closure, reopening, merging,
 or a merged base workspace, except for comments, review thread replies, closing
 and reopening that the workspace itself made through Shoal; the same change made another way, such as
-with `fj` or the web interface, is reported. A passing check is held while
+in the web interface, is reported. A passing check is held while
 another check on the PR's head commit is pending, and arrives with a check that
 fails or does not pass, or with the last pending one; a new head commit drops
 the passes held for the previous one. `shoal status` and `item_activity` events

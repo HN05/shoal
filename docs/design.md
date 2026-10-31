@@ -1513,7 +1513,7 @@ and anyone else's as the user's own logins, in another repository too, since
 checking for a duplicate before filing there is only a read; it uses each forge's own search and
 reads pages only until the limit is met. `shoal forge api` passes any request under
 the repository's forge API root through the daemon the same way, for reads no
-command models, since fj has no API passthrough to fall back to. The daemon
+command models. The daemon
 cannot tell what another method changes, so a scoped caller sends only GET
 unless `[permissions] api_writes` accepts that its writes may merge, approve or skip
 required labels, and only GET in another repository, which that setting does
@@ -2173,8 +2173,7 @@ leaves out conflicts with a target that already has HEAD's changes, as merged cl
 decides, since merging could only repeat them, and those of a completion marked
 integrated at HEAD; `conflicts` still reports them. A
 linked PR leaves them to the forge, avoiding duplicate reports. Forgejo reads
-come from its REST API rather than fj's output, which has no structured form,
-and work anonymously for public repositories. The watch shares a
+come from its REST API and work anonymously for public repositories. The watch shares a
 persistent cursor per workspace and item, reporting existing activity on the first
 wait and changes between waits thereafter; cancelling the watch discards that cursor.
 An omitted timeout keeps the watch unbounded; an explicit timeout remains a bounded

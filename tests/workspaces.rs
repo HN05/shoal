@@ -15756,7 +15756,7 @@ fn pr_watch_checks_github_state_and_commit_and_survives_restart() {
 #[test]
 fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     let fixture = Fixture::new();
-    let workspace = fixture.add("fj-watch");
+    let workspace = fixture.add("forgejo-watch");
     git(
         &fixture.repo,
         &[
@@ -15776,18 +15776,25 @@ fn pr_watch_checks_forgejo_merge_and_commits_through_the_api() {
     script_api(
         home,
         "repos/team/repo/pulls/56",
-        &forgejo_pull(56, "merged", "fj-watch", head),
+        &forgejo_pull(56, "merged", "forgejo-watch", head),
     );
     script_api(
         home,
         "repos/team/repo/pulls/56/commits?limit=50&page=1",
         &serde_json::json!([{"sha": head}]),
     );
-    fixture.ok(&["link", "pr", "56", "assigned", "--workspace", "fj-watch"]);
+    fixture.ok(&[
+        "link",
+        "pr",
+        "56",
+        "assigned",
+        "--workspace",
+        "forgejo-watch",
+    ]);
     // A merge alone waits for the agent's explicit done.
-    assert!(fixture.ok(&["status", "fj-watch"])["completion"].is_null());
-    fixture.ok(&["done", "fj-watch"]);
-    wait_removed(&fixture, "fj-watch");
+    assert!(fixture.ok(&["status", "forgejo-watch"])["completion"].is_null());
+    fixture.ok(&["done", "forgejo-watch"]);
+    wait_removed(&fixture, "forgejo-watch");
 }
 
 #[test]
@@ -22992,7 +22999,7 @@ fn failed_restacks_are_reported_even_when_pr_cleanup_is_disabled() {
     });
 }
 
-fn issue_fixture(tool: &str) -> Fixture {
+fn issue_fixture(host: &str) -> Fixture {
     let fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     git(&fixture.repo, &["config", "protocol.allow", "never"]);
     git(
@@ -23003,11 +23010,6 @@ fn issue_fixture(tool: &str) -> Fixture {
             "refs/remotes/origin/main",
         ],
     );
-    let host = if tool == "gh" {
-        "github.com"
-    } else {
-        "forge.example"
-    };
     git(
         &fixture.repo,
         &[
@@ -23018,7 +23020,7 @@ fn issue_fixture(tool: &str) -> Fixture {
         ],
     );
     install_api_curl(&fixture.root.path().join("bin"));
-    if tool == "gh" {
+    if host == "github.com" {
         // The issue has no blocking issues.
         script_api(
             fixture.root.path(),
@@ -23047,8 +23049,8 @@ fn write_issue_state(fixture: &Fixture, state: &str) {
 
 #[test]
 fn already_closed_issues_are_rejected_before_creating_workspaces() {
-    for tool in ["gh", "fj"] {
-        let fixture = issue_fixture(tool);
+    for host in ["github.com", "forge.example"] {
+        let fixture = issue_fixture(host);
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
         let output = fixture.run(&[
@@ -23069,8 +23071,8 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 #[test]
 fn client_api_creation_rejects_a_closed_issue_before_creating_a_workspace() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    for tool in ["gh", "fj"] {
-        let fixture = issue_fixture(tool);
+    for host in ["github.com", "forge.example"] {
+        let fixture = issue_fixture(host);
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
         let socket = fixture.root.path().join("state/daemon.sock");
@@ -23090,11 +23092,11 @@ fn client_api_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             client.call(create).await
         });
         let Err(shoal_client::Error::Api(error)) = refused else {
-            panic!("{tool}: expected a refusal: {refused:?}");
+            panic!("{host}: expected a refusal: {refused:?}");
         };
         assert!(
             error.message.contains("issue is already closed"),
-            "{tool}: {error}"
+            "{host}: {error}"
         );
         assert_eq!(fixture.ok(&["work"]), before);
     }
@@ -24256,7 +24258,7 @@ fn herdr_removal_and_cleanup_close_the_pane_shoal_opened_without_a_watcher() {
 
 #[test]
 fn scoped_undone_withdraws_completion_without_keeping_the_workspace() {
-    let fixture = issue_fixture("gh");
+    let fixture = issue_fixture("github.com");
     let scoped = |fixture: &Fixture, args: &[&str]| {
         let mut command = vec![
             "run",

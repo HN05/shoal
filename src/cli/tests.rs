@@ -657,7 +657,7 @@ fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
     // `launch` and `secret-tool` replace themselves with the program they
     // start; `queue-start` ends once the agent it starts runs elsewhere.
     assert!(!wraps(&["launch", "file"]));
-    assert!(!wraps(&["secret-tool", "launchers", "gh", "--", "pr"]));
+    assert!(!wraps(&["secret-tool", "launchers", "aws", "--", "s3"]));
     assert!(!wraps(&["queue-start", "entry"]));
     // `take-over` continues a wrapper in its process, which keeps the
     // responsibility it had.

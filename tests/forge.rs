@@ -2351,7 +2351,7 @@ fn pr_open_pushes_creates_and_links_or_finds_the_open_pr() {
             &fixture.repo,
             &["config", "remote.origin.pushurl", remote.to_str().unwrap()],
         );
-        // Linking a PR Shoal just read needs no lookup through the user's gh or fj.
+        // Linking a PR Shoal just read needs no second lookup.
         let list = match forge {
             Forge::GitHub => "GET repos/team/project/pulls?state=open&head=team%3Atopic",
             Forge::Forgejo => "GET repos/team/project/pulls?state=open&limit=50&page=1",
