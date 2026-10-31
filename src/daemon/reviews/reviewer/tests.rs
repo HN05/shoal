@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_support::until_tests_end;
 
 fn files() -> (tempfile::TempDir, Files) {
     let root = tempfile::tempdir().unwrap();
@@ -24,7 +25,11 @@ fn reviewer<'a>(files: &'a Files, argv: &[&str]) -> Reviewer<'a> {
 async fn a_reviewer_running_past_the_limit_times_out() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let ended = run(&reviewer(&files, &["sleep", "100000"]), &mut cancelled).await;
+    let ended = run(
+        &reviewer(&files, &["sh", "-c", &until_tests_end()]),
+        &mut cancelled,
+    )
+    .await;
     assert_eq!(ended, Ended::Failed(FailureReason::TimedOut));
     assert_eq!(TIMEOUT, Duration::from_secs(30 * 60));
 }
@@ -34,7 +39,11 @@ async fn a_cancelled_reviewer_is_stopped() {
     let (_root, files) = files();
     let (cancel, mut cancelled) = watch::channel(false);
     cancel.send_replace(true);
-    let ended = run(&reviewer(&files, &["sleep", "100000"]), &mut cancelled).await;
+    let ended = run(
+        &reviewer(&files, &["sh", "-c", &until_tests_end()]),
+        &mut cancelled,
+    )
+    .await;
     assert_eq!(ended, Ended::Cancelled);
 }
 

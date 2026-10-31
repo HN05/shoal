@@ -151,6 +151,16 @@ pub fn install_test_script(path: &Path, script: &str) {
     fs::rename(&staged, path).unwrap();
 }
 
+/// A shell command that runs until this test binary exits, for at most ten
+/// minutes, standing in for a long-running tool: a test killed before it
+/// stops the command leaves nothing running.
+pub fn until_tests_end() -> String {
+    format!(
+        "i=0; while [ $i -lt 600 ] && kill -0 {} 2>/dev/null; do sleep 1; i=$((i+1)); done",
+        std::process::id()
+    )
+}
+
 /// Poll through setup and verify that an explicit gate still holds the future.
 pub async fn assert_pending(future: impl std::future::Future) {
     tokio::pin!(future);

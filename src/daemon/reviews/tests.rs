@@ -4,7 +4,7 @@ use super::*;
 use crate::model::Workspace;
 use crate::{
     reviews::{FailureReason, ReviewState, Severity},
-    test_support::{configure, install_test_script, manager, repository},
+    test_support::{configure, install_test_script, manager, repository, until_tests_end},
 };
 
 const REVIEW: &str = r#"{"summary":"One problem.","verdict":"comment","checked":[],
@@ -147,7 +147,7 @@ async fn a_fallback_reviewer_produces_the_review() {
 
 #[tokio::test]
 async fn cancelling_stops_the_reviewer_and_removes_its_checkout() {
-    let fixture = fixture(&[("slow", "exec sleep 100000")], "agent = 'slow'").await;
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
@@ -238,6 +238,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
             ])
             .arg(std::env::current_exe().unwrap())
             .current_dir(&checkout);
+        command.env(SURVIVOR_OWNER, std::process::id().to_string());
         if marked {
             command.env(crate::env::REVIEW_RUN, checkout.parent().unwrap());
         }
@@ -268,7 +269,7 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
 
 #[tokio::test]
 async fn removing_the_workspace_stops_its_review() {
-    let fixture = fixture(&[("slow", "exec sleep 100000")], "agent = 'slow'").await;
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
@@ -665,7 +666,7 @@ async fn one_review_larger_than_a_frame_is_shown_whole() {
 
 #[tokio::test]
 async fn removing_the_repository_stops_its_reviews_first() {
-    let fixture = fixture(&[("slow", "exec sleep 100000")], "agent = 'slow'").await;
+    let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;
     let queued = manager
         .queue_review(&fixture.workspace.id, ReviewTarget::Workspace, None)
@@ -716,10 +717,24 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     assert!(!run.exists());
 }
 
+/// The test process a survivor outlives no longer than.
+const SURVIVOR_OWNER: &str = "REVIEW_TEST_SURVIVOR_OWNER";
+
 /// Sleeps as a process a stopped daemon's reviewer left, for the recovery
-/// test, which starts it.
+/// test, which starts it: until that test's process exits, for at most ten
+/// minutes.
 #[test]
 #[ignore]
 fn sleep_as_a_survivor() {
-    std::thread::sleep(std::time::Duration::from_secs(100_000));
+    let Some(owner) = std::env::var(SURVIVOR_OWNER)
+        .ok()
+        .and_then(|owner| owner.parse::<i32>().ok())
+    else {
+        return;
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
+    // SAFETY: signal 0 only checks that the process exists.
+    while std::time::Instant::now() < deadline && unsafe { libc::kill(owner, 0) } == 0 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
 }
