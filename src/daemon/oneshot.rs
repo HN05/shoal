@@ -3,7 +3,7 @@
 //! as a process group of its own, which is killed when the run times out, is
 //! cancelled or is dropped, and its output goes to files in a run directory.
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
@@ -59,8 +59,54 @@ pub(crate) fn agent_command(
     })
 }
 
+/// The run directories of one-shot runs whose processes may still be running:
+/// from a run's start until what it left is proven stopped.
+#[derive(Default)]
+pub(crate) struct Runs(std::sync::Mutex<HashSet<PathBuf>>);
+
+impl Runs {
+    /// Stop what every run that has not ended cleanly left, as the daemon
+    /// stops after aborting them; a run whose processes are proven stopped
+    /// is forgotten.
+    pub(crate) async fn stop_all(&self) {
+        let unfinished: Vec<PathBuf> = self.0.lock().unwrap().iter().cloned().collect();
+        for files in unfinished {
+            match stop_leftovers(&files).await {
+                Ok(()) => {
+                    self.0.lock().unwrap().remove(&files);
+                }
+                Err(error) => crate::daemon::log!(
+                    "stopping what the run in {} left: {error:#}",
+                    files.display()
+                ),
+            }
+        }
+    }
+
+    fn start(&self, files: &Path) {
+        self.0.lock().unwrap().insert(files.to_owned());
+    }
+
+    fn end(&self, files: &Path) {
+        self.0.lock().unwrap().remove(files);
+    }
+}
+
+/// A run whose processes in other process groups could not be proven
+/// stopped, so its tracking must outlive it.
+#[derive(Debug)]
+pub(crate) struct LeftRunning;
+
+impl std::fmt::Display for LeftRunning {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("the run's processes could not be proven stopped")
+    }
+}
+
 /// One run of a command.
 pub(crate) struct Run<'a> {
+    /// Where the run is tracked until what it left is stopped.
+    pub runs: &'a Runs,
     pub command: &'a AgentCommand,
     /// Where the command runs.
     pub directory: &'a Path,
@@ -81,15 +127,15 @@ pub(crate) enum Ended {
 /// Run until the command exits, the run's timeout passes or `cancel` turns
 /// true; then kill whatever is left of its process group, and stop what it
 /// started in other groups, which still carries its marker. An error means
-/// it could not be started or waited for.
+/// it could not be started or waited for, or, as [`LeftRunning`], that what
+/// it left could not be stopped, so the run stays tracked.
 pub(crate) async fn run(run: &Run<'_>, cancel: &mut watch::Receiver<bool>) -> Result<Ended> {
+    run.runs.start(run.files);
     let ended = run_group(run, cancel).await;
-    if let Err(error) = stop_leftovers(run.files).await {
-        crate::daemon::log!(
-            "stopping what the run in {} left: {error:#}",
-            run.files.display()
-        );
-    }
+    stop_leftovers(run.files)
+        .await
+        .map_err(|error| error.context(LeftRunning))?;
+    run.runs.end(run.files);
     ended
 }
 

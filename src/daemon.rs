@@ -216,6 +216,9 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
         .end_work(*result.as_ref().unwrap_or(&Ending::Detach))
         .await;
     background.shutdown().await;
+    // Aborting a run kills its process group; what it started elsewhere
+    // carries its marker.
+    manager.oneshot_runs.stop_all().await;
     manager.stop_for_shutdown().await;
     clients.shutdown().await;
     manager.store.shutdown().await;

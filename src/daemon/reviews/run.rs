@@ -60,6 +60,7 @@ enum Pass {
 
 /// What every reviewer of a run gets.
 struct Run<'a> {
+    runs: &'a oneshot::Runs,
     settings: &'a Effective,
     /// The workspace's configured variables.
     configured: std::collections::BTreeMap<String, std::ffi::OsString>,
@@ -172,11 +173,19 @@ impl Manager {
         let ended = self
             .run_in_checkout(&review, &workspace, &settings, &commits, &files, cancelled)
             .await;
-        match remove_run(&files).await {
-            Ok(()) => drop(checkout),
-            Err(error) => {
-                log!("review {id}: {error:#}");
-                checkout.keep();
+        if let Ok((_, Ended::LeftRunning)) = ended {
+            // Its run directory, checkout and slot stay until a restarted
+            // daemon stops what the reviewer left.
+            log!("review {id}: its reviewer's processes could not be stopped");
+            checkout.keep();
+            slot.keep();
+        } else {
+            match remove_run(&files).await {
+                Ok(()) => drop(checkout),
+                Err(error) => {
+                    log!("review {id}: {error:#}");
+                    checkout.keep();
+                }
             }
         }
         let (reviewer, ended) = ended?;
@@ -197,6 +206,7 @@ impl Manager {
         self.prepare_checkout(workspace, &commits.head, files)
             .await?;
         let run = Run {
+            runs: &self.oneshot_runs,
             settings,
             configured: self
                 .configured_environment_from(workspace, settings)
@@ -287,6 +297,9 @@ impl Manager {
             .run(move |db| match ended {
                 Ended::Returned(output) => store::finish(db, id, &reviewer, &output, now),
                 Ended::Failed(reason) => store::fail(db, id, Some(&reviewer), reason, now),
+                Ended::LeftRunning => {
+                    store::fail(db, id, Some(&reviewer), FailureReason::ExecutionFailed, now)
+                }
                 Ended::Cancelled => Ok(false),
             })
             .await?;
@@ -440,6 +453,7 @@ fn reviewer_for<'a>(
     home: &Path,
 ) -> Result<Reviewer<'a>> {
     let Run {
+        runs,
         settings,
         configured,
         instructions,
@@ -459,8 +473,10 @@ fn reviewer_for<'a>(
         })
         .with_context(|| format!("{agent} has no review template"))?;
     Ok(Reviewer {
+        runs,
         command: oneshot::agent_command(settings, agent, model, args, configured, home)?,
         files,
+        timeout: reviewer::TIMEOUT,
         writes_output: arguments.review_writes_output(),
         format: tool.review_result,
     })

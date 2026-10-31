@@ -131,6 +131,8 @@ pub struct Manager {
     pub(crate) seeds: super::seed::Seeds,
     pub(crate) forge_memories: crate::daemon::links::ForgeMemories,
     pub(crate) reviews: crate::daemon::reviews::Reviews,
+    /// One-shot agent runs whose processes may still be running.
+    pub(crate) oneshot_runs: crate::daemon::oneshot::Runs,
     /// The retry each proxied execution's proxy waits to make.
     proxy_retries: std::sync::Mutex<std::collections::HashMap<String, proxy_retries::ProxyRetry>>,
 }
@@ -163,6 +165,7 @@ impl Manager {
             seeds: Default::default(),
             forge_memories: Default::default(),
             reviews: Default::default(),
+            oneshot_runs: Default::default(),
             proxy_retries: Default::default(),
         }))
     }

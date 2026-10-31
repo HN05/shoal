@@ -12,6 +12,8 @@ fn files() -> (tempfile::TempDir, Files) {
 
 fn reviewer<'a>(files: &'a Files, argv: &[&str]) -> Reviewer<'a> {
     Reviewer {
+        runs: Box::leak(Box::default()),
+        timeout: TIMEOUT,
         command: AgentCommand {
             argv: argv.iter().map(std::ffi::OsString::from).collect(),
             environment: Default::default(),
@@ -23,17 +25,25 @@ fn reviewer<'a>(files: &'a Files, argv: &[&str]) -> Reviewer<'a> {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_reviewer_running_past_the_limit_times_out() {
     let (_root, files) = files();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let ended = run(
-        &reviewer(&files, &["sh", "-c", &until_tests_end()]),
-        &mut cancelled,
-    )
-    .await;
+    let mut slow = reviewer(&files, &["sh", "-c", &until_tests_end()]);
+    slow.timeout = Duration::from_millis(300);
+    let ended = run(&slow, &mut cancelled).await;
     assert_eq!(ended, Ended::Failed(FailureReason::TimedOut));
     assert_eq!(TIMEOUT, Duration::from_secs(30 * 60));
+}
+
+// The paused clock runs out the process inventory's own timeout at once.
+#[tokio::test(start_paused = true)]
+async fn a_reviewer_whose_processes_cannot_be_proven_stopped_is_left_running() {
+    let (_root, files) = files();
+    let (_cancel, mut cancelled) = watch::channel(false);
+    let ended = run(&reviewer(&files, &["true"]), &mut cancelled).await;
+    assert_eq!(ended, Ended::LeftRunning);
+    assert!(files.directory.exists());
 }
 
 #[tokio::test]

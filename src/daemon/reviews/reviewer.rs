@@ -49,8 +49,11 @@ impl Files {
 
 /// What one reviewer runs with.
 pub(super) struct Reviewer<'a> {
+    pub runs: &'a oneshot::Runs,
     pub command: AgentCommand,
     pub files: &'a Files,
+    /// [`TIMEOUT`], but in tests.
+    pub timeout: Duration,
     /// Whether the result goes to [`Files::output`] instead of stdout.
     pub writes_output: bool,
     pub format: &'static ResultFormat,
@@ -62,17 +65,21 @@ pub(super) enum Ended {
     Returned(ReviewerOutput),
     Failed(FailureReason),
     Cancelled,
+    /// What the reviewer started could not be proven stopped, so its run
+    /// stays tracked.
+    LeftRunning,
 }
 
-/// Run `reviewer` until it exits, [`TIMEOUT`] passes or `cancel` turns true,
+/// Run `reviewer` until it exits, its timeout passes or `cancel` turns true,
 /// and read its result, which another reviewer of the run does not see.
 pub(super) async fn run(reviewer: &Reviewer<'_>, cancel: &mut watch::Receiver<bool>) -> Ended {
     let files = reviewer.files;
     let run = oneshot::Run {
+        runs: reviewer.runs,
         command: &reviewer.command,
         directory: &files.checkout(),
         files: &files.directory,
-        timeout: TIMEOUT,
+        timeout: reviewer.timeout,
     };
     let ended = ended(reviewer, oneshot::run(&run, cancel).await);
     reviewer.files.remove_output();
@@ -92,6 +99,10 @@ fn ended(reviewer: &Reviewer<'_>, exited: Result<oneshot::Ended>) -> Ended {
         },
         Ok(oneshot::Ended::Cancelled) => Ended::Cancelled,
         Ok(oneshot::Ended::TimedOut) => Ended::Failed(FailureReason::TimedOut),
+        Err(error) if error.downcast_ref::<oneshot::LeftRunning>().is_some() => {
+            crate::daemon::log!("ending a reviewer: {error:#}");
+            Ended::LeftRunning
+        }
         Err(error) => {
             crate::daemon::log!("running a reviewer: {error:#}");
             Ended::Failed(FailureReason::ExecutionFailed)

@@ -14,29 +14,68 @@ async fn run_in(
     command: &AgentCommand,
     cancel: &mut watch::Receiver<bool>,
 ) -> Result<Ended> {
+    run_tracked(
+        &Runs::default(),
+        root,
+        command,
+        Duration::from_secs(60),
+        cancel,
+    )
+    .await
+}
+
+async fn run_tracked(
+    runs: &Runs,
+    root: &Path,
+    command: &AgentCommand,
+    timeout: Duration,
+    cancel: &mut watch::Receiver<bool>,
+) -> Result<Ended> {
     run(
         &Run {
+            runs,
             command,
             directory: root,
             files: root,
-            timeout: Duration::from_secs(60),
+            timeout,
         },
         cancel,
     )
     .await
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_run_past_its_timeout_is_stopped() {
     let root = tempfile::tempdir().unwrap();
     let (_cancel, mut cancelled) = watch::channel(false);
-    let ended = run_in(
+    let runs = Runs::default();
+    let slow = command(&["sh", "-c", &until_tests_end()]);
+    let timeout = Duration::from_millis(300);
+    let ended = run_tracked(&runs, root.path(), &slow, timeout, &mut cancelled).await;
+    assert_eq!(ended.unwrap(), Ended::TimedOut);
+    // What it left is proven stopped, so it is no longer tracked.
+    assert!(runs.0.lock().unwrap().is_empty());
+}
+
+// The paused clock runs out the process inventory's own timeout at once, so
+// what the run left cannot be proven stopped.
+#[tokio::test(start_paused = true)]
+async fn a_run_whose_leftovers_cannot_be_proven_stopped_stays_tracked() {
+    let root = tempfile::tempdir().unwrap();
+    let (_cancel, mut cancelled) = watch::channel(false);
+    let runs = Runs::default();
+    let timeout = Duration::from_secs(60);
+    let error = run_tracked(
+        &runs,
         root.path(),
-        &command(&["sh", "-c", &until_tests_end()]),
+        &command(&["true"]),
+        timeout,
         &mut cancelled,
     )
-    .await;
-    assert_eq!(ended.unwrap(), Ended::TimedOut);
+    .await
+    .unwrap_err();
+    assert!(error.downcast_ref::<LeftRunning>().is_some(), "{error:#}");
+    assert!(runs.0.lock().unwrap().contains(root.path()));
 }
 
 #[tokio::test]
@@ -106,15 +145,49 @@ async fn a_descendant_that_left_the_group_is_stopped_with_the_run() {
     let (_cancel, mut cancelled) = watch::channel(false);
     let ended = run_in(root.path(), &escaping, &mut cancelled).await;
     assert_eq!(ended.unwrap(), Ended::Exited { success: true });
-    let pid: i32 = fs::read_to_string(&pid_file)
+    let pid: u32 = fs::read_to_string(&pid_file)
         .unwrap()
         .trim()
         .parse()
         .unwrap();
-    // Stopped, though not in the run's group; a stopped orphan may wait to
-    // be reaped.
+    // Stopped, though not in the run's group.
+    assert!(stopped(pid), "the escaped child {pid} runs on");
+}
+
+#[tokio::test]
+async fn stopping_every_unfinished_run_stops_what_an_aborted_one_left() {
+    let root = tempfile::tempdir().unwrap();
+    let pid_file = root.path().join("escaped");
+    // What a run aborted with the daemon left in another process group.
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "daemon::oneshot::tests::escape_the_group",
+            "--ignored",
+        ])
+        .env(crate::env::ONESHOT_RUN, root.path())
+        .env(ESCAPE_OWNER, std::process::id().to_string())
+        .env(ESCAPE_PID_FILE, &pid_file)
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let runs = Runs::default();
+    runs.start(root.path());
+    runs.stop_all().await;
+    assert!(runs.0.lock().unwrap().is_empty());
+    let pid: u32 = fs::read_to_string(&pid_file)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert!(stopped(pid), "the escaped child {pid} runs on");
+}
+
+/// Whether process `pid` has stopped, waiting a while for it to be reaped.
+fn stopped(pid: u32) -> bool {
     let gone = || {
-        crate::process::identity::capture(pid as u32)
+        crate::process::identity::capture(pid)
             .unwrap()
             .is_none_or(|identity| !crate::process::identity::alive(&identity).unwrap())
     };
@@ -122,7 +195,7 @@ async fn a_descendant_that_left_the_group_is_stopped_with_the_run() {
     while !gone() && std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(50));
     }
-    assert!(gone(), "the escaped child {pid} runs on");
+    gone()
 }
 
 /// The test process an escaped child outlives no longer than, and where it

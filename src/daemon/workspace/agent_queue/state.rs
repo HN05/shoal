@@ -275,6 +275,12 @@ impl OneShotSlot<'_> {
         // The sender lives as long as this request.
         let _ = self.admitted.wait_for(Option::is_some).await;
     }
+
+    /// Keep the slot of a run whose processes may still be running until the
+    /// daemon restarts.
+    pub(crate) fn keep(self) {
+        std::mem::forget(self);
+    }
 }
 
 impl Drop for OneShotSlot<'_> {
