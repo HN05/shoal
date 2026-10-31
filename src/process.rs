@@ -13,6 +13,20 @@ use anyhow::{Context, Result};
 use std::{collections::HashSet, path::Path, time::Duration};
 use tokio::process::Command;
 
+/// The processes of this user working in `root`, each verified by its
+/// identity, so a caller can stop what a crashed owner left there.
+pub async fn identities_in(root: &Path) -> Result<Vec<identity::Identity>> {
+    let mut found = Vec::new();
+    for (pid, _) in directory_users(root).await? {
+        if let Some(identity) = identity::capture(pid)?
+            && identity::works_in(&identity, root)?
+        {
+            found.push(identity);
+        }
+    }
+    Ok(found)
+}
+
 /// Automatic cleanup treats every process using the directory as activity.
 pub async fn in_directory(root: &Path) -> Result<Vec<String>> {
     in_directory_except(root, &[]).await

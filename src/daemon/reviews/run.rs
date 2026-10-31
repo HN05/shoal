@@ -1,7 +1,11 @@
 //! Running queued reviews: each starts at once, takes the workspace's HEAD,
 //! runs its reviewer in a detached checkout, falls back to a second
 //! reviewer once, and records what it found.
-use std::{collections::HashSet, path::Path, sync::Arc};
+use std::{
+    collections::HashSet,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use anyhow::{Context, Result};
 use tokio::{sync::watch, task::JoinSet};
@@ -12,6 +16,7 @@ use super::{
     store,
 };
 use crate::{
+    agent::trust::TrustConfig,
     config::{Effective, templates},
     daemon::{log, workspace::Manager},
     model::Workspace,
@@ -214,12 +219,7 @@ impl Manager {
             &files.checkout(),
         );
         let ended = reviewer::run(&reviewer, cancelled).await;
-        if let Some((entries, config)) = trusted
-            && let Err(error) = entries.remove(&config, &[canonical(&files.checkout())])
-        {
-            log!("{} trust entry of a review: {error:#}", entries.tool);
-        }
-        let _ = std::fs::remove_file(files.output());
+        end_attempt(trusted, files);
         ended
     }
 
@@ -351,20 +351,8 @@ impl Manager {
         if requeued > 0 {
             log!("queued {requeued} interrupted reviews again");
         }
-        let directory = self.paths.reviews();
-        let entries = match std::fs::read_dir(&directory) {
-            Ok(entries) => entries,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(error) => {
-                return Err(error).with_context(|| format!("read {}", directory.display()));
-            }
-        };
-        for entry in entries {
-            let files = Files {
-                directory: entry?.path(),
-            };
-            forget_trust(&canonical(&files.checkout()), &self.paths.home);
-            remove_run(&files).await?;
+        for files in run_directories(&self.paths.reviews())? {
+            remove_interrupted_run(&files, &self.paths.home).await?;
         }
         Ok(())
     }
@@ -410,10 +398,7 @@ fn trust(
     reviewer: &Reviewer,
     home: &Path,
     checkout: &Path,
-) -> Option<(
-    &'static crate::agent::trust::TrustConfig,
-    std::path::PathBuf,
-)> {
+) -> Option<(&'static TrustConfig, PathBuf)> {
     if !crate::build::changes_user_files() {
         return None;
     }
@@ -431,6 +416,52 @@ fn trust(
             None
         }
     }
+}
+
+/// Undo what an attempt set up, so another reviewer starts clean: the
+/// trust entry `trusted` added and the result file.
+fn end_attempt(trusted: Option<(&'static TrustConfig, PathBuf)>, files: &Files) {
+    if let Some((entries, config)) = trusted
+        && let Err(error) = entries.remove(&config, &[canonical(&files.checkout())])
+    {
+        log!("{} trust entry of a review: {error:#}", entries.tool);
+    }
+    let _ = std::fs::remove_file(files.output());
+}
+
+/// The runs a stopped daemon left in `directory`.
+fn run_directories(directory: &Path) -> Result<Vec<Files>> {
+    let entries = match std::fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error).with_context(|| format!("read {}", directory.display())),
+    };
+    entries
+        .map(|entry| {
+            Ok(Files {
+                directory: entry?.path(),
+            })
+        })
+        .collect()
+}
+
+/// Remove a run a stopped daemon left: stop the reviewer processes still
+/// working in its checkout, verified by identity, then remove its trust
+/// entries and files.
+async fn remove_interrupted_run(files: &Files, home: &Path) -> Result<()> {
+    let checkout = canonical(&files.checkout());
+    if checkout.is_dir() {
+        let survivors = crate::process::identities_in(&checkout).await?;
+        if !survivors.is_empty() {
+            log!(
+                "stopping {} reviewer processes a stopped daemon left",
+                survivors.len()
+            );
+        }
+        crate::process::identity::stop_verified(&survivors).await?;
+    }
+    forget_trust(&checkout, home);
+    remove_run(files).await
 }
 
 /// Remove trust entries an interrupted review may have left in the tools'
@@ -464,6 +495,6 @@ async fn remove_run(files: &Files) -> Result<()> {
     }
 }
 
-fn canonical(path: &Path) -> std::path::PathBuf {
+fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
 }
