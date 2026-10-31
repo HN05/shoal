@@ -195,6 +195,31 @@ Questions).
 you more work during the grace period, run it before starting. It does not keep
 the workspace.
 
+## Local reviews
+
+`shoal review run` queues a one-shot, read-only review of your committed HEAD;
+uncommitted edits stay out of it, so commit first. The findings arrive as a
+message, each numbered `<review>.<n>`; `shoal view review` shows the latest review
+in full and `shoal watch review` waits for one. The reviewer is automated and can
+be wrong: check each finding against the code and the project's rules, then
+resolve every one with an outcome and its data:
+
+```sh
+shoal review resolve 17.1 fixed                    # Only once the fix is committed
+shoal review resolve 17.2 false-positive --reason "The caller checks the length"
+shoal review resolve 17.3 wont-fix --reason "..."  # The claim holds; the code stays
+shoal review resolve 17.4 deferred --issue 1240    # Other work fixes it
+shoal review resolve 17.5 duplicate --of 17.2
+shoal review reply 17.6 "Only on empty input?"     # Discuss without resolving
+```
+
+Use `false-positive` only when the claim is wrong. Leave a finding that needs the
+user's decision unresolved and ask with `shoal questions ask`. The next review
+checks each `fixed` finding. When the repository requires a review, `shoal pr
+open` of a new PR and `shoal ready` are refused until a finished review covers
+HEAD with every finding resolved; refused without one, they start it.
+`shoal review cancel` stops your queued or running review.
+
 ## Workspace title
 
 Once you understand the assignment, name the work in two to five words with
