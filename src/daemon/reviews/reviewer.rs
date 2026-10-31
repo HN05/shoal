@@ -32,6 +32,12 @@ impl Files {
         self.directory.join("checkout")
     }
 
+    /// The ID of the checkout's repository, written before the checkout,
+    /// so a restart finds it without the review.
+    pub fn repository(&self) -> PathBuf {
+        self.directory.join("repository")
+    }
+
     pub fn schema(&self) -> PathBuf {
         self.directory.join("schema.json")
     }

@@ -239,8 +239,8 @@ impl Manager {
         })
     }
 
-    /// The run's directory with the output schema and a detached checkout
-    /// of `head`.
+    /// The run's directory with the output schema, the repository's ID and
+    /// a detached checkout of `head`.
     async fn prepare_checkout(
         &self,
         workspace: &Workspace,
@@ -251,6 +251,8 @@ impl Manager {
         std::fs::create_dir_all(&files.directory)
             .with_context(|| format!("create {}", files.directory.display()))?;
         reviewer::write_schema(files)?;
+        std::fs::write(files.repository(), workspace.repository_id.as_str())
+            .with_context(|| format!("write {}", files.repository().display()))?;
         crate::git::detached::add(&repository.path, &files.checkout(), head).await
     }
 
@@ -432,24 +434,29 @@ impl Manager {
         unreconciled.map(drop)
     }
 
-    /// Remove the runs a stopped daemon left, returning the reviews whose
-    /// runs could not be removed; their checkouts stay for the next start.
     /// Hold what review `id`'s run, which could not be stopped or removed,
     /// may still use until the daemon restarts: its tracking, its checkout
     /// of the repository and an agent slot there.
     async fn hold_unreconciled_run(&self, id: i64) {
-        let files = self.paths.reviews().join(id.to_string());
-        self.oneshot_runs.track(&files);
-        match self.store.run(move |db| store::repository_of(db, id)).await {
-            Ok(Some(repository)) => {
+        let files = Files {
+            directory: self.paths.reviews().join(id.to_string()),
+        };
+        self.oneshot_runs.track(&files.directory);
+        // The run names it, as removing the workspace deletes the review.
+        match std::fs::read_to_string(files.repository()) {
+            Ok(repository) => {
                 self.reviews.hold_checkout(id, &repository).keep();
                 self.agent_queue.hold_oneshot(&repository);
             }
-            Ok(None) => log!("review {id} left a run in a repository Shoal no longer has"),
-            Err(error) => log!("review {id}: {error:#}"),
+            Err(error) => log!(
+                "review {id}: read {}: {error}",
+                files.repository().display()
+            ),
         }
     }
 
+    /// Remove the runs a stopped daemon left, returning the reviews whose
+    /// runs could not be removed; their checkouts stay for the next start.
     async fn remove_interrupted_runs(&self) -> Result<Vec<i64>> {
         let mut kept = Vec::new();
         for files in run_directories(&self.paths.reviews())? {
@@ -469,7 +476,6 @@ impl Manager {
     }
 }
 
-/// The reviewer `agent` with the review's fields, if it has a launcher and
 /// The reviewer `agent` with `model`: its review template's arguments for
 /// this run, after its launcher and the arguments selecting the model.
 fn reviewer_for<'a>(

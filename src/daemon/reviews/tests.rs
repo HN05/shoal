@@ -940,9 +940,13 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
         })
         .await
         .unwrap();
-    let run = manager.paths.reviews().join(stuck.to_string());
-    std::fs::create_dir_all(run.join("checkout")).unwrap();
-    // What the stopped daemon's reviewer left cannot be proven stopped.
+    // The second run's review went with its workspace.
+    let runs = [stuck, stuck + 1].map(|id| manager.paths.reviews().join(id.to_string()));
+    for run in &runs {
+        std::fs::create_dir_all(run.join("checkout")).unwrap();
+        std::fs::write(run.join("repository"), &repository).unwrap();
+    }
+    // What the stopped daemon's reviewers left cannot be proven stopped.
     manager
         .oneshot_runs
         .fail_inventory
@@ -950,12 +954,14 @@ async fn a_run_recovery_cannot_stop_keeps_its_checkout_and_slot() {
     manager.recover_reviews().await.unwrap();
     let review = manager.review(stuck).await.unwrap();
     assert_eq!(review.state, ReviewState::Failed, "{review:?}");
-    assert!(run.join("checkout").exists());
-    // Until a restart, the repository stays held and the slot used.
-    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    assert!(runs.iter().all(|run| run.join("checkout").exists()));
+    // Until a restart, the repository stays held and the slots used.
+    let held = manager.reviews.checkouts.lock().unwrap().clone();
+    let both = [stuck, stuck + 1].map(|id| (id, repository.clone()));
+    assert_eq!(held, std::collections::HashMap::from(both));
     let slots = manager.agent_queue.admitted_oneshots();
-    assert_eq!(slots.len(), 1);
-    assert_eq!(slots[0].0, repository);
+    assert_eq!(slots.len(), 2);
+    assert!(slots.iter().all(|(held, _)| *held == repository));
 }
 
 /// The test process a survivor outlives no longer than.
