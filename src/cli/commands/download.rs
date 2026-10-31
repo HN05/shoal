@@ -8,9 +8,10 @@ use serde::Serialize;
 
 use crate::{
     cli::{
-        args::repository::DownloadArgs, client, commands::items::select_context, context::Context,
+        args::repository::DownloadArgs, client, commands::items::select_repo_context,
+        context::Context,
     },
-    forge::{ForgeRepo, download::Download},
+    forge::download::Download,
 };
 
 /// Where a download was written, for `--json`.
@@ -22,18 +23,13 @@ struct Written {
 }
 
 pub(super) async fn download(ctx: &Context, args: DownloadArgs) -> Result<i32> {
-    // Refuse a bad URL or repository before the workspace picker asks for
-    // anything.
+    // Refuse a bad URL before the workspace picker asks for anything.
     crate::forge::download::check_url(&args.url)?;
-    args.repo
-        .as_deref()
-        .map(ForgeRepo::check_named)
-        .transpose()?;
-    let context = select_context(ctx, args.workspace).await?;
+    let (context, repository) = select_repo_context(ctx, args.workspace, args.repo).await?;
     let download = ctx
         .progress(
             "Downloading",
-            client::forge_download(&ctx.paths, context, args.url, args.repo),
+            client::forge_download(&ctx.paths, context, args.url, repository),
         )
         .await?;
     if args.output == Path::new("-") {
