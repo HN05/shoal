@@ -1,40 +1,48 @@
-//! Moving a removed workspace to another Shoal: a file with the removal
-//! record, its agents' session files and a Git bundle of its checkpoint,
-//! which `shoal move import` restores.
+//! Moving a space to another Shoal: a package with what continues the space
+//! there, which `shoal move import` opens. Every package holds the space's
+//! agents with their sessions and the sessions' files; a workspace's also
+//! holds its removal record and a Git bundle of its checkpoint, and a chat's
+//! its name.
 use std::{
     io::{BufRead, Read, Write},
     path::{Component, Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     execution::recovery::{LastSession, StoppedAgent},
     git::{self, default_branch::DefaultBranchLookup},
-    model::{RemovedWorkspace, Repository},
+    model::{Chat, RemovedWorkspace, Repository},
 };
 
-/// The first line of an export, naming its format version: 2 carries
-/// session files, which version 1 importers would read as part of the
-/// bundle, so an export without them keeps version 1.
-const HEADER: &str = "shoal workspace 2";
-const HEADER_WITHOUT_SESSION_FILES: &str = "shoal workspace 1";
+/// The first line of a package names its format and the version of it,
+/// the lowest that reads the package, so an older Shoal imports what it
+/// can: 1 holds a workspace, 2 a workspace with session files, which
+/// version 1 importers would read as part of the bundle, and 3 any space,
+/// naming its kind.
+const FORMAT: &str = "shoal workspace";
+const VERSION: u32 = 3;
 
-/// What an export holds besides its bundle.
+/// The version of the format that reads the package `manifest` describes.
+fn version(manifest: &Manifest) -> u32 {
+    match (&manifest.space, manifest.session_files.is_empty()) {
+        (Space::Chat(_), _) => VERSION,
+        (Space::Workspace(_), false) => 2,
+        (Space::Workspace(_), true) => 1,
+    }
+}
+
+/// What a package holds besides its session files and bundle.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Manifest {
     /// The exporting repository's origin, which selects the repository to
     /// import into.
     pub remote_url: Option<String>,
-    /// A commit of the default branch the bundle leaves out, which the
-    /// importing repository fetches when it lacks it.
-    pub prerequisite: Option<String>,
-    /// Whether a Git bundle of the checkpoint follows; the default branch
-    /// already has a checkpoint without one.
-    pub bundle: bool,
-    /// The removal record, with agents that start new sessions.
-    pub workspace: RemovedWorkspace,
+    /// The space, by its kind.
+    #[serde(flatten)]
+    pub space: Space,
     /// The agents with their sessions, for an import on the exporting
     /// machine, where the sessions remain, or one told to keep them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -43,6 +51,51 @@ pub struct Manifest {
     /// this order, so their sessions continue on any machine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub session_files: Vec<SessionFile>,
+}
+
+/// The space a package holds, named by its `kind`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a package holds one space, read once"
+)]
+pub enum Space {
+    Workspace(PackagedWorkspace),
+    Chat(PackagedChat),
+}
+
+/// A removed workspace, which the import restores from its checkpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackagedWorkspace {
+    /// A commit of the default branch the bundle leaves out, which the
+    /// importing repository fetches when it lacks it.
+    pub prerequisite: Option<String>,
+    /// Whether a Git bundle of the checkpoint follows; the default branch
+    /// already has a checkpoint without one.
+    pub bundle: bool,
+    /// The removal record, with agents that start new sessions.
+    pub workspace: RemovedWorkspace,
+}
+
+/// A chat, which the import starts again in the repository's checkout,
+/// continuing its agent's session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PackagedChat {
+    pub name: String,
+    pub agent: String,
+}
+
+/// What a package is made from: a removed workspace, or a chat whose agent
+/// ended.
+#[derive(Debug, Clone)]
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a package is made from one space, moved into it"
+)]
+pub enum Source {
+    Workspace(RemovedWorkspace),
+    Chat(Chat),
 }
 
 /// A file of an agent's session, copied unread.
@@ -67,9 +120,9 @@ pub struct SessionSource {
     pub source: PathBuf,
 }
 
-/// An export's stopped agents and last session as the exporting machine
-/// recorded them.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A package's stopped agents and last sessions as the exporting machine
+/// recorded them; a chat's agent is its one last session.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Sessions {
     /// The exporting machine's ID, when it has one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -85,36 +138,55 @@ pub struct Sessions {
     pub last_sessions: Vec<LastSession>,
 }
 
-/// An export the daemon wrote, and the removal that preceded it when the
-/// workspace still existed.
+impl Sessions {
+    /// Each agent's name with the session it reported, stopped agents first.
+    pub fn reported(&self) -> impl Iterator<Item = (&str, &str)> {
+        let stopped = self
+            .agents
+            .iter()
+            .map(|agent| (&agent.record.agent, &agent.record.session));
+        let last = self
+            .last_sessions
+            .iter()
+            .map(|last| (&last.agent, &last.session));
+        stopped
+            .chain(last)
+            .filter_map(|(agent, session)| Some((agent.as_str(), session.as_deref()?)))
+    }
+}
+
+/// A package the daemon wrote, and the removal that preceded it for a
+/// workspace that still existed.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ExportedWorkspace {
+pub struct ExportedSpace {
     pub manifest: Manifest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub removal: Option<crate::removal::RemovalResult>,
-    /// What the export left out, such as session files it could not read.
+    /// What the package left out, such as session files it could not read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
 }
 
-/// Write `removed`, a workspace of `repo`, with its agents' session files
-/// `sessions`, to the new file `path` for `shoal move import`, with a warning
-/// for each session left out because a file of it cannot be read; a failure
-/// leaves no partial file and an existing one is never replaced.
+/// Write the package `manifest` describes, a space of `repo`, with its
+/// agents' session files `sessions`, to the new file `path` for `shoal move
+/// import`, with a warning for each session left out because a file of it
+/// cannot be read; a failure leaves no partial file and an existing one is
+/// never replaced.
 pub async fn export(
     repo: &Repository,
-    removed: RemovedWorkspace,
+    mut manifest: Manifest,
     sessions: Vec<SessionSource>,
     path: PathBuf,
 ) -> Result<(Manifest, Vec<String>)> {
-    let mut manifest = Manifest::of(repo, removed).await?;
     let (sessions, warnings) = tokio::task::spawn_blocking(move || open_sessions(sessions))
         .await
         .context("read the session files")?;
     manifest.session_files = sessions.iter().map(|(file, _)| file.clone()).collect();
-    let bundle = match manifest.bundle {
-        true => Some(Bundle::create(&repo.path, &manifest).await?),
-        false => None,
+    let bundle = match &manifest.space {
+        Space::Workspace(packaged) if packaged.bundle => {
+            Some(Bundle::create(&repo.path, packaged).await?)
+        }
+        _ => None,
     };
     let written = manifest.clone();
     tokio::task::spawn_blocking(move || write_new(&path, &written, &sessions, bundle.as_ref()))
@@ -170,44 +242,69 @@ fn open_session_file(source: &SessionSource) -> Result<(std::fs::File, u64)> {
 }
 
 impl Manifest {
-    /// What exporting `removed` writes: a bundle unless the default branch
-    /// the importer fetches already has the checkpoint.
-    async fn of(repo: &Repository, removed: RemovedWorkspace) -> Result<Self> {
-        let commit = removed.checkpoint.commit.clone();
-        let shared = shared_commit(&repo.path).await?;
-        let bundle = match &shared {
-            Some(shared) => {
-                !git::is_ancestor(&repo.path, &commit, shared, git::isolated_command).await?
+    /// The package of `source`, a space of `repo`, without its session
+    /// files.
+    pub async fn of(repo: &Repository, source: Source) -> Result<Self> {
+        let remote_url = crate::repository::remote_url_from_source(&repo.source).await?;
+        let machine = crate::process::machine::id();
+        let (space, sessions) = match source {
+            Source::Workspace(removed) => {
+                let sessions = Sessions {
+                    machine,
+                    agents: removed.agents.clone(),
+                    last_sessions: removed.last_sessions.clone(),
+                };
+                let packaged = PackagedWorkspace::of(&repo.path, removed).await?;
+                (Space::Workspace(packaged), sessions)
             }
-            None => true,
+            Source::Chat(chat) => {
+                let sessions = Sessions {
+                    machine,
+                    agents: Vec::new(),
+                    last_sessions: vec![chat_session(&chat)],
+                };
+                let packaged = PackagedChat {
+                    name: chat.name,
+                    agent: chat.agent,
+                };
+                (Space::Chat(packaged), sessions)
+            }
         };
-        let sessions = Some(Sessions {
-            machine: crate::process::machine::id(),
-            agents: removed.agents.clone(),
-            last_sessions: removed.last_sessions.clone(),
-        });
         Ok(Self {
-            remote_url: crate::repository::remote_url_from_source(&repo.source).await?,
-            prerequisite: if bundle { shared } else { Some(commit) },
-            bundle,
-            workspace: moved(removed),
-            sessions,
+            remote_url,
+            space,
+            sessions: Some(sessions),
             session_files: Vec::new(),
         })
     }
 
-    /// The removal record to import on `machine`. Each agent with a session
-    /// keeps it as `keep_sessions` says, otherwise on the exporting machine
-    /// or when the export carries its files; on another machine, it keeps no
-    /// place or waiting wrapper there. Every other agent starts a new
-    /// session.
-    pub fn workspace_on(
-        &self,
-        machine: Option<&str>,
-        keep_sessions: Option<bool>,
-    ) -> RemovedWorkspace {
+    /// The space's name.
+    pub fn name(&self) -> &str {
+        match &self.space {
+            Space::Workspace(packaged) => &packaged.workspace.name,
+            Space::Chat(packaged) => &packaged.name,
+        }
+    }
+
+    /// The agents to import on `machine`, without their sessions on
+    /// another. Each agent with a session keeps it as `keep_sessions` says,
+    /// otherwise on the exporting machine or when the package carries its
+    /// files; on another machine, it keeps no place or waiting wrapper there.
+    /// Every other agent starts a new session.
+    pub fn sessions_on(&self, machine: Option<&str>, keep_sessions: Option<bool>) -> Sessions {
         let Some(sessions) = &self.sessions else {
-            return self.workspace.clone();
+            return match &self.space {
+                Space::Workspace(packaged) => Sessions {
+                    machine: None,
+                    agents: packaged.workspace.agents.clone(),
+                    last_sessions: packaged.workspace.last_sessions.clone(),
+                },
+                Space::Chat(_) => Sessions {
+                    machine: None,
+                    agents: Vec::new(),
+                    last_sessions: Vec::new(),
+                },
+            };
         };
         let exporting = machine.is_some() && sessions.machine.as_deref() == machine;
         let keeps = |session: &Option<String>| {
@@ -239,10 +336,10 @@ impl Manifest {
                 }
             }
         });
-        RemovedWorkspace {
+        Sessions {
+            machine: sessions.machine.clone(),
             agents: agents.collect(),
             last_sessions: last_sessions.collect(),
-            ..self.workspace.clone()
         }
     }
 
@@ -254,7 +351,50 @@ impl Manifest {
     }
 }
 
-/// A Git bundle of an export's checkpoint, in a directory of its own because
+impl PackagedWorkspace {
+    /// The package of `removed`, a workspace of the repository at `repo`:
+    /// a bundle unless the default branch the importer fetches already has
+    /// the checkpoint.
+    async fn of(repo: &Path, removed: RemovedWorkspace) -> Result<Self> {
+        let commit = removed.checkpoint.commit.clone();
+        let shared = shared_commit(repo).await?;
+        let bundle = match &shared {
+            Some(shared) => !git::is_ancestor(repo, &commit, shared, git::isolated_command).await?,
+            None => true,
+        };
+        Ok(Self {
+            prerequisite: if bundle { shared } else { Some(commit) },
+            bundle,
+            workspace: moved(removed),
+        })
+    }
+
+    /// The removal record to import, whose agents have `sessions`.
+    pub fn workspace_with(&self, sessions: Sessions) -> RemovedWorkspace {
+        RemovedWorkspace {
+            agents: sessions.agents,
+            last_sessions: sessions.last_sessions,
+            ..self.workspace.clone()
+        }
+    }
+}
+
+/// The session `chat`'s agent continues, as the one last session of its
+/// package.
+fn chat_session(chat: &Chat) -> LastSession {
+    LastSession {
+        execution: chat.id.clone(),
+        agent: chat.agent.clone(),
+        session: chat.session.clone(),
+        moved: false,
+        origin: None,
+        stopped_by: None,
+        stop: None,
+        model: Default::default(),
+    }
+}
+
+/// A Git bundle of a package's checkpoint, in a directory of its own because
 /// Git replaces the file.
 struct Bundle {
     directory: tempfile::TempDir,
@@ -264,12 +404,12 @@ impl Bundle {
     const NAME: &str = "checkpoint.bundle";
 
     /// Bundle the checkpoint without the prerequisite the importer fetches.
-    async fn create(repo: &Path, manifest: &Manifest) -> Result<Self> {
+    async fn create(repo: &Path, packaged: &PackagedWorkspace) -> Result<Self> {
         let bundle = Self {
             directory: tempfile::tempdir()?,
         };
-        let reference = git::checkpoint::reference(&manifest.workspace.checkpoint.commit);
-        let exclude = manifest.prerequisite.as_deref();
+        let reference = git::checkpoint::reference(&packaged.workspace.checkpoint.commit);
+        let exclude = packaged.prerequisite.as_deref();
         git::bundle::create(repo, &bundle.path(), &reference, exclude).await?;
         Ok(bundle)
     }
@@ -291,10 +431,7 @@ fn write_new(
     let file = tempfile::NamedTempFile::new_in(directory)
         .with_context(|| format!("create a file in {}", directory.display()))?;
     let mut out = std::io::BufWriter::new(file.as_file());
-    match sessions.is_empty() {
-        true => writeln!(out, "{HEADER_WITHOUT_SESSION_FILES}")?,
-        false => writeln!(out, "{HEADER}")?,
-    }
+    writeln!(out, "{FORMAT} {}", version(manifest))?;
     serde_json::to_writer(&mut out, manifest)?;
     writeln!(out)?;
     for (session, input) in sessions {
@@ -323,7 +460,7 @@ pub fn directory(path: &Path) -> &Path {
     }
 }
 
-/// An export read back: its manifest, and its session files and bundle in
+/// A package read back: its manifest, and its session files and bundle in
 /// temporary files.
 pub struct Import {
     pub manifest: Manifest,
@@ -341,19 +478,31 @@ impl Import {
     pub fn read(input: &mut impl BufRead) -> Result<Self> {
         let mut header = String::new();
         input.read_line(&mut header)?;
-        let carries_sessions = match header.trim_end() {
-            HEADER => true,
-            HEADER_WITHOUT_SESSION_FILES => false,
-            header if header.starts_with("shoal workspace ") => {
-                bail!("the export uses a newer format ({header}); upgrade Shoal to import it")
-            }
-            _ => bail!("not a Shoal workspace export"),
-        };
+        let version = header
+            .trim_end()
+            .strip_prefix(FORMAT)
+            .and_then(|version| version.strip_prefix(' '))
+            .context("not a Shoal export")?;
+        let version: u32 = version
+            .parse()
+            .ok()
+            .filter(|version| (1..=VERSION).contains(version))
+            .with_context(|| {
+                format!("the export uses a newer format ({FORMAT} {version}); upgrade Shoal to import it")
+            })?;
         let mut line = String::new();
         input.read_line(&mut line)?;
-        let mut manifest: Manifest =
+        let mut manifest: serde_json::Value =
             serde_json::from_str(&line).context("read the export's manifest")?;
-        if !carries_sessions {
+        // Earlier versions hold a workspace without naming the kind.
+        if version < VERSION
+            && let Some(manifest) = manifest.as_object_mut()
+        {
+            manifest.insert("kind".into(), "workspace".into());
+        }
+        let mut manifest: Manifest =
+            serde_json::from_value(manifest).context("read the export's manifest")?;
+        if version == 1 {
             manifest.session_files.clear();
         }
         let sessions = manifest
@@ -361,7 +510,7 @@ impl Import {
             .iter()
             .map(|file| ImportedSessionFile::read(input, file.clone()))
             .collect::<Result<_>>()?;
-        let bundle = if manifest.bundle {
+        let bundle = if matches!(&manifest.space, Space::Workspace(packaged) if packaged.bundle) {
             let mut bundle = tempfile::NamedTempFile::new()?;
             std::io::copy(input, &mut bundle)?;
             bundle.flush()?;

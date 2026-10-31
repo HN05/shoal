@@ -17,7 +17,7 @@ use crate::{
     },
     removal::{InspectionPolicy, UnsavedWork},
     time::unix_seconds,
-    transfer::{ExportedWorkspace, SessionSource},
+    transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
 impl Manager {
@@ -169,7 +169,7 @@ impl Manager {
         unsaved: UnsavedWork,
         inspection: InspectionPolicy,
         file: std::path::PathBuf,
-    ) -> Result<ExportedWorkspace> {
+    ) -> Result<ExportedSpace> {
         crate::daemon::access::ensure_writable(crate::transfer::directory(&file)).await?;
         let (removal, settings) = match self.workspace(selector).await {
             Ok(workspace) => {
@@ -201,25 +201,26 @@ impl Manager {
             Some(settings) => settings,
             None => self.repository_settings(&repo.id).await,
         };
-        let (sessions, mut warnings) = self.session_sources(&repo, settings, &removed).await;
-        let (manifest, left_out) = crate::transfer::export(&repo, removed, sessions, file).await?;
+        let manifest = Manifest::of(&repo, Source::Workspace(removed)).await?;
+        let (sessions, mut warnings) = self.session_sources(&repo, settings, &manifest).await;
+        let (manifest, left_out) = crate::transfer::export(&repo, manifest, sessions, file).await?;
         warnings.extend(left_out);
-        Ok(ExportedWorkspace {
+        Ok(ExportedSpace {
             manifest,
             removal: removal.map(|(_, removal)| removal),
             warnings,
         })
     }
 
-    /// The files of the sessions the agents of `removed` reported, as
-    /// `settings` describes the agents, wherever they ran, with a warning for
-    /// each session left out, which then starts over on the importing
-    /// machine.
+    /// The files of the sessions the agents of the package `manifest`
+    /// reported, as `settings` describes the agents, wherever they ran, with
+    /// a warning for each session left out, which then starts over on the
+    /// importing machine.
     async fn session_sources(
         &self,
         repo: &Repository,
         settings: Result<Effective>,
-        removed: &RemovedWorkspace,
+        manifest: &Manifest,
     ) -> (Vec<SessionSource>, Vec<String>) {
         let settings = match settings {
             Ok(settings) => settings,
@@ -243,9 +244,9 @@ impl Manager {
                 Vec::new()
             });
         let home = self.paths.home.clone();
-        let removed = removed.clone();
+        let sessions = manifest.sessions.clone().unwrap_or_default();
         let found = tokio::task::spawn_blocking(move || {
-            crate::cli::agents::session_sources(&settings, &home, &environments, &removed)
+            crate::cli::agents::session_sources(&settings, &home, &environments, &sessions)
         })
         .await;
         match found {

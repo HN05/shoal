@@ -98,15 +98,24 @@ async fn import(
     file: &[u8],
 ) -> crate::model::RestoredWorkspace {
     let import = Import::read(&mut &file[..]).unwrap();
+    let packaged = packaged_workspace(&import.manifest);
     manager
         .import_workspace(
             &repo.id.as_str().into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
-            import.manifest.prerequisite.as_deref(),
-            import.manifest.workspace,
+            packaged.prerequisite.as_deref(),
+            packaged.workspace.clone(),
         )
         .await
         .unwrap()
+}
+
+/// The workspace `manifest` packages.
+fn packaged_workspace(manifest: &Manifest) -> &PackagedWorkspace {
+    match &manifest.space {
+        Space::Workspace(packaged) => packaged,
+        Space::Chat(_) => panic!("a chat package: {manifest:?}"),
+    }
 }
 
 #[tokio::test]
@@ -141,7 +150,7 @@ async fn import_opens_the_exported_branch_with_its_files_and_agents() {
     let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
     assert_eq!(read.manifest.remote_url.as_deref(), origin.to_str());
-    assert!(read.manifest.bundle);
+    assert!(packaged_workspace(&read.manifest).bundle);
     // The exporting machine's import can resume the session it recorded.
     let sessions = read.manifest.sessions.as_ref().unwrap();
     assert_eq!(sessions.machine, crate::process::machine::id());
@@ -200,12 +209,13 @@ async fn import_writes_nothing_while_the_repository_moves() {
         .await
         .unwrap();
     let import = Import::read(&mut &file[..]).unwrap();
+    let packaged = packaged_workspace(&import.manifest);
     let error = importing
         .import_workspace(
             &target_repo.id.as_str().into(),
             import.bundle.as_ref().map(|bundle| bundle.path()),
-            import.manifest.prerequisite.as_deref(),
-            import.manifest.workspace,
+            packaged.prerequisite.as_deref(),
+            packaged.workspace.clone(),
         )
         .await
         .unwrap_err();
@@ -228,8 +238,9 @@ async fn export_leaves_out_a_checkpoint_the_default_branch_has() {
 
     let file = export_removed(&exporting, &workspace.id).await;
     let read = Import::read(&mut &file[..]).unwrap();
-    assert!(!read.manifest.bundle);
-    assert_eq!(read.manifest.prerequisite.as_deref(), Some(head.trim()));
+    let packaged = packaged_workspace(&read.manifest);
+    assert!(!packaged.bundle);
+    assert_eq!(packaged.prerequisite.as_deref(), Some(head.trim()));
     let restored = import(&importing, &target_repo, &file).await;
     assert_eq!(
         git(&restored.opened.workspace.path, &["rev-parse", "HEAD"]),
@@ -267,11 +278,77 @@ async fn export_the_daemon_cannot_write_keeps_the_workspace() {
 #[test]
 fn import_refuses_other_files_and_newer_formats() {
     let error = Import::read(&mut &b"not an export\n"[..]).err().unwrap();
-    assert_eq!(error.to_string(), "not a Shoal workspace export");
-    let error = Import::read(&mut &b"shoal workspace 3\n{}\n"[..])
+    assert_eq!(error.to_string(), "not a Shoal export");
+    let error = Import::read(&mut &b"shoal workspace 4\n{}\n"[..])
         .err()
         .unwrap();
     assert!(error.to_string().contains("newer format"), "{error}");
+}
+
+/// The header of format version `version`.
+fn header(version: u32) -> String {
+    format!("{FORMAT} {version}")
+}
+
+#[test]
+fn a_workspace_package_keeps_the_version_earlier_shoals_read() {
+    let mut manifest = manifest_with_sessions();
+    assert_eq!(version(&manifest), 1);
+    manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
+    assert_eq!(version(&manifest), 2);
+    // Earlier versions name no kind; their manifests hold a workspace.
+    let mut value = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(value["kind"], "workspace");
+    value.as_object_mut().unwrap().remove("kind");
+    let bytes = format!("{}\n{value}\nx", header(2)).into_bytes();
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    assert_eq!(packaged_workspace(&import.manifest).workspace.name, "topic");
+    assert_eq!(import.sessions.len(), 1);
+}
+
+#[test]
+fn a_chat_package_names_its_kind_and_continues_its_session() {
+    let chat = Chat {
+        id: "c1".into(),
+        repository_id: "r1".into(),
+        name: "plan-cache".into(),
+        agent: "claude".into(),
+        pid: 1,
+        started_at: 0,
+        origin: None,
+        tmp_dir: None,
+        session: Some("s1".into()),
+    };
+    let mut manifest = Manifest {
+        remote_url: None,
+        space: Space::Chat(PackagedChat {
+            name: chat.name.clone(),
+            agent: chat.agent.clone(),
+        }),
+        sessions: Some(Sessions {
+            machine: Some("m1".into()),
+            agents: Vec::new(),
+            last_sessions: vec![chat_session(&chat)],
+        }),
+        session_files: vec![session_file("p/s1.jsonl", 3)],
+    };
+    assert_eq!(version(&manifest), VERSION);
+    let bytes = export_bytes(&header(VERSION), &manifest, &["abc"]);
+    let import = Import::read(&mut &bytes[..]).unwrap();
+    assert!(import.bundle.is_none());
+    assert_eq!(import.manifest.name(), "plan-cache");
+    assert!(matches!(&import.manifest.space, Space::Chat(chat) if chat.agent == "claude"));
+    let reported: Vec<_> = import
+        .manifest
+        .sessions_on(Some("m2"), None)
+        .reported()
+        .map(|(agent, session)| (agent.to_owned(), session.to_owned()))
+        .collect();
+    assert_eq!(reported, [("claude".to_owned(), "s1".to_owned())]);
+    // Without its files, another machine starts a new session.
+    manifest.session_files.clear();
+    assert_eq!(manifest.sessions_on(Some("m2"), None).reported().count(), 0);
+    assert_eq!(manifest.sessions_on(Some("m1"), None).reported().count(), 1);
 }
 
 /// The bytes of an export of `manifest`'s format carrying `contents` for its
@@ -297,7 +374,7 @@ fn session_file(path: &str, size: u64) -> SessionFile {
 fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
     let mut manifest = manifest_with_sessions();
     manifest.session_files = vec![session_file("p/s1.jsonl", 3), session_file("p/s1/a", 2)];
-    let bytes = export_bytes(HEADER, &manifest, &["abc", "de"]);
+    let bytes = export_bytes(&header(2), &manifest, &["abc", "de"]);
     let import = Import::read(&mut &bytes[..]).unwrap();
     let read: Vec<_> = import
         .sessions
@@ -314,18 +391,18 @@ fn import_reads_session_files_and_refuses_paths_outside_their_directory() {
             ("p/s1/a".to_owned(), "de".to_owned())
         ]
     );
-    let short = export_bytes(HEADER, &manifest, &["abc", "d"]);
+    let short = export_bytes(&header(2), &manifest, &["abc", "d"]);
     let error = Import::read(&mut &short[..]).err().unwrap();
     assert!(error.to_string().contains("ends inside"), "{error}");
     for path in ["../escape", "/absolute"] {
         manifest.session_files = vec![session_file(path, 1)];
-        let bytes = export_bytes(HEADER, &manifest, &["x"]);
+        let bytes = export_bytes(&header(2), &manifest, &["x"]);
         let error = Import::read(&mut &bytes[..]).err().unwrap();
         assert!(error.to_string().contains("outside"), "{error}");
     }
     // A version 1 export has no session files, whatever its manifest says.
     manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
-    let bytes = export_bytes(HEADER_WITHOUT_SESSION_FILES, &manifest, &[]);
+    let bytes = export_bytes(&header(1), &manifest, &[]);
     assert!(Import::read(&mut &bytes[..]).unwrap().sessions.is_empty());
 }
 
@@ -384,14 +461,16 @@ fn manifest_with_sessions() -> Manifest {
     .unwrap();
     Manifest {
         remote_url: None,
-        prerequisite: None,
-        bundle: false,
         sessions: Some(Sessions {
             machine: Some("m1".into()),
             agents: workspace.agents.clone(),
             last_sessions: workspace.last_sessions.clone(),
         }),
-        workspace: moved(workspace),
+        space: Space::Workspace(PackagedWorkspace {
+            prerequisite: None,
+            bundle: false,
+            workspace: moved(workspace),
+        }),
         session_files: Vec::new(),
     }
 }
@@ -399,7 +478,7 @@ fn manifest_with_sessions() -> Manifest {
 #[test]
 fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     let mut manifest = manifest_with_sessions();
-    let here = manifest.workspace_on(Some("m1"), None);
+    let here = manifest.sessions_on(Some("m1"), None);
     assert_eq!(here.agents, manifest.sessions.as_ref().unwrap().agents);
     assert!(!here.agents[0].record.moved);
     let place =
@@ -416,9 +495,9 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
     assert_eq!(place(last.origin.as_ref()).as_deref(), Some("tab"));
 
     for new in [
-        manifest.workspace_on(Some("m2"), None),
-        manifest.workspace_on(None, None),
-        manifest.workspace_on(Some("m1"), Some(false)),
+        manifest.sessions_on(Some("m2"), None),
+        manifest.sessions_on(None, None),
+        manifest.sessions_on(Some("m1"), Some(false)),
     ] {
         assert!(new.agents[0].record.moved);
         assert_eq!(new.agents[0].record.session, None);
@@ -427,7 +506,7 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
 
     // Another machine told to keep the sessions keeps no terminal place of
     // the exporting machine's.
-    let kept = manifest.workspace_on(Some("m2"), Some(true));
+    let kept = manifest.sessions_on(Some("m2"), Some(true));
     assert!(!kept.agents[0].record.moved);
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.origin, None);
@@ -436,25 +515,25 @@ fn an_import_keeps_sessions_on_the_exporting_machine_or_when_asked() {
 
     // So does an export from a machine without an ID.
     manifest.sessions.as_mut().unwrap().machine = None;
-    assert!(manifest.workspace_on(None, None).agents[0].record.moved);
-    let kept = manifest.workspace_on(None, Some(true));
+    assert!(manifest.sessions_on(None, None).agents[0].record.moved);
+    let kept = manifest.sessions_on(None, Some(true));
     assert_eq!(kept.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(kept.agents[0].record.origin, None);
 
     // Another machine keeps a session whose files the export carries.
     manifest.session_files = vec![session_file("p/s1.jsonl", 1)];
-    let carried = manifest.workspace_on(Some("m2"), None);
+    let carried = manifest.sessions_on(Some("m2"), None);
     assert_eq!(carried.agents[0].record.session.as_deref(), Some("s1"));
     assert_eq!(carried.agents[0].record.origin, None);
     assert!(carried.last_sessions[0].moved);
-    let new = manifest.workspace_on(Some("m2"), Some(false));
+    let new = manifest.sessions_on(Some("m2"), Some(false));
     assert!(new.agents[0].record.moved);
     manifest.session_files.clear();
 
     // An agent that never reported a session starts a new one either way.
     let sessions = manifest.sessions.as_mut().unwrap();
     sessions.last_sessions[0].session = None;
-    let kept = manifest.workspace_on(None, Some(true));
+    let kept = manifest.sessions_on(None, Some(true));
     assert!(!kept.agents[0].record.moved);
     assert!(kept.last_sessions[0].moved);
 }

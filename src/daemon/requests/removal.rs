@@ -67,7 +67,7 @@ pub(super) async fn handle(
             workspace,
             unsaved,
             file,
-        } => Body::ExportedWorkspace(
+        } => Body::ExportedSpace(
             manager
                 .export_workspace(&workspace, unsaved, InspectionPolicy::GitOnly, file)
                 .await?,

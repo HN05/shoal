@@ -578,7 +578,7 @@ response_bodies! {
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
-    ExportedWorkspace(crate::transfer::ExportedWorkspace),
+    ExportedSpace(crate::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     Hook(Option<std::path::PathBuf>),

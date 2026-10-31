@@ -14,21 +14,21 @@ use super::{AgentEnvironment, Integration, agent_integration, configured_environ
 use crate::{
     cli::{client, commands::workspaces, context::Context},
     config::Effective,
-    model::{RemovedWorkspace, Workspace},
+    model::Workspace,
     protocol::ConfigTarget,
-    transfer::{ImportedSessionFile, SessionSource},
+    transfer::{ImportedSessionFile, SessionSource, Sessions},
 };
 
-/// The files of the sessions the agents of `removed` reported, as `settings`
-/// describes the agents, wherever this process's environment under `home`
-/// or one of `agent_environments`, those its agents ran with, put them,
-/// with a warning for each session whose files cannot be read, which then
-/// starts over.
+/// The files of the sessions the agents of `sessions` reported, as
+/// `settings` describes the agents, wherever this process's environment
+/// under `home` or one of `agent_environments`, those its agents ran with,
+/// put them, with a warning for each session whose files cannot be read,
+/// which then starts over.
 pub(crate) fn session_sources(
     settings: &Effective,
     home: &Path,
     agent_environments: &[BTreeMap<String, String>],
-    removed: &RemovedWorkspace,
+    sessions: &Sessions,
 ) -> (Vec<SessionSource>, Vec<String>) {
     let configured = configured_environments(agent_environments);
     let environments: Vec<_> = std::iter::once(AgentEnvironment::inherited(home))
@@ -38,25 +38,17 @@ pub(crate) fn session_sources(
                 .map(|configured| AgentEnvironment { home, configured }),
         )
         .collect();
-    let stopped = removed
-        .agents
-        .iter()
-        .map(|agent| (&agent.record.agent, &agent.record.session));
-    let last = removed
-        .last_sessions
-        .iter()
-        .map(|last| (&last.agent, &last.session));
     let mut seen = BTreeSet::new();
     let mut sources = Vec::new();
     let mut warnings = Vec::new();
-    for (agent, session) in stopped.chain(last) {
-        let Some(session) = session.as_deref().filter(|id| seen.insert(*id)) else {
+    for (agent, session) in sessions.reported() {
+        if !seen.insert(session) {
             continue;
-        };
+        }
         let integration = agent_integration(settings, agent);
         match find_session(integration, &environments, session) {
             Ok(files) => sources.extend(files.into_iter().map(|(path, source)| SessionSource {
-                agent: agent.clone(),
+                agent: agent.to_owned(),
                 session: session.to_owned(),
                 path,
                 source,

@@ -17,7 +17,7 @@ use crate::{
     model::Workspace,
     protocol::RemovalMethod,
     removal::{RemovalCheck, UnsavedWork},
-    transfer::ExportedWorkspace,
+    transfer::ExportedSpace,
 };
 
 use super::STANDARD_STREAM;
@@ -154,8 +154,8 @@ impl Output {
     }
 
     /// Report the export, copying it to standard output when it goes there.
-    fn report(self, ctx: &Context, exported: &ExportedWorkspace) -> Result<i32> {
-        let name = &exported.manifest.workspace.name;
+    fn report(self, ctx: &Context, exported: &ExportedSpace) -> Result<i32> {
+        let name = exported.manifest.name();
         let Self::File { path } = &self else {
             let mut file = std::fs::File::open(self.file())?;
             crate::stdout::write(|stdout| {
@@ -177,17 +177,13 @@ impl Output {
 }
 
 /// Export the removed workspace `selector` names, which needs no removal.
-async fn export_removed(
-    ctx: &Context,
-    selector: &str,
-    output: &Output,
-) -> Result<ExportedWorkspace> {
+async fn export_removed(ctx: &Context, selector: &str, output: &Output) -> Result<ExportedSpace> {
     let method = RemovalMethod::ExportWorkspace {
         workspace: selector.to_owned(),
         unsaved: UnsavedWork::default(),
         file: output.file(),
     };
-    let exported = request::<ExportedWorkspace>(&ctx.paths, method).await?;
+    let exported = request::<ExportedSpace>(&ctx.paths, method).await?;
     warn(&exported);
     Ok(exported)
 }
@@ -200,7 +196,7 @@ async fn export_workspace(
     workspace: &str,
     yes: bool,
     output: &Output,
-) -> Result<ExportedWorkspace> {
+) -> Result<ExportedSpace> {
     let check = check_export(ctx, workspace, output).await?;
     ensure_children_exported(&check, &[])?;
     let action = format!(
@@ -216,7 +212,7 @@ async fn export_checked(
     ctx: &Context,
     check: &RemovalCheck,
     output: &Output,
-) -> Result<ExportedWorkspace> {
+) -> Result<ExportedSpace> {
     let method = RemovalMethod::ExportWorkspace {
         workspace: check.workspace.id.clone(),
         unsaved: UnsavedWork::confirming(check),
@@ -225,7 +221,7 @@ async fn export_checked(
     let exported = super::super::workspaces::leaving(
         ctx,
         &check.workspace,
-        request::<ExportedWorkspace>(&ctx.paths, method),
+        request::<ExportedSpace>(&ctx.paths, method),
     )
     .await?;
     if let Some(error) = exported
@@ -240,7 +236,7 @@ async fn export_checked(
 }
 
 /// Show what the export left out.
-fn warn(exported: &ExportedWorkspace) {
+fn warn(exported: &ExportedSpace) {
     for warning in &exported.warnings {
         eprintln!("warning: {warning}");
     }

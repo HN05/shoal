@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::json;
 
 use crate::{
@@ -17,9 +17,9 @@ use crate::{
         output::{Palette, Style},
         ui,
     },
-    model::{RemovedWorkspace, RestoredWorkspace},
+    model::RestoredWorkspace,
     protocol::RemovalMethod,
-    transfer::{Import, Manifest},
+    transfer::{Import, Manifest, Sessions, Space},
 };
 
 use super::{super::restore::Reopened, STANDARD_STREAM};
@@ -73,12 +73,18 @@ async fn import_workspace(
         .or_else(|| import.manifest.remote_url.clone())
         .context("the exported repository has no origin; select the repository to import into with --repo")?;
     let selector = ui::repository_selector(repository)?;
-    let record = workspace_here(&import.manifest, options.sessions);
-    let kept = kept_sessions(&record);
+    let Space::Workspace(packaged) = &import.manifest.space else {
+        bail!(
+            "{} holds a chat, which this Shoal cannot import",
+            file.display()
+        );
+    };
+    let sessions = sessions_here(&import.manifest, options.sessions);
+    let kept: BTreeSet<&str> = sessions.reported().map(|(_, session)| session).collect();
     let carried: Vec<_> = import
         .sessions
         .into_iter()
-        .filter(|imported| kept.contains(&imported.file.session))
+        .filter(|imported| kept.contains(imported.file.session.as_str()))
         .collect();
     let method = RemovalMethod::ImportWorkspace {
         repository: selector.clone(),
@@ -86,8 +92,8 @@ async fn import_workspace(
             .bundle
             .as_ref()
             .map(|bundle| bundle.path().to_owned()),
-        prerequisite: import.manifest.prerequisite.clone(),
-        workspace: Box::new(record),
+        prerequisite: packaged.prerequisite.clone(),
+        workspace: Box::new(packaged.workspace_with(sessions.clone())),
     };
     let restored = ctx
         .progress(
@@ -103,19 +109,6 @@ async fn import_workspace(
     };
     agents::install_session_files(ctx, home, &carried).await;
     restored
-}
-
-/// The sessions the agents of the imported record `removed` continue.
-fn kept_sessions(removed: &RemovedWorkspace) -> BTreeSet<String> {
-    let stopped = removed
-        .agents
-        .iter()
-        .filter_map(|agent| agent.record.session.clone());
-    let last = removed
-        .last_sessions
-        .iter()
-        .filter_map(|last| last.session.clone());
-    stopped.chain(last).collect()
 }
 
 /// The export files `files` names, with each directory among them replaced
@@ -236,10 +229,10 @@ impl ImportReport {
     }
 }
 
-/// The exported removal record to import here, whose agents keep their
-/// sessions as `sessions` says, or on the machine that exported it.
-fn workspace_here(manifest: &Manifest, sessions: Option<bool>) -> RemovedWorkspace {
-    manifest.workspace_on(crate::process::machine::id().as_deref(), sessions)
+/// The package's agents to import here, which keep their sessions as
+/// `sessions` says, or on the machine that exported them.
+fn sessions_here(manifest: &Manifest, sessions: Option<bool>) -> Sessions {
+    manifest.sessions_on(crate::process::machine::id().as_deref(), sessions)
 }
 
 /// Read the export in `file`, or on standard input for `-`.
