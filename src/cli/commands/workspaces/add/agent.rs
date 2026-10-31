@@ -113,6 +113,29 @@ pub(super) async fn choose_add_agent(
     Ok(AgentChoice::Chosen(agent))
 }
 
+/// Refuse `model` for an agent already chosen before any prompt asks for the
+/// rest of the addition; a picked agent is checked once picked.
+pub(super) async fn check_chosen_model(
+    settings: &AddSettings<'_>,
+    agent: &AgentChoice,
+    model: &ModelChoice,
+) -> Result<()> {
+    if let AgentChoice::Chosen(Some(agent)) = agent {
+        check_model(settings.get().await?, agent, model)?;
+    }
+    Ok(())
+}
+
+/// Refuse `model` for `agent` when its launch cannot pass it on.
+fn check_model(
+    settings: &crate::config::Effective,
+    agent: &Agent,
+    model: &ModelChoice,
+) -> Result<()> {
+    let resolved = settings.model(agent.name(), model.clone());
+    agents::check_model(settings, agent.name(), &resolved)
+}
+
 /// A picked issue defaults its agent as `--issue` does.
 pub(super) async fn choose_for_picked_issue(
     settings: &AddSettings<'_>,
@@ -144,11 +167,7 @@ pub(super) async fn resolve_add_agent(
         AgentChoice::PickerIfInteractive => None,
     };
     match &agent {
-        Some(agent) => {
-            let settings = settings.get().await?;
-            let resolved = settings.model(agent.name(), model.clone());
-            agents::check_model(settings, agent.name(), &resolved)?;
-        }
+        Some(agent) => check_model(settings.get().await?, agent, &model)?,
         None => anyhow::ensure!(
             model.is_empty(),
             "--model and --effort need an agent; name one with --agent"
