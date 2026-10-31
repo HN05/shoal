@@ -1,6 +1,6 @@
 //! Show issues, PRs and linked CI runs as the forge reports them, without gh
 //! or fj.
-use anyhow::{Context as _, Result, bail, ensure};
+use anyhow::{Context as _, Result, ensure};
 
 use serde::Serialize;
 
@@ -67,10 +67,7 @@ async fn view(
 ) -> Result<i32> {
     let (context, selection) = links::select_in_context(ctx, items, repo).await?;
     if let Some(check) = check {
-        let ItemContext::Workspace(workspace) = context else {
-            bail!("--check reads a log through a workspace; run this in one or pass --workspace");
-        };
-        return show_log(ctx, workspace, selection, check).await;
+        return show_log(ctx, context, selection, check).await;
     }
     let selected = links::select_items(ctx, &context, selection, true).await?;
     let views = read_views(ctx, &context, &selected, !no_comments).await?;
@@ -111,7 +108,7 @@ impl Shown {
 }
 
 /// Each selected item as the forge reports it now, in selection order, with
-/// failed job logs where a workspace reads them.
+/// failed job logs.
 async fn read_views(
     ctx: &Context,
     context: &ItemContext,
@@ -123,9 +120,7 @@ async fn read_views(
         let own = own_forge(selected, &hosts).await?;
         let account = ctx.forge_account()?;
         let mut items = read(selected, &own, &hosts, &account, comments).await;
-        if let ItemContext::Workspace(workspace) = context {
-            read_failed_logs(ctx, &own, workspace, &mut items).await;
-        }
+        read_failed_logs(ctx, &own, context, &mut items).await;
         let runs = read_runs(ctx, context, selected).await;
         Ok(in_selection_order(selected, items, runs))
     })
@@ -235,7 +230,7 @@ pub(super) fn may_open_browser(ctx: &Context) -> Result<()> {
 /// The log of the selected PR's `check`.
 async fn show_log(
     ctx: &Context,
-    workspace: String,
+    context: ItemContext,
     selection: Selection,
     check: String,
 ) -> Result<i32> {
@@ -245,7 +240,7 @@ async fn show_log(
             client::request(
                 &ctx.paths,
                 CiMethod::CheckLog {
-                    workspace,
+                    context,
                     selection,
                     check,
                 },
@@ -307,8 +302,14 @@ async fn item_forge(
     }
 }
 
-/// The failed checks' logs of the workspace repository's PRs among `views`.
-async fn read_failed_logs(ctx: &Context, own: &ForgeRepo, workspace: &str, views: &mut [ItemView]) {
+/// The failed checks' logs of the PRs among `views` in the repository of
+/// `context`.
+async fn read_failed_logs(
+    ctx: &Context,
+    own: &ForgeRepo,
+    context: &ItemContext,
+    views: &mut [ItemView],
+) {
     if !own.supports(Capability::ReadJobLogs) {
         return;
     }
@@ -330,7 +331,7 @@ async fn read_failed_logs(ctx: &Context, own: &ForgeRepo, workspace: &str, views
             let result = client::request::<CheckLog>(
                 &ctx.paths,
                 CiMethod::CheckLog {
-                    workspace: workspace.into(),
+                    context: context.clone(),
                     selection: Selection {
                         kind: Some(LinkKind::Pr),
                         input: Some(view.url.clone()),

@@ -1,14 +1,18 @@
-//! Failed Actions logs resolved from a PR's current check, using its agent account.
-use anyhow::Result;
+//! Failed Actions logs resolved from a PR's current check, using the agent
+//! account of the workspace or registered checkout.
+use anyhow::{Context as _, Result, bail};
 
 use crate::{
     daemon::workspace::Manager,
     forge::{
+        ForgeRepo,
         capability::Capability,
         ci::checks::{CheckLog, NoJobLog, validate_check_name},
         items::link::{LinkKind, Selection},
         updates::Update,
     },
+    model::Workspace,
+    protocol::ItemContext,
 };
 
 impl Manager {
@@ -30,7 +34,8 @@ impl Manager {
                 kind: Some(LinkKind::Pr),
                 input: Some(update.url.clone()),
             };
-            let log = self.check_log(workspace, &selection, &check.name).await;
+            let context = ItemContext::Workspace(workspace.into());
+            let log = self.check_log(&context, &selection, &check.name).await;
             let summary = match log {
                 Ok(log) => log
                     .failed_step
@@ -57,30 +62,51 @@ impl Manager {
         }
     }
 
+    /// The log of the failed check `name` of the PR `selection` names in
+    /// the repository of `context`, or of the workspace's linked PR.
     pub async fn check_log(
         &self,
-        selector: &str,
+        context: &ItemContext,
         selection: &Selection,
         name: &str,
     ) -> Result<CheckLog> {
         validate_check_name(name)?;
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
+        let place = self.place(context).await?;
+        let (forge, account) = self.place_forge_account(&place).await?;
+        let url = self
+            .check_log_pr(place.workspace(), &forge, selection)
+            .await?;
+        forge.failed_check_log(&account, &url, name).await
+    }
+
+    /// The URL of the one PR `selection` names on `forge`, which in a
+    /// workspace may be its linked PR.
+    async fn check_log_pr(
+        &self,
+        workspace: Option<&Workspace>,
+        forge: &ForgeRepo,
+        selection: &Selection,
+    ) -> Result<String> {
+        if !matches!(selection.kind, None | Some(LinkKind::Pr)) {
+            bail!(ONE_PR);
+        }
+        let Some(workspace) = workspace else {
+            let input = (selection.input.as_deref()).context(super::actions::NOTHING_LINKED)?;
+            return Ok(forge.pull(input)?.1);
+        };
         let selection = Selection {
-            kind: selection.kind.or(Some(LinkKind::Pr)),
+            kind: Some(LinkKind::Pr),
             input: selection.input.clone(),
         };
-        let items = self.selected_items(&workspace, &selection).await?;
-        let [(url, LinkKind::Pr)] = items.as_slice() else {
-            anyhow::bail!(
-                "select one PR to read a check log; use shoal view pr <number> --check <name>"
-            );
-        };
-        let forge = self.workspace_forge(&workspace).await?;
-        let account = self.agent_account(&workspace).await?;
-        forge.failed_check_log(&account, url, name).await
+        match self.selected_items(workspace, &selection).await?.as_slice() {
+            [(url, LinkKind::Pr)] => Ok(url.clone()),
+            _ => bail!(ONE_PR),
+        }
     }
 }
+
+/// Why a check log needs a single PR selected.
+const ONE_PR: &str = "select one PR to read a check log; use shoal view pr <number> --check <name>";
 
 #[cfg(test)]
 mod tests;

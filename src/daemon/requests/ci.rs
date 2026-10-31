@@ -31,10 +31,10 @@ pub(super) async fn handle(
             return Ok(Answer::pages(listed, Body::CiRuns));
         }
         CiMethod::CheckLog {
-            workspace,
+            context,
             selection,
             check,
-        } => Body::CheckLog(manager.check_log(&workspace, &selection, &check).await?),
+        } => Body::CheckLog(manager.check_log(&context, &selection, &check).await?),
         CiMethod::CiAction {
             context,
             item,
@@ -83,7 +83,9 @@ impl Scoped for CiMethod {
             CiMethod::ApproveCiRuns { .. } => {
                 bail!("approving CI runs is the user's decision; ask them with shoal alerts send")
             }
-            CiMethod::CiAction { context, .. } | CiMethod::ListCiRuns { context, .. } => {
+            CiMethod::CheckLog { context, .. }
+            | CiMethod::CiAction { context, .. }
+            | CiMethod::ListCiRuns { context, .. } => {
                 Some(super::items::context_workspace(context)?)
             }
             // A workspace process acts from its own workspace, so only on
@@ -96,7 +98,6 @@ impl Scoped for CiMethod {
                 let context = context.get_or_insert_with(|| own_context(caller));
                 Some(super::items::context_workspace(context)?)
             }
-            CiMethod::CheckLog { workspace, .. } => Some(workspace),
         })
     }
 }

@@ -3316,7 +3316,7 @@ review state `status` reports, plus the last 8 KiB of each failed CI job's log, 
 [reads job logs](#forges), with the job's URL and its failing step when recorded
 by the runner. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
-Forgejo start each line with. The daemon fetches logs as the workspace's agent
+Forgejo start each line with. The daemon fetches logs as the repository's agent
 account; successful and pending checks omit log output.
 `--check NAME` selects only that failed check's log on one PR. Unavailable logs
 report an error, as does a check that links no CI job in the repository, such as
@@ -3327,8 +3327,7 @@ or PR URL may name another repository's item, shown without failed job logs, and
 `--no-comments` leaves out comments and reviews. Outside a workspace, such as in
 a chat, it shows the item a number or URL names in the repository of the
 registered checkout it runs in, or of the one `--repo` or the URL names as for
-[issue and PR actions](#issue-and-pr-actions), without failed job logs, which
-`--check` there refuses. Each comment shows its ID; an
+[issue and PR actions](#issue-and-pr-actions). Each comment shows its ID; an
 inline comment also shows the ID of the comment that starts its thread when it is
 a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a
 review whose inline comments could not be read keeps its body; the command exits 1 when an item could not be read. `--json` returns an array

@@ -588,7 +588,8 @@ pub(super) fn named_or_linked(
 }
 
 /// Why an action outside a workspace needs its item named.
-const NOTHING_LINKED: &str = "outside a workspace, nothing is linked; pass a number or URL";
+pub(super) const NOTHING_LINKED: &str =
+    "outside a workspace, nothing is linked; pass a number or URL";
 
 pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
     match kind {

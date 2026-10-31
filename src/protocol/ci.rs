@@ -6,8 +6,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CiMethod {
+    /// The log of a failed check of a PR.
     CheckLog {
-        workspace: String,
+        #[serde(flatten)]
+        context: super::ItemContext,
         selection: crate::forge::items::link::Selection,
         check: String,
     },

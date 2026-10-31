@@ -3154,6 +3154,57 @@ fn view_prints_check_logs_and_reports_lookup_errors() {
 }
 
 #[test]
+fn check_logs_are_read_from_a_registered_checkout_as_its_agent_account() {
+    let fixture = Fixture::new(Forge::Forgejo, AGENT_TOKEN);
+    let mut responses = failed_check_responses();
+    responses["GET repos/team/project/pulls/8"]["body"] = json!({
+        "number": 8, "title": "Fix crash", "state": "open",
+        "head": {"sha": "head", "ref": "topic", "repo": {"full_name": "team/project"}},
+        "base": {"ref": "main"}, "mergeable": true
+    });
+    responses["GET repos/team/project/commits/head/status?limit=50"] = json!({"body": {
+        "total_count": 1, "statuses": [{"context": "rust", "status": "failure"}]
+    }});
+    responses["GET repos/team/project/issues/8/timeline?limit=50&page=1"] = json!({"body": []});
+    fixture.respond(responses);
+    let in_checkout = |args: &[&str]| {
+        let output = (fixture.command().current_dir(&fixture.repo))
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let agent_read_log = |fixture: &Fixture| {
+        fixture.requests().iter().any(|request| {
+            request[0] == "GET repos/team/project/actions/jobs/18345/logs"
+                && request[2] == "token agenttoken"
+        })
+    };
+
+    let views = in_checkout(&["view", "pr", "8", "--no-comments"]);
+    let logs = views[0]["check_logs"].as_array().unwrap();
+    assert_eq!(logs.len(), 1, "{views}");
+    assert_eq!(logs[0]["failed_step"], "Main Test");
+    assert!(agent_read_log(&fixture));
+    let log = in_checkout(&["view", "pr", "8", "--check", "rust"]);
+    assert_eq!(log["failed_step"], "Main Test", "{log}");
+    assert!(agent_read_log(&fixture));
+    // --repo names the registered repository from anywhere.
+    let repo = fixture.repo.to_str().unwrap();
+    let log = fixture.ok(&["view", "pr", "8", "--check", "rust", "--repo", repo]);
+    assert_eq!(log["failed_step"], "Main Test", "{log}");
+    // Nothing is linked outside a workspace.
+    let output = (fixture.command().current_dir(&fixture.repo))
+        .args(["view", "pr", "--check", "rust"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("pass a number or URL"), "{stderr}");
+}
+
+#[test]
 fn view_automatically_includes_failed_logs_and_leaves_successful_checks_quiet() {
     for outcome in ["failure", "unavailable", "success"] {
         let fixture = Fixture::new(Forge::Forgejo, "");
