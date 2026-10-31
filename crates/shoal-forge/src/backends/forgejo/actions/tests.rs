@@ -50,3 +50,20 @@ fn failed_steps_are_the_marked_or_unfinished_step() {
                     test result: FAILED\n⚙️ [runner]: exitcode '101': failure\n🏁  Job failed\n";
     assert_eq!(failed_step(unmarked), None);
 }
+
+#[test]
+fn listed_failed_steps_are_the_first_step_marked_failing() {
+    let job = |steps: Value| json!({"id": 7, "steps": steps});
+    let listed = job(json!([
+        {"name": "Set up job", "number": 0, "status": "success"},
+        {"name": "cargo test", "number": 1, "status": "failure"},
+        {"name": "Complete job", "number": 2, "status": "failure"}
+    ]));
+    assert_eq!(failed_listed_step(&listed).as_deref(), Some("cargo test"));
+    let cancelled = job(json!([
+        {"name": "cargo test", "number": 1, "status": "cancelled"}
+    ]));
+    assert_eq!(failed_listed_step(&cancelled), None);
+    // Forgejo before 17 lists no steps.
+    assert_eq!(failed_listed_step(&json!({"id": 7})), None);
+}

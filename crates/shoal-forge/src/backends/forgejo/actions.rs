@@ -58,7 +58,10 @@ pub(crate) async fn failed_check_log(
     let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job_id}/logs"));
     let log = job_log(repo, account, &endpoint).await?;
     let log = repo.kind.plain_log(&log);
-    let step = failed_step(&log);
+    let step = match listed_failed_step(repo, account, job_id).await {
+        None => failed_step(&log),
+        listed => listed,
+    };
     Ok(CheckLog::from_text(url, name, &log, step).with_job(job_url(repo, target)))
 }
 
@@ -132,6 +135,27 @@ pub(crate) async fn failed_job_id(
         )
         .await?;
     job_id(&jobs, job_index, run_id)
+}
+
+/// The first step the job's step list marks as failing, which Forgejo
+/// serves from release 17; older servers do not find the job.
+pub(crate) async fn listed_failed_step(
+    repo: &ForgeRepo,
+    account: &Account,
+    job: u64,
+) -> Option<String> {
+    let endpoint = repo.repo_endpoint(&format!("actions/jobs/{job}"));
+    let job = repo.send(account, &Request::get(endpoint)).await.ok()?;
+    failed_listed_step(&job)
+}
+
+fn failed_listed_step(job: &Value) -> Option<String> {
+    let step = job["steps"]
+        .as_array()?
+        .iter()
+        .find(|step| step["status"] == "failure")?;
+    let name = step["name"].as_str()?.trim();
+    (!name.is_empty()).then(|| name.chars().take(256).collect())
 }
 
 /// The step the runner marks as failing, or the one it started last before

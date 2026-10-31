@@ -125,7 +125,10 @@ impl ForgeRepo {
         let jobs = self.jobs_of(account, &run).await?;
         let job = find_job(&run, &jobs, job)?;
         let log = self.kind.run_job_log(self, account, &run, job).await?;
-        let step = self.kind.failed_step(&log);
+        let step = match self.kind.listed_failed_step(self, account, job.id).await {
+            None => self.kind.failed_step(&log),
+            listed => listed,
+        };
         let log = CheckLog::from_text(&run.url, &job.name, &log, step);
         Ok(match &job.url {
             Some(url) => log.with_job(url.clone()),
@@ -169,11 +172,12 @@ impl ForgeRepo {
         Ok(failed_jobs)
     }
 
-    /// The step that failed in `job`, where the forge reads its log and the
-    /// log names one.
+    /// The step that failed in `job`, where the forge lists it or reads its
+    /// log and the log names one.
     async fn failed_job_step(&self, account: &Account, run: &Run, job: &RunJob) -> Option<String> {
-        if !self.supports(Capability::ReadJobLogs) {
-            return None;
+        let listed = self.kind.listed_failed_step(self, account, job.id).await;
+        if listed.is_some() || !self.supports(Capability::ReadJobLogs) {
+            return listed;
         }
         let log = self.kind.run_job_log(self, account, run, job).await.ok()?;
         self.kind.failed_step(&log)

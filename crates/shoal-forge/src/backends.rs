@@ -702,6 +702,17 @@ pub(crate) trait Backend {
         None
     }
 
+    /// The step that failed in the job with API ID `job`, where the forge
+    /// lists a job's steps with their states.
+    async fn listed_failed_step(
+        &self,
+        _repo: &ForgeRepo,
+        _account: &Account,
+        _job: u64,
+    ) -> Option<String> {
+        None
+    }
+
     /// The endpoint under the repository that serves the plain-text log of
     /// the job at `location`.
     fn job_log_endpoint(&self, _location: Location) -> Result<String> {
@@ -1420,6 +1431,15 @@ impl Backend for ForgeKind {
 
     fn failed_step(&self, log: &str) -> Option<String> {
         dispatch!(self, backend => backend.failed_step(log))
+    }
+
+    async fn listed_failed_step(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        job: u64,
+    ) -> Option<String> {
+        dispatch!(self, backend => backend.listed_failed_step(repo, account, job).await)
     }
 
     fn job_log_endpoint(&self, location: Location) -> Result<String> {

@@ -3359,7 +3359,7 @@ merge it once it can, with the `method` where the forge reports it (Forgejo and
 Gitea do not), the merge conflicts, CI checks, runs waiting for approval and
 review state `status` reports, plus the last 8 KiB of each failed CI job's log, where the forge
 [reads job logs](#forges), with the job's URL and its failing step when recorded
-by the runner. The tail is taken after removing terminal escape sequences, text
+by the runner or listed by Forgejo 17 and later. The tail is taken after removing terminal escape sequences, text
 a carriage return redrew, GitLab's section markers and the timestamps GitHub and
 Forgejo start each line with. The daemon fetches logs as the repository's agent
 account; successful and pending checks omit log output.
@@ -3391,7 +3391,7 @@ seconds, and the daemon queues what its own polling of a ready workspace's linke
 items observes for the next watch, which returns at once; `watch pr`, `watch
 issue` or `watch ci` filters by kind. A run delivers one `ci_completed` update
 when it finishes, with its final state, each failed job's failing step where its
-log names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
+log or Forgejo's step list names one, and a pointer to `shoal view ci`; its watch then ends. `watch <number-or-url>`, `watch pr <number-or-url>` and
 `watch issue <number-or-url>` select an explicit item in the workspace's repository
 without linking it or changing completion policy; explicit PR watches also accept
 PRs whose head branch is in a fork. Watches return on comments,

@@ -2921,8 +2921,10 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
             .unwrap()
             .contains("assertion failed")
     );
+    // The step comes from the log where the server lists no job steps, as
+    // before Forgejo 17.
     let requests = fixture.requests();
-    assert_eq!(requests.len(), 5);
+    assert_eq!(requests.len(), 6);
     assert!(
         requests
             .iter()
@@ -2930,8 +2932,11 @@ fn scoped_check_logs_resolve_web_indices_and_use_the_agent_account() {
         "{requests:?}"
     );
     assert_eq!(
-        requests[4][0],
-        "GET repos/team/project/actions/jobs/18345/logs"
+        (&requests[4][0], &requests[5][0]),
+        (
+            &json!("GET repos/team/project/actions/jobs/18345/logs"),
+            &json!("GET repos/team/project/actions/jobs/18345")
+        )
     );
 
     // Never show a stale failure after the same check succeeds on this head.
@@ -4341,6 +4346,10 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
         ]},
         "GET repos/team/project/actions/jobs/18345/logs":
             {"body": "⭐ Run Audit\nadvisory found\n⚙️ [runner]: exitcode '1': failure\n"},
+        "GET repos/team/project/actions/jobs/18345": {"body": {"id": 18345, "steps": [
+            {"name": "Set up job", "number": 0, "status": "success"},
+            {"name": "Audit dependencies", "number": 1, "status": "failure"}
+        ]}},
         "GET repos/team/project/actions/jobs/18344/logs": {"body": "built\n"},
         "GET repos/team/project/actions/runs?limit=5&page=1&ref=refs%2Fheads%2Ftopic&workflow_id=deps.yml":
             {"body": {"workflow_runs": [run], "total_count": 1}},
@@ -4366,7 +4375,8 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
     let logs = view["logs"].as_array().unwrap();
     assert_eq!(logs.len(), 1, "{view}");
     assert_eq!(logs[0]["name"], "audit");
-    assert_eq!(logs[0]["failed_step"], "Audit");
+    // Forgejo 17 lists the job's steps, which name the failing one.
+    assert_eq!(logs[0]["failed_step"], "Audit dependencies");
     assert_eq!(logs[0]["job_url"], format!("{url}/jobs/1"));
 
     let log = fixture.ok(&["view", "ci", &url, "--job", "build", "--workspace", "topic"]);

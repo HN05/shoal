@@ -817,6 +817,15 @@ impl Backend for Forgejo {
         actions::failed_step(log)
     }
 
+    async fn listed_failed_step(
+        &self,
+        repo: &ForgeRepo,
+        account: &Account,
+        job: u64,
+    ) -> Option<String> {
+        actions::listed_failed_step(repo, account, job).await
+    }
+
     /// Forgejo takes the host's token for attachments and raw files on its
     /// web host; an anonymous request reaches only what anyone may see.
     async fn download(&self, repo: &ForgeRepo, account: &Account, url: &str) -> Result<Fetched> {
