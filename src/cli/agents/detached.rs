@@ -132,7 +132,7 @@ pub(super) async fn start(
         prompt,
         args,
     };
-    let prepared = app.prepare(session).await?;
+    let prepared = with_effort(app.prepare(session).await?, app, &settings, &model);
     let agent = execution::TrackedAgent {
         name: app.execution_agent(),
         model,
@@ -258,7 +258,7 @@ fn workspace_input(
 /// The arguments that run `app`'s agent, started as `name`, with `model`;
 /// refused when the app passes the agent no arguments or the agent has no
 /// template for a value `model` sets.
-fn model_args(
+pub(super) fn model_args(
     app: &dyn App,
     settings: &Effective,
     name: &str,
@@ -275,6 +275,52 @@ fn model_args(
         app.agent()
     );
     super::model_args(settings, app.agent(), model)
+}
+
+/// `prepared` with the variable that sets the effort of `app`'s agent to
+/// `model`'s, which overrides its effort argument, when it reads one and
+/// the app passes it arguments.
+fn with_effort(
+    prepared: Box<dyn Prepared>,
+    app: &dyn App,
+    settings: &Effective,
+    model: &ModelChoice,
+) -> Box<dyn Prepared> {
+    let variable = app
+        .takes_agent_args()
+        .then(|| settings.launch(app.agent()).effort_environment(model))
+        .flatten();
+    match variable {
+        Some(variable) => Box::new(WithEnv {
+            prepared,
+            env: vec![variable],
+        }),
+        None => prepared,
+    }
+}
+
+/// A prepared session that runs with more variables than its app gives it.
+struct WithEnv {
+    prepared: Box<dyn Prepared>,
+    env: Vec<(&'static str, String)>,
+}
+
+impl Prepared for WithEnv {
+    fn command(&self) -> Vec<OsString> {
+        self.prepared.command()
+    }
+
+    fn env(&self) -> Vec<(&'static str, String)> {
+        [self.prepared.env(), self.env.clone()].concat()
+    }
+
+    fn discard(self: Box<Self>) -> BoxFuture<'static, ()> {
+        self.prepared.discard()
+    }
+
+    fn deliver(self: Box<Self>) -> BoxFuture<'static, Delivered> {
+        self.prepared.deliver()
+    }
 }
 
 /// The arguments that give `app`'s agent `instructions` apart from its first
@@ -368,7 +414,7 @@ pub(super) async fn start_chat(
         prompt,
         args,
     };
-    let prepared = app.prepare(session).await?;
+    let prepared = with_effort(app.prepare(session).await?, app, settings, model);
     let log = files.with_extension(crate::paths::SESSION_LOG);
     let (record, prepared) = hand_to_session(ctx, app, repository, &record, &log, prepared).await?;
     let delivered = prepared.deliver().await;

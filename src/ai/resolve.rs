@@ -67,6 +67,12 @@ pub struct LaunchProfile {
 }
 
 impl LaunchProfile {
+    /// The variable a launch with `choice` sets to its effort over the
+    /// effort arguments, when the tool reads one.
+    pub fn effort_environment(&self, choice: &ModelChoice) -> Option<(&'static str, String)> {
+        Some((self.effort_variable?, choice.effort.clone()?))
+    }
+
     /// The environment changes of a launch with `choice`.
     pub fn environment_with(&self, choice: &ModelChoice) -> Environment {
         self.environment

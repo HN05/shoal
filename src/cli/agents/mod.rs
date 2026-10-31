@@ -469,6 +469,20 @@ pub(crate) fn model_args(
         .map_err(|template| missing_template(name, template))
 }
 
+/// Refuse agent `name` with `model` before anything starts when its launch
+/// cannot pass the values on: through its own templates, or those of the
+/// agent an app it runs in starts.
+pub(in crate::cli) fn check_model(
+    settings: &Effective,
+    name: &str,
+    model: &ModelChoice,
+) -> Result<()> {
+    match agent_integration(settings, name).detached() {
+        Some(app) => detached::model_args(app, settings, name, model).map(drop),
+        None => model_args(settings, name, model).map(drop),
+    }
+}
+
 /// The refusal of a model or effort for agent `name`, which lacks `template`.
 fn missing_template(name: &str, template: &str) -> anyhow::Error {
     let option = template.trim_end_matches("_args");
