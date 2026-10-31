@@ -5,6 +5,7 @@ pub mod checks;
 pub mod run;
 pub mod run_action;
 pub mod run_view;
+pub mod workflow;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};

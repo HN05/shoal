@@ -751,6 +751,10 @@ impl Backend for Bitbucket {
         ))
     }
 
+    fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
+        value["mainbranch"]["name"].as_str()
+    }
+
     async fn check_uploads(
         &self,
         _repo: &ForgeRepo,

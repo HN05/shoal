@@ -223,7 +223,7 @@ impl Link {
     }
 }
 
-fn decode_branch(input: &str) -> Result<String> {
+pub(crate) fn decode_branch(input: &str) -> Result<String> {
     let mut bytes = Vec::new();
     let mut input = input.bytes();
     while let Some(byte) = input.next() {

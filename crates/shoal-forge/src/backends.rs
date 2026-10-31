@@ -603,6 +603,12 @@ pub(crate) trait Backend {
         None
     }
 
+    /// The default branch a read of the repository's own endpoint returned
+    /// as `value`.
+    fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
+        value["default_branch"].as_str()
+    }
+
     /// The number a workflow run's web URL in the repository names, if
     /// `target` links one.
     fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64>;
@@ -1324,6 +1330,10 @@ impl Backend for ForgeKind {
 
     fn started_run_url(&self, repo: &ForgeRepo, response: &Value) -> Option<String> {
         dispatch!(self, backend => backend.started_run_url(repo, response))
+    }
+
+    fn default_branch<'a>(&self, value: &'a Value) -> Option<&'a str> {
+        dispatch!(self, backend => backend.default_branch(value))
     }
 
     fn locate_run(&self, repo: &ForgeRepo, target: &str) -> Option<u64> {

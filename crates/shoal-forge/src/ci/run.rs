@@ -6,7 +6,13 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{ForgeRepo, account::Account, backends::Backend, capability::Capability};
+use crate::{
+    ForgeRepo,
+    account::Account,
+    backends::Backend,
+    capability::Capability,
+    ci::workflow::{WorkflowLink, is_workflow_url},
+};
 
 /// A workflow run to start.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -34,13 +40,17 @@ pub struct StartedRun {
     pub warnings: Vec<String>,
 }
 
-/// Refuse a workflow or branch no forge runs, before any lookup.
+/// Refuse a workflow, or a workflow URL, or a branch no forge runs, before
+/// any lookup.
 pub fn validate_run(workflow: Option<&str>, branch: Option<&str>) -> Result<()> {
     if let Some(branch) = branch {
         ensure!(!branch.trim().is_empty(), "branch must be nonempty");
     }
     if let Some(workflow) = workflow {
         ensure!(!workflow.trim().is_empty(), "workflow must be nonempty");
+        if is_workflow_url(workflow) {
+            WorkflowLink::parse(workflow)?;
+        }
     }
     Ok(())
 }
