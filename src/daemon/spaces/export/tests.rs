@@ -227,3 +227,26 @@ async fn a_chat_ends_without_the_workspace_executions_it_started() {
     identity::signal(&wrapper, libc::SIGKILL).unwrap();
     assert!(kept, "the workspace's execution was stopped with the chat");
 }
+
+#[tokio::test]
+async fn a_chat_whose_package_cannot_be_written_names_how_it_continues() {
+    let (root, manager, pid) = chat("unwritten").await;
+    let chat = manager.chats().await.unwrap().remove(0);
+    manager
+        .record_chat_session(&chat.id, "s1".into())
+        .await
+        .unwrap();
+    // A file the package would replace, which it never does.
+    let file = root.path().join("unwritten.shoal");
+    fs::write(&file, "kept").unwrap();
+
+    let error = export(&manager, "unwritten", &file).await.unwrap_err();
+    let error = format!("{error:#}");
+    assert!(
+        error.contains("shoal chat repo --name unwritten --agent claude --session s1 continues it"),
+        "{error}"
+    );
+    assert!(manager.chats().await.unwrap().is_empty());
+    assert_eq!(identity::capture(pid).unwrap(), None);
+    assert_eq!(fs::read_to_string(&file).unwrap(), "kept");
+}

@@ -11,13 +11,17 @@ use crate::{
     transfer::{ExportedSpace, Manifest, SessionSource, Source},
 };
 
-/// A space ended here for its package: what the package is made from, the
-/// removal that ended a workspace, and the settings describing its agents
-/// when they are not the repository's.
+/// A space ended here for its package: its repository, the package without
+/// its session files, the removal that ended a workspace, the settings
+/// describing its agents when they are not the repository's, and how the
+/// user continues the space here when writing the package fails, unless a
+/// removal record keeps it.
 struct Ended {
-    source: Source,
+    repo: Repository,
+    manifest: Manifest,
     removal: Option<RemovalResult>,
     settings: Option<Result<Effective>>,
+    continues: Option<String>,
 }
 
 impl Manager {
@@ -43,20 +47,39 @@ impl Manager {
                     .await?
             }
         };
-        let repo = self.repository(ended.source.repository_id()).await?;
         let settings = match ended.settings {
             Some(settings) => settings,
-            None => self.repository_settings(&repo.id).await,
+            None => self.repository_settings(&ended.repo.id).await,
         };
-        let manifest = Manifest::of(&repo, ended.source).await?;
-        let (sessions, mut warnings) = self.session_sources(&repo, settings, &manifest).await;
-        let (manifest, left_out) = crate::transfer::export(&repo, manifest, sessions, file).await?;
-        warnings.extend(left_out);
+        let written = self
+            .write_package(&ended.repo, ended.manifest, settings, file)
+            .await;
+        let (manifest, warnings) = match (written, ended.continues) {
+            (Ok(written), _) => written,
+            (Err(error), Some(continues)) => return Err(error.context(continues)),
+            (Err(error), None) => return Err(error),
+        };
         Ok(ExportedSpace {
             manifest,
             removal: ended.removal,
             warnings,
         })
+    }
+
+    /// Write `manifest`'s package, a space of `repo` whose agents `settings`
+    /// describes, with their session files to the new file `file`, and the
+    /// warnings for what it left out.
+    async fn write_package(
+        &self,
+        repo: &Repository,
+        manifest: Manifest,
+        settings: Result<Effective>,
+        file: std::path::PathBuf,
+    ) -> Result<(Manifest, Vec<String>)> {
+        let (sessions, mut warnings) = self.session_sources(repo, settings, &manifest).await;
+        let (manifest, left_out) = crate::transfer::export(repo, manifest, sessions, file).await?;
+        warnings.extend(left_out);
+        Ok((manifest, warnings))
     }
 
     /// Remove the workspace `selector` names for its export, or take the
@@ -92,27 +115,42 @@ impl Manager {
             "the removal could not keep the uncommitted files; shoal work restore {} opens the workspace here again",
             removed.name
         );
+        let repo = self.repository(&removed.repository_id).await?;
         Ok(Ended {
-            source: Source::Workspace(removed),
+            manifest: Manifest::of(&repo, Source::Workspace(removed)).await?,
+            repo,
             removal: removal.map(|(_, removal)| removal),
             settings,
+            continues: None,
         })
     }
 
     /// End the running `chat` for its export once its agent has reported
-    /// the session the package continues, so the session's files stop
-    /// changing.
+    /// the session the package continues and its package is made, so the
+    /// session's files stop changing and only writing them is left.
     async fn end_chat_for_export(&self, chat: Chat) -> Result<Ended> {
-        ensure!(
-            chat.session.is_some(),
-            "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
-            chat.name
+        let Some(session) = chat.session.clone() else {
+            anyhow::bail!(
+                "the agent of chat {} reported no session to continue elsewhere, so the chat keeps running",
+                chat.name
+            );
+        };
+        let repo = self.repository(&chat.repository_id).await?;
+        let continues = format!(
+            "chat {name} ended here; shoal chat {repo} --name {name} --agent {agent} --session {session} continues it",
+            name = chat.name,
+            repo = crate::repository::name(&repo),
+            agent = chat.agent,
         );
-        self.end_chat(&chat.id).await?;
+        let id = chat.id.clone();
+        let manifest = Manifest::of(&repo, Source::Chat(chat)).await?;
+        self.end_chat(&id).await?;
         Ok(Ended {
-            source: Source::Chat(chat),
+            repo,
+            manifest,
             removal: None,
             settings: None,
+            continues: Some(continues),
         })
     }
 
