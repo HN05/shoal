@@ -270,8 +270,10 @@ night (and on `fj actions dispatch flaky.yml main`) and rewrites the evergreen
 The run log keeps each failed test's output for the issue that fixes it.
 It is never a required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
-opens and whenever `review/default`, `review/claude` or `review/codex` is
-added; `review/none` suppresses it. `.review/review.md` is its project brief;
+opens or leaves draft and whenever `review/default`, `review/claude` or
+`review/codex` is added; `review/none` suppresses it. A draft PR gets no review;
+a request label added while it is a draft is answered when it leaves draft.
+`.review/review.md` is its project brief;
 keep it current when a rule here or in `docs/design.md` changes.
 Opening a ready PR already requests its review; never add reviewer request labels
 with its opening classification labels. Claude and Codex use independent queues,

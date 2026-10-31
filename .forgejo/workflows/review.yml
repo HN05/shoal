@@ -1,13 +1,22 @@
 name: review
+# One review when a PR opens, one per request label, and none while the PR is a
+# draft (a `WIP:` or `[WIP]` title prefix). Taking a PR out of draft is a title
+# edit: an `edited` event whose previous title (`changes.title.from`) had the
+# prefix requests one review, which also consumes any request label added while
+# the PR was a draft. The job runs the action on that event directly, because a
+# label added with the job token starts no workflow on Forgejo.
 on:
   pull_request:
-    types: [opened, reopened, labeled, label_updated]
+    types: [opened, reopened, labeled, label_updated, edited]
 
 concurrency:
   # Default requests share the configured reviewer's queue. Claude and Codex
   # requests use independent queues, including when both labels are present.
+  # Events the job skips (drafts and other edits) queue apart from reviews.
   group: >-
     review-${{ github.event.pull_request.number }}-${{
+    ((github.event.pull_request.draft ||
+      (github.event.action == 'edited' && !(startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]')))) && 'skipped') ||
     (github.event.label.name == 'review/claude' && 'claude') ||
     (github.event.label.name == 'review/codex' && 'codex') ||
     (!github.event.label && contains(github.event.pull_request.labels.*.name, 'review/claude') && !contains(github.event.pull_request.labels.*.name, 'review/codex') && 'claude') ||
@@ -20,7 +29,9 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       !contains(github.event.pull_request.labels.*.name, 'review/none') &&
+      !github.event.pull_request.draft &&
       (github.event.action == 'opened' || github.event.action == 'reopened' ||
+       (github.event.action == 'edited' && (startsWith(github.event.changes.title.from, 'WIP:') || startsWith(github.event.changes.title.from, '[WIP]'))) ||
        ((github.event.action == 'label_updated' || github.event.action == 'labeled') &&
         ((github.event.label.name == 'review/default' ||
           github.event.label.name == 'review/codex' ||
