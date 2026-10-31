@@ -1,6 +1,8 @@
 //! The processes of a space that Shoal does not track, as
 //! [`spaces`](crate::process::identity::spaces) finds them, and the one path
 //! that stops them, for `shoal stop` and removal alike.
+use std::path::PathBuf;
+
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +43,24 @@ pub struct Stopped {
     pub space: String,
     /// How many processes it stopped.
     pub processes: usize,
+}
+
+/// What a workspace's worktree ties to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WorktreeTies {
+    /// Nothing, as for a worktree that is gone or not verified.
+    None,
+    /// The programs built in it, wherever they run.
+    Programs,
+    /// The processes working in it and the programs built in it.
+    All,
+}
+
+impl WorktreeTies {
+    /// All ties when `verified`, none otherwise.
+    pub(crate) fn when(verified: bool) -> Self {
+        if verified { Self::All } else { Self::None }
+    }
 }
 
 /// Stopping a parent detaches the processes it started, which may start
@@ -93,7 +113,9 @@ impl Manager {
             .await?;
         let stopped = async {
             let verified = workspace.path.is_dir() && self.verify_worktree(workspace).await.is_ok();
-            let space = self.workspace_space(workspace, verified).await?;
+            let space = self
+                .workspace_space(workspace, WorktreeTies::when(verified))
+                .await?;
             self.stop_untracked(space, selection, requester).await
         }
         .await;
@@ -102,18 +124,24 @@ impl Manager {
         stopped
     }
 
-    /// What ties processes to `workspace`, through its worktree too when
-    /// `worktree` is set, which the caller verified is the workspace's.
+    /// What ties processes to `workspace`, through its worktree as `ties`
+    /// says, which the caller verified is the workspace's.
     pub(crate) async fn workspace_space(
         &self,
         workspace: &Workspace,
-        worktree: bool,
+        ties: WorktreeTies,
     ) -> Result<Space> {
         let repo = self.repository(&workspace.repository_id).await?;
+        let worktree = || workspace.path.clone();
+        let mut directories: Vec<PathBuf> = (ties == WorktreeTies::All)
+            .then(worktree)
+            .into_iter()
+            .collect();
+        directories.extend(Layout::of(&repo).map(|layout| layout.locate(&workspace.id)));
         Ok(Space {
             id: workspace.id.clone(),
-            worktree: worktree.then(|| workspace.path.clone()),
-            tmp_dir: Layout::of(&repo).map(|layout| layout.locate(&workspace.id)),
+            directories,
+            programs: (ties != WorktreeTies::None).then(worktree),
         })
     }
 
@@ -195,8 +223,8 @@ impl Manager {
 pub(crate) fn chat_space(chat: &Chat) -> Space {
     Space {
         id: chat.id.clone(),
-        worktree: None,
-        tmp_dir: chat.tmp_dir.clone(),
+        directories: chat.tmp_dir.iter().cloned().collect(),
+        programs: None,
     }
 }
 

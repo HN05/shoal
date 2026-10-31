@@ -12,7 +12,10 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::{space_processes::chat_space, workspace::Manager},
+    daemon::{
+        space_processes::{WorktreeTies, chat_space},
+        workspace::Manager,
+    },
     process::{
         described,
         identity::{
@@ -139,8 +142,8 @@ impl Manager {
     async fn surveyed_spaces(&self) -> Result<Vec<Space>> {
         let mut spaces = Vec::new();
         for workspace in self.list_workspaces().await? {
-            let worktree = workspace.path.is_dir();
-            spaces.push(self.workspace_space(&workspace, worktree).await?);
+            let ties = WorktreeTies::when(workspace.path.is_dir());
+            spaces.push(self.workspace_space(&workspace, ties).await?);
         }
         spaces.extend(self.chats().await?.iter().map(chat_space));
         Ok(spaces)

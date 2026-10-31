@@ -17,11 +17,12 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct Space {
     pub id: String,
-    /// The workspace's worktree, where its processes run and its programs
-    /// are built; a chat has none.
-    pub worktree: Option<PathBuf>,
-    /// Its directory for temporary files.
-    pub tmp_dir: Option<PathBuf>,
+    /// Directories whose processes are the space's, such as its worktree and
+    /// its directory for temporary files.
+    pub directories: Vec<PathBuf>,
+    /// Where it builds programs, its worktree, whose programs are the
+    /// space's wherever they run; a chat has none.
+    pub programs: Option<PathBuf>,
 }
 
 impl Space {
@@ -30,8 +31,8 @@ impl Space {
     fn canonical(self) -> Self {
         let canonical = |path: PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
         Self {
-            worktree: self.worktree.map(canonical),
-            tmp_dir: self.tmp_dir.map(canonical),
+            directories: self.directories.into_iter().map(canonical).collect(),
+            programs: self.programs.map(canonical),
             ..self
         }
     }
@@ -39,13 +40,13 @@ impl Space {
     /// Whether a process working in `directory` and running `program` is
     /// tied to the space by where it runs.
     fn places(&self, directory: Option<&Path>, program: Option<&Path>) -> bool {
-        let inside = |path: Option<&Path>, root: Option<&PathBuf>| {
-            path.zip(root)
-                .is_some_and(|(path, root)| path.starts_with(root))
-        };
-        inside(directory, self.worktree.as_ref())
-            || inside(directory, self.tmp_dir.as_ref())
-            || inside(program, self.worktree.as_ref())
+        directory.is_some_and(|directory| {
+            self.directories
+                .iter()
+                .any(|root| directory.starts_with(root))
+        }) || program
+            .zip(self.programs.as_ref())
+            .is_some_and(|(program, root)| program.starts_with(root))
     }
 }
 

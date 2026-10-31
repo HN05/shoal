@@ -1098,6 +1098,39 @@ async fn removal_stops_detached_programs_built_in_the_worktree() {
     assert!(!identity::alive(&detached.identity).unwrap());
 }
 
+/// Automatic cleanup retains a workspace a process works in, but a program
+/// built in the worktree and left running elsewhere is no use of it.
+#[tokio::test]
+async fn automatic_removal_stops_detached_programs_built_in_the_worktree() {
+    let (root, manager, workspace) = fixture().await;
+    // Built output is ignored, as `target/` is, so the worktree stays clean.
+    let common = git(&workspace.path, &["rev-parse", "--git-common-dir"]);
+    let exclude = workspace.path.join(common.trim()).join("info/exclude");
+    fs::create_dir_all(exclude.parent().unwrap()).unwrap();
+    fs::write(&exclude, "built\n").unwrap();
+    let built = workspace.path.join("built");
+    fs::copy(std::env::current_exe().unwrap(), &built).unwrap();
+    let elsewhere = root.path().join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    let detached = crate::test_support::Adopted::start(
+        &elsewhere,
+        &crate::test_support::runs_until_stopped(&built),
+        &[],
+        &root.path().join("pid"),
+    )
+    .await;
+    let snapshot = manager
+        .cleanup_snapshot(&workspace.id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    manager.remove_idle(&workspace.id, snapshot).await.unwrap();
+
+    assert!(!workspace.path.exists());
+    assert!(!identity::alive(&detached.identity).unwrap());
+}
+
 #[tokio::test]
 async fn removal_leaves_detached_processes_in_a_replaced_worktree_alone() {
     // The hook replaces the worktree and leaves a detached process running in

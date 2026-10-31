@@ -7,7 +7,11 @@ use super::{GuardMode, Manager, ResourceGuard, places::ExecutionPlace, stopped_w
 use crate::daemon::log;
 use crate::{
     config::repo::Cache,
-    daemon::{scope::Caller, space_processes::Selection, store},
+    daemon::{
+        scope::Caller,
+        space_processes::{Selection, WorktreeTies},
+        store,
+    },
     demos::Launch,
     hooks::HookKind,
     model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
@@ -1154,30 +1158,21 @@ impl Manager {
 
     /// Stop every untracked process of the workspace being removed, such as
     /// servers its hooks or apps started, or scripts a recording left
-    /// behind, since none outlives removal. With `worktree`, once the
-    /// directory is verified to be its worktree still, that includes the
-    /// detached processes it ties to the workspace.
+    /// behind, since none outlives removal. Its worktree ties processes to
+    /// it as `ties` says once the directory is verified to be its worktree
+    /// still.
     pub(super) async fn stop_removed_processes(
         &self,
         workspace: &Workspace,
-        worktree: bool,
+        ties: WorktreeTies,
     ) -> Result<()> {
-        if worktree {
+        if ties != WorktreeTies::None {
             self.verify_worktree(workspace).await?;
         }
-        let space = self.workspace_space(workspace, worktree).await?;
+        let space = self.workspace_space(workspace, ties).await?;
         self.stop_untracked(space, Selection::Processes, None)
             .await?;
         Ok(())
-    }
-
-    /// [`Self::stop_removed_processes`] for a workspace whose worktree is
-    /// gone or no longer counts.
-    pub(super) async fn stop_processes_without_worktree(
-        &self,
-        workspace: &Workspace,
-    ) -> Result<()> {
-        self.stop_removed_processes(workspace, false).await
     }
 
     /// Ask connected wrappers to stop and signal disconnected survivors.

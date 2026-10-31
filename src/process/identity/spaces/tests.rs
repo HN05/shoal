@@ -15,8 +15,8 @@ fn workspace(root: &Path) -> Space {
     std::fs::create_dir_all(&tmp_dir).unwrap();
     Space {
         id: "workspace-id".into(),
-        worktree: Some(worktree),
-        tmp_dir: Some(tmp_dir),
+        directories: vec![worktree.clone(), tmp_dir],
+        programs: Some(worktree),
     }
 }
 
@@ -37,7 +37,7 @@ fn listed(found: &[Untracked], identity: &Identity) -> Option<bool> {
 async fn detached_processes_in_the_worktree_are_leftovers_and_attached_ones_are_not_found() {
     let root = tempfile::tempdir().unwrap();
     let space = workspace(root.path());
-    let worktree = space.worktree.clone().unwrap();
+    let worktree = space.programs.clone().unwrap();
     let detached = Detached::start(&worktree, &root.path().join("pids")).await;
     let attached = isolated_command("sleep", &worktree)
         .arg("300")
@@ -60,10 +60,10 @@ async fn detached_processes_in_the_worktree_are_leftovers_and_attached_ones_are_
 async fn the_temporary_directory_and_programs_built_in_the_worktree_tie_detached_processes() {
     let root = tempfile::tempdir().unwrap();
     let space = workspace(root.path());
-    let tmp_dir = space.tmp_dir.clone().unwrap();
+    let tmp_dir = space.directories[1].clone();
     let elsewhere = root.path().join("elsewhere");
     std::fs::create_dir(&elsewhere).unwrap();
-    let built = space.worktree.as_ref().unwrap().join("built");
+    let built = space.programs.as_ref().unwrap().join("built");
     std::fs::copy(this_binary(), &built).unwrap();
 
     let in_tmp = Adopted::start(&tmp_dir, "sleep 300", &[], &root.path().join("tmp-pid")).await;
@@ -123,7 +123,7 @@ async fn the_identity_marker_finds_attached_processes_and_ties_detached_ones() {
 async fn a_leftover_includes_what_it_started_anywhere() {
     let root = tempfile::tempdir().unwrap();
     let space = workspace(root.path());
-    let worktree = space.worktree.clone().unwrap();
+    let worktree = space.programs.clone().unwrap();
     let pids = root.path().join("pids");
     // The shell runs in the worktree; its child moved out of it.
     let script = format!(
@@ -149,7 +149,7 @@ async fn a_leftover_includes_what_it_started_anywhere() {
 async fn tracked_processes_their_descendants_and_their_ancestors_are_not_found() {
     let root = tempfile::tempdir().unwrap();
     let space = workspace(root.path());
-    let worktree = space.worktree.clone().unwrap();
+    let worktree = space.programs.clone().unwrap();
     let detached = Detached::start(&worktree, &root.path().join("pids")).await;
 
     let found = untracked(&space, vec![detached.shell.clone()]).await;
@@ -170,8 +170,8 @@ async fn a_chat_finds_processes_by_its_marker_and_temporary_directory() {
     std::fs::create_dir(&elsewhere).unwrap();
     let chat = Space {
         id: "chat-id".into(),
-        worktree: None,
-        tmp_dir: Some(tmp_dir.clone()),
+        directories: vec![tmp_dir.clone()],
+        programs: None,
     };
     let marker = [(crate::env::CHAT, "chat-id")];
     let marked = Adopted::start(

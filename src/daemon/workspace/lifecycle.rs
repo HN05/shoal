@@ -1,6 +1,7 @@
 //! One removal path for explicit removal and automatic cleanup.
 use super::{Manager, RemovalRules, executions::StopPolicy};
 use crate::daemon::refusal::{Reason, Refusal};
+use crate::daemon::space_processes::WorktreeTies;
 use crate::{
     daemon::{
         cleanup::{Rule, Snapshot},
@@ -153,11 +154,15 @@ impl<'a> Removal<'a> {
         }
     }
 
-    /// Automatic removal takes only unused workspaces, so a detached process
-    /// running from one is activity that retains it; the others stop the
-    /// processes its worktree ties to it.
-    fn stops_detached_processes(self) -> bool {
-        !matches!(self, Removal::Automatic { .. })
+    /// What the worktree ties to the workspace for removal to stop.
+    /// Automatic removal takes only unused workspaces, so a process working
+    /// in one is activity that retains it, while a program built there and
+    /// left running elsewhere is not; the others stop both.
+    fn worktree_ties(self) -> WorktreeTies {
+        match self {
+            Removal::Automatic { .. } => WorktreeTies::Programs,
+            _ => WorktreeTies::All,
+        }
     }
 
     /// Merged cleanup, an ancestor's completion and a parent's removal
@@ -1066,7 +1071,10 @@ impl Manager {
         if let Some(hook) = post_remove {
             outcome.hook_error = self.run_post_remove_hook(workspace, &hook).await;
             // The hook runs with the workspace identity after removal's sweep.
-            if let Err(error) = self.stop_processes_without_worktree(workspace).await {
+            if let Err(error) = self
+                .stop_removed_processes(workspace, WorktreeTies::None)
+                .await
+            {
                 crate::daemon::log!(
                     "processes left by the post-remove hook of {} not stopped: {error:#}",
                     workspace.name
@@ -1151,7 +1159,7 @@ impl Manager {
         }
         // Processes can write files as they stop, which the final inspection
         // and the checkpoint must include.
-        self.stop_removed_processes(workspace, removal.stops_detached_processes())
+        self.stop_removed_processes(workspace, removal.worktree_ties())
             .await?;
         let check = self
             .recheck_removal(workspace, removal, Stage::AfterHooks, &cancelled)
@@ -1283,7 +1291,8 @@ impl Manager {
             &super::StopRequest::removal(),
         )
         .await?;
-        self.stop_processes_without_worktree(workspace).await?;
+        self.stop_removed_processes(workspace, WorktreeTies::None)
+            .await?;
         let children = self.remove_children(workspace, removal).await?;
         // Prune only this owned registration, through Worktrunk, and retain
         // its branch because the contents cannot be inspected.

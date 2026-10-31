@@ -2594,7 +2594,7 @@ them, with HEAD, in a [checkpoint](#checkpoints-and-restore).
 Removal stops tracked commands, then the workspace's
 [untracked processes](#untracked-processes) as `shoal stop --processes` does,
 including those hooks and `shoal work env` exports started. Automatic cleanup
-leaves out leftovers only the worktree ties to the workspace, which keep it as
+leaves out leftovers working in the worktree, which keep the workspace as
 activity instead. Ownership and removal policy are checked again after removal hooks,
 and the branch decision uses that last inspection. Ignored files go; shared caches
 stay; Worktrunk hooks are disabled.
