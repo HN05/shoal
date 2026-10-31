@@ -282,3 +282,34 @@ fn a_launch_profile_opens_its_app_by_its_own_mode() {
     // A profile that sets no mode of its own launches the CLI.
     assert!(!opens_app("claude-cli"));
 }
+
+#[cfg(feature = "happy")]
+#[test]
+fn an_app_run_agent_takes_the_model_of_the_agent_it_starts() {
+    let config = crate::config::Config::from_toml(
+        "[agent]\ndefault = 'happy-claude'\neffort = 'xhigh'\n[agents.claude]\nmodel = 'opus'\neffort = 'low'\n",
+    )
+    .unwrap();
+    let settings = config.resolve(&Default::default()).unwrap();
+    let choice = |model: Option<&str>, effort: &str| ModelChoice {
+        model: model.map(str::to_owned),
+        effort: Some(effort.to_owned()),
+    };
+    // `[agent]` chose happy-claude, so its effort applies over Claude's own.
+    assert_eq!(
+        resolve_model(&settings, "happy-claude", Default::default()),
+        choice(Some("opus"), "xhigh")
+    );
+    assert_eq!(
+        resolve_model(&settings, "happy-codex", Default::default()),
+        ModelChoice::default()
+    );
+    let requested = ModelChoice {
+        model: None,
+        effort: Some("high".into()),
+    };
+    assert_eq!(
+        resolve_model(&settings, "happy-claude", requested),
+        choice(Some("opus"), "high")
+    );
+}

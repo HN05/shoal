@@ -122,11 +122,30 @@ pub(super) async fn start(
                 "shoal review <url> --repo <repository>",
             )
             .await?;
+            check_reviewer_model(ctx, &repo, &reviewer, &model).await?;
             match kind {
                 ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, model, args).await,
                 ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, model, args).await,
             }
         }
+    }
+}
+
+/// Refuse an agent reviewer's `model` before its workspace is opened or
+/// updated: that of the named agent, else of `agent.default`.
+async fn check_reviewer_model(
+    ctx: &Context,
+    repo: &Repository,
+    reviewer: &Reviewer,
+    model: &ModelChoice,
+) -> Result<()> {
+    let Reviewer::Agent(agent) = reviewer else {
+        return Ok(());
+    };
+    let settings = super::chat::settings(ctx, repo).await?;
+    match agent.clone().or_else(|| settings.agent.default.clone()) {
+        Some(agent) => super::chat::check_model(&settings, &agent, model),
+        None => Ok(()),
     }
 }
 

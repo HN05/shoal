@@ -132,7 +132,7 @@ fn check_model(
     agent: &Agent,
     model: &ModelChoice,
 ) -> Result<()> {
-    let resolved = settings.model(agent.name(), model.clone());
+    let resolved = agents::resolve_model(settings, agent.name(), model.clone());
     agents::check_model(settings, agent.name(), &resolved)
 }
 
