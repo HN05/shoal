@@ -811,7 +811,8 @@ background, read-only, in a detached checkout of that commit outside the
 workspace, so uncommitted edits and later commits stay out; no session opens and
 no setup runs. The checkout's files are read-only whatever the reviewer's
 settings allow, and Shoal adds no trust entry for it; it is removed when the
-review ends. A queued review takes the
+review ends. The daemon reads the workspace's configuration only once its
+worktree verifies as the workspace's. A queued review takes the
 workspace's HEAD when it starts. A workspace has at most one queued or running
 review: running the command again returns the queued one, and is refused while one
 runs. A review waits in the [agent queue](#agent-queue) for a slot, ahead of every

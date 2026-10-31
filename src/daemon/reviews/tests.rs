@@ -357,6 +357,27 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
 }
 
 #[tokio::test]
+async fn a_replaced_checkout_is_not_reviewed() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let repository = fixture
+        .manager
+        .repository(fixture.workspace.repository_id.as_str())
+        .await
+        .unwrap();
+    // Another worktree on the same branch at the workspace's path.
+    let path = fixture.workspace.path.to_str().unwrap();
+    crate::test_support::git(&repository.path, &["worktree", "remove", "--force", path]);
+    crate::test_support::git(
+        &repository.path,
+        &["worktree", "add", "-q", path, &fixture.workspace.branch],
+    );
+    let review = fixture.review().await;
+    assert_eq!(review.state, ReviewState::Failed, "{review:?}");
+    assert_eq!(review.failure, Some(FailureReason::ExecutionFailed));
+    assert_eq!(review.reviewer, None);
+}
+
+#[tokio::test]
 async fn removing_the_workspace_stops_its_review() {
     let fixture = fixture(&[("slow", &until_tests_end())], "agent = 'slow'").await;
     let manager = &fixture.manager;

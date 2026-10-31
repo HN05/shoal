@@ -155,6 +155,9 @@ impl Manager {
             // A cancel or the workspace's removal recorded the review's end.
             _ = cancelled.wait_for(|cancelled| *cancelled) => return Ok(Pass::Ended),
         }
+        // Its configuration and commits are read only from the worktree
+        // that is this workspace's.
+        self.verify_worktree(&workspace).await?;
         let settings = self.workspace_settings_with_templates(&workspace).await?;
         let commits = self.review_commits(&workspace, &review.target).await?;
         let (head, base, now) = (commits.head.clone(), commits.base.clone(), now());
