@@ -662,3 +662,32 @@ async fn removing_the_repository_stops_its_reviews_first() {
         .unwrap();
     assert!(!manager.paths.reviews().join(queued.id.to_string()).exists());
 }
+
+#[tokio::test]
+async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = fixture(&[], "").await;
+    let manager = &fixture.manager;
+    let id = fixture.workspace.id.clone();
+    let stuck = manager
+        .store
+        .run(move |db| {
+            let review = store::queue(db, &id, &ReviewTarget::Workspace, "absent", 1)?.id();
+            store::start(db, review, "head", "base", 2)?;
+            Ok(review)
+        })
+        .await
+        .unwrap();
+    let run = manager.paths.reviews().join(stuck.to_string());
+    std::fs::create_dir_all(run.join("checkout").join("file")).unwrap();
+    // Without write access to the run, its checkout cannot go.
+    std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
+    manager.recover_reviews().await.unwrap();
+    std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let review = manager.review(stuck).await.unwrap();
+    assert_eq!(review.state, ReviewState::Failed, "{review:?}");
+    assert!(run.join("checkout").exists());
+    // The next start removes it.
+    manager.recover_reviews().await.unwrap();
+    assert!(!run.exists());
+}

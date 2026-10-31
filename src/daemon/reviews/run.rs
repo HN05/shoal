@@ -347,14 +347,42 @@ impl Manager {
     /// Remove the checkouts and output that reviews a daemon stop interrupted
     /// left behind, and queue those reviews again.
     pub(crate) async fn recover_reviews(&self) -> Result<()> {
-        let requeued = self.store.run(|db| store::requeue_running(db)).await?;
+        let unreconciled = self.remove_interrupted_runs().await;
+        let kept = match &unreconciled {
+            Ok(kept) => kept.clone(),
+            Err(_) => self.store.run(|db| store::running(db)).await?,
+        };
+        let failed = kept.clone();
+        let now = now();
+        let requeued = self
+            .store
+            .run(move |db| {
+                for id in &failed {
+                    store::fail(db, *id, None, FailureReason::ExecutionFailed, now)?;
+                }
+                store::requeue_running(db, &failed)
+            })
+            .await?;
         if requeued > 0 {
             log!("queued {requeued} interrupted reviews again");
         }
-        for files in run_directories(&self.paths.reviews())? {
-            remove_interrupted_run(&files, &self.paths.home).await?;
+        for id in kept {
+            self.deliver_review(id).await;
         }
-        Ok(())
+        unreconciled.map(drop)
+    }
+
+    /// Remove the runs a stopped daemon left, returning the reviews whose
+    /// runs could not be removed; their checkouts stay for the next start.
+    async fn remove_interrupted_runs(&self) -> Result<Vec<i64>> {
+        let mut kept = Vec::new();
+        for files in run_directories(&self.paths.reviews())? {
+            if let Err(error) = remove_interrupted_run(&files, &self.paths.home).await {
+                log!("{}: {error:#}", files.directory.display());
+                kept.extend(files.review());
+            }
+        }
+        Ok(kept)
     }
 }
 

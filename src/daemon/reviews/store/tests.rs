@@ -159,7 +159,7 @@ async fn failures_are_typed_and_interrupted_runs_start_over() {
         .run(|db| {
             let id = queue(db, "work", &ReviewTarget::Workspace, "claude", 1)?.id();
             start(db, id, "head", "base", 2)?;
-            assert_eq!(requeue_running(db)?, 1);
+            assert_eq!(requeue_running(db, &[])?, 1);
             let review = load(db, id)?.unwrap();
             assert_eq!((review.state, review.head), (ReviewState::Queued, None));
             assert_eq!(queued(db)?, [id]);
