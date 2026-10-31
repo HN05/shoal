@@ -103,9 +103,14 @@ fn render_activity(view: &StatusView, palette: Palette) {
         ),
         None => outln!("Usage:         none"),
     }
-    outln!("Leftovers:     {}", status.leftovers.len());
+    outln!("Leftovers:     {}", status.leftover_count);
     for leftover in &status.leftovers {
         outln!("  {}  {}", leftover.pid, leftover.command);
+    }
+    if let Some(more) = status.leftover_count.checked_sub(status.leftovers.len())
+        && more > 0
+    {
+        outln!("  and {more} more");
     }
 
     outln!("Sessions:      {}", view.sessions.len());

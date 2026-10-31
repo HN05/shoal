@@ -462,10 +462,10 @@ processes of workspaces or chats, by default the current one, and
 workspaces below. The daemon looks for every space's leftovers in each cleanup sweep, from one
 listing of the machine's processes, and keeps them in memory until the next
 one; the first sweep after a restart finds them again. `shoal status` shows a
-workspace's count and each one's PID and command, and with `--json` a
-`leftovers` list of `pid`, `command`, `directory` and `started_at` in Unix
-seconds. Its agent's hook names each new one once, and they create no
-notification. A space's untracked processes carry its identity
+workspace's count and the PID and command of the first ten, and with `--json`
+`leftover_count` and a `leftovers` list of the first ten with `pid`, `command`,
+`directory` and `started_at` in Unix seconds. Its agent's hook names each new
+one once, up to ten per delivery, and they create no notification. A space's untracked processes carry its identity
 (`SHOAL_WORKSPACE_ID`, or `SHOAL_CHAT` for a chat) or are its leftovers:
 processes whose parent exited, so that launchd or init adopted them, or that
 descend from such a process, working in the worktree or the space's temporary

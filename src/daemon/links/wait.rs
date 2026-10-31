@@ -34,7 +34,7 @@ const POLL_INTERVAL: Duration = Duration::from_secs(30);
 
 /// The bytes a response's updates and messages may take, leaving room for
 /// its other fields.
-const RESPONSE_LIMIT: usize = crate::protocol::MAX_FRAME - 256;
+pub(crate) const RESPONSE_LIMIT: usize = crate::protocol::MAX_FRAME - 256;
 
 /// Conflicted paths named in a branch conflict message; `shoal conflicts` lists all.
 const MAX_LISTED_FILES: usize = 10;
@@ -236,9 +236,13 @@ impl Manager {
         let workspace_id = workspace.id.clone();
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.deliverable_messages(&workspace).await?;
-        let leftovers = self.leftovers.undelivered(&workspace_id);
-        // The messages and leftovers share the response with the updates.
-        let reserved = serde_json::to_vec(&messages)?.len() + serde_json::to_vec(&leftovers)?.len();
+        // The messages, then the leftovers, share the response with the
+        // updates.
+        let messages_size = serde_json::to_vec(&messages)?.len();
+        let leftovers = self
+            .leftovers
+            .undelivered(&workspace_id, RESPONSE_LIMIT.saturating_sub(messages_size))?;
+        let reserved = messages_size + serde_json::to_vec(&leftovers)?.len();
         let children = self.delegated_workspaces(&workspace.id).await?;
         let updates = match self.gates.try_lock_prs(receiving(&workspace.id, &children)) {
             Some(_gate) => {

@@ -7,7 +7,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::daemon::{
     agent_messages::{AgentMessage, MAX_UNREAD, MAX_UNREAD_BYTES},
-    links::wait::Updates,
+    links::wait::{RESPONSE_LIMIT, Updates},
     notifications::{self, About, NotificationKind},
     workspace::Manager,
 };
@@ -96,8 +96,9 @@ impl Manager {
         if !delivery.is_current() {
             return Ok(Updates::superseded());
         }
+        let room = RESPONSE_LIMIT.saturating_sub(serde_json::to_vec(&messages)?.len());
         Ok(Updates {
-            leftovers: self.leftovers.undelivered(chat),
+            leftovers: self.leftovers.undelivered(chat, room)?,
             ..Updates::messages(messages)
         })
     }

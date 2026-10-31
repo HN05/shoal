@@ -33,8 +33,9 @@ pub struct Leftover {
     pub started_at: u64,
 }
 
-/// The most leftovers one delivery names; the rest follow in later ones.
-const DELIVERED_AT_ONCE: usize = 10;
+/// The most leftovers one delivery or status names; the rest follow in
+/// later deliveries.
+const LISTED_AT_ONCE: usize = 10;
 
 /// The longest command a leftover keeps, so a delivery stays small.
 const COMMAND_LIMIT: usize = 300;
@@ -71,17 +72,28 @@ impl Leftovers {
         }
     }
 
-    /// The leftovers of the workspace or chat `space`.
-    pub(crate) fn of(&self, space: &str) -> Vec<Leftover> {
-        self.listed(space, |_| true)
+    /// How many leftovers the workspace or chat `space` has, and as many of
+    /// them as one status lists.
+    pub(crate) fn of(&self, space: &str) -> (usize, Vec<Leftover>) {
+        let mut leftovers = self.listed(space, |_| true);
+        let count = leftovers.len();
+        leftovers.truncate(LISTED_AT_ONCE);
+        (count, leftovers)
     }
 
     /// The leftovers of `space` its agent has not been told about, as many
-    /// as one delivery names.
-    pub(crate) fn undelivered(&self, space: &str) -> Vec<Leftover> {
-        let mut undelivered = self.listed(space, |found| !found);
-        undelivered.truncate(DELIVERED_AT_ONCE);
-        undelivered
+    /// as one delivery names in `room` bytes; the rest wait for a later one.
+    pub(crate) fn undelivered(&self, space: &str, room: usize) -> Result<Vec<Leftover>> {
+        let mut used = 0;
+        let mut fitting = Vec::new();
+        for leftover in self.listed(space, |found| !found) {
+            used += serde_json::to_vec(&leftover)?.len() + 1;
+            if used > room || fitting.len() == LISTED_AT_ONCE {
+                break;
+            }
+            fitting.push(leftover);
+        }
+        Ok(fitting)
     }
 
     fn listed(&self, space: &str, delivered: impl Fn(bool) -> bool) -> Vec<Leftover> {
