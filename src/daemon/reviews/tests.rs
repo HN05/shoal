@@ -370,6 +370,42 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
 }
 
 #[tokio::test]
+async fn a_cancelled_review_holds_its_repository_until_its_run_ends() {
+    let fixture = fixture(&[], "").await;
+    let manager = &fixture.manager;
+    let repository = fixture.workspace.repository_id.as_str().to_owned();
+    let id = fixture.workspace.id.clone();
+    let queued = manager
+        .store
+        .run(move |db| {
+            store::queue(
+                db,
+                &id,
+                &ReviewTarget::Workspace,
+                "absent",
+                &Default::default(),
+                1,
+            )
+        })
+        .await
+        .unwrap()
+        .id();
+    assert!(manager.ensure_no_reviews_in(&repository).await.is_err());
+    // Cancelled, while its run still removes the checkout.
+    manager
+        .store
+        .run(move |db| store::cancel(db, queued, None, 2))
+        .await
+        .unwrap();
+    let run = Arc::new(watch::channel(true).0);
+    manager.reviews.cancels.lock().unwrap().insert(queued, run);
+    let error = manager.ensure_no_reviews_in(&repository).await.unwrap_err();
+    assert!(error.to_string().contains("queued or running"), "{error:#}");
+    manager.reviews.cancels.lock().unwrap().remove(&queued);
+    manager.ensure_no_reviews_in(&repository).await.unwrap();
+}
+
+#[tokio::test]
 async fn a_replaced_checkout_is_not_reviewed() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let repository = fixture

@@ -229,6 +229,29 @@ impl Manager {
     /// Cancel the reviews of the repository's workspaces and wait until their
     /// runs have ended and removed their checkouts, which are worktrees of
     /// the repository its removal would otherwise refuse.
+    /// Refuse while a review of the repository is queued or running, or its
+    /// ended run still holds a checkout, a worktree of the repository.
+    pub(crate) async fn ensure_no_reviews_in(&self, repository_id: &str) -> Result<()> {
+        let runs: Vec<i64> = self
+            .reviews
+            .cancels
+            .lock()
+            .unwrap()
+            .keys()
+            .copied()
+            .collect();
+        let id = repository_id.to_owned();
+        let held = self
+            .store
+            .run(move |db| store::holds_repository(db, &id, &runs))
+            .await?;
+        ensure!(
+            !held,
+            "a review of the repository is queued or running; wait for it or cancel it"
+        );
+        Ok(())
+    }
+
     pub(crate) async fn stop_repository_reviews(&self, repository_id: &str) {
         let id = repository_id.to_owned();
         let active = match self.store.run(move |db| store::active_in(db, &id)).await {

@@ -189,6 +189,7 @@ impl Manager {
         self.store
             .run(move |db| movable_records(db, &id, running).map(drop))
             .await?;
+        self.ensure_no_reviews_in(&repo.id).await?;
         let stopping = self.stopping_processes(&repo.id, running);
         let processes = process::in_directory_besides(directory, stopping).await?;
         ensure!(
@@ -623,9 +624,8 @@ fn utf8(path: &Path) -> Result<String> {
 
 /// Refuse a repository whose records show it in use: a lease that handed its
 /// checkout to a caller, a command or agent unless `running` lets the caller
-/// stop it, a chat, queued launch or review, whose checkout is a worktree of
-/// the repository, or a workspace in another lifecycle operation. Returns
-/// each workspace's state.
+/// stop it, a chat or queued launch, or a workspace in another lifecycle
+/// operation. Returns each workspace's state.
 fn movable_records(
     db: &rusqlite::Connection,
     id: &str,
@@ -659,15 +659,6 @@ fn movable_records(
             "{what}; wait for it to finish"
         );
     }
-    ensure!(
-        !store::exists(
-            db,
-            "SELECT 1 FROM reviews JOIN workspaces ON workspaces.id=reviews.workspace_id
-                WHERE workspaces.repository_id=?1 AND reviews.state IN ('queued','running')",
-            [id]
-        )?,
-        "a review of the repository is queued or running; wait for it or cancel it"
-    );
     let states = db
         .prepare("SELECT id,state FROM workspaces WHERE repository_id=?1")?
         .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
