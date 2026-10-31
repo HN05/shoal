@@ -143,6 +143,10 @@ async fn read_views(
     selected: &Selected,
     comments: bool,
 ) -> Result<Vec<Shown>> {
+    // Nothing to read, so no forge is needed, as for a local repository.
+    if selected.items.is_empty() {
+        return Ok(Vec::new());
+    }
     ctx.progress("Reading items", async {
         let hosts = ctx.forge_hosts()?;
         let own = own_forge(selected, &hosts).await?;

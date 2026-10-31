@@ -3944,6 +3944,11 @@ fn review_runs_the_configured_command_or_queues_an_agent_review() {
     assert_eq!(fixture.ok(&["view", "review", &id])["summary"], "One nit.");
     let workspaces = fixture.ok(&["work"]);
     assert_eq!(workspaces[0]["latest_review"]["status"], "finished: 1 nit");
+    // Plain view shows it in a repository without a forge, with nothing linked.
+    let viewed = fixture.ok(&["view", "--workspace", "agent-only"]);
+    assert_eq!(viewed, serde_json::json!([viewed[0]]), "{viewed}");
+    assert_eq!(viewed[0]["kind"], "review", "{viewed}");
+    assert_eq!(viewed[0]["id"].to_string(), id);
 }
 
 /// An upstream remote served at ssh://git@forge.example/team/project.git;
