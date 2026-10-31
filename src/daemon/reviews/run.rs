@@ -124,7 +124,9 @@ impl Manager {
     ) -> Result<(String, Ended)> {
         self.prepare_checkout(workspace, &commits.head, files)
             .await?;
-        let configured = self.configured_workspace_environment(workspace).await?;
+        let configured = self
+            .configured_environment_from(workspace, settings)
+            .await?;
         let instructions = self
             .review_instructions(review, workspace, settings, files, commits)
             .await?;

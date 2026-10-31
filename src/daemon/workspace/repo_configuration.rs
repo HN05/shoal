@@ -99,13 +99,15 @@ impl Manager {
     }
 
     /// [`Self::workspace_settings`] with the template files beside the global
-    /// config, which a review's instructions read.
+    /// config, which a review's instructions read, over the daemon's current
+    /// global config.
     pub(crate) async fn workspace_settings_with_templates(
         &self,
         workspace: &Workspace,
     ) -> Result<Effective> {
-        let config = Config::load_with_templates(&self.paths)?;
-        config.resolve(&self.workspace_layers(workspace).await?)
+        let layers = self.workspace_layers(workspace).await?;
+        self.config()
+            .resolve_with_template_files(&layers, &self.paths)
     }
 
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
@@ -239,6 +241,27 @@ impl Manager {
         with_tmp_dir: bool,
     ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let settings = self.workspace_settings(workspace).await?;
+        self.environment_from_settings(workspace, &settings, with_tmp_dir)
+            .await
+    }
+
+    /// [`Self::configured_workspace_environment`] from `settings` the caller
+    /// resolved, so one operation reads one version of the config.
+    pub(crate) async fn configured_environment_from(
+        &self,
+        workspace: &Workspace,
+        settings: &Effective,
+    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
+        self.environment_from_settings(workspace, settings, true)
+            .await
+    }
+
+    async fn environment_from_settings(
+        &self,
+        workspace: &Workspace,
+        settings: &Effective,
+        with_tmp_dir: bool,
+    ) -> Result<BTreeMap<String, std::ffi::OsString>> {
         let repository = self.repository(&workspace.repository_id).await?;
         let ports = self.list_ports(Some(&workspace.id)).await?;
         let caches = crate::caches::directories(&repository, &settings.caches)?;

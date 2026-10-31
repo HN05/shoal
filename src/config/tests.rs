@@ -629,3 +629,30 @@ fn an_empty_repository_env_remove_keeps_every_variable() {
     assert!(removed(""));
     assert!(!removed("[agents.claude]\nenv_remove = []\n"));
 }
+
+#[test]
+fn a_snapshot_resolves_with_the_template_files_beside_its_file() {
+    let home = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(home.path());
+    let file = Config::path(&paths);
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    std::fs::write(&file, "[review]\nagent = 'codex'\n").unwrap();
+    let snapshot = Config::load(&paths).unwrap();
+    // Edits after the snapshot reach only the template files.
+    std::fs::write(&file, "[review]\nagent = 'claude'\n").unwrap();
+    std::fs::write(
+        file.parent().unwrap().join(templates::REVIEW_FILE),
+        "Follow the brief.",
+    )
+    .unwrap();
+    let settings = snapshot
+        .resolve_with_template_files(&Default::default(), &paths)
+        .unwrap();
+    assert_eq!(settings.agent.templates.review, "Follow the brief.");
+    assert_eq!(
+        settings.review.agent.as_ref().map(|agent| agent.name()),
+        Some("codex")
+    );
+    let plain = snapshot.resolve(&Default::default()).unwrap();
+    assert_eq!(plain.agent.templates.review, templates::review_base());
+}

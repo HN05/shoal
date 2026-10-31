@@ -277,18 +277,7 @@ impl Config {
     /// for omitted inline templates, as the CLI reads it for a launch.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
         let mut config = Self::load(paths)?;
-        let directory = Self::path(paths);
-        let directory = directory.parent().context("config has no directory")?;
-        let templates = &mut config.repository;
-        if templates.agent.templates.worker.is_none() {
-            templates.agent.templates.worker = templates::read(directory, templates::WORKER_FILE)?;
-        }
-        if templates.agent.templates.chat.is_none() {
-            templates.agent.templates.chat = templates::read(directory, templates::CHAT_FILE)?;
-        }
-        if templates.agent.templates.review.is_none() {
-            templates.agent.templates.review = templates::read(directory, templates::REVIEW_FILE)?;
-        }
+        read_template_files(&mut config.repository, paths)?;
         Ok(config)
     }
 
@@ -363,13 +352,49 @@ impl Config {
     /// The settings in effect for a target whose repository layers are
     /// `layers`: those over this machine's, then the built-in defaults.
     pub fn resolve(&self, layers: &ConfigLayers) -> Result<Effective> {
-        let settings = resolve::Stack::new(self, layers).resolve()?;
+        self.resolve_over(self.repository_layer(), layers)
+    }
+
+    /// [`Self::resolve`] with the template files beside the config standing
+    /// in for omitted inline templates, as a loaded snapshot lacks them.
+    pub fn resolve_with_template_files(
+        &self,
+        layers: &ConfigLayers,
+        paths: &Paths,
+    ) -> Result<Effective> {
+        let mut global = self.repository_layer();
+        read_template_files(&mut global, paths)?;
+        self.resolve_over(global, layers)
+    }
+
+    /// The settings of `global`, this config's repository layer, under
+    /// `layers`, with this machine's tools.
+    fn resolve_over(&self, global: RepoConfig, layers: &ConfigLayers) -> Result<Effective> {
+        let settings = resolve::Stack::over(global, layers).resolve()?;
         let agents = agents::describe(&settings.agents, &self.machine.agents);
         crate::ai::validate(&agents, &settings.commands)?;
         let tools = crate::ai::tools(&agents);
         let proxies = crate::proxy::routes(&tools, &self.machine.proxies);
         Ok(Effective::new(settings, tools, proxies))
     }
+}
+
+/// Fill `global`'s omitted inline templates from the files beside the
+/// global config.
+fn read_template_files(global: &mut RepoConfig, paths: &Paths) -> Result<()> {
+    let path = Config::path(paths);
+    let directory = path.parent().context("config has no directory")?;
+    let templates = &mut global.agent.templates;
+    if templates.worker.is_none() {
+        templates.worker = templates::read(directory, templates::WORKER_FILE)?;
+    }
+    if templates.chat.is_none() {
+        templates.chat = templates::read(directory, templates::CHAT_FILE)?;
+    }
+    if templates.review.is_none() {
+        templates.review = templates::read(directory, templates::REVIEW_FILE)?;
+    }
+    Ok(())
 }
 
 fn default_template() -> &'static str {
