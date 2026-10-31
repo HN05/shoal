@@ -194,6 +194,7 @@ fn command(reviewer: &Reviewer) -> Result<Command> {
     for name in &reviewer.remove {
         command.env_remove(name);
     }
+    command.env(crate::env::REVIEW_RUN, &files.directory);
     command
         .current_dir(files.checkout())
         .stdin(Stdio::null())

@@ -225,16 +225,29 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
     crate::git::detached::add(&fixture.workspace.path, &checkout, head.trim())
         .await
         .unwrap();
-    // A reviewer that outlived its daemon, no child of this process.
-    let spawned = std::process::Command::new("sh")
-        .args(["-c", "sleep 100000 >/dev/null 2>&1 & echo $!"])
-        .current_dir(&checkout)
-        .output()
-        .unwrap();
-    let survivor: i32 = String::from_utf8_lossy(&spawned.stdout)
-        .trim()
-        .parse()
-        .unwrap();
+    // A reviewer that outlived its daemon, and someone's shell in the
+    // checkout, neither a child of this process.
+    let detached = |marked: bool| {
+        // This test binary, whose environment can be read, unlike that of
+        // the platform's own executables on macOS.
+        let mut command = std::process::Command::new("sh");
+        command
+            .args([
+                "-c",
+                "\"$0\" --exact daemon::reviews::tests::sleep_as_a_survivor --ignored >/dev/null 2>&1 & echo $!",
+            ])
+            .arg(std::env::current_exe().unwrap())
+            .current_dir(&checkout);
+        if marked {
+            command.env(crate::env::REVIEW_RUN, checkout.parent().unwrap());
+        }
+        let spawned = command.output().unwrap();
+        String::from_utf8_lossy(&spawned.stdout)
+            .trim()
+            .parse::<i32>()
+            .unwrap()
+    };
+    let (survivor, bystander) = (detached(true), detached(false));
     manager.recover_reviews().await.unwrap();
     // SAFETY: signal 0 only checks whether the process exists.
     assert_ne!(
@@ -242,6 +255,13 @@ async fn startup_removes_interrupted_checkouts_and_queues_their_reviews_again() 
         0,
         "the survivor runs on"
     );
+    assert_eq!(
+        unsafe { libc::kill(bystander, 0) },
+        0,
+        "the bystander was stopped"
+    );
+    // SAFETY: the bystander is this test's own sleep.
+    unsafe { libc::kill(bystander, libc::SIGKILL) };
     assert!(!checkout.parent().unwrap().exists());
     let review = manager.review(queued).await.unwrap();
     assert_eq!((review.state, review.head), (ReviewState::Queued, None));
@@ -690,4 +710,12 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     // The next start removes it.
     manager.recover_reviews().await.unwrap();
     assert!(!run.exists());
+}
+
+/// Sleeps as a process a stopped daemon's reviewer left, for the recovery
+/// test, which starts it.
+#[test]
+#[ignore]
+fn sleep_as_a_survivor() {
+    std::thread::sleep(std::time::Duration::from_secs(100_000));
 }

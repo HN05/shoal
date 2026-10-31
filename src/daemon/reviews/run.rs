@@ -473,13 +473,17 @@ fn run_directories(directory: &Path) -> Result<Vec<Files>> {
         .collect()
 }
 
-/// Remove a run a stopped daemon left: stop the reviewer processes still
-/// working in its checkout, verified by identity, then remove its trust
-/// entries and files.
+/// Remove a run a stopped daemon left: stop its reviewer processes still
+/// working in its checkout, each verified by identity and started with the
+/// run's marker, then remove its trust entries and files. Anyone else's
+/// process there, such as a shell, is left alone.
 async fn remove_interrupted_run(files: &Files, home: &Path) -> Result<()> {
     let checkout = canonical(&files.checkout());
     if checkout.is_dir() {
-        let survivors = crate::process::identities_in(&checkout).await?;
+        let mut survivors = crate::process::identities_in(&checkout).await?;
+        survivors.retain(|survivor| {
+            crate::process::identity::started_with(survivor, crate::env::REVIEW_RUN)
+        });
         if !survivors.is_empty() {
             log!(
                 "stopping {} reviewer processes a stopped daemon left",
