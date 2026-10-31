@@ -144,8 +144,9 @@ pub async fn run_demo(
 /// installed one.
 pub struct TakenOver {
     pub workspace: String,
-    /// The agent, as the execution registered it.
-    pub agent: String,
+    /// The agent, as the execution registered it, with the model and effort
+    /// it runs with.
+    pub agent: TrackedAgent,
     /// The descriptor of the wrapper's daemon connection.
     pub connection: i32,
     /// The recovery record the agent resumes from.

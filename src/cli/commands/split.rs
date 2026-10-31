@@ -58,10 +58,15 @@ struct Report<'a> {
 }
 
 pub(super) async fn run(ctx: &Context, workspace: Option<String>, split: Split) -> Result<i32> {
-    // A supplied branch fails before the parent picker opens.
+    // A supplied branch, or a model for no agent, fails before the parent
+    // picker opens.
     if let Some(branch) = &split.branch {
         crate::git::check_branch_name(None, branch).await?;
     }
+    anyhow::ensure!(
+        split.agent.is_some() || split.fork || split.model.is_empty(),
+        "--model and --effort need --agent or --fork"
+    );
     let parent = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
     let agent = child_agent(ctx, &parent, split.agent, split.fork, split.model).await?;
     let issue = match &split.issue {
@@ -104,13 +109,7 @@ async fn child_agent(
     let agent = match (agent, &session) {
         (Some(agent), _) => agent,
         (None, Some(session)) => session.agent.parse()?,
-        (None, None) => {
-            anyhow::ensure!(
-                model.is_empty(),
-                "--model and --effort need --agent or --fork"
-            );
-            return Ok(None);
-        }
+        (None, None) => return Ok(None),
     };
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(parent.to_owned())).await?;
     agents::ensure_available(agent.name(), &settings)?;

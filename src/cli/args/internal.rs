@@ -189,6 +189,8 @@ pub enum InternalCommand {
         workspace: String,
         #[arg(long)]
         agent: String,
+        #[command(flatten)]
+        model: crate::cli::args::ModelArgs,
         /// The descriptor of the wrapper's daemon connection.
         #[arg(long)]
         connection: i32,

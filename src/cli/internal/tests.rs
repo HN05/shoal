@@ -375,17 +375,25 @@ fn proxy_report_round_trips_its_json() {
 fn take_over_round_trips_the_agent_and_its_connection() {
     let record = Path::new("/state/a record.json");
     let log = Path::new("/logs/session log");
+    let agent = crate::execution::TrackedAgent {
+        name: "happy codex".into(),
+        model: crate::agent::ModelChoice {
+            model: Some("m1".into()),
+            effort: Some("high".into()),
+        },
+    };
     for (record, log) in [(None, None), (Some(record), Some(log))] {
         let InternalCommand::TakeOver {
             workspace,
-            agent,
+            agent: parsed_agent,
+            model,
             connection,
             record: parsed_record,
             log: parsed_log,
         } = parse(
             Worker::TakeOver {
                 workspace: "workspace-id",
-                agent: "happy codex",
+                agent: &agent,
                 connection: 7,
                 record,
                 log,
@@ -396,7 +404,8 @@ fn take_over_round_trips_the_agent_and_its_connection() {
             panic!("expected take-over worker");
         };
         assert_eq!(workspace, "workspace-id");
-        assert_eq!(agent, "happy codex");
+        assert_eq!(parsed_agent, "happy codex");
+        assert_eq!(crate::agent::ModelChoice::from(model), agent.model);
         assert_eq!(connection, 7);
         assert_eq!(parsed_record.as_deref(), record);
         assert_eq!(parsed_log.as_deref(), log);

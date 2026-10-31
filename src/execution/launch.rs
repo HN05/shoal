@@ -44,7 +44,7 @@ struct TrackedLaunch {
     /// The saved record a restored agent consumes once it is registered.
     record: Option<PathBuf>,
     /// The agent, as the execution registered it.
-    agent: Option<String>,
+    agent: Option<super::TrackedAgent>,
 }
 
 pub(super) async fn run_tracked(
@@ -328,7 +328,7 @@ async fn prepare_tracked_launch(
         auth,
         recovery,
         record: None,
-        agent: agent.map(|agent| agent.name),
+        agent,
     })
 }
 
@@ -349,18 +349,8 @@ async fn prepare_taken_over_launch(
         ..
     } = taken;
     let mut link = takeover::connection(connection)?;
-    // The record keeps the model and effort the agent ran with.
-    let model = record
-        .as_deref()
-        .and_then(|path| recovery::Record::load(path).ok().flatten())
-        .map(|record| record.model)
-        .unwrap_or_default();
-    let tracked = super::TrackedAgent {
-        name: agent.clone(),
-        model,
-    };
     let registered = async {
-        let (place, auth, recovery) = prepare_restore(paths, &workspace, &tracked, mode).await?;
+        let (place, auth, recovery) = prepare_restore(paths, &workspace, &agent, mode).await?;
         let plan = takeover::register_again(&mut link, place).await?;
         anyhow::Ok((auth, recovery, plan, this_wrapper()?))
     }
@@ -374,7 +364,7 @@ async fn prepare_taken_over_launch(
         paths,
         &plan,
         wrapper,
-        Some(&tracked),
+        Some(&agent),
         recovery.automatic,
     );
     let (command, proxy) = recovery
