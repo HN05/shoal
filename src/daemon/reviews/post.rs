@@ -49,9 +49,9 @@ impl Manager {
         }
     }
 
-    /// Submit the review for the commit it covered, `head`. Line comments
-    /// are bound to it: when the PR's head moved, before Shoal read it or
-    /// before the forge was asked, every finding goes in the body instead.
+    /// Submit the review for the commit it covered, `head`, bound to it:
+    /// when the PR's head moved, before Shoal read it or before the forge was
+    /// asked, every finding goes in the body with a note that it is outdated.
     /// Any other failure is not retried, since the review may have reached
     /// the forge.
     async fn submit_review(
@@ -93,10 +93,10 @@ impl Manager {
 }
 
 /// The comment review of `review`: line comments for the findings `inline`
-/// accepts, bound to the reviewed commit, the summary and every other
-/// finding in the body, a note that it covers `outdated` when newer commits
-/// were pushed meanwhile, and the automated-review note when there are
-/// findings.
+/// accepts, the summary and every other finding in the body, and the
+/// automated-review note when there are findings. A review of `outdated`, a
+/// commit newer ones were pushed over, says so; any other is bound to the
+/// reviewed commit.
 pub(super) fn new_review(
     review: &Review,
     inline: impl Fn(&Finding) -> bool,
@@ -134,7 +134,9 @@ pub(super) fn new_review(
     NewReview {
         verdict: ReviewVerdict::Comment,
         body,
-        commit: (!placed.is_empty()).then(|| review.head.clone()).flatten(),
+        // A review of the current head is bound to it, so a push before the
+        // forge receives it refuses it; one already outdated says so.
+        commit: review.head.clone().filter(|_| outdated.is_none()),
         comments: placed
             .into_iter()
             .map(|finding| LineComment {

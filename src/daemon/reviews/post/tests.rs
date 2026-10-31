@@ -69,7 +69,7 @@ fn findings_on_diff_lines_become_line_comments_and_the_rest_go_in_the_body() {
     );
     assert!(posted.body.ends_with(&format!("_{AUTOMATED_NOTE}_")));
     assert!(!posted.body.contains("newer commits"));
-    // Line comments are bound to the commit they were made on.
+    // A review of the current head is bound to it.
     assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
     posted.validate().unwrap();
 }
@@ -95,6 +95,7 @@ fn a_review_of_a_moved_head_puts_every_finding_in_the_body() {
 #[test]
 fn a_clean_review_posts_its_summary_without_the_note() {
     let posted = new_review(&review(Vec::new()), |_| true, None);
+    assert_eq!(posted.commit.as_deref(), Some("0123456789abcdef"));
     assert_eq!(
         posted.body,
         "One blocker.\n\n_Reviewed by claude: no findings._"
