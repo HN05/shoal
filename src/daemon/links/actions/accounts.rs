@@ -5,10 +5,7 @@ use anyhow::{Context, Result};
 use crate::{
     config::forges::{Forges, Whose},
     daemon::workspace::Manager,
-    forge::{
-        ForgeRepo,
-        account::{Account, AgentLogins},
-    },
+    forge::{ForgeRepo, account::Account},
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
@@ -48,10 +45,6 @@ impl Manager {
     /// logins for hosts without one.
     pub(in crate::daemon::links) fn agent_account(&self) -> Account {
         let forges = &self.config().machine.forges;
-        let logins = AgentLogins {
-            logins: forges.logins(Whose::Agent),
-            separate: Vec::new(),
-        };
         // An agent with the user's logins shares what the user's requests taught.
         let tokens = forges.identity(Whose::Agent);
         let user = user_identity(forges);
@@ -60,7 +53,7 @@ impl Manager {
         } else {
             format!("agent {tokens} {user}")
         };
-        Account::agent(logins, forges.logins(Whose::User))
+        Account::agent(forges.logins(Whose::Agent), forges.logins(Whose::User))
             .remembering(self.forge_memories.of(&identity))
     }
 

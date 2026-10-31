@@ -40,16 +40,13 @@ async fn header(account: &Account, host: &str) -> Result<Option<String>> {
 }
 
 #[tokio::test]
-async fn agents_use_their_own_token_then_the_users_outside_separate_forges() {
+async fn agents_use_their_own_token_then_the_users() {
     let fetches = Arc::new(AtomicUsize::new(0));
     let user = logins(
         &[("agent.example", "user-a"), ("user.example", "user-u")],
         &fetches,
     );
-    let agent = AgentLogins {
-        logins: logins(&[("Agent.Example", "agent-a")], &fetches),
-        separate: Vec::new(),
-    };
+    let agent = logins(&[("Agent.Example", "agent-a")], &fetches);
     let account = Account::agent(agent, user);
     assert_eq!(
         header(&account, "agent.example").await.unwrap().unwrap(),
@@ -66,17 +63,6 @@ async fn agents_use_their_own_token_then_the_users_outside_separate_forges() {
     // Each login's token is fetched once for the account's requests.
     header(&account, "agent.example").await.unwrap();
     assert_eq!(fetches.load(Ordering::SeqCst), 2);
-
-    let separate = AgentLogins {
-        logins: Logins::default(),
-        separate: vec![ForgeKind::Forgejo],
-    };
-    let account = Account::agent(separate, logins(&[("user.example", "u")], &fetches));
-    let error = header(&account, "user.example").await.unwrap_err();
-    assert!(
-        format!("{error:#}").contains("agent_token under [machine.forges.\"user.example\"]"),
-        "{error:#}"
-    );
 }
 
 #[tokio::test]

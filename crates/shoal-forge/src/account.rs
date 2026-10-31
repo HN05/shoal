@@ -51,21 +51,11 @@ struct Signer {
     token: OnceCell<String>,
 }
 
-/// An agent's own logins; the user's stand in for those it leaves unset.
-pub struct AgentLogins {
-    /// The agent account's tokens.
-    pub logins: Logins,
-    /// The forges on which the agent has an account of its own, where the
-    /// user's tokens never stand in for one it lacks.
-    pub separate: Vec<ForgeKind>,
-}
-
 #[derive(Default)]
 pub struct Account {
     logins: Logins,
     /// The user's tokens, for hosts an agent has none of its own for.
     fallback: Logins,
-    separate: Vec<ForgeKind>,
     /// What earlier requests as this account taught.
     memory: Memory,
 }
@@ -80,12 +70,11 @@ impl Account {
     }
 
     /// An agent's account; hosts it has no token for use the user's, as
-    /// the agent itself would, except on its separate forges.
-    pub fn agent(agent: AgentLogins, user: Logins) -> Self {
+    /// the agent itself would.
+    pub fn agent(agent: Logins, user: Logins) -> Self {
         Self {
-            logins: agent.logins,
+            logins: agent,
             fallback: user,
-            separate: agent.separate,
             memory: Memory::default(),
         }
     }
@@ -103,24 +92,15 @@ impl Account {
     /// The curl config line that signs a request to `repo`'s host in, or
     /// none without a token, which reaches only public repositories.
     pub(crate) async fn authorization(&self, repo: &ForgeRepo) -> Result<Option<Vec<u8>>> {
-        let Some(signer) = self.signer(&repo.host, repo.kind)? else {
+        let Some(signer) = self.signer(&repo.host) else {
             return Ok(None);
         };
         signer.authorization(repo.kind).await.map(Some)
     }
 
-    /// The login for `host`: the account's own, else the user's unless the
-    /// agent has an account of its own on `kind`.
-    fn signer(&self, host: &str, kind: ForgeKind) -> Result<Option<&Signer>> {
-        if let Some(signer) = self.logins.get(host) {
-            return Ok(Some(signer));
-        }
-        ensure!(
-            !self.separate.contains(&kind),
-            "the agent has its own {} account, so set its agent_token under [machine.forges.\"{host}\"]",
-            kind.name()
-        );
-        Ok(self.fallback.get(host))
+    /// The login for `host`: the account's own, else the user's.
+    fn signer(&self, host: &str) -> Option<&Signer> {
+        self.logins.get(host).or_else(|| self.fallback.get(host))
     }
 }
 

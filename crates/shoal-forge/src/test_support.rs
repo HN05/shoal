@@ -128,9 +128,5 @@ pub fn agent_on(server: &Server, token: &'static str) -> crate::account::Account
             email: None,
         },
     );
-    let agent = crate::account::AgentLogins {
-        logins,
-        separate: Vec::new(),
-    };
-    crate::account::Account::agent(agent, Default::default())
+    crate::account::Account::agent(logins, Default::default())
 }
