@@ -236,8 +236,9 @@ impl Manager {
         let workspace_id = workspace.id.clone();
         let delivery = self.item_waits.start(&workspace.id);
         let messages = self.deliverable_messages(&workspace).await?;
-        // The messages share the response with the updates.
-        let reserved = serde_json::to_vec(&messages)?.len();
+        let leftovers = self.leftovers.undelivered(&workspace_id);
+        // The messages and leftovers share the response with the updates.
+        let reserved = serde_json::to_vec(&messages)?.len() + serde_json::to_vec(&leftovers)?.len();
         let children = self.delegated_workspaces(&workspace.id).await?;
         let updates = match self.gates.try_lock_prs(receiving(&workspace.id, &children)) {
             Some(_gate) => {
@@ -252,7 +253,7 @@ impl Manager {
         Ok(Updates {
             messages,
             updates,
-            leftovers: self.leftovers.undelivered(&workspace_id),
+            leftovers,
             timed_out: false,
             superseded: false,
         })

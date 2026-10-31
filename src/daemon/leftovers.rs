@@ -13,7 +13,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     daemon::{space_processes::chat_space, workspace::Manager},
-    process::{described, identity::Identity},
+    process::{
+        described,
+        identity::{
+            Identity,
+            spaces::{Space, Untracked},
+        },
+    },
 };
 
 /// A leftover as people recognize it.
@@ -26,6 +32,12 @@ pub struct Leftover {
     /// Unix seconds when it started.
     pub started_at: u64,
 }
+
+/// The most leftovers one delivery names; the rest follow in later ones.
+const DELIVERED_AT_ONCE: usize = 10;
+
+/// The longest command a leftover keeps, so a delivery stays small.
+const COMMAND_LIMIT: usize = 300;
 
 /// What the last sweep found, by space.
 #[derive(Default)]
@@ -64,9 +76,12 @@ impl Leftovers {
         self.listed(space, |_| true)
     }
 
-    /// The leftovers of `space` its agent has not been told about.
+    /// The leftovers of `space` its agent has not been told about, as many
+    /// as one delivery names.
     pub(crate) fn undelivered(&self, space: &str) -> Vec<Leftover> {
-        self.listed(space, |found| !found)
+        let mut undelivered = self.listed(space, |found| !found);
+        undelivered.truncate(DELIVERED_AT_ONCE);
+        undelivered
     }
 
     fn listed(&self, space: &str, delivered: impl Fn(bool) -> bool) -> Vec<Leftover> {
@@ -102,43 +117,21 @@ impl Manager {
     /// Find the leftovers of every workspace and running chat from one
     /// inventory of this user's processes.
     pub(crate) async fn find_leftovers(&self) -> Result<()> {
+        let spaces = self.surveyed_spaces().await?;
+        let found = self.untracked_processes(spaces, None).await?;
+        self.leftovers.record(described_leftovers(found).await?);
+        Ok(())
+    }
+
+    /// What ties processes to each workspace and running chat.
+    async fn surveyed_spaces(&self) -> Result<Vec<Space>> {
         let mut spaces = Vec::new();
         for workspace in self.list_workspaces().await? {
             let worktree = workspace.path.is_dir();
             spaces.push(self.workspace_space(&workspace, worktree).await?);
         }
         spaces.extend(self.chats().await?.iter().map(chat_space));
-        let leftovers: Vec<_> = self
-            .untracked_processes(spaces, None)
-            .await?
-            .into_iter()
-            .flat_map(|(space, found)| found.into_iter().map(move |found| (space.clone(), found)))
-            .filter(|(_, found)| found.leftover)
-            .collect();
-        let pids: Vec<u32> = leftovers
-            .iter()
-            .map(|(_, found)| found.identity.pid)
-            .collect();
-        let described = described::describe(&pids).await?;
-        let now = crate::time::unix_seconds();
-        let mut found: HashMap<String, Vec<(Identity, Leftover)>> = HashMap::new();
-        for (space, process) in leftovers {
-            let Some(description) = described.get(&process.identity.pid) else {
-                continue;
-            };
-            let leftover = Leftover {
-                pid: process.identity.pid,
-                command: description.command.clone(),
-                directory: process.directory,
-                started_at: now.saturating_sub(description.elapsed),
-            };
-            found
-                .entry(space)
-                .or_default()
-                .push((process.identity, leftover));
-        }
-        self.leftovers.record(found);
-        Ok(())
+        Ok(spaces)
     }
 
     /// Remember that the agent of the workspace `selector` names was told
@@ -149,6 +142,51 @@ impl Manager {
             self.leftovers.delivered(&workspace.id, pids);
         }
         Ok(())
+    }
+}
+
+/// The leftovers among the untracked processes `found` of each space, as
+/// people recognize them, leaving out those that exited meanwhile.
+async fn described_leftovers(
+    found: HashMap<String, Vec<Untracked>>,
+) -> Result<HashMap<String, Vec<(Identity, Leftover)>>> {
+    let leftovers: Vec<(String, Untracked)> = found
+        .into_iter()
+        .flat_map(|(space, found)| {
+            found
+                .into_iter()
+                .map(move |process| (space.clone(), process))
+        })
+        .filter(|(_, process)| process.leftover)
+        .collect();
+    let pids: Vec<u32> = leftovers
+        .iter()
+        .map(|(_, process)| process.identity.pid)
+        .collect();
+    let described = described::describe(&pids).await?;
+    let now = crate::time::unix_seconds();
+    let mut by_space: HashMap<String, Vec<(Identity, Leftover)>> = HashMap::new();
+    for (space, process) in leftovers {
+        if let Some(description) = described.get(&process.identity.pid) {
+            let leftover = Leftover::of(&process, description, now);
+            by_space
+                .entry(space)
+                .or_default()
+                .push((process.identity, leftover));
+        }
+    }
+    Ok(by_space)
+}
+
+impl Leftover {
+    /// `process` as `description` shows it at `now`, in Unix seconds.
+    fn of(process: &Untracked, description: &described::Description, now: u64) -> Self {
+        Self {
+            pid: process.identity.pid,
+            command: description.command.chars().take(COMMAND_LIMIT).collect(),
+            directory: process.directory.clone(),
+            started_at: now.saturating_sub(description.elapsed),
+        }
     }
 }
 
