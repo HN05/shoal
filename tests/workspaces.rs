@@ -6132,8 +6132,10 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             "{restored}"
         );
         // Each restored session learns why it stopped and what the stop ended.
-        assert!(prompt.contains(": stopped by shoal stop."), "{restored}");
-        assert!(prompt.contains("such as subagents"), "{restored}");
+        assert!(
+            prompt.contains(" (stopped by shoal stop); its subagents"),
+            "{restored}"
+        );
     }
     assert!(!prompts[1].contains("command-started"), "{restored}");
     assert_eq!(

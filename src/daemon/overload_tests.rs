@@ -297,7 +297,7 @@ async fn built_in_restore_child() {
         [
             "saved-session",
             "--",
-            "Shoal resumed this session. The session stopped: critical memory pressure. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off.",
+            "This session stopped (critical memory pressure); its subagents and background commands ended. Continue working on the unfinished assignment from where you left off.",
         ]
         .map(std::ffi::OsString::from)
     );

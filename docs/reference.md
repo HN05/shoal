@@ -276,8 +276,8 @@ under `[agents.<name>]`, built in for Claude and Codex) continues the session it
 hooks last reported, otherwise the latest session in the workspace, without a
 session picker, with a prompt to continue its unfinished assignment on manual or
 automatic resume. The prompt of a stopped agent says when and why it stopped and
-that the stop ended the work running in its process, such as subagents and
-background commands. Resume commands receive that prompt through `{prompt}`;
+that its subagents and background commands ended. Resume commands receive that
+prompt through `{prompt}`;
 other agents need a `resume_command`.
 A failed command lookup warns and
 disables automatic recovery for that launch. Overload notifications include the

@@ -329,13 +329,13 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
     assert_eq!(
         resumed_prompt(Some(&stop), Some("handoff")),
         format!(
-            "Shoal resumed this session. The session stopped at {at}: critical memory pressure. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off.\n\nhandoff"
+            "This session stopped at {at} (critical memory pressure); its subagents and background commands ended. Continue working on the unfinished assignment from where you left off.\n\nhandoff"
         )
     );
     // A stop without a known reason or time still says what it ended.
     assert_eq!(
         resumed_prompt(Some(&Stop::default()), None),
-        "Shoal resumed this session. The session stopped. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off."
+        "This session stopped; its subagents and background commands ended. Continue working on the unfinished assignment from where you left off."
     );
     // A last session, which exited on its own, has no stop to describe.
     assert_eq!(

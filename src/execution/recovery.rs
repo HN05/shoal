@@ -102,7 +102,7 @@ impl Stop {
         }
     }
 
-    /// The sentences telling the restored agent about the stop.
+    /// The sentence telling the restored agent about the stop.
     fn describe(&self) -> String {
         let at = self
             .at
@@ -111,11 +111,9 @@ impl Stop {
         let reason = self
             .reason
             .as_deref()
-            .map(|reason| format!(": {reason}"))
+            .map(|reason| format!(" ({reason})"))
             .unwrap_or_default();
-        format!(
-            "The session stopped{at}{reason}. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again."
-        )
+        format!("This session stopped{at}{reason}; its subagents and background commands ended.")
     }
 }
 
@@ -135,11 +133,8 @@ pub(crate) fn saved_at(path: &Path) -> Option<u64> {
 /// What a restored session is told: why and when it stopped when known, to
 /// continue, then `handoff`.
 fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
-    let mut prompt = String::from("Shoal resumed this session. ");
-    if let Some(stop) = stop {
-        prompt.push_str(&stop.describe());
-        prompt.push(' ');
-    }
+    let mut prompt = stop.map_or_else(|| "Shoal resumed this session.".to_owned(), Stop::describe);
+    prompt.push(' ');
     prompt.push_str("Continue working on the unfinished assignment from where you left off.");
     if let Some(handoff) = handoff {
         prompt.push_str("\n\n");
