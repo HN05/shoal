@@ -28,6 +28,11 @@ pub(super) struct Files {
 }
 
 impl Files {
+    /// The review whose run these are, named by their directory.
+    pub fn review(&self) -> Option<i64> {
+        self.directory.file_name()?.to_str()?.parse().ok()
+    }
+
     pub fn checkout(&self) -> PathBuf {
         self.directory.join("checkout")
     }

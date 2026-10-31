@@ -86,13 +86,22 @@ pub(crate) fn queued(db: &Connection) -> Result<Vec<i64>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Queue again the reviews a daemon stop interrupted, which start over.
-pub(crate) fn requeue_running(db: &Connection) -> Result<usize> {
+/// Queue again the reviews a daemon stop interrupted, which start over,
+/// except those in `kept`, whose runs could not be cleaned up.
+pub(crate) fn requeue_running(db: &Connection, kept: &[i64]) -> Result<usize> {
     Ok(db.execute(
         "UPDATE reviews SET state='queued',head=NULL,base=NULL,started_at=NULL,reviewer=NULL
-            WHERE state='running'",
-        [],
+            WHERE state='running' AND id NOT IN (SELECT value FROM json_each(?1))",
+        [serde_json::to_string(kept)?],
     )?)
+}
+
+/// The reviews that are running.
+pub(crate) fn running(db: &Connection) -> Result<Vec<i64>> {
+    Ok(db
+        .prepare("SELECT id FROM reviews WHERE state='running' ORDER BY id")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Move a queued review to running at `head`; false when it is no longer
