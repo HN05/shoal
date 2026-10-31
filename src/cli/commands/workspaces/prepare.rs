@@ -50,13 +50,13 @@ pub(in crate::cli::commands) async fn prepare(
             })?;
     }
     if let Some(pr) = steps.pr {
-        link_pr(ctx, &workspace, pr).await?;
+        link_pr(ctx, &workspace, pr, reporter).await?;
         reporter.step(Step::PrLinked).await?;
         workspace = client::inspect(&ctx.paths, workspace.id).await?.workspace;
     }
     let agent = match steps.agent {
         Some(launch) => {
-            let entry = queue_agent(ctx, &workspace, launch).await?;
+            let entry = queue_agent(ctx, &workspace, launch, reporter).await?;
             reporter.step(Step::AgentQueued).await?;
             Some(entry)
         }
@@ -118,8 +118,15 @@ async fn run_post_setup_hook(
     Ok(())
 }
 
-/// Link `pr`, a number or URL, as the PR the workspace works on.
-async fn link_pr(ctx: &Context, workspace: &Workspace, pr: String) -> Result<()> {
+/// Link `pr`, a number or URL, as the PR the workspace works on, unless the
+/// operation was cancelled.
+async fn link_pr(
+    ctx: &Context,
+    workspace: &Workspace,
+    pr: String,
+    reporter: &Reporter<'_>,
+) -> Result<()> {
+    reporter.ensure_running()?;
     let method = ItemMethod::LinkItem {
         workspace: workspace.id.clone(),
         kind: LinkKind::Pr,
@@ -131,20 +138,33 @@ async fn link_pr(ctx: &Context, workspace: &Workspace, pr: String) -> Result<()>
 }
 
 /// Queue `launch` in the ready workspace, which the agent queue starts
-/// detached in the default host.
+/// detached in the default host. A cancel that arrives meanwhile queues
+/// nothing, or withdraws what it queued.
 async fn queue_agent(
     ctx: &Context,
     workspace: &Workspace,
     launch: QueuedLaunch,
+    reporter: &Reporter<'_>,
 ) -> Result<QueueEntry> {
     let agent: Agent = launch.agent.parse()?;
     let settings =
         client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
     agents::ensure_available(agent.name(), &settings)?;
     let request = queued_agent_request(workspace, agent, launch.prompt)?;
+    reporter.ensure_running()?;
     let admission: QueueAdmission =
         client::request(&ctx.paths, QueueMethod::QueueAdd { request }).await?;
-    admission
+    let entry = admission
         .entry
-        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))
+        .ok_or_else(|| anyhow::anyhow!("the daemon queued the agent without an entry"))?;
+    if let Err(cancelled) = reporter.ensure_running() {
+        let method = QueueMethod::QueueRemove {
+            entry: entry.id.clone(),
+        };
+        if let Err(error) = client::request::<()>(&ctx.paths, method).await {
+            return Err(cancelled.context(format!("the queued agent stays queued: {error:#}")));
+        }
+        return Err(cancelled);
+    }
+    Ok(entry)
 }

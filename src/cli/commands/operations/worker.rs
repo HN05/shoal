@@ -33,8 +33,15 @@ pub(in crate::cli::commands) struct Reporter<'a> {
 impl Reporter<'_> {
     /// Report `step`, which starts only while the operation is not cancelled.
     pub(in crate::cli::commands) async fn step(&self, step: Step) -> Result<()> {
-        ensure!(!*self.cancelled.borrow(), "the operation was cancelled");
+        self.ensure_running()?;
         self.report(Report::Step(step)).await
+    }
+
+    /// Refuse to go on once the operation is cancelled, as before a change
+    /// that cannot be taken back.
+    pub(in crate::cli::commands) fn ensure_running(&self) -> Result<()> {
+        ensure!(!*self.cancelled.borrow(), "the operation was cancelled");
+        Ok(())
     }
 
     /// Complete once the operation is cancelled.
