@@ -87,13 +87,6 @@ impl Paths {
         self.state.join("worktrunk.toml")
     }
 
-    /// Private forge-wrapper PATH directory, held for one tracked agent launch.
-    pub fn agent_auth_directory(&self) -> std::io::Result<tempfile::TempDir> {
-        tempfile::Builder::new()
-            .prefix("agent-auth-")
-            .tempdir_in(&self.state)
-    }
-
     /// Secret tool launchers, held for one tracked agent launch.
     pub fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir> {
         tempfile::Builder::new()

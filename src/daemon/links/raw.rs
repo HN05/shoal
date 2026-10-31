@@ -92,9 +92,7 @@ impl Manager {
         method: HttpMethod,
         elsewhere: bool,
     ) -> Result<Account> {
-        // One snapshot, so a reload cannot pair a profile with another map.
-        let config = self.config();
-        let settings = self.workspace_settings_from(&config, workspace).await?;
+        let settings = self.workspace_settings(workspace).await?;
         if method != HttpMethod::Get {
             ensure!(
                 !elsewhere,
@@ -105,7 +103,7 @@ impl Manager {
                 "workspace processes can only send GET requests; [permissions] api_writes = \"direct\" lets agents send {method}"
             );
         }
-        self.agent_account_from(&config, &settings)
+        Ok(self.agent_account())
     }
 }
 

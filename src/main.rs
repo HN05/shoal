@@ -3,7 +3,7 @@
 mod stdout;
 
 mod agent;
-mod agent_auth;
+mod agent_git;
 mod ai;
 mod build;
 mod caches;

@@ -8,7 +8,6 @@ use serde_json::Value;
 const FULL: &str = "\
 git_profile = 'work'\n\
 [agent]\ndefault = 'claude'\nmodel = 'sonnet'\neffort = 'low'\nmax_running = 2\ndirs = ['/tmp', '~/cache']\ngit_profile = 'agent'\n\
-[agent.forge_clis]\nfj = '/fj'\ngh = '/gh'\nglab = '/glab'\ntea = '/tea'\n\
 [agent.templates]\nworker = 'agent'\nchat = 'chat'\n\
 [terminal]\nfocus = false\nclose_when_done = false\ndefault_host = 'rex'\n\
 [terminal.herdr]\nenabled = false\ntab_name = '{branch}'\nnew_tab = false\nworkspace_name = 'work'\nclose_when_done = false\n\
@@ -460,10 +459,10 @@ fn reported_provenance_names_the_layer_whose_value_is_in_effect() {
             "[ports]\nstart = 3000\nend = 4000\n[commands]\nreview = ['global']\ncheck = ['check']\n",
             "[ports]\nstart = 3500\n[ports.web]\nport = 3600\n[commands]\nreview = ['file']\n",
             "[ports]\nend = 3900\n[ports.web]\nenv = 'WEB'\n[commands]\nreview = ['saved']\n\
-                 [simulators]\npreferred = ['tablet']\n[agent.forge_clis]\nfj = '/saved/fj'\n",
+                 [simulators]\npreferred = ['tablet']\n[agent]\ngit_profile = 'saved'\n",
         ),
         (
-            "[agent.forge_clis]\ngh = '/global/gh'\n[resources.lock]\ncapacity = 1\n",
+            "[agent]\ngit_profile = 'global'\n[resources.lock]\ncapacity = 1\n",
             "[simulators]\npreferred = ['phone']\nrequires_approval = true\n",
             "[resources.lock]\ncapacity = 3\n[cleanup.pr]\nenabled = false\n",
         ),

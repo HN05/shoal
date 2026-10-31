@@ -546,9 +546,8 @@ async fn prepare_agent_launch(
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
     Ok(Some(AgentLaunch {
-        account: settings.agent.forge_clis.prepare(
+        git: crate::agent_git::Launch::prepare(
             settings.agent.git_profile.as_deref(),
-            paths,
             &config.machine.git_profiles,
         )?,
         secrets,

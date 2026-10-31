@@ -1578,27 +1578,14 @@ user.
 
 ### Agent accounts
 
-`[agent.forge_clis]` selects user-owned executable wrappers for `fj`, `gh`, `glab` and
-`tea`, each an absolute or `~/` path; `[agent] git_profile` names one of the global [Git profiles](#git-profiles)
-for agents' Git commands. All default to unset. Values follow repository/global
-precedence and appear in `config show`. Tracked agent shortcuts prepend a private
-directory containing these tool names to the child's PATH; nested commands inherit
-it. Missing or non-executable wrappers fail before the agent starts. The directory
-lasts for that execution and is removed on exit; wrappers and credentials remain
-user-owned. Issue lookup before launch uses the invoking CLI's login.
-
-Wrappers receive arguments unchanged and must invoke the real tool by absolute
-path to avoid recursion. They own credential selection, including overriding
-inherited token variables. PATH selection is cooperative: an absolute tool path
-or a shell that resets PATH bypasses it.
+`[agent] git_profile` names one of the global [Git profiles](#git-profiles)
+for agents' Git commands. It defaults to unset, follows repository/global
+precedence and appears in `config show`.
 
 Issue and PR changes Shoal makes for a workspace use the agent account: the
 host's `agent_token` under [`[machine.forges."<host>"]`](#forges), with
-`agent_email` for a Bitbucket API token. The wrappers stay the agent's own; Shoal
-never runs them. Without an `agent_token`, changes use your token, as the agent
-would, except where a wrapper gives the agent its own account on the host's
-forge, `gh` on GitHub, `glab` on GitLab, `fj` or `tea` on Forgejo and Gitea:
-those changes fail rather than use your token.
+`agent_email` for a Bitbucket API token. Without an `agent_token`, changes use
+your token, as the agent would.
 
 The agent Git profile reaches tracked agents through Git's `GIT_CONFIG_COUNT`
 variables, after any inherited entries, so it overrides every Git config file for
@@ -1607,40 +1594,6 @@ ordinary executions keep their settings. When the profile sets `user.name` or
 `user.email`, inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables for that
 field are dropped. Push credentials follow profile settings such as
 `core.sshCommand`. An undefined profile fails before the agent starts.
-
-For `fj` 0.6, a separate home selects separate credentials on macOS; Linux also
-needs a separate XDG data directory. Save this as `~/bin/fj-agent`, substitute
-the installed `fj` path, and make it executable:
-
-```sh
-#!/bin/sh
-agent_home="$HOME/.local/share/shoal-auth/fj"
-exec env HOME="$agent_home" XDG_DATA_HOME="$agent_home/.local/share" \
-  XDG_CONFIG_HOME="$agent_home/.config" /opt/homebrew/bin/fj "$@"
-```
-
-Run `~/bin/fj-agent auth login` (or `auth add-token`) yourself to authenticate
-as the agent account, and give Shoal the same account's token as the host's
-`agent_token`. Only the `fj` process receives the separate home.
-
-For `gh`, changing `GH_CONFIG_DIR` alone can still reach your system keyring.
-A wrapper can instead obtain an agent token from your credential manager and
-export `GH_TOKEN` (or `GH_ENTERPRISE_TOKEN` for an enterprise host), failing
-if retrieval returns an empty token. For example, with a GitHub.com agent token
-stored in a private file, save this as executable `~/bin/gh-agent`, adapting the
-real `gh` path:
-
-```sh
-#!/bin/sh
-unset GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
-GH_TOKEN=$(cat "$HOME/.config/shoal-auth/github.token") || exit 1
-: "${GH_TOKEN:?agent token is empty}"
-export GH_TOKEN
-exec /opt/homebrew/bin/gh "$@"
-```
-
-Keep tokens outside repository and Shoal TOML. This example selects credentials
-for GitHub.com; configure the corresponding token for each enterprise host you use.
 
 ### Agent secrets
 

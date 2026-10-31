@@ -611,13 +611,7 @@ fn pinned_hosts_are_not_asked_and_unrecognized_ones_name_the_setting() {
 #[test]
 fn changes_use_the_agent_account_and_merges_the_users() {
     for forge in [Forge::GitHub, Forge::Forgejo] {
-        let config =
-            format!("[agent.forge_clis]\ngh = '~/agent-gh'\nfj = '~/agent-fj'\n{AGENT_TOKEN}");
-        let fixture = Fixture::new(forge, &config);
-        let root = fixture.root.path();
-        for name in ["agent-gh", "agent-fj"] {
-            support::install_test_script(root.join(name), "#!/bin/sh\nexit 1\n");
-        }
+        let fixture = Fixture::new(forge, AGENT_TOKEN);
         let (agent, user) = match forge {
             Forge::GitHub => (json!("Bearer agenttoken"), json!("Bearer usertoken")),
             Forge::Forgejo => (json!("token agenttoken"), json!("token usertoken")),
@@ -651,20 +645,6 @@ fn changes_use_the_agent_account_and_merges_the_users() {
             .collect();
         assert_eq!(auth, [agent, user.clone(), user]);
     }
-
-    // With an fj wrapper but no agent token, the user's token does not stand in.
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/agent-fj'\n");
-    support::install_test_script(fixture.root.path().join("agent-fj"), "#!/bin/sh\n");
-    let refused = fixture.request(json!({"item_action": {"workspace": "topic", "kind": "pr",
-        "item": "8", "action": {"action": "close"}}}));
-    assert!(
-        refused["data"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("set its agent_token under [machine.forges."),
-        "{refused}"
-    );
-    assert!(fixture.requests().is_empty());
 }
 
 #[test]
@@ -3016,11 +2996,8 @@ fn failed_check_responses() -> Value {
 #[test]
 fn check_logs_read_github_and_gitlab_jobs_as_the_agent_and_refuse_external_checks() {
     for gitlab in [false, true] {
-        // Wrappers give the agent its own accounts, which their tokens sign in to.
-        let config = format!(
-            "[agent.forge_clis]\ngh = '~/agent-gh'\nglab = '~/agent-glab'\n{AGENT_TOKEN}\
-             [machine.forges.\"gitlab.com\"]\nagent_token = \"agenttoken\"\n"
-        );
+        let config =
+            format!("{AGENT_TOKEN}[machine.forges.\"gitlab.com\"]\nagent_token = \"agenttoken\"\n");
         let fixture = Fixture::new(Forge::GitHub, &config);
         let external = "https://coverage.example/7";
         let (job, log, responses) = if gitlab {
@@ -5396,8 +5373,7 @@ fn item_commands_act_in_a_named_repository_without_a_workspace() {
 
 #[test]
 fn checkout_merges_go_out_without_the_agent_account() {
-    // A missing agent wrapper leaves the user's own logins usable.
-    let fixture = Fixture::new(Forge::Forgejo, "[agent.forge_clis]\nfj = '~/missing-fj'\n");
+    let fixture = Fixture::new(Forge::Forgejo, "");
     let endpoint = "repos/team/project/pulls/8";
     fixture.respond(json!({
         format!("GET {endpoint}"): {"body": pull(8, "open", "Fix", &[])},

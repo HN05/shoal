@@ -73,7 +73,7 @@ impl Manager {
         let account = if users_decision(&action) {
             self.user_account()
         } else {
-            self.agent_account(&workspace).await?
+            self.agent_account()
         };
         // Held from before the change, so a poll that observes it records
         // it after the workspace's cursor knows it as its own.
@@ -101,7 +101,7 @@ impl Manager {
         let account = if users_decision(&action) {
             self.user_account()
         } else {
-            self.checkout_agent_account(&checkout).await?
+            self.agent_account()
         };
         let acted = forge.apply(&account, kind, number, &action).await;
         Ok(acted
@@ -122,7 +122,7 @@ impl Manager {
             return Ok(());
         }
         let forge = self.workspace_forge(workspace).await?;
-        let account = self.agent_account(workspace).await?;
+        let account = self.agent_account();
         let action = Action::edit(Edit {
             draft: Some(draft),
             ..Edit::default()

@@ -439,12 +439,9 @@ configured command for another agent, plus proven child
   the daemon verifies the record, scope token, wrapper and child identities and
   process group; the reattach request stays accepted at every protocol version.
   Detached wrappers never write to the terminal while their command runs.
-- Agent forge wrappers are opt-in, resolve per tool through configuration layers,
-  and change only the PATH of a tracked agent, inherited by descendants. Shoal
-  never runs them, reads no CLI's saved login, and never switches the user's
-  login. An agent with a wrapper for a forge's CLI never falls back to the
-  user's token on that forge. Forge changes for a workspace use the
-  agent account except merging, which uses the user's. The agent Git profile
+- Shoal runs no forge CLI, reads no CLI's saved login, and never switches the
+  user's login. Forge changes for a workspace use the agent account except
+  merging, which uses the user's. The agent Git profile
   reaches only a tracked agent's environment and the push of `shoal pr open`;
   it never writes Git config.
 - Git profiles apply only to newly created worktrees, before setup, using

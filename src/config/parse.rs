@@ -19,8 +19,8 @@ const REMOVED: &[(&[&str], &str)] = &[
         "[machine.bitbucket] moved: set token and email under [machine.forges.\"bitbucket.org\"]",
     ),
     (
-        &["agent", "forge_clis", "fj_home"],
-        "agent.forge_clis.fj_home is gone: set agent_token under [machine.forges.\"<host>\"] in the global config",
+        &["agent", "forge_clis"],
+        "[agent.forge_clis] is gone: Shoal's commands act as the agent account, so set agent_token under [machine.forges.\"<host>\"] in the global config",
     ),
 ];
 

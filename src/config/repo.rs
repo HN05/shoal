@@ -140,8 +140,6 @@ pub struct AgentConfig {
     /// The Git profile of tracked agents' Git commands.
     pub git_profile: Option<String>,
     #[option(section)]
-    pub forge_clis: crate::agent_auth::ForgeClis,
-    #[option(section)]
     pub templates: TemplatesConfig,
 }
 
@@ -419,7 +417,6 @@ impl RepoConfig {
     pub fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
         crate::config::agents::validate(&self.agents, &self.commands)?;
-        self.agent.forge_clis.validate()?;
         for name in [&self.git_profile, &self.agent.git_profile]
             .into_iter()
             .flatten()

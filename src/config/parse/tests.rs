@@ -61,7 +61,7 @@ fn removed_settings_name_what_replaces_them() {
         error.contains("set token and email under [machine.forges.\"bitbucket.org\"]"),
         "{error}"
     );
-    let text = "[agent.forge_clis]\nfj_home = '~/fj'\n";
+    let text = "[agent.forge_clis]\nfj = '~/fj'\n";
     for error in [global(text).err(), repository(text).err()] {
         let error = message(error.unwrap());
         assert!(error.contains("set agent_token under"), "{error}");

@@ -18,11 +18,8 @@ Macraft owns VM/container provisioning. Shoal does not provision tools, manage
 browsers, schedule agent tasks beyond the `max_agents` queue, or store conversations. Agent shortcuts
 (`claude`, `codex`, `happy`, `t3`) are thin launchers around the generic execution
 path; CLI launcher argument arrays are configurable defaults; session and desktop
-adapters retain their tool-specific setup. Opt-in forge authentication wrappers
-are user-owned executables selected per tool through repository/global config;
-tracked agents receive them on a private PATH inherited by their descendants.
-Wrappers own credentials and tool-specific environment changes; Shoal stores no
-tokens and does not switch the user's or daemon's login. `[secrets]` names
+adapters retain their tool-specific setup. Shoal does not switch the user's or
+daemon's login. `[secrets]` names
 user commands that fetch values in the CLI, for an agent's environment at launch
 or, for listed tools, through private PATH launchers each time the tool runs;
 the daemon and state never hold the values, hooks drop them, and tracked
@@ -1178,7 +1175,7 @@ templates, merged option by option across layers so a repository can replace
 shadow are rejected, and `[commands]` holds only shortcuts that are not agents.
 What a tool needs of the machine, its skill directory and proxy, sits under
 `[machine.agents.<name>]`. Pickers and completion offer providers only. Agents run
-as tracked agents with scope, forge wrappers, and exit notifications. Their `{prompt}` argument combines general instructions
+as tracked agents with scope, an agent Git profile, and exit notifications. Their `{prompt}` argument combines general instructions
 and issue context; without it, nonempty context precedes forwarded arguments.
 Plain command invocations expand `{prompt}` to an empty string. User arguments
 and inserted prompt text remain literal. A provider's instruction, resume and
@@ -1457,8 +1454,7 @@ password manager, and is fetched at most once per operation and never stored;
 an `{ env }` token reads the environment of the process sending the request,
 which for the daemon is the service's. The agent account has its own
 `agent_token` per host; without one it uses the user's token, as the agent
-itself would, except on a forge where a wrapper gives the agent its own account,
-where a missing token fails rather than act as the user.
+itself would.
 The forge is selected from the remote's host without requiring configuration:
 well-known hosts by name, and any other by asking it once through each forge's
 version or metadata endpoint with the user's token for that host, since a name

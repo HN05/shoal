@@ -136,12 +136,6 @@ dirs = ["/tmp"]
 # The Git profile from [machine.git_profiles] for tracked agents' Git commands.
 # git_profile = "agent"
 
-# A separate account for tracked agents: user-owned forge executable wrappers.
-# See docs/reference.md#agent-accounts for setup.
-# [agent.forge_clis]
-# fj = "~/bin/fj-agent"
-# gh = "~/bin/gh-agent"
-
 # Prompt templates normally live beside this file as worker-template.md and
 # chat-template.md. Inline text takes precedence over the corresponding file.
 # [agent.templates]

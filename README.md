@@ -286,23 +286,18 @@ The agents Shoal starts get JSON from `shoal` without `--json`; give an agent
 you start yourself `SHOAL_OUTPUT=json` for the same, and pass `--text` for
 human output.
 
-For a separate agent account, configure forge executable wrappers and a
+For a separate agent account, configure the agent's token and a
 [Git profile](docs/reference.md#git-profiles) for the agent's commits:
 
 ```toml
 [agent]
 git_profile = "agent"
 
-[agent.forge_clis]
-fj = "~/bin/fj-agent"
-gh = "~/bin/gh-agent"
-
 [machine.forges."git.example.com"]
 agent_token = { cmd = ["op", "read", "op://dev/agent/token"] }  # Shoal's changes as the agent
 ```
 
-See [agent accounts](docs/reference.md#agent-accounts)
-for wrapper setup.
+See [agent accounts](docs/reference.md#agent-accounts).
 
 Memory overload protection stops tracked agents by default while retaining their
 workspaces and leases; before that, Shoal messages running agents to reduce load. To opt out, run `shoal config set machine.overload.memory.enabled

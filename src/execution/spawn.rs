@@ -1,5 +1,5 @@
 //! Spawning a tracked command in its workspace, with the environment, agent
-//! account and output streams its mode gives it.
+//! Git profile and output streams its mode gives it.
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf, process::Stdio};
 
 use anyhow::{Context, Result};
@@ -9,10 +9,10 @@ use super::Mode;
 use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
 
 /// What an agent's or publishing child receives beyond the workspace
-/// environment: the agent account and, for agents, the configured secrets and
-/// the output default.
+/// environment: the agent Git profile and, for agents, the configured secrets
+/// and the output default.
 pub(super) struct AgentLaunch {
-    pub(super) account: crate::agent_auth::Launch,
+    pub(super) git: crate::agent_git::Launch,
     pub(super) secrets: crate::secrets::Launch,
     pub(super) output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
@@ -183,7 +183,7 @@ impl AgentLaunch {
     /// and the key the proxy wants. Its own `env_remove` still removes those
     /// defaults.
     fn apply(&self, command: &mut Command, environment: &BTreeMap<String, OsString>) {
-        self.account.apply(command);
+        self.git.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
         if self.proxy.is_some() {

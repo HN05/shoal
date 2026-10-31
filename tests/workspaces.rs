@@ -18325,78 +18325,6 @@ fn misspelled_built_ins_are_rejected_with_a_suggestion() {
 }
 
 #[test]
-fn agent_auth_wrappers_are_inherited_without_changing_ordinary_executions() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("agent-auth");
-    let worktree = Path::new(workspace["path"].as_str().unwrap());
-    let wrappers = fixture.root.path().join("wrappers with spaces");
-    for tool in ["fj", "gh"] {
-        let path = wrappers.join(tool);
-        install_test_script(
-            &path,
-            format!("#!/bin/sh\nprintf '%s\\n' 'agent {tool}' \"$@\"\n"),
-        );
-    }
-    let config = format!(
-        "[agent.forge_clis]\nfj = {:?}\ngh = {:?}\n[agents.claude]\ncommand = ['sh', '-c', 'fj \"two words\" \"$literal\"; gh auth status; printf \"%s\\n\" \"$HOME\"; \"$SHOAL_TEST_BINARY\" run -- fj nested']\n",
-        wrappers.join("fj"),
-        wrappers.join("gh")
-    );
-    fs::write(worktree.join(".shoal.toml"), config).unwrap();
-    let report = fixture.ok(&["config", "show", "agent-auth"]);
-    let fj = report
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["key"] == "agent.forge_clis.fj")
-        .unwrap();
-    assert_eq!(fj["value"], wrappers.join("fj").to_str().unwrap());
-    assert_eq!(fj["layer"], "worktree_file");
-    let output = fixture
-        .command()
-        .env("SHOAL_TEST_BINARY", env!("CARGO_BIN_EXE_shoal"))
-        .env("literal", "$() ; ' literal")
-        .args(["claude", "agent-auth"])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
-        format!(
-            "agent fj\ntwo words\n$() ; ' literal\nagent gh\nauth\nstatus\n{}\nagent fj\nnested\n",
-            fixture.root.path().display()
-        )
-    );
-    let expected = fixture
-        .command()
-        .get_envs()
-        .find(|(key, _)| *key == "PATH")
-        .unwrap()
-        .1
-        .unwrap()
-        .to_owned();
-    let output = fixture.run(&["run", "--workspace", "agent-auth", "--", "printenv", "PATH"]);
-    assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap().trim_end(),
-        expected.to_str().unwrap()
-    );
-    assert!(
-        fs::read_dir(fixture.root.path().join("state"))
-            .unwrap()
-            .all(|entry| !entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with("agent-auth-"))
-    );
-}
-
-#[test]
 fn secrets_reach_agents_but_not_ordinary_executions_or_hooks() {
     let fixture = Fixture::with_config(Some(
         "[secrets.AGENT_TOKEN]\ncommand = ['printf', '%s\\n', 'global secret']\n",
@@ -18743,60 +18671,6 @@ fn agent_git_profile_applies_only_to_agent_processes() {
     assert!(
         stderr.contains("git profile missing is not defined"),
         "{stderr}"
-    );
-}
-
-#[test]
-fn detached_agents_use_auth_wrappers_and_invalid_wrappers_prevent_launch() {
-    let fixture = Fixture::new();
-    let workspace = fixture.add("detached-auth");
-    let worktree = Path::new(workspace["path"].as_str().unwrap());
-    let wrapper = fixture.root.path().join("fj-agent");
-    install_test_script(
-        &wrapper,
-        "#!/bin/sh\nprintf '%s\\n' 'detached agent' \"$@\"\nexit 23\n",
-    );
-    fs::write(
-        worktree.join(".shoal.toml"),
-        "[agent.forge_clis]\nfj = '~/fj-agent'\n",
-    )
-    .unwrap();
-    let log = fixture.root.path().join("agent.log");
-    let output = fixture.run(&[
-        "internal",
-        "detached",
-        "detached-auth",
-        "--log",
-        log.to_str().unwrap(),
-        "--agent",
-        "happy claude",
-        "--",
-        "fj",
-        "two words",
-    ]);
-    assert_eq!(
-        output.status.code(),
-        Some(23),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        fs::read_to_string(&log)
-            .unwrap()
-            .contains("detached agent\ntwo words\n")
-    );
-    fs::remove_file(&wrapper).unwrap();
-    install_fake_agents(&fixture, &["claude"]);
-    let output = fixture.run(&["claude", "detached-auth"]);
-    assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("agent.forge_clis.fj"));
-    let status = fixture.ok(&["status", "detached-auth"]);
-    assert!(
-        status["executions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|e| e["state"] != "running")
     );
 }
 

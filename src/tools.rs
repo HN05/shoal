@@ -34,10 +34,6 @@ tools! {
     Fzf => ("fzf", Some(Dependency::Optional("needed for interactive pickers"))),
     // Feature-specific and platform tools are diagnosed when invoked.
     Xcrun => ("xcrun", None),
-    GitHub => ("gh", None),
-    Forgejo => ("fj", None),
-    Tea => ("tea", None),
-    GitLab => ("glab", None),
     Curl => (programs::CURL, None),
     Tar => ("tar", None),
     Diff => ("diff", None),
