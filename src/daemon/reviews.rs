@@ -221,6 +221,35 @@ impl Manager {
         }
     }
 
+    /// Cancel the reviews of the repository's workspaces and wait until their
+    /// runs have ended and removed their checkouts, which are worktrees of
+    /// the repository its removal would otherwise refuse.
+    pub(crate) async fn stop_repository_reviews(&self, repository_id: &str) {
+        let id = repository_id.to_owned();
+        let active = match self.store.run(move |db| store::active_in(db, &id)).await {
+            Ok(active) => active,
+            Err(error) => {
+                log!("reviews of a removed repository: {error:#}");
+                return;
+            }
+        };
+        let mut ended = self.reviews.ended.subscribe();
+        for id in &active {
+            if let Err(error) = self.cancel_review(None, Some(*id), None).await {
+                log!("stopping review {id}: {error:#}");
+            }
+        }
+        let running = || {
+            let cancels = self.reviews.cancels.lock().unwrap();
+            active.iter().any(|id| cancels.contains_key(id))
+        };
+        while running() {
+            if ended.changed().await.is_err() {
+                return;
+            }
+        }
+    }
+
     /// Stop the workspace's running review, as its removal does; the removal
     /// then deletes its reviews.
     pub(crate) async fn stop_workspace_review(&self, workspace_id: &str) {

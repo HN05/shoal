@@ -67,6 +67,17 @@ pub(crate) fn active(db: &Connection, workspace_id: &str) -> Result<Option<(i64,
         .optional()?)
 }
 
+/// The queued or running reviews of the repository's workspaces.
+pub(crate) fn active_in(db: &Connection, repository_id: &str) -> Result<Vec<i64>> {
+    Ok(db
+        .prepare(
+            "SELECT reviews.id FROM reviews JOIN workspaces ON workspaces.id=workspace_id
+                WHERE repository_id=?1 AND reviews.state IN ('queued','running')",
+        )?
+        .query_map([repository_id], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// Every queued review, oldest first.
 pub(crate) fn queued(db: &Connection) -> Result<Vec<i64>> {
     Ok(db
