@@ -22970,6 +22970,40 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
     }
 }
 
+#[test]
+fn client_api_creation_rejects_a_closed_issue_before_creating_a_workspace() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    for tool in ["gh", "fj"] {
+        let fixture = issue_fixture(tool);
+        write_issue_state(&fixture, tool, "Closed");
+        let before = fixture.ok(&["work"]);
+        let socket = fixture.root.path().join("state/daemon.sock");
+        let create = shoal_client::CreateWorkspace {
+            repository: fixture.repo.to_str().unwrap().into(),
+            name: "closed-work".into(),
+            base: Some("HEAD".into()),
+            issue: Some("316".into()),
+            pr: None,
+            agent: None,
+        };
+        let refused = runtime.block_on(async {
+            let client = shoal_client::Connector::new(socket)
+                .connect()
+                .await
+                .unwrap();
+            client.call(create).await
+        });
+        let Err(shoal_client::Error::Api(error)) = refused else {
+            panic!("{tool}: expected a refusal: {refused:?}");
+        };
+        assert!(
+            error.message.contains("issue is already closed"),
+            "{tool}: {error}"
+        );
+        assert_eq!(fixture.ok(&["work"]), before);
+    }
+}
+
 /// Runs a session's command in place of a zmx session, recording each call
 /// and serving the sessions listed in `$HOME/zmx-sessions`. A detached
 /// session keeps the environment it was created with and runs sent text as

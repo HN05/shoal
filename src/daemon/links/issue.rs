@@ -1,5 +1,7 @@
 //! Persist issue associations.
 use crate::daemon::refusal::{Reason, Refusal};
+use std::path::Path;
+
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -12,6 +14,13 @@ use crate::{
     forge::{ForgeRepo, items::link::ItemKind},
     model::Workspace,
 };
+
+/// An open issue a new workspace is assigned.
+#[derive(Debug, Clone)]
+pub(crate) struct OpenIssue {
+    pub url: String,
+    pub title: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Registration {
@@ -100,6 +109,19 @@ impl Manager {
             .await?;
         self.signals.wake_cleanup();
         Ok(())
+    }
+
+    /// The canonical URL and title of the open issue `input` names in the
+    /// repository whose origin `checkout` has, read with the user's logins,
+    /// as `shoal add` reads it. A closed or unknown issue is refused.
+    pub(crate) async fn read_open_issue(&self, checkout: &Path, input: &str) -> Result<OpenIssue> {
+        let remote = crate::repository::remote_url_from_path(checkout)
+            .await?
+            .context("issue lookup needs an origin remote")?;
+        let forge = self.forge(&remote).await?;
+        let (number, url) = forge.issue(input)?;
+        let (title, _) = forge.issue_details(&self.user_account(), number).await?;
+        Ok(OpenIssue { url, title })
     }
 
     pub(super) async fn issue_forge(
