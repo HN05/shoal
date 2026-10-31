@@ -135,6 +135,55 @@ fn root_help_entry_points_are_grouped_and_subcommand_help_stays_specific() {
 }
 
 // Agents without network access read the options from the binary itself.
+/// `--help` prints the usage of every command without contacting a daemon:
+/// it leaves the state directory as it found it, without a socket.
+#[test]
+fn help_of_every_command_needs_no_daemon() {
+    let root = tempfile::tempdir_in("/tmp").unwrap();
+    let state = root.path().join("state");
+    std::fs::create_dir(&state).unwrap();
+    let mut pending = vec![Vec::<String>::new()];
+    let mut shown = 0;
+    while let Some(path) = pending.pop() {
+        let output = support::cli(root.path())
+            .args(&path)
+            .arg("--help")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{path:?}: {output:?}");
+        let help = String::from_utf8(output.stdout).unwrap();
+        assert!(help.contains("Usage: shoal"), "{path:?}: {help}");
+        for name in subcommands(&help) {
+            pending.push(path.iter().cloned().chain([name]).collect());
+        }
+        shown += 1;
+    }
+    assert!(shown > 100, "only {shown} commands were found");
+    assert_eq!(std::fs::read_dir(&state).unwrap().count(), 0);
+}
+
+/// The subcommands `help` lists: the name of each entry, which its
+/// description follows in a column, in a section other than arguments and
+/// options. Examples are not entries.
+fn subcommands(help: &str) -> Vec<String> {
+    let mut listed = Vec::new();
+    let mut commands = false;
+    for line in help.lines() {
+        if !line.starts_with(' ') && line.ends_with(':') {
+            commands = !matches!(line, "Arguments:" | "Options:");
+        } else if commands
+            && let Some(entry) = line.strip_prefix("  ")
+            && entry.starts_with(|c: char| c.is_ascii_lowercase())
+        {
+            let (name, description) = entry.split_once(' ').unwrap_or((entry, ""));
+            if description.is_empty() || description.starts_with(' ') {
+                listed.push(name.to_owned());
+            }
+        }
+    }
+    listed
+}
+
 #[test]
 fn config_reference_prints_the_bundled_reference_without_a_daemon() {
     let root = tempfile::tempdir().unwrap();

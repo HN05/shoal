@@ -93,8 +93,8 @@ pub const OUTPUT: &str = "SHOAL_OUTPUT";
 pub const COMPLETE: &str = "SHOAL_COMPLETE";
 /// Set to `1` to print timing lines for profiling Shoal itself.
 pub const PROFILE: &str = "SHOAL_PROFILE";
-/// Set to `1` to let a debug build change user-level files, for tests that run
-/// in a temporary home.
+/// Set to `1` to let a debug build use the user's state directory and change
+/// user-level files, for tests that run in a temporary home.
 pub const DEV_USER_FILES: &str = "SHOAL_DEV_USER_FILES";
 /// Runtime override for the packaged skills directory.
 pub const SKILLS_DIR: &str = "SHOAL_SKILLS_DIR";

@@ -1,6 +1,10 @@
 //! Locations of Shoal's per-user state. Every file the daemon or CLI touches
 //! under the state directory is named here.
-use std::{fs, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, ensure};
 
@@ -53,6 +57,12 @@ impl Paths {
 
     /// The state directory `new` selects, without requiring a usable socket path.
     pub fn state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
+        let state = Self::resolve_state_dir(state)?;
+        refuse_user_state(&state)?;
+        Ok(state)
+    }
+
+    fn resolve_state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
         let home = crate::fsutil::home_dir()?;
         ensure!(home.is_absolute(), "HOME must be an absolute path");
         let state = state.unwrap_or_else(|| home.join(DEFAULT_STATE));
@@ -128,6 +138,36 @@ impl Paths {
     pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {
         self.state.join("workspaces").join(workspace_id)
     }
+}
+
+/// A development build leaves the user's own state directory, whose daemon
+/// serves every running agent, to the installed Shoal, as it leaves the
+/// user's other files. The user's home comes from the password database, so
+/// a temporary `HOME` neither hides nor imitates it.
+fn refuse_user_state(state: &Path) -> Result<()> {
+    if crate::build::changes_user_files() {
+        return Ok(());
+    }
+    let Some(home) = crate::fsutil::account_home() else {
+        return Ok(());
+    };
+    let user = home.join(DEFAULT_STATE);
+    ensure!(
+        !same_directory(state, &user),
+        "a development build does not use the user's state directory {}; pass --state-dir with a temporary directory, or set {}=1 to use it",
+        user.display(),
+        crate::env::DEV_USER_FILES
+    );
+    Ok(())
+}
+
+/// Whether `a` and `b` name one directory, through symlinks when both exist.
+fn same_directory(a: &Path, b: &Path) -> bool {
+    a == b
+        || matches!(
+            (fs::canonicalize(a), fs::canonicalize(b)),
+            (Ok(a), Ok(b)) if a == b
+        )
 }
 
 #[cfg(test)]

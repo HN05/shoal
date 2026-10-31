@@ -228,7 +228,8 @@ for Rust changes. Test in temporary state directories and repositories, without 
 launching environment's Shoal variables or configuration locations; never install
 persistent OS services or modify real user workspaces as a side effect of tests.
 Run development builds only with a temporary `--state-dir`: the user's daemon
-serves every running agent, so never stop, restart or reinstall it. Code that
+serves every running agent, so never stop, restart or reinstall it, and a debug
+build refuses the user's state directory unless `SHOAL_DEV_USER_FILES=1`. Code that
 changes user-level files outside the state directory checks
 `build::changes_user_files`, so debug builds leave them to the installed Shoal.
 
