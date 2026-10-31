@@ -1,4 +1,4 @@
-//! Review a workspace's changes with the configured `review` command or an agent.
+//! Review a workspace's changes or a PR with the configured `review` command or an agent.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail, ensure};
@@ -7,7 +7,6 @@ use crate::{
     agent::Agent,
     cli::{
         client,
-        commands::issues::Issue,
         context::Context,
         ui::{self, Fallback},
     },
@@ -33,8 +32,7 @@ pub(super) enum Reviewer {
 /// What `shoal review` reviews.
 pub(super) enum Target {
     Workspace(Option<String>),
-    Item {
-        kind: ItemKind,
+    Pull {
         input: String,
         repository: Option<String>,
         /// `--post` or `--no-post`; otherwise `[review] post` decides.
@@ -43,39 +41,40 @@ pub(super) enum Target {
 }
 
 impl Target {
-    /// A URL in the workspace position names a PR or issue; `--repo` and
-    /// posting apply only to those forge items.
+    /// A URL in the workspace position names a PR; `--repo` and posting
+    /// apply only to PRs.
     pub fn new(
         workspace: Option<String>,
-        item: Option<(ItemKind, String)>,
+        pr: Option<String>,
         repository: Option<String>,
         post: Option<bool>,
     ) -> Result<Self> {
-        let item = match (item, workspace) {
-            (Some(item), _) => Some(item),
+        let input = match (pr, workspace) {
+            (Some(input), _) => input,
             (None, Some(input)) if IssueInput::parse(&input) == IssueInput::Url => {
-                let kind = match Link::parse(&input)?.target {
-                    LinkTarget::Pr => ItemKind::Pr,
-                    LinkTarget::Issue => ItemKind::Issue,
-                    LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR or issue URL"),
-                };
-                Some((kind, input))
+                match Link::parse(&input)?.target {
+                    LinkTarget::Pr => input,
+                    LinkTarget::Issue => {
+                        bail!(
+                            "shoal review takes a workspace or a PR; settle an issue's plan with shoal plan {input}"
+                        )
+                    }
+                    LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
+                }
             }
             (None, workspace) => {
                 ensure!(
                     repository.is_none(),
-                    "--repo selects the repository of a PR or issue; pass --pr, --issue or a URL"
+                    "--repo selects the repository of a PR; pass --pr or a URL"
                 );
                 ensure!(
                     post.is_none(),
-                    "--post and --no-post apply to PR and issue reviews; workspace reviews stay local"
+                    "--post and --no-post apply to PR reviews; workspace reviews stay local"
                 );
                 return Ok(Target::Workspace(workspace));
             }
         };
-        let (kind, input) = item.unwrap();
-        Ok(Target::Item {
-            kind,
+        Ok(Target::Pull {
             input,
             repository,
             post,
@@ -83,15 +82,11 @@ impl Target {
     }
 }
 
-/// The forge item an agent review covers, if any, and whether it posts there.
+/// The PR an agent review covers, if any, and whether it posts there.
 enum Subject {
     Changes,
     Pull {
         pull: PullRequest,
-        post: Option<bool>,
-    },
-    Issue {
-        issue: Issue,
         post: Option<bool>,
     },
 }
@@ -105,24 +100,20 @@ pub(super) async fn start(
 ) -> Result<i32> {
     match target {
         Target::Workspace(workspace) => run(ctx, workspace, reviewer, Subject::Changes, args).await,
-        Target::Item {
-            kind,
+        Target::Pull {
             input,
             repository,
             post,
         } => {
             let repo = super::issues::item_repository(
                 ctx,
-                kind,
+                ItemKind::Pr,
                 Some(&input),
                 repository,
                 "shoal review <url> --repo <repository>",
             )
             .await?;
-            match kind {
-                ItemKind::Pr => pull_request(ctx, &repo, &input, reviewer, post, args).await,
-                ItemKind::Issue => issue(ctx, &repo, &input, reviewer, post, args).await,
-            }
+            pull_request(ctx, &repo, &input, reviewer, post, args).await
         }
     }
 }
@@ -208,83 +199,6 @@ async fn pull_request(
     run(ctx, Some(workspace), reviewer, subject, args).await
 }
 
-/// Refine an issue before implementation in the workspace that works on it,
-/// opening the one `shoal add --issue` would continue when none does.
-async fn issue(
-    ctx: &Context,
-    repo: &Repository,
-    input: &str,
-    reviewer: Reviewer,
-    post: Option<bool>,
-    args: Vec<OsString>,
-) -> Result<i32> {
-    ensure!(
-        !matches!(reviewer, Reviewer::Manual),
-        "an issue review needs an agent; drop --manual"
-    );
-    let issue = super::issues::load(ctx, repo, input).await?;
-    let workspace = match issue_workspace(ctx, repo, &issue).await? {
-        Some(workspace) => workspace,
-        None => {
-            let creation = super::workspaces::Creation::default();
-            let code = super::workspaces::add(
-                ctx,
-                Some(repo.id.clone()),
-                creation,
-                Some(issue.url.clone()),
-                super::workspaces::AgentLaunch::Explicit(None),
-                Vec::new(),
-                super::workspaces::AddOptions {
-                    here: true,
-                    focus: false,
-                    now: false,
-                    after: Vec::new(),
-                },
-            )
-            .await?;
-            if code != 0 {
-                return Ok(code);
-            }
-            issue_workspace(ctx, repo, &issue)
-                .await?
-                .context("the opened issue workspace is missing")?
-        }
-    };
-    eprintln!(
-        "Reviewing issue #{} in workspace {}",
-        issue.number, workspace.name
-    );
-    let reviewer = match reviewer {
-        Reviewer::Ask => Reviewer::Agent(None),
-        reviewer => reviewer,
-    };
-    let subject = Subject::Issue { issue, post };
-    run(ctx, Some(workspace.id), reviewer, subject, args).await
-}
-
-/// The workspace associated with the issue, otherwise the one on its derived branch.
-async fn issue_workspace(
-    ctx: &Context,
-    repo: &Repository,
-    issue: &Issue,
-) -> Result<Option<Workspace>> {
-    let branch = issue.branch_name();
-    let mut derived = None;
-    let workspaces = client::workspaces(&ctx.paths).await?;
-    for workspace in workspaces
-        .into_iter()
-        .filter(|workspace| workspace.repository_id == repo.id)
-    {
-        if workspace.links.issue.as_deref() == Some(issue.url.as_str()) {
-            return Ok(Some(workspace));
-        }
-        if workspace.branch == branch {
-            derived = Some(workspace);
-        }
-    }
-    Ok(derived)
-}
-
 /// Fast-forward a reused workspace to the PR's pushed head so the review sees
 /// the author's latest commits; local commits ahead of it stay as they are.
 async fn update_to_head(
@@ -329,7 +243,7 @@ async fn run(
     let settings = client::settings(&ctx.paths, ConfigTarget::Workspace(workspace.clone())).await?;
     let post = match &subject {
         Subject::Changes => None,
-        Subject::Pull { post, .. } | Subject::Issue { post, .. } => *post,
+        Subject::Pull { post, .. } => *post,
     };
     let reviewer = match reviewer {
         // Only an agent posts, so choosing whether to post chooses the agent.
@@ -383,24 +297,6 @@ async fn run(
 
 fn prompt(workspace: &Workspace, subject: &Subject, post: bool) -> String {
     let (subject, delivery) = match subject {
-        Subject::Issue { issue, .. } => {
-            let delivery = if post {
-                format!(
-                    "Post this as one comment on issue #{} without editing the issue. Do not \
-                     edit files, commit, or push.",
-                    issue.number
-                )
-            } else {
-                LOCAL.to_owned()
-            };
-            return format!(
-                "Review issue #{}: {}\n{}\n\n{}\n\nRefine the issue before implementation \
-                 starts; this workspace is on branch {}. Check it against the code and report \
-                 what is unclear, missing, inconsistent or already done, the code it affects, \
-                 open questions, and a suggested approach. {delivery}",
-                issue.number, issue.title, issue.url, issue.details, workspace.branch
-            );
-        }
         Subject::Pull { pull, .. } => (
             format!(
                 "Review pull request #{}: {}\n{}\n\nIts changes are on branch {}",

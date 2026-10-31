@@ -65,20 +65,17 @@ pub enum ChangesCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
-    /// Review workspace or PR changes, or refine an issue, with a review tool or agent.
+    /// Review workspace or PR changes with a review tool or agent.
     Review {
-        /// Workspace to review, or a PR or issue URL.
+        /// Workspace to review, or a PR URL.
         workspace: Option<String>,
         /// Review this PR in the workspace that owns its head branch, opening one when none does.
         #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "workspace", value_parser = item_reference)]
         pr: Option<String>,
-        /// Have an agent refine this issue before implementation, in the workspace that works on it.
-        #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with_all = ["workspace", "pr", "manual"], value_parser = item_reference)]
-        issue: Option<String>,
-        /// Registered repository of the PR or issue; defaults to the URL's repository or the current checkout/workspace.
+        /// Registered repository of the PR; defaults to the URL's repository or the current checkout/workspace.
         #[arg(long = "repo")]
         repository: Option<String>,
-        /// Have the agent post its findings on the PR or issue, overriding [review] post.
+        /// Have the agent post its findings on the PR, overriding [review] post.
         #[arg(long, overrides_with = "no_post", conflicts_with = "manual")]
         post: bool,
         /// Keep the agent's findings local, overriding [review] post.

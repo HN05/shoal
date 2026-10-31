@@ -262,8 +262,7 @@ shoal land --push             # Then push the default branch instead of opening 
 
 For local code review, configure `[commands] review = ["tuicr", "-r",
 "{diff_base}..HEAD"]` and run `shoal review fix-login` or `shoal review <pr-url>`,
-then choose manual or agent review; `shoal review <issue-url>` has an agent refine
-an issue before implementation. See the
+then choose manual or agent review. See the
 [command and review configuration](docs/reference.md#configured-commands) for uncommitted
 review and exporting feedback to an agent.
 

@@ -797,14 +797,9 @@ when the worktree is no longer the recorded one on that branch, or
 opens one from origin whose base is the PR's refreshed `origin/<base>`. Either
 workspace links the PR as `shoal add` does; fork PRs are refused. `--repo` selects the PR's repository,
 which otherwise follows `shoal add`.
-`shoal review <issue-url>` or `shoal review --issue <number-or-url>` has an agent
-refine the issue before implementation: it checks the issue against the code and
-reports what is unclear, missing or already done, open questions and a suggested
-approach. It runs in the workspace associated with the issue or on its derived
-branch, opening the one `shoal add --issue` continues when none exists; `--manual`
-is refused.
-An agent reviewing a PR or issue posts its findings there as one comment, without
-approving, requesting changes or editing the issue, unless `[review] post` is
+An issue URL is refused; `shoal plan` settles an issue before implementation.
+An agent reviewing a PR posts its findings there as one comment, without
+approving or requesting changes, unless `[review] post` is
 false; `--post` or `--no-post` overrides that for one run and selects the agent.
 
 ```toml
@@ -1382,7 +1377,8 @@ starts a [chat](#chats) that settles an issue's plan with you before anyone
 implements it. The issue is a number or URL; without one, a picker offers the
 open issues labelled `[issue] plan_label`, and `--oldest` or `--newest` takes
 one from either end instead; `--oldest` is refused when more than 1,000 are open,
-since the forge lists only the newest 1,000. The repository follows `shoal review --issue`, and
+since the forge lists only the newest 1,000. The repository is `--repo`'s, else the
+issue URL's, else the current checkout's or workspace's, and
 the agent, tab and session follow `shoal chat`, except that the chat is named
 `<repo>-plan-<number>` (suffixed while another holds it) without asking. Instead of waiting for you, the agent starts on the
 issue: it checks it against the default branch, talks the open points through

@@ -1,12 +1,9 @@
 use anyhow::Result;
 
-use crate::{
-    cli::{
-        args::changes::{BranchCommand, ChangesCommand},
-        commands::{base, ci, items, review, workspaces},
-        context::Context,
-    },
-    forge::items::link::ItemKind,
+use crate::cli::{
+    args::changes::{BranchCommand, ChangesCommand},
+    commands::{base, ci, items, review, workspaces},
+    context::Context,
 };
 
 pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand) -> Result<i32> {
@@ -22,7 +19,6 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
         ChangesCommand::Review {
             workspace,
             pr,
-            issue,
             repository,
             post,
             no_post,
@@ -30,11 +26,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ChangesCommand)
             agent,
             args,
         } => {
-            let item = pr
-                .map(|pr| (ItemKind::Pr, pr))
-                .or(issue.map(|issue| (ItemKind::Issue, issue)));
             let post = (post || no_post).then_some(post);
-            let target = review::Target::new(workspace, item, repository, post)?;
+            let target = review::Target::new(workspace, pr, repository, post)?;
             let reviewer = review::Reviewer::new(manual, agent);
             review::start(&ctx, target, reviewer, args).await
         }

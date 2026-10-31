@@ -1125,7 +1125,7 @@ arguments; a standalone `{args}` places the caller's literal arguments.
 wrapper, so the editor gets scope and port variables and counts as activity.
 Built-in `review` chooses
 between the `review` command and an agent prompted to report, not change, the
-work. An agent reviewing a forge item posts its findings there as one comment
+work. An agent reviewing a PR posts its findings there as one comment
 unless `[review] post` or `--no-post` keeps them local; workspace reviews stay
 local. A PR target, named by URL or `--pr`, resolves a same-repository PR with the user's forge login and
 reviews its head branch against the PR base, reusing the owning workspace after
@@ -1133,8 +1133,8 @@ fast-forwarding it to the pushed head; local commits ahead stay, divergence is r
 The daemon fast-forwards under a lifecycle reservation and the repository's Git gate,
 after verifying the recorded worktree and its branch, so a switched or replaced
 checkout is never moved.
-An issue target asks an agent to refine the issue before implementation, in the
-workspace `add --issue` would continue, opening it when missing. `repo setup`
+Refining an issue before implementation is `shoal plan`'s, which settles it with
+the user in a chat. `repo setup`
 likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the
 tracked repository config, so it arrives as a reviewable commit that every clone
 shares. For a repository that won't take that file, or settings for one user,
@@ -1631,7 +1631,7 @@ assumes no label scheme, and issues with neither stay outside the flow.
 code, needs the user's attention and their authority to rewrite the issue, and
 the chat then coordinates the implementing workspace it opens. The plan goes
 into the issue body because the body is all an implementing agent's prompt
-carries. The planning task is built in, like an issue review's, since a
+carries. The planning task is built in, since a
 repository's planning conventions belong in its own contributor rules, and it
 keeps the discussion in the conversation: questions and forge comments serve
 agents blocked during implementation.

@@ -3930,94 +3930,35 @@ fn forge_origin(fixture: &Fixture) -> PathBuf {
 }
 
 #[test]
-fn review_refines_an_issue_in_the_workspace_add_continues() {
+fn review_refers_issues_to_shoal_plan() {
     let fixture = Fixture::with_config(Some(
         "agent.default = 'reviewer'\n[agents.reviewer]\ncommand = ['printf', '%s', '{prompt}']\n",
     ));
     forge_origin(&fixture);
-    let bin = fixture.root.path().join("issue-bin");
-    install_forgejo_curl(&bin);
-    forgejo_api(
-        fixture.root.path(),
-        "repos/team/project/issues/12",
-        &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
-            "body": "Retry failed uploads.", "labels": [], "pull_request": null}),
-    );
-    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-    let review = |target: &[&str]| {
-        fixture
-            .command()
-            .arg("review")
-            .args(target)
-            .current_dir(&fixture.repo)
-            .env("PATH", &path)
-            .output()
-            .unwrap()
-    };
-    let name = "12-clarify-retries";
-    let output = review(&["--issue", "12"]);
-    assert!(output.status.success(), "{output:?}");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for expected in [
-        "Review issue #12: Clarify retries\nhttps://forge.example/team/project/issues/12",
-        "Retry failed uploads.",
-        "Refine the issue before implementation starts; this workspace is on branch 12-clarify-retries.",
-        "Post this as one comment on issue #12 without editing the issue.",
-    ] {
-        assert!(stdout.contains(expected), "{stdout}");
-    }
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains(&format!("Reviewing issue #12 in workspace {name}")),
-        "{output:?}"
-    );
-    assert_eq!(
-        fixture.ok(&["status", name])["issue"]["url"],
-        "https://forge.example/team/project/issues/12"
-    );
-
-    let output = review(&["https://forge.example/team/project/issues/12", "--no-post"]);
-    assert!(output.status.success(), "{output:?}");
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("or comment on the forge unless asked"),
-        "{output:?}"
-    );
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains(&format!("Reviewing issue #12 in workspace {name}")),
-        "{output:?}"
-    );
-    let output = review(&["https://forge.example/team/project/issues/12", "--manual"]);
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("an issue review needs an agent"),
-        "{output:?}"
-    );
-    let added = fixture
+    let output = fixture
         .command()
         .args([
-            "--json",
-            "add",
+            "review",
+            "run",
             "https://forge.example/team/project/issues/12",
-            "--agent",
-            "reviewer",
         ])
         .current_dir(&fixture.repo)
-        .env("PATH", &path)
         .output()
         .unwrap();
-    assert!(added.status.success(), "{added:?}");
-    assert_eq!(
-        serde_json::from_str::<Value>(
-            String::from_utf8_lossy(&added.stdout)
-                .lines()
-                .next()
-                .unwrap()
-        )
-        .unwrap()["name"],
-        name
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("shoal plan https://forge.example/team/project/issues/12"),
+        "{output:?}"
     );
-    assert_eq!(fixture.ok(&["work"]).as_array().unwrap().len(), 1);
+    let output = fixture
+        .command()
+        .args(["review", "--issue", "12"])
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
 }
 
 #[test]
