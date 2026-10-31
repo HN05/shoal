@@ -100,7 +100,7 @@ pub(crate) fn operation(
     }
 }
 
-/// GitHub redirects a job's log to a download that gh follows.
+/// GitHub redirects a job's log to a download, which the read follows.
 pub(crate) fn log_endpoint(location: Location) -> Result<String> {
     let Location::GitHub { job, .. } = location else {
         bail!("not a GitHub Actions job");

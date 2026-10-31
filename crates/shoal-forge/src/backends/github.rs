@@ -1,5 +1,5 @@
-//! GitHub, through `gh`, which owns the login: its CLI reports items as
-//! structured data, and `gh api` sends REST and GraphQL requests.
+//! GitHub: its REST and GraphQL APIs, on GitHub.com or an Enterprise
+//! Server, signed in with the account's token for the host.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 
@@ -816,8 +816,6 @@ impl Backend for GitHub {
     }
 }
 
-/// The `gh issue list` or `gh pr list` arguments for `search`. Values go
-/// in `--flag=value` form, so one starting with `-` stays a value.
 /// Where `endpoint` is under GitHub's API, which takes GraphQL at
 /// `graphql` on GitHub.com and `/api/graphql` on an Enterprise Server. An
 /// endpoint that is already a URL, such as one on GitHub's upload host,
