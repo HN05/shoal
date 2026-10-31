@@ -260,11 +260,37 @@ fn repository_setup_names_its_agent_and_forwards_arguments() {
         Some(Command::Repository(RepositoryCommand::Repo {
             command: Some(RepoCommand::Setup {
                 repository: Some(repository),
+                local: false,
                 agent: Some(agent),
                 args,
             })
         })) if repository == "project" && agent.name() == "codex" && args == ["--model", "fast"]
     ));
+}
+
+#[test]
+fn local_repository_setup_is_a_flag() {
+    let cli = Cli::try_parse_from(["shoal", "repo", "setup", "project", "--local"]).unwrap();
+    assert!(matches!(
+        cli.command,
+        Some(Command::Repository(RepositoryCommand::Repo {
+            command: Some(RepoCommand::Setup { local: true, .. })
+        }))
+    ));
+}
+
+#[test]
+fn config_show_takes_a_repository_instead_of_a_workspace() {
+    let show = Cli::try_parse_from(["shoal", "config", "show", "--repo", "project"]).unwrap();
+    assert!(matches!(
+        show.command,
+        Some(Command::Service(ServiceCommand::Config {
+            command: ConfigCommand::Show { workspace: None, repository: Some(repository) }
+        })) if repository == "project"
+    ));
+    assert!(
+        Cli::try_parse_from(["shoal", "config", "show", "worker", "--repo", "project"]).is_err()
+    );
 }
 
 #[test]
@@ -474,7 +500,7 @@ fn config_show_and_reference_are_available_to_workspace_processes() {
     assert!(matches!(
         &show.command,
         Some(Command::Service(ServiceCommand::Config {
-            command: ConfigCommand::Show { workspace }
+            command: ConfigCommand::Show { workspace, repository: None }
         })) if workspace.as_deref() == Some("workspace")
     ));
     assert!(!show.command.unwrap().is_administrative());

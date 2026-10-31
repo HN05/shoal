@@ -89,8 +89,15 @@ pub(super) fn reload_message(message: String, reloaded: bool) -> String {
     }
 }
 
-pub(super) async fn show(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let target = target(ctx, workspace).await?;
+pub(super) async fn show(
+    ctx: &Context,
+    workspace: Option<String>,
+    repository: Option<String>,
+) -> Result<i32> {
+    let target = match repository {
+        Some(repository) => ConfigTarget::Repository(ui::repository_selector(repository)?),
+        None => target(ctx, workspace).await?,
+    };
     let (entries, warnings) = config::report::load(&ctx.paths, target).await?;
     for warning in warnings {
         eprintln!("warning: {warning}");

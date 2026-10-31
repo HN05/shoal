@@ -1057,7 +1057,7 @@ terminal; noninteractive and JSON calls require it.
 An agent whose executables are not on PATH
 is refused before any work starts and left out of pickers, the workspace menu
 and completion; pickers offer “No agent” to continue without launching one. `config show` reports effective repository values with their winning layers and uses a registered checkout
-before a workspace exists, then the picker. `status` combines lifecycle, fork-point changes, active work,
+before a workspace exists, then the picker; `--repo` names a repository's checkout directly. `status` combines lifecycle, fork-point changes, active work,
 leases and watched PR state in one workspace view; the daemon looks PRs up on each request
 and keeps a failed lookup on its PR. Human output uses `Display` for enum values and a shared
 semantic palette at the CLI presentation layer; machine output and stored values
@@ -1137,7 +1137,12 @@ An issue target asks an agent to refine the issue before implementation, in the
 workspace `add --issue` would continue, opening it when missing. `repo setup`
 likewise prompts an agent, in a workspace on the `shoal-setup` branch, to write the
 tracked repository config, so it arrives as a reviewable commit that every clone
-shares rather than as saved local config. Review tools own review storage, exports, and forge authentication, with
+shares. For a repository that won't take that file, or settings for one user,
+`--local` or the interactive “Save locally” choice has the agent write the local
+config and its scripts in the repository directory's `.shoal/` instead, from a
+workspace on `shoal-setup-local` it commits nothing on; the repository directory
+is already one of every workspace agent's working directories, so no extra one
+is needed, and the result applies as soon as it is saved. Review tools own review storage, exports, and forge authentication, with
 explicit feedback handoff to agents.
 
 AI tools are providers: built-in ones plus `[agents.<name>]` entries, one table

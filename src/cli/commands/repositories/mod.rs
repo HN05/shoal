@@ -8,6 +8,7 @@ mod removal;
 mod selection;
 mod sync;
 
+pub(super) use configuration::local_config_path;
 pub(super) use registration::{offer_registration, offer_unregistered};
 pub(super) use selection::{REPOSITORY, absolute, chosen};
 
@@ -25,9 +26,10 @@ pub(super) async fn run(ctx: &Context, command: RepoCommand) -> Result<i32> {
         RepoCommand::Rename { repository, name } => naming::rename(ctx, repository, name).await,
         RepoCommand::Setup {
             repository,
+            local,
             agent,
             args,
-        } => super::repo_setup::start(ctx, repository, agent, args).await,
+        } => super::repo_setup::start(ctx, repository, local, agent, args).await,
         RepoCommand::Rm {
             repository,
             confirmation,

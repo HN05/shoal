@@ -23,7 +23,10 @@ pub(in crate::cli::commands) async fn run(
             ConfigCommand::Unset { keys, repository } => {
                 configuration::edit(&ctx, configuration::unsets(keys), repository).await
             }
-            ConfigCommand::Show { workspace } => configuration::show(&ctx, workspace).await,
+            ConfigCommand::Show {
+                workspace,
+                repository,
+            } => configuration::show(&ctx, workspace, repository).await,
             ConfigCommand::Reference => configuration::reference(&ctx),
             ConfigCommand::Reset => service::install_config(&ctx, None).await,
             ConfigCommand::Install { name } => {

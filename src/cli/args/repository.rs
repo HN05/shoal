@@ -106,10 +106,14 @@ pub enum RepoCommand {
         /// New name; omit to enter one.
         name: Option<String>,
     },
-    /// Have an agent write the repository's Shoal config in a shoal-setup workspace.
+    /// Have an agent write the repository's Shoal config in a setup workspace.
     Setup {
         /// Registered repository; defaults to the current checkout or workspace, else a picker.
         repository: Option<String>,
+        /// Save the config and its scripts in the repository's local config
+        /// directory instead of committing them; asked when interactive.
+        #[arg(long)]
+        local: bool,
         /// Agent to start; defaults to agent.default, otherwise a picker.
         #[arg(long, value_parser = AgentParser)]
         agent: Option<Agent>,

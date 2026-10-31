@@ -41,7 +41,12 @@ pub enum ConfigCommand {
         repository: Option<String>,
     },
     /// Show effective repository settings and the layer each value came from.
-    Show { workspace: Option<String> },
+    Show {
+        workspace: Option<String>,
+        /// Show this repository's settings in its registered checkout instead of a workspace's.
+        #[arg(long = "repo", conflicts_with = "workspace")]
+        repository: Option<String>,
+    },
     /// Print the command and configuration reference for this release.
     Reference,
     /// Install a packaged global config, keeping the old file as config.toml.backup.

@@ -4358,6 +4358,20 @@ fn config_show_reports_effective_values_and_their_layers() {
     let human = String::from_utf8(human.stdout).unwrap();
     assert!(human.contains("ports.start = 3000 (worktree file)"));
     assert!(human.contains("agent.default = \"codex\" (local config)"));
+
+    // A named repository is shown as in its registered checkout.
+    let repository = fixture.ok(&["config", "show", "--repo", fixture.repo.to_str().unwrap()]);
+    let entry = |key: &str| {
+        repository
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|entry| entry["key"] == key)
+            .unwrap()
+    };
+    assert_eq!(entry("agent.default")["value"], "codex");
+    assert_eq!(entry("agent.default")["layer"], "local_config");
+    assert_eq!(entry("commands.global")["layer"], "global_config");
 }
 
 #[test]
@@ -5343,6 +5357,79 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             "shortcut\n"
         );
     }
+}
+
+#[test]
+fn local_repository_setup_points_its_agent_at_the_local_config() {
+    for interactive in [false, true] {
+        let fixture = Fixture::new();
+        let repo = fixture.repo.to_str().unwrap();
+        let bin = fixture.root.path().join("bin");
+        let recorded = fixture.root.path().join("agent-args");
+        install_test_script_with_mode(
+            bin.join("claude"),
+            format!(
+                "#!/bin/sh\nprintf '%s\\0' \"$@\" > '{}'\n",
+                recorded.display()
+            ),
+            0o700,
+        );
+        let output = if interactive {
+            // The second choice saves the config locally.
+            let (output, rows) =
+                fixture.pick(&["repo", "setup", repo, "--agent", "claude"], "1", "");
+            assert!(
+                rows.contains("Commit to repository") && rows.contains("Save locally"),
+                "{rows}"
+            );
+            output
+        } else {
+            fixture
+                .command()
+                .args(["repo", "setup", repo, "--local", "--agent", "claude"])
+                .env("PATH", fixture.restricted_path(&bin))
+                .output()
+                .unwrap()
+        };
+        assert!(output.status.success(), "{output:?}");
+        assert_local_setup(&fixture, &fs::read_to_string(&recorded).unwrap());
+    }
+}
+
+/// The local setup's agent, which recorded `args`, works in its own
+/// workspace and may write the local config's directory, which lies in the
+/// repository directory it is given, and the checkout stays as it was.
+fn assert_local_setup(fixture: &Fixture, args: &str) {
+    let args: Vec<_> = args.split('\0').filter(|arg| !arg.is_empty()).collect();
+    let local_config = PathBuf::from(
+        fixture.ok(&["repo", "config", fixture.repo.to_str().unwrap()])["path"]
+            .as_str()
+            .unwrap(),
+    );
+    let workspaces = fixture.ok(&["work"]);
+    let workspace = workspaces
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|workspace| workspace["branch"] == "shoal-setup-local")
+        .unwrap_or_else(|| panic!("no local setup workspace in {workspaces}"));
+    let directory = fs::canonicalize(local_config.parent().unwrap().parent().unwrap()).unwrap();
+    let add_dir = format!("--add-dir={}", directory.display());
+    assert!(args.contains(&add_dir.as_str()), "{args:?}");
+    let prompt = args.last().unwrap();
+    assert!(
+        prompt.contains(&format!("`{}`", local_config.display())),
+        "{prompt}"
+    );
+    assert!(prompt.contains("commit nothing"), "{prompt}");
+    assert!(
+        prompt.contains(&format!("branch {}", workspace["branch"].as_str().unwrap())),
+        "{prompt}"
+    );
+    let branches = git(&fixture.repo, &["branch", "--list", "shoal-setup"]);
+    assert!(branches.trim().is_empty(), "{branches}");
+    let status = git(&fixture.repo, &["status", "--porcelain"]);
+    assert!(status.trim().is_empty(), "{status}");
 }
 
 #[test]

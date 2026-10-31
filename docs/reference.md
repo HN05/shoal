@@ -1911,12 +1911,25 @@ precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
-`repo setup [repository] [--agent NAME] [-- ARGS]` starts an agent that writes
-the repository's `.shoal.toml`: setup, named ports, commands and resource pools,
-checked with `config show` and `work setup` and then committed. It runs in the
-repository's `shoal-setup` workspace, opening one on that branch when none
-exists. The agent is `--agent`, else `agent.default`, else one chosen from the
-agent picker; arguments after `--` go to the agent.
+`repo setup [repository] [--local] [--agent NAME] [-- ARGS]` starts an agent that
+writes the repository's config: setup, named ports, commands and resource pools,
+checked with `config show` and `work setup`. On a terminal without `--local`, it
+first asks whether to commit the config to the repository or save it locally;
+other callers commit it.
+
+- **Commit to repository** writes `.shoal.toml` and commits it with the scripts
+  it runs, in the repository's `shoal-setup` workspace.
+- **Save locally** (`--local`) writes the repository's
+  [local config](#store-repository-config-outside-git) and the scripts it runs
+  beside it, named by paths relative to that directory, and commits nothing, in
+  the repository's `shoal-setup-local` workspace. The config applies to every
+  workspace as soon as the agent saves it, and the agent ends by telling you to
+  check it with `config show --repo NAME`. The repository directory that holds
+  the file is already one of the agent's working directories.
+
+Either way, Shoal opens a workspace on that branch when none exists. The agent
+is `--agent`, else `agent.default`, else one chosen from the agent picker;
+arguments after `--` go to the agent.
 
 ### Contributions
 
@@ -1978,7 +1991,8 @@ or extensions. Other worktrees retain their settings.
 Run `shoal config show [workspace]` to print every effective repository setting
 and the layer that supplied it. With no workspace, Shoal uses the current
 workspace, the registered checkout when no workspace exists yet, then the
-workspace picker. Named tables
+workspace picker. `--repo NAME` shows a repository's settings in its registered
+checkout from any directory. Named tables
 such as commands and ports show one entry per name. `--json` returns `key`, `value`,
 and `layer` for each entry.
 
