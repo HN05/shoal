@@ -3625,6 +3625,21 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
         writes(&fixture),
         [json!([other, {"ref": "trunk", "inputs": {}}])]
     );
+    // GitHub reports no run URL, and ci list would list only the workspace's
+    // repository.
+    let output = fixture.run(&[
+        "ci",
+        "run",
+        "https://github.com/other/tool/actions/workflows/ci.yml",
+        "--workspace",
+        "topic",
+    ]);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains(
+            "find it in the forge's web UI and follow it with shoal link ci <URL> opened"
+        ),
+        "{output:?}"
+    );
     let output = fixture.run(&["ci", "run", "https://github.com/team/project/pull/8"]);
     assert!(!output.status.success());
     assert!(

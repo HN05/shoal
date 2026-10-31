@@ -17,6 +17,7 @@ use crate::{
             approval::RunsApproved,
             run::{StartedRun, validate_run},
             run_action::{RunActed, validate_run_reference},
+            workflow::is_workflow_url,
         },
     },
     protocol::{CiMethod, ItemContext},
@@ -32,10 +33,8 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
             Some(ui::select_workspace(ctx, args.workspace, fallback).await?)
         }
     };
-    let follow = match workspace {
-        Some(_) => "find it with shoal ci list and follow it with shoal link ci <URL> opened",
-        None => "find it in the forge's web UI",
-    };
+    let by_url = args.workflow.as_deref().is_some_and(is_workflow_url);
+    let follow = follow_hint(workspace.is_some(), by_url);
     let started: StartedRun = client::request(
         &ctx.paths,
         CiMethod::StartCiRun {
@@ -187,6 +186,19 @@ fn outcome(action: CiAction) -> &'static str {
     match action {
         CiAction::Rerun => "Rerun started",
         CiAction::Cancel => "Cancelled",
+    }
+}
+
+/// How to find and follow a started run whose URL the forge does not
+/// report: `ci list` lists only the workspace's repository, while a
+/// workflow's URL may name another.
+fn follow_hint(in_workspace: bool, by_url: bool) -> &'static str {
+    match (in_workspace, by_url) {
+        (false, _) => "find it in the forge's web UI",
+        (true, true) => {
+            "find it in the forge's web UI and follow it with shoal link ci <URL> opened"
+        }
+        (true, false) => "find it with shoal ci list and follow it with shoal link ci <URL> opened",
     }
 }
 
