@@ -14,6 +14,9 @@ use crate::forge::{
 /// Bounds a token command, which may wait on a password manager.
 const TOKEN_TIMEOUT: Duration = Duration::from_secs(60);
 
+/// The most a token command may print.
+const MAX_TOKEN_BYTES: usize = 64 * 1024;
+
 #[derive(Debug, Default, PartialEq, Deserialize)]
 #[serde(transparent)]
 pub struct Forges(BTreeMap<String, Forge>);
@@ -173,14 +176,28 @@ struct Configured {
 impl Token for Configured {
     fn fetch(&self) -> futures_util::future::BoxFuture<'_, Result<String>> {
         Box::pin(async move {
-            let token = self.value.resolve(|name| std::env::var_os(name));
-            let token = match tokio::time::timeout(TOKEN_TIMEOUT, token).await {
-                Ok(token) => token,
-                Err(_) => Err(anyhow::anyhow!("timed out after a minute")),
+            let token = match &self.value {
+                Value::Cmd { cmd } => token_output(cmd).await,
+                value => value.resolve(|name| std::env::var_os(name)).await,
             };
             token.with_context(|| format!("read {}", self.setting))
         })
     }
+}
+
+/// What a token command prints, bounded in time and size; its diagnostics
+/// go into the error rather than to the process's stderr.
+async fn token_output(command: &[String]) -> Result<String> {
+    let (program, args) = command
+        .split_first()
+        .context("the command names no program")?;
+    let mut process = tokio::process::Command::new(program);
+    process.args(args);
+    shoal_subprocess::Run::new(process)
+        .timeout(TOKEN_TIMEOUT)
+        .output_limit(MAX_TOKEN_BYTES)
+        .output()
+        .await
 }
 
 /// The setting that pins `host`'s type, for messages that ask for it.

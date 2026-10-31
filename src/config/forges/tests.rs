@@ -79,3 +79,15 @@ async fn tokens_fetch_their_value_and_name_the_setting_when_they_fail() {
         "{error:#}"
     );
 }
+
+#[tokio::test]
+async fn token_commands_report_their_diagnostics_and_are_bounded() {
+    let command = |script: &str| vec!["sh".to_owned(), "-c".to_owned(), script.to_owned()];
+    let error = token_output(&command("echo locked >&2; exit 3"))
+        .await
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("locked"), "{error:#}");
+    let flood = command("head -c 70000 /dev/zero | tr '\\0' a");
+    assert!(token_output(&flood).await.is_err());
+    assert_eq!(token_output(&command("echo abc")).await.unwrap(), "abc\n");
+}
