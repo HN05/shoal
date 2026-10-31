@@ -233,7 +233,7 @@ fn each_agent_keeps_a_last_session_and_a_single_earlier_one_gets_a_file() {
 }
 
 #[test]
-fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
+fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let record = write_record(
@@ -251,6 +251,11 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
         },
     )
     .unwrap();
+    let stopped = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_800_000_000);
+    std::fs::File::open(&record)
+        .unwrap()
+        .set_modified(stopped)
+        .unwrap();
     keep_as_last_session(&paths, "workspace", "execution", &record, None).unwrap();
     assert!(!record.exists());
     assert!(!pending(&paths, "workspace").unwrap());
@@ -263,6 +268,10 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session() {
             moved: false,
             origin: Some(herdr_pane("w1:p2")),
             stopped_by: None,
+            stop: Some(Stop {
+                reason: Some("its terminal closed".into()),
+                at: Some(1_800_000_000),
+            }),
         }]
     );
     let kept = LastSession::path(&paths, "workspace", "execution");
@@ -287,4 +296,50 @@ fn a_pane_recorded_before_origins_is_a_herdr_place() {
     assert_eq!(serde_json::from_value::<Record>(saved).unwrap(), record);
     let unknown = serde_json::json!({"agent": "codex", "origin": {"host": "tmux"}});
     assert!(serde_json::from_value::<Record>(unknown).is_err());
+}
+
+#[test]
+fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let path = save_record(
+        &paths,
+        "workspace",
+        "execution",
+        "claude",
+        Some("critical memory pressure"),
+        None,
+    )
+    .unwrap();
+    let stopped = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_800_000_000);
+    std::fs::File::open(&path)
+        .unwrap()
+        .set_modified(stopped)
+        .unwrap();
+    let record = Record::load(&path).unwrap().unwrap();
+    let stop = Stop::of(&record, &path);
+    assert_eq!(
+        stop,
+        Stop {
+            reason: Some("critical memory pressure".into()),
+            at: Some(1_800_000_000),
+        }
+    );
+    let at = crate::time::local_minutes(1_800_000_000);
+    assert_eq!(
+        resumed_prompt(Some(&stop), Some("handoff")),
+        format!(
+            "Shoal resumed this session. The session stopped at {at}: critical memory pressure. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off.\n\nhandoff"
+        )
+    );
+    // A stop without a known reason or time still says what it ended.
+    assert_eq!(
+        resumed_prompt(Some(&Stop::default()), None),
+        "Shoal resumed this session. The session stopped. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off."
+    );
+    // A last session, which exited on its own, has no stop to describe.
+    assert_eq!(
+        resumed_prompt(None, None),
+        "Shoal resumed this session. Continue working on the unfinished assignment from where you left off."
+    );
 }

@@ -174,7 +174,7 @@ async fn built_in_restore_child() {
             &["claude-fixture", "--continue"][..],
         ),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff, None)
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, handoff, None, None)
             .await
             .unwrap();
         assert!(recovery.automatic);
@@ -214,13 +214,13 @@ async fn built_in_restore_child() {
         ("codex", &["codex-fixture", "resume", "s1"][..]),
         ("claude", &["claude-fixture", "--resume", "s1"][..]),
     ] {
-        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Some("s1"))
+        let recovery = Recovery::resolve(&manager.paths, &workspace, agent, None, Some("s1"), None)
             .await
             .unwrap();
         let restore = restore.iter().map(std::ffi::OsString::from);
         assert!(recovery.command.starts_with(&restore.collect::<Vec<_>>()));
     }
-    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None, None)
+    let unsupported = Recovery::resolve(&manager.paths, &workspace, "custom", None, None, None)
         .await
         .unwrap();
     assert!(!unsupported.automatic);
@@ -230,9 +230,16 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', 'specific-id']\n",
     )
     .unwrap();
-    let overridden = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
-        .await
-        .unwrap();
+    let overridden = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        "codex",
+        Some("handoff"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert!(overridden.automatic);
     assert!(!overridden.handoff_delivered);
     assert_eq!(
@@ -244,9 +251,16 @@ async fn built_in_restore_child() {
         "[agents.codex]\nresume_command = ['saved-session', '--', '{prompt}']\n",
     )
     .unwrap();
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", Some("handoff"), None)
-        .await
-        .unwrap();
+    let prompted = Recovery::resolve(
+        &manager.paths,
+        &workspace,
+        "codex",
+        Some("handoff"),
+        None,
+        None,
+    )
+    .await
+    .unwrap();
     assert!(prompted.handoff_delivered);
     assert_eq!(
         prompted.command,
@@ -257,7 +271,7 @@ async fn built_in_restore_child() {
         ]
         .map(std::ffi::OsString::from)
     );
-    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, None)
+    let prompted = Recovery::resolve(&manager.paths, &workspace, "codex", None, None, None)
         .await
         .unwrap();
     assert!(!prompted.handoff_delivered);
@@ -267,6 +281,23 @@ async fn built_in_restore_child() {
             "saved-session",
             "--",
             "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
+        ]
+        .map(std::ffi::OsString::from)
+    );
+    // A restore tells the session why and when it stopped.
+    let stop = crate::execution::recovery::Stop {
+        reason: Some("critical memory pressure".into()),
+        at: None,
+    };
+    let told = Recovery::resolve(&manager.paths, &workspace, "codex", None, None, Some(&stop))
+        .await
+        .unwrap();
+    assert_eq!(
+        told.command,
+        [
+            "saved-session",
+            "--",
+            "Shoal resumed this session. The session stopped: critical memory pressure. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again. Continue working on the unfinished assignment from where you left off.",
         ]
         .map(std::ffi::OsString::from)
     );

@@ -158,7 +158,10 @@ when explicitly configured for another agent, and load and disk space have
 recovered, except that an agent stopped between turns has nothing to do until
 an update arrives for it, so that update restores it instead, and its restore
 holds no agent slot until then. Manual and automatic restores prompt the agent to continue its
-unfinished assignment; configured restore commands receive that prompt through
+unfinished assignment, naming when and why Shoal stopped it, which every stop
+that saves an agent records and a last session keeps, and that the stop ended
+the work in its process, so the agent neither repeats what got it stopped nor
+assumes its subagents finished; configured restore commands receive that prompt through
 `{prompt}`. Never replay the original task prompt. Keep waiting wrappers tracked; they reattach
 like running commands, so a daemon restart or crash hands the wait to the next
 daemon instead of cancelling the restore. A daemon update waits for a stop

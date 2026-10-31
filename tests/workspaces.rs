@@ -6131,6 +6131,9 @@ fn stop_saves_agents_and_commands_and_resumes_agent_sessions() {
             prompt.contains("Continue working on the unfinished assignment"),
             "{restored}"
         );
+        // Each restored session learns why it stopped and what the stop ended.
+        assert!(prompt.contains(": stopped by shoal stop."), "{restored}");
+        assert!(prompt.contains("such as subagents"), "{restored}");
     }
     assert!(!prompts[1].contains("command-started"), "{restored}");
     assert_eq!(

@@ -83,6 +83,71 @@ pub struct Record {
     pub turn: Option<AgentState>,
 }
 
+/// Why and when Shoal stopped an agent, which its restore tells it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stop {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// When its recovery record was saved, in Unix seconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<u64>,
+}
+
+impl Stop {
+    /// The stop of the agent `record`, saved at `path`, keeps.
+    pub(crate) fn of(record: &Record, path: &Path) -> Self {
+        Self {
+            reason: record.stop_reason.clone(),
+            at: saved_at(path),
+        }
+    }
+
+    /// The sentences telling the restored agent about the stop.
+    fn describe(&self) -> String {
+        let at = self
+            .at
+            .map(|at| format!(" at {}", crate::time::local_minutes(at as i64)))
+            .unwrap_or_default();
+        let reason = self
+            .reason
+            .as_deref()
+            .map(|reason| format!(": {reason}"))
+            .unwrap_or_default();
+        format!(
+            "The session stopped{at}{reason}. The stop ended the work running in its process, such as subagents and background commands; check what they left before starting them again."
+        )
+    }
+}
+
+/// When the file at `path` was last saved, in Unix seconds, which is when a
+/// saved agent stopped.
+pub(crate) fn saved_at(path: &Path) -> Option<u64> {
+    let modified = std::fs::metadata(path).and_then(|metadata| metadata.modified());
+    Some(
+        modified
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs(),
+    )
+}
+
+/// What a restored session is told: why and when it stopped when known, to
+/// continue, then `handoff`.
+fn resumed_prompt(stop: Option<&Stop>, handoff: Option<&str>) -> String {
+    let mut prompt = String::from("Shoal resumed this session. ");
+    if let Some(stop) = stop {
+        prompt.push_str(&stop.describe());
+        prompt.push(' ');
+    }
+    prompt.push_str("Continue working on the unfinished assignment from where you left off.");
+    if let Some(handoff) = handoff {
+        prompt.push_str("\n\n");
+        prompt.push_str(handoff);
+    }
+    prompt
+}
+
 /// What a new agent of a workspace that moved where its earlier session is
 /// not available is told, followed by `handoff`.
 pub(crate) fn moved_prompt(handoff: Option<&str>) -> String {
@@ -102,7 +167,7 @@ impl Recovery {
             let workspace = client::inspect(paths, workspace_id.to_owned())
                 .await?
                 .workspace;
-            Self::resolve(paths, &workspace, agent, None, None).await
+            Self::resolve(paths, &workspace, agent, None, None, None).await
         }
         .await;
         resolved.unwrap_or_else(|error| {
@@ -117,16 +182,18 @@ impl Recovery {
         })
     }
 
-    /// Ask the restored session to continue, including `handoff` where the
-    /// command accepts a prompt: agents with resume arguments and `{prompt}`
-    /// in its `resume_command`. Resume arguments restore `session` when known,
-    /// otherwise the workspace's latest session.
+    /// Ask the restored session to continue, telling it about its `stop` and
+    /// including `handoff` where the command accepts a prompt: agents with
+    /// resume arguments and `{prompt}` in its `resume_command`. Resume
+    /// arguments restore `session` when known, otherwise the workspace's
+    /// latest session.
     pub(crate) async fn resolve(
         paths: &Paths,
         workspace: &Workspace,
         agent: &str,
         handoff: Option<&str>,
         session: Option<&str>,
+        stop: Option<&Stop>,
     ) -> Result<Self> {
         let settings =
             client::settings(paths, ConfigTarget::Workspace(workspace.id.clone())).await?;
@@ -134,13 +201,7 @@ impl Recovery {
         let configured = settings.resume_commands.get(&name);
         let resume_args = settings.launch(&name).arguments.resume_args(session);
         let automatic = configured.is_some() || resume_args.is_some();
-        let mut message = String::from(
-            "Shoal resumed this session. Continue working on the unfinished assignment from where you left off.",
-        );
-        if let Some(handoff) = handoff {
-            message.push_str("\n\n");
-            message.push_str(handoff);
-        }
+        let message = resumed_prompt(stop, handoff);
         let prompt = std::ffi::OsStr::new(&message);
         let (command, handoff_delivered) = if let Some(argv) = configured {
             let mut command = configured::expand_with_fields(
@@ -190,8 +251,8 @@ impl Recovery {
     }
 
     /// The command restoring the agent stopped with `record`, with the
-    /// proxy it was resolved to go through: the session it saved, otherwise
-    /// the restore command resolved at launch.
+    /// proxy it was resolved to go through: the session it saved, told why
+    /// and when it stopped, otherwise the restore command resolved at launch.
     pub(super) async fn restore_command(
         &self,
         paths: &Paths,
@@ -199,17 +260,18 @@ impl Recovery {
         record: Option<&Path>,
     ) -> (Vec<OsString>, Option<crate::proxy::Proxy>) {
         let launched = || (self.command.clone(), self.proxy.clone());
-        let session = record
-            .and_then(|path| Record::load(path).ok().flatten())
-            .and_then(|record| record.session);
-        let Some(session) = session else {
+        let Some((path, record)) =
+            record.and_then(|path| Some((path, Record::load(path).ok().flatten()?)))
+        else {
             return launched();
         };
-        match Self::resolve(paths, workspace, &self.agent, None, Some(&session)).await {
+        let stop = Stop::of(&record, path);
+        let session = record.session.as_deref();
+        match Self::resolve(paths, workspace, &self.agent, None, session, Some(&stop)).await {
             Ok(recovery) if !recovery.command.is_empty() => (recovery.command, recovery.proxy),
             Ok(_) => launched(),
             Err(error) => {
-                eprintln!("warning: cannot resume session {session}: {error:#}");
+                eprintln!("warning: cannot resolve the restore command: {error:#}");
                 launched()
             }
         }
@@ -314,9 +376,10 @@ impl Record {
         }
     }
 
-    /// This record as the last session of execution `id`, which keeps its
-    /// agent, session and place.
-    pub(crate) fn into_last_session(self, id: String) -> LastSession {
+    /// This record, saved at `path`, as the last session of execution `id`,
+    /// which keeps its agent, session, place and stop.
+    pub(crate) fn into_last_session(self, id: String, path: &Path) -> LastSession {
+        let stop = Stop::of(&self, path);
         LastSession {
             execution: id,
             agent: self.agent,
@@ -324,6 +387,7 @@ impl Record {
             moved: self.moved,
             origin: self.origin,
             stopped_by: None,
+            stop: Some(stop),
         }
     }
 
@@ -524,10 +588,7 @@ pub(crate) fn stopped_agents(paths: &Paths, workspace_id: &str) -> Result<Vec<St
     for (execution, path) in Saved::load(paths, workspace_id)?.agents {
         if let Some(mut record) = Record::load(&path)? {
             record.waiting = None;
-            let stopped_at = std::fs::metadata(&path)?
-                .modified()?
-                .duration_since(std::time::UNIX_EPOCH)?
-                .as_secs();
+            let stopped_at = saved_at(&path).context("read when the agent stopped")?;
             agents.push(StoppedAgent {
                 execution,
                 record,
@@ -568,7 +629,7 @@ pub(crate) fn keep_as_last_session(
     };
     LastSession {
         stopped_by: stopped_by.map(str::to_owned),
-        ..record.into_last_session(id.to_owned())
+        ..record.into_last_session(id.to_owned(), path)
     }
     .write(paths, workspace_id)?;
     consume(path)
@@ -710,6 +771,10 @@ pub struct LastSession {
     /// user or Shoal stopped, or that exited on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stopped_by: Option<String>,
+    /// Why and when Shoal stopped the agent; none for one that exited on its
+    /// own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Stop>,
 }
 
 /// The key of a last session saved without its execution.
@@ -743,6 +808,7 @@ impl LastSession {
             moved: false,
             origin: None,
             stopped_by: None,
+            stop: None,
         }
         .write(paths, workspace_id)
     }
@@ -824,11 +890,11 @@ where
     #[serde(untagged)]
     enum Sessions {
         Many(Vec<LastSession>),
-        One(LastSession),
+        One(Box<LastSession>),
     }
     Ok(match Sessions::deserialize(deserializer)? {
         Sessions::Many(sessions) => sessions,
-        Sessions::One(session) => vec![session],
+        Sessions::One(session) => vec![*session],
     })
 }
 

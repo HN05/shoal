@@ -10,7 +10,7 @@ use crate::{
         workspace::Discarded,
     },
     execution::recovery::{
-        LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume,
+        LastSession, Record, Recovery, RecoveryClaim, Saved, SavedCommand, claim, consume, saved_at,
     },
     model::{Inspection, QueueEntry, Workspace},
     protocol::{AssignmentMethod, ConfigTarget, RecoveryMethod},
@@ -327,7 +327,7 @@ pub async fn run(
     if let Some(reason) = &recorded.stop_reason {
         eprintln!("shoal: restoring {}, stopped: {reason}", recorded.agent);
     }
-    let session = recorded.into_last_session(selected_id);
+    let session = recorded.into_last_session(selected_id, &selected);
     restore(ctx, workspace, session, selected, saved.commands).await
 }
 
@@ -376,9 +376,9 @@ async fn continue_last_session(
     restore(ctx, workspace, last, path, commands).await
 }
 
-/// Restore the agent of `session`, saved at `path`, telling it about the
-/// stopped `commands`, which the caller claimed; it consumes their records
-/// once it runs.
+/// Restore the agent of `session`, saved at `path`, telling it about its stop
+/// and the stopped `commands`, which the caller claimed; it consumes their
+/// records once it runs.
 async fn restore(
     ctx: &Context,
     workspace: &Workspace,
@@ -398,6 +398,7 @@ async fn restore(
         &session.agent,
         handoff.as_deref(),
         session.session.as_deref(),
+        session.stop.as_ref(),
     )
     .await?;
     if !commands.is_empty() && !recovery.handoff_delivered {
@@ -533,12 +534,9 @@ fn session_label(path: &Path) -> String {
 
 /// `, stopped <time>` for the agent saved at `path`, empty when unknown.
 fn stop_time(path: &Path) -> String {
-    std::fs::metadata(path)
-        .and_then(|metadata| metadata.modified())
-        .ok()
-        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+    saved_at(path)
         .map(|stopped| {
-            let time = crate::time::local_minutes(stopped.as_secs() as i64);
+            let time = crate::time::local_minutes(stopped as i64);
             format!(", stopped {time}")
         })
         .unwrap_or_default()

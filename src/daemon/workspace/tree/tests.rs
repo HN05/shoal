@@ -367,6 +367,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
                 moved: false,
                 origin: None,
                 stopped_by,
+                stop: None,
             }
             .write(&manager.paths, &workspace.id)
             .unwrap();

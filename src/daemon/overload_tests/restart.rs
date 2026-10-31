@@ -180,6 +180,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         moved: false,
         origin: None,
         stopped_by: None,
+        stop: None,
     };
     kept_session.write(&manager.paths, &workspace.id).unwrap();
     let wrapper = exited().await;
@@ -232,6 +233,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
                 moved: false,
                 origin: None,
                 stopped_by: None,
+                stop: None,
             }
         ]
     );

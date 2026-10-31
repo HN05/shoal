@@ -422,6 +422,7 @@ async fn a_last_session_queues_and_takes_a_slot_once_admitted() {
             moved: false,
             origin: None,
             stopped_by: None,
+            stop: None,
         }
         .write(&manager.paths, &workspace.id)
         .unwrap();
