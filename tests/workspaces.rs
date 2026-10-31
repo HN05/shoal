@@ -60,6 +60,8 @@ const UNSETTLED: &str = "messages.settle_seconds = 0\n";
 /// The scripted forges serve Forgejo's API without answering which one they
 /// serve; `tests/forge.rs` covers asking.
 const FORGEJO_HOST: &str = "machine.forges.\"forge.example\".type = \"forgejo\"\n";
+/// The setting the built-in Codex command adds, which lets sandboxed Codex reach the daemon.
+const NETWORK: &str = "sandbox_workspace_write.network_access=true";
 /// A long-running command whose environment stays readable once launchd adopts
 /// it. macOS hides an orphaned `sleep`'s environment, which fails concurrent
 /// tests' setup verification.
@@ -5100,9 +5102,7 @@ exit 7
         } else if agent == "claude" {
             format!("{name}\nliteral spaces; $(false)\n")
         } else {
-            format!(
-                "{name}\nliteral spaces; $(false)\n--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
-            )
+            format!("{name}\nliteral spaces; $(false)\n-c\n{NETWORK}\n")
         };
         assert!(
             strip_shoal_arguments(&String::from_utf8(output.stdout).unwrap(), '\n').ends_with(
@@ -5221,15 +5221,7 @@ fn codex_default_mode_is_read_at_launch_and_explicit_modes_override_it() {
             } else {
                 let stdout = strip_shoal_arguments(&stdout, '\n');
                 let lines: Vec<_> = stdout.lines().collect();
-                assert_eq!(
-                    lines[1..],
-                    [
-                        "literal spaces; $(false)",
-                        "--sandbox",
-                        "danger-full-access",
-                        "--ask-for-approval=never"
-                    ]
-                );
+                assert_eq!(lines[1..], ["literal spaces; $(false)", "-c", NETWORK]);
                 assert_eq!(lines[0], "default-mode");
             }
             assert_eq!(
@@ -5374,9 +5366,9 @@ fn agent_shortcuts_forward_arguments_without_starting_real_agents() {
             format!(
                 "shortcut\n--version\nhello with spaces\n{}",
                 if agent == "claude" {
-                    ""
+                    String::new()
                 } else {
-                    "--sandbox\ndanger-full-access\n--ask-for-approval=never\n"
+                    format!("-c\n{NETWORK}\n")
                 }
             )
         );

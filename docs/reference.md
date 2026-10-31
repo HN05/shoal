@@ -751,7 +751,7 @@ CLI agents' are:
 command = ["claude"]
 
 [agents.codex]
-command = ["codex", "{args}", "--sandbox", "danger-full-access", "--ask-for-approval=never"]
+command = ["codex", "{args}", "-c", "sandbox_workspace_write.network_access=true"]
 ```
 
 Override their `command` to change the executable or flags; prompt templates,
