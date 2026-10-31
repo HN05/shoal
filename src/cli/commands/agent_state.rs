@@ -25,22 +25,22 @@ use crate::{
 /// turn of an agent with integration `ends_turn` when one is named.
 pub(super) async fn run(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
-    let reported = report_state(ctx, workspace, state, ends_turn).await;
+    let reported = report_state(ctx, space, state, ends_turn).await;
     tell_failure(ctx, &reported).await;
     reported
 }
 
 async fn report_state(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     state: AgentState,
     ends_turn: Option<IntegrationKind>,
 ) -> Result<i32> {
-    let workspace = ui::select_space(ctx, workspace, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
     let event = hook_event();
     let turn_end = ends_turn.map(|integration| TurnEnd {
         final_message: event.as_ref().and_then(final_message),
@@ -49,7 +49,7 @@ async fn report_state(
     let status: AgentStatus = request(
         &ctx.paths,
         AgentMethod::SetAgentState {
-            workspace,
+            workspace: space,
             state,
             session: event.as_ref().and_then(session_of),
             turn_end,

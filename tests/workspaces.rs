@@ -20528,7 +20528,7 @@ fn agents_report_their_turn_state_until_their_execution_ends() {
     let output = scoped_command(
         &fixture,
         "reporter",
-        &["internal", "agent-state", "waiting", "--workspace", "other"],
+        &["internal", "agent-state", "waiting", "--space", "other"],
     );
     assert!(!output.status.success(), "{output:?}");
     // The execution reports, then lists itself while its state is current.
@@ -20639,13 +20639,7 @@ fn agent_state_reports_from_an_input_that_never_closes() {
     fixture.add("reporter");
     let mut child = fixture
         .command()
-        .args([
-            "internal",
-            "agent-state",
-            "waiting",
-            "--workspace",
-            "reporter",
-        ])
+        .args(["internal", "agent-state", "waiting", "--space", "reporter"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
@@ -25271,7 +25265,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --workspace chat-worker\n\"$shoal\" alerts send --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker\n\"$shoal\" alerts send --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );

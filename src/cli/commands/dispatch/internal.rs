@@ -29,8 +29,8 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
         InternalCommand::AgentState {
             state,
             ends_turn,
-            workspace,
-        } => agent_state::run(&ctx, workspace, state, ends_turn).await,
+            space,
+        } => agent_state::run(&ctx, space, state, ends_turn).await,
         InternalCommand::TurnFailed {
             integration,
             workspace,

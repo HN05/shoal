@@ -47,9 +47,10 @@ pub enum InternalCommand {
         /// which reads how long the agent's prompt cache lives.
         #[arg(long, value_name = "INTEGRATION")]
         ends_turn: Option<crate::ai::IntegrationKind>,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Workspace or chat to report for; defaults to the chat this runs
+        /// in, else the caller's own or the current workspace.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
     /// Report a turn an API error ended, with the failure the hook event of an
     /// agent with this integration names; Shoal's agent hooks call it.
