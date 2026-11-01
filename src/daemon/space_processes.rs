@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::processes::{Selection, Stopped};
 use crate::{
     daemon::{store, workspace::Manager},
     model::{Chat, Workspace},
@@ -17,16 +17,6 @@ use crate::{
     tmp_dirs::Layout,
 };
 
-/// Which of a space's untracked processes an operation takes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Selection {
-    /// Every untracked process, leftovers included.
-    Processes,
-    /// Only the processes left behind by what started them.
-    Leftovers,
-}
-
 impl Selection {
     fn takes(self, process: &Untracked) -> bool {
         match self {
@@ -34,15 +24,6 @@ impl Selection {
             Self::Leftovers => process.leftover,
         }
     }
-}
-
-/// What a stop of a space's processes stopped.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Stopped {
-    /// The name of the workspace or chat.
-    pub space: String,
-    /// How many processes it stopped.
-    pub processes: usize,
 }
 
 /// What a workspace's worktree ties to it.

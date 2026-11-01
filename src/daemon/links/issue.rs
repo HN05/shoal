@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::links::issue::Registration;
 use crate::{
     daemon::{
         events::{self, EventKind},
@@ -20,12 +20,6 @@ use crate::{
 pub(crate) struct OpenIssue {
     pub url: String,
     pub title: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Registration {
-    pub url: String,
-    pub error: Option<String>,
 }
 
 impl Manager {

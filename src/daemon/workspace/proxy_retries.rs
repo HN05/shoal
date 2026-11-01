@@ -4,20 +4,9 @@
 //! restart that forgets it loses nothing that still runs. The reset is kept
 //! with the turn retries it holds back.
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 use super::Manager;
-use crate::state::TurnFailure;
-
-/// A retry the proxy waits to make.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ProxyRetry {
-    pub failure: TurnFailure,
-    /// The attempt that failed, from 1.
-    pub attempt: u32,
-    /// Unix seconds when the proxy tries again.
-    pub next_at: i64,
-}
+pub(crate) use crate::client::executions::ProxyRetry;
 
 impl Manager {
     /// Keep the retry the proxy of `execution` in workspace `selector`

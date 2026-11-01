@@ -28,6 +28,8 @@ use crate::{
     repository,
 };
 
+pub(crate) use crate::client::links::Updates;
+
 mod held;
 
 const POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -40,23 +42,6 @@ pub(crate) const RESPONSE_LIMIT: usize = crate::protocol::MAX_FRAME - 256;
 const MAX_LISTED_FILES: usize = 10;
 
 const NO_LINKED_ITEMS: &str = "no linked items of the selected kind; register one with shoal link";
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Updates {
-    pub updates: Vec<Update>,
-    /// Agent messages end a wait on their own, ahead of item activity.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub messages: Vec<AgentMessage>,
-    /// Leftovers of the space its agent has not been told about, which
-    /// only the hook after a tool call delivers.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub leftovers: Vec<crate::daemon::leftovers::Leftover>,
-    pub timed_out: bool,
-    /// A newer wait in the same workspace took over before this one received
-    /// updates; they stay pending for the newer wait.
-    #[serde(default)]
-    pub superseded: bool,
-}
 
 /// The running wait of each workspace or chat, identified by its
 /// supersession signal. Waits share one cursor per item, so a newer wait

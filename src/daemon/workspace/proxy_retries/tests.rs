@@ -1,5 +1,8 @@
 use super::*;
-use crate::test_support::{manager, repository};
+use crate::{
+    state::TurnFailure,
+    test_support::{manager, repository},
+};
 
 #[tokio::test]
 async fn a_reported_retry_shows_until_the_proxy_or_its_execution_ends() {

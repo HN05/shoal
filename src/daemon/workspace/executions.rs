@@ -20,7 +20,7 @@ use crate::{
         identity::{self as process, Identity},
     },
     protocol::{Reattach, timing},
-    state::{ExecutionState, WorkspaceState, states},
+    state::{ExecutionState, WorkspaceState},
 };
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
@@ -48,20 +48,8 @@ fn running_workspaces(db: &rusqlite::Connection) -> Result<HashSet<String>> {
 #[cfg(test)]
 mod tests;
 
+pub use crate::client::executions::ExecutionKind;
 pub(crate) use state::{Completing, Executions};
-
-states!(
-    /// What a tracked execution runs, which decides its lifecycle rules.
-    ExecutionKind {
-        /// A caller-chosen command in a ready workspace.
-        Command => "command",
-        /// A landing authorized by an unscoped caller; the daemon holds its Git gate.
-        Land => "land",
-        /// The repository's setup command; exclusive apart from the execution that
-        /// requested it, and its exit decides whether the workspace becomes ready.
-        Setup => "setup",
-    }
-);
 
 /// The proof required after stopping a disconnected execution. Both policies
 /// signal only native identity-verified processes and reject owned survivors.

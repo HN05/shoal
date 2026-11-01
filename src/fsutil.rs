@@ -1,4 +1,5 @@
 //! Small filesystem operations shared by the CLI and daemon.
+pub(crate) use crate::client::executions::FileIdentity;
 use std::{
     ffi::OsStr,
     fs,
@@ -210,36 +211,6 @@ fn same_file(left: &Path, right: &Path) -> bool {
     match (fs::metadata(left), fs::metadata(right)) {
         (Ok(left), Ok(right)) => (left.dev(), left.ino()) == (right.dev(), right.ino()),
         _ => false,
-    }
-}
-
-/// What tells a file at a path apart from its replacement. It follows
-/// symlinks, so retargeting a link, renaming another file over it or rewriting
-/// it in place all change the identity.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct FileIdentity {
-    device: u64,
-    inode: u64,
-    size: u64,
-    modified: std::time::SystemTime,
-}
-
-impl FileIdentity {
-    pub fn of(path: &Path) -> io::Result<Self> {
-        use std::os::unix::fs::MetadataExt as _;
-        let metadata = fs::metadata(path)?;
-        Ok(Self {
-            device: metadata.dev(),
-            inode: metadata.ino(),
-            size: metadata.len(),
-            modified: metadata.modified()?,
-        })
-    }
-
-    /// Whether another file now sits at `path`. A missing or unreadable file
-    /// is no replacement.
-    pub fn replaced_at(&self, path: &Path) -> bool {
-        Self::of(path).is_ok_and(|current| current != *self)
     }
 }
 

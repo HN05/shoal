@@ -8,8 +8,9 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
+
+pub(crate) use crate::client::executions::TurnRetry;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
-use serde::{Deserialize, Serialize};
 
 use self::unretried::Unretried;
 use super::Manager;
@@ -34,18 +35,6 @@ const JITTER: f64 = 0.2;
 const RESET_MARGIN_SECS: i64 = 30;
 /// How often the loop looks again without a retry to wait for.
 const IDLE_RECHECK: Duration = Duration::from_secs(60 * 60);
-
-/// A workspace's retry of its agent's failed turn.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TurnRetry {
-    pub failure: TurnFailure,
-    /// The attempt the retry makes or made, from 1.
-    pub attempt: u32,
-    /// Unix seconds when the agent is asked to continue.
-    pub due_at: i64,
-    /// Whether the agent was asked and its turn has not ended yet.
-    pub delivered: bool,
-}
 
 pub(crate) fn get(db: &Connection, workspace_id: &str) -> Result<Option<TurnRetry>> {
     Ok(db

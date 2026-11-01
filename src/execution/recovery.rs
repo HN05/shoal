@@ -12,6 +12,10 @@ mod claim;
 
 pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
 
+pub(crate) use crate::client::executions::{
+    LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, one_or_many_sessions,
+    unnamed_execution,
+};
 use crate::{
     agent::ModelChoice,
     cli::{client, commands::configured},
@@ -20,8 +24,8 @@ use crate::{
     paths::Paths,
     process::identity::{self, Identity},
     protocol::ConfigTarget,
-    sessions::{HostName, Origin},
-    state::{AgentState, states},
+    sessions::Origin,
+    state::AgentState,
 };
 
 #[derive(Debug)]
@@ -36,67 +40,6 @@ pub(crate) struct Recovery {
     /// The proxy `command` was resolved to go through, from the same
     /// settings.
     pub proxy: Option<crate::proxy::Proxy>,
-}
-
-states!(
-    /// How far a stop has progressed, so reconciliation after a daemon
-    /// interruption knows which wrapper transition was still expected.
-    Stage {
-        /// The daemon decided to stop the agent and expects its wrapper to stop it.
-        Stopping => "stopping",
-        /// The wrapper stopped the agent, then pauses for an automatic restore
-        /// or exits.
-        Stopped => "stopped",
-    }
-);
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Record {
-    pub agent: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stop_reason: Option<String>,
-    /// Unknown for records saved before stages existed, which may come from
-    /// either side of the stop.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stage: Option<Stage>,
-    /// Where the agent ran, as its terminal host records it, so `shoal
-    /// resume --all` can restore it there.
-    #[serde(
-        default,
-        alias = "place",
-        deserialize_with = "earlier_place",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub origin: Option<Origin>,
-    /// The wrapper that restores the agent automatically while it runs.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub waiting: Option<Identity>,
-    /// The session the agent's hooks last reported, which built-in agents
-    /// resume by ID.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<String>,
-    /// The workspace moved where the agent's session is not available, such
-    /// as from another machine, so the agent starts a new one.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub moved: bool,
-    /// What the agent was doing when it stopped, as its hooks last reported
-    /// it. Unknown for agents without hooks and for records saved before
-    /// turns were kept.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn: Option<AgentState>,
-    /// The model and effort the agent ran with, which its restore keeps.
-    #[serde(default, flatten)]
-    pub model: ModelChoice,
-}
-
-/// Why and when Shoal stopped an agent, which its restore tells it.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Stop {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    /// When its recovery record was saved, in Unix seconds.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<u64>,
 }
 
 impl Stop {
@@ -413,30 +356,6 @@ pub(crate) enum Restorer {
     Queue(BTreeMap<String, String>),
 }
 
-/// A record's place: an origin, or the bare pane ID records kept before
-/// origins, which only Herdr recorded.
-fn earlier_place<'de, D: serde::Deserializer<'de>>(
-    deserializer: D,
-) -> std::result::Result<Option<Origin>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Place {
-        Origin(Origin),
-        Pane(String),
-    }
-    Ok(Some(match Place::deserialize(deserializer)? {
-        Place::Origin(origin) => origin,
-        Place::Pane(pane) => Origin {
-            host: HostName::Herdr,
-            group: None,
-            place: Some(pane),
-            data: BTreeMap::new(),
-            owned: false,
-            instance: None,
-        },
-    }))
-}
-
 impl Record {
     /// The record of `agent`, stopped for `reason`.
     fn new(
@@ -652,17 +571,6 @@ fn request_path(paths: &Paths, workspace_id: &str, id: &str) -> PathBuf {
         .join(format!("{id}{REQUEST_SUFFIX}"))
 }
 
-/// An agent stopped in a removed workspace, which `shoal work restore` saves
-/// again for `shoal resume`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StoppedAgent {
-    pub execution: String,
-    pub record: Record,
-    /// When its record was saved, in Unix seconds, which `shoal resume`
-    /// shows as its stop time.
-    pub stopped_at: u64,
-}
-
 /// The workspace's stopped agents, for its removal record. Their wrappers have
 /// exited, so none waits to restore them, and the restored workspace waits
 /// for `shoal resume` to restore them.
@@ -824,50 +732,6 @@ pub(crate) fn forget_session(paths: &Paths, workspace_id: &str, id: &str) -> Res
     consume(&session_path(paths, workspace_id, id))
 }
 
-/// An agent that exited on its own before its assignment was done, which
-/// `shoal resume` continues. Unlike stopped work, it uses no agent slot, never
-/// delays cleanup and nothing restores it on its own. A workspace keeps one
-/// per agent.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LastSession {
-    /// The execution the agent ran as, which `--execution` selects. Its file
-    /// is named after it; one saved without it gets a new ID.
-    #[serde(default = "unnamed_execution")]
-    pub execution: String,
-    pub agent: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session: Option<String>,
-    /// The workspace moved where the session is not available.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub moved: bool,
-    /// Where the agent ran, as its terminal host records it, so `shoal
-    /// resume` can restore it there; unknown for one that exited on its own.
-    #[serde(
-        default,
-        alias = "place",
-        deserialize_with = "earlier_place",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub origin: Option<Origin>,
-    /// The workspace whose process stopped the agent with `shoal stop`,
-    /// which with the workspaces above it may resume it; unknown for one the
-    /// user or Shoal stopped, or that exited on its own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stopped_by: Option<String>,
-    /// Why and when Shoal stopped the agent; none for one that exited on its
-    /// own.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Stop>,
-    /// The model and effort the agent ran with, which its restore keeps.
-    #[serde(default, flatten)]
-    pub model: ModelChoice,
-}
-
-/// The key of a last session saved without its execution.
-fn unnamed_execution() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-
 impl LastSession {
     /// This session where it is not available, which starts a new one.
     pub(crate) fn moved(self) -> Self {
@@ -971,24 +835,6 @@ fn name_unnamed_session(paths: &Paths, workspace_id: &str) -> Result<()> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
-}
-
-/// Read the last sessions of a removal record, which earlier records kept as
-/// a single one.
-pub(crate) fn one_or_many_sessions<'de, D>(deserializer: D) -> Result<Vec<LastSession>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Sessions {
-        Many(Vec<LastSession>),
-        One(Box<LastSession>),
-    }
-    Ok(match Sessions::deserialize(deserializer)? {
-        Sessions::Many(sessions) => sessions,
-        Sessions::One(session) => vec![*session],
-    })
 }
 
 /// A command `shoal stop` interrupted, reported by `shoal resume` instead of

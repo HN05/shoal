@@ -2,6 +2,7 @@
 //! arguments/environment; only the explicit execution marker, ancestor PIDs,
 //! scoped ancestors' state directories and the working directories of a
 //! space's untracked processes leave this module.
+pub(crate) use crate::client::processes::{Identity, UniqueId};
 use crate::protocol::timing;
 use crate::tools::Tool;
 use anyhow::{Context, Result, ensure};
@@ -24,23 +25,6 @@ const INVENTORY_TIMEOUT: Duration = if cfg!(test) {
 } else {
     timing::PROCESS_INVENTORY_TIMEOUT
 };
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Identity {
-    pub pid: u32,
-    pub birth: String,
-    /// The kernel's never-reused process ID where the platform reports one,
-    /// so the process's descendants stay attributable after it exits.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unique: Option<UniqueId>,
-}
-
-/// Unique process IDs start over at each boot.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UniqueId {
-    pub boot: String,
-    pub id: u64,
-}
 
 impl Identity {
     /// The unique ID that live processes' parent links can name: one recorded

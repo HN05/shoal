@@ -3,13 +3,13 @@
 //! as duplicates once the user decides.
 use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     ffi::OsString,
     path::{Path, PathBuf},
 };
 
+pub(crate) use crate::client::links::{OpenOutcome, Proposed};
 use crate::{
     config::resolve::Effective,
     daemon::{
@@ -36,26 +36,10 @@ use crate::{
     model::Workspace,
 };
 
-/// What `issue open` or `pr open` did: opened or found the item, or
-/// recorded it for the user's approval.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum OpenOutcome {
-    Proposed(Proposed),
-    /// Boxed, as the larger by far.
-    Opened(Box<Opened>),
-}
-
 impl OpenOutcome {
     pub fn opened(opened: Opened) -> Self {
         Self::Opened(Box::new(opened))
     }
-}
-
-/// An issue or PR waiting for the user's approval before Shoal opens it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Proposed {
-    pub proposed: Box<ApprovalRequest>,
 }
 
 /// A scoped caller, which proposes what `[permissions]` keeps it from opening

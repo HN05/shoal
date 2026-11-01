@@ -4,13 +4,12 @@
 //! space's agent about each one once.
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
     sync::{Mutex, PoisonError},
 };
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::processes::Leftover;
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
     process::{
@@ -21,17 +20,6 @@ use crate::{
         },
     },
 };
-
-/// A leftover as people recognize it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Leftover {
-    pub pid: u32,
-    pub command: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub directory: Option<PathBuf>,
-    /// Unix seconds when it started.
-    pub started_at: u64,
-}
 
 /// The most leftovers one delivery or status names; the rest follow in
 /// later deliveries.
