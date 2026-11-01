@@ -485,3 +485,31 @@ async fn a_list_too_large_for_a_frame_arrives_in_pages_that_join() {
             .contains_key("more")
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_response_read_cancelled_partway_keeps_what_it_read() {
+    use std::time::Duration;
+    use tokio::io::AsyncWriteExt as _;
+    let (mut writer, reader) = tokio::io::duplex(4 * MAX_FRAME);
+    let mut responses = Responses::new(reader);
+    let entries: Vec<String> = (0..4000).map(|n| format!("{n:>40}")).collect();
+    let mut wire = Vec::new();
+    for frame in Response::new(7, Body::ApiResponse(entries.clone()))
+        .frames()
+        .unwrap()
+    {
+        write(&mut wire, &frame).await.unwrap();
+    }
+    // Cancel once partway through the first page, and once after it, partway
+    // through the next.
+    let first_page = wire.iter().position(|byte| *byte == b'\n').unwrap() + 1;
+    for end in [first_page / 2, first_page] {
+        writer.write_all(&wire[..end]).await.unwrap();
+        wire.drain(..end);
+        let cancelled = tokio::time::timeout(Duration::from_secs(1), responses.next()).await;
+        assert!(cancelled.is_err(), "the response is unfinished");
+    }
+    writer.write_all(&wire).await.unwrap();
+    let response = responses.next().await.unwrap();
+    assert_eq!(Vec::<String>::try_from(response.body).unwrap(), entries);
+}

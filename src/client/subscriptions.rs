@@ -13,7 +13,7 @@ use tokio::{
 
 use crate::client::{
     connection::{self, Daemon},
-    protocol::{self, Body, SubscriptionMethod, timing},
+    protocol::{Body, Responses, SubscriptionMethod, timing},
 };
 use records::{Record, RecordKey, Topic};
 
@@ -37,7 +37,7 @@ pub enum Update {
 pub struct Subscription<D> {
     daemon: D,
     topics: Vec<Topic>,
-    stream: Option<BufReader<UnixStream>>,
+    stream: Option<Responses<BufReader<UnixStream>>>,
     /// The first snapshot, until [`Self::next`] returns it.
     first: Option<Vec<Record>>,
 }
@@ -57,6 +57,7 @@ impl<D: Daemon> Subscription<D> {
 
     /// The next update: first the snapshot, then each change, and a new
     /// snapshot once the subscription reconnected after a daemon restart.
+    /// Cancelling it, as `tokio::select!` does, loses no update.
     pub async fn next(&mut self) -> Result<Update> {
         if let Some(records) = self.first.take() {
             return Ok(Update::Snapshot {
@@ -73,7 +74,7 @@ impl<D: Daemon> Subscription<D> {
                     resynced: true,
                 });
             };
-            match protocol::read_response(stream).await {
+            match stream.next().await {
                 Ok(response) => {
                     return match response.body.into_result()? {
                         Body::RecordChanged(record) => Ok(Update::Changed(Box::new(record))),
@@ -92,12 +93,12 @@ impl<D: Daemon> Subscription<D> {
 async fn subscribe(
     daemon: &impl Daemon,
     topics: &[Topic],
-) -> Result<(BufReader<UnixStream>, Vec<Record>)> {
+) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
     let method = SubscriptionMethod::Subscribe {
         topics: topics.to_vec(),
     };
     let (stream, body) = connection::open_buffered(daemon, method).await?;
-    Ok((stream, Vec::try_from(body)?))
+    Ok((Responses::new(stream), Vec::try_from(body)?))
 }
 
 /// [`subscribe`] again, giving a restarting daemon time to come back and
@@ -105,7 +106,7 @@ async fn subscribe(
 async fn resubscribe(
     daemon: &impl Daemon,
     topics: &[Topic],
-) -> Result<(BufReader<UnixStream>, Vec<Record>)> {
+) -> Result<(Responses<BufReader<UnixStream>>, Vec<Record>)> {
     let deadline = Instant::now() + timing::DAEMON_RESTART_TIMEOUT;
     loop {
         match subscribe(daemon, topics).await {

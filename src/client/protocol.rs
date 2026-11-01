@@ -978,6 +978,76 @@ pub async fn read_response(
     Ok(response)
 }
 
+/// Responses read one after another from a stream, such as a subscription's,
+/// in a way that loses nothing when a read is cancelled: the start of a frame
+/// and the earlier pages of a response wait for the next read.
+pub struct Responses<R> {
+    reader: R,
+    /// Bytes read past the last whole frame.
+    buffer: Vec<u8>,
+    /// A paged response whose remaining pages have yet to arrive.
+    joined: Option<Response>,
+}
+
+impl<R: AsyncRead + Unpin> Responses<R> {
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buffer: Vec::new(),
+            joined: None,
+        }
+    }
+
+    /// The next response, joining the pages of one sent in several frames.
+    pub async fn next(&mut self) -> Result<Response> {
+        loop {
+            let page: Response = self.frame().await?;
+            let Some(mut response) = self.joined.take() else {
+                if page.more {
+                    self.joined = Some(page);
+                    continue;
+                }
+                return Ok(page);
+            };
+            ensure!(
+                page.id == response.id,
+                "a response page answers another request"
+            );
+            response.body.extend(page.body)?;
+            response.more = page.more;
+            if !response.more {
+                return Ok(response);
+            }
+            self.joined = Some(response);
+        }
+    }
+
+    /// The next frame. A read fills the buffer only once it returns, so a
+    /// cancelled one leaves it as it was.
+    async fn frame<T: DeserializeOwned>(&mut self) -> Result<T> {
+        loop {
+            if let Some(end) = self.buffer.iter().position(|byte| *byte == b'\n') {
+                let frame: Vec<u8> = self.buffer.drain(..=end).collect();
+                return serde_json::from_slice(&frame).context("invalid protocol message");
+            }
+            ensure!(
+                self.buffer.len() <= MAX_FRAME,
+                "protocol frame exceeds {MAX_FRAME} bytes"
+            );
+            let mut chunk = [0u8; 8192];
+            let read = self.reader.read(&mut chunk).await?;
+            if read == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "incomplete protocol frame",
+                )
+                .into());
+            }
+            self.buffer.extend_from_slice(&chunk[..read]);
+        }
+    }
+}
+
 /// `items` in pages that each fit in a frame with room for the envelope,
 /// in order. There is always a first page, empty when `items` is.
 pub fn frame_pages<T: Serialize>(items: Vec<T>) -> Result<Vec<Vec<T>>> {
