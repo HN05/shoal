@@ -214,3 +214,35 @@ async fn a_local_origin_path_selects_the_checkout_cloned_from_it() {
     };
     assert_eq!(select(&repositories, selector).await.unwrap().id, "cloned");
 }
+
+#[tokio::test]
+async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
+    let repositories = [repository("shoal", "/tmp/shoal", None)];
+    let refusal = |value: &'static str| {
+        let repositories = &repositories;
+        async move { select(repositories, value).await.unwrap_err() }
+    };
+    let error = refusal("https://example.test/team/shoal/issues/1211").await;
+    assert!(error.is::<NotRegistered>());
+    assert_eq!(
+        error.to_string(),
+        "https://example.test/team/shoal/issues/1211 is an issue URL, not a repository; \
+         name its repository instead: shoal"
+    );
+    assert_eq!(
+        refusal("https://example.test/team/other/pulls/3")
+            .await
+            .to_string(),
+        "https://example.test/team/other/pulls/3 is a PR URL, not a repository; its repository \
+         https://example.test/team/other is not registered; run \
+         `shoal repo add https://example.test/team/other`"
+    );
+    // Registration offers neither, though both are remote URLs.
+    assert!(!registrable("https://example.test/team/other/pulls/3"));
+    assert!(registrable("https://example.test/team/other"));
+    // Anything else is still an unregistered repository.
+    assert_eq!(
+        refusal("missing").await.to_string(),
+        "repository is not registered: missing; run `shoal repo add <path-or-url>`"
+    );
+}

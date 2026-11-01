@@ -5,7 +5,10 @@ use std::path::Path;
 
 use crate::{git, model::Repository};
 
-use crate::forge::repo::remote_url::{RemoteUrl, source_name};
+use crate::forge::{
+    items::link::{Link, LinkTarget},
+    repo::remote_url::{RemoteUrl, source_name},
+};
 
 /// Preserve the caller's argument alongside a path resolved in its directory.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -221,6 +224,7 @@ pub async fn select(
     Err(NotRegistered {
         value: value.to_owned(),
         path: canonical,
+        item: ItemOf::find(repositories, value).await?,
     }
     .into())
 }
@@ -230,10 +234,18 @@ pub async fn select(
 pub struct NotRegistered {
     value: String,
     path: Option<std::path::PathBuf>,
+    item: Option<ItemOf>,
 }
 
 impl std::fmt::Display for NotRegistered {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(item) = &self.item {
+            return write!(
+                f,
+                "{} is {}, not a repository; {item}",
+                self.value, item.kind
+            );
+        }
         write!(f, "repository is not registered: {}", self.value)?;
         if let Some(path) = &self.path {
             write!(f, " (read as a path: {})", path.display())?;
@@ -242,11 +254,60 @@ impl std::fmt::Display for NotRegistered {
     }
 }
 
+/// The repository of an issue, PR, CI run or branch URL given where a
+/// repository was expected.
+#[derive(Debug)]
+struct ItemOf {
+    /// What the URL names, as in `an issue URL`.
+    kind: &'static str,
+    /// The repository's URL.
+    repository: String,
+    /// The name of the registered repository with that URL, if any.
+    registered: Option<String>,
+}
+
+impl ItemOf {
+    /// The repository of the item `value` is the URL of, if it is one.
+    async fn find(repositories: &[Repository], value: &str) -> Result<Option<Self>> {
+        let Ok(link) = Link::parse(value) else {
+            return Ok(None);
+        };
+        let kind = match link.target {
+            LinkTarget::Issue => "an issue URL",
+            LinkTarget::Pr => "a PR URL",
+            LinkTarget::Run => "a CI run URL",
+            LinkTarget::Branch(_) => "a branch URL",
+        };
+        let repository = link.repository.repository_url();
+        let registered = find_by_identity(repositories, &repository).await?;
+        Ok(Some(Self {
+            kind,
+            registered: registered.map(|repo| name(repo).to_owned()),
+            repository,
+        }))
+    }
+}
+
+impl std::fmt::Display for ItemOf {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.registered {
+            Some(name) => write!(f, "name its repository instead: {name}"),
+            None => write!(
+                f,
+                "its repository {} is not registered; run `shoal repo add {}`",
+                self.repository, self.repository
+            ),
+        }
+    }
+}
+
 impl std::error::Error for NotRegistered {}
 
-/// A local checkout or clone URL that registration can accept.
+/// A local checkout or clone URL that registration can accept, which an
+/// item's URL is not.
 pub fn registrable(selector: &str) -> bool {
-    Path::new(selector).exists() || RemoteUrl::parse(selector).is_some()
+    Path::new(selector).exists()
+        || RemoteUrl::parse(selector).is_some() && Link::parse(selector).is_err()
 }
 
 pub async fn find_by_identity<'a>(
