@@ -33,6 +33,7 @@ pub mod secrets;
 pub mod sessions;
 pub mod sim;
 pub mod state;
+pub mod subscriptions;
 pub mod time;
 pub mod transfer;
 pub mod validate;

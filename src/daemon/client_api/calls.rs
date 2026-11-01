@@ -64,7 +64,7 @@ impl Session {
         let caller = scope::authorize(manager, self.scope.as_deref(), &mut operation)
             .await
             .map_err(|error| errors::scope_refused(&error))?;
-        let answer = requests::handle(&self.server, operation, caller.as_ref())
+        let answer = requests::handle(&self.server, operation, caller.as_ref(), None)
             .await
             .map_err(|error| errors::failed(&error))?;
         match answer {

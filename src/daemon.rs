@@ -51,6 +51,9 @@ pub(crate) mod spaces;
 mod startup;
 mod startup_audit;
 pub mod store;
+mod subscriptions;
+#[cfg(test)]
+pub(crate) mod test_daemon;
 mod tmp_dirs;
 mod untracked;
 mod warnings;
@@ -400,7 +403,7 @@ async fn serve_request(
         return Ok(());
     };
     let reads_only = operation.reads_only();
-    let answer = requests::operation(&server, operation, caller.as_ref());
+    let answer = requests::operation(&server, operation, caller.as_ref(), scope);
     let answer = log::when_slow(&name, answer);
     let Some(answer) = unless_abandoned(&mut stream, &name, reads_only, answer).await else {
         return Ok(());

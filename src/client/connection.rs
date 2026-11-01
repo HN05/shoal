@@ -700,7 +700,7 @@ impl Outage {
     }
 }
 
-fn scope_denied(error: &anyhow::Error) -> bool {
+pub(crate) fn scope_denied(error: &anyhow::Error) -> bool {
     error
         .downcast_ref::<protocol::RemoteError>()
         .is_some_and(|remote| remote.code == protocol::ErrorCode::ScopeDenied)

@@ -1448,7 +1448,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         );
         let server = crate::daemon::tests::server(manager.clone());
         let Err(error) =
-            crate::daemon::requests::handle(&server, method.into(), Some(&caller)).await
+            crate::daemon::requests::handle(&server, method.into(), Some(&caller), None).await
         else {
             panic!("a changed request must not be decided");
         };
@@ -1549,7 +1549,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             let caller = caller.unwrap();
             let server = crate::daemon::tests::server(manager.clone());
             assert!(
-                crate::daemon::requests::handle(&server, read(), caller.as_ref())
+                crate::daemon::requests::handle(&server, read(), caller.as_ref(), None)
                     .await
                     .is_ok()
             );
@@ -1567,7 +1567,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
                 Ok(())
             }).await.unwrap();
             let Err(error) =
-                crate::daemon::requests::handle(&server, read(), caller.as_ref()).await
+                crate::daemon::requests::handle(&server, read(), caller.as_ref(), None).await
             else {
                 panic!("a record of another workspace must not be shown");
             };

@@ -69,7 +69,7 @@ impl Answer {
 
     /// The reply to an operation that failed.
     pub(super) fn failed(error: &anyhow::Error) -> Self {
-        Self::Body(Body::error(error_code(error), format!("{error:#}")))
+        Self::Body(failure(error))
     }
 
     /// Send the answer to `request_id`. The guard is held until the reply is
@@ -93,6 +93,11 @@ impl Answer {
             Self::Connection(keep) => keep(stream, request_id, guard).await,
         }
     }
+}
+
+/// The error body of an operation that failed with `error`.
+pub(super) fn failure(error: &anyhow::Error) -> Body {
+    Body::error(error_code(error), format!("{error:#}"))
 }
 
 /// The code of an operation's failure: specific where the caller can act on

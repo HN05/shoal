@@ -46,6 +46,7 @@ mod resources;
 mod reviews;
 mod secrets;
 mod simulators;
+mod subscriptions;
 mod workspaces;
 
 pub use agents::{AgentMethod, TurnEnd, WokenTurn};
@@ -71,6 +72,7 @@ pub use resources::ResourceMethod;
 pub use reviews::{ReviewMethod, ReviewPiece};
 pub use secrets::SecretMethod;
 pub use simulators::SimulatorMethod;
+pub use subscriptions::SubscriptionMethod;
 pub use workspaces::WorkspaceMethod;
 
 pub const VERSION: u32 = 180;
@@ -247,6 +249,7 @@ pub enum Operation {
     Secret(SecretMethod),
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
+    Subscription(SubscriptionMethod),
 }
 
 impl Method {
@@ -312,6 +315,7 @@ impl Operation {
             Self::Operations(method) => method.lifetime(),
             Self::Question(method) => method.lifetime(),
             Self::Review(method) => method.lifetime(),
+            Self::Subscription(method) => method.lifetime(),
             Self::Daemon(_)
             | Self::Repository(_)
             | Self::Removal(_)
@@ -384,6 +388,7 @@ from_domains!(
     Secret(SecretMethod),
     Resource(ResourceMethod),
     Simulator(SimulatorMethod),
+    Subscription(SubscriptionMethod),
 );
 
 /// How long a request keeps its connection.
@@ -648,6 +653,9 @@ response_bodies! {
     OperationStarted(operations::Started),
     OperationEvent(operations::OperationEvent),
     OperationEnded(operations::Ended),
+    Records(Vec<crate::client::subscriptions::records::Record>),
+    RecordChanged(crate::client::subscriptions::records::Record),
+    RecordRemoved(crate::client::subscriptions::records::RecordKey),
 }
 
 // The lists a response sends in pages when they do not fit in one frame.
@@ -711,6 +719,7 @@ paged_bodies!(
     ApprovalRequests,
     Simulators,
     SimHistory,
+    Records,
 );
 
 impl TryFrom<Body> for () {

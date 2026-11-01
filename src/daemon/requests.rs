@@ -22,19 +22,22 @@ mod resources;
 mod reviews;
 mod secrets;
 mod simulators;
+mod subscriptions;
 pub(super) mod workspaces;
 use anyhow::Result;
 
 use super::{Server, answer::Answer, scope::Caller};
 use crate::protocol::Operation;
 
-/// Answer a request; a failure becomes an error reply.
+/// Answer a request from `caller`, whose scope token is `scope`; a failure
+/// becomes an error reply.
 pub(super) async fn operation(
     server: &Server,
     operation: Operation,
     caller: Option<&Caller>,
+    scope: Option<&str>,
 ) -> Answer {
-    handle(server, operation, caller)
+    handle(server, operation, caller, scope)
         .await
         .unwrap_or_else(|error| Answer::failed(&error))
 }
@@ -44,6 +47,7 @@ pub(super) async fn handle(
     server: &Server,
     operation: Operation,
     caller: Option<&Caller>,
+    scope: Option<&str>,
 ) -> Result<Answer> {
     match operation {
         Operation::Daemon(method) => daemon::handle(server, method).await,
@@ -72,5 +76,8 @@ pub(super) async fn handle(
         Operation::Secret(method) => secrets::handle(&server.manager, method, caller).await,
         Operation::Resource(method) => resources::handle(&server.manager, method, caller).await,
         Operation::Simulator(method) => simulators::handle(&server.manager, method, caller).await,
+        Operation::Subscription(method) => {
+            subscriptions::handle(&server.manager, method, caller, scope)
+        }
     }
 }
