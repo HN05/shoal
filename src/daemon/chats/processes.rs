@@ -15,7 +15,9 @@ const ROUNDS: usize = 5;
 /// execution `wrappers`: that process while it lives, those carrying the
 /// chat's identity, those it started, by the lineage of its never-reused ID
 /// when recorded, and the members of the group it led, which keeps its ID
-/// while any member remains, other than a workspace's.
+/// while any member remains, other than a workspace's. A group under that ID
+/// is another's once a different process has the ID, or the process ran in
+/// an earlier boot.
 pub(super) async fn survivors(
     chat: &str,
     recorded: &Identity,
@@ -31,7 +33,10 @@ pub(super) async fn survivors(
             survivors.push(started);
         }
     }
-    let (_, members) = identity::related(None, Some(recorded.pid), None).await?;
+    let (_, members) = match led_group(recorded)? {
+        Some(group) => identity::related(None, Some(group), None).await?,
+        None => Default::default(),
+    };
     for member in members {
         if identity::group_of(&member) == Some(recorded.pid)
             && !identity::owned_by_workspace(&member, wrappers)?
@@ -44,6 +49,16 @@ pub(super) async fn survivors(
         survivors.push(recorded.clone());
     }
     Ok(survivors)
+}
+
+/// The group the process `recorded` led, when one under its ID can still be
+/// its own: it runs, or no other process has its ID, in the boot it ran in.
+pub(super) fn led_group(recorded: &Identity) -> Result<Option<u32>> {
+    if recorded.of_earlier_boot() {
+        return Ok(None);
+    }
+    let reused = identity::capture(recorded.pid)?.is_some_and(|current| current != *recorded);
+    Ok((!reused).then_some(recorded.pid))
 }
 
 /// The processes of a running chat.
