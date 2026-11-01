@@ -68,7 +68,11 @@ impl Scoped for QueueMethod {
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueMove { .. } => None,
             QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
-            QueueMethod::QueueAgent { workspace, .. } => Some(workspace),
+            QueueMethod::QueueAgent { workspace, .. } => {
+                const REFUSAL: &str =
+                    "workspace processes can start agents only in the workspaces split from theirs";
+                Some(manager.workspace_below(caller, workspace, REFUSAL).await?)
+            }
             QueueMethod::QueueRestore {
                 workspace,
                 execution,

@@ -272,6 +272,29 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     // A launcher's `{prompt}` receives it rather than its forwarded arguments.
     assert_eq!(plan["prompt"], "Fix the build");
     assert_eq!(queued.agent, "probe");
+
+    // A workspace's agent queues agents only in the workspaces below its own.
+    let parent = daemon.workspace("parent").await;
+    let split = WorkspaceMethod::SplitWorkspace {
+        workspace: parent.id.clone(),
+        name: "child".into(),
+        base: Some("HEAD".into()),
+    };
+    connection::request::<Workspace>(&app, split).await.unwrap();
+    let agent = daemon.scoped(&parent).await;
+    let queue_in = |workspace: &str| QueueMethod::QueueAgent {
+        workspace: workspace.into(),
+        agent: "probe".into(),
+        prompt: None,
+    };
+    assert_eq!(
+        code(connection::request::<QueueEntry>(&agent, queue_in("parent")).await),
+        ErrorCode::ScopeDenied
+    );
+    let child: QueueEntry = connection::request(&agent, queue_in("child"))
+        .await
+        .unwrap();
+    assert_eq!(child.agent, "probe");
 }
 
 /// Follow operation `id` from its start to its end.
