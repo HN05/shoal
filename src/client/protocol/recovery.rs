@@ -1,4 +1,4 @@
-use crate::daemon::recovery::ReconcileOptions;
+use crate::client::recovery::ReconcileOptions;
 use serde::{Deserialize, Serialize};
 
 /// Requests that keep, restore and repair workspace state: checkpoints and reconciliation.

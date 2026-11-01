@@ -13,7 +13,7 @@ pub enum SecretMethod {
     SecretAcquire {
         workspace: String,
         name: String,
-        request: crate::daemon::secrets::SecretRequest,
+        request: crate::client::secrets::SecretRequest,
     },
     SecretRelease {
         workspace: String,

@@ -17,6 +17,8 @@ mod caches;
 #[cfg(feature = "cli")]
 mod cli;
 #[cfg(feature = "cli")]
+mod config_file;
+#[cfg(feature = "cli")]
 mod daemon;
 #[cfg(feature = "cli")]
 mod env;

@@ -50,7 +50,7 @@ impl SkillDir {
         home: &Path,
     ) -> Result<PathBuf> {
         Ok(match self {
-            Self::Claude => crate::env::claude_config_dir_with(configured)?
+            Self::Claude => crate::client::env::claude_config_dir_with(configured)?
                 .unwrap_or_else(|| home.join(".claude"))
                 .join("skills"),
             Self::Home(relative) => home.join(relative),

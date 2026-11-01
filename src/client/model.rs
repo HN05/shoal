@@ -322,7 +322,7 @@ pub struct RemovedWorkspace {
         skip_serializing_if = "Vec::is_empty"
     )]
     pub last_sessions: Vec<crate::client::executions::LastSession>,
-    pub cause: crate::daemon::events::EventCause,
+    pub cause: crate::client::events::EventCause,
     pub removed_at: u64,
     pub expires_at: u64,
 }

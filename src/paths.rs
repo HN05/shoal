@@ -1,100 +1,30 @@
-//! Locations of Shoal's per-user state. Every file the daemon or CLI touches
-//! under the state directory is named here.
+//! The state directory of this build of the `shoal` command. A development
+//! build leaves the user's own state directory, whose daemon serves every
+//! running agent, to the installed Shoal, as it leaves the user's other files;
+//! apps reach that daemon whatever their build.
 use std::{
     fs,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 
-const DEFAULT_STATE: &str = ".local/state/shoal";
-
-/// The extension of a detached session's log, beside its other files.
-pub const SESSION_LOG: &str = "log";
-/// The extension of a detached session's first message, kept for the user
-/// to send.
-pub const SESSION_PROMPT: &str = "prompt.md";
-
-/// macOS limits `sun_path`; it is the more restrictive supported platform.
-const MAX_SOCKET_PATH_LEN: usize = 104;
-
-#[derive(Debug, Clone)]
-pub struct Paths {
-    pub home: PathBuf,
-    pub state: PathBuf,
-    pub socket: PathBuf,
-}
+pub(crate) use crate::client::paths::{DEFAULT_STATE, Paths, SESSION_LOG, SESSION_PROMPT};
 
 impl Paths {
-    #[cfg(test)]
-    pub fn for_test(root: impl AsRef<std::path::Path>) -> Self {
-        let home = root.as_ref().to_path_buf();
-        let state = home.join("state");
-        let socket = state.join("daemon.sock");
-        Self {
-            home,
-            state,
-            socket,
-        }
+    /// [`Paths::new`] for this build, refusing the user's state directory
+    /// in a development build.
+    pub fn of_command(state: Option<PathBuf>) -> Result<Self> {
+        let paths = Self::new(state)?;
+        refuse_user_state(&paths.state)?;
+        Ok(paths)
     }
 
-    pub fn new(state: Option<PathBuf>) -> Result<Self> {
-        let home = crate::fsutil::home_dir()?;
+    /// [`Paths::state_dir`] for this build, as [`Self::of_command`] refuses it.
+    pub fn command_state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
         let state = Self::state_dir(state)?;
-        let socket = state.join("daemon.sock");
-        ensure!(
-            socket.as_os_str().len() < MAX_SOCKET_PATH_LEN,
-            "socket path is too long: {}; use a shorter --state-dir",
-            socket.display()
-        );
-        Ok(Self {
-            home,
-            state,
-            socket,
-        })
-    }
-
-    /// The state directory `new` selects, without requiring a usable socket path.
-    pub fn state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
-        let state = Self::resolve_state_dir(state)?;
         refuse_user_state(&state)?;
         Ok(state)
-    }
-
-    fn resolve_state_dir(state: Option<PathBuf>) -> Result<PathBuf> {
-        let home = crate::fsutil::home_dir()?;
-        ensure!(home.is_absolute(), "HOME must be an absolute path");
-        let state = state.unwrap_or_else(|| home.join(DEFAULT_STATE));
-        Ok(if state.is_absolute() {
-            state
-        } else {
-            std::env::current_dir()?.join(state)
-        })
-    }
-
-    pub fn prepare(&self) -> Result<()> {
-        fs::create_dir_all(&self.state).context("create state directory")?;
-        fs::set_permissions(&self.state, fs::Permissions::from_mode(0o700))?;
-        Ok(())
-    }
-
-    /// Lock held by the running daemon; never unlinked so waiters share one inode.
-    pub fn daemon_lock(&self) -> PathBuf {
-        self.state.join("daemon.lock")
-    }
-
-    pub fn daemon_log(&self) -> PathBuf {
-        self.state.join("daemon.log")
-    }
-
-    pub fn database(&self) -> PathBuf {
-        self.state.join("state.db")
-    }
-
-    /// Managed Worktrunk configuration, isolating Shoal from personal hooks.
-    pub fn worktrunk_config(&self) -> PathBuf {
-        self.state.join("worktrunk.toml")
     }
 
     /// Secret tool launchers, held for one tracked agent launch.
@@ -103,47 +33,11 @@ impl Paths {
             .prefix("secret-tools-")
             .tempdir_in(&self.state)
     }
-
-    /// Copies of the files proposed issues and PRs attach, kept until the
-    /// user decides, since the agent's copies may be gone by then.
-    pub fn proposal_files(&self) -> PathBuf {
-        self.state.join("proposals")
-    }
-
-    /// Packages of spaces `shoal move ssh` ended here whose import on the
-    /// other machine failed, kept for `shoal move import` here.
-    pub fn unmoved_packages(&self) -> PathBuf {
-        self.state.join("unmoved")
-    }
-
-    /// The workspaces each command last acted on, which `-` selects from.
-    pub fn recent_workspaces(&self) -> PathBuf {
-        self.state.join("recent-workspaces.json")
-    }
-
-    /// Where a chat started detached keeps its log and first message, named
-    /// after the chat so a later chat with that name replaces them.
-    pub fn chat_files(&self, chat: &crate::model::Chat) -> PathBuf {
-        self.state.join("chats").join(&chat.name)
-    }
-
-    /// Where each running review keeps its detached checkout and its
-    /// reviewer's output, until the review ends.
-    pub fn reviews(&self) -> PathBuf {
-        self.state.join("reviews")
-    }
-
-    /// Run data Shoal keeps for one workspace, such as detached session logs;
-    /// deleted with the workspace record.
-    pub fn workspace_state(&self, workspace_id: &str) -> PathBuf {
-        self.state.join("workspaces").join(workspace_id)
-    }
 }
 
-/// A development build leaves the user's own state directory, whose daemon
-/// serves every running agent, to the installed Shoal, as it leaves the
-/// user's other files. The user's home comes from the password database, so
-/// a temporary `HOME` neither hides nor imitates it.
+/// Refuse the user's state directory in a development build. The user's home
+/// comes from the password database, so a temporary `HOME` neither hides nor
+/// imitates it.
 fn refuse_user_state(state: &Path) -> Result<()> {
     if crate::build::changes_user_files() {
         return Ok(());

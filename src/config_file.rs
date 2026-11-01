@@ -9,7 +9,11 @@ use anyhow::{Context, Result, ensure};
 
 use crate::fsutil::{self, Permissions, ReplaceOptions};
 
-use super::edit::{self, Change};
+use crate::config::{
+    Config, PACKAGED,
+    edit::{self, Change},
+};
+use crate::paths::Paths;
 
 /// Apply `changes` to the file at `path` and save the result once `check`
 /// accepts it.
@@ -90,4 +94,42 @@ fn keep_backup(path: &Path, backup: &Path) -> std::io::Result<bool> {
         fs::copy(path, backup)?;
     }
     Ok(true)
+}
+
+/// The global config's writes, which hold its edit lock.
+impl Config {
+    /// Write a fresh template, first moving any existing file to
+    /// `config.toml.backup` (replacing an older backup). Returns the path and
+    /// the backup, if one was made.
+    pub fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
+        Self::install_named(paths, "default")
+    }
+
+    /// Apply `changes` together, saving only when the result is valid.
+    pub fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
+        edit(Self::path(paths), changes, |edited| {
+            Self::parse(edited, paths)
+                .map(drop)
+                .context("invalid edited config")
+        })
+    }
+
+    pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
+        let text = PACKAGED
+            .iter()
+            .find(|(candidate, _)| *candidate == name)
+            .map(|(_, text)| *text)
+            .with_context(|| format!("unknown packaged config: {name}"))?;
+        Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
+        let path = Self::path(paths);
+        let _lock = lock(&path)?;
+        replace(path, text)
+    }
+
+    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
+    /// rather than while its file is moved aside.
+    pub fn load_settled(paths: &Paths) -> Result<Self> {
+        let _lock = lock(&Self::path(paths))?;
+        Self::load(paths)
+    }
 }

@@ -11,9 +11,7 @@ fn the_client_crate_finds_the_socket_shoal_listens_on() {
         Some(PathBuf::from("/var/shoal")),
         Some(PathBuf::from("relative/state")),
     ] {
-        let shoal = Paths::resolve_state_dir(state.clone())
-            .unwrap()
-            .join("daemon.sock");
+        let shoal = Paths::state_dir(state.clone()).unwrap().join("daemon.sock");
         let client = shoal_client::socket_in(state.as_deref(), &home).unwrap();
         assert_eq!(client, shoal, "state directory {state:?}");
     }

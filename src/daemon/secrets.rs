@@ -1,8 +1,8 @@
 //! Access grants for approval-gated secrets. The daemon records the decision;
 //! the CLI fetches the value only after the daemon confirms it.
 use anyhow::{Result, anyhow, ensure};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::secrets::{CatalogSecret, SecretCatalog, SecretGrant, SecretRequest};
 use crate::{
     daemon::{
         allocation::Allocation,
@@ -13,39 +13,6 @@ use crate::{
     model::Workspace,
     secrets::Secret,
 };
-
-/// A request to fetch a configured secret.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct SecretRequest {
-    pub reason: Option<String>,
-    /// The source the caller will fetch from, when it was resolved earlier: a
-    /// tool launcher serves its agent launch's configuration.
-    pub source: Option<SecretSpecification>,
-}
-
-/// The caller may fetch the named secret.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SecretGrant {
-    pub name: String,
-    /// False when the secret needs no decision for this caller.
-    pub approved: bool,
-}
-
-/// A configured secret without the command that fetches it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CatalogSecret {
-    pub name: String,
-    /// Programs that receive the value; empty means the agent's environment.
-    pub tools: Vec<String>,
-    pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
-}
-
-/// The secrets configured for a workspace's agents.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SecretCatalog {
-    pub secrets: Vec<CatalogSecret>,
-}
 
 impl Manager {
     pub async fn secret_catalog(&self, selector: &str) -> Result<SecretCatalog> {

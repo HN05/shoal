@@ -443,7 +443,7 @@ impl RepoConfig {
             );
         }
         crate::client::resources::definitions(&self.resources, &self.resource_pools)?;
-        crate::env::validate_configured_environment(&self.env)?;
+        crate::client::env::validate_configured_environment(&self.env)?;
         crate::config::validate_agent_dirs(self.agent.dirs.as_deref().unwrap_or_default())?;
         crate::agent::ModelChoice {
             model: self.agent.model.clone(),

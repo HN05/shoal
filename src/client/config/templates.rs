@@ -9,8 +9,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 use crate::{
+    client::paths::Paths,
     config::{Config, repo::TemplatesConfig},
-    paths::Paths,
 };
 
 pub use super::placeholders::render;

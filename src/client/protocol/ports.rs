@@ -1,4 +1,4 @@
-use crate::daemon::ports::PortRequest;
+use crate::model::PortRequest;
 use serde::{Deserialize, Serialize};
 
 /// Requests about a workspace's TCP port reservations.

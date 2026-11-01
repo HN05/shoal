@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use super::*;
 
 fn secret(command: &[&str]) -> Secret {

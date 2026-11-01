@@ -240,7 +240,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
                 ..
             })
         )
-    ) && let Ok(state) = Paths::state_dir(cli.state_dir.clone())
+    ) && let Ok(state) = Paths::command_state_dir(cli.state_dir.clone())
     {
         skill::refresh_installed(&state, cli.json);
     }
@@ -253,7 +253,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         command: ShellCommand::Recover { path },
     })) = &cli.command
     {
-        let state = crate::paths::Paths::state_dir(cli.state_dir.clone())?;
+        let state = crate::paths::Paths::command_state_dir(cli.state_dir.clone())?;
         let destination = shell::recovery_directory(path, &state)?;
         if cli.json {
             outln!("{}", json!({"path": destination}));
@@ -268,7 +268,7 @@ pub(crate) async fn run(cli: Cli) -> Result<i32> {
         print_help(path)?;
         return Ok(0);
     }
-    let mut ctx = Context::new(Paths::new(cli.state_dir)?, cli.json);
+    let mut ctx = Context::new(Paths::of_command(cli.state_dir)?, cli.json);
     ctx.need = cli.need;
     ctx.command = cli.path;
     // The daemon pins its own config's forges and keeps them across a

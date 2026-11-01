@@ -1,6 +1,5 @@
 pub mod agents;
 pub mod edit;
-pub mod file;
 pub mod forges;
 pub mod machine;
 pub mod named_commands;
@@ -9,7 +8,6 @@ pub mod overload;
 mod parse;
 pub(crate) mod placeholders;
 pub mod repo;
-pub mod report;
 pub mod resolve;
 pub mod templates;
 #[cfg(test)]
@@ -24,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use crate::paths::Paths;
+use crate::client::paths::Paths;
 pub use machine::Machine;
 pub use repo::{
     AutoCleanup, Cleanup, Happy, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Settings,
@@ -210,34 +208,6 @@ impl Config {
         Self::install_at(Self::path(paths))
     }
 
-    /// Write a fresh template, first moving any existing file to
-    /// `config.toml.backup` (replacing an older backup). Returns the path and
-    /// the backup, if one was made.
-    pub fn reset(paths: &Paths) -> Result<(PathBuf, Option<PathBuf>)> {
-        Self::install_named(paths, "default")
-    }
-
-    /// Apply `changes` together, saving only when the result is valid.
-    pub fn edit(paths: &Paths, changes: &[edit::Change]) -> Result<(PathBuf, Option<PathBuf>)> {
-        file::edit(Self::path(paths), changes, |edited| {
-            Self::parse(edited, paths)
-                .map(drop)
-                .context("invalid edited config")
-        })
-    }
-
-    pub fn install_named(paths: &Paths, name: &str) -> Result<(PathBuf, Option<PathBuf>)> {
-        let text = PACKAGED
-            .iter()
-            .find(|(candidate, _)| *candidate == name)
-            .map(|(_, text)| *text)
-            .with_context(|| format!("unknown packaged config: {name}"))?;
-        Self::parse(text, paths).with_context(|| format!("validate packaged config {name}"))?;
-        let path = Self::path(paths);
-        let _lock = file::lock(&path)?;
-        file::replace(path, text)
-    }
-
     fn install_at(path: PathBuf) -> Result<(PathBuf, bool)> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
@@ -269,13 +239,6 @@ impl Config {
         Self::parse(&text, paths).with_context(|| format!("parse {}", path.display()))
     }
 
-    /// [`Self::load`] under the edit lock, so a concurrent edit is read whole
-    /// rather than while its file is moved aside.
-    pub fn load_settled(paths: &Paths) -> Result<Self> {
-        let _lock = file::lock(&Self::path(paths))?;
-        Self::load(paths)
-    }
-
     /// [`Self::load`] with the template files beside the config standing in
     /// for omitted inline templates, as the CLI reads it for a launch.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
@@ -300,7 +263,7 @@ impl Config {
         )))
     }
 
-    fn parse(text: &str, paths: &Paths) -> Result<Self> {
+    pub(crate) fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let mut config = Self::from_toml(text)?;
         let machine = &mut config.machine;
         let written: toml::Table = toml::from_str(text)?;

@@ -349,7 +349,7 @@ impl Typed {
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
-        let Ok(paths) = Paths::new(state) else {
+        let Ok(paths) = Paths::of_command(state) else {
             return Settings {
                 commands: named_commands::defaults(),
                 providers: crate::ai::agents(&crate::ai::tools(&Default::default()))
@@ -439,7 +439,7 @@ impl Typed {
             .state
             .clone()
             .or_else(|| std::env::var_os(env::STATE_DIR).map(PathBuf::from));
-        let paths = Paths::new(state)?;
+        let paths = Paths::of_command(state)?;
         if matches!(target, Target::Repositories) {
             return Ok(repository_candidates(
                 &client::repositories(&paths).await?,

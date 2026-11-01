@@ -59,7 +59,7 @@ pub(super) fn run(
         return Ok(0);
     };
     ensure!(
-        !crate::env::inherits_scope(&Paths::state_dir(state_dir)?),
+        !crate::env::inherits_scope(&Paths::command_state_dir(state_dir)?),
         "workspace processes cannot install user-level skills; run shoal skill install outside the scoped execution"
     );
     ensure!(

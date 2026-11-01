@@ -1,61 +1,19 @@
 //! Secrets that user-configured commands fetch for tracked agents. Shoal keeps
 //! the commands, never the values.
 use anyhow::{Context, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     ffi::{OsStr, OsString},
     os::unix::fs::PermissionsExt,
     path::Path,
 };
 
+pub(crate) use crate::client::secrets::{Secret, Secrets, validate};
 use crate::{env, paths::Paths};
-
-#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Secret {
-    /// Argument array whose standard output is the value.
-    pub command: Vec<String>,
-    /// Programs that receive the value each time they run; empty gives it to
-    /// the agent's environment instead.
-    pub tools: Vec<String>,
-    /// Scoped callers fetch it only after the user approves a request.
-    pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
-}
-
-/// Configured secrets keyed by the variable that carries each value.
-pub type Secrets = BTreeMap<String, Secret>;
 
 /// The tool-scoped secrets a launcher directory serves, beside its launchers.
 /// Tool names cannot start with a dot, so no launcher can take its name.
 const MANIFEST: &str = ".secrets.json";
-
-pub fn validate(secrets: &Secrets) -> Result<()> {
-    for (name, secret) in secrets {
-        env::validate_configured_name("[secrets]", name)?;
-        ensure!(
-            !env::PROTECTED.contains(&name.as_str()),
-            "[secrets] cannot set {name}"
-        );
-        crate::config::value::validate_command(
-            &format!("secrets.{name}.command"),
-            &secret.command,
-        )?;
-        // Environment secrets are fetched before the agent can ask for them.
-        ensure!(
-            !secret.requires_approval || !secret.tools.is_empty(),
-            "secrets.{name}.requires_approval needs tools: an agent's environment is fetched before it can ask"
-        );
-        for tool in &secret.tools {
-            ensure!(
-                !tool.is_empty() && !tool.starts_with('.') && !tool.contains(['/', '\0']),
-                "secrets.{name}.tools: {tool:?} is not a program name"
-            );
-        }
-    }
-    Ok(())
-}
 
 /// The secret variables an agent launch adds to its child's environment, and
 /// the launchers that give tool-scoped secrets to their tools.

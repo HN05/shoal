@@ -38,7 +38,7 @@ impl Value {
     pub fn validate(&self, setting: &str) -> Result<()> {
         match self {
             Self::Written(_) => Ok(()),
-            Self::Env { env } => crate::env::validate_configured_name(setting, env),
+            Self::Env { env } => crate::client::env::validate_configured_name(setting, env),
             Self::Cmd { cmd } => validate_command(&format!("{setting}.cmd"), cmd),
         }
     }

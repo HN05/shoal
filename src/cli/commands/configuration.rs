@@ -8,9 +8,10 @@ use crate::{
         ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
-    config::{self, edit::Change},
+    config::{Config, edit::Change, options::Entry, repo::ConfigLayers, resolve::Stack},
     env,
-    protocol::ConfigTarget,
+    paths::Paths,
+    protocol::{ConfigTarget, WorkspaceMethod},
 };
 
 /// The reference bundled with this release, readable without network access.
@@ -98,7 +99,7 @@ pub(super) async fn show(
         Some(repository) => ConfigTarget::Repository(ui::repository_selector(repository)?),
         None => target(ctx, workspace).await?,
     };
-    let (entries, warnings) = config::report::load(&ctx.paths, target).await?;
+    let (entries, warnings) = report(&ctx.paths, target).await?;
     for warning in warnings {
         eprintln!("warning: {warning}");
     }
@@ -155,4 +156,14 @@ async fn target(ctx: &Context, explicit: Option<String>) -> Result<ConfigTarget>
         Some(repository) => ConfigTarget::Repository(repository.id.clone().into()),
         None => ConfigTarget::Workspace(ui::pick_workspace(ctx, workspaces, "workspace").await?),
     })
+}
+
+/// Every option with its winning layer, and warnings for retired settings:
+/// the daemon's repository layers under the global file read now.
+async fn report(paths: &Paths, target: ConfigTarget) -> Result<(Vec<Entry>, Vec<String>)> {
+    let layers =
+        client::request::<Box<ConfigLayers>>(paths, WorkspaceMethod::LayeredConfig { target })
+            .await?;
+    let stack = Stack::new(&Config::load_with_templates(paths)?, &layers);
+    Ok((stack.report()?, stack.warnings().to_vec()))
 }

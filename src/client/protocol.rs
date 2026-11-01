@@ -6,14 +6,15 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 
 use crate::{
     client::{
+        events::EventItem,
         notifications::Notification,
         processes::Identity,
+        recovery::Report,
         removal::{RemovalCheck, RemovalResult},
         resources::{Overview, ResourceLease},
         sim::{AuditEntry, Simulator, SimulatorCatalog},
     },
     config::repo::ConfigLayers,
-    daemon::{events::EventItem, recovery::Report},
     model::{
         ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
         PortSuggestion, Repository, RepositoryRemoval, SyncedRepository, Workspace,
@@ -194,7 +195,7 @@ impl Request {
             protocol: VERSION,
             id: 1,
             method: method.into(),
-            scope: crate::env::scope_token(),
+            scope: crate::client::env::scope_token(),
         }
     }
 }
@@ -523,7 +524,7 @@ response_bodies! {
     MovedEntry(crate::model::MovedEntry),
     QueuedPlan(crate::model::QueuedPlan),
     Holds(Vec<crate::model::WorkspaceHold>),
-    AttachedFiles(Vec<crate::daemon::workspace_files::AttachedFile>),
+    AttachedFiles(Vec<crate::client::files::AttachedFile>),
     Demos(Vec<crate::demos::Running>),
     DemoProgress(crate::demos::Progress),
     Workspaces(Vec<Workspace>),
@@ -539,7 +540,7 @@ response_bodies! {
     Downloaded(Vec<DownloadPiece>),
     Opened(crate::client::links::OpenOutcome),
     Completion(crate::model::Completion),
-    Discarded(crate::daemon::workspace::Discarded),
+    Discarded(crate::client::executions::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
     AgentStatus(crate::model::AgentStatus),
     WokenTurn(WokenTurn),
@@ -556,7 +557,7 @@ response_bodies! {
     CiRunJobs(Vec<crate::forge::ci::run_view::RunJob>),
     CiRuns(Vec<crate::forge::ci::run_action::Run>),
     WorkspaceEnv(std::collections::BTreeMap<String, String>),
-    Cleanup(crate::daemon::cleanup::ManualCleanup),
+    Cleanup(crate::client::cleanup::ManualCleanup),
     RemovedWorkspaces(Vec<crate::model::RemovedWorkspace>),
     AgentEnvironments(Vec<std::collections::BTreeMap<String, String>>),
     KeptBranches(Vec<crate::model::KeptBranch>),
@@ -595,8 +596,8 @@ response_bodies! {
     PortCatalog(crate::model::PortCatalog),
     ApprovalRequest(Box<crate::client::approvals::ApprovalRequest>),
     ApprovalRequests(Vec<crate::client::approvals::ApprovalRequest>),
-    SecretGrant(crate::daemon::secrets::SecretGrant),
-    SecretCatalog(crate::daemon::secrets::SecretCatalog),
+    SecretGrant(crate::client::secrets::SecretGrant),
+    SecretCatalog(crate::client::secrets::SecretCatalog),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
     ResourceCatalog(crate::client::resources::Catalog),

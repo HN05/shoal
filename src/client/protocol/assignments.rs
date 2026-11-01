@@ -14,7 +14,7 @@ pub enum AssignmentMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         integrated: bool,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        results: Vec<crate::daemon::workspace_files::NewFile>,
+        results: Vec<crate::client::files::NewFile>,
     },
     WorkspaceUndone {
         workspace: String,

@@ -49,7 +49,7 @@ impl Manager {
         };
         let path = self.local_config_outside_checkouts(&directory).await?;
         let (config, backup) = tokio::task::spawn_blocking(move || {
-            config::file::edit(path, &changes, |edited| {
+            crate::config_file::edit(path, &changes, |edited| {
                 config::repo::parse(edited)
                     .map(drop)
                     .context("invalid edited local config")

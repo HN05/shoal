@@ -150,20 +150,20 @@ fn validate_base(agents: &Agents, name: &str, base: &str) -> Result<()> {
 /// its config from the variables it sets, so those can be set, not removed.
 fn environment(agent: &Agent) -> Result<()> {
     for (variable, value) in &agent.env {
-        crate::env::validate_configured_name("env", variable)?;
+        crate::client::env::validate_configured_name("env", variable)?;
         ensure!(
             !value.contains('\0'),
             "env value for {variable} contains NUL"
         );
     }
     for variable in &agent.env_remove {
-        crate::env::validate_configured_name("env_remove", variable)?;
+        crate::client::env::validate_configured_name("env_remove", variable)?;
         ensure!(
-            !crate::env::AGENT_CONFIG_VARIABLES.contains(&variable.as_str()),
+            !crate::client::env::AGENT_CONFIG_VARIABLES.contains(&variable.as_str()),
             "env_remove cannot remove {variable}; set it in env to the directory instead"
         );
     }
-    for variable in crate::env::AGENT_CONFIG_VARIABLES {
+    for variable in crate::client::env::AGENT_CONFIG_VARIABLES {
         if let Some(directory) = agent.env.get(variable) {
             ensure!(
                 directory.starts_with('/') || directory.starts_with("~/"),

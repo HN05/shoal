@@ -39,7 +39,7 @@ pub enum RemovalMethod {
     Cleanup {
         dry_run: bool,
         #[serde(flatten)]
-        selection: crate::daemon::cleanup::Selection,
+        selection: crate::client::cleanup::Selection,
     },
     /// Removed workspaces that can still be restored.
     RemovedWorkspaces,

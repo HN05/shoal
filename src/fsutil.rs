@@ -1,5 +1,5 @@
 //! Small filesystem operations shared by the CLI and daemon.
-pub(crate) use crate::client::executions::FileIdentity;
+pub(crate) use crate::client::{executions::FileIdentity, paths::home_dir};
 use std::{
     ffi::OsStr,
     fs,
@@ -83,13 +83,6 @@ fn remove_existing(path: &Path) -> io::Result<()> {
 }
 
 use anyhow::Context;
-
-/// Read HOME without imposing caller-specific path validation.
-pub fn home_dir() -> anyhow::Result<PathBuf> {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .context("HOME is not set")
-}
 
 /// The home directory of the user this process runs as, from the password
 /// database rather than `HOME`.

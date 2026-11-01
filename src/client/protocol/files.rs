@@ -14,7 +14,7 @@ pub enum FileMethod {
     AddFiles {
         space: String,
         /// The files by absolute path, which the daemon copies.
-        files: Vec<crate::daemon::workspace_files::NewFile>,
+        files: Vec<crate::client::files::NewFile>,
         /// The chat whose agent sends the request, which attaches them.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         sender_chat: Option<String>,
