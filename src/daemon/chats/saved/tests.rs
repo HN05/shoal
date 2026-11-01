@@ -84,6 +84,11 @@ async fn a_saved_chat_keeps_its_record_until_it_is_restored() {
         Some(chat.id.clone())
     );
     assert!(manager.check_chat_name("talk".into()).await.is_err());
+    let taken = manager
+        .create_workspace(&repo.id, "talk".into(), None, None, None)
+        .await
+        .unwrap_err();
+    assert!(format!("{taken:#}").contains("a chat already has the name talk"));
     assert_eq!(
         std::fs::read_to_string(tmp_dir.join("notes")).unwrap(),
         "kept"

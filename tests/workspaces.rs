@@ -27220,8 +27220,7 @@ fn chat_rename_renames_the_named_current_or_picked_chat() {
     let output = fixture.run(&["chat", "rename", "repo-plan-7", "topic"]);
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("a running chat already has the name topic"),
+        String::from_utf8_lossy(&output.stderr).contains("a chat already has the name topic"),
         "{output:?}"
     );
 

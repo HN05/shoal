@@ -353,7 +353,7 @@ async fn chats_and_workspaces_share_one_namespace() {
     start("talk", process.id()).await.unwrap();
     assert!(
         refusal(start("talk", std::process::id()).await)
-            .contains("a running chat already has the name talk")
+            .contains("a chat already has the name talk")
     );
     assert!(manager.check_chat_name("talk".into()).await.is_err());
     manager.check_chat_name("other".into()).await.unwrap();
@@ -370,24 +370,32 @@ async fn chats_and_workspaces_share_one_namespace() {
         "re-po"
     );
 
-    // A workspace is neither checked, created nor renamed to a running
-    // chat's name.
+    // A workspace is neither checked, created nor renamed to a chat's name.
     let options = Default::default();
     let error = manager
         .check_creation(&repo.id, Some("talk"), None, options)
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("running chat"), "{error:#}");
+    assert!(
+        format!("{error:#}").contains("a chat already has"),
+        "{error:#}"
+    );
     let error = manager
         .create_workspace(&repo.id, "talk".into(), None, None, None)
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("running chat"), "{error:#}");
+    assert!(
+        format!("{error:#}").contains("a chat already has"),
+        "{error:#}"
+    );
     let error = manager
         .rename_workspace(&worker.id, "talk", None)
         .await
         .unwrap_err();
-    assert!(format!("{error:#}").contains("running chat"), "{error:#}");
+    assert!(
+        format!("{error:#}").contains("a chat already has"),
+        "{error:#}"
+    );
 
     // The name frees once the chat's process ends, without listing chats.
     process.kill();
@@ -439,7 +447,7 @@ async fn a_renamed_chat_takes_a_free_name_with_its_files() {
     // The new name is refused where a new chat's would be.
     let rename = |chat: &str, name: &str| manager.rename_chat(chat.into(), name.into());
     assert!(refusal(rename("talk", "worker").await).contains("workspace name"));
-    assert!(refusal(rename("talk", "other").await).contains("running chat"));
+    assert!(refusal(rename("talk", "other").await).contains("a chat already has"));
     assert!(refusal(rename("talk", "-topic").await).contains("chat names must"));
     assert!(refusal(rename("gone", "topic").await).contains("no running chat gone"));
     assert_eq!(rename("talk", "talk").await.unwrap(), talk);

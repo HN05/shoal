@@ -799,8 +799,9 @@ enum NameHolder {
     Chat,
 }
 
-/// What holds `name`, other than the workspace `except_id`. Chats are
-/// running as far as the caller ended finished ones first.
+/// What holds `name`, other than the workspace `except_id`. A chat holds
+/// its name while it runs or waits saved, as far as the caller ended
+/// finished ones first.
 fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<Option<NameHolder>> {
     if exists(
         db,
@@ -818,7 +819,8 @@ fn name_holder(db: &Connection, name: &str, except_id: Option<&str>) -> Result<O
     Ok(None)
 }
 
-/// Refuse a name another workspace, an unfinished rename or a running chat holds.
+/// Refuse a name another workspace, an unfinished rename or a chat, running
+/// or saved, holds.
 pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str>) -> Result<()> {
     match name_holder(db, name, except_id)? {
         None => Ok(()),
@@ -834,13 +836,14 @@ pub fn ensure_name_available(db: &Connection, name: &str, except_id: Option<&str
         .into()),
         Some(NameHolder::Chat) => Err(Refusal::new(
             Reason::NameTaken,
-            format!("a running chat already has the name {name}"),
+            format!("a chat already has the name {name}"),
         )
         .into()),
     }
 }
 
-/// Whether a workspace, an unfinished rename or a running chat holds `name`.
+/// Whether a workspace, an unfinished rename or a chat, running or saved,
+/// holds `name`.
 pub fn name_taken(db: &Connection, name: &str) -> Result<bool> {
     Ok(name_holder(db, name, None)?.is_some())
 }
