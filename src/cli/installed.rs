@@ -116,8 +116,18 @@ pub(crate) fn replace_option(
     option: &str,
     value: &str,
 ) -> Vec<OsString> {
+    let mut replaced = without_option(arguments, option);
+    replaced.extend([option.into(), value.into()]);
+    replaced
+}
+
+/// `arguments` without `option` and the value it was given.
+pub(crate) fn without_option(
+    arguments: impl IntoIterator<Item = OsString>,
+    option: &str,
+) -> Vec<OsString> {
     let inline = format!("{option}=");
-    let mut replaced = Vec::new();
+    let mut kept = Vec::new();
     let mut arguments = arguments.into_iter();
     while let Some(argument) = arguments.next() {
         if argument == option {
@@ -126,11 +136,10 @@ pub(crate) fn replace_option(
             .to_str()
             .is_some_and(|argument| argument.starts_with(&inline))
         {
-            replaced.push(argument);
+            kept.push(argument);
         }
     }
-    replaced.extend([option.into(), value.into()]);
-    replaced
+    kept
 }
 
 /// `arguments` with `flag` added unless they already have it.

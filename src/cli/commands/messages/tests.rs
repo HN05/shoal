@@ -139,6 +139,30 @@ fn a_resumed_wake_continues_in_the_inbox_it_found() {
         resumed(None),
         ["internal", "wake", "--agent", "7", "--resume"]
     );
+    // A hook an earlier release handed over names the space alone when it
+    // is handed over again, found or not.
+    let handed_over = [
+        "internal",
+        "wake",
+        "--agent",
+        "7",
+        "--workspace",
+        "w1",
+        "--resume",
+    ];
+    for inbox in [Some(Inbox::Workspace("w1".into())), None] {
+        let wait = WakeWait {
+            space: Some("w1".into()),
+            inbox,
+            restarted: true,
+        };
+        assert_eq!(
+            wait.resume_arguments(handed_over.map(OsString::from).to_vec()),
+            [
+                "internal", "wake", "--agent", "7", "--resume", "--space", "w1"
+            ]
+        );
+    }
 }
 
 #[test]

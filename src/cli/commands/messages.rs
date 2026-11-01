@@ -13,7 +13,7 @@ use crate::{
     cli::{
         client::{self, request},
         context::Context,
-        installed::{Executable, arguments, replace_option, with_flag},
+        installed::{Executable, arguments, replace_option, with_flag, without_option},
         output::{Palette, Style},
         terminal,
         ui::{self, Fallback},
@@ -400,10 +400,16 @@ impl WakeWait {
     }
 
     /// The hook's `arguments` continuing this wait after an upgrade restarted
-    /// the daemon, in the inbox it found.
+    /// the daemon, in the inbox it found or was named. A hook an earlier
+    /// release handed over names its workspace the earlier way, which the
+    /// space replaces.
     fn resume_arguments(&self, arguments: Vec<OsString>) -> Vec<OsString> {
-        let arguments = match &self.inbox {
-            Some(inbox) => replace_option(arguments, "--space", inbox.space()),
+        let space = self.inbox.as_ref().map(Inbox::space);
+        let arguments = match space.or(self.space.as_deref()) {
+            Some(space) => {
+                let arguments = without_option(arguments, "--workspace");
+                replace_option(arguments, "--space", space)
+            }
             None => arguments,
         };
         with_flag(arguments, "--resume")
