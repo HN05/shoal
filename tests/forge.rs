@@ -3558,14 +3558,7 @@ fn ci_actions_rerun_failed_jobs_and_cancel_running_runs_on_the_head() {
     assert!(posts().is_empty());
 
     let rerun = fixture.ok(&[
-        "ci",
-        "rerun",
-        "--pr",
-        "8",
-        "--check",
-        "rust",
-        "--workspace",
-        "topic",
+        "ci", "rerun", "--pr", "8", "--check", "rust", "--space", "topic",
     ]);
     assert_eq!(rerun["checks"], json!(["rust"]), "{rerun}");
     assert_eq!(posts(), ["POST repos/team/project/actions/jobs/11/rerun"]);
@@ -3680,7 +3673,7 @@ fn ci_runs_start_on_the_workspace_branch_with_inputs() {
         "ci",
         "run",
         "deps.yml",
-        "--workspace",
+        "--space",
         "topic",
         "--input",
         "level=full",
@@ -3752,7 +3745,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
     }));
     // A workflow's page in the workspace's repository runs on its branch.
     let page = "https://github.com/team/project/actions/workflows/deps.yml";
-    let started = fixture.ok(&["ci", "run", page, "--workspace", "topic"]);
+    let started = fixture.ok(&["ci", "run", page, "--space", "topic"]);
     assert_eq!(
         started,
         json!({"workflow": "deps.yml", "branch": "topic"}),
@@ -3760,7 +3753,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
     );
     // A workflow file's URL also names the branch.
     let file = "https://github.com/team/project/blob/release/1/.github/workflows/deps.yml";
-    let started = fixture.ok(&["ci", "run", file, "--workspace", "topic"]);
+    let started = fixture.ok(&["ci", "run", file, "--space", "topic"]);
     assert_eq!(started["branch"], "release/1", "{started}");
     assert_eq!(
         writes(&fixture),
@@ -3791,7 +3784,7 @@ fn workflow_links_start_runs_in_their_repository_on_their_branch() {
         "ci",
         "run",
         "https://github.com/other/tool/actions/workflows/ci.yml",
-        "--workspace",
+        "--space",
         "topic",
     ]);
     assert!(
@@ -3818,7 +3811,7 @@ fn forgejo_workflow_links_of_another_repository_link_the_run_for_the_user_only()
     }));
     let other = fixture.web.replace("/team/project", "/other/project");
     let page = format!("{other}/actions?workflow=deps.yml");
-    let started = fixture.ok(&["ci", "run", &page, "--workspace", "topic"]);
+    let started = fixture.ok(&["ci", "run", &page, "--space", "topic"]);
     assert_eq!(
         (&started["branch"], &started["url"], &started["linked"]),
         (
@@ -3916,13 +3909,84 @@ fn ci_runs_are_started_viewed_and_listed_from_a_registered_checkout() {
 }
 
 #[test]
+fn a_chat_runs_ci_on_the_default_branch_and_acts_on_its_linked_prs_runs() {
+    let fixture = Fixture::new(Forge::Forgejo, "");
+    let repository = fixture.ok(&["repo", "ls"])[0]["id"].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = support::isolated(fixture.root.path(), "sleep")
+        .arg("600")
+        .current_dir(fixture.root.path())
+        .spawn()
+        .unwrap();
+    let chat = fixture.request(json!({"start_chat": {"repository": repository,
+        "name": "planning", "agent": "claude", "pid": agent.id()}}));
+    assert_eq!(chat["type"], "chat", "{chat}");
+    let mut open = pull(8, "open", "Fix", &[]);
+    open["head"]["sha"] = json!("head");
+    let run = json!({"id": 9331, "index_in_repo": 2765, "prettyref": "topic",
+        "workflow_id": "deps.yml", "status": "running", "commit_sha": "head"});
+    let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
+    fixture.respond(json!({
+        "GET repos/team/project": {"body": {"default_branch": "main"}},
+        "GET repos/team/project/pulls/8": {"body": open},
+        "GET repos/team/project/actions/runs?limit=10&page=1&ref=refs%2Fheads%2Fmain":
+            {"body": {"workflow_runs": [], "total_count": 0}},
+        "GET repos/team/project/actions/runs?limit=10&page=1&head_sha=head":
+            {"body": {"workflow_runs": [run], "total_count": 1}},
+        "GET repos/team/project/commits/head/status?limit=50": {"body": {"total_count": 1, "statuses": [
+            {"context": "rust", "status": "pending", "target_url": "/team/project/actions/runs/2765/jobs/0"}
+        ]}},
+        "GET repos/team/project/actions/runs?run_number=2765": {"body": {"workflow_runs": [run]}},
+        "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
+        dispatch: {"status": 201, "body": {"id": 9332, "run_number": 2766}},
+    }));
+
+    // With nothing linked, runs are listed and start on the default branch,
+    // and the chat follows the run it started.
+    assert_eq!(
+        fixture.ok(&["ci", "list", "--space", "planning"]),
+        json!([])
+    );
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "planning"]);
+    assert_eq!(
+        (&started["branch"], &started["linked"]),
+        (&json!("main"), &json!(true)),
+        "{started}"
+    );
+    assert_eq!(
+        writes(&fixture),
+        [json!([dispatch, {"ref": "main", "inputs": {}, "return_run_info": true}])]
+    );
+    let chats = fixture.request(json!("list_chats"));
+    let opened = &chats["data"][0]["links"]["opened"];
+    assert_eq!(opened[0]["url"], started["url"], "{chats}");
+
+    // A linked PR's head is where its runs and checks are.
+    fixture.ok(&["link", "pr", "8", "assigned", "--space", "planning"]);
+    let runs = fixture.ok(&["ci", "list", "--space", "planning"]);
+    let url = format!("{}/actions/runs/2765", fixture.web);
+    assert_eq!(runs[0]["url"], url, "{runs}");
+    let cancelled = fixture.ok(&["ci", "cancel", "--space", "planning"]);
+    assert_eq!(cancelled["checks"], json!(["rust"]), "{cancelled}");
+    assert_eq!(
+        writes(&fixture),
+        [json!([
+            "POST repos/team/project/actions/runs/9331/cancel",
+            null
+        ])]
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn forgejo_ci_runs_link_the_run_they_start() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     let dispatch = "POST repos/team/project/actions/workflows/deps.yml/dispatches";
     fixture.respond(json!({
         dispatch: {"status": 201, "body": {"id": 9331, "run_number": 2765, "jobs": ["audit"]}},
     }));
-    let started = fixture.ok(&["ci", "run", "deps.yml", "--workspace", "topic"]);
+    let started = fixture.ok(&["ci", "run", "deps.yml", "--space", "topic"]);
     assert_eq!(
         started["url"],
         format!("{}/actions/runs/2765", fixture.web),
@@ -3940,7 +4004,7 @@ fn forgejo_ci_runs_link_the_run_they_start() {
         json!([{"kind": "ci", "url": started["url"], "title": "deps.yml"}]),
         "{links}"
     );
-    let output = fixture.run(&["ci", "run", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "run", "--space", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("starts a named workflow"),
@@ -4138,7 +4202,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
     );
     assert!(fixture.requests().is_empty());
 
-    let approved = fixture.ok(&["ci", "approve", "--workspace", "topic"]);
+    let approved = fixture.ok(&["ci", "approve", "--space", "topic"]);
     assert_eq!(approved, json!({"approved": [url(21)]}));
     let posts = fixture
         .requests()
@@ -4153,7 +4217,7 @@ fn github_reports_runs_waiting_for_approval_and_approves_them_as_the_user() {
             "Bearer usertoken"
         ])]
     );
-    let output = fixture.run(&["ci", "approve", "22", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "approve", "22", "--space", "topic"]);
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("does not wait for approval"),
         "{output:?}"
@@ -4220,7 +4284,7 @@ fn forgejo_lists_runs_waiting_for_approval_but_leaves_approving_to_its_web_ui() 
         "{output:?}"
     );
     fixture.requests();
-    let output = fixture.run(&["ci", "approve", "--pr", "8", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "approve", "--pr", "8", "--space", "topic"]);
     assert!(
         String::from_utf8_lossy(&output.stderr).contains(
             "Shoal cannot approve CI runs on Forgejo or Gitea; approve them in the web UI"
@@ -4251,7 +4315,7 @@ fn ci_run_actions_rerun_and_cancel_runs_of_the_workspace_branch() {
         "rerun",
         &format!("{url}/job/34"),
         "--failed",
-        "--workspace",
+        "--space",
         "topic",
     ]);
     assert_eq!(rerun, json!({"url": url, "action": "rerun"}));
@@ -4422,7 +4486,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         "POST repos/team/project/actions/runs/9331/cancel": {"status": 204},
     }));
     let url = format!("{}/actions/runs/2765", fixture.web);
-    let cancel = fixture.ok(&["ci", "cancel", &url, "--workspace", "topic"]);
+    let cancel = fixture.ok(&["ci", "cancel", &url, "--space", "topic"]);
     assert_eq!(cancel["url"], url, "{cancel}");
     assert_eq!(
         writes(&fixture),
@@ -4432,7 +4496,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         ])]
     );
     // The fixture's server runs Forgejo 11, which cannot rerun.
-    let output = fixture.run(&["ci", "rerun", "2765", "--workspace", "topic"]);
+    let output = fixture.run(&["ci", "rerun", "2765", "--space", "topic"]);
     assert!(!output.status.success());
     assert!(
         String::from_utf8_lossy(&output.stderr).contains(
@@ -4454,7 +4518,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
         "POST repos/team/project/actions/jobs/18345/rerun": {"status": 204},
         "POST repos/team/project/actions/jobs/18346/rerun": {"status": 204},
     }));
-    let rerun = fixture.ok(&["ci", "rerun", "2765", "--workspace", "topic"]);
+    let rerun = fixture.ok(&["ci", "rerun", "2765", "--space", "topic"]);
     assert_eq!(rerun["url"], url, "{rerun}");
     assert_eq!(
         writes(&fixture),
@@ -4463,7 +4527,7 @@ fn forgejo_ci_run_actions_cancel_by_run_number_and_rerun_from_release_17() {
             null
         ])]
     );
-    fixture.ok(&["ci", "rerun", "2765", "--failed", "--workspace", "topic"]);
+    fixture.ok(&["ci", "rerun", "2765", "--failed", "--space", "topic"]);
     assert_eq!(
         writes(&fixture),
         [
@@ -4532,7 +4596,7 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
         "deps.yml",
         "--limit",
         "5",
-        "--workspace",
+        "--space",
         "topic",
     ]);
     assert_eq!(
@@ -4540,7 +4604,7 @@ fn forgejo_ci_runs_are_viewed_with_failed_logs_and_listed_by_branch_or_pr() {
         json!([{"url": url, "branch": "topic", "workflow": "deps.yml", "state": "failed"}])
     );
     // A PR's runs are those on its head commit.
-    let runs = fixture.ok(&["ci", "list", "--pr", "#8", "--workspace", "topic"]);
+    let runs = fixture.ok(&["ci", "list", "--pr", "#8", "--space", "topic"]);
     assert_eq!(runs[0]["url"], url, "{runs}");
     let output = fixture.run(&["ci", "list", "--pr", "8", "--branch", "topic"]);
     assert!(!output.status.success());

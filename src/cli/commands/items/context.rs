@@ -12,12 +12,9 @@ use crate::{
     repository::{self, NotRegistered},
 };
 
-/// What is missing when nothing gives a non-interactive command its repository.
+/// What is missing when nothing gives a non-interactive command its space
+/// or repository.
 const NO_CONTEXT: &str =
-    "no current workspace or registered checkout; run this in one, or pass --workspace or --repo";
-
-/// [`NO_CONTEXT`] for a command that acts on a space.
-const NO_SPACE_CONTEXT: &str =
     "no current workspace, chat or registered checkout; run this in one, or pass --space or --repo";
 
 /// What is missing when nothing gives a non-interactive command that takes
@@ -25,23 +22,8 @@ const NO_SPACE_CONTEXT: &str =
 const NO_REPOSITORY: &str =
     "no current workspace or registered checkout; run this in one, or pass --repo";
 
-/// The checkout of the registered repository `repo` names, else the context
-/// [`select_context`] selects, except that outside a workspace or checkout
-/// an issue or PR URL `item` of a registered repository selects that one's.
-pub(in crate::cli::commands) async fn select_item_context(
-    ctx: &Context,
-    workspace: Option<String>,
-    repo: Option<String>,
-    item: Option<&str>,
-) -> Result<ItemContext> {
-    match repo {
-        Some(repo) => Ok(ItemContext::Checkout(named(ctx, &repo).await?.id)),
-        None => select_context(ctx, workspace, item).await,
-    }
-}
-
-/// [`select_item_context`] for a command that acts on a space, a workspace
-/// or chat: the registered repository `repo` names, else the space `space`
+/// Where a command that acts on a space, a workspace or chat, runs: the
+/// registered repository `repo` names, else the space `space`
 /// names or the chat this runs in, else the current workspace or checkout,
 /// else the registered repository of the issue or PR URL `item`, else a
 /// space the user picks.
@@ -67,7 +49,7 @@ pub(in crate::cli::commands) async fn select_space_item_context(
     {
         return Ok(ItemContext::Checkout(repo.id.clone()));
     }
-    ensure!(ctx.interactive(), "{NO_SPACE_CONTEXT}");
+    ensure!(ctx.interactive(), "{NO_CONTEXT}");
     let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
     space_context(ctx, space).await
 }
@@ -145,32 +127,6 @@ async fn registered_checkout(ctx: &Context, repo: Option<&str>) -> Result<Option
     }
     let checkout = registered(ctx, named).await?;
     Ok(checkout.map(|checkout| ItemContext::Checkout(checkout.id)))
-}
-
-/// The named or current workspace, else the registered checkout the current
-/// directory is in, else the registered repository of the issue or PR URL
-/// `item`, else a workspace the user picks.
-async fn select_context(
-    ctx: &Context,
-    workspace: Option<String>,
-    item: Option<&str>,
-) -> Result<ItemContext> {
-    if workspace.is_some() {
-        let workspace = ui::select_workspace(ctx, workspace, ui::Fallback::CurrentDirectory);
-        return Ok(ItemContext::Workspace(workspace.await?));
-    }
-    if let Some(context) = current_context(ctx).await? {
-        return Ok(context);
-    }
-    let repos = client::repositories(&ctx.paths).await?;
-    if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
-        && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
-    {
-        return Ok(ItemContext::Checkout(repo.id.clone()));
-    }
-    ensure!(ctx.interactive(), "{NO_CONTEXT}");
-    let workspace = ui::select_workspace(ctx, None, ui::Fallback::CurrentDirectory).await?;
-    Ok(ItemContext::Workspace(workspace))
 }
 
 /// The workspace, else the registered checkout, the current directory is in.

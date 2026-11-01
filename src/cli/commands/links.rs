@@ -88,7 +88,7 @@ async fn checkout_selected(
 ) -> Result<Selected> {
     let input = selection
         .input
-        .context("outside a workspace, nothing is linked; pass a number or URL")?;
+        .context("outside a workspace or chat, nothing is linked; pass a number or URL")?;
     let repo = super::items::checkout_repository(ctx, repository).await?;
     let forge = match elsewhere {
         true => item_url_forge(ctx, selection.kind, &input).await?,

@@ -6,7 +6,7 @@ use crate::{
     cli::{
         args::ci::{RunArgs, Subject, Target},
         client,
-        commands::items::select_item_context,
+        commands::items::select_space_item_context,
         context::Context,
     },
     forge::ci::{
@@ -23,8 +23,7 @@ pub(super) async fn start(ctx: &Context, args: RunArgs) -> Result<i32> {
     // Refuse bad arguments before the workspace picker asks for anything.
     validate_run(args.workflow.as_deref(), args.branch.as_deref())?;
     let workflow = args.workflow.as_deref();
-    let context =
-        super::workspace_input_context(ctx, args.workspace, args.repo.name, workflow).await?;
+    let context = super::input_context(ctx, args.space, args.repo.name, workflow).await?;
     let follow = follow_hint(context.as_ref(), workflow.is_some_and(is_workflow_url));
     let started: StartedRun = client::request(
         &ctx.paths,
@@ -57,8 +56,8 @@ pub(super) async fn act(
     }
     match subject.run.clone() {
         Some(run) => {
-            let (workspace, repo) = (subject.workspace.clone(), subject.repo.name.clone());
-            let context = super::workspace_input_context(ctx, workspace, repo, Some(&run)).await?;
+            let (space, repo) = (subject.space.clone(), subject.repo.name.clone());
+            let context = super::input_context(ctx, space, repo, Some(&run)).await?;
             act_on_run(ctx, context, run, action, failed).await
         }
         None => {
@@ -88,13 +87,13 @@ pub(super) async fn approve(ctx: &Context, subject: Subject) -> Result<i32> {
     Ok(0)
 }
 
-/// Where the subject's run or PR is acted on: the named or current
-/// workspace, or the checkout of the registered repository `--repo` names or
-/// the current directory or the PR's URL is in.
+/// Where the subject's run or PR is acted on: the named or current space,
+/// or the checkout of the registered repository `--repo` names or the
+/// current directory or the PR's URL is in.
 async fn subject_context(ctx: &Context, subject: &Subject) -> Result<ItemContext> {
-    select_item_context(
+    select_space_item_context(
         ctx,
-        subject.workspace.clone(),
+        subject.space.clone(),
         subject.repo.name.clone(),
         subject.pr.as_deref(),
     )

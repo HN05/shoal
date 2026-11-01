@@ -3,7 +3,7 @@
 //! contributor's code run, so it is the user's decision.
 use anyhow::{Context, Result};
 
-use super::actions::named_or_linked;
+use super::actions::Place;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
@@ -38,10 +38,7 @@ impl Manager {
                 self.record_approval(workspace, LinkKind::Ci, &url).await?;
                 vec![url]
             }
-            None => {
-                self.approve_pr_runs(workspace, &forge, &account, pr)
-                    .await?
-            }
+            None => self.approve_pr_runs(&place, &forge, &account, pr).await?,
         };
         Ok(RunsApproved { approved })
     }
@@ -50,12 +47,12 @@ impl Manager {
     /// fails.
     async fn approve_pr_runs(
         &self,
-        workspace: Option<&Workspace>,
+        place: &Place,
         forge: &ForgeRepo,
         account: &Account,
         pr: Option<String>,
     ) -> Result<Vec<String>> {
-        let input = named_or_linked(pr, workspace, ItemKind::Pr)?;
+        let input = self.named_or_linked(pr, place, ItemKind::Pr).await?;
         let (number, url) = forge.pull(&input)?;
         let waiting = forge
             .pr_waiting_runs(account, number)
@@ -73,7 +70,8 @@ impl Manager {
             }
         }
         if !approved.is_empty() {
-            self.record_approval(workspace, LinkKind::Pr, &url).await?;
+            self.record_approval(place.workspace(), LinkKind::Pr, &url)
+                .await?;
         }
         match failure {
             Some(error) => Err(error.context(format!(

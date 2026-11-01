@@ -7,7 +7,8 @@ use crate::cli::args::item_reference;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum CiCommand {
-    /// List the newest CI runs, on the workspace's branch by default.
+    /// List the newest CI runs, on the workspace's branch or a chat's linked
+    /// PR by default.
     List(ListArgs),
     /// Start a workflow run on a branch, also in another repository by the
     /// workflow's URL.
@@ -61,9 +62,10 @@ pub struct Subject {
     /// linked PR.
     #[arg(long, value_name = "NUMBER_OR_URL", conflicts_with = "run", value_parser = item_reference)]
     pub pr: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
     #[arg(long, conflicts_with = "repo")]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
     #[command(flatten)]
     pub repo: crate::cli::args::changes::RegisteredRepo,
 }
@@ -71,11 +73,12 @@ pub struct Subject {
 // Which runs `shoal ci list` lists.
 #[derive(Debug, Args)]
 pub struct ListArgs {
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
     #[arg(long, conflicts_with = "repo")]
-    pub workspace: Option<String>,
-    /// Branch whose runs to list; defaults to the workspace's branch, or
-    /// outside a workspace the repository's default branch.
+    pub space: Option<String>,
+    /// Branch whose runs to list; defaults to the workspace's branch, in a
+    /// chat its linked PR's head, or else the repository's default branch.
     #[arg(long)]
     pub branch: Option<String>,
     /// List the runs on this PR's head commit, by number or URL.
@@ -99,13 +102,13 @@ pub struct RunArgs {
     /// which workspace processes cannot start; GitLab runs the branch's
     /// pipeline and takes none.
     pub workflow: Option<String>,
-    /// Workspace to use; defaults to the current workspace, or else the
-    /// picker unless a URL names the workflow.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or else the picker unless a URL names the workflow.
     #[arg(long, conflicts_with = "repo")]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
     /// Branch to run on; defaults to the branch a workflow file's URL names,
     /// then the workspace's, the only one workspace processes may run on, or
-    /// else the repository's default branch.
+    /// else, as in a chat, the repository's default branch.
     #[arg(long)]
     pub branch: Option<String>,
     #[command(flatten)]

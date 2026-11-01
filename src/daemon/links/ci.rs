@@ -2,7 +2,6 @@
 //! as the agent account of the workspace or registered checkout.
 use anyhow::{Context, Result};
 
-use super::actions::named_or_linked;
 use crate::{
     daemon::{events, workspace::Manager},
     forge::{
@@ -27,7 +26,7 @@ impl Manager {
         }
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
-        let input = named_or_linked(item, place.workspace(), ItemKind::Pr)?;
+        let input = self.named_or_linked(item, &place, ItemKind::Pr).await?;
         let (number, url) = forge.pull(&input)?;
         let plan = forge
             .plan_ci(&account, number, action, &checks)

@@ -1,6 +1,6 @@
 //! The forge and the accounts item actions go out with: the user's own
 //! logins for reads and the user's decisions, the agent account for the rest.
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::{
     config::{
@@ -8,23 +8,34 @@ use crate::{
         forges::{Forges, Whose},
     },
     daemon::workspace::Manager,
-    forge::{ForgeRepo, account::Account},
+    forge::{ForgeRepo, account::Account, items::link::ItemKind},
     model::{Repository, Workspace},
     protocol::ItemContext,
 };
 
 /// Where an action on a repository's items runs: a workspace, its worktree
-/// verified, or the registered checkout of a repository without one.
+/// verified, a chat in its repository's registered checkout, or the
+/// registered checkout of a repository without either.
 pub(in crate::daemon::links) enum Place {
     Workspace(Box<Workspace>),
+    Chat { id: String, checkout: Repository },
     Checkout(Repository),
 }
 
 impl Place {
-    /// The workspace, whose linked items an action may default to.
     pub(in crate::daemon::links) fn workspace(&self) -> Option<&Workspace> {
         match self {
             Self::Workspace(workspace) => Some(workspace),
+            Self::Chat { .. } | Self::Checkout(_) => None,
+        }
+    }
+
+    /// The workspace or chat, whose linked items an action may default to
+    /// and which records the changes it makes.
+    pub(in crate::daemon::links) fn space_id(&self) -> Option<&str> {
+        match self {
+            Self::Workspace(workspace) => Some(&workspace.id),
+            Self::Chat { id, .. } => Some(id),
             Self::Checkout(_) => None,
         }
     }
@@ -124,9 +135,16 @@ impl Manager {
                 self.verify_worktree(&workspace).await?;
                 Place::Workspace(Box::new(workspace))
             }
-            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
-                Place::Checkout(self.context_checkout(context).await?)
+            ItemContext::Chat(selector) => {
+                let chat = (self.running_chat(selector).await?)
+                    .with_context(|| format!("no running chat {selector}"))?;
+                let checkout = self.repository(&chat.repository_id).await?;
+                Place::Chat {
+                    id: chat.id,
+                    checkout,
+                }
             }
+            ItemContext::Checkout(_) => Place::Checkout(self.context_checkout(context).await?),
         })
     }
 
@@ -137,7 +155,9 @@ impl Manager {
     ) -> Result<(ForgeRepo, Account)> {
         match place {
             Place::Workspace(workspace) => self.workspace_forge_account(workspace).await,
-            Place::Checkout(repository) => self.checkout_forge_account(repository).await,
+            Place::Chat { checkout, .. } | Place::Checkout(checkout) => {
+                self.checkout_forge_account(checkout).await
+            }
         }
     }
 
@@ -145,7 +165,24 @@ impl Manager {
     pub(in crate::daemon::links) async fn place_forge(&self, place: &Place) -> Result<ForgeRepo> {
         match place {
             Place::Workspace(workspace) => self.workspace_forge(workspace).await,
-            Place::Checkout(repository) => self.checkout_forge(repository).await,
+            Place::Chat { checkout, .. } | Place::Checkout(checkout) => {
+                self.checkout_forge(checkout).await
+            }
+        }
+    }
+
+    /// The `named` item, else the one item of `kind` linked to the place's
+    /// space.
+    pub(in crate::daemon::links) async fn named_or_linked(
+        &self,
+        named: Option<String>,
+        place: &Place,
+        kind: ItemKind,
+    ) -> Result<String> {
+        match (named, place.space_id()) {
+            (Some(named), _) => Ok(named),
+            (None, Some(id)) => self.linked_item(id, kind).await,
+            (None, None) => bail!(super::NOTHING_LINKED),
         }
     }
 }

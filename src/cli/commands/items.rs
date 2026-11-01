@@ -38,8 +38,8 @@ use self::{
 };
 pub(crate) use content::read_body;
 pub(super) use context::{
-    checkout_repository, context_repository, current_context, select_item_context,
-    select_repo_context, select_space_item_context, space_context,
+    checkout_repository, context_repository, current_context, select_repo_context,
+    select_space_item_context, space_context,
 };
 pub(super) use open::push_and_open;
 

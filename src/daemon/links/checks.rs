@@ -77,10 +77,9 @@ impl Manager {
         validate_check_name(name)?;
         let place = self.place(context).await?;
         let (forge, account) = self.place_forge_account(&place).await?;
-        let space = match (place.workspace(), context) {
-            (Some(workspace), _) => Some(LinkSpace::from(workspace.clone())),
-            (None, ItemContext::Chat(chat)) => Some(self.link_space(chat).await?),
-            (None, _) => None,
+        let space = match place.space_id() {
+            Some(id) => Some(self.link_space(id).await?),
+            None => None,
         };
         let url = self.check_log_pr(space.as_ref(), &forge, selection).await?;
         forge.failed_check_log(&account, &url, name).await

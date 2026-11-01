@@ -6,7 +6,7 @@ use crate::{
     cli::{
         args::items::ItemArgs,
         client,
-        commands::{items::select_item_context, view as items_view},
+        commands::{items::select_space_item_context, view as items_view},
         context::Context,
     },
     forge::ci::{
@@ -135,13 +135,13 @@ async fn job_log(
 /// The newest runs `filter` selects, or those on the head of the PR `pr`.
 pub(super) async fn list(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     repo: Option<String>,
     pr: Option<String>,
     filter: RunFilter,
 ) -> Result<i32> {
     validate_filter(&filter)?;
-    let context = select_item_context(ctx, workspace, repo, pr.as_deref()).await?;
+    let context = select_space_item_context(ctx, space, repo, pr.as_deref()).await?;
     let method = CiMethod::ListCiRuns {
         context,
         pr,

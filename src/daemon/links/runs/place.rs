@@ -5,7 +5,7 @@
 use anyhow::{Context, Result, ensure};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{links::actions::Place, workspace::Manager},
     forge::{
         ForgeRepo, IssueInput,
         account::Account,
@@ -22,8 +22,8 @@ const ELSEWHERE: &str =
 
 /// The repository a CI run request acts in and the account it acts as.
 pub(in crate::daemon::links) struct RunPlace {
-    /// The workspace the request came from, if any.
-    pub workspace: Option<Workspace>,
+    /// Where the request came from, if anywhere.
+    pub origin: Option<Place>,
     pub forge: ForgeRepo,
     pub account: Account,
     /// Whether `forge` is the repository the request came from.
@@ -33,7 +33,15 @@ pub(in crate::daemon::links) struct RunPlace {
 impl RunPlace {
     /// The workspace whose own repository the request acts in.
     pub fn own_workspace(&self) -> Option<&Workspace> {
-        self.workspace.as_ref().filter(|_| self.own)
+        (self.origin.as_ref())
+            .and_then(Place::workspace)
+            .filter(|_| self.own)
+    }
+
+    /// The workspace or chat the request came from, which links the runs
+    /// it starts.
+    pub fn space_id(&self) -> Option<&str> {
+        self.origin.as_ref().and_then(Place::space_id)
     }
 
     /// The branch a run starts on or is listed on: the `named` one,
@@ -66,16 +74,15 @@ impl Manager {
         named: Option<ForgeRepo>,
         scoped: bool,
     ) -> Result<RunPlace> {
-        let place = match context {
+        let origin = match context {
             Some(context) => Some(self.place(context).await?),
             None => None,
         };
-        let workspace = place.as_ref().and_then(|place| place.workspace().cloned());
-        if let Some(place) = &place {
+        if let Some(place) = &origin {
             let (own, account) = self.place_forge_account(place).await?;
             if named.as_ref().is_none_or(|named| *named == own) {
                 return Ok(RunPlace {
-                    workspace,
+                    origin,
                     forge: own,
                     account,
                     own: true,
@@ -85,7 +92,7 @@ impl Manager {
         let forge = named.context("outside a workspace, name it by its URL")?;
         ensure!(!scoped, ELSEWHERE);
         Ok(RunPlace {
-            workspace,
+            origin,
             forge,
             account: self.user_account(),
             own: false,

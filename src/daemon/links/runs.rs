@@ -5,10 +5,10 @@ mod place;
 
 use std::collections::BTreeMap;
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{links::actions::Place, workspace::Manager},
     forge::{
         ForgeRepo,
         capability::Capability,
@@ -19,7 +19,7 @@ use crate::{
             run_action::{Run, RunActed, validate_run_reference},
             run_view::{JobRef, RunFilter, RunJob, validate_filter},
         },
-        items::link::LinkKind,
+        items::link::{ItemKind, LinkKind},
     },
     model::{LinkedItem, Relation, Workspace},
     protocol::ItemContext,
@@ -48,14 +48,14 @@ impl Manager {
             branch,
             inputs,
         };
-        if let Some(workspace) = &place.workspace {
+        if let Some(id) = place.space_id() {
             // Refuse before the run starts what would refuse its link after.
-            self.ensure_links_accepted(&workspace.id).await?;
+            self.ensure_links_accepted(id).await?;
         }
         let mut started = (place.forge.start_run(&place.account, &run).await)
             .with_context(|| format!("could not start a CI run on {}", run.branch))?;
-        if let Some(workspace) = &place.workspace {
-            (self.link_started(&workspace.id, &place.forge, &mut started)).await;
+        if let Some(id) = place.space_id() {
+            (self.link_started(id, &place.forge, &mut started)).await;
         }
         Ok(started)
     }
@@ -162,8 +162,8 @@ impl Manager {
     }
 
     /// The newest runs `filter` selects on the head commit of the PR `pr`
-    /// names, otherwise on the branch it names, by default the workspace's
-    /// or, from a registered checkout, the repository's default branch.
+    /// names, otherwise on the branch it names, by default the workspace's,
+    /// a chat's linked PR's head, or else the repository's default branch.
     pub async fn list_ci_runs(
         &self,
         context: &ItemContext,
@@ -179,6 +179,12 @@ impl Manager {
         let (forge, account) = (&place.forge, &place.account);
         // Refuse a forge without runs before reading the PR.
         forge.require(Capability::ReadRuns)?;
+        // A chat's checkout is not on its PR's branch, so its runs are
+        // those of its linked PR.
+        let pr = match (pr, &filter.branch, &place.origin) {
+            (None, None, Some(Place::Chat { id, .. })) => self.linked_pr(id).await?,
+            (pr, ..) => pr,
+        };
         match pr {
             Some(input) => {
                 let (_, url) = forge.pull(&input)?;
@@ -194,6 +200,19 @@ impl Manager {
             .list_runs(account, &filter)
             .await
             .context("could not list CI runs")
+    }
+
+    /// The one PR linked to the space `id`, if any.
+    async fn linked_pr(&self, id: &str) -> Result<Option<String>> {
+        let id = id.to_owned();
+        let prs = (self.store)
+            .run(move |db| super::wait::linked_items(db, &id, Some(ItemKind::Pr)))
+            .await?;
+        match prs.as_slice() {
+            [] => Ok(None),
+            [(url, _)] => Ok(Some(url.clone())),
+            _ => bail!("several PRs are linked; pass --pr or --branch"),
+        }
     }
 }
 

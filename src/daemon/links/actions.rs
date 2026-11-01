@@ -28,6 +28,8 @@ use crate::{
 mod accounts;
 mod open_issue;
 
+pub(in crate::daemon::links) use self::accounts::Place;
+
 impl Manager {
     /// Apply `action` to the item `input` names in the repository of
     /// `context`, or to the workspace's linked item of `kind`.
@@ -629,31 +631,9 @@ pub(super) async fn head_repository(
     Ok(Some(pushed.path))
 }
 
-/// The item `input` names, else the workspace's linked one of `kind`;
-/// outside a workspace nothing is linked.
-pub(super) fn named_or_linked(
-    input: Option<String>,
-    workspace: Option<&Workspace>,
-    kind: ItemKind,
-) -> Result<String> {
-    match (input, workspace) {
-        (Some(input), _) => Ok(input),
-        (None, Some(workspace)) => linked(workspace, kind),
-        (None, None) => bail!(NOTHING_LINKED),
-    }
-}
-
-/// Why an action outside a workspace needs its item named.
+/// Why an action outside a space needs its item named.
 pub(super) const NOTHING_LINKED: &str =
-    "outside a workspace, nothing is linked; pass a number or URL";
-
-pub(super) fn linked(workspace: &Workspace, kind: ItemKind) -> Result<String> {
-    let assigned = match kind {
-        ItemKind::Issue => workspace.links.issue.iter().cloned().collect(),
-        ItemKind::Pr => workspace.links.prs.clone(),
-    };
-    only_assigned(kind, assigned)
-}
+    "outside a workspace or chat, nothing is linked; pass a number or URL";
 
 /// The one assigned item of `kind` among `assigned`.
 fn only_assigned(kind: ItemKind, assigned: Vec<String>) -> Result<String> {
