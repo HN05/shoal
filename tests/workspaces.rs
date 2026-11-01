@@ -7554,19 +7554,21 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
 /// terminal to close, which `pty.spawn` waits for and macOS may never
 /// report, leaving the session behind.
 fn terminal_zmx() -> String {
+    // The command runs inside the worker's `try`, which removes its
+    // running marker however it ends.
     let zmx = PASSTHROUGH_ZMX.replace(
-        "    sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)",
-        "    import pty, select\n\
-         \x20   pid, terminal = pty.fork()\n\
-         \x20   if pid == 0:\n\
-         \x20       os.execvp('sh', ['sh', '-c', args[1]])\n\
-         \x20   while not (status := os.waitpid(pid, os.WNOHANG))[0]:\n\
-         \x20       if select.select([terminal], [], [], 0.1)[0]:\n\
-         \x20           try:\n\
-         \x20               os.read(terminal, 4096)\n\
-         \x20           except OSError:\n\
-         \x20               pass\n\
-         \x20   sys.exit(os.waitstatus_to_exitcode(status[1]))",
+        "        sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)",
+        "        import pty, select\n\
+         \x20       pid, terminal = pty.fork()\n\
+         \x20       if pid == 0:\n\
+         \x20           os.execvp('sh', ['sh', '-c', args[1]])\n\
+         \x20       while not (status := os.waitpid(pid, os.WNOHANG))[0]:\n\
+         \x20           if select.select([terminal], [], [], 0.1)[0]:\n\
+         \x20               try:\n\
+         \x20                   os.read(terminal, 4096)\n\
+         \x20               except OSError:\n\
+         \x20                   pass\n\
+         \x20       sys.exit(os.waitstatus_to_exitcode(status[1]))",
     );
     assert_ne!(zmx, PASSTHROUGH_ZMX);
     zmx
