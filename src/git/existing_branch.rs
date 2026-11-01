@@ -1,15 +1,9 @@
 //! Existing branches a workspace can open, and the checkout rule for them.
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 
 use crate::git;
+pub(crate) use crate::model::Branch;
 use std::path::Path;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Branch {
-    pub name: String,
-    pub remote: Option<String>,
-}
 
 impl Branch {
     pub fn selector(&self) -> String {

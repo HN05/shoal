@@ -10,7 +10,7 @@ use crate::config::hooks::HookKind;
 pub enum WorkspaceMethod {
     OpenBranch {
         path: Option<std::path::PathBuf>,
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         branch: String,
         git_profile: Option<String>,
         base: Option<String>,
@@ -19,7 +19,7 @@ pub enum WorkspaceMethod {
     },
     CreateWorkspace {
         path: Option<std::path::PathBuf>,
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         name: String,
         base: Option<String>,
         git_profile: Option<String>,
@@ -40,7 +40,7 @@ pub enum WorkspaceMethod {
     /// Refuse what `CreateWorkspace` or `OpenBranch` would refuse in this
     /// request, without creating anything.
     CheckCreation {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         /// The new branch; `existing` names a branch to open instead.
         branch: Option<String>,
         existing: Option<String>,
@@ -51,11 +51,11 @@ pub enum WorkspaceMethod {
     /// Refuse the work `after` names that a queued launch in `repository`
     /// could not wait for, without queuing anything.
     CheckDependencies {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         after: Vec<crate::model::Dependency>,
     },
     AdoptWorkspace {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         path: std::path::PathBuf,
         copy: bool,
     },

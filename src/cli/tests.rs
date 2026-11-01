@@ -777,3 +777,24 @@ fn only_wrappers_that_never_replace_themselves_claim_privacy_grants() {
             .is_some_and(Command::wraps_execution)
     );
 }
+
+#[test]
+fn ai_tool_validation_knows_every_built_in_command() {
+    // Building the CLI takes more stack in a debug build than a test thread has.
+    let names = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(|| {
+            <Cli as clap::CommandFactory>::command()
+                .get_subcommands()
+                .map(|command| command.get_name().to_owned())
+                .collect::<std::collections::BTreeSet<_>>()
+        })
+        .expect("spawn a thread to build the CLI")
+        .join()
+        .expect("building the CLI does not panic");
+    let listed = crate::ai::validate::BUILT_IN_COMMANDS
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect();
+    assert_eq!(names, listed);
+}

@@ -56,7 +56,7 @@ pub enum RemovalMethod {
     /// Record a workspace another Shoal exported as removed here, with its
     /// checkpoint fetched from `bundle`, and open it again.
     ImportWorkspace {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         bundle: Option<std::path::PathBuf>,
         prerequisite: Option<String>,
         workspace: Box<crate::model::RemovedWorkspace>,

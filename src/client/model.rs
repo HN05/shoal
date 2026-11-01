@@ -973,7 +973,7 @@ pub enum Dependency {
 /// is the CLI's own and stays opaque to the daemon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
-    pub repository: crate::repository::Selector,
+    pub repository: crate::client::repository::Selector,
     pub name: String,
     pub agent: String,
     pub issue_title: Option<String>,
@@ -1060,6 +1060,13 @@ pub struct PortRequest {
     pub env_var: Option<String>,
     pub reason: Option<String>,
     pub on_conflict: Option<ConflictPolicy>,
+}
+
+/// A branch a new workspace can take, local or on a remote.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Branch {
+    pub name: String,
+    pub remote: Option<String>,
 }
 
 #[cfg(test)]

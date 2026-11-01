@@ -30,6 +30,7 @@ pub mod sessions;
 pub mod sim;
 pub mod state;
 pub mod time;
+pub mod transfer;
 pub mod validate;
 
 pub use shoal_forge as forge;

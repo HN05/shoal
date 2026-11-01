@@ -13,8 +13,7 @@ mod claim;
 pub(crate) use claim::{RecoveryClaim, claim, discard_saved};
 
 pub(crate) use crate::client::executions::{
-    LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, one_or_many_sessions,
-    unnamed_execution,
+    LastSession, Record, Stage, Stop, StoppedAgent, earlier_place, unnamed_execution,
 };
 use crate::{
     agent::ModelChoice,

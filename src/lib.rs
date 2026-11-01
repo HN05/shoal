@@ -47,6 +47,8 @@ mod proxy;
 #[cfg(feature = "cli")]
 mod removal;
 #[cfg(feature = "cli")]
+mod repository;
+#[cfg(feature = "cli")]
 mod secrets;
 #[cfg(feature = "cli")]
 mod seed;
@@ -69,9 +71,7 @@ mod transfer;
 
 #[cfg(feature = "cli")]
 use cli::Cli;
-use client::{
-    agent, ai, config, demos, model, protocol, repository, reviews, state, time, validate,
-};
+use client::{agent, ai, config, demos, model, protocol, reviews, state, time, validate};
 use shoal_forge as forge;
 use shoal_subprocess as subprocess;
 

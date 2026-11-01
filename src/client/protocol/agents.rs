@@ -107,7 +107,7 @@ pub enum AgentMethod {
     /// [`Self::SendAgentMessage`] to every workspace of the repository with
     /// a running agent, answered with the workspaces it reached.
     SendRepositoryAgentMessage {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         message: String,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<crate::client::files::NewFile>,

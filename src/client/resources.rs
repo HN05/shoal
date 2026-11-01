@@ -260,7 +260,7 @@ impl ResourceConfig {
     fn validate_repository(&self, name: &str) -> Result<()> {
         match (self.kind, self.repo.as_deref()) {
             (ResourceKind::Repo, Some(repo)) => {
-                if !crate::repository::is_remote_url(repo) {
+                if !crate::client::repository::is_remote_url(repo) {
                     validate::name("repository", repo)?;
                 }
                 ensure!(

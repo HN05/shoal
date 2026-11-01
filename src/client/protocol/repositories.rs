@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub enum RepositoryMethod {
     ListRepositories,
     RegisterRepository {
-        source: crate::repository::Selector,
+        source: crate::client::repository::Selector,
         name: Option<String>,
         path: Option<std::path::PathBuf>,
     },
@@ -16,19 +16,19 @@ pub enum RepositoryMethod {
         name: Option<String>,
     },
     RenameRepository {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         name: String,
     },
     /// The repository's local config file, reserving its directory.
     LocalConfigPath {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
     },
     EditLocalConfig {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         changes: Vec<crate::config::edit::Change>,
     },
     RemoveRepository {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
     },
     /// The repositories `MoveRepositories` would move into `root`, or the
     /// configured `root_dir`, after the checks it runs before moving any.
@@ -45,10 +45,10 @@ pub enum RepositoryMethod {
     },
     /// Fetch the default branch's remote and fast-forward the local default branch.
     SyncRepository {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
     },
     ListBranches {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
     },
     /// Branches removal kept because only they have some commits, only
     /// those of one repository when a selector names it.

@@ -8,7 +8,7 @@ use super::Lifetime;
 pub enum ChatMethod {
     /// Record a chat named `name` whose agent replaces process `pid`.
     StartChat {
-        repository: crate::repository::Selector,
+        repository: crate::client::repository::Selector,
         name: String,
         agent: String,
         pid: u32,

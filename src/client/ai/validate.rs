@@ -5,7 +5,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, ensure};
-use clap::CommandFactory;
 
 use super::{Agent, Agents, PROVIDERS, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
@@ -112,7 +111,7 @@ pub fn reachable_name(name: &str) -> Result<()> {
     );
     let built_in_provider = PROVIDERS.iter().any(|provider| provider.name == name);
     ensure!(
-        built_in_provider || !built_in_commands().iter().any(|command| command == name),
+        built_in_provider || !BUILT_IN_COMMANDS.contains(&name),
         "{name:?} is a built-in Shoal command; choose another name"
     );
     not_reserved(name)
@@ -174,24 +173,66 @@ fn environment(agent: &Agent) -> Result<()> {
     Ok(())
 }
 
-/// The names of Shoal's own subcommands. Building the CLI to read them
-/// takes more stack in a debug build than a worker thread has, so it is
-/// built once, on a thread of its own.
-fn built_in_commands() -> &'static [String] {
-    static NAMES: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-    NAMES.get_or_init(|| {
-        let names = std::thread::Builder::new()
-            .stack_size(64 << 20)
-            .spawn(|| {
-                crate::cli::Cli::command()
-                    .get_subcommands()
-                    .map(|command| command.get_name().to_owned())
-                    .collect()
-            })
-            .expect("spawn a thread to build the CLI");
-        names.join().expect("building the CLI does not panic")
-    })
-}
+/// The names of Shoal's own subcommands, which a test keeps equal to the
+/// CLI's.
+pub const BUILT_IN_COMMANDS: &[&str] = &[
+    "add",
+    "contribute",
+    "split",
+    "inbox",
+    "work",
+    "cd",
+    "edit",
+    "status",
+    "messages",
+    "files",
+    "questions",
+    "approvals",
+    "done",
+    "rm",
+    "cleanup",
+    "move",
+    "run",
+    "claude",
+    "codex",
+    "happy",
+    "t3",
+    "chat",
+    "plan",
+    "attach",
+    "demo",
+    "stop",
+    "restart",
+    "resume",
+    "queue",
+    "branch",
+    "diff",
+    "conflicts",
+    "review",
+    "land",
+    "forge",
+    "pr",
+    "issue",
+    "ci",
+    "link",
+    "unlink",
+    "view",
+    "watch",
+    "ready",
+    "acquire",
+    "release",
+    "leases",
+    "catalog",
+    "history",
+    "alerts",
+    "repo",
+    "config",
+    "update",
+    "daemon",
+    "shell",
+    "skill",
+    "internal",
+];
 
 /// Arguments must name one of `placeholders` when there are any.
 fn validate_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {

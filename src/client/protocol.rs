@@ -422,7 +422,7 @@ impl Response {
 #[serde(rename_all = "snake_case")]
 pub enum ConfigTarget {
     Workspace(String),
-    Repository(crate::repository::Selector),
+    Repository(crate::client::repository::Selector),
 }
 
 crate::state::open_enum! {
@@ -531,7 +531,7 @@ response_bodies! {
     Chat(crate::model::Chat),
     Chats(Vec<crate::model::Chat>),
     ChatName(String),
-    Branches(Vec<crate::git::existing_branch::Branch>),
+    Branches(Vec<crate::model::Branch>),
     OpenedWorkspace(crate::model::OpenedWorkspace),
     Inspection(Inspection),
     Item(crate::forge::items::item::Item),
@@ -573,7 +573,7 @@ response_bodies! {
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
     StoppedProcesses(crate::client::processes::Stopped),
-    ExportedSpace(crate::transfer::ExportedSpace),
+    ExportedSpace(crate::client::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
     Hook(Option<std::path::PathBuf>),

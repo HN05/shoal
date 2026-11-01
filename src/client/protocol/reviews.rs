@@ -31,7 +31,7 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        repository: Option<crate::repository::Selector>,
+        repository: Option<crate::client::repository::Selector>,
     },
     /// Review `id`, else the workspace's newest.
     ShowReview {
