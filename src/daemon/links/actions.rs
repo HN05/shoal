@@ -79,8 +79,11 @@ impl Manager {
         // it after the workspace's cursor knows it as its own.
         let _gate = self.gates.lock_prs([&workspace.id]).await;
         let target = Target { kind, number, url };
-        self.apply_own(&workspace.id, &forge, &account, target, &action)
-            .await
+        let item = self
+            .apply_own(&workspace.id, &forge, &account, target, &action)
+            .await?;
+        self.sync_after_merge(&workspace.repository_id, &action, &item);
+        Ok(item)
     }
 
     /// Apply `action` from the repository's registered checkout, which no
@@ -103,10 +106,22 @@ impl Manager {
         } else {
             self.agent_account()
         };
-        let acted = forge.apply(&account, kind, number, &action).await;
-        Ok(acted
+        let item = forge
+            .apply(&account, kind, number, &action)
+            .await
             .with_context(|| format!("could not {} {url}", action.name()))?
-            .item)
+            .item;
+        self.sync_after_merge(&checkout.id, &action, &item);
+        Ok(item)
+    }
+
+    /// Sync the repository a merge just changed, without waiting for it, so
+    /// conflict checks of its other workspaces see the merge.
+    fn sync_after_merge(&self, repository_id: &str, action: &Action, item: &Item) {
+        let merging = matches!(action, Action::Merge { .. } | Action::AutoMerge { .. });
+        if merging && item.state == ItemState::Merged {
+            self.syncs.request(repository_id);
+        }
     }
 
     /// Move the workspace's open PRs at `urls` into or out of draft as its

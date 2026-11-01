@@ -1,5 +1,7 @@
 use std::{fs, path::PathBuf, sync::Arc};
 
+use futures_util::FutureExt as _;
+
 use crate::{
     daemon::workspace::Manager,
     test_support::{commit, git, manager, repository},
@@ -100,4 +102,13 @@ async fn an_unfetched_repository_is_not_fresh() {
     let f = Fixture::new().await;
     f.break_remote();
     assert!(!f.manager.default_branch_fresh(&f.repo_id).await);
+}
+
+#[tokio::test]
+async fn a_request_wakes_the_loop_for_that_repository() {
+    let f = Fixture::new().await;
+    f.manager.syncs.request(&f.repo_id);
+    assert!(f.manager.syncs.wake.notified().now_or_never().is_some());
+    assert_eq!(f.manager.syncs.take_requested(), vec![f.repo_id.clone()]);
+    assert!(f.manager.syncs.take_requested().is_empty());
 }

@@ -2036,3 +2036,30 @@ async fn a_held_gate_delays_a_wake_but_keeps_an_issued_one_due() {
     drop(held);
     assert!(manager.wake_updates_due(workspace, true).await.unwrap());
 }
+
+#[tokio::test]
+async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "merging".into(), None, None, None)
+        .await
+        .unwrap();
+    register_watch(&manager, &workspace.id, "pr").await;
+    let in_state = |state: &str| {
+        serde_json::from_value::<Snapshot>(
+            json!({"comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {}}),
+        )
+        .unwrap()
+    };
+    let record = |state| {
+        manager.record_background_activity(&workspace.id, vec![("pr".into(), in_state(state))])
+    };
+    assert!(!record("open").await.unwrap());
+    assert!(!record("open").await.unwrap());
+    assert!(record("merged").await.unwrap());
+}

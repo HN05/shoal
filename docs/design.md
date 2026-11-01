@@ -715,8 +715,8 @@ and skips hooks; post-remove events are not durably queued or replayed.
 commits stay fixed) with native Git settings, so advancing the base is never shown
 as work. `conflicts` asks `git merge-tree` whether committed HEAD merges cleanly
 into a target, by default the base workspace's branch, otherwise the local default
-branch, which the daemon keeps current; it writes only objects. Every minute, and
-on `sync`, the daemon fetches the default branch's remotes and fast-forwards the local default
+branch, which the daemon keeps current; it writes only objects. Every minute, after a
+PR of the repository merges, and on `sync`, the daemon fetches the default branch's remotes and fast-forwards the local default
 branch under the creation refresh rules, under the repository's Git gate, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Shoal has no merge or rebase command: Git

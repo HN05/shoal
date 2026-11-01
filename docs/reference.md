@@ -2251,8 +2251,8 @@ an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
 The daemon keeps each registered checkout's default branch in sync with its
-remote: when it starts and every minute, it fetches the default branch's
-upstream and default remotes and fast-forwards the local default branch under
+remote: when it starts, every minute, and right after `shoal pr merge` or a
+watch sees a linked PR merge, it fetches the default branch's upstream and default remotes and fast-forwards the local default branch under
 the [creation refresh rules](#base-branch), moving only the ref when the
 checkout is on another branch. `shoal repo sync [repository]` syncs at once and
 reports the result or the error. Syncing never pushes or moves workspace branches.

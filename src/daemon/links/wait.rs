@@ -22,7 +22,7 @@ use crate::{
             link::{ItemKind, LinkKind, Selection},
         },
         transport::limits::rate_limited,
-        updates::{MergeCheck, Snapshot, Update},
+        updates::{MergeCheck, Snapshot, Update, UpdateKind},
     },
     model::{ConflictCheck, Workspace, WorkspaceRef},
     repository,
@@ -656,8 +656,13 @@ impl Manager {
         let observations = self
             .item_activity(workspace, items, &Selection::default())
             .await?;
-        self.record_background_activity(&workspace.id, observations.clone())
+        let merged = self
+            .record_background_activity(&workspace.id, observations.clone())
             .await?;
+        // Other workspaces' conflict checks read the default branch the merge changed.
+        if merged {
+            self.syncs.request(&workspace.repository_id);
+        }
         self.queue_background_updates(&workspace.id, observations, observed_at)
             .await
     }
@@ -679,17 +684,19 @@ impl Manager {
         Ok(())
     }
 
+    /// Record what changed since the last poll; returns whether an item merged.
     async fn record_background_activity(
         &self,
         id: &str,
         observations: Vec<(String, Snapshot)>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         let id = id.to_owned();
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
                 store::require_ready(&tx, &id)?;
                 let linked = polled_items(&tx, &id)?;
+                let mut merged = false;
                 for (url, kind, mut snapshot) in observations.into_iter().filter_map(
                     |(url, snapshot)| {
                         linked
@@ -714,6 +721,7 @@ impl Manager {
                     );
                     if let Some(previous) = previous {
                         for update in previous.changes(&snapshot, &url) {
+                            merged |= update.kind == UpdateKind::Merged;
                             crate::daemon::events::record_item_activity(
                                 &tx, &id, kind, &url, &update,
                             )?;
@@ -727,7 +735,7 @@ impl Manager {
                     )?;
                 }
                 tx.commit()?;
-                Ok(())
+                Ok(merged)
             })
             .await
     }

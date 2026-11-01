@@ -62,6 +62,15 @@ impl Syncs {
             .is_some_and(|at| at >= since)
     }
 
+    /// Sync `repository_id` before the next scheduled pass.
+    pub(crate) fn request(&self, repository_id: &str) {
+        self.requested
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(repository_id.to_owned());
+        self.wake.notify_one();
+    }
+
     fn take_requested(&self) -> Vec<String> {
         self.requested
             .lock()
