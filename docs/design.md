@@ -715,8 +715,9 @@ and skips hooks; post-remove events are not durably queued or replayed.
 commits stay fixed) with native Git settings, so advancing the base is never shown
 as work. `conflicts` asks `git merge-tree` whether committed HEAD merges cleanly
 into a target, by default the base workspace's branch, otherwise the local default
-branch, which `sync` keeps current; it writes only objects. `sync` fetches the default branch's remote and fast-forwards the local default
-branch under the creation refresh rules, advancing a clean registered checkout where
+branch, which the daemon keeps current; it writes only objects. Every minute, and
+on `sync`, the daemon fetches the default branch's remotes and fast-forwards the local default
+branch under the creation refresh rules, under the repository's Git gate, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
 already does both in a workspace. `land`,
@@ -2269,8 +2270,9 @@ cannot be resolved, is retained. Manual removal asks only before deleting
 uncommitted or untracked files or commits on a detached HEAD, which no branch keeps.
 Shoal remembers each branch a removal kept, at the commit removal left it on, and
 the cleanup sweep deletes it once a remote or the default branch has all its
-commits, without notifying anyone. At most every ten minutes it fetches the
-default branch and asks every remote which branches it has; only those answers
+commits, without notifying anyone. It needs a default branch fetched in the last
+ten minutes, fetching it when the background sync has not, and at most every ten
+minutes it asks every remote which branches it has; only those answers
 count, never remote-tracking refs, which a narrowed fetch mapping or a deleted
 remote branch can leave stale. A kept branch that moved or went away, is the
 default branch or belongs to a workspace again is forgotten; one checked out, or

@@ -10,6 +10,7 @@ mod auto_update;
 pub(crate) mod caches;
 pub mod chat_messages;
 mod chats;
+pub(crate) mod checkout_sync;
 pub mod cleanup;
 mod connections;
 pub(crate) mod cpu_usage;
@@ -129,6 +130,12 @@ pub async fn run(paths: Paths, managed: bool, handoff: Option<handoff::Handoff>)
     };
     let mut background = JoinSet::new();
     spawn_supervised(&mut background, &manager, "auto cleanup", cleanup::run);
+    spawn_supervised(
+        &mut background,
+        &manager,
+        "checkout sync",
+        checkout_sync::run,
+    );
     spawn_supervised(
         &mut background,
         &manager,

@@ -24,13 +24,9 @@ use crate::{
 /// Retry an unchanged workspace whose removal failed after this long.
 const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
 
-/// Fetch a repository's default branch at most this often.
-pub(super) const FETCH_INTERVAL: Duration = Duration::from_secs(10 * 60);
-
 /// What merged cleanup remembers between passes.
 #[derive(Default)]
 pub struct State {
-    fetches: Fetches,
     /// Workspaces whose removal failed, and when: retried once they change
     /// or after [`RETRY_AFTER`], so a passing failure does not keep them.
     retained: HashMap<String, (Snapshot, Instant)>,
@@ -42,37 +38,6 @@ impl State {
         self.retained
             .get(id)
             .is_some_and(|(retained, at)| *retained == snapshot && at.elapsed() < RETRY_AFTER)
-    }
-}
-
-/// When each repository's default branch was last fetched successfully.
-#[derive(Default)]
-pub(super) struct Fetches(HashMap<String, Instant>);
-
-impl Fetches {
-    /// Whether the default branch is freshly fetched, fetching it unless that
-    /// succeeded recently. Stale refs may show changes the default branch no
-    /// longer has, so after a failed fetch nothing in the repository that
-    /// depends on it is decided.
-    pub(super) async fn fresh(&mut self, manager: &Manager, repository_id: &str) -> bool {
-        let now = Instant::now();
-        if self
-            .0
-            .get(repository_id)
-            .is_some_and(|at| now.duration_since(*at) < FETCH_INTERVAL)
-        {
-            return true;
-        }
-        match manager.fetch_default_branch(repository_id).await {
-            Ok(()) => {
-                self.0.insert(repository_id.to_owned(), now);
-                true
-            }
-            Err(error) => {
-                log!("cleanup could not fetch the default branch: {error:#}");
-                false
-            }
-        }
     }
 }
 
@@ -105,7 +70,7 @@ async fn sweep_workspace(
     workspace: &Workspace,
     now: u64,
 ) -> Result<()> {
-    let Some(snapshot) = idle_candidate(manager, state, workspace, now).await else {
+    let Some(snapshot) = idle_candidate(manager, workspace, now).await else {
         return Ok(());
     };
     if state.waits(&workspace.id, snapshot) {
@@ -148,12 +113,7 @@ async fn sweep_workspace(
 /// The snapshot of a merged workspace idle for its configured period, or
 /// `None`. Cheap checks come first: recorded activity, then Git and process
 /// state, and only then a walk of the worktree's files.
-async fn idle_candidate(
-    manager: &Manager,
-    state: &mut State,
-    workspace: &Workspace,
-    now: u64,
-) -> Option<Snapshot> {
+async fn idle_candidate(manager: &Manager, workspace: &Workspace, now: u64) -> Option<Snapshot> {
     let observed = async {
         let settings = manager.workspace_settings(workspace).await?;
         let Some(delay) = settings.cleanup.merged.delay() else {
@@ -163,7 +123,7 @@ async fn idle_candidate(
         if manager.active_at(&workspace.id).await? > deadline {
             return Ok(None);
         }
-        if !state.fetches.fresh(manager, &workspace.repository_id).await {
+        if !manager.default_branch_fresh(&workspace.repository_id).await {
             return Ok(None);
         }
         let Some(snapshot) = manager.merged_snapshot(&workspace.id).await? else {

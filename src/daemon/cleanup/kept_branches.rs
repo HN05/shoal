@@ -1,27 +1,28 @@
 //! Deletion of branches that removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::{Result, ensure};
 use tokio::time::Instant;
 
-use super::merged::{FETCH_INTERVAL, Fetches};
 use crate::{
     daemon::{log, workspace::Manager},
     git::RemoteHead,
 };
 
+/// Ask a repository's remotes for their branches at most this often.
+const HEADS_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
 /// What the kept-branch sweep remembers between passes.
 #[derive(Default)]
 pub struct State {
-    fetches: Fetches,
     /// The branches each repository's remotes advertised, and when.
     heads: HashMap<String, (Instant, Vec<RemoteHead>)>,
 }
 
 impl State {
     /// The branches the repository's remotes advertise, asking them again
-    /// once the last answer is older than the fetch interval. `None` when a
+    /// once the last answer is older than [`HEADS_INTERVAL`]. `None` when a
     /// remote cannot answer, since a missing answer proves nothing.
     async fn advertised(
         &mut self,
@@ -32,7 +33,7 @@ impl State {
         let stale = self
             .heads
             .get(repository_id)
-            .is_none_or(|(at, _)| now.duration_since(*at) >= FETCH_INTERVAL);
+            .is_none_or(|(at, _)| now.duration_since(*at) >= HEADS_INTERVAL);
         if stale {
             match manager.remote_heads(repository_id).await {
                 Ok(heads) => {
@@ -59,7 +60,7 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
         // Squash and rebase merges show only on the fetched default branch;
         // any other evidence comes from what the remotes advertise now, never
         // from remote-tracking refs, which may be stale or unmapped.
-        if !state.fetches.fresh(manager, &repository_id).await {
+        if !manager.default_branch_fresh(&repository_id).await {
             continue;
         }
         let Some(heads) = state.advertised(manager, &repository_id).await else {

@@ -79,38 +79,17 @@ impl Manager {
         Ok(allocate_branch(name, &taken))
     }
 
-    /// Fetch the default branch's remote, updating its remote-tracking branches,
-    /// then fast-forward the local default branch as workspace creation does.
-    pub async fn sync_repository(
-        &self,
-        selector: &crate::repository::Selector,
-    ) -> Result<SyncedRepository> {
-        let repo = self.repository(selector).await?;
-        let _guard = self.gates.lock_git(&repo.id).await;
-        let (default, remote) = fetch_default_remote(&repo).await?;
-        let default_branch = self
-            .refresh_branch(&repo, &default, UpstreamPolicy::AllowLocalOnly)
-            .await
-            .with_context(|| format!("could not refresh {default}"))?;
-        Ok(SyncedRepository {
-            repository_id: repo.id,
-            remote,
-            default_branch,
-        })
-    }
-
     /// Fetch every remote that holds a default-branch ref merge checks read:
     /// the local default branch's upstream and the default remote, so they
-    /// see what the forge merged; local branches stay unchanged.
-    pub async fn fetch_default_branch(&self, repository_id: &str) -> Result<()> {
-        let repo = self.repository(repository_id).await?;
-        let _guard = self.gates.lock_git(&repo.id).await;
+    /// see what the forge merged; local branches stay unchanged. Returns the
+    /// default branch. The caller holds the repository's Git gate.
+    pub(crate) async fn fetch_default_remotes(&self, repo: &Repository) -> Result<String> {
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
         let mut remotes = Vec::new();
         let local = git::local_ref(&default);
         if git::ref_exists(&repo.path, &local, git::isolated_command).await?
-            && let Some((remote, _)) = upstream(&repo, &local).await?
+            && let Some((remote, _)) = upstream(repo, &local).await?
         {
             remotes.push(remote);
         }
@@ -124,7 +103,28 @@ impl Manager {
                 .await
                 .with_context(|| format!("could not fetch {remote}"))?;
         }
-        Ok(())
+        Ok(default)
+    }
+
+    /// Fast-forward the local default branch from its upstream as workspace
+    /// creation does. The caller holds the repository's Git gate.
+    pub(crate) async fn fast_forward_default(
+        &self,
+        repo: &Repository,
+        default: &str,
+    ) -> Result<SyncedRepository> {
+        let remote = upstream(repo, &git::local_ref(default))
+            .await?
+            .map(|(remote, _)| remote);
+        let default_branch = self
+            .refresh_branch(repo, default, UpstreamPolicy::AllowLocalOnly)
+            .await
+            .with_context(|| format!("could not refresh {default}"))?;
+        Ok(SyncedRepository {
+            repository_id: repo.id.clone(),
+            remote,
+            default_branch,
+        })
     }
 
     /// The branches every remote of the repository advertises now.
@@ -409,22 +409,6 @@ impl Manager {
         }
         Ok(())
     }
-}
-
-/// Resolve the default branch and fetch its remote, when it has one. The
-/// caller holds the repository's Git gate.
-async fn fetch_default_remote(repo: &Repository) -> Result<(String, Option<String>)> {
-    let default =
-        crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
-    let remote = upstream(repo, &git::local_ref(&default))
-        .await?
-        .map(|(remote, _)| remote);
-    if let Some(remote) = &remote {
-        fetch::remote(&repo.path, remote)
-            .await
-            .with_context(|| format!("could not fetch {remote}"))?;
-    }
-    Ok((default, remote))
 }
 
 #[cfg(test)]

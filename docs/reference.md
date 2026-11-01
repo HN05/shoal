@@ -2250,6 +2250,13 @@ precedence over paths. A name still resolves when
 an unrelated path has the same spelling in the caller's directory; if that path
 is another registered checkout, the selector is ambiguous and lists both matches.
 
+The daemon keeps each registered checkout's default branch in sync with its
+remote: when it starts and every minute, it fetches the default branch's
+upstream and default remotes and fast-forwards the local default branch under
+the [creation refresh rules](#base-branch), moving only the ref when the
+checkout is on another branch. `shoal repo sync [repository]` syncs at once and
+reports the result or the error. Syncing never pushes or moves workspace branches.
+
 `repo setup [repository] [--local [--here] [--name NAME]] [--agent NAME] [-- ARGS]`
 starts an agent that writes the repository's config: setup, named ports, commands
 and resource pools. On a terminal without `--local`, it first asks whether to
@@ -3914,8 +3921,9 @@ grace_minutes = 10 # Default: 10; 0 removes at once
 A workspace whose branch merged into the default branch is removed once nothing
 has used it for `idle_minutes`, whether or not its agent ran `shoal done` or it
 has linked issues and PRs. Merged has the meaning [removal](#remove-a-workspace)
-gives it, against the default branch's remote-tracking branch, fetched at most
-every ten minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
+gives it, against the default branch's remote-tracking branch as the
+[sync](#repositories) last fetched it, fetching it again when no sync has for ten
+minutes; until a fetch succeeds, the repository's workspaces are kept. Uncommitted and untracked files go into the
 [removal's checkpoint](#checkpoints-and-restore); they keep the workspace when the checkpoint cannot keep
 them all or the branch has no commits of its own. A merge, rebase or other
 Git operation under way, open [questions](#questions), running/unknown commands,

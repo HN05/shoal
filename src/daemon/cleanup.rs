@@ -505,7 +505,6 @@ async fn remove_on_request(
     pick: &Pick,
 ) -> Result<()> {
     let named = matches!(pick, Pick::Only(_));
-    let mut fetches = merged::Fetches::default();
     for workspace in workspaces {
         if !pick.covers(&workspace.name, &workspace.id) {
             continue;
@@ -515,7 +514,7 @@ async fn remove_on_request(
             report.keep(workspace.name, CleanupReason::NotReady { state }, named);
             continue;
         }
-        let snapshot = match requested_candidacy(manager, &workspace, &mut fetches).await {
+        let snapshot = match requested_candidacy(manager, &workspace).await {
             Ok(Ok(snapshot)) => snapshot,
             Ok(Err(reason)) => {
                 report.keep(workspace.name, reason, named);
@@ -559,13 +558,12 @@ async fn remove_on_request(
 async fn requested_candidacy(
     manager: &Manager,
     workspace: &Workspace,
-    fetches: &mut merged::Fetches,
 ) -> Result<Result<Snapshot, CleanupReason>> {
     let reason = match manager.cleanup_candidacy(&workspace.id).await? {
         Ok(snapshot) => return Ok(Ok(snapshot)),
         Err(reason) => reason,
     };
-    if !fetches.fresh(manager, &workspace.repository_id).await {
+    if !manager.default_branch_fresh(&workspace.repository_id).await {
         return Ok(Err(reason));
     }
     Ok(manager.merged_snapshot(&workspace.id).await?.ok_or(reason))

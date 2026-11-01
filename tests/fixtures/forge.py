@@ -14,7 +14,9 @@ with 304. Every request is appended to $HOME/forge/requests.jsonl with its
 body, its Authorization value and status; an uploaded file's body is
 {"file": name, "type": content type, "bytes": size}, with its "field" in a
 form. The server reports a Forgejo version, unlogged, when no response names
-"GET version", so Shoal recognizes it as Forgejo.
+"GET version", so Shoal recognizes it as Forgejo. Git's own requests to a
+clone URL, such as the daemon's background fetch, get 404 unlogged: they
+are not forge API calls, and arrive whenever a sync runs.
 """
 import hashlib
 import json
@@ -144,6 +146,10 @@ def curl(args):
     )
 
 
+# Git's smart HTTP requests under a repository's clone URL.
+GIT_TRANSPORT = re.compile(r"^/[^?]*\.git/(info/refs|git-upload-pack|git-receive-pack)")
+
+
 def form_file(data):
     """The one file of a multipart form, as its field, name, type and size."""
     head, _, rest = data.partition(b"\r\n\r\n")
@@ -168,7 +174,9 @@ class Handler(BaseHTTPRequestHandler):
             body = json.loads(data) if length else None
         path = self.path.removeprefix("/api/v1/")
         key = f"{self.command} {path}"
-        if key == "GET version" and key not in load_responses():
+        if GIT_TRANSPORT.match(path):
+            status, answer, headers = 404, None, {}
+        elif key == "GET version" and key not in load_responses():
             status, answer, headers = 200, {"version": "11.0.0+gitea-1.22.0"}, {}
         else:
             status, answer, headers = respond(

@@ -10655,6 +10655,8 @@ fn add_base_accepts_branches_tags_commits_and_revision_expressions() {
 fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
     let fixture = Fixture::new();
     let author = upstream_remote(&fixture);
+    // Synced first, so the daemon's own syncs leave main where it is.
+    fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     let main = git(&fixture.repo, &["rev-parse", "main"]);
     git(&author, &["switch", "-c", "feature/api"]);
     for (index, contents) in ["first\n", "second\n"].into_iter().enumerate() {
@@ -10674,7 +10676,7 @@ fn add_fetches_a_remote_branch_base_before_creating_the_worktree() {
         assert_eq!(workspace["base_ref"], "refs/remotes/origin/feature/api");
         assert_eq!(workspace["base_commit"], expected.trim());
     }
-    // Only the named branch is fetched; the local default stays as it was.
+    // Only the named branch is fetched; the default branch stays as it was.
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), main);
 }
 
@@ -13369,7 +13371,6 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
     let head = git(path, &["rev-parse", "HEAD"]);
-    let stale = git(&fixture.repo, &["rev-parse", "main"]);
     let author = upstream_remote(&fixture);
     let upstream = git(&author, &["rev-parse", "HEAD"]);
     git(&author, &["switch", "-c", "feature/api"]);
@@ -13394,9 +13395,9 @@ fn sync_fetches_the_remote_and_fast_forwards_only_the_default_branch() {
         String::from_utf8_lossy(&output.stderr)
     );
     let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // The daemon's own sync may have advanced main first; either way it ends
+    // at the upstream commit.
     assert_eq!(result["remote"], "origin");
-    assert_eq!(result["default_branch"]["updated"], true);
-    assert_eq!(result["default_branch"]["previous_commit"], stale.trim());
     assert_eq!(result["default_branch"]["commit"], upstream.trim());
     assert_eq!(git(&fixture.repo, &["rev-parse", "main"]), upstream);
     assert_eq!(
@@ -23151,6 +23152,8 @@ fn daemon_git_predicate_failures_preserve_branches_and_workspaces() {
     let worker = fixture.add("worker");
     let path = Path::new(worker["path"].as_str().unwrap());
     upstream_remote(&fixture);
+    // Synced first, so the daemon's own syncs leave main where it is.
+    fixture.ok(&["repo", "sync", fixture.repo.to_str().unwrap()]);
     // Make the default's tree differ so removal must check ancestry.
     fs::write(path.join("tracked"), "preserved work\n").unwrap();
     git(path, &["add", "tracked"]);
