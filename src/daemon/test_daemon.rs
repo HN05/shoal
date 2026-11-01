@@ -127,3 +127,6 @@ fn accept(manager: &Arc<Manager>) -> JoinHandle<()> {
         }
     })
 }
+
+#[cfg(test)]
+mod tests;

@@ -23,6 +23,11 @@ pub(super) async fn handle(
                 agent_queue::hold(stream, request_id, manager, entry, guard)
             }));
         }
+        QueueMethod::QueueAgent {
+            workspace,
+            agent,
+            prompt,
+        } => Body::QueueEntry(manager.queue_agent(&workspace, agent, prompt).await?),
         QueueMethod::QueueAdd { request } => {
             Body::QueueAdmission(manager.queue_add(request).await?)
         }
@@ -63,6 +68,7 @@ impl Scoped for QueueMethod {
             | QueueMethod::QueueRemove { .. }
             | QueueMethod::QueueMove { .. } => None,
             QueueMethod::QueueAdd { request } => Some(manager.queue_target(caller, request).await?),
+            QueueMethod::QueueAgent { workspace, .. } => Some(workspace),
             QueueMethod::QueueRestore {
                 workspace,
                 execution,

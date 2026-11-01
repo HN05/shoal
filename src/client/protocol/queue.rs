@@ -9,6 +9,15 @@ pub enum QueueMethod {
     QueueAdd {
         request: crate::model::QueueRequest,
     },
+    /// Queue `agent` in the ready `workspace`, with `prompt` as its first
+    /// message, once it can run there; the daemon starts it detached in the
+    /// default host once the queue admits it. Answers with the entry.
+    QueueAgent {
+        workspace: String,
+        agent: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prompt: Option<String>,
+    },
     ListQueue,
     /// The plan a queued start runs.
     QueuedPlan {

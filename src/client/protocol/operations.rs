@@ -33,6 +33,36 @@ pub enum OperationMethod {
     /// Interrupt operation `id`'s worker, as an interrupt of the command
     /// that ran its work did.
     CancelOperation { id: String },
+    /// Create a workspace in `repository` and start preparing it, as `shoal
+    /// add` does: refuse an agent that cannot run there or an issue that is
+    /// not open before anything is created, assign the issue, then run
+    /// setup, link `pr` and queue `agent`. Answers with
+    /// [`super::Body::WorkspaceStarted`].
+    StartWorkspace {
+        repository: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+        /// An issue number or URL of the repository.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        issue: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pr: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<QueuedLaunch>,
+    },
+    /// Split a child from `workspace` and start preparing it, as `shoal
+    /// split` does, with the checks of [`Self::StartWorkspace`].
+    StartSplit {
+        workspace: String,
+        name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        base: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        issue: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        agent: Option<QueuedLaunch>,
+    },
     /// The worker's report of a step of operation `id`, or of its end.
     ReportProgress { id: String, report: Report },
 }
@@ -50,6 +80,13 @@ impl OperationMethod {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Started {
     pub id: String,
+}
+
+/// An operation preparing a new workspace, and the workspace as it began.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartedWorkspace {
+    pub operation: String,
+    pub workspace: Box<Workspace>,
 }
 
 /// What the daemon hands an operation's worker on its standard input.

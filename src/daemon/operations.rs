@@ -3,6 +3,7 @@
 //! ID. The worker reports its steps and its end; what its processes write
 //! arrives on its standard streams. An ended operation can be followed for
 //! [`RETAIN`].
+pub(crate) mod starts;
 mod worker;
 
 use std::{

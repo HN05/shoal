@@ -651,6 +651,7 @@ response_bodies! {
     SimOverview(crate::client::sim::SimulatorOverview),
     SimHistory(Vec<AuditEntry>),
     OperationStarted(operations::Started),
+    WorkspaceStarted(operations::StartedWorkspace),
     OperationEvent(operations::OperationEvent),
     OperationEnded(operations::Ended),
     Records(Vec<crate::client::subscriptions::records::Record>),

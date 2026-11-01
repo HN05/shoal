@@ -1288,6 +1288,7 @@ fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
 }
 
 mod actions;
+mod agents;
 mod dependencies;
 mod expiry;
 mod order;
