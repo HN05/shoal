@@ -25,9 +25,12 @@ when behavior changes, distinguishing decisions from proposals.
 - Integrations such as agent tools, terminal hosts and apps implement callbacks
   for what they do differently; state, decisions and daemon calls stay in
   Shoal's generic code, which passes each callback only what it reads.
-- A chat gets every workspace feature that does not need a worktree or branch.
-  A change that adds or extends such a feature implements it for chats too,
-  through the same code path, or its PR says why it cannot apply to them.
+- A chat gets every feature that coordinates or communicates, including
+  requests to the forge such as starting CI runs, but nothing that runs code on
+  this machine, such as leases, `shoal run` and demos, or needs its own
+  worktree or branch. A change that adds or extends such a feature implements
+  it for chats too, through the same code path, or its PR says why it cannot
+  apply to them.
 - A space is a workspace or a chat. Flags, arguments, user-facing text and
   code call what applies to both a space (`--space`), and say workspace only
   for what needs a worktree. A command's flag becomes `--space` in the change

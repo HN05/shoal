@@ -35,8 +35,9 @@ instead of the PR delivery guidance below.
   - Integrations such as agent tools, terminal hosts and apps implement callbacks
     for what they do differently; state, decisions and daemon calls stay in
     Shoal's generic code, which passes each callback only what it reads.
-- A chat gets every workspace feature that does not need a worktree or branch.
-  Flag a change that adds or extends such a feature for workspaces only, unless
+- A chat gets every feature that coordinates or communicates, including
+  requests to the forge such as starting CI runs, but nothing that runs code on
+  this machine or needs its own worktree or branch. Flag a change that adds or extends such a feature for workspaces only, unless
   its PR says why it cannot apply to chats. A space is a workspace or a chat:
   flag a flag, text or name that says workspace for something a chat also
   takes.
