@@ -232,7 +232,7 @@ async fn a_moved_chat_lasts_while_its_new_process_runs() {
         .move_chat(&chat.id, std::process::id())
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("unknown chat"), "{error:#}");
+    assert!(error.to_string().contains("no running chat"), "{error:#}");
 }
 
 /// A process stop reads the tracked processes and stops the rest under the

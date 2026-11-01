@@ -26,6 +26,8 @@ impl Manager {
     /// whose processes do not stop runs on.
     pub(crate) async fn save_chats(&self, restore: ChatRestore) {
         let _saving = self.chat_saves.lock().await;
+        // A handoff would replace the process the stop below ends.
+        let _handoffs = self.chat_handoffs.write().await;
         // A chat whose agent exited since the last sweep has ended, and
         // would otherwise come back.
         if let Err(error) = self.end_finished_chats().await {

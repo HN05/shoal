@@ -561,3 +561,40 @@ async fn no_chat_starts_while_a_shutdown_holds_the_queue() {
     assert!(error.to_string().contains("shutdown"), "{error:#}");
     assert!(manager.chats().await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_saved_chat_takes_no_handoff() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // A launcher that hands the chat to a session it starts, as Happy's does.
+    let mut launcher = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "happy-claude".into(),
+            launcher.id(),
+            None,
+            true,
+        )
+        .await
+        .unwrap();
+    manager.save_chats(ChatRestore::Resume).await;
+    launcher.wait().unwrap();
+
+    let error = manager
+        .move_chat(&chat.id, std::process::id())
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("no running chat"), "{error:#}");
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(
+        (saved.pid, saved.restore),
+        (chat.pid, Some(ChatRestore::Resume))
+    );
+}

@@ -438,12 +438,15 @@ fn move_chat_files(paths: &crate::paths::Paths, old: &Chat, renamed: &Chat) -> R
     Ok(())
 }
 
+/// Make `process` the one the running chat `chat` lasts while. A saved
+/// chat's agent was stopped, so a session started for it is refused, which
+/// its launcher then stops.
 fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> {
     let moved = db.execute(
-        "UPDATE chats SET pid=?2,birth=?3,starting=0 WHERE id=?1",
+        "UPDATE chats SET pid=?2,birth=?3,starting=0 WHERE id=?1 AND restore IS NULL",
         params![chat, process.pid, process.birth],
     )?;
-    anyhow::ensure!(moved == 1, "unknown chat {chat}");
+    anyhow::ensure!(moved == 1, "no running chat {chat}");
     recorded(db)?
         .into_iter()
         .find(|running| running.id == chat)
