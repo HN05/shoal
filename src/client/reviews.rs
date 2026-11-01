@@ -63,6 +63,8 @@ states!(
         /// The reviewer's output is missing or does not match the schema.
         InvalidOutput => "invalid-output",
         TimedOut => "timed-out",
+        /// The repository's false positives file cannot be read.
+        InvalidFalsePositives => "invalid-false-positives",
     }
 );
 
@@ -77,6 +79,9 @@ impl FailureReason {
             Self::ExecutionFailed => "the reviewer exited unsuccessfully",
             Self::InvalidOutput => "the reviewer's output did not match the review schema",
             Self::TimedOut => "the reviewer ran longer than 30 minutes and was stopped",
+            Self::InvalidFalsePositives => {
+                "the repository's .shoal/false-positives.toml is invalid; fix or delete it, then review again"
+            }
         }
     }
 }

@@ -897,7 +897,8 @@ over; the fallback agent runs with its own configured ones. A reviewer still run
 minutes is stopped and the review fails as `timed-out`; after any other failure,
 `fallback_agent` reviews once more. A failed review records why as one of
 `usage-limit`, `quota-exhausted`, `rate-limit`, `authentication-failed`,
-`execution-failed`, `invalid-output` or `timed-out`, never the reviewer's output.
+`execution-failed`, `invalid-output`, `timed-out` or `invalid-false-positives`, never
+the reviewer's output.
 Findings and a verdict of any kind are results, not failures.
 
 ```toml
@@ -918,7 +919,8 @@ repository's own directory, beside its [local config](#store-repository-config-o
 and outside every Git tree (`~/shoal/my-project/.shoal/false-positives.toml`). Every
 later review of any of the repository's workspaces receives its entries, up to 32 KiB
 of them, the newest first. The reviewer skips a claim while its reason holds and
-reports it when the change invalidates the reason. Reopening the finding or resolving
+reports it when the change invalidates the reason. While the file is invalid, reviews of
+the repository fail as `invalid-false-positives` until it is fixed or deleted. Reopening the finding or resolving
 it another way removes its entry; removing its workspace does not. Edit the file to
 remove an entry or add one:
 

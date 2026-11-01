@@ -550,6 +550,23 @@ async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
 }
 
 #[tokio::test]
+async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let repository = &fixture.workspace.repository_id;
+    let path = fixture
+        .manager
+        .false_positives_path(repository)
+        .await
+        .unwrap()
+        .unwrap();
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "[[false_positive]]\nclaim = \"Unchecked\"\n").unwrap();
+    let review = fixture.review().await;
+    assert_eq!(review.state, ReviewState::Failed);
+    assert_eq!(review.failure, Some(FailureReason::InvalidFalsePositives));
+}
+
+#[tokio::test]
 async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     let slow = until_tests_end();
     let fixture = fixture(

@@ -350,6 +350,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 105 {
         db.execute_batch(STOPPED_CHAT_PROCESSES)?;
     }
+    if version >= 106 {
+        db.execute_batch(include_str!("review_false_positive_failures.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1268,4 +1271,34 @@ async fn migrates_setup_completion_without_losing_interrupted_state() {
         })
         .await
         .unwrap();
+}
+
+#[test]
+fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_positives() -> Result<()>
+{
+    let mut db = historical_database(105)?;
+    db.execute_batch(
+        "INSERT INTO reviews(id,workspace_id,target,agent,state,created_at)
+            VALUES (1,'workspace','{\"kind\":\"workspace\"}','codex','finished',1),
+                (2,'workspace','{\"kind\":\"workspace\"}','codex','cancelled',2);
+        INSERT INTO review_findings(review_id,number,severity,path,line,title,body)
+            VALUES (1,1,'nit','a',1,'Title','Body');
+        INSERT INTO review_replies(review_id,number,created_at,body) VALUES (1,1,3,'Reply');
+        DELETE FROM reviews WHERE id=2;",
+    )?;
+    migrate(&mut db)?;
+    let kept: (String, String) = db.query_row(
+        "SELECT title,review_replies.body FROM review_findings
+            JOIN review_replies USING(review_id,number)",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(kept, ("Title".to_owned(), "Reply".to_owned()));
+    db.execute(
+        "INSERT INTO reviews(workspace_id,target,agent,state,failure,created_at)
+            VALUES ('workspace','{}','codex','failed','invalid-false-positives',4)",
+        [],
+    )?;
+    assert_eq!(db.last_insert_rowid(), 3);
+    Ok(())
 }

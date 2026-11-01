@@ -104,15 +104,19 @@ impl Manager {
         self.reviews.ended.send_modify(|ended| *ended += 1);
     }
 
-    /// Fail review `id`, which could not be prepared, as its reviewer could
-    /// not run.
+    /// Fail review `id`, which could not be prepared: for its repository's
+    /// unreadable false positives, else as its reviewer could not run.
     async fn fail_unprepared(&self, id: i64, error: anyhow::Error) {
         log!("review {id}: {error:#}");
+        let reason = match error.downcast_ref::<super::false_positives::Unreadable>() {
+            Some(_) => FailureReason::InvalidFalsePositives,
+            None => FailureReason::ExecutionFailed,
+        };
         let _operation = self.gates.operation().await;
         let now = now();
         let failed = self
             .store
-            .run(move |db| store::fail(db, id, None, FailureReason::ExecutionFailed, now))
+            .run(move |db| store::fail(db, id, None, reason, now))
             .await;
         match failed {
             Ok(true) => self.deliver_review(id).await,

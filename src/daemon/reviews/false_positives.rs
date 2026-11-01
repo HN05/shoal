@@ -36,13 +36,26 @@ struct Entries {
     false_positive: Vec<FalsePositive>,
 }
 
+/// The context of an error reading a repository's false positives, which
+/// fails the review as [`crate::reviews::FailureReason::InvalidFalsePositives`].
+#[derive(Debug)]
+pub(super) struct Unreadable;
+
+impl std::fmt::Display for Unreadable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("read the repository's false positives")
+    }
+}
+
 impl Manager {
     /// The false positives of the repository `repository_id`, newest first.
+    /// An error reading them has the context [`Unreadable`].
     pub(super) async fn false_positives(&self, repository_id: &str) -> Result<Vec<FalsePositive>> {
         let Some(path) = self.false_positives_path(repository_id).await? else {
             return Ok(Vec::new());
         };
-        tokio::task::spawn_blocking(move || read(&path)).await?
+        let listed = tokio::task::spawn_blocking(move || read(&path)).await?;
+        listed.context(Unreadable)
     }
 
     /// Keep `finding` of `review` in its repository's false positives while
