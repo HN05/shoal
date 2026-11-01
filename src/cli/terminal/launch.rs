@@ -616,10 +616,12 @@ pub(in crate::cli) fn keeps_agents_in_sessions(settings: &Effective) -> bool {
     current(settings).host.attaches().is_some()
 }
 
-/// The program an agent launch here needs besides the agent's own.
-pub(in crate::cli) fn launcher_program() -> Option<&'static str> {
-    hosts()
-        .find_map(Host::attaches)
+/// The program an agent launch here under `settings` needs besides the
+/// agent's own: that of the host it runs in a session of.
+pub(in crate::cli) fn launcher_program(settings: &Effective) -> Option<&'static str> {
+    current(settings)
+        .host
+        .attaches()
         .map(Attaches::launcher_program)
 }
 

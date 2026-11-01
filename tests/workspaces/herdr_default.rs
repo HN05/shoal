@@ -63,6 +63,23 @@ fn background_additions_open_tabs_in_the_repository_workspace() {
 }
 
 #[test]
+fn launches_from_a_terminal_need_no_zmx_while_herdr_is_the_default() {
+    let fixture = Fixture::with_config(Some(
+        "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",
+    ));
+    install_fake_herdr(&fixture);
+    fixture.interactive_path();
+    fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
+    let repo = fixture.repo.to_str().unwrap();
+    let (output, transcript) = plain_terminal(&fixture, &["add", repo, "first", "--agent", "pi"]);
+    assert!(output.status.success(), "{output:?} {transcript}");
+    assert!(
+        transcript.contains("Started first in a background Herdr tab"),
+        "{transcript}"
+    );
+}
+
+#[test]
 fn a_fixed_workspace_name_is_reused_as_herdr_lists_it() {
     let fixture = Fixture::with_config(Some(
         "machine.max_agents = 'none'\nterminal.default_host = 'herdr'\nterminal.focus = false\n[terminal.herdr]\nworkspace_name = 'agents'\n[agents.pi]\ncommand = ['sh', '-c', 'exit 0']\n",

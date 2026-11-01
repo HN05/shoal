@@ -978,8 +978,8 @@ cleanup treat the agent as before. When the session returns control, Shoal reset
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
 zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled` or in a
-Rex block with `terminal.rex.enabled` runs in place. On a terminal outside zmx, a missing
-zmx refuses the agent as a missing agent executable does.
+Rex block with `terminal.rex.enabled` runs in place. A launch that would start a zmx
+session refuses the agent when zmx is missing, as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr) or
 [Rex](#rex) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.

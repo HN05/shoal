@@ -728,10 +728,11 @@ pub(in crate::cli) fn builtin_names() -> Vec<String> {
     names
 }
 
-/// Whether every executable the agent starts is available, so pickers and
-/// completion offer only agents that can launch.
+/// Whether every executable the agent itself starts is available, so pickers
+/// and completion offer only agents that can launch; a launch refuses a
+/// missing session host itself.
 pub(in crate::cli) fn installed(name: &str, commands: &Commands, search_path: &OsStr) -> bool {
-    programs(name, commands).is_some_and(|programs| {
+    programs(name, commands, None).is_some_and(|programs| {
         programs
             .into_iter()
             .all(|program| program_available(program, search_path))
@@ -759,7 +760,7 @@ pub(crate) fn ensure_available(name: &str, settings: &Effective) -> Result<()> {
         anyhow::bail!("cannot start {name}: {reason}");
     }
     launch_proxy(settings, name)?;
-    ensure_installed(name, &settings.launchers)
+    ensure_installed(name, settings)
 }
 
 /// Refuse agent `name` when it cannot start from a fork of a session: it
@@ -815,9 +816,11 @@ pub(crate) fn launch_proxy<'a>(
     Ok(Some(proxy))
 }
 
-/// Refuse an agent whose executables are missing.
-fn ensure_installed(name: &str, commands: &Commands) -> Result<()> {
-    let programs = programs(name, commands).with_context(|| {
+/// Refuse an agent whose executables are missing, the session host a launch
+/// here under `settings` starts it in among them.
+fn ensure_installed(name: &str, settings: &Effective) -> Result<()> {
+    let launcher = super::terminal::launcher_program(settings);
+    let programs = programs(name, &settings.launchers, launcher).with_context(|| {
         format!("unknown agent {name:?}; set [agents.{name}] command in Shoal config")
     })?;
     for program in programs {
@@ -836,9 +839,13 @@ pub(in crate::cli) fn ensure_program(name: &str, program: &str) -> Result<()> {
     Ok(())
 }
 
-/// The executables an agent starts; `None` when it has no launcher. Terminal
-/// agents launched on a terminal also start its session host.
-fn programs<'a>(name: &str, commands: &'a Commands) -> Option<Vec<&'a str>> {
+/// The executables an agent starts; `None` when it has no launcher. A
+/// terminal agent also starts `launcher`, its session host's program.
+fn programs<'a>(
+    name: &str,
+    commands: &'a Commands,
+    launcher: Option<&'static str>,
+) -> Option<Vec<&'a str>> {
     if let Some(programs) = added(name).and_then(|added| added.integration.programs()) {
         return Some(programs);
     }
@@ -847,7 +854,7 @@ fn programs<'a>(name: &str, commands: &'a Commands) -> Option<Vec<&'a str>> {
         .and_then(|argv| argv.first())
         .map(|program| {
             let mut programs = vec![program.as_str()];
-            programs.extend(super::terminal::launcher_program());
+            programs.extend(launcher);
             programs
         })
 }

@@ -42,14 +42,18 @@ fn agents_are_installed_only_when_every_program_they_start_is_on_path() {
 
 #[test]
 fn launches_name_the_missing_program_or_undefined_agent() {
-    let mut commands = named_commands::defaults();
-    commands.insert("probe".into(), vec!["shoal-test-missing-program".into()]);
-    let error = ensure_installed("probe", &commands).unwrap_err();
+    let settings = crate::config::Config::from_toml(
+        "[agents.probe]\ncommand = [\"shoal-test-missing-program\"]\n",
+    )
+    .unwrap()
+    .resolve(&crate::config::repo::ConfigLayers::default())
+    .unwrap();
+    let error = ensure_installed("probe", &settings).unwrap_err();
     assert_eq!(
         error.to_string(),
         "cannot start probe: shoal-test-missing-program is not installed or not on PATH"
     );
-    let error = ensure_installed("undefined", &commands).unwrap_err();
+    let error = ensure_installed("undefined", &settings).unwrap_err();
     assert!(error.to_string().starts_with("unknown agent"), "{error}");
 }
 
