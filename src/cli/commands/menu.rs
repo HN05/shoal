@@ -535,7 +535,7 @@ async fn mark_read(ctx: &Context, notifications: &[Notification]) -> Result<()> 
 async fn inbox_rows(ctx: &Context) -> Result<Entries> {
     let filter = ListFilter::resolve(ctx, None, Vec::new()).await?;
     let inbox = Inbox::request(ctx, &filter).await?;
-    let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
+    let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await;
     let labels = inbox.rows(&repos, Palette::picker(), ui::picker_width());
     Ok(inbox
         .items
@@ -547,7 +547,7 @@ async fn inbox_rows(ctx: &Context) -> Result<Entries> {
 
 /// Every workspace, then an entry that adds one unless workspace processes ask.
 async fn work_rows(ctx: &Context, scoped: bool) -> Result<Entries> {
-    let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await?;
+    let repos = ui::repository_choices(client::repositories(&ctx.paths).await?).await;
     let workspaces = client::workspaces(&ctx.paths).await?;
     let palette = Palette::picker();
     let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);

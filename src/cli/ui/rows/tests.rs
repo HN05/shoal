@@ -286,3 +286,88 @@ fn workspace_rows_align_status_and_titles() {
         ]
     );
 }
+
+fn repository(id: &str, source: &str) -> Repository {
+    Repository {
+        id: id.into(),
+        path: source.into(),
+        source: source.into(),
+        last_used: 0,
+        name: None,
+        workspaces_dir: None,
+        contribution: false,
+    }
+}
+
+#[tokio::test]
+async fn repository_choices_name_distinct_repositories_without_reading_remotes() {
+    let reads = std::sync::Mutex::new(Vec::new());
+    let entries = repository_entries(
+        vec![
+            repository("a", "/work/shoal"),
+            repository("b", "git@example.com:me/app.git"),
+        ],
+        async |path: &Path| {
+            reads.lock().unwrap().push(path.to_owned());
+            Ok(None)
+        },
+    )
+    .await;
+    assert_eq!(
+        entries,
+        [("a".into(), "shoal".into()), ("b".into(), "app".into())]
+    );
+    assert!(reads.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn repository_choices_tell_shared_names_apart_by_their_origins_host() {
+    let entries = repository_entries(
+        vec![
+            repository("a", "/work/shoal"),
+            repository("b", "/forks/shoal"),
+        ],
+        async |path: &Path| {
+            Ok(Some(match path.to_str() {
+                Some("/work/shoal") => "git@example.com:me/shoal.git".into(),
+                _ => "https://forge.test/me/shoal.git".into(),
+            }))
+        },
+    )
+    .await;
+    assert_eq!(
+        entries,
+        [
+            ("a".into(), "shoal (example.com)".into()),
+            ("b".into(), "shoal (forge.test)".into())
+        ]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn repository_choices_label_unreadable_origins_by_their_recorded_source() {
+    let started = tokio::time::Instant::now();
+    let entries = repository_entries(
+        vec![
+            repository("a", "/work/shoal"),
+            repository("b", "/stalled/shoal"),
+            repository("c", "/missing/shoal"),
+        ],
+        async |path: &Path| match path.to_str() {
+            Some("/stalled/shoal") => std::future::pending().await,
+            Some("/missing/shoal") => anyhow::bail!("not a Git checkout"),
+            _ => Ok(None),
+        },
+    )
+    .await;
+    assert_eq!(
+        entries,
+        [
+            ("a".into(), "shoal (local)  /work/shoal".into()),
+            ("b".into(), "shoal (local)  /stalled/shoal".into()),
+            ("c".into(), "shoal (local)  /missing/shoal".into())
+        ]
+    );
+    // The reads run at once, so the picker waits for one limit, not one per read.
+    assert_eq!(started.elapsed(), REMOTE_READ_LIMIT);
+}

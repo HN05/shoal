@@ -35,7 +35,7 @@ pub(super) async fn current_repository(
         ctx.interactive(),
         "no current registered repository; {hint}"
     );
-    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
+    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)
 }
 
 /// The registered repository whose checkout the current directory is in.

@@ -1,10 +1,11 @@
 //! The labels pickers and lists show: aligned rows of workspaces, agent
 //! launches and repositories, with their status cells.
-use std::{collections::HashSet, path::Path};
+use std::{collections::HashSet, path::Path, time::Duration};
 
 use super::Entries;
 
 use anyhow::{Context as _, Result};
+use futures_util::future::join_all;
 
 use crate::{
     cli::{
@@ -507,44 +508,84 @@ pub fn repository_label(repo: &Repository, palette: Palette) -> String {
     )
 }
 
+/// How long a picker waits on a checkout's origin, as on a volume that stopped
+/// answering, before labelling the repository by its recorded source.
+const REMOTE_READ_LIMIT: Duration = Duration::from_secs(3);
+
 /// Picker entries that stay unambiguous when repositories share a name.
-pub async fn repository_choices(mut repos: Vec<Repository>) -> Result<Entries> {
-    for repo in &mut repos {
-        if let Some(url) = crate::repository::remote_url_from_source(&repo.source).await? {
-            repo.source = url;
-        }
-    }
+pub async fn repository_choices(repos: Vec<Repository>) -> Entries {
+    repository_entries(repos, crate::repository::remote_url_from_path).await
+}
+
+/// [`repository_choices`] with `read` reading a checkout's origin URL.
+async fn repository_entries(
+    repos: Vec<Repository>,
+    read: impl AsyncFn(&Path) -> Result<Option<String>>,
+) -> Entries {
+    let shared = shared_names(&repos);
+    let sources = distinguishing_sources(&repos, &shared, read).await;
     let labels: Vec<_> = repos
         .iter()
-        .map(|repo| {
+        .zip(&sources)
+        .map(|(repo, source)| {
             let name = crate::repository::name(repo);
-            let shared = repos
-                .iter()
-                .filter(|r| crate::repository::name(r) == name)
-                .count()
-                > 1;
-            if !shared {
+            if !shared.contains(name) {
                 return name.to_owned();
             }
-            match crate::repository::host(&repo.source) {
+            match crate::repository::host(source) {
                 Some(host) => format!("{name} ({host})"),
                 None => format!("{name} (local)"),
             }
         })
         .collect();
-    Ok(repos
+    repos
         .into_iter()
+        .zip(sources)
         .zip(&labels)
-        .map(|(repo, label)| {
+        .map(|((repo, source), label)| {
             // Same host or multiple local checkouts can still share a name.
             let label = if labels.iter().filter(|other| *other == label).count() > 1 {
-                format!("{label}  {}", repo.source)
+                format!("{label}  {source}")
             } else {
                 label.clone()
             };
             (repo.id, label)
         })
-        .collect())
+        .collect()
+}
+
+/// The names more than one of `repos` has.
+fn shared_names(repos: &[Repository]) -> HashSet<&str> {
+    let mut seen = HashSet::new();
+    repos
+        .iter()
+        .map(crate::repository::name)
+        .filter(|name| !seen.insert(*name))
+        .collect()
+}
+
+/// Each repository's source, with a checkout whose name is `shared` given
+/// its origin's URL to tell it apart by host. Only those checkouts start
+/// Git, all at once, and one whose origin `read` cannot give within
+/// [`REMOTE_READ_LIMIT`] keeps its recorded source.
+async fn distinguishing_sources(
+    repos: &[Repository],
+    shared: &HashSet<&str>,
+    read: impl AsyncFn(&Path) -> Result<Option<String>>,
+) -> Vec<String> {
+    let read = &read;
+    join_all(repos.iter().map(|repo| async move {
+        let checkout = shared.contains(crate::repository::name(repo))
+            && crate::repository::host(&repo.source).is_none();
+        if !checkout {
+            return repo.source.clone();
+        }
+        match tokio::time::timeout(REMOTE_READ_LIMIT, read(Path::new(&repo.source))).await {
+            Ok(Ok(Some(url))) => url,
+            _ => repo.source.clone(),
+        }
+    }))
+    .await
 }
 
 /// Preserve the argument and resolve existing paths in the caller's directory.

@@ -457,7 +457,9 @@ Those checks skip a stalled directory until 20 seconds after its last check, and
 while another check rechecks it, so each sweep rechecks it once. Listings read
 HEAD for review marks within three seconds in all and skip stalled directories,
 leaving staleness unknown, so `shoal attach` and `shoal work` answer from the
-daemon's state.
+daemon's state. Repository pickers start Git only to tell apart repositories
+that share a name, reading their origins at once within three seconds, and
+label one whose origin they cannot read by its recorded source.
 Repository roots and explicit workspace paths resolve existing symlinks and lexical
 `..` before boundary checks and creation, even when trailing components are missing.
 An explicit workspace path overrides the destination for one creation, without

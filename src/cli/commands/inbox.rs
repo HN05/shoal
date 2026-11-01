@@ -35,11 +35,11 @@ pub(in crate::cli) struct Inbox {
 
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
     let inbox = Inbox::request(ctx, filter).await?;
-    // Only text rows name repositories, which reads each checkout's remote.
+    // Only text rows name repositories.
     let repositories = if ctx.json {
         Vec::new()
     } else {
-        ui::repository_choices(client::repositories(&ctx.paths).await?).await?
+        ui::repository_choices(client::repositories(&ctx.paths).await?).await
     };
     let rows = inbox.rows(
         &repositories,

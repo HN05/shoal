@@ -168,5 +168,5 @@ async fn worktree_repository(ctx: &Context, path: &Path) -> Result<String> {
         "cannot infer the repository of {}; pass --repo <repository>",
         path.display()
     );
-    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)
+    ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await)
 }
