@@ -1308,7 +1308,7 @@ command, so Shoal checks the server just before each command on a recorded
 pane. Zellij reports neither agent turn state nor the process in a pane's
 foreground, so an agent without turn hooks closes its pane once its execution
 ends, and a resume runs in a pane only while Zellij names your login shell
-(`SHELL`) as what runs there.
+(`SHELL`), running no script or command, as what runs there.
 
 Zellij draws panes through its own terminal emulator rather than passing output
 through as zmx does, and handles terminal protocols itself: it forwards Kitty

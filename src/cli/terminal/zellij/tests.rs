@@ -36,6 +36,9 @@ fn a_pane_is_at_its_prompt_while_the_users_shell_runs_in_front() {
     assert!(at_prompt(false, Some(&format!("{shell} -l"))));
     assert!(!at_prompt(true, Some(&shell)));
     assert!(!at_prompt(false, Some("claude --resume")));
+    // The shell runs a script or a command rather than its prompt.
+    assert!(!at_prompt(false, Some(&format!("{shell} script.sh"))));
+    assert!(!at_prompt(false, Some(&format!("{name} -c 'sleep 600'"))));
     assert!(!at_prompt(false, None));
 }
 

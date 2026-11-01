@@ -401,18 +401,25 @@ async fn run_at_prompt(
 
 /// Whether a pane that runs `command` in its foreground, and has not
 /// `exited`, is at the prompt of the user's shell: Zellij names the process
-/// in the foreground but not its process, so the shell is told by its name.
+/// in the foreground but not its process, so the shell is told by its name,
+/// run with no arguments but those of an interactive or login shell. A shell
+/// running a script or a command is busy.
 fn at_prompt(exited: bool, command: Option<&str>) -> bool {
+    const PROMPT_FLAGS: &[&str] = &["-l", "--login", "-i"];
     let shell = var("SHELL").unwrap_or_else(|| "/bin/sh".into());
-    let program = |command: &str| -> Option<String> {
-        let first = command.split_whitespace().next()?;
-        let name = Path::new(first.trim_start_matches('-')).file_name()?;
+    let program = |word: &str| -> Option<String> {
+        let name = Path::new(word.trim_start_matches('-')).file_name()?;
         Some(name.to_string_lossy().into_owned())
     };
+    let Some(mut words) = command.map(str::split_whitespace) else {
+        return false;
+    };
     !exited
-        && command
+        && words
+            .next()
             .and_then(program)
             .is_some_and(|name| Some(name) == program(&shell))
+        && words.all(|word| PROMPT_FLAGS.contains(&word))
 }
 
 /// Open a background pane for the demo with the user's shell, then type its
