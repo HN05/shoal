@@ -1227,6 +1227,7 @@ fn import_resume_queues_the_agents_the_export_stopped_once_post_setup_succeeds()
         path.join("agent-restarted").exists() || path.join("agent-before-setup").exists()
     });
     fs::write(path.join("release"), "").unwrap();
+    wait_zmx_sessions_ended(fixture.root.path());
     assert!(path.join("agent-restarted").exists());
 }
 
@@ -1327,6 +1328,7 @@ fn move_ssh_hands_a_workspace_and_its_agent_to_another_shoal() {
         moved_path.join("agent-restarted").exists()
     });
     fs::write(moved_path.join("release"), "").unwrap();
+    wait_zmx_sessions_ended(there.root.path());
 }
 
 #[test]
@@ -24112,6 +24114,7 @@ fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
 /// session keeps the environment it was created with and runs sent text as
 /// its shell would, logging the output to `$HOME/zmx-<name>.log`, and stays
 /// listed, with the labels set on it, once `$HOME/zmx-keep-sessions` exists.
+/// `$HOME/zmx-<name>.running` exists while the sent text runs.
 /// An attached session ends once `$HOME/zmx-attach-ends-session` exists.
 /// Calls from a place watcher go to `$HOME/zmx-watch-calls`, out of the
 /// recorded actions.
@@ -24130,7 +24133,10 @@ def rewrite_sessions(lines):
 if args[:1] == ['worker']:
     # Keep a readable parent for macOS's hidden shell environment, so other
     # fixtures can attribute it while verifying their setup processes.
-    sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)
+    try:
+        sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)
+    finally:
+        (root / f"zmx-{os.environ['ZMX_SESSION']}.running").unlink(missing_ok=True)
 parent = subprocess.run(['ps', '-o', 'args=', '-p', str(os.getppid())],
     capture_output=True, text=True).stdout
 log = 'zmx-watch-calls' if ' place-watch ' in parent else 'zmx-calls'
@@ -24176,6 +24182,7 @@ elif args[:1] == ['send']:
     with (root / f'zmx-{args[1]}.log').open('a') as log:
         # Native send returns after writing input, before the worker labels
         # its session. Waiting here would deadlock on the handoff's lock.
+        (root / f'zmx-{args[1]}.running').touch()
         subprocess.Popen([sys.executable, __file__, 'worker', args[2].rstrip('\r')], env=env,
             start_new_session=True,
             stdin=subprocess.DEVNULL, stdout=log, stderr=log)
@@ -24217,6 +24224,20 @@ elif args[:1] == ['attach']:
 else:
     sys.exit(1)
 "#;
+
+/// Wait until no session `PASSTHROUGH_ZMX` detached under `home` still runs
+/// sent text. Those run in sessions of their own, which outlive the test.
+fn wait_zmx_sessions_ended(home: &Path) {
+    wait_until("zmx sessions ended", || {
+        !fs::read_dir(home).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".running")
+        })
+    });
+}
 
 /// The `zmx list` line of session `name`, one Shoal created for `workspace`
 /// in the fixture's state directory.
