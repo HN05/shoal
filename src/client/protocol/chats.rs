@@ -26,7 +26,7 @@ pub enum ChatMethod {
         chat: String,
         pid: u32,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        origin: Option<crate::sessions::Origin>,
+        origin: Option<crate::client::sessions::Origin>,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
