@@ -135,7 +135,9 @@ impl super::Host for Zmx {
         state: &'a Path,
     ) -> futures_util::future::BoxFuture<'a, Result<Vec<super::Session>>> {
         Box::pin(async move {
-            // Without zmx there are no sessions to find.
+            // Without zmx there are no sessions to find. A close still runs
+            // for a session recorded as zmx's, and fails until zmx is back,
+            // since its server can outlive the executable.
             if !Tool::Zmx.installed() {
                 return Ok(Vec::new());
             }
@@ -159,10 +161,6 @@ impl super::Host for Zmx {
         owner: &'a super::Owner,
     ) -> futures_util::future::BoxFuture<'a, Result<()>> {
         Box::pin(async move {
-            // Without zmx no session runs to close.
-            if !Tool::Zmx.installed() {
-                return Ok(());
-            }
             let session = place.id();
             let _server = ownership_lock().await?;
             if list()
