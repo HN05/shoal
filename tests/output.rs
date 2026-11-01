@@ -476,3 +476,43 @@ fn shoal_output_json_refuses_to_prompt_on_a_terminal() {
     let message = error["error"]["message"].as_str().unwrap();
     assert!(message.contains("pass --yes"), "{message}");
 }
+
+/// A Rust program that runs `shoal --json` parses its output, and its
+/// failures, with the library's types.
+#[test]
+fn a_program_reads_json_output_with_the_librarys_types() {
+    use shoal::client::{
+        model::Repository,
+        output::{daemon::Status, error::CommandError, skill::Skill},
+    };
+    let added = serde_json::json!({
+        "type": "repository",
+        "data": {"id": "test", "path": "/test", "source": "/test", "last_used": 0}
+    });
+    let (output, _) = run_with_reply(
+        &["--json", "repo", "add", "/test"],
+        None,
+        &[],
+        Some((false, added)),
+    );
+    assert!(output.status.success(), "{output:?}");
+    let repository: Repository = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(repository.id, "test");
+
+    let (output, _) = run(&["--json", "skill", "worker"], None, &[]);
+    let skill: Skill = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(skill.name, "shoal-worker");
+
+    let (output, _) = run(&["--json", "daemon", "status"], None, &[]);
+    let status: Status = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(!status.running && status.daemon.is_none());
+
+    let refused = serde_json::json!({
+        "type": "error",
+        "data": {"code": "scope_denied", "message": "outside the workspace"}
+    });
+    let (output, _) = run_with_reply(&["--json", "repo", "ls"], None, &[], Some((false, refused)));
+    assert!(!output.status.success(), "{output:?}");
+    let failed: CommandError = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(failed.error.code, "scope_denied");
+}
