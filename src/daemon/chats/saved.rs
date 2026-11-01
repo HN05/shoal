@@ -6,7 +6,11 @@ use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 use rusqlite::{Connection, params};
 
-use super::{Over, ensure_checkout_free, processes::ChatProcesses, recorded};
+use super::{
+    Over, ensure_checkout_free,
+    processes::{self, ChatProcesses},
+    recorded,
+};
 use crate::{
     daemon::{log, workspace::Manager},
     model::Chat,
@@ -35,12 +39,27 @@ impl Manager {
         let stopped = join_all(stops).await;
         for ((id, process), stopped) in saved.into_iter().zip(stopped) {
             if let Err(error) = stopped {
-                log!("chat {id} not stopped, so it runs on: {error:#}");
+                log!("chat {id} not fully stopped: {error:#}");
+                self.keep_after_failed_stop(id, process).await;
+            }
+        }
+    }
+
+    /// Settle the chat `id`, saved while it ran as `process`, after a stop
+    /// that failed: it runs on while that process lives, and otherwise stays
+    /// saved, since running with its process ended would end it, deleting
+    /// its temporary directory. A restore or discard waits for what the stop
+    /// left running.
+    async fn keep_after_failed_stop(&self, id: String, process: Identity) {
+        match identity::alive(&process) {
+            Ok(true) => {
                 let chat = id.clone();
                 if let Err(error) = self.store.run(move |db| unsave(db, &chat, &process)).await {
                     log!("chat {id} stays saved: {error:#}");
                 }
             }
+            Ok(false) => log!("chat {id} stays saved; its agent ended"),
+            Err(error) => log!("chat {id} stays saved: {error:#}"),
         }
     }
 
@@ -134,14 +153,8 @@ impl Manager {
         let id = chat.id.clone();
         let recorded = self.store.run(move |db| saved_process(db, &id)).await?;
         let wrappers = self.execution_wrappers().await?;
-        let mut running: Vec<Identity> = identity::scan_chat(&chat.id)
-            .await?
-            .into_iter()
-            .filter(|process| process.pid != caller && !wrappers.contains(process))
-            .collect();
-        if identity::alive(&recorded)? && !running.contains(&recorded) {
-            running.push(recorded);
-        }
+        let mut running = processes::survivors(&chat.id, &recorded, &wrappers).await?;
+        running.retain(|process| process.pid != caller);
         let pids: Vec<String> = running
             .iter()
             .map(|process| process.pid.to_string())

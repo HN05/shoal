@@ -10,6 +10,36 @@ use crate::process::identity::{self, Identity};
 /// may start another while it stops.
 const ROUNDS: usize = 5;
 
+/// The processes the chat `chat`, saved while it ran as `recorded`, still
+/// owns after a stop that failed or was interrupted, other than the
+/// execution `wrappers`: that process while it lives, those carrying the
+/// chat's identity, and the members of the group it led, which keeps its ID
+/// while any member remains, other than a workspace's.
+pub(super) async fn survivors(
+    chat: &str,
+    recorded: &Identity,
+    wrappers: &[Identity],
+) -> Result<Vec<Identity>> {
+    let mut survivors: Vec<Identity> = identity::scan_chat(chat)
+        .await?
+        .into_iter()
+        .filter(|process| !wrappers.contains(process))
+        .collect();
+    let (_, members) = identity::related(None, Some(recorded.pid), None).await?;
+    for member in members {
+        if identity::group_of(&member) == Some(recorded.pid)
+            && !identity::owned_by_workspace(&member, wrappers)?
+            && !survivors.contains(&member)
+        {
+            survivors.push(member);
+        }
+    }
+    if identity::alive(recorded)? && !survivors.contains(recorded) {
+        survivors.push(recorded.clone());
+    }
+    Ok(survivors)
+}
+
 /// The processes of a running chat.
 pub(super) struct ChatProcesses<'a> {
     chat: &'a str,
