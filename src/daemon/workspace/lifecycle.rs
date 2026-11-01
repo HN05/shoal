@@ -526,7 +526,7 @@ impl Manager {
     /// every sweep, or `None` when it is not a candidate.
     pub async fn cleanup_signals(&self, id: &str) -> Result<Option<u64>> {
         Ok(self
-            .cleanup_candidate(id, &[])
+            .checked_cleanup_candidate(id, &[])
             .await?
             .ok()
             .map(|(_, signals)| signals))
@@ -550,7 +550,7 @@ impl Manager {
         id: &str,
         cancelled: &[IdleRestore],
     ) -> Result<Result<Snapshot, CleanupReason>> {
-        let (path, signals) = match self.cleanup_candidate(id, cancelled).await? {
+        let (path, signals) = match self.checked_cleanup_candidate(id, cancelled).await? {
             Ok(candidate) => candidate,
             Err(reason) => return Ok(Err(reason)),
         };
@@ -598,6 +598,17 @@ impl Manager {
         })
     }
 
+    /// [`Self::cleanup_candidate`], inspected under [`Manager::check_access`].
+    async fn checked_cleanup_candidate(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Result<(PathBuf, u64), CleanupReason>> {
+        let path = self.workspace(id).await?.path;
+        self.check_access(&path, self.cleanup_candidate(id, cancelled))
+            .await
+    }
+
     /// The path and cleanup signals of a candidate whose `cancelled`
     /// restores a removal stopped, or the first reason it is not one.
     async fn cleanup_candidate(
@@ -630,6 +641,17 @@ impl Manager {
             check.workspace.path,
             crate::daemon::cleanup::signals(&head, activity),
         )))
+    }
+
+    /// [`Self::merged_candidate`], inspected under [`Manager::check_access`].
+    async fn checked_merged_candidate(
+        &self,
+        id: &str,
+        cancelled: &[IdleRestore],
+    ) -> Result<Option<(PathBuf, u64)>> {
+        let path = self.workspace(id).await?.path;
+        self.check_access(&path, self.merged_candidate(id, cancelled))
+            .await
     }
 
     /// The path and signals of a merged cleanup candidate, or `None` when
@@ -684,7 +706,7 @@ impl Manager {
         id: &str,
         cancelled: &[IdleRestore],
     ) -> Result<Option<Snapshot>> {
-        let Some((path, signals)) = self.merged_candidate(id, cancelled).await? else {
+        let Some((path, signals)) = self.checked_merged_candidate(id, cancelled).await? else {
             return Ok(None);
         };
         let tree = tokio::task::spawn_blocking(move || crate::daemon::cleanup::fingerprint(&path))
@@ -707,12 +729,12 @@ impl Manager {
     ) -> Result<Option<u64>> {
         Ok(match rule {
             Rule::Idle => self
-                .cleanup_candidate(id, cancelled)
+                .checked_cleanup_candidate(id, cancelled)
                 .await?
                 .ok()
                 .map(|(_, signals)| signals),
             Rule::Merged => self
-                .merged_candidate(id, cancelled)
+                .checked_merged_candidate(id, cancelled)
                 .await?
                 .map(|(_, signals)| signals),
         })
@@ -901,8 +923,8 @@ impl Manager {
         if !removal.waits_for_grace() {
             return Ok(false);
         }
-        self.recheck_removal(workspace, removal, Stage::Initial, &[])
-            .await?;
+        let checked = self.recheck_removal(workspace, removal, Stage::Initial, &[]);
+        self.check_access(&workspace.path, checked).await?;
         let grace = self.workspace_settings(workspace).await?.cleanup.grace();
         let cleanup_at = self.claim_grace(&workspace.id, grace).await?;
         Ok(crate::time::unix_seconds() < cleanup_at)

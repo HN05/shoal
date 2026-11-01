@@ -458,13 +458,14 @@ The daemon's own reads in a worktree, such as its ownership marker or whether
 it exists, can wait too, and no time limit interrupts a read waiting in the
 kernel, so requests and sweeps read worktree files on the blocking pool, where
 a read holds no runtime thread and a check's time limit ends the wait for it.
-The startup audit, its recheck, the sweep's branch observation and the Git reads
-of `shoal status` check a worktree within 30 seconds, a status reporting what it
-could not read; one that runs out or is interrupted records the directory
-holding the worktree as stalled, which the daemon reports once as an alert and
-in `daemon status` until a check there finishes. The directory comes from the
-path alone, since reading the filesystem could stall too, and groups a
-repository's workspaces, which a prompt for their location holds together.
+The startup audit, its recheck, the sweep's branch observation and cleanup
+checks, and the Git reads of `shoal status` check a worktree within 30 seconds,
+a status reporting what it could not read; one that runs out or is interrupted
+records the directory holding the worktree as stalled, which the daemon reports
+once as an alert and in `daemon status` until a check there finishes. The
+directory comes from the path alone, since reading the filesystem could stall
+too, and groups a repository's workspaces, which a prompt for their location
+holds together.
 Those checks skip a stalled directory until 20 seconds after its last check, and
 while another check rechecks it, so each sweep rechecks it once; the sweep's
 cleanup phases skip a workspace or checkout in a stalled directory until a check

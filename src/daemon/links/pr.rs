@@ -321,8 +321,11 @@ impl Manager {
         let result: Result<bool> = async {
             restacked.context(STACK_ERROR)?;
             settings?;
-            self.verify_worktree(workspace).await?;
-            let head = current_head(workspace).await?;
+            let verified = async {
+                self.verify_worktree(workspace).await?;
+                current_head(workspace).await
+            };
+            let head = self.check_access(&workspace.path, verified).await?;
             if !self
                 .confirm_pr_completion(workspace, &mut registration.kind, &head)
                 .await?
