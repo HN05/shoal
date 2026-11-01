@@ -3674,7 +3674,7 @@ A chat links items the same way in its repository's registered checkout. It has
 no completion or cleanup, so its assigned items drive neither, and its assigned PRs
 name no branch; the activity Shoal polls for its items reaches its inbox as
 messages, which wake its agent as other chat messages do. Its links go with it
-when it ends.
+when it ends. `shoal plan` assigns its chat the issue it plans.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,

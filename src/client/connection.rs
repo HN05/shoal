@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     client::{paths::Paths, processes::Identity},
     config::repo::ConfigLayers,
-    model::{Chat, Inspection, PresentSpace, Repository, Spaces, Workspace},
+    model::{Chat, Inspection, LinkedItem, PresentSpace, Repository, Spaces, Workspace},
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
         RepositoryMethod, Request, Response, WorkspaceMethod, timing,
@@ -452,6 +452,18 @@ pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     let mut chats = recorded_chats(daemon).await?;
     chats.retain(|chat| chat.restore.is_none());
     Ok(chats)
+}
+
+/// Link `item` to the space `space` as assigned.
+pub async fn link_assigned(daemon: &impl Daemon, space: &str, item: &LinkedItem) -> Result<()> {
+    let method = ItemMethod::LinkItem {
+        space: space.to_owned(),
+        kind: item.kind,
+        url: item.url.clone(),
+        relation: crate::model::Relation::Assigned,
+        title: item.title.clone(),
+    };
+    request::<()>(daemon, method).await
 }
 
 /// The workspace or running chat `selector` names, by ID or name.

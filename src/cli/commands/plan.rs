@@ -10,8 +10,12 @@ use super::{
 use crate::{
     cli::{context::Context, ui},
     config,
-    forge::items::{item::Item, link::ItemKind, list::MAX_LIMIT},
-    model::Repository,
+    forge::items::{
+        item::Item,
+        link::{ItemKind, LinkKind},
+        list::MAX_LIMIT,
+    },
+    model::{LinkedItem, Repository},
 };
 
 /// Which issue labelled as needing a plan is planned without naming one.
@@ -108,6 +112,11 @@ fn topic(repo: &Repository, issue: &Issue, labels: &config::Issue) -> Topic {
         asks_name: false,
         opening: Some(prompt(issue, labels)),
         directories: Vec::new(),
+        assigned: Some(LinkedItem {
+            kind: LinkKind::Issue,
+            url: issue.url.clone(),
+            title: Some(issue.title.clone()),
+        }),
     }
 }
 

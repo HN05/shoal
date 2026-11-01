@@ -26687,6 +26687,41 @@ fn plan_opens_a_chat_on_an_issue_that_needs_a_plan() {
 }
 
 #[test]
+fn plan_assigns_its_chat_the_issue_it_plans() {
+    let fixture = Fixture::new();
+    forge_origin(&fixture);
+    // The agents' directory is on the terminal's PATH.
+    install_api_curl(&fixture.root.path().join("bin"));
+    let url = "https://forge.example/team/project/issues/12";
+    script_api(
+        fixture.root.path(),
+        "repos/team/project/issues/12",
+        &serde_json::json!({"number": 12, "title": "Clarify retries", "state": "open",
+            "body": "Body.", "labels": [], "html_url": url, "pull_request": null}),
+    );
+    // The chat's agent reads what its chat links.
+    install_test_script(
+        fixture.root.path().join("bin").join("pi"),
+        format!(
+            "#!/bin/sh\n'{}' --json view --space \"$SHOAL_CHAT\" --no-comments > \"$HOME/plan-view\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let (output, transcript) = fixture.interactive_command(
+        fixture
+            .command()
+            .args(["plan", url, "--agent", "pi", "--here"])
+            .current_dir(&fixture.repo),
+        "",
+    );
+    assert!(output.status.success(), "{output:?}\n{transcript}");
+    let viewed: Value =
+        serde_json::from_str(&fs::read_to_string(fixture.root.path().join("plan-view")).unwrap())
+            .unwrap();
+    assert_eq!(viewed[0]["url"], url, "{viewed}");
+}
+
+#[test]
 fn setup_verifies_after_a_concurrent_happy_chat_stops() {
     let fixture = Fixture::with_config(Some(HAPPY_ENABLED));
     let record = install_fake_happy(&fixture);

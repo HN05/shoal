@@ -32,7 +32,7 @@ use crate::{
     config::{Config, Effective, named_commands::Commands},
     execution::recovery,
     fsutil,
-    model::{Chat, RemovedWorkspace, Repository, Workspace},
+    model::{Chat, LinkedItem, RemovedWorkspace, Repository, Workspace},
     paths::Paths,
     protocol::{ConfigTarget, RepositoryMethod},
     tools::Tool,
@@ -347,6 +347,19 @@ pub(in crate::cli) struct ChatLaunch {
     pub args: Vec<OsString>,
     /// The saved chat, by ID, it restores instead of recording a new one.
     pub restores: Option<String>,
+    /// The issue the chat is assigned once recorded.
+    pub assigned: Option<LinkedItem>,
+}
+
+/// Assign the recorded `chat` the issue its launch names, if any. A failure
+/// is told and leaves the chat to start without it.
+pub(in crate::cli) async fn assign_chat(ctx: &Context, chat: &Chat, assigned: Option<&LinkedItem>) {
+    let Some(item) = assigned else {
+        return;
+    };
+    if let Err(error) = client::link_assigned(&ctx.paths, &chat.id, item).await {
+        eprintln!("shoal: {} was not linked to the chat: {error:#}", item.url);
+    }
 }
 
 /// How a launch relates to the agents around it.
