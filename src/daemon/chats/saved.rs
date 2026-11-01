@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     daemon::{log, workspace::Manager},
-    model::Chat,
+    model::{Chat, Repository},
     process::identity::{self, Identity},
     sessions::Origin,
     state::ChatRestore,
@@ -110,6 +110,12 @@ impl Manager {
         hands_over: bool,
     ) -> Result<Chat> {
         let process = identity::capture(pid)?.context("the chat process is not running")?;
+        // A shutdown's save is over or under way, which would end the
+        // restored agent with nothing left to bring it back.
+        ensure!(
+            !self.agent_queue.suspended(),
+            "Shoal is stopping work for a shutdown or a daemon stop"
+        );
         self.ensure_ended(saved, pid).await?;
         let repository = self
             .reserve_repository_directory(&saved.repository_id)
@@ -124,8 +130,20 @@ impl Manager {
             origin,
             hands_over,
         };
-        let mut chat = self.store.run(move |db| restore(db, &restored)).await?;
-        match tmp_dirs::directory(&repository, &chat.id) {
+        let chat = self.store.run(move |db| restore(db, &restored)).await?;
+        self.give_restored_tmp_dir(chat, &repository, pid).await
+    }
+
+    /// `chat`, just restored as process `pid`, with its temporary directory,
+    /// created again when missing; a chat that cannot have one waits for
+    /// `shoal resume` again rather than ending.
+    async fn give_restored_tmp_dir(
+        &self,
+        mut chat: Chat,
+        repository: &Repository,
+        pid: u32,
+    ) -> Result<Chat> {
+        match tmp_dirs::directory(repository, &chat.id) {
             Ok(tmp_dir) => {
                 chat.tmp_dir = tmp_dir;
                 Ok(chat)
