@@ -30,22 +30,24 @@ pub enum DiagnosticsCommand {
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum AlertsCommand {
-    /// Send the user a notification about a workspace without marking it done.
+    /// Send the user a notification about a space without marking it done.
     Send {
         /// One line of text, such as "PR #12 is ready to merge".
         message: String,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, the notification names; defaults to
+        /// the current chat or workspace, or a picker.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
     /// Delete all notifications, including unread ones.
     Clear,
-    /// Withdraw an unread message the workspace sent with shoal alerts send.
+    /// Withdraw an unread message the space sent with shoal alerts send.
     Withdraw {
         /// Notification number, as shoal alerts send printed it.
         id: i64,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, that sent it; defaults to the current
+        /// chat or workspace, or a picker.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
 }

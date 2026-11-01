@@ -138,11 +138,11 @@ async fn agent_messages_are_validated_collapsed_and_confined_to_their_workspace(
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             NotificationMethod::SendMessage {
-                workspace: target.clone(),
+                space: target.clone(),
                 message: "hello".into(),
             },
             NotificationMethod::WithdrawMessage {
-                workspace: target.clone(),
+                space: target.clone(),
                 id: 1,
             },
         ] {

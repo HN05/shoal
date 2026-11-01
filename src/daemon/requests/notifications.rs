@@ -25,11 +25,11 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: NotificationMethod) -
             let listed = manager.notifications(unread_only, limit).await;
             return Ok(Answer::pages(listed, Body::Notifications));
         }
-        NotificationMethod::SendMessage { workspace, message } => {
-            Body::Sent(manager.send_message(&workspace, message).await?)
+        NotificationMethod::SendMessage { space, message } => {
+            Body::Sent(manager.send_message(&space, message).await?)
         }
-        NotificationMethod::WithdrawMessage { workspace, id } => {
-            Body::Notification(manager.withdraw_message(&workspace, id).await?)
+        NotificationMethod::WithdrawMessage { space, id } => {
+            Body::Notification(manager.withdraw_message(&space, id).await?)
         }
         NotificationMethod::MarkNotificationsRead { ids } => {
             manager.mark_notifications_read(ids).await?;
@@ -44,8 +44,8 @@ pub(super) async fn handle(manager: &Arc<Manager>, method: NotificationMethod) -
 impl Scoped for NotificationMethod {
     async fn scope(&mut self, _: &Manager, _: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            NotificationMethod::SendMessage { workspace, .. }
-            | NotificationMethod::WithdrawMessage { workspace, .. } => Some(workspace),
+            NotificationMethod::SendMessage { space, .. }
+            | NotificationMethod::WithdrawMessage { space, .. } => Some(space),
             NotificationMethod::ListNotifications { .. }
             | NotificationMethod::MarkNotificationsRead { .. }
             | NotificationMethod::ClearNotifications

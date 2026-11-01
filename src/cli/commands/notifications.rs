@@ -79,11 +79,11 @@ fn refuse_workspace_processes(ctx: &Context) -> Result<()> {
     Ok(())
 }
 
-pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let withdrawn = request::<Notification>(
         &ctx.paths,
-        NotificationMethod::WithdrawMessage { workspace, id },
+        NotificationMethod::WithdrawMessage { space, id },
     )
     .await?;
     ctx.emit(
@@ -93,11 +93,11 @@ pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) 
     Ok(0)
 }
 
-pub(super) async fn send(ctx: &Context, workspace: Option<String>, message: String) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+pub(super) async fn send(ctx: &Context, space: Option<String>, message: String) -> Result<i32> {
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
     let sent = request::<Sent>(
         &ctx.paths,
-        NotificationMethod::SendMessage { workspace, message },
+        NotificationMethod::SendMessage { space, message },
     )
     .await?;
     let text = match sent.notification {

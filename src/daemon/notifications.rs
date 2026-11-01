@@ -8,7 +8,7 @@ pub(crate) use crate::client::notifications::{Cleared, Notification, Notificatio
 use crate::daemon::log;
 use crate::{
     daemon::workspace::{Manager, Source},
-    model::Workspace,
+    model::PresentSpace,
 };
 
 /// Rows kept before older read notifications are pruned; unread ones stay.
@@ -74,7 +74,7 @@ impl About {
         }
     }
 
-    /// The workspace `id`, which has `name`.
+    /// The workspace or chat `id`, which has `name`.
     pub(crate) fn workspace(name: &str, id: &str) -> Self {
         Self {
             name: Some(name.to_owned()),
@@ -181,7 +181,7 @@ pub(crate) fn retract_about(
 /// Delete the unread message `id` that `workspace` sent the user.
 fn withdraw_message(
     tx: &rusqlite::Transaction<'_>,
-    workspace: &Workspace,
+    space: &About,
     id: i64,
 ) -> Result<Notification> {
     let notification = tx
@@ -189,11 +189,14 @@ fn withdraw_message(
             &format!(
                 "SELECT {COLUMNS} FROM notifications WHERE id=?1 AND workspace_id=?2 AND kind=?3"
             ),
-            params![id, workspace.id, NotificationKind::AgentMessage],
+            params![id, space.id, NotificationKind::AgentMessage],
             row,
         )
         .optional()?
-        .with_context(|| format!("workspace {} sent no notification {id}", workspace.name))?;
+        .with_context(|| {
+            let name = space.name.as_deref().unwrap_or_default();
+            format!("{name} sent no notification {id}")
+        })?;
     ensure!(
         !notification.read,
         "notification {id} was already shown; send a correction with shoal alerts send"
@@ -236,16 +239,25 @@ impl Manager {
         }
     }
 
-    /// Record a message a workspace process sends the user. Unlike daemon
-    /// events, the message is the whole operation, so failures are returned.
+    /// Record a message a space's agent sends the user, naming the space.
+    /// Unlike daemon events, the message is the whole operation, so failures
+    /// are returned.
     pub async fn send_message(&self, selector: &str, message: String) -> Result<Sent> {
         crate::validate::message(&message)?;
-        let workspace = self.workspace(selector).await?;
-        let about = About::workspace(&workspace.name, &workspace.id);
+        let about = self.space_about(selector).await?;
         let notification = self
             .record_notification(about, NotificationKind::AgentMessage, message)
             .await?;
         Ok(Sent { notification })
+    }
+
+    /// The workspace or running chat `selector` names, as its messages to
+    /// the user name their sender.
+    async fn space_about(&self, selector: &str) -> Result<About> {
+        Ok(match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => About::workspace(&workspace.name, &workspace.id),
+            PresentSpace::Chat(chat) => About::workspace(&chat.name, &chat.id),
+        })
     }
 
     /// Tell the user that a turn-state report of the workspace's agent failed
@@ -263,14 +275,14 @@ impl Manager {
         Ok(())
     }
 
-    /// Delete the message `id` the workspace sent the user, which the user
-    /// need not see after all. A shown message stays; a correction follows it.
+    /// Delete the message `id` the space sent the user, which the user need
+    /// not see after all. A shown message stays; a correction follows it.
     pub async fn withdraw_message(&self, selector: &str, id: i64) -> Result<Notification> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.space_about(selector).await?;
         self.store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let notification = withdraw_message(&tx, &workspace, id)?;
+                let notification = withdraw_message(&tx, &space, id)?;
                 tx.commit()?;
                 Ok(notification)
             })

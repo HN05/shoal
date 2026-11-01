@@ -155,7 +155,7 @@ async fn start(
         client::call(
             &ctx.paths,
             NotificationMethod::SendMessage {
-                workspace: workspace.id.clone(),
+                space: workspace.id.clone(),
                 message,
             },
         )

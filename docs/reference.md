@@ -4040,8 +4040,8 @@ shoal alerts --all      # Recent ones including read (--limit, default 50)
 shoal alerts --follow   # Keep printing, and raise terminal notifications
 shoal alerts --keep-unread  # Show without marking read, also with --follow
 shoal alerts clear      # Delete all of them, including unread ones
-shoal alerts send "PR #12 is ready to merge" [--workspace W]  # Add one for a workspace
-shoal alerts withdraw <number> [--workspace W]   # Take back an unread one send added
+shoal alerts send "PR #12 is ready to merge" [--space S]  # Add one for a workspace or chat
+shoal alerts withdraw <number> [--space S]   # Take back an unread one send added
 ```
 
 The daemon records what happens while you are not looking: a resource or
@@ -4053,10 +4053,11 @@ idle cleanup, automatic cleanup that starts failing, a directory whose file acce
 stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
-control characters) for a workspace; agents use it to ask for attention without
-marking the assignment done. It prints the notification's number, or that a
+control characters) for a space, a workspace or chat, which the entry names;
+agents use it to ask for attention without marking the assignment done. It
+prints the notification's number, or that a
 [coordinating agent](#child-workspaces) received the message instead; the
-workspace may withdraw its message by that number until it is shown. Each line shows when it came in, the workspace, and the message: the local
+space may withdraw its message by that number until it is shown. Each line shows when it came in, the workspace, and the message: the local
 time for today's, otherwise whole days, weeks, months or years ago, such as
 `1 day ago` or `2 weeks ago`;
 `--json` returns records with `kind`, `created_at`, and `read`. On a terminal,

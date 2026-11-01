@@ -12,17 +12,17 @@ pub(in crate::cli::commands) async fn run(
 ) -> Result<i32> {
     match command {
         DiagnosticsCommand::Alerts {
-            command: Some(AlertsCommand::Send { message, workspace }),
+            command: Some(AlertsCommand::Send { message, space }),
             ..
-        } => notifications::send(&ctx, workspace, message).await,
+        } => notifications::send(&ctx, space, message).await,
         DiagnosticsCommand::Alerts {
             command: Some(AlertsCommand::Clear),
             ..
         } => notifications::clear(&ctx).await,
         DiagnosticsCommand::Alerts {
-            command: Some(AlertsCommand::Withdraw { id, workspace }),
+            command: Some(AlertsCommand::Withdraw { id, space }),
             ..
-        } => notifications::withdraw(&ctx, workspace, id).await,
+        } => notifications::withdraw(&ctx, space, id).await,
         DiagnosticsCommand::Alerts {
             command: None,
             follow: true,

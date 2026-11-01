@@ -22,14 +22,14 @@ pub enum NotificationMethod {
         keep_unread: bool,
         after: i64,
     },
-    /// A message from a workspace process to the user.
+    /// A message from a space's agent to the user.
     SendMessage {
-        workspace: String,
+        space: String,
         message: String,
     },
-    /// Delete the unread message `id` the workspace sent the user.
+    /// Delete the unread message `id` the space sent the user.
     WithdrawMessage {
-        workspace: String,
+        space: String,
         id: i64,
     },
 }

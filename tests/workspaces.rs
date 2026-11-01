@@ -11539,7 +11539,7 @@ esac
         "{to_inbox}"
     );
     // Notifications name their workspace, and showing them marks them read.
-    fixture.ok(&["alerts", "send", "build finished", "--workspace", "asker"]);
+    fixture.ok(&["alerts", "send", "build finished", "--space", "asker"]);
     let shown = fixture.run(&["internal", "menu-rows", "notifications"]);
     let shown = String::from_utf8(shown.stdout).unwrap();
     assert!(
@@ -11548,7 +11548,7 @@ esac
     );
     assert_eq!(fixture.ok(&["alerts"]), serde_json::json!([]));
     // A workspace process cannot see them, even having cleared its token.
-    fixture.ok(&["alerts", "send", "agent only", "--workspace", "asker"]);
+    fixture.ok(&["alerts", "send", "agent only", "--space", "asker"]);
     let cleared = fixture
         .command()
         .args(["run", "--workspace", "asker", "--", "sh", "-c"])
@@ -20626,6 +20626,46 @@ test ! -f "$HOME/fail-after" || { echo 'external cleanup failed' >&2; exit 8; }
 }
 
 #[test]
+fn a_chats_alert_names_it_until_withdrawn() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let in_chat = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", &chat)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let sent = in_chat(&["alerts", "send", "Plan ready"]);
+    let id = sent["notification"].as_i64().unwrap().to_string();
+    let alerts = fixture.ok(&["alerts", "--keep-unread"]);
+    let alert = alerts
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|alert| alert["message"] == "Plan ready")
+        .unwrap_or_else(|| panic!("{alerts}"));
+    assert_eq!(alert["workspace"], "planning", "{alert}");
+    in_chat(&["alerts", "withdraw", &id]);
+    let alerts = fixture.ok(&["alerts"]);
+    assert!(
+        alerts
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|alert| alert["message"] != "Plan ready"),
+        "{alerts}"
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     let fixture = Fixture::new();
     fixture.add("sender");
@@ -20645,7 +20685,7 @@ fn agents_notify_the_user_about_their_own_workspace_without_completing_it() {
     assert!(output.status.success(), "{output:?}");
     for args in [
         &["alerts", "withdraw", &id][..],
-        &["alerts", "send", "hello", "--workspace", "other"][..],
+        &["alerts", "send", "hello", "--space", "other"][..],
         &["alerts", "send", "two\nlines"],
         &["alerts"],
     ] {
@@ -26147,7 +26187,7 @@ fn a_chat_receives_the_events_of_the_workers_it_coordinates() {
     install_test_script(
         home.join("bin/claude"),
         format!(
-            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker\n\"$shoal\" alerts send --workspace chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
+            "#!/bin/sh\nshoal='{}'\n\"$shoal\" add \"$PWD\" chat-worker </dev/null >/dev/null\n\"$shoal\" internal agent-state working --space chat-worker\n\"$shoal\" alerts send --space chat-worker 'Tests pass'\necho '{{\"hook_event_name\":\"PostToolUse\"}}' | \"$shoal\" messages --hook > \"$HOME/chat-hook\"\n\"$shoal\" messages --hook </dev/null > \"$HOME/chat-hook-again\"\n",
             env!("CARGO_BIN_EXE_shoal")
         ),
     );
