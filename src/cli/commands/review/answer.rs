@@ -63,7 +63,7 @@ pub(super) async fn resolve(
     outcome: Option<Outcome>,
 ) -> Result<i32> {
     let message = match &outcome {
-        Some(outcome) => format!("Resolved finding {finding}: {}.", outcome.describe()),
+        Some(_) => format!("Resolved finding {finding}."),
         None => format!("Reopened finding {finding}."),
     };
     let review: Review = client::reviews(
