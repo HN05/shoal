@@ -910,3 +910,64 @@ async fn completion_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
     assert!(parent.path.exists());
     assert!(child.path.exists());
 }
+
+/// A registered repository, a parent at an explicit path in another directory
+/// than the repository's workspaces, and a workspace there built on it.
+async fn split_across_directories(
+    base: bool,
+) -> (tempfile::TempDir, Arc<Manager>, Workspace, Workspace) {
+    use crate::test_support::{manager, repository};
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let parent = manager
+        .create_workspace(
+            &repo.id,
+            "parent".into(),
+            None,
+            None,
+            Some(temp.path().join("elsewhere").join("parent")),
+        )
+        .await
+        .unwrap();
+    let below = if base {
+        manager
+            .create_workspace(
+                &repo.id,
+                "stacked".into(),
+                Some("parent".into()),
+                None,
+                None,
+            )
+            .await
+    } else {
+        manager
+            .split_workspace(&parent.id, "child".into(), None)
+            .await
+    }
+    .unwrap();
+    assert_ne!(parent.path.parent(), below.path.parent());
+    (temp, manager, parent, below)
+}
+
+#[tokio::test]
+async fn deleted_parent_cleanup_keeps_a_parent_whose_child_elsewhere_stalled() {
+    let (_temp, manager, parent, child) = split_across_directories(false).await;
+    fs::remove_dir_all(&parent.path).unwrap();
+    manager.file_access.stall_rechecking(&child.path);
+
+    sweep(&manager, &mut Timers::default()).await.unwrap();
+
+    let remaining: Vec<_> = manager
+        .list_workspaces()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|workspace| workspace.name)
+        .collect();
+    assert_eq!(remaining.len(), 2, "{remaining:?}");
+    assert!(child.path.exists());
+}

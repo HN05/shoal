@@ -209,6 +209,12 @@ impl<'a> Removal<'a> {
         )
     }
 
+    /// Whether the removal leaves alone the workspaces below that are in a
+    /// stalled directory, as the cleanup sweep, which makes it, skips them.
+    fn skips_stalled(self) -> bool {
+        self.unattended() || matches!(self, Removal::Deleted)
+    }
+
     /// A workspace process's manual removal leaves the user's holds in
     /// place, below the workspace too.
     fn refuses_holds(self) -> bool {
@@ -1245,13 +1251,9 @@ impl Manager {
         {
             bail!("{retention}; retaining workspace");
         }
-        // As the sweep skips them, an unattended removal leaves the
-        // workspaces below alone, which may be in another directory.
-        if matches!(stage, Stage::Initial)
-            && removal.unattended()
-            && let Some(name) = self.stalled_below(&check.workspace).await?
-        {
-            bail!("file access stalled in the directory of {name}, below it; retaining workspace");
+        if matches!(stage, Stage::Initial) {
+            self.ensure_none_stalled_below(&check.workspace, removal)
+                .await?;
         }
         removal.verify(&check, stage)?;
         match (removal, stage) {
@@ -1297,18 +1299,29 @@ impl Manager {
         Ok(check)
     }
 
-    /// The first workspace below `workspace` whose directory's file access
-    /// stalled. The sweep's own pass of that workspace rechecks it.
-    async fn stalled_below(&self, workspace: &Workspace) -> Result<Option<String>> {
+    /// Refuse a removal that [skips stalled](Removal::skips_stalled)
+    /// workspaces while one below `workspace`, which may be in another
+    /// directory, is in a directory whose file access stalled. The sweep's
+    /// own pass of that workspace rechecks it.
+    async fn ensure_none_stalled_below(
+        &self,
+        workspace: &Workspace,
+        removal: Removal<'_>,
+    ) -> Result<()> {
+        if !removal.skips_stalled() {
+            return Ok(());
+        }
         let mut pending = workspace.child_workspaces.clone();
         while let Some(child) = pending.pop() {
             let child = self.workspace(&child.id).await?;
-            if self.file_access.stalled(&child.path).is_some() {
-                return Ok(Some(child.name));
-            }
+            ensure!(
+                self.file_access.stalled(&child.path).is_none(),
+                "file access stalled in the directory of {}, below it; retaining workspace",
+                child.name
+            );
             pending.extend(child.child_workspaces);
         }
-        Ok(None)
+        Ok(())
     }
 
     /// The directory is gone: a worktree that was deleted rather than moved is
@@ -1333,6 +1346,7 @@ impl Manager {
                 "commands are recorded; stop them with shoal stop or shoal rm"
             );
         }
+        self.ensure_none_stalled_below(workspace, removal).await?;
         self.stop_executions(
             &workspace.id,
             removal.stop_policy(),

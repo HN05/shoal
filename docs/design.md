@@ -470,8 +470,8 @@ Those checks skip a stalled directory until 20 seconds after its last check, and
 while another check rechecks it, so each sweep rechecks it once; the sweep's
 cleanup phases skip a workspace or checkout in a stalled directory, reading its
 HEAD themselves when a recheck is due, since none may be left there that branch
-observation can read; an unattended removal is refused while a workspace below
-it is in a stalled directory. Listings read
+observation can read; an unattended removal, deleted-worktree cleanup included,
+is refused while a workspace below it is in a stalled directory. Listings read
 HEAD for review marks within three seconds in all and skip stalled directories,
 leaving staleness unknown, so `shoal attach` and `shoal work` answer from the
 daemon's state. Repository pickers start Git only to tell apart repositories
