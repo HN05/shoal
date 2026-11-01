@@ -15,6 +15,7 @@ use std::{
 };
 
 use anyhow::{Result, anyhow};
+use futures_util::future::BoxFuture;
 use tokio::time::Instant;
 
 use super::{log, notifications::NotificationKind, workspace::Manager};
@@ -201,18 +202,22 @@ impl FileAccess {
 
 impl Manager {
     /// Run `check` of `path` under [`FileAccess`]'s time limit, and tell
-    /// the user once when its directory stalls.
-    pub(crate) async fn check_access<T>(
-        &self,
-        path: &Path,
-        check: impl Future<Output = Result<T>>,
-    ) -> Result<T> {
-        let (result, stall) = self.file_access.check(path, check).await;
-        if let Some(stall) = stall {
-            self.notify(None, NotificationKind::AccessStalled, stall.message())
-                .await;
-        }
-        result
+    /// the user once when its directory stalls. Boxed, so the operations
+    /// that nest checks, such as removal, hold a pointer rather than each
+    /// check on their stack.
+    pub(crate) fn check_access<'a, T: Send + 'a>(
+        &'a self,
+        path: &'a Path,
+        check: impl Future<Output = Result<T>> + Send + 'a,
+    ) -> BoxFuture<'a, Result<T>> {
+        Box::pin(async move {
+            let (result, stall) = self.file_access.check(path, check).await;
+            if let Some(stall) = stall {
+                self.notify(None, NotificationKind::AccessStalled, stall.message())
+                    .await;
+            }
+            result
+        })
     }
 
     /// Whether the cleanup sweep skips `path`: file access in its directory
