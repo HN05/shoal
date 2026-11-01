@@ -41,6 +41,10 @@ const CONTRACT_DIR: &str = "/contract_version_1/";
 const PANE_POLL: Duration = Duration::from_millis(100);
 const PANE_POLLS: u32 = 100;
 
+/// How long a `zellij` command may run before it is stopped; only a hang
+/// guard, since each one answers at once.
+const TIMEOUT: Duration = Duration::from_secs(30);
+
 /// The variable choosing the directory of every session's socket.
 pub(crate) const SOCKET_DIR_VAR: &str = "ZELLIJ_SOCKET_DIR";
 /// The variable naming the session a pane runs in.
@@ -588,14 +592,14 @@ fn pane_command<'a>(shell: &Shell<'a>) -> Vec<&'a str> {
 
 /// What `command` prints, failing when it fails.
 async fn run(command: Command) -> Result<String> {
-    let output = Run::new(command).checked().await?;
+    let output = Run::new(command).timeout(TIMEOUT).checked().await?;
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 /// What `command` prints, a listing, which is empty when the session or
 /// every session is gone.
 async fn listing(command: Command) -> Result<String> {
-    let output = Run::new(command).capture().await?;
+    let output = Run::new(command).timeout(TIMEOUT).capture().await?;
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).into_owned());
     }
