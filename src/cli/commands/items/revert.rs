@@ -1,6 +1,6 @@
-//! `shoal pr revert`: open a PR that undoes a merged one, through the forge
-//! where it reverts PRs, and otherwise from a new workspace whose branch
-//! reverts the merge with `git revert`.
+//! `shoal pr revert`: open a PR that undoes a merged one for a workspace or
+//! chat, through the forge where it reverts PRs, and otherwise from a new
+//! workspace whose branch reverts the merge with `git revert`.
 use anyhow::{Context as _, Result};
 
 use super::{
@@ -11,13 +11,14 @@ use crate::client::output::items::Revert;
 use crate::{
     cli::{
         args::changes::{RevertArgs, RevertedPr},
-        client::request,
-        commands::{capabilities::forge_of, split},
+        client::{self, request},
+        commands::{capabilities::forge_of, issues, items::checkout_repository, split},
         context::Context,
         ui,
     },
     daemon::links::proposals::OpenOutcome,
     execution,
+    forge::ForgeRepo,
     forge::{
         capability::Capability,
         items::{
@@ -26,7 +27,7 @@ use crate::{
         },
     },
     git::revert::{self as git_revert, Merge, Merged, Reverted},
-    model::Workspace,
+    model::{Chat, PresentSpace, Repository, Workspace},
     protocol::{AssignmentMethod, ItemMethod, RemovalMethod, WorkspaceMethod},
     removal::{RemovalResult, UnsavedWork},
     repository::Selector,
@@ -34,33 +35,22 @@ use crate::{
 
 pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs) -> Result<i32> {
     let options = revert_args(args)?;
-    let workspace =
-        ui::select_workspace(ctx, selector.workspace, ui::Fallback::CurrentDirectory).await?;
-    let workspace: Workspace = request(
-        &ctx.paths,
-        WorkspaceMethod::VerifyWorkspace {
-            workspace,
-            on_branch: false,
-        },
-    )
-    .await?;
-    if forge_of(ctx, &workspace)
-        .await?
-        .supports(Capability::RevertPrs)
-    {
+    let space = ui::select_space(ctx, selector.space, ui::Fallback::CurrentDirectory).await?;
+    let from = Reverting::of(ctx, space).await?;
+    if from.forge(ctx).await?.supports(Capability::RevertPrs) {
         let method = ItemMethod::RevertPull {
-            workspace: workspace.id,
+            space: from.id().to_owned(),
             item: selector.item,
             options,
         };
         return report(ctx, request(&ctx.paths, method).await?, None);
     }
     let method = ItemMethod::MergedPull {
-        workspace: workspace.id.clone(),
+        space: from.id().to_owned(),
         item: selector.item,
     };
     let merged: MergedPull = request(&ctx.paths, method).await?;
-    let Some(reverting) = revert_workspace(ctx, &workspace, &merged).await? else {
+    let Some(reverting) = revert_workspace(ctx, &from, &merged).await? else {
         return Ok(1);
     };
     let options = revert_options(&merged.item, options);
@@ -85,6 +75,53 @@ pub(super) async fn revert(ctx: &Context, selector: RevertedPr, args: RevertArgs
     report(ctx, outcome, Some(&reverting))
 }
 
+/// The space a revert is opened from: a workspace, its worktree verified, or
+/// a running chat, which acts in its repository's registered checkout.
+#[allow(
+    clippy::large_enum_variant,
+    reason = "a lookup's result, read by the revert that made it"
+)]
+enum Reverting {
+    Workspace(Box<Workspace>),
+    Chat { chat: Chat, repository: Repository },
+}
+
+impl Reverting {
+    /// The workspace or running chat `space` names.
+    async fn of(ctx: &Context, space: String) -> Result<Self> {
+        match client::present_space(&ctx.paths, &space).await? {
+            Some(PresentSpace::Chat(chat)) => {
+                let repository = checkout_repository(ctx, &chat.repository_id).await?;
+                Ok(Self::Chat { chat, repository })
+            }
+            _ => {
+                let method = WorkspaceMethod::VerifyWorkspace {
+                    workspace: space,
+                    on_branch: false,
+                };
+                Ok(Self::Workspace(Box::new(
+                    request(&ctx.paths, method).await?,
+                )))
+            }
+        }
+    }
+
+    fn id(&self) -> &str {
+        match self {
+            Self::Workspace(workspace) => &workspace.id,
+            Self::Chat { chat, .. } => &chat.id,
+        }
+    }
+
+    /// The forge of the space's repository.
+    async fn forge(&self, ctx: &Context) -> Result<ForgeRepo> {
+        match self {
+            Self::Workspace(workspace) => forge_of(ctx, workspace).await,
+            Self::Chat { repository, .. } => issues::origin_forge(ctx, repository).await,
+        }
+    }
+}
+
 /// What the revert is opened with, its files checked and its body read.
 fn revert_args(args: RevertArgs) -> Result<PullOptions> {
     let (body, attachments) = read_content(args.body, args.files)?;
@@ -104,29 +141,49 @@ fn revert_args(args: RevertArgs) -> Result<PullOptions> {
 /// A new workspace on branch `revert-<number>` from the remote's latest
 /// base branch of the merged PR, set up as any new workspace is: a child of
 /// a workspace process's own workspace, since that is the only kind it may
-/// create; `None` when setup failed.
+/// create, and one a chat opens when the revert comes from a chat; `None`
+/// when setup failed.
 async fn revert_workspace(
     ctx: &Context,
-    workspace: &Workspace,
+    from: &Reverting,
     merged: &MergedPull,
 ) -> Result<Option<Workspace>> {
     let pr = merged.item.pr.as_ref().context("only PRs revert")?;
     let name = format!("revert-{}", merged.item.number);
     let base = Some(format!("origin/{}", pr.base));
-    let created = if crate::env::is_scoped() {
-        split::create_child(ctx, workspace.id.clone(), name, base, None).await?
-    } else {
-        let method = WorkspaceMethod::CreateWorkspace {
-            path: None,
-            repository: Selector::Value(workspace.repository_id.clone()),
-            name,
-            base,
-            git_profile: None,
-            chat: None,
-        };
-        request(&ctx.paths, method).await?
+    let created = match from {
+        Reverting::Workspace(workspace) if crate::env::is_scoped() => {
+            split::create_child(ctx, workspace.id.clone(), name, base, None).await?
+        }
+        Reverting::Workspace(workspace) => {
+            let repository = workspace.repository_id.clone();
+            create_workspace(ctx, repository, name, base, None).await?
+        }
+        Reverting::Chat { chat, .. } => {
+            let repository = chat.repository_id.clone();
+            create_workspace(ctx, repository, name, base, Some(chat.id.clone())).await?
+        }
     };
     split::prepare(ctx, created).await
+}
+
+/// A new workspace `name` of `repository` on `base`, opened by `chat`, if any.
+async fn create_workspace(
+    ctx: &Context,
+    repository: String,
+    name: String,
+    base: Option<String>,
+    chat: Option<String>,
+) -> Result<Workspace> {
+    let method = WorkspaceMethod::CreateWorkspace {
+        path: None,
+        repository: Selector::Value(repository),
+        name,
+        base,
+        git_profile: None,
+        chat,
+    };
+    request(&ctx.paths, method).await
 }
 
 /// Revert the merge on the workspace's branch as tracked commands of that

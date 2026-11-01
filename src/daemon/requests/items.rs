@@ -93,7 +93,7 @@ pub(super) async fn handle(
             Body::Opened(manager.open_pull(&workspace, options, caller).await?)
         }
         ItemMethod::RevertPull {
-            workspace,
+            space: workspace,
             item,
             options,
         } => Body::Opened(
@@ -101,9 +101,10 @@ pub(super) async fn handle(
                 .revert_pull(&workspace, item, options, caller)
                 .await?,
         ),
-        ItemMethod::MergedPull { workspace, item } => {
-            Body::MergedPull(manager.merged_pull(&workspace, item).await?)
-        }
+        ItemMethod::MergedPull {
+            space: workspace,
+            item,
+        } => Body::MergedPull(manager.merged_pull(&workspace, item).await?),
         ItemMethod::OpenIssue {
             context,
             issue,
@@ -229,8 +230,12 @@ impl Scoped for ItemMethod {
             }
             | ItemMethod::PrWait { workspace, .. }
             | ItemMethod::OpenPull { workspace, .. }
-            | ItemMethod::RevertPull { workspace, .. }
-            | ItemMethod::MergedPull { workspace, .. }
+            | ItemMethod::RevertPull {
+                space: workspace, ..
+            }
+            | ItemMethod::MergedPull {
+                space: workspace, ..
+            }
             | ItemMethod::SelectItems {
                 space: workspace, ..
             } => Some(workspace),

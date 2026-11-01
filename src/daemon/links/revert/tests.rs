@@ -45,3 +45,36 @@ async fn reverts_keep_the_reverted_base_and_skip_workspaces_being_removed() {
         "{error:#}"
     );
 }
+
+#[tokio::test]
+async fn a_chat_reverts_from_its_repositorys_checkout() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    // The chat reaches its checkout's forge, which this repository lacks,
+    // rather than being refused as no workspace.
+    let reverted = manager
+        .revert_pull(&chat.id, Some("7".into()), PullOptions::default(), None)
+        .await;
+    let merged = manager.merged_pull(&chat.name, Some("7".into())).await;
+    for error in [reverted.unwrap_err(), merged.unwrap_err()] {
+        assert!(
+            format!("{error:#}").contains("need an origin remote"),
+            "{error:#}"
+        );
+    }
+}

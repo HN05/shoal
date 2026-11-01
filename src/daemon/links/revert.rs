@@ -1,9 +1,9 @@
-//! Revert a merged PR of a workspace's repository: through a forge that
-//! opens the revert itself, or by reading what reverting its merge with Git
-//! in a new workspace needs.
+//! Revert a merged PR of a space's repository: through a forge that opens
+//! the revert itself, or by reading what reverting its merge with Git in a
+//! new workspace needs.
 use anyhow::{Result, bail, ensure};
 
-use super::{actions::linked, proposals::OpenOutcome};
+use super::{proposals::OpenOutcome, space::LinkSpace};
 use crate::{
     config::repo::Opening,
     daemon::{scope::Caller, workspace::Manager},
@@ -20,9 +20,9 @@ use crate::{
 
 impl Manager {
     /// Have the forge open the revert of the merged PR `input` names, or of
-    /// the workspace's linked PR, as its agent account, and record it as
-    /// opened by the workspace. Its branch is the forge's, not the
-    /// workspace's, so it is not assigned.
+    /// the space's linked PR, as its agent account, and record it as opened
+    /// by the space. Its branch is the forge's, not a workspace's, so it is
+    /// not assigned.
     pub async fn revert_pull(
         &self,
         selector: &str,
@@ -34,25 +34,32 @@ impl Manager {
             options.base.is_none(),
             "a revert targets the reverted PR's base branch"
         );
+        let id = self.link_space(selector).await?.id().to_owned();
         // Cleanup holds the workspace's gate, so it cannot remove the
         // workspace between opening the revert and recording it.
-        let (workspace, _gate) = self.lock_pr_gate(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        ensure!(
-            workspace.state.accepts_links(),
-            "workspace cannot accept a PR in its current state"
-        );
-        let settings = self.workspace_settings(&workspace).await?;
+        let _gate = self.gates.lock_prs([&id]).await;
+        let space = self.link_space(&id).await?;
+        self.verify_space(&space).await?;
+        let settings = match &space {
+            LinkSpace::Workspace(workspace) => {
+                ensure!(
+                    workspace.state.accepts_links(),
+                    "workspace cannot accept a PR in its current state"
+                );
+                self.workspace_settings(workspace).await?
+            }
+            LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await?,
+        };
         if self.proposer(caller).await.is_some() && settings.permissions.pr_open == Opening::Propose
         {
             bail!(
                 "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
             );
         }
-        let (forge, account) = self.workspace_forge_account(&workspace).await?;
+        let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
         let input = match input {
             Some(input) => input,
-            None => linked(&workspace, ItemKind::Pr)?,
+            None => self.linked_item(space.id(), ItemKind::Pr).await?,
         };
         let (number, _) = forge.pull(&input)?;
         let current = forge.merged(&account, number).await?;
@@ -62,12 +69,12 @@ impl Manager {
         let revert = NewRevert::new(options, settings.pr.draft);
         let created = forge.revert_pull(&account, &current, &revert).await?;
         let (_, warning) = self
-            .keep_created(&workspace.id, ItemKind::Pr, &created.item, false)
+            .keep_created(space.id(), ItemKind::Pr, &created.item, false)
             .await?;
         let checked = conventions::warnings(
             &forge,
             &account,
-            &workspace.path,
+            space.origin_path(),
             &created.item,
             Some(&revert.body),
             required,
@@ -85,16 +92,15 @@ impl Manager {
         }))
     }
 
-    /// The merged PR `input` names, or the workspace's linked PR, with what
-    /// reverting its merge with Git needs, read as the workspace's agent
-    /// account.
+    /// The merged PR `input` names, or the space's linked PR, with what
+    /// reverting its merge with Git needs, read as the agent account.
     pub async fn merged_pull(&self, selector: &str, input: Option<String>) -> Result<MergedPull> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let (forge, account) = self.workspace_forge_account(&workspace).await?;
+        let space = self.link_space(selector).await?;
+        self.verify_space(&space).await?;
+        let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
         let input = match input {
             Some(input) => input,
-            None => linked(&workspace, ItemKind::Pr)?,
+            None => self.linked_item(space.id(), ItemKind::Pr).await?,
         };
         let (number, _) = forge.pull(&input)?;
         forge.merged_pull(&account, number).await

@@ -455,15 +455,16 @@ pub struct RegisteredRepo {
     pub name: Option<String>,
 }
 
-// A merged PR of the workspace's repository to revert.
+// A merged PR of the space's repository to revert.
 #[derive(Debug, Args)]
 pub struct RevertedPr {
     /// Number or URL; defaults to the linked one.
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
     #[arg(long)]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
 }
 
 // What a new PR is opened with.
