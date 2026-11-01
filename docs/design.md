@@ -516,7 +516,8 @@ registration is never turned into one.
 A new branch starts from the repository default branch: `origin/HEAD`, the sole
 remote's HEAD, or the checkout's current branch without remotes, never a guessed
 `main`. It starts from the local default branch as the background sync left it,
-so creating a workspace never waits on the remote; the sync fast-forwards it from
+so creating a workspace waits on the remote only to discover a remote HEAD not
+yet cached; the sync fast-forwards it from
 its upstream, preserving an ahead branch and leaving it on divergence, dirty or
 managed checkouts, and failed fetches. `--base REF` starts from any locally
 resolvable commit ref, except a configured remote's branch, which is fetched first
@@ -720,10 +721,10 @@ branch, which the daemon keeps current; it writes only objects. Every minute, af
 PR of the repository merges, and on `sync`, the daemon fetches the default branch's remotes under a fetch gate of its own,
 which moving or removing the repository also takes, and only then fast-forwards
 the local default branch to what it fetched under the repository's Git gate, so
-creation never waits on the remote, advancing a clean registered checkout where
+creation never waits on a sync's fetch, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
 a workspace from it stays plain Git. Commands that only read the default branch
-never sync, so none waits on the remote or handles a failed sync; workspace
+never sync, so none waits on a fetch or handles a failed sync; workspace
 status shows a failing sync, and one failing for 30 minutes of awake time, which
 a brief outage or a wake before the network does not reach, needs the user and
 joins the inbox with one alert. Shoal has no merge or rebase command: Git
