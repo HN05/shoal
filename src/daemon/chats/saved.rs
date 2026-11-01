@@ -71,8 +71,9 @@ impl Manager {
     }
 
     /// Stop the processes of the chat `id`, saved as running as `process`:
-    /// those it owns while that process runs, otherwise what it left
-    /// running, found as a restore finds it.
+    /// those it owns while that process runs, otherwise those it is proven
+    /// to have left running. Members of the group it led prove no ownership
+    /// once it ended, so they only hold its restore.
     async fn stop_saved(&self, id: &str, process: &Identity) -> Result<()> {
         let wrappers = self.execution_wrappers().await?;
         if let Some(processes) = ChatProcesses::of(id, process, wrappers.clone())? {
@@ -80,8 +81,8 @@ impl Manager {
         }
         let chat = id.to_owned();
         let recorded = self.store.run(move |db| saved_process(db, &chat)).await?;
-        let survivors = processes::survivors(id, &recorded, &wrappers).await?;
-        identity::stop_verified(&survivors).await
+        let owned = processes::owned(id, &recorded, &wrappers).await?;
+        identity::stop_verified(&owned).await
     }
 
     /// Run the saved chat `id` again as process `pid`, at `origin` in a

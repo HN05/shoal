@@ -599,6 +599,9 @@ async fn a_saved_chat_takes_no_handoff() {
     );
 }
 
+/// The child carries no chat identity: the lineage of the agent's
+/// never-reused ID, which macOS reports, proves it the chat's.
+#[cfg(target_os = "macos")]
 #[tokio::test]
 async fn a_stop_after_the_agent_exited_ends_what_it_left_running() {
     let (root, manager) = manager().await;
@@ -637,6 +640,59 @@ async fn a_stop_after_the_agent_exited_ends_what_it_left_running() {
         .await
         .unwrap();
     // The agent exits between the save and its stop.
+    unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
+    leader.wait().unwrap();
+
+    manager.stop_saved(&chat.id, &agent).await.unwrap();
+
+    assert!(!crate::process::identity::alive(&child).unwrap());
+    drop(group);
+}
+
+#[tokio::test]
+async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    // The agent starts a child with the chat's identity once it is recorded.
+    let id_file = root.path().join("chat-id");
+    let started = root.path().join("child");
+    let mut leader = ProcessGroup::spawn(
+        std::process::Command::new("sh")
+            .arg("-c")
+            .arg(
+                "while [ ! -s \"$0\" ]; do sleep 0.1; done; \
+                 SHOAL_CHAT=$(cat \"$0\") sleep 600 & echo $! > \"$1\"; wait",
+            )
+            .arg(&id_file)
+            .arg(&started),
+    );
+    let group = KilledGroup(leader.id());
+    let chat = manager
+        .start_chat(
+            repo.id.into(),
+            "talk".into(),
+            "claude".into(),
+            leader.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    std::fs::write(&id_file, &chat.id).unwrap();
+    let child = wait_for_child(&started).await;
+    let child = crate::process::identity::capture(child).unwrap().unwrap();
+    let agent = crate::process::identity::capture(chat.pid)
+        .unwrap()
+        .unwrap();
+    manager
+        .store
+        .run(|db| super::save(db, ChatRestore::Resume))
+        .await
+        .unwrap();
     unsafe { libc::kill(leader.id() as i32, libc::SIGKILL) };
     leader.wait().unwrap();
 

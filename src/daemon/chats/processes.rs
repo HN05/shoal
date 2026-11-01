@@ -10,29 +10,20 @@ use crate::process::identity::{self, Identity};
 /// may start another while it stops.
 const ROUNDS: usize = 5;
 
-/// The processes the chat `chat`, saved while it ran as `recorded`, still
-/// owns after a stop that failed or was interrupted, other than the
-/// execution `wrappers`: that process while it lives, those carrying the
-/// chat's identity, those it started, by the lineage of its never-reused ID
-/// when recorded, and the members of the group it led, which keeps its ID
-/// while any member remains, other than a workspace's. A group under that ID
-/// is another's once a different process has the ID, or the process ran in
-/// an earlier boot.
+/// The processes the chat `chat`, saved while it ran as `recorded`, may
+/// still own after a stop that failed or was interrupted, other than the
+/// execution `wrappers`, which hold its restore or discard: those it
+/// [`owned`], and the members of the group it led, which keeps its ID while
+/// any member remains, other than a workspace's. A group under that ID is
+/// another's once a different process has the ID, or the process ran in an
+/// earlier boot. Membership alone does not prove ownership, so only
+/// refusing counts it.
 pub(super) async fn survivors(
     chat: &str,
     recorded: &Identity,
     wrappers: &[Identity],
 ) -> Result<Vec<Identity>> {
-    let mut survivors: Vec<Identity> = identity::scan_chat(chat)
-        .await?
-        .into_iter()
-        .filter(|process| !wrappers.contains(process))
-        .collect();
-    for started in identity::started_by(recorded, wrappers).await? {
-        if !survivors.contains(&started) {
-            survivors.push(started);
-        }
-    }
+    let mut survivors = owned(chat, recorded, wrappers).await?;
     let (_, members) = match led_group(recorded)? {
         Some(group) => identity::related(None, Some(group), None).await?,
         None => Default::default(),
@@ -45,10 +36,33 @@ pub(super) async fn survivors(
             survivors.push(member);
         }
     }
-    if identity::alive(recorded)? && !survivors.contains(recorded) {
-        survivors.push(recorded.clone());
-    }
     Ok(survivors)
+}
+
+/// The processes the chat `chat`, saved while it ran as `recorded`, is
+/// proven to own, other than the execution `wrappers`, which a stop may
+/// signal: that process while it lives, those carrying the chat's identity,
+/// and those it started, by the lineage of its never-reused ID when
+/// recorded.
+pub(super) async fn owned(
+    chat: &str,
+    recorded: &Identity,
+    wrappers: &[Identity],
+) -> Result<Vec<Identity>> {
+    let mut owned: Vec<Identity> = identity::scan_chat(chat)
+        .await?
+        .into_iter()
+        .filter(|process| !wrappers.contains(process))
+        .collect();
+    for started in identity::started_by(recorded, wrappers).await? {
+        if !owned.contains(&started) {
+            owned.push(started);
+        }
+    }
+    if identity::alive(recorded)? && !owned.contains(recorded) {
+        owned.push(recorded.clone());
+    }
+    Ok(owned)
 }
 
 /// The group the process `recorded` led, when it has to be asked: its
