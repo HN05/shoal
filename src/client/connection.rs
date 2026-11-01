@@ -17,7 +17,7 @@ use tokio::{
 use crate::{
     client::{paths::Paths, processes::Identity},
     config::repo::ConfigLayers,
-    model::{Chat, Inspection, Repository, Workspace},
+    model::{Chat, Inspection, PresentSpace, Repository, Workspace},
     protocol::{
         self, Body, ChatMethod, DaemonMethod, DaemonStatus, ErrorCode, Exit, ItemMethod, Method,
         RepositoryMethod, Request, Response, WorkspaceMethod, timing,
@@ -452,6 +452,23 @@ pub async fn chats(daemon: &impl Daemon) -> Result<Vec<Chat>> {
     let mut chats = recorded_chats(daemon).await?;
     chats.retain(|chat| chat.restore.is_none());
     Ok(chats)
+}
+
+/// The workspace or running chat `selector` names, by ID or name.
+pub async fn present_space(daemon: &impl Daemon, selector: &str) -> Result<Option<PresentSpace>> {
+    let named = |id: &str, name: &str| id == selector || name == selector;
+    let workspace = workspaces(daemon)
+        .await?
+        .into_iter()
+        .find(|workspace| named(&workspace.id, &workspace.name));
+    if let Some(workspace) = workspace {
+        return Ok(Some(PresentSpace::Workspace(workspace)));
+    }
+    Ok(chats(daemon)
+        .await?
+        .into_iter()
+        .find(|chat| named(&chat.id, &chat.name))
+        .map(PresentSpace::Chat))
 }
 
 /// Running chats and those Shoal saved to restore.

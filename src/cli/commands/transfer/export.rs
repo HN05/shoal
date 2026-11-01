@@ -34,7 +34,7 @@ pub(super) async fn export(
 ) -> Result<i32> {
     ensure_unscoped_export(ctx)?;
     if let [selector] = names.as_slice()
-        && present_space(ctx, selector).await?.is_none()
+        && client::present_space(&ctx.paths, selector).await?.is_none()
     {
         let output = Output::reserve(&file)?;
         let exported = export_removed(ctx, selector, &output).await?;
@@ -52,7 +52,7 @@ pub(super) async fn export(
     let named = names.into_iter().next();
     // The export ends its space, so it never takes the chat it runs in.
     let selector = ui::select_other_space(ctx, named, Fallback::CurrentDirectory).await?;
-    let space = present_space(ctx, &selector)
+    let space = client::present_space(&ctx.paths, &selector)
         .await?
         .with_context(|| format!("no space {selector}"))?;
     let exported = export_space(ctx, space, yes, &output).await?;
@@ -72,23 +72,6 @@ pub(super) async fn export_all(
     export_into(ctx, &spaces, directory, yes).await
 }
 
-/// The workspace or running chat `selector` names, by ID or name.
-async fn present_space(ctx: &Context, selector: &str) -> Result<Option<PresentSpace>> {
-    let named = |id: &str, name: &str| id == selector || name == selector;
-    let workspace = client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|workspace| named(&workspace.id, &workspace.name));
-    if let Some(workspace) = workspace {
-        return Ok(Some(PresentSpace::Workspace(workspace)));
-    }
-    Ok(client::chats(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|chat| named(&chat.id, &chat.name))
-        .map(PresentSpace::Chat))
-}
-
 /// The spaces `names` selects, or the current one or those the picker
 /// offers without names.
 pub(super) async fn selected_spaces(
@@ -97,7 +80,7 @@ pub(super) async fn selected_spaces(
 ) -> Result<Vec<PresentSpace>> {
     let mut spaces = Vec::new();
     for selector in ui::select_spaces(ctx, names).await? {
-        let space = present_space(ctx, &selector)
+        let space = client::present_space(&ctx.paths, &selector)
             .await?
             .with_context(|| format!("no space {selector}"))?;
         spaces.push(space);
