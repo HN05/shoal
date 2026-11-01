@@ -1,4 +1,4 @@
-use crate::daemon::resources::ResourceRequest;
+use crate::client::resources::ResourceRequest;
 use serde::{Deserialize, Serialize};
 
 /// Requests about leases of cooperative resources.

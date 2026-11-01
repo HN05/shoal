@@ -1,7 +1,7 @@
 //! Cooperative TCP port reservations owned by a worktree.
+pub(crate) use crate::model::PortRequest;
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, Transaction, TransactionBehavior, params};
-use serde::{Deserialize, Serialize};
 use std::{
     io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -29,16 +29,6 @@ mod selection;
 mod tests;
 
 use selection::first_available;
-
-/// Caller overrides for a named port; unset fields fall back to the
-/// repository's port definition.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct PortRequest {
-    pub port: Option<u16>,
-    pub env_var: Option<String>,
-    pub reason: Option<String>,
-    pub on_conflict: Option<ConflictPolicy>,
-}
 
 pub enum Acquisition {
     Allocation(Allocation<PortReservation>),

@@ -749,7 +749,7 @@ async fn expiry_refuses_results_whose_directory_was_replaced() {
 async fn a_completion_hands_back_a_bounded_number_of_files() {
     let (temp, manager) = manager().await;
     let audit = workspace(&temp, &manager).await;
-    let results = (0..=super::MAX_RESULTS)
+    let results = (0..=crate::client::files::MAX_RESULTS)
         .map(|n| temp.path().join(format!("{n}.md")).into())
         .collect();
     let error = manager

@@ -236,3 +236,13 @@ pub struct ProxyRetry {
     /// Unix seconds when the proxy tries again.
     pub next_at: i64,
 }
+
+/// What `shoal resume --discard` forgot in a workspace.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Discarded {
+    /// The workspace's name.
+    pub workspace: String,
+    /// The execution IDs of the forgotten stopped agents, last sessions and
+    /// commands.
+    pub executions: Vec<String>,
+}

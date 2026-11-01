@@ -95,9 +95,9 @@ pub struct RepoConfig {
     #[option(named)]
     pub secrets: crate::secrets::Secrets,
     #[option(named)]
-    pub resources: BTreeMap<String, crate::daemon::resources::ResourceConfig>,
+    pub resources: BTreeMap<String, crate::client::resources::ResourceConfig>,
     #[option(named)]
-    pub resource_pools: BTreeMap<String, crate::daemon::resources::PoolConfig>,
+    pub resource_pools: BTreeMap<String, crate::client::resources::PoolConfig>,
     #[option(section)]
     pub simulators: SimulatorsConfig,
     #[option(section)]
@@ -315,7 +315,7 @@ pub struct PortsConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct PortDefinition {
     pub requires_approval: bool,
-    pub approval_lifetime: crate::daemon::approvals::Lifetime,
+    pub approval_lifetime: crate::client::approvals::Lifetime,
     pub port: Option<u16>,
     pub env: Option<String>,
     pub reason: Option<String>,
@@ -442,7 +442,7 @@ impl RepoConfig {
                 "configured port {name} cannot use port zero"
             );
         }
-        crate::daemon::resources::definitions(&self.resources, &self.resource_pools)?;
+        crate::client::resources::definitions(&self.resources, &self.resource_pools)?;
         crate::env::validate_configured_environment(&self.env)?;
         crate::config::validate_agent_dirs(self.agent.dirs.as_deref().unwrap_or_default())?;
         crate::agent::ModelChoice {
@@ -465,8 +465,8 @@ impl RepoConfig {
 pub struct SimulatorsConfig {
     #[option(default = false)]
     pub requires_approval: Option<bool>,
-    #[option(default = crate::daemon::approvals::Lifetime::default())]
-    pub approval_lifetime: Option<crate::daemon::approvals::Lifetime>,
+    #[option(default = crate::client::approvals::Lifetime::default())]
+    pub approval_lifetime: Option<crate::client::approvals::Lifetime>,
     #[option(list)]
     pub preferred: Vec<String>,
 }

@@ -2,7 +2,6 @@
 //! and of workspaces whose directory was deleted outside Shoal; the user can
 //! remove the idle candidates on request.
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs,
@@ -14,6 +13,9 @@ use std::{
 };
 use tokio::time::{Instant, sleep};
 
+pub(crate) use crate::client::cleanup::{
+    CacheCleanup, Kept, ManualCleanup, Pick, Retained, Selection,
+};
 use crate::{
     daemon::{
         caches::Emptying, events::EventCause, log, notifications::NotificationKind,
@@ -491,20 +493,6 @@ fn skip_failed<T>(workspace: &Workspace, observed: Result<Option<T>>) -> Option<
     })
 }
 
-/// The workspaces a manual cleanup removed, or would remove in a dry run,
-/// and those it retained because inspection or removal failed. A dry run
-/// also lists why it keeps each other workspace.
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct ManualCleanup {
-    pub dry_run: bool,
-    pub removed: Vec<String>,
-    pub retained: Vec<Retained>,
-    #[serde(default)]
-    pub kept: Vec<Kept>,
-    #[serde(default)]
-    pub caches: Vec<CacheCleanup>,
-}
-
 impl ManualCleanup {
     /// A dry run lists why it keeps each workspace, and a request naming
     /// workspaces says why it kept those.
@@ -513,17 +501,6 @@ impl ManualCleanup {
             self.kept.push(Kept { workspace, reason });
         }
     }
-}
-
-/// Which items of one kind a cleanup request covers.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Pick {
-    #[default]
-    None,
-    All,
-    /// Workspaces, or the repositories whose caches to empty, by name or ID.
-    Only(Vec<String>),
 }
 
 impl Pick {
@@ -552,39 +529,6 @@ impl Pick {
         }
         Ok(())
     }
-}
-
-/// What a cleanup request covers.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Selection {
-    #[serde(default)]
-    pub workspaces: Pick,
-    #[serde(default)]
-    pub caches: Pick,
-    /// Only this repository's workspaces and caches, by any repository selector.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Retained {
-    pub workspace: String,
-    pub error: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Kept {
-    pub workspace: String,
-    pub reason: CleanupReason,
-}
-
-/// One repository's shared caches on a cleanup request.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CacheCleanup {
-    pub repository: String,
-    pub repository_id: String,
-    #[serde(flatten)]
-    pub emptying: Emptying,
 }
 
 /// Remove the selected workspaces idle or merged cleanup would remove, now:

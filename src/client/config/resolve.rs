@@ -113,7 +113,7 @@ impl Stack {
         // Each layer is valid alone; the repository's layered names must agree
         // too. A repository name that shadows a global one is allocation's
         // concern, so a conflict there never blocks the workspace's settings.
-        crate::daemon::resources::definitions(&repository.resources, &repository.resource_pools)
+        crate::client::resources::definitions(&repository.resources, &repository.resource_pools)
             .context("layered repository config")?;
         base.merge(global, Merge::SameLevel);
         base.merge(repository, Merge::RepositoryOverGlobal);

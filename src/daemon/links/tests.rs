@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    daemon::events::{EventItem, LinkEvent},
+    client::events::{EventItem, LinkEvent},
     model::LinkedItem,
     test_support::{git, manager, repository},
 };

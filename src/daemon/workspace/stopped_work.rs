@@ -1,21 +1,11 @@
 //! What a stop saved for `shoal resume`: keeping stopped agents as last
 //! sessions after `shoal stop`, and forgetting them, which the daemon does so
 //! it can confine coordinating agents to the workspaces below theirs.
+pub use crate::client::executions::Discarded;
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 
 use super::Manager;
 use crate::execution::recovery::{self, Saved};
-
-/// What `shoal resume --discard` forgot in a workspace.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Discarded {
-    /// The workspace's name.
-    pub workspace: String,
-    /// The execution IDs of the forgotten stopped agents, last sessions and
-    /// commands.
-    pub executions: Vec<String>,
-}
 
 /// A workspace process that stopped another workspace's executions, which
 /// may resume the agents among them.

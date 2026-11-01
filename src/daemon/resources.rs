@@ -8,7 +8,7 @@ mod repositories;
 pub(crate) use repositories::{borrowed, ensure_no_external_leases};
 
 pub(crate) use crate::client::resources::{
-    Catalog, CatalogPool, Definition, LockMode, Overview, PoolConfig, PoolStatus, RepositoryView,
+    Catalog, CatalogPool, Definition, LockMode, Overview, PoolStatus, RepositoryView,
     ResourceConfig, ResourceKind, ResourceLease, ResourceRequest, ResourceStatus, Scope,
     WorkspaceOverview, definitions,
 };

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-use crate::{daemon::approvals::Lifetime, state::states, validate};
+use crate::{client::approvals::Lifetime, state::states, validate};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

@@ -16,10 +16,10 @@ pub enum ApprovalMethod {
         id: i64,
         approve: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
+        shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
         /// Edits, a reason or a duplicate, for proposals only.
         #[serde(default)]
-        details: crate::daemon::approvals::proposals::ProposalDecision,
+        details: crate::client::approvals::ProposalDecision,
     },
     /// Pass a request the coordinating agent of `workspace` decides on to the
     /// next coordinating agent above it that holds a grant, or to the user.
@@ -27,7 +27,7 @@ pub enum ApprovalMethod {
         workspace: String,
         id: i64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<Box<crate::daemon::approvals::ApprovalRequest>>,
+        shown: Option<Box<crate::client::approvals::ApprovalRequest>>,
     },
     /// Withdraw the workspace's pending approval request `id`, which its
     /// agent no longer needs.

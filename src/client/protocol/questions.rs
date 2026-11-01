@@ -10,7 +10,7 @@ pub enum QuestionMethod {
     /// question again returns it until its answer is delivered.
     AskQuestion {
         workspace: String,
-        ask: crate::daemon::questions::Ask,
+        ask: crate::client::questions::Ask,
     },
     /// Open questions, in every workspace unless one is named.
     ListQuestions { workspace: Option<String> },
@@ -22,7 +22,7 @@ pub enum QuestionMethod {
         workspace: String,
         id: i64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<crate::daemon::questions::Question>,
+        shown: Option<crate::client::questions::Question>,
     },
     /// The user's answer, queued for the asking workspace's agents.
     /// `shown` is the question the user was shown, which a later question
@@ -31,12 +31,12 @@ pub enum QuestionMethod {
         id: i64,
         answer: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        shown: Option<crate::daemon::questions::Question>,
+        shown: Option<crate::client::questions::Question>,
     },
     /// Accept the stored recommendation literally, including numeric text.
     AcceptQuestionRecommendation {
         id: i64,
-        shown: Option<crate::daemon::questions::Question>,
+        shown: Option<crate::client::questions::Question>,
     },
     /// The caller's agent asks the user in its chat this turn: the turn's
     /// final message becomes a question.
@@ -49,7 +49,7 @@ pub enum QuestionMethod {
     AwaitAnswer {
         workspace: String,
         id: i64,
-        ask: crate::daemon::questions::Ask,
+        ask: crate::client::questions::Ask,
     },
 }
 

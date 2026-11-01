@@ -3,10 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 use crate::{
-    client::sim::Simulator,
+    client::{processes::Identity, resources::ResourceLease, sim::Simulator},
     config::repo::{ConflictPolicy, PortDefinition},
-    daemon::resources::ResourceLease,
-    process::identity::Identity,
     state::{AgentState, ExecutionState, QueueKind, QueueState, WorkspaceState},
 };
 
@@ -314,16 +312,16 @@ pub struct RemovedWorkspace {
     /// Agents stopped by the removal or before it, which `shoal resume`
     /// continues once the workspace is restored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub agents: Vec<crate::execution::recovery::StoppedAgent>,
+    pub agents: Vec<crate::client::executions::StoppedAgent>,
     /// The last sessions of agents, which `shoal resume` continues once the
     /// workspace is restored.
     #[serde(
         default,
         alias = "last_session",
-        deserialize_with = "crate::execution::recovery::one_or_many_sessions",
+        deserialize_with = "crate::client::executions::one_or_many_sessions",
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub last_sessions: Vec<crate::execution::recovery::LastSession>,
+    pub last_sessions: Vec<crate::client::executions::LastSession>,
     pub cause: crate::daemon::events::EventCause,
     pub removed_at: u64,
     pub expires_at: u64,
@@ -487,9 +485,9 @@ pub struct Completion {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Inspection {
-    pub issue: Option<crate::daemon::links::issue::Registration>,
+    pub issue: Option<crate::client::links::issue::Registration>,
     pub completion: Option<Completion>,
-    pub pr_cleanup: Option<crate::daemon::links::pr::Registration>,
+    pub pr_cleanup: Option<crate::client::links::pr::Registration>,
     pub workspace: Workspace,
     pub executions: Vec<Execution>,
     /// The places Shoal created for the workspace, such as a session whose
@@ -534,17 +532,17 @@ pub struct WorkspaceStatus {
     pub issue_status: Option<IssueStatus>,
     /// The retry of the agent's turn an API failure ended.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub turn_retry: Option<crate::daemon::workspace::turn_retry::TurnRetry>,
+    pub turn_retry: Option<crate::client::executions::TurnRetry>,
     /// The request the agent's proxy waits to retry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub proxy_retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
+    pub proxy_retry: Option<crate::client::executions::ProxyRetry>,
     /// How many processes are still running after what started them exited,
     /// as the cleanup sweep last found them.
     #[serde(default)]
     pub leftover_count: usize,
     /// The first of them.
     #[serde(default)]
-    pub leftovers: Vec<crate::daemon::leftovers::Leftover>,
+    pub leftovers: Vec<crate::client::processes::Leftover>,
 }
 
 /// The first condition that keeps a workspace from automatic cleanup, in the
@@ -1052,6 +1050,16 @@ impl Selected {
         );
         Ok(kind)
     }
+}
+
+/// Caller overrides for a named port; unset fields fall back to the
+/// repository's port definition.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PortRequest {
+    pub port: Option<u16>,
+    pub env_var: Option<String>,
+    pub reason: Option<String>,
+    pub on_conflict: Option<ConflictPolicy>,
 }
 
 #[cfg(test)]

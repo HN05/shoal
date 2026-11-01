@@ -1,5 +1,5 @@
 use super::*;
-use crate::daemon::workspace::ExecutionKind;
+use crate::client::executions::ExecutionKind;
 use serde_json::json;
 
 #[test]
@@ -138,7 +138,7 @@ fn workspace_hook_rejects_unknown_kinds() {
 
 #[test]
 fn pr_actions_preserve_existing_wire_fields() {
-    use crate::daemon::links::pr::Action;
+    use crate::client::links::pr::Action;
     for (action, url, clear) in [
         (
             Action::Watch {
@@ -184,7 +184,7 @@ fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
         json!({"clear": true, "unwatch": "7"}),
         json!({"clear": false, "url": "8", "unwatch": "7"}),
     ] {
-        assert!(serde_json::from_value::<crate::daemon::links::pr::Action>(action).is_err());
+        assert!(serde_json::from_value::<crate::client::links::pr::Action>(action).is_err());
     }
 }
 

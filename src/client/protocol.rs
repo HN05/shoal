@@ -5,21 +5,20 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::{
-    client::removal::{RemovalCheck, RemovalResult},
-    client::sim::{AuditEntry, Simulator, SimulatorCatalog},
-    config::repo::ConfigLayers,
-    daemon::{
-        events::EventItem,
+    client::{
         notifications::Notification,
-        recovery::Report,
+        processes::Identity,
+        removal::{RemovalCheck, RemovalResult},
         resources::{Overview, ResourceLease},
+        sim::{AuditEntry, Simulator, SimulatorCatalog},
     },
+    config::repo::ConfigLayers,
+    daemon::{events::EventItem, recovery::Report},
     model::{
         ConflictCheck, DiffBase, ExecutionPlan, Inspection, PortOverview, PortReservation,
         PortSuggestion, Repository, RepositoryRemoval, SyncedRepository, Workspace,
         WorkspaceStatus,
     },
-    process::identity::Identity,
 };
 
 mod agents;
@@ -538,7 +537,7 @@ response_bodies! {
     Items(Vec<crate::forge::items::item::Item>),
     ApiResponse(Vec<String>),
     Downloaded(Vec<DownloadPiece>),
-    Opened(crate::daemon::links::proposals::OpenOutcome),
+    Opened(crate::client::links::OpenOutcome),
     Completion(crate::model::Completion),
     Discarded(crate::daemon::workspace::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),
@@ -572,7 +571,7 @@ response_bodies! {
     Execution(ExecutionPlan),
     RemovalCheck(RemovalCheck),
     RemovalResult(RemovalResult),
-    StoppedProcesses(crate::daemon::space_processes::Stopped),
+    StoppedProcesses(crate::client::processes::Stopped),
     ExportedSpace(crate::transfer::ExportedSpace),
     DiffBase(DiffBase),
     Conflicts(ConflictCheck),
@@ -580,27 +579,27 @@ response_bodies! {
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),
     Notifications(Vec<Notification>),
-    Cleared(crate::daemon::notifications::Cleared),
-    AgentMessages(Vec<crate::daemon::agent_messages::AgentMessage>),
-    Question(crate::daemon::questions::Question),
-    Questions(crate::daemon::questions::Listing),
+    Cleared(crate::client::notifications::Cleared),
+    AgentMessages(Vec<crate::client::agent_messages::AgentMessage>),
+    Question(crate::client::questions::Question),
+    Questions(crate::client::questions::Listing),
     ReviewPieces(Vec<ReviewPiece>),
     ReviewId(i64),
     Notification(Notification),
-    Sent(crate::daemon::notifications::Sent),
+    Sent(crate::client::notifications::Sent),
     EventItem(EventItem),
-    PrUpdates(crate::daemon::links::wait::Updates),
+    PrUpdates(crate::client::links::Updates),
     Port(PortReservation),
     PortSuggestion(PortSuggestion),
     PortOverview(PortOverview),
     PortCatalog(crate::model::PortCatalog),
-    ApprovalRequest(Box<crate::daemon::approvals::ApprovalRequest>),
-    ApprovalRequests(Vec<crate::daemon::approvals::ApprovalRequest>),
+    ApprovalRequest(Box<crate::client::approvals::ApprovalRequest>),
+    ApprovalRequests(Vec<crate::client::approvals::ApprovalRequest>),
     SecretGrant(crate::daemon::secrets::SecretGrant),
     SecretCatalog(crate::daemon::secrets::SecretCatalog),
     ResourceLease(ResourceLease),
     ResourceOverview(Overview),
-    ResourceCatalog(crate::daemon::resources::Catalog),
+    ResourceCatalog(crate::client::resources::Catalog),
     Simulator(Simulator),
     Simulators(Vec<Simulator>),
     SimCatalog(SimulatorCatalog),
@@ -880,7 +879,7 @@ pub enum Control {
         /// upgrade replaced may continue from, since it speaks the daemon's
         /// protocol. Older daemons leave it out.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        executable: Option<crate::fsutil::FileIdentity>,
+        executable: Option<crate::client::executions::FileIdentity>,
     },
     Finished {
         complete: bool,

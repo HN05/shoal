@@ -34,7 +34,7 @@ pub enum ItemMethod {
     SetPr {
         workspace: String,
         #[serde(flatten)]
-        action: crate::daemon::links::pr::Action,
+        action: crate::client::links::pr::Action,
     },
     PrWait {
         workspace: String,

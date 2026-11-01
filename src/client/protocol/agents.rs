@@ -49,7 +49,7 @@ pub enum AgentMethod {
         workspace: String,
         execution: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        retry: Option<crate::daemon::workspace::proxy_retries::ProxyRetry>,
+        retry: Option<crate::client::executions::ProxyRetry>,
     },
     /// The upstream of `execution`'s proxy refuses requests until Unix
     /// second `resets_at`, such as a usage limit's reset, which its wrapper

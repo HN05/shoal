@@ -2,30 +2,13 @@
 //! nothing Shoal started can be using them.
 use anyhow::Result;
 use rusqlite::{Connection, TransactionBehavior};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::cleanup::Emptying;
 use crate::{
     caches::Layout,
     daemon::{store, workspace::Manager},
     model::Repository,
 };
-
-/// What happened to one repository's shared caches.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "outcome", rename_all = "snake_case")]
-pub enum Emptying {
-    /// The caches emptied, or that a dry run would empty.
-    Emptied {
-        caches: Vec<String>,
-    },
-    /// A tracked execution or the seed build of the repository is running.
-    Busy {
-        caches: Vec<String>,
-    },
-    Failed {
-        error: String,
-    },
-}
 
 impl Manager {
     /// Empty the repository's shared caches unless a tracked execution in one

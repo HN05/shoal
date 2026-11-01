@@ -21,7 +21,7 @@ pub enum RemovalMethod {
     /// that started it.
     StopProcesses {
         space: String,
-        selection: crate::daemon::space_processes::Selection,
+        selection: crate::client::processes::Selection,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         requester: Option<u32>,
     },

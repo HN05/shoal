@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{ErrorCode, Lifetime};
 use crate::{
-    daemon::{approvals::ApprovalRequest, links::proposals::OpenOutcome},
+    client::{approvals::ApprovalRequest, links::OpenOutcome},
     forge::items::create::PullOptions,
     model::{LandedBranch, QueueEntry, Workspace},
 };

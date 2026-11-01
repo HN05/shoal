@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::Lifetime;
-use crate::{daemon::workspace::ExecutionKind, process::identity::Identity};
+use crate::client::{executions::ExecutionKind, processes::Identity};
 
 /// Requests that run tracked commands in a workspace.
 #[derive(Debug, Serialize, Deserialize)]

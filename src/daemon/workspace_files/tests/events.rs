@@ -1,9 +1,7 @@
 use super::{Attacher, FileSource, chat, workspace};
 use crate::{
-    daemon::{
-        events::{EventItem, FileEventDetails, FileEventKind},
-        workspace::Manager,
-    },
+    client::events::{EventItem, FileEventDetails, FileEventKind},
+    daemon::workspace::Manager,
     test_support::manager,
 };
 
