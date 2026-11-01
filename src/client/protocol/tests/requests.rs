@@ -22,6 +22,7 @@ const REQUESTS: &[&str] = &[
     r#"{"plan_repository_moves":{"root":"/work","regular_dir":false}}"#,
     r#"{"move_repositories":{"regular_dir":true}}"#,
     r#"{"sync_repository":{"repository":"app"}}"#,
+    r#""failing_syncs""#,
     r#"{"list_branches":{"repository":"app"}}"#,
     r#"{"kept_branches":{"repository":"app"}}"#,
     r#"{"delete_kept_branches":{"branches":[{"repository_id":"r1","branch":"fix","head":"abc"}]}}"#,

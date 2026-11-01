@@ -60,6 +60,7 @@ impl Manager {
             simulator.workspace_id.as_deref() == Some(inspection.workspace.id.as_str())
         });
         let (leftover_count, leftovers) = self.leftovers.of(&inspection.workspace.id);
+        let sync = self.checkout_sync(&inspection.workspace.repository_id);
         Ok(WorkspaceStatus {
             inspection,
             setup_finished,
@@ -75,6 +76,7 @@ impl Manager {
             proxy_retry,
             leftover_count,
             leftovers,
+            sync,
         })
     }
 }

@@ -2,7 +2,8 @@
 //! every repository each [`SYNC_INTERVAL`], and a repository sooner when a
 //! merge changed its remote. Commands that read the default branch use what
 //! the checkout has; `shoal repo sync` and decisions that need the remote's
-//! state now sync through the same path.
+//! state now sync through the same path. A sync that keeps failing shows in
+//! workspace status, then in the inbox with one notification.
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard, PoisonError},
@@ -15,10 +16,14 @@ use tokio::{
     time::{Instant, sleep_until},
 };
 
+use self::health::Health;
 use crate::{
-    daemon::{log, workspace::Manager},
-    model::SyncedRepository,
+    daemon::{log, notifications::NotificationKind, workspace::Manager},
+    model::{CheckoutSync, SyncedRepository},
+    time::{local_minutes, unix_seconds},
 };
+
+mod health;
 
 const SYNC_INTERVAL: Duration = Duration::from_secs(60);
 /// A fetch at most this old still shows what the remote's default branch
@@ -34,13 +39,6 @@ pub(crate) struct Syncs {
     wake: Notify,
 }
 
-/// The outcome of a repository's recent syncs.
-#[derive(Default)]
-struct Health {
-    /// When its remotes were last fetched.
-    fetched: Option<Instant>,
-}
-
 impl Syncs {
     fn lock(&self) -> MutexGuard<'_, HashMap<String, Health>> {
         self.repositories
@@ -52,14 +50,34 @@ impl Syncs {
         self.lock()
             .entry(repository_id.to_owned())
             .or_default()
-            .fetched = Some(at);
+            .fetched(at);
     }
 
     fn fetched_since(&self, repository_id: &str, since: Instant) -> bool {
         self.lock()
             .get(repository_id)
-            .and_then(|health| health.fetched)
-            .is_some_and(|at| at >= since)
+            .is_some_and(|health| health.fetched_since(since))
+    }
+
+    fn record(&self, repository_id: &str, error: Option<&Error>) {
+        self.lock()
+            .entry(repository_id.to_owned())
+            .or_default()
+            .record(error, Instant::now(), unix_seconds());
+    }
+
+    /// Forget the repositories no longer registered.
+    fn retain(&self, repository_ids: &[String]) {
+        self.lock().retain(|id, _| repository_ids.contains(id));
+    }
+
+    /// The failures to tell the user about, each once.
+    fn unnotified(&self) -> Vec<(String, String)> {
+        let now = Instant::now();
+        self.lock()
+            .iter_mut()
+            .filter_map(|(id, health)| Some((id.clone(), health.notify(now)?)))
+            .collect()
     }
 
     /// Sync `repository_id` before the next scheduled pass.
@@ -87,6 +105,15 @@ enum Synced {
     /// The remotes were fetched; the local default branch followed them or
     /// could not.
     Fetched(Result<SyncedRepository>),
+}
+
+impl Synced {
+    fn error(&self) -> Option<&Error> {
+        match self {
+            Synced::Unfetched(error) | Synced::Fetched(Err(error)) => Some(error),
+            Synced::Fetched(Ok(_)) => None,
+        }
+    }
 }
 
 impl Manager {
@@ -131,8 +158,38 @@ impl Manager {
         }
     }
 
-    /// One sync under the repository's Git gate, recorded for later decisions.
+    /// How the background sync of the repository went, once it was tried.
+    pub(crate) fn checkout_sync(&self, repository_id: &str) -> Option<CheckoutSync> {
+        self.syncs
+            .lock()
+            .get(repository_id)
+            .map(|health| health.view(repository_id))
+    }
+
+    /// The registered repositories whose syncs have failed long enough to
+    /// need the user.
+    pub async fn failing_syncs(&self) -> Result<Vec<CheckoutSync>> {
+        let repositories = self.repositories().await?;
+        let now = Instant::now();
+        let syncs = self.syncs.lock();
+        Ok(repositories
+            .iter()
+            .filter_map(|repo| {
+                let health = syncs.get(&repo.id)?;
+                health.needs_user(now).then(|| health.view(&repo.id))
+            })
+            .collect())
+    }
+
+    /// One sync, recorded for status and later decisions.
     async fn sync(&self, repository_id: &str) -> Synced {
+        let synced = self.fetch_and_fast_forward(repository_id).await;
+        self.syncs.record(repository_id, synced.error());
+        synced
+    }
+
+    /// Fetch and fast-forward under the repository's Git gate.
+    async fn fetch_and_fast_forward(&self, repository_id: &str) -> Synced {
         let started = Instant::now();
         let _git = self.gates.lock_git(repository_id).await;
         let synced = async {
@@ -150,15 +207,39 @@ impl Manager {
     }
 
     /// Sync each repository, logging the ones that fail.
-    async fn sync_all(&self, repository_ids: Vec<String>) {
+    async fn sync_all(&self, repository_ids: &[String]) {
         for repository_id in repository_ids {
-            let error = match self.sync(&repository_id).await {
-                Synced::Unfetched(error) | Synced::Fetched(Err(error)) => error,
-                Synced::Fetched(Ok(_)) => continue,
-            };
-            log!("sync of repository {repository_id}: {error:#}");
+            if let Some(error) = self.sync(repository_id).await.error() {
+                log!("sync of repository {repository_id}: {error:#}");
+            }
         }
     }
+
+    /// Tell the user about each sync that has failed long enough, once.
+    async fn notify_failing_syncs(&self) {
+        for (repository_id, error) in self.syncs.unnotified() {
+            let (Some(sync), Ok(repo)) = (
+                self.checkout_sync(&repository_id),
+                self.repository(repository_id.as_str()).await,
+            ) else {
+                continue;
+            };
+            let name = repo.name.unwrap_or_else(|| repo.path.display().to_string());
+            let message = failure_message(&name, sync.failing_since, &error);
+            self.notify(None, NotificationKind::SyncFailed, message)
+                .await;
+        }
+    }
+}
+
+/// The notification for a repository whose syncs keep failing.
+fn failure_message(name: &str, failing_since: Option<u64>, error: &str) -> String {
+    let since = failing_since.map_or_else(String::new, |since| {
+        format!(" since {}", local_minutes(since as i64))
+    });
+    format!(
+        "the default branch of {name} has not synced{since}: {error}; retry with shoal repo sync"
+    )
 }
 
 /// Sync every repository at once and then each [`SYNC_INTERVAL`], and a
@@ -170,7 +251,11 @@ pub async fn run(manager: Arc<Manager>) {
             next = Instant::now() + SYNC_INTERVAL;
             manager.syncs.take_requested();
             match manager.repositories().await {
-                Ok(repositories) => repositories.into_iter().map(|repo| repo.id).collect(),
+                Ok(repositories) => {
+                    let ids: Vec<String> = repositories.into_iter().map(|repo| repo.id).collect();
+                    manager.syncs.retain(&ids);
+                    ids
+                }
                 Err(error) => {
                     log!("checkout sync: {error:#}");
                     Vec::new()
@@ -181,7 +266,8 @@ pub async fn run(manager: Arc<Manager>) {
         };
         {
             let _operation = manager.gates.operation().await;
-            manager.sync_all(repository_ids).await;
+            manager.sync_all(&repository_ids).await;
+            manager.notify_failing_syncs().await;
         }
         tokio::select! {
             _ = sleep_until(next) => {}

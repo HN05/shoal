@@ -623,6 +623,7 @@ response_bodies! {
     Hook(Option<std::path::PathBuf>),
     LayeredConfig(Box<ConfigLayers>),
     SyncedRepository(SyncedRepository),
+    FailingSyncs(Vec<crate::model::CheckoutSync>),
     Notifications(Vec<Notification>),
     Cleared(crate::client::notifications::Cleared),
     AgentMessages(Vec<crate::client::agent_messages::AgentMessage>),

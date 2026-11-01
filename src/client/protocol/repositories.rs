@@ -47,6 +47,8 @@ pub enum RepositoryMethod {
     SyncRepository {
         repository: crate::client::repository::Selector,
     },
+    /// The repositories whose background sync has failed long enough for the inbox.
+    FailingSyncs,
     ListBranches {
         repository: crate::client::repository::Selector,
     },

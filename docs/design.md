@@ -720,7 +720,11 @@ branch, which the daemon keeps current; it writes only objects. Every minute, af
 PR of the repository merges, and on `sync`, the daemon fetches the default branch's remotes and fast-forwards the local default
 branch under the repository's Git gate, advancing a clean registered checkout where
 `git fetch` into the checked-out branch is refused; it never pushes or moves workspace branches, so updating
-a workspace from it stays plain Git. Shoal has no merge or rebase command: Git
+a workspace from it stays plain Git. Commands that only read the default branch
+never sync, so none waits on the remote or handles a failed sync; workspace
+status shows a failing sync, and one failing for 30 minutes of awake time, which
+a brief outage or a wake before the network does not reach, needs the user and
+joins the inbox with one alert. Shoal has no merge or rebase command: Git
 already does both in a workspace. `land`,
 the local substitute for a pull request, merges the workspace branch into the default
 branch, first refreshing a configured upstream while preserving an ahead branch and

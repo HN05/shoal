@@ -58,6 +58,7 @@ pub(super) async fn handle(
         RepositoryMethod::SyncRepository { repository } => {
             Body::SyncedRepository(manager.sync_repository(&repository).await?)
         }
+        RepositoryMethod::FailingSyncs => Body::FailingSyncs(manager.failing_syncs().await?),
         RepositoryMethod::ListBranches { repository } => {
             Body::Branches(manager.branches(&repository).await?)
         }
@@ -105,6 +106,7 @@ impl Scoped for RepositoryMethod {
             | RepositoryMethod::RemoveRepository { .. }
             | RepositoryMethod::PlanRepositoryMoves { .. }
             | RepositoryMethod::MoveRepositories { .. }
+            | RepositoryMethod::FailingSyncs
             | RepositoryMethod::ListBranches { .. }
             | RepositoryMethod::KeptBranches { .. }
             | RepositoryMethod::DeleteKeptBranches { .. }

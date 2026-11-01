@@ -543,6 +543,25 @@ pub struct WorkspaceStatus {
     /// The first of them.
     #[serde(default)]
     pub leftovers: Vec<crate::client::processes::Leftover>,
+    /// How the background sync of the repository's default branch went,
+    /// once the daemon has tried it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sync: Option<CheckoutSync>,
+}
+
+/// How the background sync of a repository's default branch went.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CheckoutSync {
+    pub repository_id: String,
+    /// Unix seconds when the default branch last followed its remote.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synced_at: Option<u64>,
+    /// Unix seconds since when every sync failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failing_since: Option<u64>,
+    /// The error of the last failed sync.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// The first condition that keeps a workspace from automatic cleanup, in the

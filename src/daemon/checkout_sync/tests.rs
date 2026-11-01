@@ -1,9 +1,9 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use futures_util::FutureExt as _;
 
 use crate::{
-    daemon::workspace::Manager,
+    daemon::{notifications::NotificationKind, workspace::Manager},
     test_support::{commit, git, manager, repository},
 };
 
@@ -111,4 +111,40 @@ async fn a_request_wakes_the_loop_for_that_repository() {
     assert!(f.manager.syncs.wake.notified().now_or_never().is_some());
     assert_eq!(f.manager.syncs.take_requested(), vec![f.repo_id.clone()]);
     assert!(f.manager.syncs.take_requested().is_empty());
+}
+
+#[tokio::test]
+async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification() {
+    let f = Fixture::new().await;
+    assert_eq!(f.manager.checkout_sync(&f.repo_id), None);
+    f.manager
+        .sync_repository(&f.repo_id.clone().into())
+        .await
+        .unwrap();
+    f.break_remote();
+    f.manager
+        .sync_repository(&f.repo_id.clone().into())
+        .await
+        .unwrap_err();
+    let sync = f.manager.checkout_sync(&f.repo_id).unwrap();
+    assert!(sync.synced_at.is_some());
+    assert!(sync.failing_since.is_some());
+    assert!(sync.error.unwrap().contains("could not fetch origin"));
+    assert!(f.manager.failing_syncs().await.unwrap().is_empty());
+
+    // Only the threshold is waited out; no Git runs while the clock is paused.
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(30 * 60)).await;
+    let failing = f.manager.failing_syncs().await.unwrap();
+    assert_eq!(failing.len(), 1);
+    assert_eq!(failing[0].repository_id, f.repo_id);
+    f.manager.notify_failing_syncs().await;
+    f.manager.notify_failing_syncs().await;
+    let notifications = f.manager.notifications(false, 100).await.unwrap();
+    let told: Vec<_> = notifications
+        .iter()
+        .filter(|n| n.kind == NotificationKind::SyncFailed)
+        .collect();
+    assert_eq!(told.len(), 1, "{notifications:?}");
+    assert!(told[0].message.contains("retry with shoal repo sync"));
 }

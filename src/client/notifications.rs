@@ -67,6 +67,8 @@ states!(NotificationKind {
     /// The daemon's environment or the global config has a problem, such as
     /// a missing tool, found when the daemon starts or reloads its config.
     EnvironmentProblem => "environment_problem",
+    /// A repository's default branch has not synced with its remote for a while.
+    SyncFailed => "sync_failed",
     /// File access in a directory stalled, as while a macOS privacy prompt waits.
     AccessStalled => "access_stalled",
 });
