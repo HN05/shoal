@@ -150,7 +150,7 @@ impl Inbox {
             .map(|(item, repository)| {
                 [
                     item.kind(),
-                    (item.workspace_name().into(), None),
+                    (item.name(repositories).into(), None),
                     (repository, None),
                     (item.text(), None),
                     (item.note(), Some(Style::Muted)),
@@ -251,7 +251,10 @@ impl Item {
         }
     }
 
-    fn workspace_name(&self) -> &str {
+    /// What the row names: its workspace, an untracked worktree's directory,
+    /// or the repository whose sync failed, which the repository column
+    /// leaves out when every row shares it. Repositories are `(id, name)` pairs.
+    fn name<'a>(&'a self, repositories: &'a [(String, String)]) -> &'a str {
         match self {
             Self::Question { question } => &question.workspace,
             Self::Approval { request } => &request.workspace,
@@ -266,7 +269,10 @@ impl Item {
                 .and_then(|name| name.to_str())
                 .unwrap_or_default(),
             Self::Cleanup { .. } => "",
-            Self::SyncFailed { .. } => "",
+            Self::SyncFailed { sync } => repositories
+                .iter()
+                .find(|(id, _)| id == &sync.repository_id)
+                .map_or(sync.repository_id.as_str(), |(_, name)| name.as_str()),
         }
     }
 
@@ -344,3 +350,6 @@ fn home_relative(path: &std::path::Path) -> String {
         None => path.display().to_string(),
     }
 }
+
+#[cfg(test)]
+mod tests;
