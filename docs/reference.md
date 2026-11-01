@@ -3497,13 +3497,20 @@ shoal ci list --workflow deps.yml        # the newest runs on the workspace's br
 shoal ci list --pr 12                    # the runs on PR 12's head commit
 shoal ci approve --pr 12                 # approve the runs waiting on PR 12's head
 shoal ci rerun --pr 12 --repo shoal      # in a registered repository, without a workspace
+shoal ci list --space planning           # a chat's linked PR's runs
 ```
 
 `shoal ci run` starts a workflow run on the workspace's branch, or the one
 `--branch` names, with each repeated `--input NAME=VALUE`. Every `ci` command
 also runs outside a workspace as [issue and PR actions](#issue-and-pr-actions)
 do, from a registered checkout or with `--repo`, where `ci run` and `ci list`
-take the repository's default branch. It also takes a
+take the repository's default branch. `--space` names the workspace or running
+[chat](#chats) to act from, which defaults to the chat this runs in, then the
+current workspace or checkout, then a picker. A chat acts in its repository's
+checkout like a registered checkout, but with its links: `ci run` starts on
+`--branch` or the default branch and links the run it starts, `ci list` lists
+the runs on its one linked PR's head or else on the default branch, and
+`rerun`, `cancel` and `approve` act on its linked PR without `--pr`. It also takes a
 workflow's web URL: its page, GitHub's `…/actions/workflows/<file>` or
 Forgejo's `…/actions?workflow=<file>`, or the URL of its file on a branch,
 `…/blob/<branch>/.github/workflows/<file>` or
@@ -3525,7 +3532,7 @@ may start runs only on that workspace's branch.
 reports it, which GitHub and Gitea do not. Inside a workspace, a run with a URL
 is [linked](#linked-items-and-cleanup) as opened where Shoal reads runs, which
 Bitbucket's it does not, so `shoal watch` reports when it finishes; `linked` says
-whether it was.
+whether it was. A chat links the runs it starts the same way.
 
 `shoal ci rerun` and `shoal ci cancel` act on one run when given its web URL, as
 `ci run` or a check links it, or the number in that URL. `rerun` reruns every
@@ -3549,8 +3556,8 @@ every such CI job, leaving other providers' checks alone, or each repeated
 `--check` by the name `shoal view` shows, which must be a CI job in that state.
 The daemon uses the forge's job API as the agent account and records an
 `item_changed` event once a request succeeds; a failed request stops the rest.
-Outside a workspace, `rerun`, `cancel` and `approve` record no event and need
-a run or `--pr`.
+Outside a workspace, `rerun`, `cancel` and `approve` record no event, and
+outside a chat too they need a run or `--pr`.
 GitHub reruns a failed Actions job, or every failed job of a run when several of
 its jobs are selected, because a rerun starts a new attempt of the run, refuses
 a rerun while another job of the run is still running, and cancels the job's

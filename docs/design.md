@@ -2354,7 +2354,10 @@ and Shoal records `opened` itself for the issues, PRs and CI runs it creates.
 A CI run is a linked item of its own kind, never `assigned`, because a run
 cannot complete an assignment: watches follow it until they deliver its finish,
 since a dispatched Forgejo run belongs to no PR and a run can outlive its PR's
-watch. A PR's runs are not linked for it, as its checks already cover them. Unlinking
+watch. A PR's runs are not linked for it, as its checks already cover them. A
+chat links the runs it starts as a workspace does, but its checkout's branch is
+not its own, so its CI commands default to its linked PR and else to the
+default branch. Unlinking
 selects a relation's items, one kind of them, or one item. PR links accumulate
 without duplicates and require
 every watched PR to merge, with HEAD present in at least one or merged into the freshly
