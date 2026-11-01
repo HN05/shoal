@@ -345,7 +345,8 @@ pub fn marked_child() -> tokio::process::Command {
 /// Start `command` from [`marked_child`] and return once the helper runs its
 /// own image. Linux resumes a `posix_spawn` caller before the child leaves
 /// the caller's memory, so until then the child's environment reads as the
-/// caller's. The helper prints libtest's header only after that.
+/// caller's. The helper prints libtest's header only after that. The child
+/// keeps its output's read end, so the helper's later writes still succeed.
 pub fn spawn_marked_child(command: &mut tokio::process::Command) -> tokio::process::Child {
     use std::io::Read as _;
     let mut child = command
@@ -354,7 +355,9 @@ pub fn spawn_marked_child(command: &mut tokio::process::Command) -> tokio::proce
         .spawn()
         .unwrap();
     let stdout = child.stdout.take().unwrap().into_owned_fd().unwrap();
-    fs::File::from(stdout).read_exact(&mut [0]).unwrap();
+    let mut stdout = std::process::ChildStdout::from(stdout);
+    stdout.read_exact(&mut [0]).unwrap();
+    child.stdout = Some(tokio::process::ChildStdout::from_std(stdout).unwrap());
     child
 }
 
