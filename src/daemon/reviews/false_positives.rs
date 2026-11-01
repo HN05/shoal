@@ -5,7 +5,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
-use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value, value};
 
 use super::super::workspace::Manager;
 use crate::{
@@ -127,17 +127,40 @@ fn with_entry(
 }
 
 /// Remove the entries of `finding` from `document`, saying whether there
-/// were any. Comments above a removed entry stay.
+/// were any. The entries are tables or an inline array of them, and comments
+/// above a removed table stay.
 fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<bool> {
-    let entries = match document.get_mut("false_positive") {
-        None => return Ok(false),
-        Some(Item::ArrayOfTables(entries)) => entries,
-        Some(_) => bail!("`false_positive` is not a list of [[false_positive]] tables"),
-    };
+    match document.get_mut("false_positive") {
+        None => Ok(false),
+        Some(Item::ArrayOfTables(entries)) => {
+            let (removed, orphaned) = without_table(entries, finding);
+            if !orphaned.is_empty() {
+                let trailing = orphaned + document.trailing().as_str().unwrap_or_default();
+                document.set_trailing(trailing);
+            }
+            Ok(removed)
+        }
+        Some(Item::Value(Value::Array(entries))) => {
+            let listed = entries.len();
+            entries.retain(|entry| {
+                let id = entry
+                    .as_inline_table()
+                    .and_then(|table| table.get("finding"));
+                !is_of(id.and_then(Value::as_str), finding)
+            });
+            Ok(entries.len() < listed)
+        }
+        Some(_) => bail!("`false_positive` is not a list of tables"),
+    }
+}
+
+/// Remove the tables of `finding` from `entries`, saying whether there were
+/// any, and the comments above the last tables removed, which the next
+/// table keeps otherwise.
+fn without_table(entries: &mut ArrayOfTables, finding: FindingId) -> (bool, String) {
     let (mut index, mut removed, mut orphaned) = (0, false, String::new());
     while let Some(table) = entries.get(index) {
-        let id = table.get("finding").and_then(Item::as_str);
-        if id.and_then(|id| id.parse::<FindingId>().ok()) != Some(finding) {
+        if !is_of(table.get("finding").and_then(Item::as_str), finding) {
             index += 1;
             continue;
         }
@@ -155,11 +178,12 @@ fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<boo
             None => orphaned.push_str(&comments),
         }
     }
-    if !orphaned.is_empty() {
-        let trailing = orphaned + document.trailing().as_str().unwrap_or_default();
-        document.set_trailing(trailing);
-    }
-    Ok(removed)
+    (removed, orphaned)
+}
+
+/// Whether an entry's `finding` field names `finding`.
+fn is_of(id: Option<&str>, finding: FindingId) -> bool {
+    id.and_then(|id| id.parse::<FindingId>().ok()) == Some(finding)
 }
 
 fn prefix(decor: &toml_edit::Decor) -> &str {
@@ -169,7 +193,7 @@ fn prefix(decor: &toml_edit::Decor) -> &str {
         .unwrap_or_default()
 }
 
-/// Add `entry` after the entries of `document`.
+/// Add `entry` after the entries of `document`, in the form they take.
 fn append(document: &mut DocumentMut, entry: &FalsePositive) {
     let mut table = Table::new();
     if let Some(finding) = entry.finding {
@@ -183,6 +207,7 @@ fn append(document: &mut DocumentMut, entry: &FalsePositive) {
             table.decor_mut().set_prefix("\n");
             entries.push(table);
         }
+        Some(Item::Value(Value::Array(entries))) => entries.push(table.into_inline_table()),
         _ => {
             // Comments alone trail the document; keep them above the entry.
             let mut comments = document.trailing().as_str().unwrap_or_default().to_owned();

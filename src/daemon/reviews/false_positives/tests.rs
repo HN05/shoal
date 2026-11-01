@@ -67,3 +67,26 @@ fn an_invalid_file_is_refused_and_kept() {
         "[[false_positive]]\nclaim = \"Unchecked\"\n"
     );
 }
+
+#[test]
+fn entries_in_an_inline_array_are_edited_in_place() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("false-positives.toml");
+    for written in [
+        "false_positive = []\n",
+        "false_positive = [{ claim = \"Unchecked\", path = \"src/a.rs\", reason = \"Checked\" }]\n",
+    ] {
+        std::fs::write(&path, written).unwrap();
+        let before = read(&path).unwrap();
+        record(&path, id(1), Some(listed(1, "Sorted"))).unwrap();
+        assert_eq!(read(&path).unwrap()[0], listed(1, "Sorted"));
+        assert!(
+            std::fs::read_to_string(&path)
+                .unwrap()
+                .starts_with("false_positive = [")
+        );
+        record(&path, id(2), None).unwrap();
+        record(&path, id(1), None).unwrap();
+        assert_eq!(read(&path).unwrap(), before);
+    }
+}
