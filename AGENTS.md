@@ -279,8 +279,10 @@ The run log keeps each failed test's output for the issue that fixes it.
 It is never a required check.
 `.forgejo/workflows/review.yml` posts an advisory review-bot review when a PR
 opens or leaves draft and whenever `review/default`, `review/claude` or
-`review/codex` is added; `review/none` suppresses it. A draft PR gets no review;
-a request label added while it is a draft is answered when it leaves draft.
+`review/codex` is added; `review/none` suppresses it. Pushing commits does not
+request one, so a review covers only the head it ran on. A draft PR gets no
+review; a request label added while it is a draft is answered when it leaves
+draft.
 `.review/review.md` is its project brief;
 keep it current when a rule here or in `docs/design.md` changes.
 Opening a ready PR already requests its review; never add reviewer request labels
@@ -341,8 +343,9 @@ the failing test and log excerpt; rerun only after that, never instead of it.
   PR with its `area/`, `type/` and `complexity/` labels, then watch CI and the
   review bot. Review findings are claims to verify against the code and its
   callers before fixing them or rejecting them with evidence in the thread.
-  After fixing substantial findings, request another review and mark the PR
-  ready only once it comes back clean.
+  After fixing findings or resolving merge conflicts, request another review
+  with `shoal pr edit --add-label review/default`, since a push does not, and
+  mark the PR ready only once a review of the current head comes back clean.
   Agents cannot merge PRs; leave merging to the user instead of asking for
   permission to merge.
 
