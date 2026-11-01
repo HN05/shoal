@@ -3,14 +3,14 @@
 use anyhow::{Context as _, Result};
 use serde::Deserialize;
 
-use super::{created, herdr, shell_command, tab_command};
+use super::{await_prompt, created, herdr, shell_command, tab_command};
 use crate::{cli::terminal::Demo, sessions::Origin, subprocess::Run};
 
 /// Lines of recent output a screen read returns.
 const SCREEN_LINES: &str = "500";
 
-/// Open a background tab for the demo and run its worker in the tab's pane,
-/// returning the pane.
+/// Open a background tab for the demo and run its worker in the tab's pane
+/// once its shell is at its prompt, returning the pane.
 pub(super) async fn start(demo: &Demo<'_>) -> Result<Origin> {
     let origin = demo
         .origin
@@ -24,6 +24,7 @@ pub(super) async fn start(demo: &Demo<'_>) -> Result<Origin> {
         owned: true,
         ..origin.clone()
     };
+    await_prompt(origin, place.id()).await;
     let mut run = herdr(origin);
     run.args(["pane", "run", place.id()]).arg(format!(
         "{} && exit",

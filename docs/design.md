@@ -902,11 +902,16 @@ serves runs work in place, a queued start without another fallback fails, and
 a demo runs as a background process. Rex cannot set a new terminal's
 environment, so a new block runs a launch step that loads the worker and its
 variables from a private file and deletes it, keeping them off screen and out
-of shell history, then the user's login shell, which stays as in a Herdr tab. Rex blocks and Herdr
-panes carry no ownership marks, so the daemon's records of the places Shoal
-created are the proof of ownership, closed through the same removal hook,
-orphan sweep and pending-close retries as zmx sessions; neither host reuses
-IDs on one server, Herdr not even across its restarts, so a recorded place that
+of shell history, then the user's login shell, which stays as in a Herdr tab.
+Herdr cannot start a tab with a command, and a Rex demo needs its block before
+its command, so Shoal types those into the new shell. Typed before the prompt,
+a line shows twice, echoed by the terminal and drawn again by the line editor,
+so Shoal waits until the terminal no longer takes input a line at a time, or
+long enough for a shell without a line editor. Rex blocks and Herdr panes carry
+no ownership marks, so the daemon's records of the places Shoal created are
+the proof of ownership, closed through the same removal hook, orphan sweep
+and pending-close retries as zmx sessions; neither host reuses IDs on one
+server, Herdr not even across its restarts, so a recorded place that
 still exists is Shoal's, and each state directory knows only its own. Servers
 number places alike, so a record names its place by host, the server the host
 reads from its data, and ID. An agent of

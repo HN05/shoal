@@ -6,6 +6,7 @@ pub mod load;
 pub mod machine;
 pub mod responsibility;
 pub mod scoped;
+pub mod tty;
 pub mod usage;
 
 use crate::tools::Tool;

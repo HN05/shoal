@@ -1,5 +1,9 @@
 //! Herdr terminal handoffs; workspace ownership stays with the daemon.
-use std::{collections::BTreeMap, ffi::OsString, path::Path};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, de::DeserializeOwned};
@@ -10,6 +14,7 @@ use futures_util::future::BoxFuture;
 use super::{
     Demo, Host, Options, PlaceState, Session, Start, Watched,
     host::{Closes, Demos, Places, Sessions, Types, Watches},
+    typed,
 };
 
 mod attach;
@@ -18,6 +23,7 @@ mod tabs;
 mod workspaces;
 use crate::{
     config,
+    process::tty,
     sessions::{HostName, Origin, herdr},
     state::AgentState,
     subprocess::Run,
@@ -264,13 +270,32 @@ async fn run_at_prompt(pane: &Origin, argv: &[OsString], env: &[(&str, String)])
 
 /// A pane that is gone, unreadable or running a program is not at its prompt.
 async fn at_prompt(origin: &Origin, pane: &str) -> bool {
+    processes(origin, pane)
+        .await
+        .is_some_and(|processes| processes.shell_in_foreground())
+}
+
+/// Wait until the shell of `pane`, a new pane, is at its prompt, reading its
+/// terminal on this machine, where its Herdr server runs.
+async fn await_prompt(origin: &Origin, pane: &str) {
+    let terminal = shell_terminal(origin, pane).await;
+    typed::await_prompt(|| std::future::ready(terminal.as_deref().and_then(tty::canonical))).await;
+}
+
+/// The terminal of `pane`'s shell, when Herdr names the shell's process.
+async fn shell_terminal(origin: &Origin, pane: &str) -> Option<PathBuf> {
+    let shell = processes(origin, pane).await?.shell_pid?;
+    tty::of(u32::try_from(shell).ok()?).await
+}
+
+/// The processes of `pane`, `None` when it is gone or unreadable.
+async fn processes(origin: &Origin, pane: &str) -> Option<PaneProcesses> {
     let mut info = herdr(origin);
     info.args(["pane", "process-info", "--pane"]).arg(pane);
-    let Ok(output) = Run::new(info).checked().await else {
-        return false;
-    };
+    let output = Run::new(info).checked().await.ok()?;
     serde_json::from_slice::<ProcessInfo>(&output.stdout)
-        .is_ok_and(|info| info.result.process_info.shell_in_foreground())
+        .ok()
+        .map(|info| info.result.process_info)
 }
 
 /// The Herdr pane this process runs in.
@@ -283,7 +308,8 @@ fn current_pane() -> Option<String> {
         .filter(|pane| !pane.is_empty())
 }
 
-/// Run `start` in a new tab, returning its pane.
+/// Run `start` in a new tab once its shell is at its prompt, returning its
+/// pane.
 async fn open_tab(start: &Start<'_>) -> Result<Origin> {
     let origin = start
         .origin
@@ -301,6 +327,7 @@ async fn open_tab(start: &Start<'_>) -> Result<Origin> {
         owned: true,
         ..origin.clone()
     };
+    await_prompt(origin, place.id()).await;
     run_in_pane(origin, place.id(), start.argv).await?;
     Ok(place)
 }

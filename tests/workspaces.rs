@@ -23475,11 +23475,11 @@ fn herdr_tab_directive(fixture: &Fixture) -> PathBuf {
 }
 
 /// The `herdr` calls that change something, without the pane reads Shoal
-/// makes to find where a place runs.
+/// makes to find where a place runs and whether its shell is at its prompt.
 fn herdr_changes(fixture: &Fixture) -> Vec<Vec<String>> {
     herdr_calls(fixture)
         .into_iter()
-        .filter(|call| call[..2] != ["pane", "get"])
+        .filter(|call| call[..2] != ["pane", "get"] && call[..2] != ["pane", "process-info"])
         .collect()
 }
 
@@ -23522,7 +23522,7 @@ fn herdr_handoff_preserves_choices_and_literal_arguments() {
     assert!(caller.status.success(), "{caller:?}");
     assert!(fixture.ok(&["work"]).as_array().unwrap().is_empty());
     assert_eq!(fs::read_to_string(directive).unwrap(), "unchanged");
-    let calls = herdr_calls(&fixture);
+    let calls = herdr_changes(&fixture);
     assert_eq!(&calls[0][..3], ["tab", "create", "--workspace"]);
     assert!(calls[0].iter().any(|arg| arg == "--no-focus"));
     // The tab gets the caller's output setting, not the Herdr server's.
@@ -23607,7 +23607,7 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
         "{output:?}"
     );
     let calls = herdr_calls(&fixture);
-    assert_eq!(calls.len(), 5, "{calls:?}");
+    assert_eq!(calls.len(), 6, "{calls:?}");
     let resumed =
         |run: &[String], (_, id, execution): &(String, String, String), close: &[&str]| {
             let worker = run[3].split(' ').collect::<Vec<_>>();
@@ -23643,9 +23643,11 @@ fn herdr_resume_all_reuses_stopped_panes_and_labels_new_tabs_as_add_does() {
     let label = create.iter().position(|arg| arg == "--label").unwrap();
     assert_eq!(create[label + 1], "resumed second");
     assert!(create.iter().any(|arg| arg == "--no-focus"));
-    assert_eq!(calls[4][..3], ["pane", "run", "w1:p9"]);
+    // The new tab's shell is read for its prompt before the run.
+    assert_eq!(calls[4][..4], ["pane", "process-info", "--pane", "w1:p9"]);
+    assert_eq!(calls[5][..3], ["pane", "run", "w1:p9"]);
     resumed(
-        &calls[4],
+        &calls[5],
         &expected[1],
         &["--opened-in", "herdr", "--close-in", "herdr"],
     );
@@ -23797,7 +23799,7 @@ fn herdr_labels_name_issues_by_repository_and_number() {
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
         assert!(caller.status.success(), "{caller:?} {transcript}");
-        let calls = herdr_calls(&fixture);
+        let calls = herdr_changes(&fixture);
         let create = &calls[calls.len() - 2];
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
@@ -23864,7 +23866,7 @@ fn herdr_tab_name_templates_survive_handoff_and_use_the_allocated_branch() {
         }
         let (caller, transcript) = herdr_call(&fixture, &args, "");
         assert!(caller.status.success(), "{caller:?} {transcript}");
-        let calls = herdr_calls(&fixture);
+        let calls = herdr_changes(&fixture);
         let create = &calls[calls.len() - 2];
         let label = create.iter().position(|arg| arg == "--label").unwrap();
         assert_eq!(create[label + 1], initial);
