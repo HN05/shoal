@@ -219,7 +219,9 @@ survives a rename, while a list or a count goes stale silently, and an overstate
 rule is narrowed, not annotated with its exceptions. Name something only when a
 reader cannot find it from the rule. No milestone reports, inventories of files,
 tests or flags, or investigation notes. Length is judged by these rules, not by a
-line count.
+line count. Documentation states what Shoal does and what it does not support,
+never what has or has not been tested, run or verified; say what you could not
+test in the PR.
 
 ## Validation
 

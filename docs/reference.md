@@ -126,7 +126,7 @@ Changing the service state directory requires stopping it with its existing
 `--state-dir` first.
 Stop foreground daemons manually. The daemon starts each diagnostic line with its
 local time and drops lines it cannot write. macOS diagnostics go to `daemon.log` in the
-state directory; Linux uses `journalctl --user -u shoal.service`. Native Linux service integration remains untested.
+state directory; Linux uses `journalctl --user -u shoal.service`.
 
 ### Daemon restarts
 
