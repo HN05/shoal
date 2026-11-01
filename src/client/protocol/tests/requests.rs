@@ -115,6 +115,8 @@ const REQUESTS: &[&str] = &[
     r#"{"chat_updates":{"chat":"c1"}}"#,
     r#"{"wait_chat_messages":{"chat":"c1"}}"#,
     r#"{"acknowledge_chat_messages":{"chat":"c1","ids":[1]}}"#,
+    r#"{"chat_done":{"chat":"planning"}}"#,
+    r#"{"chat_undone":{"chat":"planning"}}"#,
     // The agent queue.
     r#"{"queue_add":{"request":{"repository":"app","name":"fix","agent":"claude","issue_title":null,"plan":"{}","env":{},"now":false,"workspace":null,"after":[]}}}"#,
     r#"{"queue_agent":{"workspace":"fix","agent":"claude","prompt":"Fix the build"}}"#,

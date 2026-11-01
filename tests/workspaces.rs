@@ -7875,7 +7875,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         (&["stop"], "missing workspaces; pass <space>"),
         (&["diff"], workspace),
         (&["view", "pr", "12"], "pass --space or --repo"),
-        (&["done"], workspace),
+        (&["done"], "missing space; pass <space>"),
         (&["check"], workspace),
     ] {
         for json in [false, true] {
@@ -21248,6 +21248,70 @@ awk -F '\t' -v pick="$PICK" 'index($1, pick) == 1 { print; exit }' "$HOME/picker
     let (_, transcript) = press("");
     assert!(!transcript.contains("unknown workspace"), "{transcript}");
     assert!(!transcript.contains("no workspace"), "{transcript}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
+fn a_chat_records_its_work_done_and_withdraws_it() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let report = fixture.root.path().join("report.md");
+    fs::write(&report, "plan\n").unwrap();
+    // The cleanup options are a workspace's.
+    for flag in ["--cleanup", "--integrated", "--keep-demos"] {
+        let output = fixture.run(&["done", "planning", flag]);
+        assert!(!output.status.success(), "{flag}: {output:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("a chat has no cleanup"),
+            "{output:?}"
+        );
+    }
+    // Done again at the same HEAD with nothing new changes nothing.
+    fixture.ok(&["done", "planning"]);
+    let output = fixture.run(&["done", "planning"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("already marked done"),
+        "{output:?}"
+    );
+    let completion = fixture.ok(&["done", "planning", "--attach", report.to_str().unwrap()]);
+    assert_eq!(completion["cleanup"], false, "{completion}");
+    assert_eq!(
+        completion["results"][0]["name"], "report.md",
+        "{completion}"
+    );
+    // The chat keeps running, finished, and the user hears of it.
+    let finished = fixture.ok(&["work", "--chats", "--status", "finished"]);
+    assert!(finished.to_string().contains("planning"), "{finished}");
+    let inbox = fixture.ok(&["inbox"]);
+    assert_eq!(inbox[0]["kind"], "chat_done", "{inbox}");
+    let alerts = fixture.ok(&["alerts"]);
+    assert!(alerts.to_string().contains("chat finished"), "{alerts}");
+    // The user attached the report; the chat's agent attaches its own.
+    let files = fixture.ok(&["files", "planning"]);
+    assert_eq!(files[0]["name"], "report.md", "{files}");
+    assert_eq!(files[0]["attached_by"]["kind"], "user", "{files}");
+    let notes = fixture.root.path().join("notes.md");
+    fs::write(&notes, "notes\n").unwrap();
+    let output = fixture
+        .command()
+        .args(["--json", "done", "--attach", notes.to_str().unwrap()])
+        .env("SHOAL_CHAT", &chat)
+        .current_dir(&fixture.repo)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let files = fixture.ok(&["files", "planning"]);
+    assert_eq!(files[1]["name"], "notes.md", "{files}");
+    assert_eq!(files[1]["attached_by"]["kind"], "chat", "{files}");
+    let completion: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let withdrawn = fixture.ok(&["done", "--undo", "planning"]);
+    assert_eq!(withdrawn["withdrawn"]["results"], completion["results"]);
+    let finished = fixture.ok(&["work", "--chats", "--status", "finished"]);
+    assert!(!finished.to_string().contains("planning"), "{finished}");
+    let output = fixture.run(&["done", "--undo", "planning"]);
+    assert!(!output.status.success(), "{output:?}");
     agent.kill().unwrap();
     agent.wait().unwrap();
 }

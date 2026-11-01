@@ -61,11 +61,12 @@ impl ListStatus {
     }
 
     /// A chat Shoal saved is stopped until it is restored; another is
-    /// ready once it marks its work ready, or else runs without a reported
-    /// turn state.
+    /// finished once it records completion, ready once it marks its work
+    /// ready, or else runs without a reported turn state.
     pub fn of_chat(chat: &Chat) -> Self {
         match chat.restore {
             Some(_) => Self::Stopped,
+            None if chat.completion.is_some() => Self::Finished,
             None if !chat.review.is_empty() => Self::Ready,
             None => Self::ProcessRunning,
         }

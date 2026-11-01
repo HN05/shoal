@@ -116,7 +116,7 @@ pub(in crate::cli::commands) async fn run(
             files::list(&ctx, space, listing).await
         }
         CoordinationCommand::Done {
-            workspace,
+            space,
             cleanup,
             integrated,
             undo,
@@ -124,7 +124,7 @@ pub(in crate::cli::commands) async fn run(
             attach,
         } => {
             if undo {
-                workspaces::undone(&ctx, workspace).await
+                workspaces::undone(&ctx, space).await
             } else {
                 let options = workspaces::Done {
                     cleanup,
@@ -136,7 +136,7 @@ pub(in crate::cli::commands) async fn run(
                         results
                     },
                 };
-                workspaces::done(&ctx, workspace, options).await
+                workspaces::done(&ctx, space, options).await
             }
         }
     }

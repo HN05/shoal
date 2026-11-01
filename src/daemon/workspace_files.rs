@@ -197,24 +197,24 @@ impl Manager {
         gone.ok_or(error)
     }
 
-    /// Copies of the files `results` that `workspace` hands back with its
+    /// Copies of the files `results` that `space` hands back with its
     /// completion, recorded as its results attached by `attacher`, which
     /// outlive its removal.
     pub(crate) async fn keep_results(
         &self,
-        workspace: &Workspace,
+        space: &Space,
         results: Vec<NewFile>,
         attacher: &Attacher,
     ) -> Result<Vec<HandedBack>> {
         if results.is_empty() {
             return Ok(Vec::new());
         }
-        let (layout, _files) = self.lock_files(&workspace.clone().into()).await?;
-        let id = workspace.id.clone();
+        let (layout, _files) = self.lock_files(space).await?;
+        let id = space.id.clone();
         let kept =
             tokio::task::spawn_blocking(move || layout.keep_results(&id, &results)).await??;
         let records = self
-            .record_or_discard(&workspace.id, FileSource::Result, attacher, kept)
+            .record_or_discard(&space.id, FileSource::Result, attacher, kept)
             .await?;
         Ok(records
             .into_iter()

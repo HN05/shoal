@@ -129,6 +129,9 @@ linked, and `shoal ready --undo` withdraws the marks. `shoal ci list`,
 your watch then follows. `shoal review run` from the chat reviews your linked
 PR in the workspace that owns its branch, and `shoal review list` lists your
 linked PRs' reviews.
+When the work you were given in the chat is finished, run `shoal done`, with
+`--attach FILE` for a report; your agent keeps running, and the user sees the
+chat as finished until `shoal done --undo`.
 
 To ask the user something in a chat, run `shoal questions ask --in-chat`, then
 write the question as your final message and end your turn: it also reaches

@@ -4,21 +4,36 @@ use anyhow::Result;
 use crate::client::output::workspaces::Withdrawn;
 use crate::{
     cli::{
-        client::request,
+        client::{self, request},
         context::Context,
         ui::{self, Fallback},
     },
-    model::Completion,
-    protocol::{AssignmentMethod, DemoMethod},
+    model::{Completion, PresentSpace},
+    protocol::{AssignmentMethod, ChatMethod, DemoMethod},
 };
 
-pub(in crate::cli::commands) async fn undone(
-    ctx: &Context,
-    workspace: Option<String>,
-) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let withdrawn: Completion =
-        request(&ctx.paths, AssignmentMethod::WorkspaceUndone { workspace }).await?;
+/// The space `space` names, else the current chat or workspace, else a
+/// picked one: a running chat's ID, or else a workspace.
+async fn selected(ctx: &Context, space: Option<String>) -> Result<Selected> {
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    Ok(match client::present_space(&ctx.paths, &space).await? {
+        Some(PresentSpace::Chat(chat)) => Selected::Chat(chat.id),
+        _ => Selected::Workspace(space),
+    })
+}
+
+enum Selected {
+    Chat(String),
+    Workspace(String),
+}
+
+pub(in crate::cli::commands) async fn undone(ctx: &Context, space: Option<String>) -> Result<i32> {
+    let withdrawn: Completion = match selected(ctx, space).await? {
+        Selected::Chat(chat) => request(&ctx.paths, ChatMethod::ChatUndone { chat }).await?,
+        Selected::Workspace(workspace) => {
+            request(&ctx.paths, AssignmentMethod::WorkspaceUndone { workspace }).await?
+        }
+    };
     ctx.emit(
         "Completion withdrawn; run shoal done when finished.",
         Withdrawn { withdrawn },
@@ -39,13 +54,30 @@ pub(in crate::cli::commands) struct Done {
     pub results: Vec<crate::daemon::workspace_files::NewFile>,
 }
 
-/// Stop the workspace's demos unless `keep_demos`, then record completion.
+/// Stop the workspace's demos unless `keep_demos`, then record completion;
+/// a chat only records it, since it has no cleanup, branch or demos.
 pub(in crate::cli::commands) async fn done(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     options: Done,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
+    let workspace = match selected(ctx, space).await? {
+        Selected::Chat(chat) => {
+            anyhow::ensure!(
+                !options.cleanup && !options.integrated && !options.keep_demos,
+                "a chat has no cleanup, branch or demos; --cleanup, --integrated and --keep-demos apply to workspaces"
+            );
+            let method = ChatMethod::ChatDone {
+                chat,
+                results: options.results,
+                sender_chat: crate::env::chat(),
+            };
+            let completion: Completion = request(&ctx.paths, method).await?;
+            ctx.emit("Chat marked done; its agent keeps running.", &completion)?;
+            return Ok(0);
+        }
+        Selected::Workspace(workspace) => workspace,
+    };
     // Before completion, whose cleanup may remove the workspace at once.
     if !options.keep_demos {
         request::<()>(

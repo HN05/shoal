@@ -861,6 +861,9 @@ pub struct Chat {
     /// Its ready-for-review marks, on its linked items or on itself.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review: Vec<ReviewMark>,
+    /// What `shoal done` recorded, until `shoal done --undo`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion: Option<Completion>,
 }
 
 /// A space as it exists: a workspace or a chat, running or saved, which

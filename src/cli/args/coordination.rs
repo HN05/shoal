@@ -45,8 +45,12 @@ pub enum CoordinationCommand {
         print: bool,
     },
     /// Mark the assignment finished; by default stop tracked commands and clean up safely.
+    ///
+    /// A chat records that its work is finished and keeps running.
     Done {
-        workspace: Option<String>,
+        /// Space, a workspace or chat, whose work is finished; defaults to
+        /// the current chat or workspace, or a picker.
+        space: Option<String>,
         /// Request cleanup even when [cleanup.done] enabled is false; preserve dirty or unpushed work.
         #[arg(long, conflicts_with = "undo")]
         cleanup: bool,

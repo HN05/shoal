@@ -13,7 +13,7 @@ mod contributions;
 mod daemon_exit;
 mod demos;
 mod diff;
-mod done;
+pub(crate) mod done;
 mod environment;
 mod executions;
 mod fast_forward;

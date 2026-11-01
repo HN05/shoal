@@ -496,7 +496,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
         let Command::Coordination(CoordinationCommand::Done {
             cleanup,
             integrated,
-            workspace,
+            space,
             undo,
             keep_demos,
             attach,
@@ -506,7 +506,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
         };
         assert_eq!(cleanup, expected);
         assert!(!integrated && !undo && !keep_demos && attach.is_empty());
-        assert!(workspace.is_none());
+        assert!(space.is_none());
     }
     assert!(Cli::try_parse_from(["shoal", "done", "--keep"]).is_err());
     assert!(Cli::try_parse_from(["shoal", "done", "--undo", "--cleanup"]).is_err());
@@ -546,7 +546,7 @@ fn done_flags_override_the_default_and_remain_available_to_agents() {
     }
     assert!(
         matches!(Cli::try_parse_from(["shoal", "done", "review", "--cleanup"]).unwrap().command,
-            Some(Command::Coordination(CoordinationCommand::Done { workspace: Some(name), cleanup: true, undo: false, .. })) if name == "review")
+            Some(Command::Coordination(CoordinationCommand::Done { space: Some(name), cleanup: true, undo: false, .. })) if name == "review")
     );
 }
 

@@ -2143,7 +2143,10 @@ rather than something to merge hands back files with its completion. They are
 the workspace's results among its attached files, which stay when cleanup
 removes it, for as long as its removal record, so the user or the parent's
 agent can read them after the worktree is gone; the workspace's other attached
-files go with it. A workspace or a chat is a space: the user returns to both by name, from
+files go with it. A chat's `done` records its completion on the chat
+and nothing more: it has no cleanup to request, no branch another could
+integrate and no parent to tell, so it notifies the user and its agent keeps
+running, with the done state shown until `--undo` withdraws it. A workspace or a chat is a space: the user returns to both by name, from
 one namespace, so what applies to both is named for
 the space, and the flag that selects one is `--space`. A chat owns attached
 files as a workspace does, since its

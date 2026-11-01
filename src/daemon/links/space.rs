@@ -65,10 +65,13 @@ impl LinkSpace {
         self.workspace().map(|workspace| workspace.branch.as_str())
     }
 
-    /// Whether the space's assignment is done, which ends the activity of
-    /// its closed items; a chat's assignment does not complete.
+    /// Whether the space recorded its work as done, which ends the activity
+    /// of its closed items.
     pub(crate) fn done(&self) -> bool {
-        self.workspace().is_some_and(|workspace| workspace.done)
+        match self {
+            Self::Workspace(workspace) => workspace.done,
+            Self::Chat { chat, .. } => chat.completion.is_some(),
+        }
     }
 
     /// Where an item request of the space runs: the workspace, or the

@@ -77,6 +77,15 @@ pub(super) async fn handle(
             manager.leftovers.delivered(&chat, &leftovers);
             Body::Ok
         }
+        ChatMethod::ChatDone {
+            chat,
+            results,
+            sender_chat,
+        } => {
+            let attacher = manager.attacher(caller, sender_chat.as_deref()).await;
+            Body::Completion(manager.mark_chat_done(&chat, results, &attacher).await?)
+        }
+        ChatMethod::ChatUndone { chat } => Body::Completion(manager.undo_chat_done(&chat).await?),
     }))
 }
 
@@ -96,7 +105,9 @@ impl Scoped for ChatMethod {
             | ChatMethod::ChatMessages { .. }
             | ChatMethod::ChatUpdates { .. }
             | ChatMethod::WaitChatMessages { .. }
-            | ChatMethod::AcknowledgeChatMessages { .. } => return Err(denied()),
+            | ChatMethod::AcknowledgeChatMessages { .. }
+            | ChatMethod::ChatDone { .. }
+            | ChatMethod::ChatUndone { .. } => return Err(denied()),
         })
     }
 }

@@ -247,15 +247,19 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<I
     waiting.chain(failed).chain(review).collect()
 }
 
-/// Each mark of the running chats.
+/// Each running chat that recorded its work as finished, and each mark of
+/// the others.
 fn chat_items(chats: &[Chat]) -> Vec<Item> {
     let running = chats.iter().filter(|chat| chat.restore.is_none());
     running
-        .flat_map(|chat| {
-            chat.review.iter().map(|mark| Item::ChatReady {
-                chat: chat.clone(),
-                mark: mark.clone(),
-            })
+        .flat_map(|chat| match chat.completion {
+            Some(_) => vec![Item::ChatDone { chat: chat.clone() }],
+            None => (chat.review.iter())
+                .map(|mark| Item::ChatReady {
+                    chat: chat.clone(),
+                    mark: mark.clone(),
+                })
+                .collect(),
         })
         .collect()
 }
@@ -269,7 +273,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
-            Self::ChatReady { chat, .. } => &chat.id,
+            Self::ChatReady { chat, .. } | Self::ChatDone { chat } => &chat.id,
             Self::Demo { demo } => &demo.workspace_id,
             Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => "",
         }
@@ -296,7 +300,7 @@ impl Item {
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.name,
-            Self::ChatReady { chat, .. } => &chat.name,
+            Self::ChatReady { chat, .. } | Self::ChatDone { chat } => &chat.name,
             Self::Demo { demo } => &demo.workspace,
             // The directory a workspace adopting it would be named after.
             Self::Untracked { worktree } => worktree
@@ -319,6 +323,7 @@ impl Item {
             Self::NeedsInput { .. } => ("needs input", Style::Warning),
             Self::Failed { .. } => ("failed", Style::Error),
             Self::Ready { .. } | Self::ChatReady { .. } => ("ready", Style::Success),
+            Self::ChatDone { .. } => ("finished", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
@@ -347,6 +352,7 @@ impl Item {
                 chat.links.issue_title.clone().unwrap_or_default()
             }
             Self::ChatReady { chat, mark } => marked(mark, &chat.links),
+            Self::ChatDone { chat } => chat.links.issue_title.clone().unwrap_or_default(),
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),

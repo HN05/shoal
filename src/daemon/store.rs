@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 110;
+const SCHEMA_VERSION: i64 = 111;
 
 #[cfg(test)]
 mod benchmark;
@@ -453,7 +453,11 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (108, include_str!("store/question_spaces.sql"), None),
     (109, include_str!("store/link_spaces.sql"), None),
     (110, include_str!("store/review_spaces.sql"), None),
+    (111, CHAT_COMPLETION, None),
 ];
+
+/// The JSON completion a chat recorded with `shoal done`, until `--undo`.
+const CHAT_COMPLETION: &str = "ALTER TABLE chats ADD COLUMN completion TEXT;";
 
 /// The JSON array of paths of the files attached to a chat's message.
 const CHAT_MESSAGE_ATTACHMENTS: &str =

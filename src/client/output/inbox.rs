@@ -31,6 +31,10 @@ pub enum Item {
         chat: Chat,
         mark: ReviewMark,
     },
+    /// A chat that recorded its work as finished.
+    ChatDone {
+        chat: Chat,
+    },
     Demo {
         demo: Running,
     },

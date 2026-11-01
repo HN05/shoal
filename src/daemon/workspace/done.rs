@@ -80,7 +80,7 @@ impl Manager {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = crate::daemon::links::pr::current_head(&workspace).await?;
-        let results = self.keep_results(&workspace, results, attacher).await?;
+        let results = (self.keep_results(&workspace.clone().into(), results, attacher)).await?;
         self.record_done(&workspace, head, cleanup, integrated, results)
             .await
     }
@@ -380,6 +380,18 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> Stri
     } else {
         "; no cleanup requested"
     });
+    push_closed_and_results(&mut notice, workspace, completion, closed);
+    notice
+}
+
+/// Add the questions a completion closed and the results it handed back
+/// to the notice of the space `space`.
+pub(crate) fn push_closed_and_results(
+    notice: &mut String,
+    space: &str,
+    completion: &Completion,
+    closed: &[i64],
+) {
     if let [number] = closed {
         notice.push_str(&format!("; closed question {number}"));
     } else if !closed.is_empty() {
@@ -388,11 +400,10 @@ fn done_notice(workspace: &str, completion: &Completion, closed: &[i64]) -> Stri
     }
     if !completion.results.is_empty() {
         notice.push_str(&format!(
-            "; results in shoal files {workspace}: {}",
+            "; results in shoal files {space}: {}",
             results_preview(&completion.results)
         ));
     }
-    notice
 }
 
 /// The results a notice names: the first few, then how many more, since

@@ -1129,6 +1129,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TRIGGER workspace_review_removed;
     ALTER TABLE questions DROP COLUMN in_chat;
     ALTER TABLE executions DROP COLUMN model;
     ALTER TABLE executions DROP COLUMN effort;
+    ALTER TABLE chats DROP COLUMN completion;
     ALTER TABLE chats DROP COLUMN session;
     ALTER TABLE chats DROP COLUMN asks_in_chat;
     DROP TRIGGER chat_saved;

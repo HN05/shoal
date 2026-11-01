@@ -2964,7 +2964,7 @@ names the `shoal move import` that continues the chat here.
 
 ### Assignment completion
 
-`shoal done [workspace]` records that the assignment is finished and notifies the
+`shoal done [space]` records that the assignment is finished and notifies the
 user. It replaces a recorded completion at another HEAD, with another cleanup
 choice, another `--integrated` choice, other results or a cleanup error, and fails when it would change nothing: the same
 completion with no open question to close and no `hooks.post_done` to rerun.
@@ -2995,12 +2995,21 @@ Only `done` completes an assignment; issue closure and merged PRs do not. A
 merged workspace nobody uses is removed by [merged cleanup](#merged-workspaces)
 whether or not its agent ran `done`.
 
+A [chat](#chats), named or the one this runs in, records that its work is
+finished at its checkout's HEAD, and its agent and session keep running. It has
+no cleanup, branch or demos, so `--cleanup`, `--integrated` and `--keep-demos`
+are refused. `--attach` hands files back into the chat's attached files, its
+open questions close, and the user is notified, since a chat has no parent. Its
+closed linked items stop being polled, as a finished workspace's do. `work
+--chats` shows the chat as `finished`, `shoal inbox` and the menu list it, and
+its record carries the `completion` until `shoal done --undo` withdraws it.
+
 ```toml
 [cleanup.done]
 enabled = true    # Default: true
 ```
 
-`shoal done --undo [workspace]` withdraws a recorded completion and fails when none
+`shoal done --undo [space]` withdraws a recorded completion and fails when none
 is recorded, leaving its results among the attached files; `--json` returns `{"withdrawn": <completion>}`. Scoped agents may mark only their own workspace or a child workspace undone.
 Issue associations and PR watches remain registered. It does not keep the workspace:
 cleanup proceeds as if `done` had not run.

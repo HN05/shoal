@@ -24,6 +24,7 @@ fn spaces() -> Spaces {
         restore,
         links: Default::default(),
         review: Vec::new(),
+        completion: None,
     };
     Spaces {
         workspaces: vec![workspace],

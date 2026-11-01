@@ -84,6 +84,7 @@ impl Manager {
             restore: None,
             links: SpaceLinks::default(),
             review: Vec::new(),
+            completion: None,
         };
         let birth = process.birth.clone();
         let chat = self
@@ -482,7 +483,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     db.prepare(
         "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
                     chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
-                    chats.restore
+                    chats.restore,chats.completion
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
              ORDER BY chats.started_at, chats.rowid",
     )?
@@ -505,6 +506,7 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
             restore: row.get(9)?,
             links: SpaceLinks::default(),
             review: Vec::new(),
+            completion: store::json_column(row, "completion")?,
         })
     })?
     .collect::<rusqlite::Result<Vec<Chat>>>()?
@@ -660,6 +662,7 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
     Ok(())
 }
 
+mod done;
 mod processes;
 mod restores;
 mod saved;

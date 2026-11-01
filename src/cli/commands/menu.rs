@@ -260,6 +260,8 @@ impl Row {
                 space,
                 url: mark.url.clone(),
             },
+            // Enter attaches to the chat, whose agent says what it finished.
+            Item::ChatDone { .. } => Self::Ready { space, url: None },
             Item::Demo { demo } => Self::Demo {
                 workspace: space,
                 name: demo.launch.name.clone(),
