@@ -31,7 +31,7 @@ pub struct Effective {
     pub resume_commands: crate::config::named_commands::Commands,
     /// The proxy each AI tool's tracked agents reach their upstream through.
     #[serde(skip)]
-    pub proxies: BTreeMap<String, crate::proxy::Proxy>,
+    pub proxies: BTreeMap<String, crate::config::proxies::Proxy>,
 }
 
 impl std::ops::Deref for Effective {
@@ -184,7 +184,7 @@ impl Effective {
     pub fn new(
         settings: Settings,
         tools: crate::ai::Tools,
-        proxies: BTreeMap<String, crate::proxy::Proxy>,
+        proxies: BTreeMap<String, crate::config::proxies::Proxy>,
     ) -> Self {
         let commands = |command: fn(&AgentTool) -> &Option<Vec<String>>| {
             settings
@@ -260,7 +260,7 @@ impl Effective {
 
     /// The proxy agent `name`'s tracked launches reach their upstream
     /// through.
-    pub fn proxy(&self, name: &str) -> Option<&crate::proxy::Proxy> {
+    pub fn proxy(&self, name: &str) -> Option<&crate::config::proxies::Proxy> {
         self.proxies.get(name)
     }
 }

@@ -73,7 +73,6 @@ use client::{
     agent, ai, config, demos, model, protocol, repository, reviews, state, time, validate,
 };
 use shoal_forge as forge;
-#[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;
 
 /// The `shoal` command.

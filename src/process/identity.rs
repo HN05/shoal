@@ -68,23 +68,6 @@ impl Identity {
     }
 }
 
-/// PID and birth name the process; records made before `unique` existed
-/// lack it.
-impl PartialEq for Identity {
-    fn eq(&self, other: &Self) -> bool {
-        self.pid == other.pid && self.birth == other.birth
-    }
-}
-
-impl Eq for Identity {}
-
-impl std::hash::Hash for Identity {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.pid.hash(state);
-        self.birth.hash(state);
-    }
-}
-
 /// A process's identity and its parent's unique ID, which the kernel keeps
 /// after the parent exits and launchd adopts the process, until the process
 /// replaces its image.

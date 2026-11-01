@@ -1,12 +1,16 @@
 pub mod agents;
 pub mod edit;
 pub mod forges;
+pub mod git_profiles;
+pub mod hooks;
 pub mod machine;
 pub mod named_commands;
 pub mod options;
 pub mod overload;
 mod parse;
 pub(crate) mod placeholders;
+pub mod presets;
+pub mod proxies;
 pub mod repo;
 pub mod resolve;
 pub mod templates;
@@ -174,7 +178,7 @@ impl Config {
         let Some(path) = &self.machine.root_dir else {
             return Ok(paths.home.join("shoal"));
         };
-        let path = crate::fsutil::expand_home(path, &paths.home);
+        let path = crate::client::fsutil::expand_home(path, &paths.home);
         ensure!(
             path.is_absolute(),
             "machine.root_dir must be an absolute path or start with ~/"
@@ -231,7 +235,7 @@ impl Config {
     /// template files only agent launches need.
     pub fn load(paths: &Paths) -> Result<Self> {
         let path = Self::path(paths);
-        let Some(text) = crate::fsutil::read_optional(&path)
+        let Some(text) = crate::client::fsutil::read_optional(&path)
             .with_context(|| format!("read {}", path.display()))?
         else {
             return Self::parse("", paths);
@@ -274,7 +278,7 @@ impl Config {
             .and_then(toml::Value::as_table);
         machine.overload.follow_load(
             machine.load,
-            crate::process::load::swap(),
+            overload::swap(),
             overload.unwrap_or(&toml::Table::new()),
         );
         config.validate(paths)?;
@@ -299,8 +303,8 @@ impl Config {
         let (machine, repository) = (&self.machine, &self.repository);
         repository.validate()?;
         crate::ai::validate::skill_dirs(&machine.agents, &paths.home)?;
-        crate::proxy::validate(&machine.proxies)?;
-        crate::proxy::validate_references(&machine.agents, &machine.proxies)?;
+        crate::config::proxies::validate(&machine.proxies)?;
+        crate::config::proxies::validate_references(&machine.agents, &machine.proxies)?;
         self.root_dir(paths)?;
         machine.overload.validate()?;
         machine.simulators.validate()?;
@@ -345,7 +349,7 @@ impl Config {
         let agents = agents::describe(&settings.agents, &self.machine.agents);
         crate::ai::validate(&agents, &settings.commands)?;
         let tools = crate::ai::tools(&agents);
-        let proxies = crate::proxy::routes(&tools, &self.machine.proxies);
+        let proxies = crate::config::proxies::routes(&tools, &self.machine.proxies);
         Ok(Effective::new(settings, tools, proxies))
     }
 }

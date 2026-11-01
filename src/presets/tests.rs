@@ -1,5 +1,10 @@
+use std::{collections::BTreeMap, fs};
+
 use super::*;
-use std::fs;
+use crate::config::{
+    presets::{caches, environment},
+    repo::CacheScope,
+};
 
 #[test]
 fn preset_variables_give_way_to_configured_ones() {

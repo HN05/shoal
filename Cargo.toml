@@ -45,17 +45,14 @@ cli = [
     "dep:rusqlite",
     "dep:sha2",
     "dep:shoal-client",
-    "dep:shoal-subprocess",
     "dep:socket2",
     "dep:tempfile",
-    "dep:toml_edit",
     "dep:rustix",
     "dep:zbus",
     "shoal-forge/clap",
     "shoal-forge/rusqlite",
     "tokio/rt-multi-thread",
     "tokio/signal",
-    "tokio/process",
     "uuid/v4",
 ]
 # Detached Happy sessions, which seed prompts through Happy's encrypted server.
@@ -89,12 +86,12 @@ shoal-client = { workspace = true, optional = true }
 shoal-config-derive.workspace = true
 shoal-forge.workspace = true
 shoal-proxy = { workspace = true, optional = true }
-shoal-subprocess = { workspace = true, optional = true }
+shoal-subprocess.workspace = true
 socket2 = { version = "0.6", optional = true }
 tempfile = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["macros", "net", "io-util", "sync", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "sync", "time"] }
 toml = "1.1.6"
-toml_edit = { version = "0.25", optional = true }
+toml_edit = "0.25"
 uuid = { workspace = true, features = ["serde"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

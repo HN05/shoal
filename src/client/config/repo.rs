@@ -93,7 +93,7 @@ pub struct RepoConfig {
     /// Machine-specific, so the global config or local config sets it, never
     /// the worktree file.
     #[option(named)]
-    pub secrets: crate::secrets::Secrets,
+    pub secrets: crate::client::secrets::Secrets,
     #[option(named)]
     pub resources: BTreeMap<String, crate::client::resources::ResourceConfig>,
     #[option(named)]
@@ -194,7 +194,7 @@ pub struct SetupConfig {
     /// Build tools whose usual setup the repository's workspaces share; an
     /// empty list turns off presets a lower layer names. Unset when no layer
     /// names presets.
-    pub presets: Option<Vec<crate::presets::Preset>>,
+    pub presets: Option<Vec<crate::config::presets::Preset>>,
     #[option(section, repository_only)]
     pub seed: Seed,
 }
@@ -222,7 +222,7 @@ fn preset_environment(
     config: &RepoConfig,
 ) -> Result<BTreeMap<String, String>> {
     let presets = config.setup.presets.as_deref().unwrap_or_default();
-    Ok(crate::presets::environment(presets, env))
+    Ok(crate::config::presets::environment(presets, env))
 }
 
 fn preset_caches(
@@ -230,7 +230,7 @@ fn preset_caches(
     config: &RepoConfig,
 ) -> Result<BTreeMap<String, Cache>> {
     let presets = config.setup.presets.as_deref().unwrap_or_default();
-    Ok(crate::presets::caches(presets, caches))
+    Ok(crate::config::presets::caches(presets, caches))
 }
 
 states!(
@@ -344,8 +344,8 @@ pub fn local_config_path(repository_dir: &Path) -> PathBuf {
 pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, templates::Files)> {
     let path = local_config_path(repository_dir);
     let directory = repository_dir.join(LOCAL_DIR);
-    let text =
-        crate::fsutil::read_optional(&path).with_context(|| format!("read {}", path.display()))?;
+    let text = crate::client::fsutil::read_optional(&path)
+        .with_context(|| format!("read {}", path.display()))?;
     let mut config = match text {
         Some(text) => parse(&text).with_context(|| format!("parse {}", path.display()))?,
         None => RepoConfig::default(),
@@ -358,7 +358,7 @@ pub fn load_local(repository_dir: &Path) -> Result<(RepoConfig, templates::Files
 /// Make each relative hook path and `setup.command` name a script in
 /// `directory`.
 fn resolve_script_paths(config: &mut RepoConfig, directory: &Path) {
-    for &kind in crate::hooks::HookKind::ALL {
+    for &kind in crate::config::hooks::HookKind::ALL {
         if let Some(command) = kind.repository_command_mut(config) {
             *command = directory.join(&*command).to_string_lossy().into_owned();
         }
@@ -428,7 +428,7 @@ impl RepoConfig {
         {
             crate::validate::name("git profile", name)?;
         }
-        for &kind in crate::hooks::HookKind::ALL {
+        for &kind in crate::config::hooks::HookKind::ALL {
             kind.validate(kind.repository_command(self))?;
         }
         self.cleanup.validate()?;
@@ -450,10 +450,10 @@ impl RepoConfig {
             effort: self.agent.effort.clone(),
         }
         .validate("agent")?;
-        crate::caches::validate(&self.caches)?;
+        validate_caches(&self.caches)?;
         crate::demos::validate(&self.demos)?;
-        crate::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;
-        crate::secrets::validate(&self.secrets)?;
+        crate::config::presets::validate(self.setup.presets.as_deref().unwrap_or_default())?;
+        crate::client::secrets::validate(&self.secrets)?;
         self.setup.seed.validate()?;
         Ok(())
     }
@@ -716,6 +716,15 @@ pub struct CleanupDoneConfig {
 pub struct PrCleanupConfig {
     #[option(default = true)]
     pub enabled: Option<bool>,
+}
+
+/// Configured cache names, which `{cache.NAME}` spells.
+fn validate_caches(caches: &BTreeMap<String, Cache>) -> Result<()> {
+    for name in caches.keys() {
+        crate::validate::lowercase_name("cache", name)
+            .with_context(|| format!("invalid configured cache name: {name}"))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

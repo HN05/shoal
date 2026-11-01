@@ -24,14 +24,6 @@ const SHARED: &str = "shared";
 /// there never crosses filesystems.
 const TRASH: &str = "trash";
 
-pub fn validate(caches: &BTreeMap<String, Cache>) -> Result<()> {
-    for name in caches.keys() {
-        crate::validate::lowercase_name("cache", name)
-            .with_context(|| format!("invalid configured cache name: {name}"))?;
-    }
-    Ok(())
-}
-
 /// The directory of one repository's shared caches.
 #[derive(Debug, Clone)]
 pub struct Layout {

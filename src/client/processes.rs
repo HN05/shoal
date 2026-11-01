@@ -15,6 +15,23 @@ pub struct Identity {
     pub unique: Option<UniqueId>,
 }
 
+/// PID and birth name the process; records made before `unique` existed
+/// lack it.
+impl PartialEq for Identity {
+    fn eq(&self, other: &Self) -> bool {
+        self.pid == other.pid && self.birth == other.birth
+    }
+}
+
+impl Eq for Identity {}
+
+impl std::hash::Hash for Identity {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pid.hash(state);
+        self.birth.hash(state);
+    }
+}
+
 /// Unique process IDs start over at each boot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniqueId {

@@ -43,7 +43,7 @@ pub fn fill(templates: &mut TemplatesConfig, directories: &[PathBuf]) -> Result<
             continue;
         };
         if value.is_none() {
-            *value = crate::fsutil::read_optional(&path)
+            *value = crate::client::fsutil::read_optional(&path)
                 .with_context(|| format!("read {}", path.display()))?;
             files.insert(key.to_owned(), path);
         }

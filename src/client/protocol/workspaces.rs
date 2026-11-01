@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigTarget;
 use super::Lifetime;
-use crate::hooks::HookKind;
+use crate::config::hooks::HookKind;
 
 /// Requests that create, find, inspect and change workspaces.
 #[derive(Debug, Serialize, Deserialize)]

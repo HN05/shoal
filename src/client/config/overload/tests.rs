@@ -69,3 +69,11 @@ fn memory_is_opt_out_and_settings_are_bounded() {
     assert!(toml::from_str::<Overload>("[memory]\nunknown = true").is_err());
     assert!(crate::config::repo::parse("[overload.memory]\nenabled = false").is_err());
 }
+
+#[test]
+fn swap_requires_configured_space() {
+    assert!(linux_swap("MemTotal: 10 kB\nSwapTotal: 2048 kB\n"));
+    assert!(!linux_swap("SwapTotal: 0 kB\n"));
+    assert!(!linux_swap("SwapTotal: x kB\n"));
+    assert!(!linux_swap("MemTotal: 10 kB\n"));
+}

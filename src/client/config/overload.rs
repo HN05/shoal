@@ -331,5 +331,27 @@ fn validate_seconds(value: u64, key: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether the machine can page memory out to swap. A failed reading says no,
+/// keeping memory thresholds at their lower defaults.
+#[cfg(target_os = "linux")]
+pub(crate) fn swap() -> bool {
+    std::fs::read_to_string("/proc/meminfo").is_ok_and(|text| linux_swap(&text))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn linux_swap(text: &str) -> bool {
+    text.lines()
+        .find_map(|line| line.strip_prefix("SwapTotal:"))
+        .and_then(|value| value.split_whitespace().next()?.parse::<u64>().ok())
+        .is_some_and(|total| total > 0)
+}
+
+/// macOS always swaps and reports pressure natively, so no Linux memory
+/// threshold applies.
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn swap() -> bool {
+    false
+}
+
 #[cfg(test)]
 mod tests;

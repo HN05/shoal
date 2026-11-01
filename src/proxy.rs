@@ -2,10 +2,9 @@
 //! global `[machine.proxies.<name>]` tables an `[machine.agents.<name>]` entry names. The
 //! `shoal-proxy` crate forwards and retries; Shoal configures and runs one
 //! per agent launch.
-mod config;
 mod launch;
 
-pub use config::{Proxies, Proxy, routes, validate, validate_references};
+pub use crate::config::proxies::Proxy;
 pub use launch::{
     KEY_HEADER, KEY_VARIABLE, Running, forget_reports, send_relayed, send_report, start,
 };

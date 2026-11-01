@@ -22,10 +22,10 @@ pub struct Machine {
     /// What each AI tool needs of this machine.
     pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
     /// Retrying proxies an AI tool's agents reach their API through.
-    pub proxies: crate::proxy::Proxies,
+    pub proxies: crate::config::proxies::Proxies,
     /// Forge hosts: the type each serves, and the tokens that sign in to it.
     pub forges: forges::Forges,
     /// Named Git settings a repository or agent selects.
-    pub git_profiles: crate::git_profile::Git,
+    pub git_profiles: crate::config::git_profiles::Git,
     pub simulators: crate::client::sim::SimConfig,
 }

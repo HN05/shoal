@@ -227,7 +227,7 @@ pub fn skill_dirs(
 }
 
 pub(super) fn skill_dir(directory: &Path, home: &Path) -> Result<PathBuf> {
-    let path = crate::fsutil::expand_home(directory, home);
+    let path = crate::client::fsutil::expand_home(directory, home);
     ensure!(
         path.is_absolute(),
         "skill_dir must be an absolute path or start with ~/"

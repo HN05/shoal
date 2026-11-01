@@ -153,7 +153,7 @@ fn config_serializes_in_its_own_spelling() {
 
 #[test]
 fn additional_hooks_validate_and_layer_paths() {
-    for &kind in crate::hooks::HookKind::ALL {
+    for &kind in crate::config::hooks::HookKind::ALL {
         let key = kind.key();
         assert!(parse(&format!("{key} = ' '")).is_err());
         assert!(parse(&format!(r#"{key} = "a\u0000b""#)).is_err());
@@ -290,5 +290,24 @@ fn worktree_templates_come_from_the_root_or_the_shoal_directory() {
             "{error}"
         );
         assert!(error.contains(&format!(".shoal/{name}")), "{error}");
+    }
+}
+
+#[test]
+fn cache_names_are_lowercase_identifiers() {
+    let configured = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| {
+                let cache = Cache {
+                    scope: CacheScope::Shared,
+                };
+                ((*name).to_owned(), cache)
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
+    validate_caches(&configured(&["go", "pnpm_store", "gradle-home"])).unwrap();
+    for name in ["", "Go", ".go", "../go", "go/build"] {
+        assert!(validate_caches(&configured(&[name])).is_err(), "{name:?}");
     }
 }

@@ -92,7 +92,7 @@ pub fn skill_dirs(tools: &Tools, home: &Path) -> Result<BTreeMap<String, Option<
 /// Skill delivery reads machine config without constructing daemon paths.
 pub fn load(home: &Path) -> Result<Tools> {
     let path = crate::config::Config::path_for_home(home);
-    let text = crate::fsutil::read_optional(&path)
+    let text = crate::client::fsutil::read_optional(&path)
         .with_context(|| format!("read {}", path.display()))?
         .unwrap_or_default();
     let config = crate::config::Config::from_toml(&text)

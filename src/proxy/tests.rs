@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use super::*;
+use crate::config::proxies::{routes, validate, validate_references};
 
 fn parse(text: &str) -> Result<crate::config::Config> {
     let config = crate::config::Config::from_toml(text)?;

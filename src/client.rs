@@ -12,6 +12,7 @@ pub mod env;
 pub mod events;
 pub mod executions;
 pub mod files;
+pub(crate) mod fsutil;
 pub mod links;
 pub mod model;
 pub mod notifications;

@@ -1,5 +1,9 @@
 //! Small filesystem operations shared by the CLI and daemon.
-pub(crate) use crate::client::{executions::FileIdentity, paths::home_dir};
+pub(crate) use crate::client::{
+    executions::FileIdentity,
+    fsutil::{expand_home, read_optional},
+    paths::home_dir,
+};
 use std::{
     ffi::OsStr,
     fs,
@@ -107,14 +111,6 @@ pub fn account_home() -> Option<PathBuf> {
     Some(PathBuf::from(OsStr::from_bytes(home.to_bytes())))
 }
 
-/// Expand a leading `~` path component, without resolving users or symlinks.
-pub fn expand_home(path: &Path, home: &Path) -> PathBuf {
-    match path.strip_prefix("~") {
-        Ok(relative) => home.join(relative),
-        Err(_) => path.to_owned(),
-    }
-}
-
 /// Follow symlinks and require a regular file with at least one execute bit.
 pub fn is_executable(path: &Path) -> io::Result<bool> {
     let metadata = fs::metadata(path)?;
@@ -204,15 +200,6 @@ fn same_file(left: &Path, right: &Path) -> bool {
     match (fs::metadata(left), fs::metadata(right)) {
         (Ok(left), Ok(right)) => (left.dev(), left.ino()) == (right.dev(), right.ino()),
         _ => false,
-    }
-}
-
-/// Read UTF-8 text; only a missing file is treated as absent.
-pub fn read_optional(path: &Path) -> io::Result<Option<String>> {
-    match fs::read_to_string(path) {
-        Ok(text) => Ok(Some(text)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
     }
 }
 

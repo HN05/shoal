@@ -1,6 +1,6 @@
 use super::*;
+use crate::config::hooks::HookKind;
 use crate::config::{self, named_commands, repo::parse};
-use crate::hooks::HookKind;
 use serde_json::Value;
 
 /// Every option set, so an option that does not survive layering reports
@@ -319,7 +319,7 @@ fn places_close_when_done_unless_a_layer_turns_it_off() {
 
 #[test]
 fn presets_come_from_the_global_config_unless_the_repository_names_its_own() {
-    use crate::presets::Preset;
+    use crate::config::presets::Preset;
     let presets = |global, worktree, saved| {
         stack(global, worktree, saved)
             .resolve()

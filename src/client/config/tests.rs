@@ -92,9 +92,9 @@ fn global_git_profile_selections_must_name_defined_profiles() {
 #[test]
 fn additional_hook_paths_are_validated_in_global_config() {
     let paths = Paths::for_test("/home/test");
-    for &kind in crate::hooks::HookKind::ALL {
+    for &kind in crate::config::hooks::HookKind::ALL {
         let key = kind.key();
-        if kind == crate::hooks::HookKind::Setup {
+        if kind == crate::config::hooks::HookKind::Setup {
             assert!(Config::parse(&format!("{key} = 'scripts/hook'"), &paths).is_err());
             continue;
         }

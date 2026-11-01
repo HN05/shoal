@@ -75,11 +75,3 @@ fn caches_are_created_emptied_and_removed_only_when_owned() {
     assert!(!directory.exists());
     assert!(layout.move_aside().unwrap().is_empty());
 }
-
-#[test]
-fn cache_names_are_lowercase_identifiers() {
-    validate(&configured(&["go", "pnpm_store", "gradle-home"])).unwrap();
-    for name in ["", "Go", ".go", "../go", "go/build"] {
-        assert!(validate(&configured(&[name])).is_err(), "{name:?}");
-    }
-}
