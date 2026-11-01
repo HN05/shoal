@@ -30,15 +30,34 @@ pub(crate) const RECHECK_AFTER: Duration = Duration::from_secs(20);
 /// What a process reports when the kernel interrupts its wait on the volume.
 const INTERRUPTED: &str = "Interrupted system call";
 
-/// The stalled volumes.
+/// The stalled volumes, and the checks running now.
 #[derive(Default)]
 pub(crate) struct VolumeAccess {
     stalls: Mutex<BTreeMap<PathBuf, Stalled>>,
+    running: Mutex<Running>,
 }
 
 struct Stalled {
     report: VolumeStall,
     checked: Instant,
+}
+
+#[derive(Default)]
+struct Running {
+    next: u64,
+    checks: BTreeMap<u64, (PathBuf, Instant)>,
+}
+
+/// A running check, which leaves [`VolumeAccess::waiting`] when dropped.
+struct RunningCheck<'a> {
+    access: &'a VolumeAccess,
+    id: u64,
+}
+
+impl Drop for RunningCheck<'_> {
+    fn drop(&mut self) {
+        lock(&self.access.running).checks.remove(&self.id);
+    }
 }
 
 impl VolumeAccess {
@@ -55,7 +74,9 @@ impl VolumeAccess {
         if let Some(stall) = self.recently_stalled(&volume) {
             return (Err(stalled(&stall)), None);
         }
+        let running = self.start(path);
         let outcome = tokio::time::timeout(LIMIT, check).await;
+        drop(running);
         let (error, reason) = match outcome {
             Ok(Err(error)) if interrupted(&error) => (Some(error), "was interrupted".to_owned()),
             Ok(result) => {
@@ -90,11 +111,28 @@ impl VolumeAccess {
             .collect()
     }
 
+    /// The path of the check that has run longest, and for how long.
+    pub(crate) fn waiting(&self) -> Option<(PathBuf, Duration)> {
+        lock(&self.running)
+            .checks
+            .values()
+            .min_by_key(|(_, started)| *started)
+            .map(|(path, started)| (path.clone(), started.elapsed()))
+    }
+
     fn recently_stalled(&self, volume: &Path) -> Option<VolumeStall> {
         lock(&self.stalls)
             .get(volume)
             .filter(|stalled| stalled.checked.elapsed() < RECHECK_AFTER)
             .map(|stalled| stalled.report.clone())
+    }
+
+    fn start(&self, path: &Path) -> RunningCheck<'_> {
+        let mut running = lock(&self.running);
+        let id = running.next;
+        running.next += 1;
+        running.checks.insert(id, (path.to_owned(), Instant::now()));
+        RunningCheck { access: self, id }
     }
 
     /// Record that a check of `path` on `volume` stalled, keeping the first

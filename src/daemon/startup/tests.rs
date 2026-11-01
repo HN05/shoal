@@ -86,3 +86,48 @@ async fn a_client_that_never_sends_its_request_does_not_hold_up_serving() {
     let (_listener, _connections) = startup.finish(crate::daemon::tests::server(manager)).await;
     assert!(finishing.elapsed() < timing::REQUEST_READ_TIMEOUT);
 }
+
+#[tokio::test(start_paused = true)]
+async fn status_names_the_file_access_a_step_waits_on() {
+    let (root, manager) = manager().await;
+    let access = &manager.volume_access;
+    assert_eq!(waiting(access), None);
+    let path = root.path().join("workspace");
+    let (started, finish) = (tokio::sync::Notify::new(), tokio::sync::Notify::new());
+    let check = manager.check_volume(&path, async {
+        started.notify_one();
+        finish.notified().await;
+        Ok(())
+    });
+    let observe = async {
+        started.notified().await;
+        tokio::time::advance(Duration::from_secs(1)).await;
+        let quick = waiting(access);
+        tokio::time::advance(SLOW_ACCESS).await;
+        let slow = waiting(access);
+        finish.notify_one();
+        (quick, slow)
+    };
+    let (checked, (quick, slow)) = tokio::join!(check, observe);
+    checked.unwrap();
+    assert_eq!(quick, None);
+    assert_eq!(
+        slow.as_deref(),
+        Some(&*format!(
+            "waiting 6s for file access in {}; a macOS privacy prompt may be waiting for an answer",
+            path.display()
+        ))
+    );
+
+    let stalled = manager
+        .check_volume(&path, std::future::pending::<anyhow::Result<()>>())
+        .await;
+    assert!(stalled.is_err());
+    assert_eq!(
+        waiting(access).as_deref(),
+        Some(&*format!(
+            "file access on {} stalled; a macOS privacy prompt may be waiting for an answer",
+            path.display()
+        ))
+    );
+}

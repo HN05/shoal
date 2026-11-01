@@ -97,6 +97,33 @@ async fn a_check_that_fails_otherwise_leaves_the_volume_answering() {
     assert_eq!(access.stalls(), []);
 }
 
+#[tokio::test(start_paused = true)]
+async fn waiting_names_the_check_that_has_run_longest() {
+    let access = VolumeAccess::default();
+    assert_eq!(access.waiting(), None);
+    let started = tokio::sync::Notify::new();
+    let (finish, finished) = tokio::sync::oneshot::channel::<()>();
+    let check = access.check(Path::new(WORKSPACE), async {
+        started.notify_one();
+        let _ = finished.await;
+        Ok(())
+    });
+    let observe = async {
+        started.notified().await;
+        tokio::time::advance(Duration::from_secs(5)).await;
+        let waiting = access.waiting();
+        let _ = finish.send(());
+        waiting
+    };
+    let ((result, _), waiting) = tokio::join!(check, observe);
+    result.unwrap();
+    assert_eq!(
+        waiting,
+        Some((PathBuf::from(WORKSPACE), Duration::from_secs(5)))
+    );
+    assert_eq!(access.waiting(), None);
+}
+
 #[tokio::test]
 async fn the_daemon_alerts_once_while_a_volume_stays_stalled() {
     let (temp, manager) = crate::test_support::manager().await;

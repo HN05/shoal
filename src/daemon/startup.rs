@@ -2,8 +2,12 @@
 //! wait for the daemon to finish starting, as across an update's handoff,
 //! except that a request whose client sends it again when closed unanswered is
 //! closed, and a status request that would outwait its client learns which
-//! step runs and for how long. A step that runs long is logged.
-use std::sync::{Arc, Mutex};
+//! step runs, for how long, and the file access it waits on. A step that runs
+//! long is logged.
+use std::{
+    sync::{Arc, Mutex, OnceLock},
+    time::Duration,
+};
 
 use tokio::{
     net::{UnixListener, UnixStream},
@@ -12,15 +16,25 @@ use tokio::{
     time::Instant,
 };
 
-use super::{Server, connections, log, read_request, serve_request};
+use super::{Server, connections, log, read_request, serve_request, volume_access::VolumeAccess};
 use crate::protocol::{self, Body, DaemonMethod, ErrorCode, Method, Operation, Response, timing};
+
+/// A check of a path that has run this long is named in a status answer.
+const SLOW_ACCESS: Duration = Duration::from_secs(5);
 
 /// The startup in progress and the task accepting its connections.
 pub(super) struct Startup {
-    step: Arc<Mutex<Step>>,
+    progress: Arc<Progress>,
     /// The server once startup has finished, which waiting requests use.
     ready: watch::Sender<Option<Server>>,
     accepting: JoinHandle<(UnixListener, JoinSet<()>)>,
+}
+
+/// What a status request learns while startup runs.
+struct Progress {
+    step: Mutex<Step>,
+    /// The file access the steps wait on, once the state is open.
+    access: OnceLock<Arc<VolumeAccess>>,
 }
 
 #[derive(Clone, Copy)]
@@ -32,23 +46,31 @@ struct Step {
 impl Startup {
     /// Accept connections on `listener` until [`Self::finish`].
     pub(super) fn begin(listener: UnixListener) -> Self {
-        let step = Arc::new(Mutex::new(Step {
-            name: "starting",
-            since: Instant::now(),
-        }));
+        let progress = Arc::new(Progress {
+            step: Mutex::new(Step {
+                name: "starting",
+                since: Instant::now(),
+            }),
+            access: OnceLock::new(),
+        });
         let (ready, server) = watch::channel(None);
-        let accepting = tokio::spawn(accept(listener, step.clone(), server));
+        let accepting = tokio::spawn(accept(listener, progress.clone(), server));
         Self {
-            step,
+            progress,
             ready,
             accepting,
         }
     }
 
+    /// Name the checks of `access` that wait long in status answers.
+    pub(super) fn follow(&self, access: Arc<VolumeAccess>) {
+        let _ = self.progress.access.set(access);
+    }
+
     /// Run the step `name`, such as `auditing worktrees`, which status
     /// requests report while it runs.
     pub(super) async fn step<T>(&self, name: &'static str, work: impl Future<Output = T>) -> T {
-        *lock(&self.step) = Step {
+        *lock(&self.progress.step) = Step {
             name,
             since: Instant::now(),
         };
@@ -74,7 +96,7 @@ impl Drop for Startup {
 
 async fn accept(
     listener: UnixListener,
-    step: Arc<Mutex<Step>>,
+    progress: Arc<Progress>,
     server: watch::Receiver<Option<Server>>,
 ) -> (UnixListener, JoinSet<()>) {
     let mut connections = JoinSet::new();
@@ -83,7 +105,7 @@ async fn accept(
             _ = ready(server.clone()) => break,
             accepted = connections::accept(&listener) => match accepted {
                 Ok(stream) => {
-                    connections.spawn(connection(stream, step.clone(), server.clone()));
+                    connections.spawn(connection(stream, progress.clone(), server.clone()));
                 }
                 Err(error) => {
                     log!("accept connection during startup: {error}");
@@ -100,7 +122,7 @@ async fn accept(
 /// running step once startup outlasts [`timing::STARTUP_STATUS_WAIT`].
 async fn connection(
     mut stream: UnixStream,
-    step: Arc<Mutex<Step>>,
+    progress: Arc<Progress>,
     server: watch::Receiver<Option<Server>>,
 ) {
     let request = match read_request(&mut stream).await {
@@ -117,7 +139,7 @@ async fn connection(
     let server = if status {
         match tokio::time::timeout(timing::STARTUP_STATUS_WAIT, ready(server)).await {
             Ok(server) => server,
-            Err(_) => return answer_step(stream, request.id, &step).await,
+            Err(_) => return answer_step(stream, request.id, &progress).await,
         }
     } else {
         ready(server).await
@@ -132,15 +154,40 @@ async fn connection(
     }
 }
 
-/// Refuse a status request with the startup step running and how long it has run.
-async fn answer_step(mut stream: UnixStream, request_id: u64, step: &Mutex<Step>) {
-    let Step { name, since } = *lock(step);
-    let message = format!(
+/// Refuse a status request with the startup step running, how long it has
+/// run, and the file access it waits on.
+async fn answer_step(mut stream: UnixStream, request_id: u64, progress: &Progress) {
+    let Step { name, since } = *lock(&progress.step);
+    let mut message = format!(
         "the daemon is starting: {name} for {}",
         log::elapsed(since.elapsed())
     );
+    if let Some(waiting) = progress.access.get().and_then(|access| waiting(access)) {
+        message.push_str(&format!("; {waiting}"));
+    }
     let response = Response::new(request_id, Body::error(ErrorCode::OperationFailed, message));
     let _ = protocol::write(&mut stream, &response).await;
+}
+
+/// The stalled volume, or else the check that has run longer than
+/// [`SLOW_ACCESS`], with the permission it may wait on.
+fn waiting(access: &VolumeAccess) -> Option<String> {
+    let waiting = match access.stalls().first() {
+        Some(stall) => format!("file access on {} stalled", stall.volume.display()),
+        None => {
+            let (path, waited) = access
+                .waiting()
+                .filter(|(_, waited)| *waited >= SLOW_ACCESS)?;
+            format!(
+                "waiting {} for file access in {}",
+                log::elapsed(waited),
+                path.display()
+            )
+        }
+    };
+    Some(format!(
+        "{waiting}; a macOS privacy prompt may be waiting for an answer"
+    ))
 }
 
 /// The server once startup has finished, or `None` once it failed.

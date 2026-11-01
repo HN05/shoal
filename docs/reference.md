@@ -95,7 +95,9 @@ directory must match. `daemon status` exits 1 when offline, and names each
 volume whose file access stalls, as while macOS waits for an answer to a
 privacy prompt for it, whichever process the prompt is for: a worktree check
 there that runs 30 seconds or is interrupted reports the volume once as a
-`volume_stalled` alert, and it stays listed until a check finishes. A daemon that
+`volume_stalled` alert, and it stays listed until a check finishes. While the
+daemon starts, its answer names the step, a stalled volume, or a path whose
+check has waited five seconds. A daemon that
 owns the state directory but does not answer is reported with its PID by every
 command. `daemon status`, `stop` and `restart` need no request capacity, and send
 a daemon that does not answer SIGTERM, through the service manager or directly

@@ -240,6 +240,7 @@ async fn start(startup: &startup::Startup, paths: &Paths) -> Result<Arc<Manager>
     let manager = startup
         .step("opening the state database", Manager::open(paths.clone()))
         .await?;
+    startup.follow(manager.volume_access.clone());
     startup
         .step(
             "quarantining interrupted operations",
