@@ -7311,6 +7311,29 @@ fn save_running_chat(fixture: &Fixture, stop: impl FnOnce(&Fixture)) -> Value {
 }
 
 #[test]
+fn a_saved_chats_open_question_stays_in_the_inbox() {
+    let mut fixture = chat_session_fixture();
+    save_running_chat(&fixture, |fixture| {
+        let chat = fixture.ok(&["work", "--chats"])[0]["id"].clone();
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", chat.as_str().unwrap())
+            .args(["--json", "questions", "ask", "Which database?"])
+            .args(["--recommend", "SQLite"])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        let output = fixture.run(&["daemon", "stop"]);
+        assert!(output.status.success(), "{output:?}");
+    });
+    assert!(fixture.daemon.child.wait().unwrap().success());
+    fixture.restart();
+    let inbox = fixture.ok(&["inbox"]);
+    assert_eq!(inbox[0]["question"]["space"], "talk", "{inbox}");
+}
+
+#[test]
 fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     let mut fixture = chat_session_fixture();
     let home = fixture.root.path().to_owned();

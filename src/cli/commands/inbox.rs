@@ -74,11 +74,12 @@ impl Inbox {
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
         let existing: HashSet<String> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
-        // Workspace processes see their own tree, which no chat is in.
+        // Workspace processes see their own tree, which no chat is in. A
+        // saved chat keeps its open questions.
         let mut chats = if crate::env::is_scoped() {
             Vec::new()
         } else {
-            client::chats(&ctx.paths).await?
+            client::recorded_chats(&ctx.paths).await?
         };
         chats.retain(|chat| filter.keeps_chat(chat));
         let questions =
