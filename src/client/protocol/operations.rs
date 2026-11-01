@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use super::{ErrorCode, Lifetime};
 use crate::{
-    client::{approvals::ApprovalRequest, links::OpenOutcome},
+    client::{
+        approvals::{ApprovalRequest, DecisionStatus},
+        links::OpenOutcome,
+    },
     forge::items::create::PullOptions,
     model::{LandedBranch, QueueEntry, Workspace},
 };
@@ -231,4 +234,20 @@ pub enum Failure {
     Failed {
         message: String,
     },
+}
+
+impl Failure {
+    /// The code a caller acts on.
+    pub fn code(&self) -> ErrorCode {
+        match self {
+            Self::SetupFailed { .. } | Self::SetupUnverified { .. } => ErrorCode::SetupFailed,
+            Self::HookFailed { .. } => ErrorCode::HookFailed,
+            Self::PushFailed { .. } => ErrorCode::PushFailed,
+            Self::Approval { request } if request.status == DecisionStatus::Denied => {
+                ErrorCode::ApprovalDenied
+            }
+            Self::Refused { code, .. } => code.clone(),
+            Self::Approval { .. } | Self::Failed { .. } => ErrorCode::OperationFailed,
+        }
+    }
 }

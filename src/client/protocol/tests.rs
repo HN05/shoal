@@ -100,6 +100,10 @@ fn daemon_error_codes_preserve_wire_spellings() {
         (ErrorCode::NameTaken, "name_taken"),
         (ErrorCode::NotReady, "not_ready"),
         (ErrorCode::UnsavedWork, "unsaved_work"),
+        (ErrorCode::ApprovalDenied, "approval_denied"),
+        (ErrorCode::SetupFailed, "setup_failed"),
+        (ErrorCode::HookFailed, "hook_failed"),
+        (ErrorCode::PushFailed, "push_failed"),
         (ErrorCode::Unknown("future_code".into()), "future_code"),
     ] {
         let wire = json!({"protocol": VERSION, "id": 7, "type": "error",
@@ -116,7 +120,11 @@ fn daemon_error_codes_preserve_wire_spellings() {
             | ErrorCode::NotFound
             | ErrorCode::NameTaken
             | ErrorCode::NotReady
-            | ErrorCode::UnsavedWork => "failed".to_owned(),
+            | ErrorCode::UnsavedWork
+            | ErrorCode::ApprovalDenied
+            | ErrorCode::SetupFailed
+            | ErrorCode::HookFailed
+            | ErrorCode::PushFailed => "failed".to_owned(),
             _ => format!("{spelling}: failed"),
         };
         assert_eq!(error.to_string(), display);

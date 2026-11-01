@@ -31,7 +31,7 @@ mod listing;
 pub(crate) mod menu;
 mod messages;
 mod notifications;
-mod operations;
+pub(crate) mod operations;
 mod plan;
 mod ports;
 mod questions;

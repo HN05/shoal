@@ -8,7 +8,12 @@ use std::{
 };
 
 use crate::{
-    daemon::refusal::Reason,
+    cli::commands::operations::Failed,
+    daemon::{
+        approvals::{DecisionStatus, Undecided},
+        refusal::Reason,
+    },
+    execution::SetupVerificationFailure,
     forge::review::status::ReviewState,
     protocol::{ErrorCode, RemoteError},
     sim::SimulatorState,
@@ -88,13 +93,30 @@ pub enum Style {
 /// specific one, or the code of a refusal the CLI raised, otherwise
 /// `command_failed`.
 pub fn json_error(error: &anyhow::Error) -> serde_json::Value {
-    let code = error
-        .downcast_ref::<RemoteError>()
-        .map(|remote| remote.code.clone())
-        .or_else(|| Reason::of(error).map(Reason::code))
+    let code = error_code(error)
         .filter(|code| *code != ErrorCode::OperationFailed)
         .map_or_else(|| "command_failed".to_owned(), |code| code.to_string());
     serde_json::json!({"error": {"code": code, "message": format!("{error:#}")}})
+}
+
+/// The specific code of `error`: the daemon's, an operation's failure, a
+/// denied approval, or a refusal the CLI raised.
+fn error_code(error: &anyhow::Error) -> Option<ErrorCode> {
+    if let Some(remote) = error.downcast_ref::<RemoteError>() {
+        return Some(remote.code.clone());
+    }
+    if let Some(Failed(failure)) = error.downcast_ref::<Failed>() {
+        return Some(failure.code());
+    }
+    if error.downcast_ref::<SetupVerificationFailure>().is_some() {
+        return Some(ErrorCode::SetupFailed);
+    }
+    if let Some(Undecided(request)) = error.downcast_ref::<Undecided>()
+        && request.status == DecisionStatus::Denied
+    {
+        return Some(ErrorCode::ApprovalDenied);
+    }
+    Reason::of(error).map(Reason::code)
 }
 
 /// Print the help or version text clap reports as a parse error, which clap's

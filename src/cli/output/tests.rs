@@ -76,7 +76,14 @@ fn emoji_require_a_utf8_terminal_with_glyphs() {
 fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
     use anyhow::Context as _;
 
-    use crate::daemon::refusal::{Reason, Refusal};
+    use crate::{
+        cli::commands::operations::Failed,
+        daemon::refusal::{Reason, Refusal},
+        execution::SetupVerificationFailure,
+        protocol::operations::Failure,
+    };
+
+    let failed = |failure| anyhow::Error::from(Failed(failure));
 
     let remote = |code| {
         anyhow::Error::from(RemoteError {
@@ -98,6 +105,28 @@ fn json_errors_carry_the_specific_code_of_a_daemon_or_cli_refusal() {
             "name_taken",
         ),
         (anyhow::anyhow!("failed"), "command_failed"),
+        (
+            failed(Failure::HookFailed {
+                message: "hook".into(),
+            }),
+            "hook_failed",
+        ),
+        (
+            failed(Failure::PushFailed {
+                message: "push".into(),
+            }),
+            "push_failed",
+        ),
+        (
+            failed(Failure::SetupFailed {
+                message: "setup".into(),
+            }),
+            "setup_failed",
+        ),
+        (
+            SetupVerificationFailure { exit_code: 1 }.into(),
+            "setup_failed",
+        ),
     ] {
         let error = Err::<(), _>(error).context("caller context").unwrap_err();
         let printed = json_error(&error);

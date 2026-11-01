@@ -23,7 +23,7 @@ pub(super) use worker::{Reporter, run as worker};
 
 /// A failure the operation reported that no other error type carries.
 #[derive(Debug)]
-pub(super) struct Failed(pub Failure);
+pub(crate) struct Failed(pub Failure);
 
 impl std::fmt::Display for Failed {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

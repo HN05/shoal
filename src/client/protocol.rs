@@ -474,6 +474,15 @@ crate::state::open_enum! {
         NotReady => "not_ready",
         /// Removal would delete unsaved work the caller did not confirm.
         UnsavedWork => "unsaved_work",
+        /// The user denied the approval the request needed.
+        ApprovalDenied => "approval_denied",
+        /// The workspace's setup command failed; the workspace is kept as
+        /// failed.
+        SetupFailed => "setup_failed",
+        /// The post-setup hook failed; the ready workspace is kept.
+        HookFailed => "hook_failed",
+        /// Pushing the workspace's branch failed.
+        PushFailed => "push_failed",
     }
 }
 
@@ -489,6 +498,10 @@ impl ErrorCode {
                 | Self::NameTaken
                 | Self::NotReady
                 | Self::UnsavedWork
+                | Self::ApprovalDenied
+                | Self::SetupFailed
+                | Self::HookFailed
+                | Self::PushFailed
         )
     }
 }
