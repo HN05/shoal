@@ -7,7 +7,9 @@ use std::{
 };
 
 use crate::{
-    daemon::chats::saved::tests::running_chat, process::identity::Identity, test_support::manager,
+    daemon::chats::saved::tests::{running_chat, unmarked},
+    process::identity::Identity,
+    test_support::manager,
 };
 
 /// The agent starts a process in its group as its stop's first round
@@ -30,7 +32,7 @@ async fn a_chat_keeps_its_record_and_directory_until_its_stop_finishes() {
             async move {
                 manager.record_chat_stopping(&chat.id, found).await?;
                 if rounds.fetch_add(1, Ordering::SeqCst) == 0 {
-                    let child = std::process::Command::new("sleep")
+                    let child = unmarked("sleep")
                         .arg("600")
                         .process_group(i32::try_from(chat.pid)?)
                         .spawn()?;

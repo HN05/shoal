@@ -800,7 +800,7 @@ wait
 
 /// `program` without the identity of a workspace or chat the runner may run
 /// in, which would make what it starts theirs rather than the test chat's.
-fn unmarked(program: &str) -> std::process::Command {
+pub(in crate::daemon::chats) fn unmarked(program: &str) -> std::process::Command {
     let mut command = std::process::Command::new(program);
     command
         .env_remove(crate::env::WORKSPACE_ID)
