@@ -1,7 +1,7 @@
 //! Arguments of commands that stop, remove and move workspaces.
 use clap::{Args, Subcommand};
 
-use crate::cli::args::{ConfirmationArgs, WorkspaceTargets, transfer::MoveCommand};
+use crate::cli::args::{ConfirmationArgs, SpaceTargets, transfer::MoveCommand};
 
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
@@ -15,7 +15,7 @@ pub enum LifecycleCommand {
     /// working directory, temporary directory, program or identity, with what they started.
     Stop {
         #[command(flatten)]
-        targets: WorkspaceTargets,
+        targets: SpaceTargets,
         /// Treat executions Shoal cannot prove ended as stopped without asking.
         #[arg(short = 'y', long)]
         yes: bool,

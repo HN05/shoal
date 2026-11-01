@@ -49,6 +49,17 @@ pub struct WorkspaceTargets {
     pub all: bool,
 }
 
+// The spaces of `shoal stop`: workspaces, and running chats for the modes
+// that stop untracked processes.
+#[derive(Debug, Default, Args)]
+pub struct SpaceTargets {
+    #[arg(value_name = "SPACE")]
+    pub space: Vec<String>,
+    /// All workspaces.
+    #[arg(long, conflicts_with = "space")]
+    pub all: bool,
+}
+
 // A description or comment, given inline or read from a file.
 #[derive(Debug, Default, Args)]
 pub struct BodyArgs {

@@ -5776,6 +5776,48 @@ fn stop_and_manual_removal_terminate_connected_executions() {
     }
 }
 
+/// Stopping untracked processes takes chats, so completion offers running
+/// chats for it, and plain `stop`, which takes workspaces, does not.
+#[test]
+fn completion_offers_chats_only_to_the_stop_levels() {
+    let fixture = Fixture::new();
+    fixture.add("planned");
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "planning", "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let state = fixture.root.path().join("state");
+    let complete = |args: &[&str]| {
+        let mut words = vec!["shoal", "--state-dir", state.to_str().unwrap()];
+        words.extend_from_slice(args);
+        let output = fixture
+            .command()
+            .arg("--")
+            .args(&words)
+            .env("SHOAL_COMPLETE", "bash")
+            .env("_CLAP_COMPLETE_INDEX", (words.len() - 1).to_string())
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        String::from_utf8(output.stdout).unwrap()
+    };
+
+    for mode in ["--processes", "--leftovers"] {
+        let offered = complete(&["stop", mode, "pl"]);
+        assert!(offered.lines().any(|line| line == "planning"), "{offered}");
+        assert!(offered.lines().any(|line| line == "planned"), "{offered}");
+    }
+    let offered = complete(&["stop", "--yes", "pl"]);
+    assert!(!offered.lines().any(|line| line == "planning"), "{offered}");
+
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 /// `stop --leftovers` takes only processes left behind, `stop --processes`
 /// every process carrying the workspace's identity too, and plain `stop`
 /// both after its agents and commands. None takes the workspace's own
@@ -7368,7 +7410,7 @@ fn noninteractive_missing_targets_do_not_open_pickers() {
         ),
         (&["rm"], workspaces),
         (&["status"], "missing workspace; pass <target>"),
-        (&["stop"], workspaces),
+        (&["stop"], "missing workspaces; pass <space>"),
         (&["diff"], workspace),
         (&["done"], workspace),
         (&["check"], workspace),

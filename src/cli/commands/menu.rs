@@ -18,7 +18,7 @@ use crate::{
     cli::{
         Command, agents,
         args::{
-            ConfirmationArgs, WorkspaceTargets,
+            ConfirmationArgs, SpaceTargets,
             agents::AgentsCommand,
             changes::ChangesCommand,
             coordination::{CoordinationCommand, QuestionsArgs},
@@ -697,8 +697,8 @@ async fn workspace_command(ctx: &Context, key: Key, workspace: Option<String>) -
             item: None,
         }),
         Key::Stop => Command::Lifecycle(LifecycleCommand::Stop {
-            targets: WorkspaceTargets {
-                workspace: workspace.into_iter().collect(),
+            targets: SpaceTargets {
+                space: workspace.into_iter().collect(),
                 all: false,
             },
             yes: false,

@@ -468,7 +468,12 @@ pub fn pick_chat(ctx: &Context, chats: &[Chat]) -> Result<String> {
 }
 
 async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Vec<String>> {
-    require_argument(ctx, "workspaces", WORKSPACE)?;
+    // `stop` takes spaces, of which it picks workspaces.
+    let argument = match crate::cli::usage::of(&ctx.command, WORKSPACE) {
+        Some(_) => WORKSPACE,
+        None => SPACE,
+    };
+    require_argument(ctx, "workspaces", argument)?;
     let entries = workspace_entries(ctx, workspaces, false).await;
     ensure!(!entries.is_empty(), "{}", ctx.need.none_offered());
     pick_many(ctx, "Workspaces> ", entries)

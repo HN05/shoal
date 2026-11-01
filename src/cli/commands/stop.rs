@@ -7,7 +7,7 @@ use serde_json::json;
 
 use crate::{
     cli::{
-        args::WorkspaceTargets,
+        args::SpaceTargets,
         client::{self, request},
         context::Context,
         output::Style,
@@ -21,14 +21,14 @@ use crate::{
 
 pub(super) async fn run(
     ctx: &Context,
-    targets: WorkspaceTargets,
+    targets: SpaceTargets,
     yes: bool,
     skip_children: bool,
 ) -> Result<i32> {
     if targets.all {
         return stop_all(ctx).await;
     }
-    let mut selected = ui::select_workspaces(ctx, targets.workspace).await?;
+    let mut selected = ui::select_workspaces(ctx, targets.space).await?;
     if !skip_children {
         selected = with_children(ctx, selected).await?;
     }

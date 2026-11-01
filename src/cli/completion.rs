@@ -132,6 +132,7 @@ pub fn command() -> Command {
             .try_get_many::<String>("workspace")
             .ok()
             .flatten()
+            .or_else(|| leaf.try_get_many::<String>("space").ok().flatten())
             .map(|names| names.cloned().collect())
             .unwrap_or_default();
         typed.pool = value(leaf, "pool");
@@ -217,6 +218,8 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
                 ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
                 ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
                 ("workspace", _, _) => Some(Target::Workspaces(need)),
+                // Only stopping untracked processes takes chats.
+                ("space", _, "stop") if need != Need::Untracked => Some(Target::Workspaces(need)),
                 ("space", _, _) => Some(Target::Spaces(need)),
                 ("name", "acquire", "port") => Some(Target::Ports),
                 ("pool", "acquire" | "release", "resource" | "repo")

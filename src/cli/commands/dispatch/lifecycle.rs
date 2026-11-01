@@ -15,17 +15,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: LifecycleComman
             targets,
             interrupt: true,
             ..
-        } => turns::interrupt(&ctx, targets.workspace).await,
+        } => turns::interrupt(&ctx, targets.space).await,
         LifecycleCommand::Stop {
             targets,
             processes: true,
             ..
-        } => stop::processes(&ctx, targets.workspace, Selection::Processes).await,
+        } => stop::processes(&ctx, targets.space, Selection::Processes).await,
         LifecycleCommand::Stop {
             targets,
             leftovers: true,
             ..
-        } => stop::processes(&ctx, targets.workspace, Selection::Leftovers).await,
+        } => stop::processes(&ctx, targets.space, Selection::Leftovers).await,
         LifecycleCommand::Stop {
             targets,
             yes,

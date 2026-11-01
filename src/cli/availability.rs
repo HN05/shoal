@@ -33,6 +33,9 @@ pub enum Need {
     Session,
     /// A running agent or command to stop.
     Running,
+    /// A space whose untracked processes to stop: a settled workspace, or a
+    /// running chat.
+    Untracked,
     /// A ready workspace with a recorded completion to withdraw.
     Done,
     /// A recorded base workspace to clear.
@@ -87,7 +90,7 @@ impl Need {
         let flag = |name| matches.try_get_one::<bool>(name).ok().flatten() == Some(&true);
         // Untracked processes do not need a running agent or command.
         if path == ["stop"] && (flag("processes") || flag("leftovers")) {
-            return Some(Self::Any);
+            return Some(Self::Untracked);
         }
         if flag("undo") {
             match path {
@@ -115,6 +118,7 @@ impl Need {
             Self::Holds => "no workspace has holds",
             Self::Marks => "no workspace is marked ready",
             Self::Directory => "no workspace directory exists",
+            Self::Untracked => "no workspace or chat",
             Self::Any
             | Self::Ready
             | Self::Settled
@@ -182,13 +186,16 @@ impl Availability {
             Need::Any
             | Need::Ready
             | Need::Settled
+            | Need::Untracked
             | Need::Links
             | Need::Setup
             | Need::Checkpoint => false,
         };
         let settled = match self.need {
             Need::Ready | Need::Done => accepts(&[WorkspaceState::Ready]),
-            Need::Settled => accepts(&[WorkspaceState::Ready, WorkspaceState::Failed]),
+            Need::Settled | Need::Untracked => {
+                accepts(&[WorkspaceState::Ready, WorkspaceState::Failed])
+            }
             Need::Links => state.accepts_links(),
             Need::Setup => accepts(&[
                 WorkspaceState::Preparing,
