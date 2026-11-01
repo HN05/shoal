@@ -9,6 +9,7 @@ use super::{
 };
 use crate::{
     daemon::{resources::Scope, store},
+    fsutil::off_runtime,
     git,
     model::{Repository, RepositoryRemoval, Workspace},
     removal::{InspectionPolicy, UnsavedWork},
@@ -294,7 +295,7 @@ impl Manager {
                 "workspace {} is busy",
                 workspace.name
             );
-            if workspace.path.exists() {
+            if off_runtime::exists(&workspace.path).await? {
                 self.verify_worktree(workspace).await?;
             } else {
                 ensure!(

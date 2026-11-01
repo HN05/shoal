@@ -454,6 +454,10 @@ opens a file in the protected location waits until the prompt is answered or the
 kernel interrupts it (`Interrupted system call`), so each Git the daemon starts
 does. Shoal cannot end the wait, only keep it from holding up unrelated work,
 and does not depend on where the worktree is or which permission it waits on.
+The daemon's own reads in a worktree, such as its ownership marker or whether
+it exists, can wait too, and no time limit interrupts a read waiting in the
+kernel, so requests and sweeps read worktree files on the blocking pool, where
+a read holds no runtime thread and a check's time limit ends the wait for it.
 The startup audit, its recheck, the sweep's branch observation and the Git reads
 of `shoal status` check a worktree within 30 seconds, a status reporting what it
 could not read; one that runs out or is interrupted records the directory

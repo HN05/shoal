@@ -12,7 +12,7 @@ use std::{
 /// Names the owning workspace inside a worktree's Git admin directory. Git keeps
 /// unknown files there across moves and discards them with the worktree, so the
 /// marker survives device renumbering, restores and copies but not re-creation.
-const OWNER_MARKER: &str = "shoal-workspace";
+pub(super) const OWNER_MARKER: &str = "shoal-workspace";
 
 /// The workspace ID recorded in an admin directory, if Shoal marked it.
 pub(in crate::daemon) fn marked_owner(git_dir: &Path) -> Result<Option<String>> {

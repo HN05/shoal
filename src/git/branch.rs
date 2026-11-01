@@ -1,9 +1,9 @@
 //! Branch names, renaming and checkout fast-forwards.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use crate::git;
+use crate::{fsutil::off_runtime, git};
 
 /// Local and remote branch names that can conflict with a new local branch.
 pub async fn names_in_use(repo: &Path) -> Result<Vec<String>> {
@@ -95,6 +95,13 @@ pub async fn is_symbolic(repo: &Path, name: &str) -> Result<bool> {
 /// operation returns to or rewrites the branch, so the branch is in use.
 pub async fn in_operation(repo: &Path, name: &str) -> Result<bool> {
     let common = git::common_dir(repo).await?;
+    let name = name.to_owned();
+    off_runtime::run(move || operation_on(common, &name)).await
+}
+
+/// Whether a rebase or bisect that the common Git directory `common` or one
+/// of its linked worktrees' directories records is on the branch `name`.
+fn operation_on(common: PathBuf, name: &str) -> Result<bool> {
     let linked = match std::fs::read_dir(common.join("worktrees")) {
         Ok(entries) => entries
             .map(|entry| entry.map(|entry| entry.path()))

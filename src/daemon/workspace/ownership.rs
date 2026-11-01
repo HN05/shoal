@@ -8,7 +8,7 @@ use super::{
     paths::matches_recorded_worktree_path,
 };
 use crate::daemon::refusal::{Reason, Refusal};
-use crate::{git, model::Workspace, state::WorkspaceState};
+use crate::{fsutil::off_runtime, git, model::Workspace, state::WorkspaceState};
 use anyhow::{Context, Result, ensure};
 use rusqlite::params;
 use std::{
@@ -139,18 +139,8 @@ impl Manager {
 
     async fn verify_worktree_identity(&self, workspace: &Workspace) -> Result<()> {
         let actual_git_dir = self.linked_git_dir(workspace).await?;
-        verify_owner(
-            &actual_git_dir,
-            &workspace.id,
-            workspace.git_dir_id.as_deref(),
-        )?;
-        if let Some(expected) = &workspace.git_dir {
-            ensure!(
-                fs::canonicalize(expected)? == actual_git_dir,
-                "workspace path now refers to a different Git worktree"
-            );
-        }
-        Ok(())
+        let workspace = workspace.clone();
+        off_runtime::run(move || verify_git_dir(&workspace, &actual_git_dir)).await
     }
 
     /// Verify ownership, then record the worktree's identity when `record` is
@@ -198,20 +188,10 @@ impl Manager {
         git_dir: &Path,
         workspace_id: &str,
     ) -> Result<()> {
-        let marked = marked_owner(git_dir)?;
-        let identity = directory_identity(git_dir)?;
-        for other in self.list_workspaces().await? {
-            let owns = owns_git_dir(&other, git_dir, Some(&identity), marked.as_deref())?;
-            ensure!(
-                other.id == workspace_id || !owns,
-                "Git worktree is already owned by {}; restore its recorded path",
-                other.name
-            );
-        }
-        if marked.is_some_and(|owner| owner != workspace_id) {
-            clear_owner(git_dir)?;
-        }
-        Ok(())
+        let workspaces = self.list_workspaces().await?;
+        let git_dir = git_dir.to_owned();
+        let workspace_id = workspace_id.to_owned();
+        off_runtime::run(move || release_stale_marker(&git_dir, &workspace_id, &workspaces)).await
     }
 
     /// The admin directory of the linked worktree rooted at the recorded path
@@ -221,7 +201,8 @@ impl Manager {
         // Verify this is still the checkout Shoal created before any deletion.
         let root = git::worktree_root(&workspace.path).await?;
         ensure!(
-            fs::canonicalize(root.trim())? == fs::canonicalize(&workspace.path)?,
+            off_runtime::canonicalize(Path::new(root.trim())).await?
+                == off_runtime::canonicalize(&workspace.path).await?,
             "workspace path no longer points to its worktree root"
         );
         let expected = git::common_dir(&repo.path).await?;
@@ -242,12 +223,10 @@ impl Manager {
     /// location and filesystem identity, returning whether anything changed.
     pub(crate) async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git::git_dir(&workspace.path).await?;
-        let marked = marked_owner(&git_dir)?.as_deref() == Some(workspace.id.as_str());
-        if !marked {
-            mark_owner(&git_dir, &workspace.id)?;
-        }
-        // The identity only proves ownership of records made before markers.
-        let identity = directory_identity(&git_dir)?;
+        let (marked, identity) = {
+            let (git_dir, id) = (git_dir.clone(), workspace.id.clone());
+            off_runtime::run(move || mark_git_dir(&git_dir, &id)).await?
+        };
         if workspace.git_dir.as_ref() == Some(&git_dir)
             && workspace.git_dir_id.as_ref() == Some(&identity)
         {
@@ -268,12 +247,17 @@ impl Manager {
     /// Whether Git still lists the (possibly missing) worktree at its recorded path.
     pub(crate) async fn is_registered_worktree(&self, workspace: &Workspace) -> Result<bool> {
         let repo = self.repository(&workspace.repository_id).await?;
-        for tree in git::worktrees(&repo.path, git::run).await? {
-            if matches_recorded_worktree_path(&workspace.path, &tree.path)? {
-                return Ok(true);
+        let trees = git::worktrees(&repo.path, git::run).await?;
+        let recorded = workspace.path.clone();
+        off_runtime::run(move || {
+            for tree in trees {
+                if matches_recorded_worktree_path(&recorded, &tree.path)? {
+                    return Ok(true);
+                }
             }
-        }
-        Ok(false)
+            Ok(false)
+        })
+        .await
     }
 
     /// Missing worktrees may have been moved outside Shoal, not deleted. Consult
@@ -281,32 +265,90 @@ impl Manager {
     /// link to another existing path needs proof that the directory is ours.
     pub(crate) async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
         let repo = self.repository(&workspace.repository_id).await?;
-        let Some(directory) = &workspace.git_dir else {
-            // Older records cannot prove identity after a move; a branch match at
-            // another existing path is enough to block forgetting the workspace.
-            return Ok(git::worktrees(&repo.path, git::run)
-                .await?
+        if let Some(directory) = workspace.git_dir.clone() {
+            let workspace = workspace.clone();
+            return off_runtime::run(move || moved_worktree(&workspace, &directory)).await;
+        }
+        // Older records cannot prove identity after a move; a branch match at
+        // another existing path is enough to block forgetting the workspace.
+        let trees = git::worktrees(&repo.path, git::run).await?;
+        let branch = workspace.branch.clone();
+        off_runtime::run(move || {
+            Ok(trees
                 .into_iter()
-                .find(|tree| tree.is_branch(&workspace.branch) && tree.path.is_dir())
-                .map(|tree| tree.path));
-        };
-        let destination = match fs::read_to_string(directory.join("gitdir")) {
-            Ok(destination) => PathBuf::from(destination.trim_end_matches('\n')),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(error).context("read worktree ownership link"),
-        };
-        let path = destination.parent().context("invalid Git worktree link")?;
-        if !path.try_exists()? || fs::canonicalize(path)? == workspace.path {
-            return Ok(None);
-        }
-        // Only this workspace's admin directory proves that its worktree moved;
-        // one marked for another workspace means this worktree was deleted.
-        match marked_owner(directory)? {
-            Some(owner) if owner != workspace.id => return Ok(None),
-            _ => verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?,
-        }
-        Ok(Some(path.to_owned()))
+                .find(|tree| tree.is_branch(&branch) && tree.path.is_dir())
+                .map(|tree| tree.path))
+        })
+        .await
     }
+}
+
+/// Refuse an admin directory that is not the workspace's own, or not the one
+/// it recorded.
+fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
+    verify_owner(git_dir, &workspace.id, workspace.git_dir_id.as_deref())?;
+    if let Some(expected) = &workspace.git_dir {
+        ensure!(
+            fs::canonicalize(expected)? == git_dir,
+            "workspace path now refers to a different Git worktree"
+        );
+    }
+    Ok(())
+}
+
+/// Refuse an admin directory another of the `workspaces` owns, and clear a
+/// marker naming a workspace other than `workspace_id`, which none of them is.
+fn release_stale_marker(
+    git_dir: &Path,
+    workspace_id: &str,
+    workspaces: &[Workspace],
+) -> Result<()> {
+    let marked = marked_owner(git_dir)?;
+    let identity = directory_identity(git_dir)?;
+    for other in workspaces {
+        let owns = owns_git_dir(other, git_dir, Some(&identity), marked.as_deref())?;
+        ensure!(
+            other.id == workspace_id || !owns,
+            "Git worktree is already owned by {}; restore its recorded path",
+            other.name
+        );
+    }
+    if marked.is_some_and(|owner| owner != workspace_id) {
+        clear_owner(git_dir)?;
+    }
+    Ok(())
+}
+
+/// Mark the admin directory as `workspace_id`'s unless it already is,
+/// returning whether it already was, and its filesystem identity.
+fn mark_git_dir(git_dir: &Path, workspace_id: &str) -> Result<(bool, String)> {
+    let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id);
+    if !marked {
+        mark_owner(git_dir, workspace_id)?;
+    }
+    // The identity only proves ownership of records made before markers.
+    Ok((marked, directory_identity(git_dir)?))
+}
+
+/// Where the worktree of the workspace's recorded admin `directory` moved,
+/// if the directory proves it is still the workspace's.
+fn moved_worktree(workspace: &Workspace, directory: &Path) -> Result<Option<PathBuf>> {
+    let destination = match fs::read_to_string(directory.join("gitdir")) {
+        Ok(destination) => PathBuf::from(destination.trim_end_matches('\n')),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("read worktree ownership link"),
+    };
+    let path = destination.parent().context("invalid Git worktree link")?;
+    if !path.try_exists()? || fs::canonicalize(path)? == workspace.path {
+        return Ok(None);
+    }
+    // Only this workspace's admin directory proves that its worktree moved;
+    // one marked for another workspace means this worktree was deleted.
+    match marked_owner(directory)? {
+        Some(owner) if owner != workspace.id => return Ok(None),
+        _ => verify_owner(directory, &workspace.id, workspace.git_dir_id.as_deref())?,
+    }
+    Ok(Some(path.to_owned()))
 }
 
 #[cfg(test)]

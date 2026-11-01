@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use super::run;
+use crate::fsutil::off_runtime;
 
 /// Read an object or revision without peeling it to a commit.
 pub async fn revision(
@@ -64,7 +65,7 @@ pub async fn worktree_root(repo: &Path) -> Result<String> {
 /// sets `core.bare`, so Git refuses every working-tree command there. Running
 /// `git init --bare` with an inherited `GIT_DIR` leaves a checkout this way.
 pub async fn is_bare_with_work_tree(path: &Path) -> Result<bool> {
-    if !path.join(".git").is_dir() {
+    if !off_runtime::is_dir(&path.join(".git")).await? {
         return Ok(false);
     }
     Ok(run(path, &["rev-parse", "--is-bare-repository"])
@@ -75,7 +76,7 @@ pub async fn is_bare_with_work_tree(path: &Path) -> Result<bool> {
 
 pub async fn git_dir(repo: &Path) -> Result<PathBuf> {
     let dir = run(repo, &["rev-parse", "--path-format=absolute", "--git-dir"]).await?;
-    Ok(std::fs::canonicalize(dir.trim())?)
+    off_runtime::canonicalize(Path::new(dir.trim())).await
 }
 
 pub async fn metadata_path(

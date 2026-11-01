@@ -4,6 +4,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
 
+use crate::fsutil::off_runtime;
+
 use super::{isolated_command_without_submodules, run_isolated, run_without_submodules};
 
 const REFS: &str = "refs/shoal/checkpoints/";
@@ -54,18 +56,22 @@ pub async fn unsaved_bytes(worktree: &Path) -> Result<Option<u64>> {
     if untracked.split('\0').any(|file| file.ends_with('/')) || changed_submodule(worktree).await? {
         return Ok(None);
     }
-    let mut bytes = 0;
-    for file in [changed, untracked]
-        .iter()
-        .flat_map(|files| files.split('\0'))
-        .filter(|file| !file.is_empty())
-    {
-        // A deleted tracked file is listed as changed and adds nothing.
-        if let Ok(metadata) = std::fs::symlink_metadata(worktree.join(file)) {
-            bytes += metadata.len();
+    let worktree = worktree.to_owned();
+    off_runtime::run(move || {
+        let mut bytes = 0;
+        for file in [changed, untracked]
+            .iter()
+            .flat_map(|files| files.split('\0'))
+            .filter(|file| !file.is_empty())
+        {
+            // A deleted tracked file is listed as changed and adds nothing.
+            if let Ok(metadata) = std::fs::symlink_metadata(worktree.join(file)) {
+                bytes += metadata.len();
+            }
         }
-    }
-    Ok(Some(bytes))
+        Ok(Some(bytes))
+    })
+    .await
 }
 
 /// Whether a submodule has a new commit, tracked changes or untracked files.

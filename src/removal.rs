@@ -4,7 +4,7 @@ use anyhow::Result;
 pub(crate) use crate::client::removal::{
     BranchOutcome, NOTHING, RemovalCheck, RemovalResult, UnsavedWork,
 };
-use crate::{git, model::Workspace, process};
+use crate::{fsutil::off_runtime, git, model::Workspace, process};
 
 #[cfg(test)]
 mod tests;
@@ -93,7 +93,7 @@ pub(crate) async fn inspect(
         integrated: false,
         default_branch: default_branch.map(str::to_owned),
     };
-    if !check.workspace.path.exists() {
+    if !off_runtime::exists(&check.workspace.path).await? {
         return Ok(check);
     }
     let path = &check.workspace.path;

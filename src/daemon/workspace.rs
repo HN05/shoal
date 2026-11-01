@@ -71,6 +71,7 @@ use crate::daemon::refusal::{Reason, Refusal};
 use crate::{
     config::Config,
     daemon::store::{self, Store},
+    fsutil::off_runtime,
     git::{self, default_branch::DefaultBranchLookup, worktrunk},
     model::{Execution, Inspection, Repository, Workspace},
     paths::Paths,
@@ -525,12 +526,10 @@ impl Manager {
         base_branch: Option<String>,
         parent: Option<String>,
     ) -> Result<()> {
-        let marker = record
-            .git_dir
-            .as_ref()
-            .map(|git_dir| identity::marked_owner(git_dir))
-            .transpose()?
-            .flatten();
+        let marker = match record.git_dir.clone() {
+            Some(git_dir) => off_runtime::run(move || identity::marked_owner(&git_dir)).await?,
+            None => None,
+        };
         // A chat that ended no longer holds its name.
         self.end_finished_chats().await?;
         self.store

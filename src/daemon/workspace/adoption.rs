@@ -4,6 +4,7 @@ use super::{
 };
 use crate::daemon::log;
 use crate::{
+    fsutil::off_runtime,
     git::{self, worktrunk},
     model::Workspace,
     state::WorkspaceState,
@@ -62,7 +63,7 @@ impl Manager {
             return Ok(workspace);
         }
         let git_dir = git::git_dir(&path).await?;
-        let identity = directory_identity(&git_dir)?;
+        let identity = git_dir_identity(&git_dir).await?;
         let base = existing_base(repo, branch).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let workspace = Workspace {
@@ -180,7 +181,7 @@ impl Manager {
 
     /// Best-effort identity capture when Worktrunk failed after creating Git data.
     async fn record_copy_identity_if_present(&self, workspace: &Workspace) -> Result<()> {
-        if !workspace.path.exists() {
+        if !off_runtime::exists(&workspace.path).await? {
             return Ok(());
         }
         if git::git_dir(&workspace.path).await.is_err() {
@@ -198,7 +199,7 @@ impl Manager {
         let base = existing_base(repo, &workspace.branch).await?;
         let (commit, reference) = recorded_base(repo, &base).await?;
         let git_dir = git::git_dir(&workspace.path).await?;
-        let identity = directory_identity(&git_dir)?;
+        let identity = git_dir_identity(&git_dir).await?;
         self.record_copy_ready(workspace, git_dir, identity, commit, reference)
             .await
     }
@@ -230,4 +231,10 @@ impl Manager {
             })
             .await
     }
+}
+
+/// The filesystem identity of the admin directory `git_dir`.
+async fn git_dir_identity(git_dir: &Path) -> Result<String> {
+    let git_dir = git_dir.to_owned();
+    off_runtime::run(move || directory_identity(&git_dir)).await
 }

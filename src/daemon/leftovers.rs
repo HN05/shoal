@@ -12,6 +12,7 @@ use anyhow::Result;
 pub(crate) use crate::client::processes::Leftover;
 use crate::{
     daemon::{space_processes::WorktreeTies, workspace::Manager},
+    fsutil::off_runtime,
     process::{
         described,
         identity::{
@@ -130,7 +131,7 @@ impl Manager {
     async fn surveyed_spaces(&self) -> Result<Vec<Space>> {
         let mut spaces = Vec::new();
         for workspace in self.list_workspaces().await? {
-            let ties = WorktreeTies::when(workspace.path.is_dir());
+            let ties = WorktreeTies::when(off_runtime::is_dir(&workspace.path).await?);
             spaces.push(self.workspace_space(&workspace, ties).await?);
         }
         for chat in self.chats().await? {

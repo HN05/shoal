@@ -401,7 +401,7 @@ pub async fn common_dir(path: &Path) -> Result<PathBuf> {
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     )
     .await?;
-    Ok(std::fs::canonicalize(dir.trim())?)
+    crate::fsutil::off_runtime::canonicalize(Path::new(dir.trim())).await
 }
 
 pub async fn worktrees(

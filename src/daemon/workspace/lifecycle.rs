@@ -7,6 +7,7 @@ use crate::{
         cleanup::{Rule, Snapshot},
         events::{self, EventCause, EventKind},
     },
+    fsutil::off_runtime,
     git::{
         self,
         default_branch::DefaultBranchLookup,
@@ -326,8 +327,8 @@ impl Stage {
 }
 
 /// What the worktree's state keeps from automatic cleanup, if anything.
-fn worktree_cleanup_reason(check: &RemovalCheck) -> Option<CleanupReason> {
-    if !check.workspace.path.is_dir() {
+async fn worktree_cleanup_reason(check: &RemovalCheck) -> Result<Option<CleanupReason>> {
+    Ok(if !off_runtime::is_dir(&check.workspace.path).await? {
         Some(CleanupReason::MissingDirectory)
     } else if check.dirty {
         Some(CleanupReason::Dirty)
@@ -343,7 +344,7 @@ fn worktree_cleanup_reason(check: &RemovalCheck) -> Option<CleanupReason> {
         })
     } else {
         None
-    }
+    })
 }
 
 /// The workspace's executions as cleanup sees them.
@@ -428,7 +429,7 @@ impl Manager {
         policy: InspectionPolicy,
         executions: CleanupExecutions,
     ) -> Result<RemovalCheck> {
-        if workspace.path.exists() {
+        if off_runtime::exists(&workspace.path).await? {
             self.verify_worktree(&workspace).await?;
         }
         let repo = self.repository(&workspace.repository_id).await?;
@@ -616,11 +617,11 @@ impl Manager {
                 executions,
             )
             .await?;
-        if let Some(reason) = worktree_cleanup_reason(&check) {
+        if let Some(reason) = worktree_cleanup_reason(&check).await? {
             return Ok(Err(reason));
         }
         check.load_directory_processes().await?;
-        if let Some(reason) = worktree_cleanup_reason(&check) {
+        if let Some(reason) = worktree_cleanup_reason(&check).await? {
             return Ok(Err(reason));
         }
         let head = git::revision(&check.workspace.path, "HEAD", git::run).await?;
@@ -654,7 +655,7 @@ impl Manager {
                 executions,
             )
             .await?;
-        if !check.workspace.path.is_dir()
+        if !off_runtime::is_dir(&check.workspace.path).await?
             || !Rule::Merged.allows(&check)
             || git::status::operation_in_progress(&check.workspace.path).await?
             || (check.dirty && !self.unsaved_files_are_leftovers(&check.workspace).await?)
@@ -923,7 +924,7 @@ impl Manager {
         let result = async {
             // Its reviews go with its record.
             self.stop_workspace_review(&workspace.id).await;
-            let present = workspace.path.try_exists()?;
+            let present = off_runtime::try_exists(&workspace.path).await?;
             let post_remove = if present {
                 self.ensure_no_pending_rename(&workspace.id).await?;
                 self.prepare_post_remove_hook(&workspace).await?
@@ -985,7 +986,7 @@ impl Manager {
         } else {
             None
         };
-        let present = workspace.path.try_exists()?;
+        let present = off_runtime::try_exists(&workspace.path).await?;
         let rules = RemovalRules {
             allow_pending_rename: !present,
             awaiting_setup: manual && workspace.state == WorkspaceState::Preparing,

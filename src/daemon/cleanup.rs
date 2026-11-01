@@ -21,6 +21,7 @@ use crate::{
         caches::Emptying, events::EventCause, file_access, log, notifications::NotificationKind,
         workspace::Manager,
     },
+    fsutil::off_runtime,
     model::{CleanupReason, Workspace},
     state::WorkspaceState,
 };
@@ -215,10 +216,8 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
 /// own read says nothing about the processes it starts there, so it records
 /// no stall.
 async fn is_dir(path: &std::path::Path) -> bool {
-    let path = path.to_owned();
-    let read = tokio::task::spawn_blocking(move || path.is_dir());
     matches!(
-        tokio::time::timeout(file_access::LIMIT, read).await,
+        tokio::time::timeout(file_access::LIMIT, off_runtime::is_dir(path)).await,
         Ok(Ok(true))
     )
 }
@@ -251,7 +250,7 @@ async fn sweep_workspace(
         workspace.state,
         WorkspaceState::Ready | WorkspaceState::Failed
     ) && workspace.git_dir.is_some()
-        && !workspace.path.try_exists()?
+        && !off_runtime::try_exists(&workspace.path).await?
     {
         timers.idle.remove(&workspace.id);
         remove_deleted(manager, workspace).await;

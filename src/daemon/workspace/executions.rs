@@ -13,6 +13,7 @@ use crate::{
         store,
     },
     demos::Launch,
+    fsutil::off_runtime,
     hooks::HookKind,
     model::{
         Execution, ExecutionPlan, LandPlan, PortReservation, QueueEntry, Repository, Workspace,
@@ -429,7 +430,10 @@ impl Manager {
         let mut connections = self.executions.connections().await;
         connections.ensure_accepting()?;
         let workspace = self.workspace(workspace_id).await?;
-        ensure!(workspace.path.is_dir(), "workspace directory is missing");
+        ensure!(
+            off_runtime::is_dir(&workspace.path).await?,
+            "workspace directory is missing"
+        );
         self.verify_worktree(&workspace).await?;
         self.touch(&workspace.id).await;
         let settings = self.workspace_settings(&workspace).await?;
@@ -1157,7 +1161,7 @@ impl Manager {
     /// that an unprovable execution ended cannot cover a visible process.
     async fn ensure_directory_unused(&self, workspace_id: &str) -> Result<()> {
         let path = self.workspace(workspace_id).await?.path;
-        let users = if path.is_dir() {
+        let users = if off_runtime::is_dir(&path).await? {
             crate::process::in_directory(&path).await?
         } else {
             Vec::new()

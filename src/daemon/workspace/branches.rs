@@ -6,6 +6,7 @@ use anyhow::{Context, Result, ensure};
 
 use super::Manager;
 use crate::{
+    fsutil::off_runtime,
     git::{
         self,
         default_branch::DefaultBranchLookup,
@@ -35,7 +36,10 @@ pub(super) enum OpenTarget {
 
 /// Refuse new-worktree options for a workspace that opening reuses, except a
 /// path naming where it already is.
-fn check_reopen_options(workspace: &Workspace, options: NewWorktreeOptions<'_>) -> Result<()> {
+async fn check_reopen_options(
+    workspace: &Workspace,
+    options: NewWorktreeOptions<'_>,
+) -> Result<()> {
     ensure!(
         options.git_profile.is_none(),
         "--git-profile applies only to new worktrees; workspace {} already exists",
@@ -48,7 +52,9 @@ fn check_reopen_options(workspace: &Workspace, options: NewWorktreeOptions<'_>) 
     );
     if let Some(path) = options.path {
         ensure!(
-            std::fs::canonicalize(path).is_ok_and(|p| p == workspace.path),
+            off_runtime::canonicalize(path)
+                .await
+                .is_ok_and(|p| p == workspace.path),
             "workspace already exists at {}; --path cannot relocate it",
             workspace.path.display()
         );
@@ -185,12 +191,15 @@ impl Manager {
 
     /// Match a canonical checkout path against recorded workspace locations.
     pub(super) async fn managed_workspace_at(&self, path: &Path) -> Result<Option<String>> {
-        Ok(self
-            .list_workspaces()
-            .await?
-            .into_iter()
-            .find(|w| std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path))
-            .map(|w| w.name))
+        let workspaces = self.list_workspaces().await?;
+        let path = path.to_owned();
+        off_runtime::run(move || {
+            Ok(workspaces
+                .into_iter()
+                .find(|w| std::fs::canonicalize(&w.path).is_ok_and(|managed| managed == path))
+                .map(|w| w.name))
+        })
+        .await
     }
 
     /// Fetch a local branch's upstream and fast-forward the branch to it. The
@@ -272,7 +281,7 @@ impl Manager {
             .await?
             .map(|tree| tree.path);
         if let Some(checkout) = &checkout {
-            let path = std::fs::canonicalize(checkout)?;
+            let path = off_runtime::canonicalize(checkout).await?;
             ensure!(
                 self.managed_workspace_at(&path).await?.is_none(),
                 "{branch} is checked out in a managed workspace; switch that workspace back to its own branch first"
@@ -414,7 +423,7 @@ impl Manager {
             ensure_not_checked_out(&repo.path, &branch.name).await?;
             return Ok(OpenTarget::Create(branch));
         };
-        check_reopen_options(&workspace, options)?;
+        check_reopen_options(&workspace, options).await?;
         Ok(OpenTarget::Reopen(Box::new(workspace)))
     }
 

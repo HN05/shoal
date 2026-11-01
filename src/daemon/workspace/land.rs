@@ -10,6 +10,7 @@ use crate::{
         },
         log,
     },
+    fsutil::off_runtime,
     git::{
         self,
         default_branch::DefaultBranchLookup,
@@ -26,7 +27,7 @@ impl Manager {
         let workspace = self.workspace(selector).await?;
         let repo = self.repository(&workspace.repository_id).await?;
         ensure!(
-            workspace.path.is_dir(),
+            off_runtime::is_dir(&workspace.path).await?,
             "workspace directory is missing: {}",
             workspace.path.display()
         );

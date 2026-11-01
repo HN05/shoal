@@ -12,6 +12,7 @@ use super::Manager;
 use crate::{
     config::Effective,
     daemon::log,
+    fsutil::off_runtime,
     git::{
         self,
         default_branch::{self, DefaultBranchLookup},
@@ -114,7 +115,7 @@ impl Manager {
         let Some(directory) = repo.workspaces_dir.clone() else {
             return false;
         };
-        if !directory.try_exists().unwrap_or(false) {
+        if !off_runtime::try_exists(&directory).await.unwrap_or(false) {
             return false;
         }
         let Some(_git) = self.gates.try_lock_git(&repo.id) else {
@@ -206,9 +207,8 @@ impl Manager {
         let mut worktrees = vec![repo.path.clone()];
         for workspace in self.list_workspaces().await? {
             if workspace.repository_id == repo.id
-                && workspace
-                    .path
-                    .try_exists()
+                && off_runtime::try_exists(&workspace.path)
+                    .await
                     .with_context(|| format!("inspect {}", workspace.path.display()))?
             {
                 worktrees.push(workspace.path);
@@ -249,15 +249,21 @@ fn worktree_gone(directory: &Path, project: &Path) -> bool {
 /// The content of every `Package.resolved` in the worktree; one deleted
 /// since the listing pins nothing, and one that cannot be read stops pruning.
 async fn worktree_pins(worktree: &Path) -> Result<Vec<Vec<u8>>> {
-    let mut pins = Vec::new();
-    for file in git::files::in_worktree(worktree, xcode::PINS).await? {
-        match std::fs::read(&file) {
-            Ok(content) => pins.push(content),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error).with_context(|| format!("read {}", file.display())),
+    let files = git::files::in_worktree(worktree, xcode::PINS).await?;
+    off_runtime::run(move || {
+        let mut pins = Vec::new();
+        for file in files {
+            match std::fs::read(&file) {
+                Ok(content) => pins.push(content),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(error).with_context(|| format!("read {}", file.display()));
+                }
+            }
         }
-    }
-    Ok(pins)
+        Ok(pins)
+    })
+    .await
 }
 
 /// Delete the DerivedData of every project `deletes` selects, logging what

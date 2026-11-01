@@ -6,6 +6,7 @@ use crate::{
         self, Config, Effective,
         repo::{ConfigLayers, RepoConfig},
     },
+    fsutil::off_runtime,
     hooks::{HookDirectory, HookKind},
     model::{LocalConfigEdit, Workspace},
     protocol::ConfigTarget,
@@ -186,7 +187,7 @@ impl Manager {
     async fn local_config_occupant(&self, directory: &std::path::Path) -> Result<Option<PathBuf>> {
         let local = directory.join(config::repo::LOCAL_DIR);
         let git = local.join(".git");
-        if off_runtime(move || Ok(std::fs::symlink_metadata(git).is_ok())).await? {
+        if off_runtime::run(move || Ok(std::fs::symlink_metadata(git).is_ok())).await? {
             return Ok(Some(local));
         }
         self.store
@@ -206,7 +207,7 @@ impl Manager {
         let (local_config, local_template_files) = match &repository.workspaces_dir {
             Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
                 let directory = directory.clone();
-                off_runtime(move || config::repo::load_local(&directory)).await?
+                off_runtime::run(move || config::repo::load_local(&directory)).await?
             }
             _ => Default::default(),
         };
@@ -325,15 +326,7 @@ async fn load_worktree_file(
     path: &std::path::Path,
 ) -> Result<(RepoConfig, config::templates::Files)> {
     let path = path.to_owned();
-    off_runtime(move || config::repo::load(&path)).await
-}
-
-/// Run the blocking file `read` on the blocking pool, so file access that
-/// stalls holds no runtime thread and a caller's time limit applies.
-async fn off_runtime<T: Send + 'static>(
-    read: impl FnOnce() -> Result<T> + Send + 'static,
-) -> Result<T> {
-    tokio::task::spawn_blocking(read).await?
+    off_runtime::run(move || config::repo::load(&path)).await
 }
 
 #[cfg(test)]

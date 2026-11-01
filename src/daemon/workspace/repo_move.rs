@@ -9,7 +9,8 @@ use super::{
 };
 use crate::{
     daemon::{log, store},
-    fsutil, git,
+    fsutil::{self, off_runtime},
+    git,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
     process, repository, seed,
     state::WorkspaceState,
@@ -200,7 +201,7 @@ impl Manager {
             processes.join(", ")
         );
         for workspace in self.repository_workspaces(&repo.id).await? {
-            if workspace.path.exists() {
+            if off_runtime::exists(&workspace.path).await? {
                 self.verify_worktree(&workspace).await?;
             } else {
                 ensure!(
@@ -492,18 +493,18 @@ impl Manager {
     /// worktree before recording its admin directory.
     async fn reconnect_worktrees(&self, id: &str) -> Result<()> {
         let repo = self.repository(id).await?;
-        let present: Vec<_> = self
-            .repository_workspaces(id)
-            .await?
-            .into_iter()
-            .filter(|workspace| workspace.path.exists())
-            .collect();
-        let seed = seed::Layout::of(&repo).map(|layout| layout.worktree());
-        let paths: Vec<_> = present
-            .iter()
-            .map(|w| w.path.clone())
-            .chain(seed.filter(|worktree| worktree.exists()))
-            .collect();
+        let mut present = Vec::new();
+        for workspace in self.repository_workspaces(id).await? {
+            if off_runtime::exists(&workspace.path).await? {
+                present.push(workspace);
+            }
+        }
+        let mut paths: Vec<_> = present.iter().map(|w| w.path.clone()).collect();
+        if let Some(seed) = seed::Layout::of(&repo).map(|layout| layout.worktree())
+            && off_runtime::exists(&seed).await?
+        {
+            paths.push(seed);
+        }
         git::repair_worktrees(&repo.path, &paths).await?;
         for workspace in &present {
             let verified = self.verify_and_record_worktree(workspace, true).await?;

@@ -4,6 +4,7 @@ use std::path::Path;
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
+    fsutil::off_runtime,
     git::{self, run_isolated as git_run, worktrunk},
     model::{LandPlan, LandedBranch, Repository},
 };
@@ -102,7 +103,7 @@ pub(crate) async fn unfinished_operation(checkout: &Path) -> Result<Option<&'sta
         "index.lock",
     ] {
         let path = git::metadata_path(checkout, marker, git_run).await?;
-        if checkout.join(path.trim()).exists() {
+        if off_runtime::exists(&checkout.join(path.trim())).await? {
             return Ok(Some(marker));
         }
     }

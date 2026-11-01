@@ -4,6 +4,8 @@ pub(crate) use crate::client::{
     fsutil::{expand_home, read_optional},
     paths::home_dir,
 };
+pub mod off_runtime;
+
 use std::{
     ffi::OsStr,
     fs,

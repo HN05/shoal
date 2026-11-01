@@ -8,6 +8,7 @@ use anyhow::{Result, ensure};
 pub(crate) use crate::client::processes::{Selection, Stopped};
 use crate::{
     daemon::{store, workspace::Manager},
+    fsutil::off_runtime,
     model::{Chat, Workspace},
     process::identity::{
         self, Identity,
@@ -93,7 +94,8 @@ impl Manager {
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let stopped = async {
-            let verified = workspace.path.is_dir() && self.verify_worktree(workspace).await.is_ok();
+            let verified = off_runtime::is_dir(&workspace.path).await?
+                && self.verify_worktree(workspace).await.is_ok();
             let space = self
                 .workspace_space(workspace, WorktreeTies::when(verified))
                 .await?;

@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::{
     daemon::workspace::{Manager, StopRequest},
+    fsutil::off_runtime,
     model::Workspace,
     process::{execution::Processes, identity as process},
     state::{ExecutionState, WorkspaceState},
@@ -165,7 +166,7 @@ impl Manager {
         options: ReconcileOptions,
         report: &mut Report,
     ) -> Result<()> {
-        let workspace = if !workspace.path.try_exists()? {
+        let workspace = if !off_runtime::try_exists(&workspace.path).await? {
             // No HEAD remains to reconcile. Shared removal verifies deletion,
             // releases leases and cascades the reserved rename name.
             workspace.clone()
@@ -221,7 +222,7 @@ impl Manager {
         options: ReconcileOptions,
         report: &mut Report,
     ) -> Result<()> {
-        if workspace.path.try_exists()? {
+        if off_runtime::try_exists(&workspace.path).await? {
             match self
                 .verify_and_record_worktree(workspace, options.repair)
                 .await
@@ -327,7 +328,7 @@ impl Manager {
     /// the workspace directory: even an explicit acknowledgement cannot ignore
     /// visible cwd users.
     async fn clear_stopped_execution(&self, workspace: &Workspace, id: &str) -> Result<Clearance> {
-        let users = if workspace.path.is_dir() {
+        let users = if off_runtime::is_dir(&workspace.path).await? {
             crate::process::in_directory(&workspace.path).await?
         } else {
             vec![]

@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 
 use super::run;
+use crate::fsutil::off_runtime;
 
 pub async fn porcelain(repo: &Path) -> Result<String> {
     run(repo, &["status", "--porcelain", "--untracked-files=normal"]).await
@@ -111,7 +112,7 @@ pub async fn operation_in_progress(repo: &Path) -> Result<bool> {
     ];
     let git_dir = super::git_dir(repo).await?;
     for marker in MARKERS {
-        if git_dir.join(marker).try_exists()? {
+        if off_runtime::try_exists(&git_dir.join(marker)).await? {
             return Ok(true);
         }
     }
