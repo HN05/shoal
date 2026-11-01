@@ -88,7 +88,10 @@ pub async fn survey(
 
 /// What one inventory tells about the processes this user runs.
 struct Survey<'a> {
+    /// Every listed process, so ancestry passes through setuid programs.
     lineages: HashMap<u32, &'a Lineage>,
+    /// The processes running as this user, the only ones reported or stopped.
+    own: HashSet<u32>,
     marks: HashMap<u32, Marks>,
     directories: HashMap<u32, PathBuf>,
     programs: HashMap<u32, PathBuf>,
@@ -109,19 +112,24 @@ impl<'a> Survey<'a> {
         let lineages: HashMap<u32, &Lineage> = inventory
             .observed
             .iter()
-            .filter(|(pid, _)| runs_as_this_user(inventory, **pid))
             .map(|(pid, observed)| (*pid, &observed.lineage))
             .collect();
-        let pids = lineages.keys().copied();
+        let own: HashSet<u32> = lineages
+            .keys()
+            .copied()
+            .filter(|pid| runs_as_this_user(inventory, *pid))
+            .collect();
         let mut survey = Self {
-            directories: pids
-                .clone()
-                .filter_map(|pid| Some((pid, working_directory(pid)?)))
+            directories: own
+                .iter()
+                .filter_map(|pid| Some((*pid, working_directory(*pid)?)))
                 .collect(),
-            programs: pids
-                .filter_map(|pid| Some((pid, executable(pid)?)))
+            programs: own
+                .iter()
+                .filter_map(|pid| Some((*pid, executable(*pid)?)))
                 .collect(),
             lineages,
+            own,
             marks,
             excluded: HashSet::new(),
         };
@@ -192,8 +200,8 @@ impl<'a> Survey<'a> {
     /// The space's processes carrying its identity, and its leftovers.
     fn untracked(&self, space: &Space) -> Vec<Untracked> {
         let candidates = || {
-            self.lineages
-                .keys()
+            self.own
+                .iter()
                 .copied()
                 .filter(|pid| !self.excluded.contains(pid))
         };

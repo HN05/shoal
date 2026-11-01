@@ -215,3 +215,59 @@ async fn hooks_the_surveying_process_runs_are_not_found() {
     assert_eq!(listed(&found, &hook.0), None, "{found:?}");
     assert_eq!(listed(&found, &other.0), Some(false), "{found:?}");
 }
+
+/// A setuid program, such as an agent's `sudo -u`, runs as another user, so
+/// it is never found itself, but what it starts as this user still descends
+/// from the agent that started it.
+#[test]
+fn ancestry_passes_through_setuid_programs() {
+    use super::super::{Evidence, Inventory, Lineage, Marks, Observed, owners::Owners};
+    let process = |pid: u32, parent: u32, evidence| {
+        let lineage = Lineage {
+            identity: Identity {
+                pid,
+                birth: format!("1:{pid}"),
+                unique: None,
+            },
+            unique: None,
+            parent: None,
+            parent_pid: parent,
+            adopted: false,
+        };
+        (pid, Observed { lineage, evidence })
+    };
+    let marked = || {
+        Evidence::Marked(Marks {
+            workspace: Some("workspace-id".into()),
+            ..Marks::default()
+        })
+    };
+    let (agent, sudo, child) = (1_000_000, 1_000_001, 1_000_002);
+    let owners = Owners::default();
+    let inventory = Inventory {
+        observed: HashMap::from([
+            process(agent, 1, marked()),
+            process(sudo, agent, Evidence::Elevated),
+            process(child, sudo, marked()),
+        ]),
+        ..Inventory::new(&owners)
+    };
+    let space = Space {
+        id: "workspace-id".into(),
+        directories: Vec::new(),
+        programs: None,
+    };
+    let tracked = inventory.observed[&agent].lineage.identity.clone();
+
+    let survey = Survey::of(&inventory, &[tracked]);
+    assert!(survey.untracked(&space).is_empty());
+
+    let survey = Survey::of(&inventory, &[]);
+    let found: Vec<u32> = survey
+        .untracked(&space)
+        .iter()
+        .map(|process| process.identity.pid)
+        .collect();
+    assert!(found.contains(&child), "{found:?}");
+    assert!(!found.contains(&sudo), "{found:?}");
+}
