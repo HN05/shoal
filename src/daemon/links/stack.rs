@@ -36,7 +36,7 @@ impl Manager {
             return Ok(None);
         }
         // Its HEAD and remote authorize forge writes for other workspaces.
-        self.verify_worktree(base).await?;
+        self.verify_checked(base).await?;
         let mut merged = Vec::new();
         for url in urls {
             match self.base_pr_commits(base, url).await {
@@ -54,7 +54,7 @@ impl Manager {
         };
         // The rebase cutoff is HEAD, so commits the merge left out would be
         // dropped from every stacked branch.
-        let head = current_head(base).await?;
+        let head = self.check_access(&base.path, current_head(base)).await?;
         if !merged.contains(&head) {
             return Ok(Some(anyhow::anyhow!(
                 "the merged PRs do not contain the base workspace's HEAD"
@@ -92,7 +92,7 @@ impl Manager {
         head: &str,
     ) -> Result<()> {
         let workspace = self.workspace(&stacked.id).await?;
-        self.verify_worktree(&workspace).await?;
+        self.verify_checked(&workspace).await?;
         let id = workspace.id.clone();
         let items = self
             .store
@@ -143,7 +143,7 @@ impl Manager {
             }
         };
         // Lookups take time; recheck what authorizes the write right before it.
-        self.verify_worktree(workspace).await?;
+        self.verify_checked(workspace).await?;
         self.ensure_base_unchanged(base, head).await?;
         Ok(Some(
             match forge.retarget(&self.user_account(), number, target).await {
@@ -153,11 +153,22 @@ impl Manager {
         ))
     }
 
+    /// [`Manager::verify_worktree`] of `workspace`, inspected under
+    /// [`Manager::check_access`] since it may be in another directory than
+    /// the workspace the sweep is handling.
+    async fn verify_checked(&self, workspace: &Workspace) -> Result<()> {
+        self.check_access(&workspace.path, self.verify_worktree(workspace))
+            .await
+    }
+
     /// The rebase cutoff in the update is the base HEAD read before restacking.
     async fn ensure_base_unchanged(&self, base: &Workspace, head: &str) -> Result<()> {
-        self.verify_worktree(base).await?;
+        let current = async {
+            self.verify_worktree(base).await?;
+            current_head(base).await
+        };
         anyhow::ensure!(
-            current_head(base).await? == head,
+            self.check_access(&base.path, current).await? == head,
             "the base workspace's HEAD changed while restacking; retrying next sweep"
         );
         Ok(())

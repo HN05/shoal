@@ -221,7 +221,8 @@ impl Manager {
         checkout: &std::path::Path,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
-        let remote = repository::remote_url_from_path(checkout)
+        let remote = self
+            .check_access(checkout, repository::remote_url_from_path(checkout))
             .await?
             .context("PR lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
