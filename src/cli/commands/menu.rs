@@ -241,7 +241,7 @@ enum Row {
 
 impl Row {
     fn of(item: &Item) -> Self {
-        let workspace = item.workspace_id().to_owned();
+        let workspace = item.space_id().to_owned();
         match item {
             Item::Question { question } => Self::Question {
                 id: question.id,

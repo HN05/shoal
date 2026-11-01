@@ -79,7 +79,7 @@ async fn requests_are_served_while_long_lived_capacity_is_full() {
         }
     });
     let await_answer = || QuestionMethod::AwaitAnswer {
-        workspace: workspace.name.clone(),
+        space: workspace.name.clone(),
         id: question.id,
         ask: ask.clone(),
     };

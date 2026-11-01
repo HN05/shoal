@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 107;
+const SCHEMA_VERSION: i64 = 108;
 
 #[cfg(test)]
 mod benchmark;
@@ -452,6 +452,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (105, STOPPED_CHAT_PROCESSES, None),
     (106, include_str!("store/review_false_positive_failures.sql"), None),
     (107, CHAT_MESSAGE_ATTACHMENTS, None),
+    (108, include_str!("store/question_spaces.sql"), None),
 ];
 
 /// The JSON array of paths of the files attached to a chat's message.

@@ -19,7 +19,7 @@ pub enum CoordinationCommand {
         #[arg(long, conflicts_with = "space")]
         hook: bool,
     },
-    /// Review and answer questions from workspace agents.
+    /// Review and answer questions from the agents of workspaces and chats.
     #[command(args_conflicts_with_subcommands = true)]
     Questions {
         #[command(subcommand)]
@@ -105,9 +105,9 @@ pub enum FilesCommand {
 pub struct QuestionsArgs {
     /// Question number; omit to choose an open question.
     pub id: Option<i64>,
-    /// List questions from this workspace.
+    /// List questions from this space, a workspace or chat.
     #[arg(long, conflicts_with = "id")]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
     /// Send an answer or choice number.
     #[arg(long, requires = "id", conflicts_with = "withdraw")]
     pub answer: Option<String>,
@@ -148,6 +148,7 @@ pub enum MessagesCommand {
 
 // Arguments of `shoal questions ask` and the hidden `shoal ask`.
 #[derive(Debug, Args)]
+#[command(group(clap::ArgGroup::new("asking_space").args(["space", "handed_over"])))]
 pub struct QuestionAskArgs {
     /// The decision, in one line, such as "Which database should the cache use?"
     #[arg(required_unless_present = "in_chat")]
@@ -155,8 +156,8 @@ pub struct QuestionAskArgs {
     /// The answer you recommend.
     #[arg(long, required_unless_present = "in_chat")]
     pub recommend: Option<String>,
-    /// Ask in your chat instead: your turn's final message becomes the
-    /// question, and a reply in the chat closes it.
+    /// Ask in your conversation instead: your turn's final message becomes
+    /// the question, and a reply in the conversation closes it.
     #[arg(long, conflicts_with_all = ["question", "recommend", "reason", "choices", "wait", "resume"])]
     pub in_chat: bool,
     /// Why you recommend it.
@@ -168,12 +169,22 @@ pub struct QuestionAskArgs {
     /// Wait for the answer and print it. Asking again waits for the same question.
     #[arg(long)]
     pub wait: bool,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, whose agents ask; defaults to the current
+    /// chat or workspace, or a picker.
     #[arg(long)]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
+    /// The workspace the wait of an earlier release names when an upgrade
+    /// hands it over to this one.
+    #[arg(
+        long = "workspace",
+        hide = true,
+        conflicts_with = "space",
+        requires = "resume"
+    )]
+    pub handed_over: Option<String>,
     /// Continue waiting for this question, as the installed release does
     /// after an upgrade restarted the daemon.
-    #[arg(long, hide = true, requires = "workspace")]
+    #[arg(long, hide = true, requires = "asking_space")]
     pub resume: Option<i64>,
 }
 
@@ -182,12 +193,13 @@ pub struct QuestionAskArgs {
 pub enum QuestionsCommand {
     /// Ask the user to decide something; the answer arrives as a message.
     Ask(QuestionAskArgs),
-    /// Withdraw an open question the workspace's agent no longer needs answered.
+    /// Withdraw an open question the space's agent no longer needs answered.
     Withdraw {
         /// Question number.
         id: i64,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Space, a workspace or chat, that asked it; defaults to the one
+        /// that did.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
 }

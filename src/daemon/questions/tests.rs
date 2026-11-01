@@ -47,7 +47,7 @@ async fn asking_notifies_once_and_repeats_return_the_same_question() {
         .unwrap();
     assert_eq!(again, first);
     assert!(first.is_open());
-    assert_eq!(first.workspace, "asker");
+    assert_eq!(first.space, "asker");
 
     let notifications = manager.notifications(true, 50).await.unwrap();
     let asked: Vec<_> = notifications
@@ -353,19 +353,19 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
     for (target, allowed) in [(&workspace.name, true), (&other.name, false)] {
         for mut method in [
             QuestionMethod::AskQuestion {
-                workspace: target.clone(),
+                space: target.clone(),
                 ask: ask("Which database?", &[]),
             },
             QuestionMethod::AwaitAnswer {
-                workspace: target.clone(),
+                space: target.clone(),
                 id: 1,
                 ask: ask("Which database?", &[]),
             },
             QuestionMethod::ListQuestions {
-                workspace: Some(target.clone()),
+                space: Some(target.clone()),
             },
             QuestionMethod::WithdrawQuestion {
-                workspace: target.clone(),
+                space: target.clone(),
                 id: 1,
                 shown: None,
             },
@@ -378,13 +378,13 @@ async fn workspace_processes_ask_and_wait_but_only_the_user_answers() {
             );
         }
     }
-    let mut listing = QuestionMethod::ListQuestions { workspace: None };
+    let mut listing = QuestionMethod::ListQuestions { space: None };
     scope::authorize(&manager, Some("scope"), &mut listing)
         .await
         .unwrap();
     assert!(matches!(
         listing,
-        QuestionMethod::ListQuestions { workspace: Some(owner) } if owner == workspace.id
+        QuestionMethod::ListQuestions { space: Some(owner) } if owner == workspace.id
     ));
     for mut method in [
         QuestionMethod::AnswerQuestion {

@@ -11501,7 +11501,7 @@ esac
         "Which database?",
         "--recommend",
         "SQLite",
-        "--workspace",
+        "--space",
         "asker",
     ]);
     let id = asker["id"].as_str().unwrap();
@@ -12025,7 +12025,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         "Which database?",
         "--recommend",
         "SQLite",
-        "--workspace",
+        "--space",
         "asker",
     ]);
 
@@ -12037,7 +12037,7 @@ fn inbox_lists_what_needs_the_user_by_kind() {
         .map(|item| item["kind"].as_str().unwrap())
         .collect();
     assert_eq!(listed, ["question", "approval", "needs_input", "ready"]);
-    assert_eq!(items[0]["question"]["workspace"], "asker");
+    assert_eq!(items[0]["question"]["space"], "asker");
     assert_eq!(items[1]["request"]["workspace"], "agent");
     assert_eq!(items[2]["workspace"]["name"], "waiter");
     let text = String::from_utf8(fixture.run(&["inbox"]).stdout).unwrap();
@@ -21785,6 +21785,55 @@ fn agents_withdraw_questions_they_no_longer_need_answered() {
 }
 
 #[test]
+fn a_chats_agent_asks_the_user_and_reads_the_answer_in_its_inbox() {
+    let fixture = Fixture::new();
+    let (mut agent, chat) = start_test_chat(&fixture, "planning");
+    let in_chat = |args: &[&str]| {
+        let output = fixture
+            .command()
+            .current_dir(&fixture.repo)
+            .env("SHOAL_CHAT", &chat)
+            .arg("--json")
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{args:?}: {output:?}");
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()
+    };
+    let asked = in_chat(&[
+        "questions",
+        "ask",
+        "Which database?",
+        "--recommend",
+        "SQLite",
+    ]);
+    assert_eq!(asked["space"], "planning", "{asked}");
+    let id = asked["id"].to_string();
+    // The user sees it under the chat's name, and the answer reaches the chat.
+    let listed = fixture.ok(&["questions", "--space", "planning"]);
+    assert_eq!(listed["questions"][0]["id"], asked["id"], "{listed}");
+    let inbox = fixture.ok(&["inbox"]);
+    let item = &inbox[0]["question"];
+    assert_eq!(item["space"], "planning", "{inbox}");
+    fixture.ok(&["questions", &id, "--answer", "Postgres"]);
+    let messages = in_chat(&["messages"]);
+    assert_eq!(
+        messages[0]["message"],
+        format!("Answer to question {id} (Which database?): Postgres")
+    );
+    // The chat withdraws a question it no longer needs answered.
+    let asked = in_chat(&["questions", "ask", "Which cache?", "--recommend", "None"]);
+    let id = asked["id"].to_string();
+    in_chat(&["questions", "withdraw", &id]);
+    assert_eq!(
+        fixture.ok(&["questions"]),
+        serde_json::json!({"questions": [], "omitted": 0})
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn agents_wait_for_the_answer_to_their_question() {
     let fixture = Fixture::new();
     fixture.add("asker");
@@ -21800,7 +21849,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "SQLite",
         ])
         .args(["--choice", "SQLite", "--choice", "Postgres"])
-        .args(["--workspace", "asker", "--wait"])
+        .args(["--space", "asker", "--wait"])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -21811,7 +21860,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             .first()
             .cloned()
     });
-    assert_eq!(question["workspace"], "asker");
+    assert_eq!(question["space"], "asker");
     assert_eq!(question["recommendation"], "SQLite");
     let id = question["id"].to_string();
 
@@ -21851,7 +21900,7 @@ fn agents_wait_for_the_answer_to_their_question() {
 
     // An upgraded release resumes a wait by the recorded number and the
     // question's text, without asking again.
-    let workspace = open["workspace_id"].as_str().unwrap();
+    let space = open["space_id"].as_str().unwrap();
     let id = open["id"].to_string();
     let resumed = fixture
         .command()
@@ -21864,7 +21913,7 @@ fn agents_wait_for_the_answer_to_their_question() {
             "None",
             "--wait",
         ])
-        .args(["--workspace", workspace, "--resume", &id])
+        .args(["--space", space, "--resume", &id])
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
@@ -22237,7 +22286,7 @@ fn redirected_requests_are_inspected_without_prompting_or_deciding() {
         "Which database?",
         "--recommend",
         "SQLite",
-        "--workspace",
+        "--space",
         "agent",
     ]);
     install_test_script(fixture.root.path().join("bin/fzf"), "#!/bin/sh\nexit 77\n");
@@ -22464,7 +22513,7 @@ fn question_picker_answers_the_selected_question_with_a_suggestion() {
         "SQLite",
         "--choice",
         "Postgres",
-        "--workspace",
+        "--space",
         "asker",
     ]);
     let id = question["id"].to_string();
@@ -22493,7 +22542,7 @@ fn question_prompt_accepts_the_recommendation_with_enter() {
             &text,
             "--recommend",
             recommendation,
-            "--workspace",
+            "--space",
             "asker",
         ];
         for choice in choices {

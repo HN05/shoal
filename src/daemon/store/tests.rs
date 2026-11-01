@@ -356,6 +356,9 @@ fn historical_database(version: i64) -> Result<Connection> {
     if version >= 107 {
         db.execute_batch(CHAT_MESSAGE_ATTACHMENTS)?;
     }
+    if version >= 108 {
+        db.execute_batch(include_str!("question_spaces.sql"))?;
+    }
     db.pragma_update(None, "user_version", version)?;
     db.execute_batch(
             "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
@@ -1303,5 +1306,23 @@ fn reviews_keep_their_findings_replies_and_ids_when_they_can_fail_for_false_posi
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
+    Ok(())
+}
+
+#[test]
+fn a_workspaces_questions_keep_their_numbers_as_questions_of_spaces() -> Result<()> {
+    let mut db = historical_database(107)?;
+    db.execute(
+        "INSERT INTO questions(workspace_id,created_at,question,recommendation,choices,number)
+            VALUES ('workspace',1,'Which?','A','[]',4)",
+        [],
+    )?;
+    migrate(&mut db)?;
+    let kept: (String, Option<String>, i64) = db.query_row(
+        "SELECT workspace_id,chat_id,number FROM questions",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    assert_eq!(kept, ("workspace".to_owned(), None, 4));
     Ok(())
 }

@@ -856,6 +856,13 @@ pub enum PresentSpace {
 }
 
 impl PresentSpace {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::Workspace(workspace) => &workspace.id,
+            Self::Chat(chat) => &chat.id,
+        }
+    }
+
     pub fn name(&self) -> &str {
         match self {
             Self::Workspace(workspace) => &workspace.name,

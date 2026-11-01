@@ -1,5 +1,9 @@
 use super::*;
-use crate::cli::args::{internal::InternalCommand, items::ItemsCommand};
+use crate::cli::args::{
+    coordination::{CoordinationCommand, QuestionsCommand},
+    internal::InternalCommand,
+    items::ItemsCommand,
+};
 use anyhow::Context as _;
 use std::{cell::Cell, future::Future, task::Poll, time::Duration};
 use tokio::sync::{Semaphore, mpsc};
@@ -177,6 +181,35 @@ fn a_resumed_watch_names_its_workspace() {
     };
     assert!(resume);
     assert_eq!(items.workspace.as_deref(), Some("work"));
+}
+
+#[test]
+fn a_resumed_question_wait_names_its_space_or_an_earlier_releases_workspace() {
+    let parse = |arguments: &[&str]| {
+        let arguments = ["shoal", "questions", "ask", "Which?", "--recommend", "A"]
+            .iter()
+            .chain(arguments);
+        let cli = <Cli as clap::Parser>::try_parse_from(arguments)?;
+        let Some(Command::Coordination(CoordinationCommand::Questions {
+            command: Some(QuestionsCommand::Ask(args)),
+            ..
+        })) = cli.command
+        else {
+            panic!("expected questions ask");
+        };
+        Ok::<_, clap::Error>((args.space, args.handed_over, args.resume))
+    };
+    assert_eq!(
+        parse(&["--space", "work", "--resume", "3"]).unwrap(),
+        (Some("work".to_owned()), None, Some(3))
+    );
+    // The wait of an earlier release hands itself over this way.
+    assert_eq!(
+        parse(&["--workspace", "work", "--resume", "3"]).unwrap(),
+        (None, Some("work".to_owned()), Some(3))
+    );
+    assert!(parse(&["--workspace", "work"]).is_err());
+    assert!(parse(&["--resume", "3"]).is_err());
 }
 
 #[test]

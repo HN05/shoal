@@ -189,7 +189,7 @@ async fn questions(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Re
         .open_questions()
         .await?
         .into_iter()
-        .filter(|question| visible.contains(question.workspace_id.as_str()))
+        .filter(|question| visible.contains(question.space_id.as_str()))
         .map(Record::Question)
         .collect())
 }

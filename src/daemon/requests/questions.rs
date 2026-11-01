@@ -17,39 +17,37 @@ pub(super) async fn handle(
     caller: Option<&Caller>,
 ) -> Result<Answer> {
     Ok(Answer::Body(match method {
-        QuestionMethod::AwaitAnswer { workspace, id, ask } => {
+        QuestionMethod::AwaitAnswer { space, id, ask } => {
             let manager = manager.clone();
             return Ok(Answer::wait(async move {
-                let question = manager.await_answer(&workspace, id, &ask).await?;
+                let question = manager.await_answer(&space, id, &ask).await?;
                 Ok(Body::Question(question))
             }));
         }
-        QuestionMethod::AskQuestion { workspace, ask } => {
-            Body::Question(manager.ask_question(&workspace, ask).await?)
+        QuestionMethod::AskQuestion { space, ask } => {
+            Body::Question(manager.ask_question(&space, ask).await?)
         }
-        QuestionMethod::AskInChat { workspace } => {
+        QuestionMethod::AskInChat { space } => {
             manager
-                .mark_chat_question(&workspace, caller.and_then(Caller::execution_id))
+                .mark_chat_question(&space, caller.and_then(Caller::execution_id))
                 .await?;
             Body::Ok
         }
-        QuestionMethod::RepliedInChat { workspace } => {
+        QuestionMethod::RepliedInChat { space } => {
             manager
-                .reply_in_chat(&workspace, caller.and_then(Caller::execution_id))
+                .reply_in_chat(&space, caller.and_then(Caller::execution_id))
                 .await?;
             Body::Ok
         }
-        QuestionMethod::ListQuestions { workspace } => {
-            Body::Questions(manager.questions(workspace.as_deref()).await?)
+        QuestionMethod::ListQuestions { space } => {
+            Body::Questions(manager.questions(space.as_deref()).await?)
         }
         QuestionMethod::ShowQuestion { id } => {
             Body::Question(show_question(manager, caller, id).await?)
         }
-        QuestionMethod::WithdrawQuestion {
-            workspace,
-            id,
-            shown,
-        } => Body::Question(manager.withdraw_question(&workspace, id, shown).await?),
+        QuestionMethod::WithdrawQuestion { space, id, shown } => {
+            Body::Question(manager.withdraw_question(&space, id, shown).await?)
+        }
         QuestionMethod::AcceptQuestionRecommendation { id, shown } => {
             Body::Question(manager.accept_question_recommendation(id, shown).await?)
         }
@@ -62,12 +60,12 @@ pub(super) async fn handle(
 impl Scoped for QuestionMethod {
     async fn scope(&mut self, manager: &Manager, caller: &Caller) -> Result<Option<&mut String>> {
         Ok(match self {
-            QuestionMethod::AskQuestion { workspace, .. }
-            | QuestionMethod::AskInChat { workspace }
-            | QuestionMethod::RepliedInChat { workspace }
-            | QuestionMethod::WithdrawQuestion { workspace, .. }
-            | QuestionMethod::AwaitAnswer { workspace, .. } => Some(workspace),
-            QuestionMethod::ListQuestions { workspace } => Some(caller.own_by_default(workspace)),
+            QuestionMethod::AskQuestion { space, .. }
+            | QuestionMethod::AskInChat { space }
+            | QuestionMethod::RepliedInChat { space }
+            | QuestionMethod::WithdrawQuestion { space, .. }
+            | QuestionMethod::AwaitAnswer { space, .. } => Some(space),
+            QuestionMethod::ListQuestions { space } => Some(caller.own_by_default(space)),
             QuestionMethod::ShowQuestion { id } => {
                 show_question(manager, Some(caller), *id).await?;
                 None
@@ -87,6 +85,6 @@ impl Scoped for QuestionMethod {
 
 async fn show_question(manager: &Manager, caller: Option<&Caller>, id: i64) -> Result<Question> {
     let question = manager.question(id).await?;
-    inspect_owner(manager, caller, &question.workspace_id, "questions").await?;
+    inspect_owner(manager, caller, &question.space_id, "questions").await?;
     Ok(question)
 }

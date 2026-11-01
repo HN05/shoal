@@ -1555,13 +1555,14 @@ until its answer is delivered, which makes an interrupted wait safe to rerun.
 Delivery deletes the question: the agent's transcript keeps the exchange, and
 nothing in Shoal reads it again. An open question means an agent is waiting on the
 user or its coordinator, so it keeps the workspace from idle cleanup; questions belong to the
-workspace and go with it. Marking the assignment done closes its open questions,
+space, a workspace or chat, whose agent asked them and go with it, while a saved chat
+keeps them. Marking the assignment done closes its open questions,
 since the finished work waits on no answer and a question it made pointless would
 otherwise keep the workspace until the user answers. An agent that no longer needs
 an answer withdraws its question, which closes it the same way and takes back its
 notification while the user has not seen it, so the user is not asked to decide
 what no longer matters. Withdrawing completion does not reopen them, and a closed
-question keeps its number until the workspace goes, so a late answer is refused
+question keeps its number until its space goes, so a late answer is refused
 instead of reaching a later question.
 
 An agent asks in its chat with `questions ask --in-chat`, and the question

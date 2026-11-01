@@ -203,7 +203,7 @@ async fn workspace_processes_read_their_own_messages_but_cannot_send() {
                 workspace: target.clone(),
             },
             AgentMethod::MarkAgentMessagesDelivered {
-                workspace: target.clone(),
+                space: target.clone(),
                 ids: Vec::new(),
             },
         ] {

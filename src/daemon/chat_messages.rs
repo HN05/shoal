@@ -63,6 +63,7 @@ impl Manager {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 let paths: Vec<_> = attachments.iter().map(|copy| copy.path.clone()).collect();
                 let queued = insert(&tx, &chat, &About::default(), None, &message, &paths)?;
+                let queued = queued.is_some();
                 let source = workspace_files::FileSource::Message;
                 workspace_files::record(&tx, &chat, source, Some(&attacher), &attachments)?;
                 tx.commit()?;
@@ -98,7 +99,7 @@ impl Manager {
                     id: workspace_id,
                     subject: None,
                 };
-                let queued = insert(&tx, &chat, &about, kind, &message, &[])?;
+                let queued = insert(&tx, &chat, &about, kind, &message, &[])?.is_some();
                 tx.commit()?;
                 Ok(queued)
             })
@@ -174,7 +175,8 @@ impl Manager {
         Ok(Updates::messages(messages))
     }
 
-    /// Delete exactly these messages once the chat's agent has received them.
+    /// Delete exactly these messages once the chat's agent has received
+    /// them, with the questions whose answers they carried.
     pub async fn mark_chat_messages_delivered(&self, chat: &str, ids: Vec<i64>) -> Result<()> {
         let chat = chat.to_owned();
         self.store
@@ -185,6 +187,7 @@ impl Manager {
                         "DELETE FROM chat_messages WHERE id=?1 AND chat_id=?2",
                         params![id, chat],
                     )?;
+                    crate::daemon::questions::delete_delivered(&tx, &chat, id)?;
                 }
                 tx.commit()?;
                 Ok(())
@@ -193,9 +196,20 @@ impl Manager {
     }
 }
 
+/// Queue `message` from the user for the chat in the caller's transaction:
+/// its ID, or `None` when an identical message is already unread.
+pub(crate) fn insert_from_user(
+    tx: &Transaction<'_>,
+    chat: &str,
+    message: &str,
+) -> Result<Option<i64>> {
+    insert(tx, chat, &About::default(), None, message, &[])
+}
+
 /// Queue a message about the named workspace, or from the user without one,
 /// with the files `attachments` Shoal has copied, in the caller's
-/// transaction, returning whether it was new.
+/// transaction: its ID, or `None` when an identical message is already
+/// unread.
 fn insert(
     tx: &Transaction<'_>,
     chat: &str,
@@ -203,7 +217,7 @@ fn insert(
     kind: Option<NotificationKind>,
     message: &str,
     attachments: &[PathBuf],
-) -> Result<bool> {
+) -> Result<Option<i64>> {
     let workspace = about.name.as_deref().unwrap_or_default();
     let attachments = serde_json::to_string(attachments)?;
     let pending: Option<i64> = tx
@@ -215,7 +229,7 @@ fn insert(
         )
         .optional()?;
     if pending.is_some() {
-        return Ok(false);
+        return Ok(None);
     }
     let (unread, bytes): (i64, i64) = tx.query_row(
         "SELECT COUNT(*),
@@ -247,7 +261,7 @@ fn insert(
             attachments
         ],
     )?;
-    Ok(true)
+    Ok(Some(tx.last_insert_rowid()))
 }
 
 /// Give the user the notifications that the ended chat's unread messages

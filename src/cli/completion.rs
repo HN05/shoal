@@ -456,7 +456,7 @@ impl Typed {
                 .collect());
         }
         if matches!(target, Target::Questions) {
-            let method = QuestionMethod::ListQuestions { workspace: None };
+            let method = QuestionMethod::ListQuestions { space: None };
             let questions = client::request::<Listing>(&paths, method).await?.questions;
             return Ok(questions
                 .iter()

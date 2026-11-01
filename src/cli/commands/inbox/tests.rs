@@ -13,6 +13,7 @@ fn a_lone_sync_failure_names_its_repository() {
             },
         }],
         workspaces: Vec::new(),
+        chats: Vec::new(),
     };
     let repositories = [("r1".to_owned(), "app".to_owned())];
     let rows = inbox.rows(&repositories, Palette::stdout(true), None);

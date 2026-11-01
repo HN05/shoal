@@ -3,8 +3,8 @@ use super::*;
 fn question(text: &str, in_chat: bool) -> Question {
     Question {
         id: 3,
-        workspace_id: "w1".into(),
-        workspace: "cache".into(),
+        space_id: "w1".into(),
+        space: "cache".into(),
         created_at: 0,
         ask: Ask {
             question: text.into(),
@@ -31,7 +31,7 @@ fn a_question_asked_in_the_chat_shows_the_message_without_a_recommendation() {
     let plain = Palette::stdout(true);
     assert_eq!(
         details(&asked, plain),
-        "Question 3, asked in the chat\n  Which database?\n\n  I recommend SQLite.\n  Workspace  cache"
+        "Question 3, asked in the chat\n  Which database?\n\n  I recommend SQLite.\n  Space  cache"
     );
     assert_eq!(
         render(&asked, plain),
@@ -49,7 +49,7 @@ fn other_questions_show_their_recommendation() {
     let plain = Palette::stdout(true);
     assert_eq!(
         details(&asked, plain),
-        "Question 3: Which database?\n  Workspace    cache\n  Recommended  SQLite"
+        "Question 3: Which database?\n  Space        cache\n  Recommended  SQLite"
     );
     assert_eq!(
         summary(&asked),

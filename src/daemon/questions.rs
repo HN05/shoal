@@ -1,11 +1,12 @@
-//! Questions a workspace's agents ask the user. A question names the decision
-//! and the agent's recommendation; only the user answers, and the answer
-//! reaches the agents as a message. Delivering the answer, or removing the
-//! workspace, deletes the question, which frees its number for the next one.
-//! Marking the assignment done, or the asking agent withdrawing a question,
-//! closes it unanswered; a closed question keeps its number until the
-//! workspace goes so that a late answer is refused. A question an agent
-//! asked in its chat closes the same way when the user replies there.
+//! Questions the agents of a space, a workspace or chat, ask the user. A
+//! question names the decision and the agent's recommendation; only the user
+//! answers, and the answer reaches the agents as a message. Delivering the
+//! answer, or removing the workspace or ending the chat, deletes the
+//! question, which frees its number for the next one. Marking the assignment
+//! done, or the asking agent withdrawing a question, closes it unanswered; a
+//! closed question keeps its number until the space goes so that a late
+//! answer is refused. A question an agent asked in its conversation closes
+//! the same way when the user replies there.
 use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
@@ -14,11 +15,11 @@ use std::time::Duration;
 pub(crate) use crate::client::questions::{Ask, Listing, Question};
 use crate::{
     daemon::{
-        agent_messages,
+        agent_messages, chat_messages,
         notifications::{self, About, NotificationKind},
         workspace::Manager,
     },
-    model::Workspace,
+    model::PresentSpace,
 };
 
 /// Longest answer, in bytes; answers may span lines.
@@ -119,9 +120,9 @@ impl Question {
     }
 
     /// Whether `other` is this question as asked, though it may since be
-    /// answered: the same workspace, ask and time.
+    /// answered: the same space, ask and time.
     fn is_same(&self, other: &Question) -> bool {
-        self.workspace_id == other.workspace_id
+        self.space_id == other.space_id
             && self.ask == other.ask
             && self.created_at == other.created_at
     }
@@ -195,19 +196,24 @@ impl Ask {
     }
 }
 
+/// A question's space, workspace or chat, by ID, as a filter names it.
+const SPACE: &str = "COALESCE(q.workspace_id,q.chat_id)";
+
 const SELECT: &str =
-    "SELECT q.number,q.workspace_id,w.name,q.created_at,q.question,q.recommendation,
-    q.reason,q.choices,q.answer,q.answered_at,
-    (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id),q.closed_at,q.withdrawn,
-    q.in_chat
-    FROM questions q JOIN workspaces w ON w.id=q.workspace_id";
+    "SELECT q.number,COALESCE(q.workspace_id,q.chat_id),COALESCE(w.name,c.name),q.created_at,
+    q.question,q.recommendation,q.reason,q.choices,q.answer,q.answered_at,
+    CASE WHEN q.chat_id IS NULL THEN (SELECT m.id FROM agent_messages m WHERE m.id=q.message_id)
+        ELSE (SELECT m.id FROM chat_messages m WHERE m.id=q.message_id) END,
+    q.closed_at,q.withdrawn,q.in_chat
+    FROM questions q LEFT JOIN workspaces w ON w.id=q.workspace_id
+        LEFT JOIN chats c ON c.id=q.chat_id";
 
 fn decode(row: &rusqlite::Row<'_>) -> rusqlite::Result<(Question, String)> {
     Ok((
         Question {
             id: row.get(0)?,
-            workspace_id: row.get(1)?,
-            workspace: row.get(2)?,
+            space_id: row.get(1)?,
+            space: row.get(2)?,
             created_at: row.get(3)?,
             ask: Ask {
                 question: row.get(4)?,
@@ -244,11 +250,11 @@ fn by_id(db: &Connection, id: i64) -> Result<Option<Question>> {
 
 /// An identical question the agents have not received the answer to, so
 /// asking again, as after an interrupted wait, returns it.
-fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Option<Question>> {
+fn repeated(tx: &Transaction<'_>, space_id: &str, ask: &Ask) -> Result<Option<Question>> {
     let candidates = query(
         tx,
-        "WHERE q.workspace_id=?1 AND q.question=?2",
-        params![workspace_id, ask.question],
+        &format!("WHERE {SPACE}=?1 AND q.question=?2"),
+        params![space_id, ask.question],
     )?;
     let Some(question) = candidates
         .into_iter()
@@ -265,16 +271,22 @@ fn repeated(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask) -> Result<Optio
     Ok(Some(question))
 }
 
-/// Record `ask`, asked in the chat when `in_chat`, under the smallest free
-/// number and return that number.
-fn insert(tx: &Transaction<'_>, workspace_id: &str, ask: &Ask, in_chat: bool) -> Result<i64> {
+/// Record `ask` from the agents of `space`, asked in the conversation when
+/// `in_chat`, under the smallest free number and return that number.
+fn insert(tx: &Transaction<'_>, space: &PresentSpace, ask: &Ask, in_chat: bool) -> Result<i64> {
     let number = crate::daemon::store::free_number(tx, "questions")?;
+    let (workspace_id, chat_id) = match space {
+        PresentSpace::Workspace(workspace) => (Some(&workspace.id), None),
+        PresentSpace::Chat(chat) => (None, Some(&chat.id)),
+    };
     tx.execute(
-        "INSERT INTO questions(number,workspace_id,created_at,question,recommendation,reason,choices,in_chat)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        "INSERT INTO questions(number,workspace_id,chat_id,created_at,question,recommendation,
+                reason,choices,in_chat)
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
         params![
             number,
             workspace_id,
+            chat_id,
             i64::try_from(crate::time::unix_seconds())?,
             ask.question,
             ask.recommendation,
@@ -344,40 +356,55 @@ fn record_answer(
     )?;
     let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
-    let message_id = agent_messages::insert(tx, &question.workspace_id, &message, &[])?;
+    let message_id = queue_answer(tx, &question, &message)?;
     store_answer(tx, &mut question, answer, message_id)?;
     Ok(question)
 }
 
-/// Close the workspace's open questions, which its finished assignment no
+/// Queue `message`, which answers `question`, for the agents of its space:
+/// its ID, or `None` when an identical message is already unread.
+fn queue_answer(tx: &Transaction<'_>, question: &Question, message: &str) -> Result<Option<i64>> {
+    let asked_by_chat: bool = tx.query_row(
+        "SELECT chat_id IS NOT NULL FROM questions WHERE number=?1",
+        [question.id],
+        |row| row.get(0),
+    )?;
+    if asked_by_chat {
+        chat_messages::insert_from_user(tx, &question.space_id, message)
+    } else {
+        agent_messages::insert(tx, &question.space_id, message, &[])
+    }
+}
+
+/// Close the space's open questions, which its finished assignment no
 /// longer waits on, and return their numbers.
-pub(crate) fn close_open(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<i64>> {
+pub(crate) fn close_open(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<i64>> {
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     let mut numbers = tx
         .prepare(
             "UPDATE questions SET closed_at=?2
-                WHERE workspace_id=?1 AND answer IS NULL AND closed_at IS NULL
+                WHERE COALESCE(workspace_id,chat_id)=?1 AND answer IS NULL AND closed_at IS NULL
                 RETURNING number",
         )?
-        .query_map(params![workspace_id, closed_at], |row| row.get(0))?
+        .query_map(params![space_id, closed_at], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<i64>>>()?;
     numbers.sort_unstable();
     Ok(numbers)
 }
 
-/// Close the workspace's open question `id` as withdrawn by its agent.
+/// Close the space's open question `id` as withdrawn by its agent.
 fn withdraw(
     tx: &Transaction<'_>,
-    workspace: &Workspace,
+    space: &PresentSpace,
     id: i64,
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = by_id(tx, id)?
-        .filter(|question| question.workspace_id == workspace.id)
+        .filter(|question| question.space_id == space.id())
         .ok_or_else(|| {
             Refusal::new(
                 Reason::NotFound,
-                format!("workspace {} has no question {id}", workspace.name),
+                format!("{} has no question {id}", space.name()),
             )
         })?;
     question.ensure_open()?;
@@ -399,28 +426,40 @@ fn withdraw(
 enum Asker {
     /// A `questions ask` command, which states it.
     Command,
-    /// The agent an execution runs, in its chat.
+    /// An agent, in its conversation, in the turn it marked.
+    Chat(Turn),
+}
+
+/// The turn of an agent: the current one of the agent an execution runs, or
+/// of a chat's agent, which no execution tracks.
+#[derive(Debug, Clone)]
+pub(crate) enum Turn {
+    Execution(String),
     Chat(String),
 }
 
-/// Mark or unmark the current turn of the agent execution `id` runs as
-/// asking in its chat; whether that changed the mark.
-pub(crate) fn set_chat_mark(db: &Connection, id: &str, marked: bool) -> Result<bool> {
+/// Mark or unmark `turn` as asking in the agent's conversation; whether that
+/// changed the mark.
+pub(crate) fn set_chat_mark(db: &Connection, turn: &Turn, marked: bool) -> Result<bool> {
+    let (table, id) = match turn {
+        Turn::Execution(id) => ("executions", id),
+        Turn::Chat(id) => ("chats", id),
+    };
     let changed = db.execute(
-        "UPDATE executions SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2",
+        &format!("UPDATE {table} SET asks_in_chat=?2 WHERE id=?1 AND asks_in_chat<>?2"),
         params![id, marked],
     )?;
     Ok(changed > 0)
 }
 
-/// Close the open questions the workspace's agents asked in their chats,
+/// Close the open questions the space's agents asked in their conversations,
 /// which the user replied to there, as withdrawn, retracting their unread
 /// notifications; each with whether there was one to retract.
-fn close_in_chat(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<(Question, bool)>> {
+fn close_in_chat(tx: &Transaction<'_>, space_id: &str) -> Result<Vec<(Question, bool)>> {
     let open = query(
         tx,
-        "WHERE q.workspace_id=?1 AND q.in_chat AND q.answer IS NULL AND q.closed_at IS NULL",
-        [workspace_id],
+        &format!("WHERE {SPACE}=?1 AND q.in_chat AND q.answer IS NULL AND q.closed_at IS NULL"),
+        [space_id],
     )?;
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     open.into_iter()
@@ -431,7 +470,7 @@ fn close_in_chat(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<(Questi
             )?;
             let retracted = notifications::retract(
                 tx,
-                workspace_id,
+                space_id,
                 NotificationKind::QuestionAsked,
                 &question.notification(),
             )?;
@@ -440,16 +479,16 @@ fn close_in_chat(tx: &Transaction<'_>, workspace_id: &str) -> Result<Vec<(Questi
         .collect()
 }
 
-/// Delete the question whose answer `message_id` carried, once the message
-/// is delivered.
+/// Delete the question whose answer `message_id` carried to the space
+/// `space_id`, once the message is delivered.
 pub(crate) fn delete_delivered(
     tx: &Transaction<'_>,
-    workspace_id: &str,
+    space_id: &str,
     message_id: i64,
 ) -> Result<()> {
     tx.execute(
-        "DELETE FROM questions WHERE workspace_id=?1 AND message_id=?2",
-        params![workspace_id, message_id],
+        "DELETE FROM questions WHERE COALESCE(workspace_id,chat_id)=?1 AND message_id=?2",
+        params![space_id, message_id],
     )?;
     Ok(())
 }
@@ -483,16 +522,15 @@ impl Manager {
     }
 
     /// Record the question in its turn's final `message` when the agent
-    /// `execution` runs marked the turn as asking in its chat, consuming
-    /// the mark, and tell the user about it.
+    /// marked `turn` as asking in its conversation, consuming the mark, and
+    /// tell the user about it.
     pub(crate) async fn ask_in_chat(
         &self,
         selector: &str,
-        execution: &str,
+        turn: Turn,
         message: Option<&str>,
     ) -> Result<Option<Question>> {
-        let asker = Asker::Chat(execution.to_owned());
-        self.record_question(selector, Ask::in_chat(message), asker)
+        self.record_question(selector, Ask::in_chat(message), Asker::Chat(turn))
             .await
     }
 
@@ -505,25 +543,27 @@ impl Manager {
         ask: Ask,
         asker: Asker,
     ) -> Result<Option<Question>> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.present_space(selector).await?;
         let recorded = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
                 // A workspace reserved for removal takes no question its
                 // cleanup checks have not seen.
-                crate::daemon::store::require_ready(&tx, &workspace.id)?;
-                if let Asker::Chat(execution) = &asker
-                    && !set_chat_mark(&tx, execution, false)?
+                if let PresentSpace::Workspace(workspace) = &space {
+                    crate::daemon::store::require_ready(&tx, &workspace.id)?;
+                }
+                if let Asker::Chat(turn) = &asker
+                    && !set_chat_mark(&tx, turn, false)?
                 {
                     return Ok(None);
                 }
-                if let Some(question) = repeated(&tx, &workspace.id, &ask)? {
+                if let Some(question) = repeated(&tx, space.id(), &ask)? {
                     tx.commit()?;
                     return Ok(Some((question, false)));
                 }
                 let in_chat = matches!(asker, Asker::Chat(_));
-                let id = insert(&tx, &workspace.id, &ask, in_chat)?;
+                let id = insert(&tx, &space, &ask, in_chat)?;
                 let question = by_id(&tx, id)?.context("recorded question is missing")?;
                 tx.commit()?;
                 Ok(Some((question, true)))
@@ -549,7 +589,7 @@ impl Manager {
             Ok(_) => return,
             Err(error) => crate::daemon::log!("question {id} not rechecked: {error:#}"),
         }
-        let about = About::workspace(&question.workspace, &question.workspace_id);
+        let about = About::workspace(&question.space, &question.space_id);
         self.notify_about(
             about,
             NotificationKind::QuestionAsked,
@@ -558,16 +598,22 @@ impl Manager {
         .await;
     }
 
-    /// The newest open questions that fit one response, oldest first.
+    /// The newest open questions that fit one response, oldest first, of
+    /// every space unless `selector` names one.
     pub async fn questions(&self, selector: Option<&str>) -> Result<Listing> {
-        let owner = self.workspace_filter(selector).await?;
+        let owner = match selector {
+            Some(selector) => Some(self.present_space(selector).await?.id().to_owned()),
+            None => None,
+        };
         let questions = self
             .store
             .run(move |db| {
                 query(
                     db,
-                    "WHERE (?1 IS NULL OR q.workspace_id=?1) AND q.answer IS NULL
-                        AND q.closed_at IS NULL",
+                    &format!(
+                        "WHERE (?1 IS NULL OR {SPACE}=?1) AND q.answer IS NULL
+                            AND q.closed_at IS NULL"
+                    ),
                     [owner],
                 )
             })
@@ -639,12 +685,14 @@ impl Manager {
                 Ok(question)
             })
             .await?;
+        // The answer waits in the inbox of a workspace's or chat's agents.
         self.signals.agent_message_queued();
+        self.signals.chat_message_queued();
         self.signals.question_changed();
         Ok(question)
     }
 
-    /// Withdraw the workspace's open question `id`, which its agents no
+    /// Withdraw the space's open question `id`, which its agents no
     /// longer need answered. Its notification goes while unread; once shown,
     /// the user or the coordinating agent is told instead.
     pub async fn withdraw_question(
@@ -653,16 +701,16 @@ impl Manager {
         id: i64,
         shown: Option<Question>,
     ) -> Result<Question> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.present_space(selector).await?;
         let _gate = self.gates.lock_announcements().await;
         let (question, retracted) = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                let question = withdraw(&tx, &workspace, id, shown.as_ref())?;
+                let question = withdraw(&tx, &space, id, shown.as_ref())?;
                 let retracted = notifications::retract(
                     &tx,
-                    &question.workspace_id,
+                    &question.space_id,
                     NotificationKind::QuestionAsked,
                     &question.notification(),
                 )?;
@@ -672,8 +720,8 @@ impl Manager {
             .await?;
         self.signals.question_changed();
         if !retracted {
-            self.notify(
-                Some(&question.workspace),
+            self.notify_about(
+                About::workspace(&question.space, &question.space_id),
                 NotificationKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )
@@ -682,24 +730,24 @@ impl Manager {
         Ok(question)
     }
 
-    /// Close the open questions the agents of the workspace `selector` names
-    /// asked in their chats, which the user replied to there, with the mark
-    /// of the turn the agent `execution` runs, and return their numbers.
+    /// Close the open questions the agents of the space `selector` names
+    /// asked in their conversations, which the user replied to there, with
+    /// the mark of `turn`, and return their numbers.
     pub(crate) async fn close_chat_questions(
         &self,
         selector: &str,
-        execution: Option<String>,
+        turn: Option<Turn>,
     ) -> Result<Vec<i64>> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.present_space(selector).await?;
         let _gate = self.gates.lock_announcements().await;
         let closed = self
             .store
             .run(move |db| {
                 let tx = db.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-                if let Some(execution) = &execution {
-                    set_chat_mark(&tx, execution, false)?;
+                if let Some(turn) = &turn {
+                    set_chat_mark(&tx, turn, false)?;
                 }
-                let closed = close_in_chat(&tx, &workspace.id)?;
+                let closed = close_in_chat(&tx, space.id())?;
                 tx.commit()?;
                 Ok(closed)
             })
@@ -710,8 +758,8 @@ impl Manager {
         // As for a withdrawal, whoever saw the question, the user or the
         // coordinating agent it went to instead, is told it closed.
         for (question, _) in closed.iter().filter(|(_, retracted)| !retracted) {
-            self.notify(
-                Some(&question.workspace),
+            self.notify_about(
+                About::workspace(&question.space, &question.space_id),
                 NotificationKind::QuestionWithdrawn,
                 question.withdrawal_notification(),
             )
@@ -720,12 +768,12 @@ impl Manager {
         Ok(closed.iter().map(|(question, _)| question.id).collect())
     }
 
-    /// Return the workspace's question `id` asking `ask` once it is answered.
+    /// Return the space's question `id` asking `ask` once it is answered.
     /// What it asks tells it from a later question reusing the number; a
     /// later identical question asks the same, so its answer serves the wait
     /// too.
     pub async fn await_answer(&self, selector: &str, id: i64, ask: &Ask) -> Result<Question> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.present_space(selector).await?;
         // Subscribe before reading, so an answer in between still wakes.
         let mut changed = self.signals.watch_questions();
         loop {
@@ -733,13 +781,11 @@ impl Manager {
                 .store
                 .run(move |db| by_id(db, id))
                 .await?
-                .filter(|question| {
-                    question.workspace_id == workspace.id && question.ask == *ask
-                })
+                .filter(|question| question.space_id == space.id() && question.ask == *ask)
                 .with_context(|| {
                     format!(
-                        "workspace {} has no question {id} awaiting delivery; a delivered answer removes its question",
-                        workspace.name
+                        "{} has no question {id} awaiting delivery; a delivered answer removes its question",
+                        space.name()
                     )
                 })?;
             if question.answer.is_some() {

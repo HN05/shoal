@@ -277,3 +277,79 @@ async fn a_coordinator_that_received_the_question_hears_a_reply_closed_it() {
     );
     assert!(manager.notifications(true, 50).await.unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn a_chats_agent_asks_hears_the_answer_in_its_inbox_and_asks_in_its_conversation() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let process =
+        crate::test_support::ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            process.id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    let ask = crate::daemon::questions::Ask {
+        question: "Which database?".into(),
+        recommendation: "SQLite".into(),
+        reason: None,
+        choices: Vec::new(),
+    };
+    let asked = manager.ask_question(&chat.name, ask).await.unwrap();
+    assert_eq!((&*asked.space_id, &*asked.space), (&*chat.id, "planning"));
+    let listed = manager.questions(Some(&chat.name)).await.unwrap();
+    assert_eq!(listed.questions, std::slice::from_ref(&asked));
+    // The answer waits in the chat's inbox, and its delivery deletes the
+    // question.
+    manager
+        .answer_question(asked.id, "Postgres".into(), None)
+        .await
+        .unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    assert_eq!(
+        messages[0].message,
+        format!(
+            "Answer to question {} (Which database?): Postgres",
+            asked.id
+        )
+    );
+    manager
+        .mark_chat_messages_delivered(&chat.id, vec![messages[0].id])
+        .await
+        .unwrap();
+    assert!(manager.question(asked.id).await.is_err());
+
+    // The chat marks its own turn, which no execution tracks.
+    manager.mark_chat_question(&chat.name, None).await.unwrap();
+    manager
+        .end_agent_turn(&chat.name, None, None, ending("Which cache?"))
+        .await
+        .unwrap();
+    let asked = manager.questions(None).await.unwrap().questions;
+    assert_eq!(asked.len(), 1);
+    assert!(asked[0].in_chat);
+    assert_eq!(asked[0].space, "planning");
+    let closed = manager.reply_in_chat(&chat.name, None).await.unwrap();
+    assert_eq!(closed, [asked[0].id]);
+
+    // An open question goes with the chat.
+    manager.mark_chat_question(&chat.name, None).await.unwrap();
+    manager
+        .end_agent_turn(&chat.name, None, None, ending("Which queue?"))
+        .await
+        .unwrap();
+    assert_eq!(manager.questions(None).await.unwrap().questions.len(), 1);
+    process.kill();
+    manager.end_finished_chats().await.unwrap();
+    assert!(manager.questions(None).await.unwrap().questions.is_empty());
+}

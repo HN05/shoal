@@ -16,9 +16,10 @@ pub struct Ask {
 pub struct Question {
     /// The number the user answers it by; reused once the question is deleted.
     pub id: i64,
-    pub workspace_id: String,
-    /// The workspace's current name.
-    pub workspace: String,
+    /// The workspace or chat whose agent asked it.
+    pub space_id: String,
+    /// The space's current name.
+    pub space: String,
     /// Unix seconds.
     pub created_at: i64,
     #[serde(flatten)]

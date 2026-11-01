@@ -171,10 +171,8 @@ pub(super) async fn handle(
         AgentMethod::AgentUpdates { workspace } => {
             Body::PrUpdates(manager.agent_updates(&workspace).await?)
         }
-        AgentMethod::MarkAgentMessagesDelivered { workspace, ids } => {
-            manager
-                .mark_agent_messages_delivered(&workspace, ids)
-                .await?;
+        AgentMethod::MarkAgentMessagesDelivered { space, ids } => {
+            manager.mark_space_messages_delivered(&space, ids).await?;
             Body::Ok
         }
     }))
@@ -186,7 +184,9 @@ impl Scoped for AgentMethod {
             AgentMethod::AwaitAgentWake { workspace, .. }
             | AgentMethod::AgentMessages { workspace }
             | AgentMethod::AgentSession { workspace }
-            | AgentMethod::MarkAgentMessagesDelivered { workspace, .. }
+            | AgentMethod::MarkAgentMessagesDelivered {
+                space: workspace, ..
+            }
             | AgentMethod::AgentUpdates { workspace }
             | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
             AgentMethod::ReportTurnFailure {

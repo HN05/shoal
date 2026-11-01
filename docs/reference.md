@@ -4220,35 +4220,37 @@ reach a chat's files.
 ```sh
 shoal questions ask "Which database?" --recommend SQLite [--reason R] [--choice C]... [--wait]
 shoal questions ask --in-chat        # The turn's final message in the chat is the question
-shoal questions [--workspace W]      # Pick an open question on a terminal
+shoal questions [--space S]          # Pick an open question on a terminal
 shoal questions withdraw <number>    # Close a question the agent no longer needs answered
 shoal questions <number>             # Inspect and choose an answer
 shoal questions <number> --answer <answer> # Answer text or a choice number
 ```
 
-`shoal questions ask` records a question for the user from a workspace's agents: the
+`shoal questions ask` records a question for the user from the agents of a space, a
+workspace or chat: the
 decision, the recommended answer, an optional reason and optional choices, each
 one line with the same limits as `alerts send`. It raises a `question_asked`
 notification and prints the question number. `shoal questions <number> --answer <answer>` records the answer,
-resolving a choice number to that choice, and queues it for the workspace's agents
+resolving a choice number to that choice, and queues it for the space's agents
 as a message naming the question, so the [agent messages](#agent-messages) hooks
 deliver it and wake an idle agent; it confirms with the question text, since a
 stale notification may name a reused number. An answer may span lines, up to 4096 bytes.
 Delivering the answer deletes the question. A new question takes the smallest
-number no stored question holds, across workspaces. On a terminal,
+number no stored question holds, across spaces. On a terminal,
 `shoal questions` opens a picker; selecting a question or naming its number shows
-its text, workspace, recommendation, reason and numbered choices, then an `Answer`
+its text, space, recommendation, reason and numbered choices, then an `Answer`
 prompt. Enter accepts the recommendation shown in brackets; type a choice number or
 answer text for another answer, or press Ctrl-C to leave. The answer is refused if another question
 took the number meanwhile. With JSON or redirected input or output, listing and inspection
 print records without prompting.
-`--in-chat` lets a tracked agent with Shoal's hooks, Claude Code or Codex, ask in its
-chat, where the question reads as the agent wrote it; other agents are refused. It
+`--in-chat` lets an agent with Shoal's hooks, Claude Code or Codex, that Shoal tracks
+in a workspace or runs as a chat's, ask in its conversation, where the question
+reads as the agent wrote it; other agents are refused. It
 marks the agent's current turn, which a daemon restart keeps, and when the turn ends the
 `Stop` hook passes the turn's final message, which becomes an open question of up to
 8 KiB without a recommendation. Answering it in your questions reaches the agent as
 a message like any answer; a prompt you submit in the agent's chat, rather than one
-Shoal submits to wake or continue it, closes the workspace's open chat questions as
+Shoal submits to wake or continue it, closes the space's open questions asked there as
 withdrawn and takes back their unread notifications. A turn without a final message,
 as from a hook that does not pass one, asks you to read the question in the chat.
 `--wait` blocks without a time limit until the answer arrives and prints it, which
@@ -4261,13 +4263,14 @@ A listing returns the newest open questions that fit one response and counts the
 ones it leaves out. Only unscoped callers answer, except that a workspace process
 answers, by number, the questions asked in the [workspaces below its own](#child-workspaces).
 Scoped callers ask, list and withdraw only their own workspace's questions, or a
-child's with `--workspace`. An open question keeps the workspace from idle
-cleanup; removing the workspace deletes its questions. `shoal done` closes the
+child's with `--space`. An open question keeps the workspace from idle
+cleanup; removing the workspace or ending the chat deletes its questions, which a
+saved chat keeps. `shoal done` closes the
 workspace's open questions, and `withdraw` closes one of them: answers to a closed
 question are refused, waits on it fail, and `shoal done --undo` does not reopen it.
 Withdrawing deletes the question's `question_asked` notification while it is
 unread, and otherwise raises `question_withdrawn`. A closed question keeps its
-number until the workspace goes.
+number until its space goes.
 
 ### Leases
 

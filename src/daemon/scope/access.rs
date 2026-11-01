@@ -201,8 +201,8 @@ impl Manager {
         };
         ensure!(
             question.id == id
-                && question.workspace_id != *owner
-                && self.within_subtree(owner, &question.workspace_id).await?,
+                && question.space_id != *owner
+                && self.within_subtree(owner, &question.space_id).await?,
             "answering questions is the user's, or a coordinating agent's for the workspaces below it; workspace processes ask with shoal questions ask"
         );
         Ok(question)

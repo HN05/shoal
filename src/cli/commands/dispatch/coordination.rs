@@ -24,11 +24,12 @@ pub(in crate::cli::commands) async fn run(
                 reason,
                 choices,
                 wait,
-                workspace,
+                space,
+                handed_over,
                 resume,
             } = args;
             if in_chat {
-                return questions::ask_in_chat(&ctx, workspace).await;
+                return questions::ask_in_chat(&ctx, space).await;
             }
             // Clap requires the question and recommendation without --in-chat.
             let ask = crate::daemon::questions::Ask {
@@ -37,16 +38,16 @@ pub(in crate::cli::commands) async fn run(
                 reason,
                 choices,
             };
-            // Clap requires --workspace with --resume.
-            match (workspace, resume) {
-                (Some(workspace), Some(id)) => questions::resume(&ctx, workspace, id, ask).await,
-                (workspace, _) => questions::ask(&ctx, workspace, ask, wait).await,
+            // Clap requires a space with --resume.
+            match (space.or(handed_over), resume) {
+                (Some(space), Some(id)) => questions::resume(&ctx, space, id, ask).await,
+                (space, _) => questions::ask(&ctx, space, ask, wait).await,
             }
         }
         CoordinationCommand::Questions {
-            command: Some(QuestionsCommand::Withdraw { id, workspace }),
+            command: Some(QuestionsCommand::Withdraw { id, space }),
             ..
-        } => questions::withdraw(&ctx, workspace, id).await,
+        } => questions::withdraw(&ctx, space, id).await,
         CoordinationCommand::Questions {
             command: None,
             args,

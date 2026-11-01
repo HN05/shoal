@@ -10,7 +10,7 @@ use crate::{
         client::{self, request},
         commands::messages::hanging_indent,
         context::Context,
-        installed::{Executable, arguments, replace_option},
+        installed::{Executable, arguments, replace_option, without_option},
         output::{Palette, Style},
         ui::{self, Cell, Entries, Fallback, WidthLimit},
     },
@@ -29,7 +29,7 @@ pub(super) async fn run(ctx: &Context, args: QuestionsArgs) -> Result<i32> {
                 request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
             show(ctx, question).await
         }
-        None => list(ctx, args.workspace).await,
+        None => list(ctx, args.space).await,
     }
 }
 
@@ -43,21 +43,10 @@ async fn show(ctx: &Context, question: Question) -> Result<i32> {
     Ok(0)
 }
 
-pub(super) async fn ask(
-    ctx: &Context,
-    workspace: Option<String>,
-    ask: Ask,
-    wait: bool,
-) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::CurrentDirectory).await?;
-    let question: Question = request(
-        &ctx.paths,
-        QuestionMethod::AskQuestion {
-            workspace: workspace.clone(),
-            ask,
-        },
-    )
-    .await?;
+pub(super) async fn ask(ctx: &Context, space: Option<String>, ask: Ask, wait: bool) -> Result<i32> {
+    let space = ui::select_space(ctx, space, Fallback::CurrentDirectory).await?;
+    let question: Question =
+        request(&ctx.paths, QuestionMethod::AskQuestion { space, ask }).await?;
     if !wait && question.is_open() {
         ctx.emit(
             &format!(
@@ -68,21 +57,21 @@ pub(super) async fn ask(
         )?;
         return Ok(0);
     }
-    // The workspace ID stays valid if the workspace is renamed meanwhile.
-    let workspace = question.workspace_id.clone();
+    // The space's ID stays valid if the space is renamed meanwhile.
+    let space = question.space_id.clone();
     let question = if question.is_open() {
-        await_answer(ctx, &workspace, &question, false).await?
+        await_answer(ctx, &space, &question, false).await?
     } else {
         question
     };
-    print_answer(ctx, workspace, &question).await?;
+    print_answer(ctx, space, &question).await?;
     Ok(0)
 }
 
-/// Mark the caller's agent's turn as asking the user in its chat.
-pub(super) async fn ask_in_chat(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
-    request::<()>(&ctx.paths, QuestionMethod::AskInChat { workspace }).await?;
+/// Mark the caller's agent's turn as asking the user in its conversation.
+pub(super) async fn ask_in_chat(ctx: &Context, space: Option<String>) -> Result<i32> {
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
+    request::<()>(&ctx.paths, QuestionMethod::AskInChat { space }).await?;
     ctx.emit(
         "Ask your question as your final message and end your turn; it also reaches the user's questions.",
         InChat { in_chat: true },
@@ -90,16 +79,16 @@ pub(super) async fn ask_in_chat(ctx: &Context, workspace: Option<String>) -> Res
     Ok(0)
 }
 
-/// Continue an earlier `ask --wait` for question `id` of `workspace`, which
-/// asks `ask`.
-pub(super) async fn resume(ctx: &Context, workspace: String, id: i64, ask: Ask) -> Result<i32> {
-    let question = await_answer(ctx, &workspace, Asked { id, ask }, true).await?;
-    print_answer(ctx, workspace, &question).await?;
+/// Continue an earlier `ask --wait` for question `id` of `space`, which asks
+/// `ask`.
+pub(super) async fn resume(ctx: &Context, space: String, id: i64, ask: Ask) -> Result<i32> {
+    let question = await_answer(ctx, &space, Asked { id, ask }, true).await?;
+    print_answer(ctx, space, &question).await?;
     Ok(0)
 }
 
 /// Printed here, the answer's message need not reach the agent again.
-async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> Result<()> {
+async fn print_answer(ctx: &Context, space: String, question: &Question) -> Result<()> {
     ctx.emit(question.answer.as_deref().unwrap_or_default(), question)?;
     crate::stdout::flush()?;
     let Some(id) = question.message_id else {
@@ -108,7 +97,7 @@ async fn print_answer(ctx: &Context, workspace: String, question: &Question) -> 
     request::<()>(
         &ctx.paths,
         AgentMethod::MarkAgentMessagesDelivered {
-            workspace,
+            space,
             ids: vec![id],
         },
     )
@@ -135,33 +124,35 @@ impl From<&Question> for Asked {
 /// resumes the wait for the same question.
 async fn await_answer(
     ctx: &Context,
-    workspace: &str,
+    space: &str,
     asked: impl Into<Asked>,
     restarted: bool,
 ) -> Result<Question> {
     let asked = asked.into();
     let executable = Executable::current();
     let method = || QuestionMethod::AwaitAnswer {
-        workspace: workspace.to_owned(),
+        space: space.to_owned(),
         id: asked.id,
         ask: asked.ask.clone(),
     };
     match client::await_reply(&ctx.paths, method, restarted).await {
         Ok(body) => Question::try_from(body),
-        Err(error) => Err(executable.resume_or(error, || resume_arguments(workspace, asked.id))),
+        Err(error) => Err(executable.resume_or(error, || resume_arguments(space, asked.id))),
     }
 }
 
 /// This command's arguments, which state the question, resuming the wait for
-/// its number `id` in `workspace` without asking again.
-fn resume_arguments(workspace: &str, id: i64) -> Vec<OsString> {
-    let arguments = replace_option(arguments(), "--workspace", workspace);
+/// its number `id` in `space` without asking again. A wait an earlier
+/// release handed over names its workspace the earlier way, which the space
+/// replaces.
+fn resume_arguments(space: &str, id: i64) -> Vec<OsString> {
+    let arguments = without_option(arguments(), "--workspace");
+    let arguments = replace_option(arguments, "--space", space);
     replace_option(arguments, "--resume", &id.to_string())
 }
 
-pub(super) async fn list(ctx: &Context, workspace: Option<String>) -> Result<i32> {
-    let listing =
-        request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { workspace }).await?;
+pub(super) async fn list(ctx: &Context, space: Option<String>) -> Result<i32> {
+    let listing = request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { space }).await?;
     if ctx.interactive_output() && !listing.questions.is_empty() {
         let question = pick_question(ctx, listing.questions)?;
         return show(ctx, question).await;
@@ -189,14 +180,14 @@ fn pick_question(ctx: &Context, questions: Vec<Question>) -> Result<Question> {
 }
 
 /// One aligned row per question, as the inbox shows it: its number, the
-/// workspace, the question cut to fit the picker, and the recommendation.
+/// space, the question cut to fit the picker, and the recommendation.
 fn picker_rows(questions: &[Question]) -> Entries {
     let cells = questions
         .iter()
         .map(|question| {
             [
                 (question.id.to_string(), Some(Style::Muted)),
-                (question.workspace.clone(), None),
+                (question.space.clone(), None),
                 (question.one_line(), None),
                 (
                     question
@@ -217,18 +208,18 @@ fn picker_rows(questions: &[Question]) -> Entries {
         .collect()
 }
 
-pub(super) async fn withdraw(ctx: &Context, workspace: Option<String>, id: i64) -> Result<i32> {
+pub(super) async fn withdraw(ctx: &Context, space: Option<String>, id: i64) -> Result<i32> {
     let question = request::<Question>(&ctx.paths, QuestionMethod::ShowQuestion { id }).await?;
-    let workspace = workspace.unwrap_or_else(|| question.workspace_id.clone());
-    withdraw_shown(ctx, workspace, question).await
+    let space = space.unwrap_or_else(|| question.space_id.clone());
+    withdraw_shown(ctx, space, question).await
 }
 
-async fn withdraw_shown(ctx: &Context, workspace: String, shown: Question) -> Result<i32> {
+async fn withdraw_shown(ctx: &Context, space: String, shown: Question) -> Result<i32> {
     let id = shown.id;
     let question = request::<Question>(
         &ctx.paths,
         QuestionMethod::WithdrawQuestion {
-            workspace,
+            space,
             id,
             shown: Some(shown),
         },
@@ -309,13 +300,13 @@ fn read_question_action(ctx: &Context, question: &Question) -> Result<QuestionAc
     })
 }
 
-/// One line with what the user needs to choose a question: its workspace,
-/// the decision, the recommendation and the choices.
+/// One line with what the user needs to choose a question: its space, the
+/// decision, the recommendation and the choices.
 pub(in crate::cli) fn summary(question: &Question) -> String {
     let mut line = format!(
         "{}  {}: {}",
         question.id,
-        question.workspace,
+        question.space,
         question.one_line()
     );
     if let Some(recommendation) = question.recommendation() {
@@ -332,7 +323,7 @@ pub(in crate::cli) fn summary(question: &Question) -> String {
 }
 
 /// The question's number and text, then labeled rows with its status once
-/// settled, workspace, recommendation, reason, numbered choices and answer.
+/// settled, space, recommendation, reason, numbered choices and answer.
 fn details(question: &Question, palette: Palette) -> String {
     // A question asked in the chat is the agent's whole message, which
     // follows the heading.
@@ -357,7 +348,7 @@ fn details(question: &Question, palette: Palette) -> String {
     if !question.is_open() {
         row("Status", status(question));
     }
-    row("Workspace", &question.workspace);
+    row("Space", &question.space);
     if let Some(recommendation) = question.recommendation() {
         row("Recommended", recommendation);
     }
@@ -403,7 +394,7 @@ fn render(question: &Question, palette: Palette) -> String {
         "{} {} {}: {}",
         palette.paint(Style::Heading, question.id),
         palette.paint(Style::Muted, format_args!("[{}]", status(question))),
-        question.workspace,
+        question.space,
         hanging_indent(&question.ask.question, "  ")
     )];
     if let Some(recommendation) = question.recommendation() {

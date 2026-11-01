@@ -410,6 +410,18 @@ impl Manager {
         self.mark_agent_messages_delivered(selector, messages).await
     }
 
+    /// [`Self::mark_agent_messages_delivered`] for the workspace, or
+    /// [`Self::mark_chat_messages_delivered`] for the running chat,
+    /// `selector` names.
+    pub async fn mark_space_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {
+        match self.present_space(selector).await? {
+            PresentSpace::Workspace(workspace) => {
+                self.mark_agent_messages_delivered(&workspace.id, ids).await
+            }
+            PresentSpace::Chat(chat) => self.mark_chat_messages_delivered(&chat.id, ids).await,
+        }
+    }
+
     /// Delete exactly these messages once an agent has received them, with
     /// the questions whose answers they carried.
     pub async fn mark_agent_messages_delivered(&self, selector: &str, ids: Vec<i64>) -> Result<()> {

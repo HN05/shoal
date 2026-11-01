@@ -225,14 +225,13 @@ fn user_prompt(input: &str) -> bool {
     })
 }
 
-/// Tell the daemon that the user replied in the agent's chat, which
-/// answers the questions the workspace's agents asked there.
+/// Tell the daemon that the user replied in the agent's conversation, which
+/// answers the questions the space's agents asked there.
 async fn report_reply(ctx: &Context, deadline: tokio::time::Instant) -> Result<()> {
     let reply = async {
-        let Inbox::Workspace(workspace) = Inbox::current(ctx, Fallback::OwnWorkspace).await? else {
-            return Ok(());
-        };
-        request::<()>(&ctx.paths, QuestionMethod::RepliedInChat { workspace }).await
+        let inbox = Inbox::current(ctx, Fallback::OwnWorkspace).await?;
+        let space = inbox.space().to_owned();
+        request::<()>(&ctx.paths, QuestionMethod::RepliedInChat { space }).await
     };
     tokio::time::timeout_at(deadline, reply)
         .await
@@ -529,7 +528,7 @@ impl Inbox {
         let ids = messages.iter().map(|message| message.id).collect();
         let method: Method = match self {
             Self::Workspace(workspace) => AgentMethod::MarkAgentMessagesDelivered {
-                workspace: workspace.clone(),
+                space: workspace.clone(),
                 ids,
             }
             .into(),

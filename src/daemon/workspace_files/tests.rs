@@ -1116,6 +1116,7 @@ const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     ALTER TABLE executions DROP COLUMN model;
     ALTER TABLE executions DROP COLUMN effort;
     ALTER TABLE chats DROP COLUMN session;
+    ALTER TABLE chats DROP COLUMN asks_in_chat;
     DROP TRIGGER chat_saved;
     DROP TRIGGER chat_restored;
     ALTER TABLE chats DROP COLUMN restore;

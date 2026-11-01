@@ -120,7 +120,7 @@ pub enum AgentMethod {
         workspace: String,
     },
     MarkAgentMessagesDelivered {
-        workspace: String,
+        space: String,
         ids: Vec<i64>,
     },
     /// The workspace's undelivered agent messages and queued item updates,

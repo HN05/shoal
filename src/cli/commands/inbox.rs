@@ -1,4 +1,4 @@
-//! `shoal inbox`: what needs the user now, each with its workspace: open
+//! `shoal inbox`: what needs the user now, each with its space: open
 //! questions, pending approvals, agents that need input, failed workspaces,
 //! work marked ready at its current commit, running demos, Git worktrees
 //! under Shoal's directories that no workspace owns, automatic cleanup
@@ -23,16 +23,17 @@ use crate::{
         questions::{Listing, Question},
     },
     demos::Running,
-    model::{CheckoutSync, UntrackedWorktree, Workspace},
+    model::{Chat, CheckoutSync, UntrackedWorktree, Workspace},
     protocol::{ApprovalMethod, DemoMethod, QuestionMethod, RepositoryMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
 
-/// The inbox's items in the order it lists them, and the workspaces they
-/// belong to.
+/// The inbox's items in the order it lists them, and the workspaces and
+/// chats they belong to.
 pub(in crate::cli) struct Inbox {
     pub items: Vec<Item>,
     workspaces: Vec<Workspace>,
+    chats: Vec<Chat>,
 }
 
 pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
@@ -73,12 +74,17 @@ impl Inbox {
         let stopped = ui::stopped_workspaces(&ctx.paths, &workspaces);
         let existing: HashSet<String> = workspaces.iter().map(|w| w.id.clone()).collect();
         workspaces.retain(|w| filter.keeps_workspace(w, stopped.contains(&w.id)));
-        let questions = request::<Listing>(
-            &ctx.paths,
-            QuestionMethod::ListQuestions { workspace: None },
-        )
-        .await?
-        .questions;
+        // Workspace processes see their own tree, which no chat is in.
+        let mut chats = if crate::env::is_scoped() {
+            Vec::new()
+        } else {
+            client::chats(&ctx.paths).await?
+        };
+        chats.retain(|chat| filter.keeps_chat(chat));
+        let questions =
+            request::<Listing>(&ctx.paths, QuestionMethod::ListQuestions { space: None })
+                .await?
+                .questions;
         let requests = request::<Vec<ApprovalRequest>>(
             &ctx.paths,
             ApprovalMethod::ListApprovals { workspace: None },
@@ -93,7 +99,7 @@ impl Inbox {
         };
         let demos =
             request::<Vec<Running>>(&ctx.paths, DemoMethod::ListDemos { workspace: None }).await?;
-        let mut items = decision_items(questions, requests, &workspaces, detached);
+        let mut items = decision_items(questions, requests, &workspaces, &chats, detached);
         items.extend(workspace_items(&workspaces, &stopped));
         items.extend(
             demos
@@ -127,7 +133,11 @@ impl Inbox {
                     .map(|sync| Item::SyncFailed { sync }),
             );
         }
-        Ok(Self { items, workspaces })
+        Ok(Self {
+            items,
+            workspaces,
+            chats,
+        })
     }
 
     /// One aligned row per item: its kind, workspace, the workspace's
@@ -139,7 +149,7 @@ impl Inbox {
         palette: Palette,
         width: Option<usize>,
     ) -> Vec<String> {
-        let repository = |item| repository_of(&self.workspaces, item);
+        let repository = |item| repository_of(&self.workspaces, &self.chats, item);
         let cells: Vec<[Cell; 5]> = self
             .items
             .iter()
@@ -164,29 +174,37 @@ impl Inbox {
 
 /// Open questions, then the pending approval requests the user decides, of
 /// `workspaces`; a coordinating agent decides the others.
-/// The repository of the item's workspace, or the one that owns a proposed
-/// issue whose workspace is gone.
-fn repository_of<'a>(workspaces: &'a [Workspace], item: &'a Item) -> &'a str {
+/// The repository of the item's workspace or chat, or the one that owns a
+/// proposed issue whose workspace is gone.
+fn repository_of<'a>(workspaces: &'a [Workspace], chats: &'a [Chat], item: &'a Item) -> &'a str {
+    let space = item.space_id();
     workspaces
         .iter()
-        .find(|w| w.id == item.workspace_id())
+        .find(|w| w.id == space)
         .map(|w| w.repository_id.as_str())
+        .or_else(|| {
+            let chat = chats.iter().find(|chat| chat.id == space);
+            chat.map(|chat| chat.repository_id.as_str())
+        })
         .or_else(|| item.repository_id())
         .unwrap_or("")
 }
 
-/// Questions and approvals of the listed workspaces, and the requests
-/// `detached` keeps: issue proposals that outlived their workspace.
+/// Questions of the listed workspaces and chats, approvals of the listed
+/// workspaces, and the requests `detached` keeps: issue proposals that
+/// outlived their workspace.
 fn decision_items(
     questions: Vec<Question>,
     requests: Vec<ApprovalRequest>,
     workspaces: &[Workspace],
+    chats: &[Chat],
     detached: impl Fn(&ApprovalRequest) -> bool,
 ) -> Vec<Item> {
     let kept = |id: &str| workspaces.iter().any(|w| w.id == id);
+    let asked = |id: &str| kept(id) || chats.iter().any(|chat| chat.id == id);
     let questions = questions
         .into_iter()
-        .filter(|question| kept(&question.workspace_id))
+        .filter(|question| asked(&question.space_id))
         .map(|question| Item::Question { question });
     let requests = requests
         .into_iter()
@@ -228,9 +246,10 @@ fn workspace_items(workspaces: &[Workspace], stopped: &HashSet<String>) -> Vec<I
 }
 
 impl Item {
-    pub(in crate::cli) fn workspace_id(&self) -> &str {
+    /// The workspace or chat it belongs to.
+    pub(in crate::cli) fn space_id(&self) -> &str {
         match self {
-            Self::Question { question } => &question.workspace_id,
+            Self::Question { question } => &question.space_id,
             Self::Approval { request } => &request.workspace_id,
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
@@ -251,12 +270,12 @@ impl Item {
         }
     }
 
-    /// What the row names: its workspace, an untracked worktree's directory,
+    /// What the row names: its space, an untracked worktree's directory,
     /// or the repository whose sync failed, which the repository column
     /// leaves out when every row shares it. Repositories are `(id, name)` pairs.
     fn name<'a>(&'a self, repositories: &'a [(String, String)]) -> &'a str {
         match self {
-            Self::Question { question } => &question.workspace,
+            Self::Question { question } => &question.space,
             Self::Approval { request } => &request.workspace,
             Self::NeedsInput { workspace }
             | Self::Failed { workspace }
