@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::{OptionalExtension, Transaction, params};
-use serde::{Deserialize, Serialize};
 
+pub(crate) use crate::client::agent_messages::AgentMessage;
 use crate::{
     daemon::{
         workspace::Manager,
@@ -25,18 +25,6 @@ mod settle;
 /// paths included; together they fit one response.
 pub(crate) const MAX_UNREAD: i64 = 50;
 pub(crate) const MAX_UNREAD_BYTES: usize = 50 * crate::validate::MAX_MESSAGE_LEN;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AgentMessage {
-    pub id: i64,
-    /// Unix seconds.
-    pub created_at: i64,
-    /// Empty when the message is only its attachments.
-    pub message: String,
-    /// Shoal's copies of the files attached to the message.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<PathBuf>,
-}
 
 /// Queue `message` with the files `attachments`, which Shoal has copied, in
 /// the caller's transaction, returning its ID, or `None` when an identical

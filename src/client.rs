@@ -2,13 +2,18 @@
 //! and the client-side logic the CLI shares with them.
 
 pub mod agent;
+pub mod agent_messages;
 pub mod ai;
+pub mod approvals;
 pub mod config;
 pub mod demos;
 pub mod model;
+pub mod notifications;
 pub mod protocol;
+pub mod questions;
 pub mod removal;
 pub mod repository;
+pub mod resources;
 pub mod reviews;
 pub mod sessions;
 pub mod sim;

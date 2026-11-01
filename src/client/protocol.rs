@@ -9,7 +9,6 @@ use crate::{
     client::sim::{AuditEntry, Simulator, SimulatorCatalog},
     config::repo::ConfigLayers,
     daemon::{
-        allocation::Allocation,
         events::EventItem,
         notifications::Notification,
         recovery::Report,
@@ -424,16 +423,6 @@ impl Response {
 pub enum ConfigTarget {
     Workspace(String),
     Repository(crate::repository::Selector),
-}
-
-impl<T> Allocation<T> {
-    pub fn into_body(self, granted: impl FnOnce(T) -> Body) -> Body {
-        match self {
-            Self::Granted(value) => granted(value),
-            Self::Busy(message) => Body::Busy { message },
-            Self::Approval(request) => Body::ApprovalRequest(request),
-        }
-    }
 }
 
 crate::state::open_enum! {

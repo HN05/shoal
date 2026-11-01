@@ -1,25 +1,17 @@
 //! Borrow registered checkouts without creating or deleting filesystem views.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, params};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::PathBuf,
 };
 
-use super::{Definition, ResourceLease};
+use super::{Definition, RepositoryView, ResourceLease};
 use crate::{
     daemon::{store, workspace::Manager},
     model::Repository,
     repository,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct RepositoryView {
-    pub id: String,
-    pub path: PathBuf,
-}
 
 /// Registered repositories named by a pool's members, keyed by selector.
 pub(super) type Related = BTreeMap<String, Result<Repository>>;

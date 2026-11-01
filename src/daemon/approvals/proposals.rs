@@ -3,137 +3,17 @@
 //! proposal is no longer stored.
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, Transaction, params};
-use serde::{Deserialize, Serialize};
 
 use super::{
     ApprovalRequest, DecisionStatus, Specification, Target, by_key, current, record_row, retire,
 };
+pub(crate) use crate::client::approvals::{
+    Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
+};
 use crate::{
     daemon::store,
-    forge::{
-        items::action::Edit,
-        items::attach::Attachment,
-        items::create::{NewIssue, NewPull},
-    },
+    forge::{items::action::Edit, items::attach::Attachment},
 };
-
-/// The name of a workspace's single PR proposal.
-pub const PR: &str = "branch";
-/// The name every issue proposal shares; the repository holds any number.
-pub const ISSUE: &str = "issue";
-
-/// What `shoal issue open` was told, and where it was proposed from.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct IssueSpecification {
-    pub issue: NewIssue,
-    /// The URL of the repository the issue opens in, when it is not the
-    /// workspace's.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<String>,
-    /// Whether approval also assigns the issue to the workspace.
-    pub link: bool,
-    pub branch: String,
-    pub commit: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
-    /// Findings of proposals the user marked as duplicates of this one,
-    /// posted as comments once it is opened.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub duplicates: Vec<Finding>,
-    /// What is left to do to the issue once approval posted it, such as
-    /// Forgejo's labels, until it is done.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub follow_up: Option<Edit>,
-}
-
-/// A duplicate proposal's text and files, which become a comment on what it
-/// duplicates.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Finding {
-    pub body: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub attachments: Vec<Attachment>,
-}
-
-/// The PR `shoal pr open` would open, bound to the branch commit the user
-/// approves; a newer commit outdates it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PullSpecification {
-    pub pull: NewPull,
-    pub commit: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub agent: Option<String>,
-    /// What is left to do to the PR once approval posted it, such as its
-    /// labels and reviewers, until it is done.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub follow_up: Option<Edit>,
-}
-
-/// What the user decides about a proposal besides yes or no.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ProposalDecision {
-    /// Replaces the proposed title on approval.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    /// Replaces the proposed description on approval.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<String>,
-    /// Tells the agent why its proposal was denied.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    /// Denies an issue proposal as a duplicate and adds its finding there.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub duplicate_of: Option<Duplicate>,
-}
-
-/// What a denied issue proposal duplicates.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Duplicate {
-    /// An issue number or URL in the same repository.
-    Issue(String),
-    /// Another pending issue proposal, by its number.
-    Approval(i64),
-}
-
-impl ProposalDecision {
-    /// Refuse details that do not apply to this decision of `target`.
-    pub fn validate(&self, target: &Target, approve: bool) -> Result<()> {
-        self.check(approve)?;
-        ensure!(
-            self.duplicate_of.is_none() || *target == Target::IssueOpen,
-            "only an issue proposal can be a duplicate"
-        );
-        Ok(())
-    }
-
-    /// Refuse details that do not apply to an approval or a denial of any
-    /// request, before the request is known.
-    pub fn check(&self, approve: bool) -> Result<()> {
-        if approve {
-            ensure!(
-                self.reason.is_none() && self.duplicate_of.is_none(),
-                "a reason or duplicate applies only when denying"
-            );
-            ensure!(
-                self.title
-                    .as_ref()
-                    .is_none_or(|title| !title.trim().is_empty()),
-                "the title cannot be empty"
-            );
-        } else {
-            ensure!(
-                self.title.is_none() && self.body.is_none(),
-                "a title or body applies only when approving"
-            );
-        }
-        crate::validate::reason("denial", self.reason.as_deref())
-    }
-}
 
 impl ApprovalRequest {
     /// The proposed issue, for an issue proposal.

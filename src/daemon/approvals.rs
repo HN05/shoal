@@ -2,130 +2,26 @@
 use crate::daemon::refusal::{Reason, Refusal};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
-use serde::{Deserialize, Serialize};
-use std::{fmt, str::FromStr};
+use std::fmt;
 
 use crate::{
-    config::repo::ConflictPolicy,
     daemon::{
         log,
         notifications::{self, About, NotificationKind},
-        resources::{Definition, LockMode, Scope},
         scope::Caller,
         store,
         workspace::Manager,
     },
     model::Workspace,
-    sim::Profile,
-    state::{states, text_key},
 };
 
 pub mod proposals;
 
-use proposals::{IssueSpecification, PullSpecification};
-
-states!(
-    #[derive(Default)]
-    Lifetime {
-        #[default]
-        Lease => "lease",
-        Workspace => "workspace",
-    }
-);
-
-states!(DecisionStatus {
-    Pending => "pending",
-    Approved => "approved",
-    Denied => "denied",
-    Outdated => "outdated",
-    /// The requesting agent no longer needed it.
-    Withdrawn => "withdrawn",
-});
-
-/// What a decision authorizes; one active request per workspace, target and
-/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `land`, `issue_open` or `pr_open`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Target {
-    Resource {
-        scope: Scope,
-        pool: String,
-    },
-    Port(String),
-    Simulator,
-    /// Fetching a configured secret; the daemon records the grant, never the value.
-    Secret(String),
-    /// Landing a workspace branch into the default branch.
-    Land,
-    /// Opening an issue a scoped caller proposed; the repository owns the
-    /// request, so it outlives the workspace.
-    IssueOpen,
-    /// Opening a PR for the workspace branch at one commit.
-    PrOpen,
-    /// A hold an agent asks to place on its own workspace, which approval
-    /// places.
-    Hold(String),
-}
-
-/// The name of a workspace's single land request.
-pub const LAND: &str = "branch";
-
-impl fmt::Display for Target {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Resource { scope, pool } => write!(f, "resource/{scope}/{pool}"),
-            Self::Port(name) => write!(f, "port/{name}"),
-            Self::Simulator => f.write_str("simulator"),
-            Self::Secret(name) => write!(f, "secret/{name}"),
-            Self::Land => f.write_str("land"),
-            Self::IssueOpen => f.write_str("issue_open"),
-            Self::PrOpen => f.write_str("pr_open"),
-            Self::Hold(name) => write!(f, "hold/{name}"),
-        }
-    }
-}
-
-impl FromStr for Target {
-    type Err = anyhow::Error;
-
-    fn from_str(text: &str) -> Result<Self> {
-        match text {
-            "simulator" => return Ok(Self::Simulator),
-            "land" => return Ok(Self::Land),
-            "issue_open" => return Ok(Self::IssueOpen),
-            "pr_open" => return Ok(Self::PrOpen),
-            _ => {}
-        }
-        if let Some(name) = text.strip_prefix("port/")
-            && !name.is_empty()
-        {
-            return Ok(Self::Port(name.into()));
-        }
-        if let Some(name) = text.strip_prefix("secret/")
-            && !name.is_empty()
-        {
-            return Ok(Self::Secret(name.into()));
-        }
-        if let Some(name) = text.strip_prefix("hold/")
-            && !name.is_empty()
-        {
-            return Ok(Self::Hold(name.into()));
-        }
-        // The scope may itself contain a slash; pool names cannot.
-        if let Some((scope, pool)) = text
-            .strip_prefix("resource/")
-            .and_then(|rest| rest.rsplit_once('/'))
-            && !pool.is_empty()
-        {
-            return Ok(Self::Resource {
-                scope: scope.parse()?,
-                pool: pool.into(),
-            });
-        }
-        bail!("invalid approval target: {text}")
-    }
-}
-text_key!(Target);
+pub(crate) use crate::client::approvals::{
+    ApprovalRequest, DecisionStatus, HoldSpecification, LAND, LandSpecification, Lifetime,
+    PortSpecification, ResourceSpecification, SecretSpecification, SimulatorSpecification,
+    Specification, Target,
+};
 
 impl Target {
     /// Whether the request proposes a forge write the user may edit before
@@ -140,122 +36,6 @@ impl Target {
     fn needs_grant(&self) -> bool {
         !matches!(self, Self::Hold(_))
     }
-}
-
-/// The effective allocation settings a decision binds; a later request with
-/// different settings cannot reuse the grant. Each kind keeps the JSON shape
-/// its allocator has always recorded.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum Specification {
-    Resource(ResourceSpecification),
-    Port(PortSpecification),
-    Simulator(SimulatorSpecification),
-    Secret(SecretSpecification),
-    Land(LandSpecification),
-    Issue(IssueSpecification),
-    Pull(PullSpecification),
-    Hold(HoldSpecification),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ResourceSpecification {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository: Option<crate::daemon::resources::RepositoryView>,
-    pub definition: Definition,
-    /// The pool member the decision selects.
-    pub member: String,
-    pub mode: LockMode,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PortSpecification {
-    pub env: String,
-    pub on_conflict: ConflictPolicy,
-    pub preferred: Option<u16>,
-    /// Automatic range as `[start, end]`.
-    pub range: [u16; 2],
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SimulatorSpecification {
-    pub clean: bool,
-    pub profile: Profile,
-}
-
-/// A land decision covers the branch at one commit; later commits need a new one.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LandSpecification {
-    pub branch: String,
-    pub head: String,
-}
-
-/// A secret grant covers the configured source; changing the command or the
-/// tools it serves needs a new decision.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SecretSpecification {
-    pub command: Vec<String>,
-    pub tools: Vec<String>,
-}
-
-/// A hold covers its name on the requesting workspace.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct HoldSpecification {
-    pub hold: String,
-}
-
-impl fmt::Display for Specification {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&serde_json::to_string(self).map_err(|_| fmt::Error)?)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApprovalRequest {
-    /// The number the user decides it by; reused once the request is deleted.
-    #[serde(default)]
-    pub id: i64,
-    /// Stable identity behind the user-facing number, carried through displayed snapshots.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub key: String,
-    pub workspace_id: String,
-    #[serde(default)]
-    pub workspace: String,
-    /// The repository that owns a proposed issue, which outlives the
-    /// workspace that proposed it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub repository_id: Option<String>,
-    pub target: Target,
-    pub name: String,
-    pub specification: Specification,
-    pub lifetime: Lifetime,
-    pub reason: String,
-    pub status: DecisionStatus,
-    pub created_at: u64,
-    pub decided_at: Option<u64>,
-    /// False for workspace grants retained after release.
-    pub active: bool,
-    /// Whether the request went up the workspace tree to find its decider.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub routed: bool,
-    /// The workspace whose coordinating agent decides the request, since it
-    /// holds a grant for the same thing; the user decides without one.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub decider: Option<String>,
-    /// The issue or PR an approved proposal opened, or the issue a denied
-    /// one duplicates; decided proposals are no longer stored.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    /// What deciding a proposal could not finish, such as attaching the
-    /// files of a duplicate's comment that was posted.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<String>,
 }
 
 const COLUMNS: &str = "SELECT id,record,active,number FROM access_requests";
@@ -428,51 +208,6 @@ impl ApprovalRequest {
             && self.lifetime == other.lifetime
             && self.reason == other.reason
             && self.created_at == other.created_at
-    }
-
-    /// What the user is asked to decide: the access and how long it lasts,
-    /// the branch and commit to land, the issue or PR to open, or the hold
-    /// to place.
-    pub fn subject(&self) -> String {
-        match (&self.target, &self.specification) {
-            (Target::Land, Specification::Land(land)) => {
-                format!("land {} at {}", land.branch, land.head)
-            }
-            (Target::IssueOpen, Specification::Issue(issue)) => {
-                let title = &issue.issue.title;
-                match &issue.repository {
-                    Some(repository) => format!("open issue \"{title}\" in {repository}"),
-                    None => format!("open issue \"{title}\""),
-                }
-            }
-            (Target::Hold(name), _) => format!("hold the workspace as {name}"),
-            (Target::PrOpen, Specification::Pull(pull)) => format!(
-                "open PR \"{}\" from {} at {}",
-                pull.pull.title, pull.pull.head, pull.commit
-            ),
-            _ => format!("{} ({})", self.access(), self.lifetime),
-        }
-    }
-
-    /// The kind and name of what the request grants access to, and the
-    /// lease name when the agent chose its own.
-    fn access(&self) -> String {
-        let (kind, name) = match &self.target {
-            Target::Resource { pool, .. } => ("resource", Some(pool)),
-            Target::Port(name) => ("port", Some(name)),
-            Target::Secret(name) => ("secret", Some(name)),
-            Target::Simulator => ("simulator", None),
-            target => return target.to_string(),
-        };
-        let target = match name {
-            Some(name) => format!("{kind} {name}"),
-            None => kind.to_owned(),
-        };
-        if self.name == "default" || name == Some(&self.name) {
-            target
-        } else {
-            format!("{target} \"{}\"", self.name)
-        }
     }
 
     /// What the user is told about a request no coordinator decides,

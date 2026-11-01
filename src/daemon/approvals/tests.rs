@@ -1,4 +1,8 @@
 use super::*;
+use crate::{
+    daemon::resources::{Definition, LockMode, Scope},
+    sim::Profile,
+};
 
 fn resource(mode: LockMode) -> Specification {
     let definition = Definition {
