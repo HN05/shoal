@@ -1526,10 +1526,9 @@ contents, so an identical message with the same files still collapses.
 A workspace being removed takes no message, since removal decides from the
 messages it has and deletes them with the workspace.
 `messages` reads new messages while `messages send` sends them, to one space,
-a workspace or running chat, or, with `--all`, to every workspace of a
-repository with a running agent, such as to have them all rebase onto a fix: a
-workspace without one would hold the message until removal. `--all` leaves out
-chats, since such messages are about the branches workspaces work on. A message
+a workspace or running chat, or, with `--all`, to every running agent of a
+repository, in its workspaces and chats, such as to have them all rebase onto a
+fix: a workspace without one would hold the message until removal. A message
 to a chat goes the way the user's own messages to it go, with its files kept
 among the chat's. Scoped
 processes may read their own workspace's messages and send messages

@@ -1,5 +1,5 @@
 //! `shoal messages send` queues a message for a space's agents, or with
-//! `--all` for every running agent of a repository's workspaces;
+//! `--all` for every running agent of a repository's workspaces and chats;
 //! `shoal messages` shows the space's undelivered messages once.
 use std::{
     ffi::OsString,
@@ -20,7 +20,7 @@ use crate::{
     },
     daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
     forge::items::attach::Attachment,
-    model::{PresentSpace, Workspace},
+    model::PresentSpace,
     protocol::{AgentMethod, ChatMethod, Method, QuestionMethod},
     repository::Selector,
 };
@@ -29,7 +29,8 @@ use crate::{
 pub(super) enum Recipients {
     /// The agents of the named space, else the current one or a picked one.
     Space(Option<String>),
-    /// Every running agent of the named repository, else the current one.
+    /// Every running agent of the named repository's workspaces and chats,
+    /// else the current one's.
     Repository(Option<String>),
 }
 
@@ -77,7 +78,7 @@ async fn send_to_repository(
     message: String,
     attachments: Vec<NewFile>,
 ) -> Result<i32> {
-    let reached: Vec<Workspace> = request(
+    let reached: Reached = request(
         &ctx.paths,
         AgentMethod::SendRepositoryAgentMessage {
             repository: chosen_repository(ctx, repository).await?,
@@ -87,28 +88,20 @@ async fn send_to_repository(
         },
     )
     .await?;
-    show_reached(ctx, reached)?;
-    Ok(0)
-}
-
-/// The workspaces a repository-wide message reached, by name.
-fn show_reached(ctx: &Context, reached: Vec<Workspace>) -> Result<()> {
-    let reached = Reached {
-        workspaces: reached
-            .into_iter()
-            .map(|workspace| workspace.name)
-            .collect(),
-    };
     ctx.show(&reached, |reached| {
-        if reached.workspaces.is_empty() {
-            outln!("No workspace has a running agent.");
+        if reached.workspaces.is_empty() && reached.chats.is_empty() {
+            outln!("No workspace or chat has a running agent.");
             return;
         }
-        outln!("Message queued for the agents of:");
+        outln!("Message queued for:");
         for workspace in &reached.workspaces {
             outln!("  {workspace}");
         }
-    })
+        for chat in &reached.chats {
+            outln!("  {chat} (chat)");
+        }
+    })?;
+    Ok(0)
 }
 
 /// The repository `--repo` names, else the current checkout's or

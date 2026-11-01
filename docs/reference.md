@@ -4077,7 +4077,7 @@ workspace and withdraw those messages. Read entries older than the newest
 shoal messages send "Stop the dev server" [--space S]  # Queue one for a workspace's or chat's agents
 shoal messages send --body-file plan.md [--space S]    # Queue a file's text as one message
 shoal messages send "Crash on launch" --attach shot.png    # Attach files; repeat --attach for more
-shoal messages send --all "Rebase onto main" [--repo R]    # Queue one for every running workspace agent
+shoal messages send --all "Rebase onto main" [--repo R]    # Queue one for every running agent
 shoal messages [space]     # New messages, oldest first, shown once
 ```
 
@@ -4093,12 +4093,12 @@ lists each copy's path as an `Attached file:` line, or in `attachments` with
 `shoal messages` or `shoal watch`, which delete each message once they have
 printed it.
 
-`--all` queues the message for every workspace of the current repository, or
-the one `--repo` names, with a running agent, and for no chat, since such
-messages are about branches: one Shoal tracks, working or
-idle, that is connected and not being stopped; stopped and queued agents do not
-count. It lists the workspaces it reached, in `workspaces` with `--json`; a
-workspace process reaches only the workspaces below its own. Workspaces without a running agent get nothing, since a message
+`--all` queues the message for every running agent of the current repository,
+or the one `--repo` names: each running chat but the one sending, and each
+workspace with an agent Shoal tracks, working or idle, that is connected and
+not being stopped; stopped and queued agents do not count. It lists the spaces
+it reached, in `workspaces` and `chats` with `--json`; a workspace process
+reaches only the workspaces below its own. Workspaces without a running agent get nothing, since a message
 waits there until an agent reads it. Sending the same message again after a
 failure does not repeat it to agents that have not read it yet, because
 identical unread messages collapse.

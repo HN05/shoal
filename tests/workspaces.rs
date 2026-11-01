@@ -20928,9 +20928,10 @@ fn a_title_request_reaches_only_a_running_agent() {
 }
 
 #[test]
-fn a_message_to_all_skips_workspaces_without_a_running_agent() {
+fn a_message_to_all_reaches_running_chats_but_not_workspaces_without_an_agent() {
     let fixture = Fixture::new();
     fixture.add("idle");
+    let (mut agent, _) = start_test_chat(&fixture, "planning");
     let repo = fixture.repo.to_str().unwrap();
     let sent = fixture.ok(&[
         "messages",
@@ -20940,8 +20941,13 @@ fn a_message_to_all_skips_workspaces_without_a_running_agent() {
         repo,
         "Rebase onto main",
     ]);
-    assert_eq!(sent, serde_json::json!({"workspaces": []}));
+    assert_eq!(
+        sent,
+        serde_json::json!({"workspaces": [], "chats": ["planning"]})
+    );
     assert_eq!(fixture.ok(&["messages", "idle"]), serde_json::json!([]));
+    agent.kill().unwrap();
+    agent.wait().unwrap();
     let output = fixture.run(&["messages", "send", "--all", "--space", "idle", "hi"]);
     assert!(!output.status.success(), "{output:?}");
 }

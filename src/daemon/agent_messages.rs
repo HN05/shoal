@@ -10,11 +10,12 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 pub(crate) use crate::client::agent_messages::AgentMessage;
 use crate::{
+    client::output::messages::Reached,
     daemon::{
         workspace::Manager,
         workspace_files::{self, Attacher, NewFile, layout::Copy},
     },
-    model::{PresentSpace, Workspace},
+    model::{Chat, PresentSpace, Workspace},
     repository::Selector,
     state::WorkspaceState,
 };
@@ -206,21 +207,23 @@ impl Manager {
         }
     }
 
-    /// [`Self::send_agent_message`] to every workspace of `repository` with
-    /// a running agent, or only to those below `below`, the sender's own
-    /// workspace; the workspaces it reached. Identical unread messages
-    /// collapse, so sending again after a failure does not repeat it to
-    /// recipients that have not read it yet.
-    pub async fn send_repository_agent_message(
+    /// [`Self::send_space_message`] to every workspace of `repository` with
+    /// a running agent and each of its running chats but the sending chat
+    /// `sender_chat`, or only to the workspaces below `below`, the sender's
+    /// own workspace; the spaces it reached. Identical unread messages collapse, so sending
+    /// again after a failure does not repeat it to recipients that have not
+    /// read it yet.
+    pub async fn send_repository_message(
         &self,
         repository: &Selector,
         message: String,
         attachments: Vec<NewFile>,
         attacher: &Attacher,
         below: Option<&str>,
-    ) -> Result<Vec<Workspace>> {
-        let recipients = self.agent_recipients(repository, below).await?;
-        for workspace in &recipients {
+        sender_chat: Option<&str>,
+    ) -> Result<Reached> {
+        let (workspaces, chats) = self.recipients(repository, below, sender_chat).await?;
+        for workspace in &workspaces {
             self.send_agent_message(
                 &workspace.id,
                 message.clone(),
@@ -230,23 +233,36 @@ impl Manager {
             .await
             .with_context(|| format!("message {}", workspace.name))?;
         }
-        Ok(recipients)
+        for chat in &chats {
+            self.send_chat_message(&chat.id, message.clone(), attachments.clone(), attacher)
+                .await
+                .with_context(|| format!("message {}", chat.name))?;
+        }
+        Ok(Reached {
+            workspaces: workspaces
+                .into_iter()
+                .map(|workspace| workspace.name)
+                .collect(),
+            chats: chats.into_iter().map(|chat| chat.name).collect(),
+        })
     }
 
     /// The workspaces of `repository` with a running agent, by name, except
-    /// those being removed; only those below `below` when it names one.
-    async fn agent_recipients(
+    /// those being removed, and its running chats but `sender_chat`; only
+    /// the workspaces below `below` when it names one.
+    async fn recipients(
         &self,
         repository: &Selector,
         below: Option<&str>,
-    ) -> Result<Vec<Workspace>> {
+        sender_chat: Option<&str>,
+    ) -> Result<(Vec<Workspace>, Vec<Chat>)> {
         let repository = self.repository(repository.clone()).await?.id;
         // The subtree lists `below` itself first.
         let below: Option<Vec<String>> = match below {
             Some(below) => Some(self.subtree(below).await?.into_iter().skip(1).collect()),
             None => None,
         };
-        let mut recipients = Vec::new();
+        let mut workspaces = Vec::new();
         for id in self.running_agent_workspaces().await {
             if below.as_ref().is_some_and(|below| !below.contains(&id)) {
                 continue;
@@ -254,11 +270,21 @@ impl Manager {
             let workspace = self.workspace(&id).await?;
             if workspace.repository_id == repository && workspace.state != WorkspaceState::Removing
             {
-                recipients.push(workspace);
+                workspaces.push(workspace);
             }
         }
-        recipients.sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(recipients)
+        workspaces.sort_by(|a, b| a.name.cmp(&b.name));
+        let mut chats = match below {
+            Some(_) => Vec::new(),
+            None => self.chats().await?,
+        };
+        chats.retain(|chat| {
+            chat.repository_id == repository
+                && chat.restore.is_none()
+                && sender_chat.is_none_or(|sender| sender != chat.id && sender != chat.name)
+        });
+        chats.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok((workspaces, chats))
     }
 
     pub(crate) async fn queue_agent_message(

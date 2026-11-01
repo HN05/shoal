@@ -252,7 +252,7 @@ async fn run_agent(
 }
 
 #[tokio::test]
-async fn a_repository_message_reaches_its_running_agents_below_the_sender() {
+async fn a_repository_message_reaches_its_running_agents_and_chats_below_the_sender() {
     let (temp, manager) = manager().await;
     let parent = workspace(&temp, &manager, "parent").await;
     let child = manager
@@ -280,24 +280,45 @@ async fn a_repository_message_reaches_its_running_agents_below_the_sender() {
     for workspace in [&parent, &child, &sibling, &outside] {
         running.push(run_agent(&manager, workspace).await);
     }
+    // Chats run with this process as their agent.
+    for (repository, name) in [
+        (&parent.repository_id, "planning"),
+        (&parent.repository_id, "sender"),
+        (&elsewhere.id, "other"),
+    ] {
+        manager
+            .start_chat(
+                repository.clone().into(),
+                name.into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+    }
     let send = |below: Option<String>| {
         let manager = &manager;
         let repository = parent.repository_id.clone();
         async move {
-            let reached = manager
-                .send_repository_agent_message(
+            manager
+                .send_repository_message(
                     &repository.into(),
                     "Rebase onto main".into(),
                     Vec::new(),
                     &Attacher::User,
                     below.as_deref(),
+                    Some("sender"),
                 )
                 .await
-                .unwrap();
-            reached.into_iter().map(|w| w.name).collect::<Vec<_>>()
+                .unwrap()
         }
     };
-    assert_eq!(send(None).await, ["child", "parent", "sibling"]);
+    let reached = send(None).await;
+    assert_eq!(reached.workspaces, ["child", "parent", "sibling"]);
+    // The sending chat is left out.
+    assert_eq!(reached.chats, ["planning"]);
     for workspace in [&parent, &child, &sibling] {
         let messages = manager.agent_messages(&workspace.id).await.unwrap();
         assert_eq!(messages.len(), 1, "{}", workspace.name);
@@ -311,8 +332,13 @@ async fn a_repository_message_reaches_its_running_agents_below_the_sender() {
                 .is_empty()
         );
     }
-    assert_eq!(send(Some(parent.id.clone())).await, ["child"]);
-    assert!(send(Some(child.id.clone())).await.is_empty());
+    let reached = send(Some(parent.id.clone())).await;
+    assert_eq!(
+        (reached.workspaces, reached.chats),
+        (vec!["child".to_owned()], vec![])
+    );
+    let reached = send(Some(child.id.clone())).await;
+    assert!(reached.workspaces.is_empty() && reached.chats.is_empty());
     // A workspace process names only its own repository.
     manager
         .executions

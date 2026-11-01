@@ -572,6 +572,7 @@ response_bodies! {
     Demos(Vec<crate::demos::Running>),
     DemoProgress(crate::demos::Progress),
     Workspaces(Vec<Workspace>),
+    Reached(crate::client::output::messages::Reached),
     Chat(crate::model::Chat),
     Chats(Vec<crate::model::Chat>),
     ChatName(String),
