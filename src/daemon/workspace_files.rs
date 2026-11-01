@@ -155,14 +155,17 @@ impl Manager {
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
-    /// The workspace or running chat `selector` names, or else the latest
-    /// removed workspace or ended chat of that name or ID whose files are
-    /// kept.
+    /// The workspace or running chat `selector` names, else a saved chat,
+    /// which keeps its files until it ends, or else the latest removed
+    /// workspace or ended chat of that name or ID whose files are kept.
     pub(crate) async fn file_space(&self, selector: &str) -> Result<Space> {
         let error = match self.present_space(selector).await {
             Ok(space) => return Ok(space.into()),
             Err(error) => error,
         };
+        if let Some(saved) = self.recorded_chat(selector).await? {
+            return Ok(crate::model::PresentSpace::Chat(saved).into());
+        }
         let selector = selector.to_owned();
         let gone = self
             .store

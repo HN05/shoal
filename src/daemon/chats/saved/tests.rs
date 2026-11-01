@@ -497,3 +497,52 @@ async fn a_restore_during_a_shutdown_leaves_the_chat_saved() {
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.restore, Some(ChatRestore::Automatic));
 }
+
+#[tokio::test]
+async fn a_saved_chat_keeps_its_files_listed() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    let notes = root.path().join("notes.md");
+    std::fs::write(&notes, "kept").unwrap();
+    manager
+        .add_attached_files(
+            &chat.name,
+            vec![notes.into()],
+            &crate::daemon::workspace_files::Attacher::User,
+        )
+        .await
+        .unwrap();
+    manager.save_chats(ChatRestore::Resume).await;
+    process.wait().unwrap();
+
+    let files = manager.attached_files("talk").await.unwrap();
+
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].name, "notes.md");
+}
+
+#[tokio::test]
+async fn no_chat_starts_while_a_shutdown_holds_the_queue() {
+    let (root, manager) = manager().await;
+    let checkout = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    manager.agent_queue.suspend(true).await;
+
+    let error = manager
+        .start_chat(
+            repo.id.into(),
+            "late".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("shutdown"), "{error:#}");
+    assert!(manager.chats().await.unwrap().is_empty());
+}
