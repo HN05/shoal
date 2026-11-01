@@ -57,3 +57,24 @@ fn a_symlink_in_place_of_a_directory_is_refused() {
     std::os::unix::fs::symlink(&outside, layout.locate("linked")).unwrap();
     assert!(layout.prepare("linked").is_err());
 }
+
+/// What works in a space's temporary directory counts as the space's, so
+/// only the directory Shoal created leads there, never a link put in its
+/// place.
+#[test]
+fn only_a_created_directory_is_an_existing_one() {
+    let root = tempfile::tempdir().unwrap();
+    let layout = Layout::new(root.path(), "repo");
+    assert_eq!(layout.existing("space"), None);
+    let created = layout.prepare("space").unwrap();
+    assert_eq!(layout.existing("space"), Some(created));
+
+    let outside = root.path().join("outside");
+    fs::create_dir(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, layout.locate("linked")).unwrap();
+    assert_eq!(layout.existing("linked"), None);
+
+    let unmarked = tempfile::tempdir().unwrap();
+    fs::create_dir_all(unmarked.path().join(".tmp/space")).unwrap();
+    assert_eq!(Layout::new(unmarked.path(), "repo").existing("space"), None);
+}

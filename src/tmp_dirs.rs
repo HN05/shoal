@@ -74,6 +74,17 @@ impl Layout {
         Ok(directory)
     }
 
+    /// The temporary directory of the workspace or chat `id` when it is one
+    /// Shoal created: a directory, not a link, in the directory marked for
+    /// this repository. What works in it counts as the space's, so a link
+    /// put in its place must not lead elsewhere.
+    pub fn existing(&self, id: &str) -> Option<PathBuf> {
+        let directory = self.locate(id);
+        (is_marked_dir(&self.root, &self.owner)
+            && fs::symlink_metadata(&directory).is_ok_and(|metadata| metadata.is_dir()))
+        .then_some(directory)
+    }
+
     /// The IDs whose temporary directories exist; none when the directory is
     /// not the one Shoal created for this repository.
     pub fn list(&self) -> Result<Vec<String>> {

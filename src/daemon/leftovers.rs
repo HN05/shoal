@@ -12,10 +12,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    daemon::{
-        space_processes::{WorktreeTies, chat_space},
-        workspace::Manager,
-    },
+    daemon::{space_processes::WorktreeTies, workspace::Manager},
     process::{
         described,
         identity::{
@@ -148,7 +145,9 @@ impl Manager {
             let ties = WorktreeTies::when(workspace.path.is_dir());
             spaces.push(self.workspace_space(&workspace, ties).await?);
         }
-        spaces.extend(self.chats().await?.iter().map(chat_space));
+        for chat in self.chats().await? {
+            spaces.push(self.chat_space(&chat).await?);
+        }
         Ok(spaces)
     }
 

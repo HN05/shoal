@@ -81,7 +81,7 @@ impl Manager {
             Err(error) => {
                 let chat = self.running_chat(selector).await?.ok_or(error)?;
                 let processes = self
-                    .stop_untracked(chat_space(&chat), selection, requester)
+                    .stop_untracked(self.chat_space(&chat).await?, selection, requester)
                     .await?;
                 return Ok(Stopped {
                     space: chat.name,
@@ -137,11 +137,25 @@ impl Manager {
             .then(worktree)
             .into_iter()
             .collect();
-        directories.extend(Layout::of(&repo).map(|layout| layout.locate(&workspace.id)));
+        directories.extend(Layout::of(&repo).and_then(|layout| layout.existing(&workspace.id)));
         Ok(Space {
             id: workspace.id.clone(),
             directories,
             programs: (ties != WorktreeTies::None).then(worktree),
+        })
+    }
+
+    /// What ties processes to `chat`: its identity and its temporary
+    /// directory, while that is the one Shoal created.
+    pub(crate) async fn chat_space(&self, chat: &Chat) -> Result<Space> {
+        let repo = self.repository(&chat.repository_id).await?;
+        Ok(Space {
+            id: chat.id.clone(),
+            directories: Layout::of(&repo)
+                .and_then(|layout| layout.existing(&chat.id))
+                .into_iter()
+                .collect(),
+            programs: None,
         })
     }
 
@@ -217,15 +231,6 @@ impl Manager {
             .filter(|process| selection.takes(process))
             .map(|process| process.identity)
             .collect())
-    }
-}
-
-/// What ties processes to `chat`: its identity and temporary directory.
-pub(crate) fn chat_space(chat: &Chat) -> Space {
-    Space {
-        id: chat.id.clone(),
-        directories: chat.tmp_dir.iter().cloned().collect(),
-        programs: None,
     }
 }
 
