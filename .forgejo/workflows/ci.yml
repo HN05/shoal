@@ -202,6 +202,8 @@ jobs:
           . .forgejo/scripts/lock-target-dir.sh
           cargo clean --workspace
           cargo clippy --locked --all-targets -- -D warnings
+          # Apps build shoal::client alone, without the CLI and the daemon.
+          cargo clippy --locked --lib --no-default-features -- -D warnings
           # A workspace build unifies features; each crate must also build alone.
           for manifest in crates/*/Cargo.toml; do
             cargo check --locked --manifest-path "$manifest"
@@ -210,7 +212,7 @@ jobs:
           # Exercise the libc used by distributed Linux binaries too: GNU-only
           # tests cannot catch musl's unsupported Metadata::created().
           musl_target="$(rustc -vV | sed -n 's/^host: //p' | sed 's/-gnu$/-musl/')"
-          cargo-zigbuild test --locked --target "$musl_target" --bin shoal daemon::workspace::identity
+          cargo-zigbuild test --locked --target "$musl_target" --lib daemon::workspace::identity
 
       - name: Cross-build release binaries (manual CI runs)
         if: github.event_name == 'workflow_dispatch'
