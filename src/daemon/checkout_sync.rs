@@ -13,6 +13,7 @@ use std::{
 use anyhow::{Error, Result};
 use tokio::{
     sync::Notify,
+    task::{self, JoinError, JoinSet},
     time::{Instant, sleep_until},
 };
 
@@ -163,7 +164,7 @@ impl Manager {
         self.syncs
             .lock()
             .get(repository_id)
-            .map(|health| health.view(repository_id))
+            .and_then(|health| health.view(repository_id))
     }
 
     /// The registered repositories whose syncs have failed long enough to
@@ -176,7 +177,7 @@ impl Manager {
             .iter()
             .filter_map(|repo| {
                 let health = syncs.get(&repo.id)?;
-                health.needs_user(now).then(|| health.view(&repo.id))
+                health.needs_user(now).then(|| health.view(&repo.id))?
             })
             .collect())
     }
@@ -207,12 +208,29 @@ impl Manager {
     }
 
     /// Sync each repository, logging the ones that fail.
-    async fn sync_all(&self, repository_ids: &[String]) {
-        for repository_id in repository_ids {
-            if let Some(error) = self.sync(repository_id).await.error() {
-                log!("sync of repository {repository_id}: {error:#}");
+    /// Every registered repository, forgetting the syncs of those removed.
+    async fn registered_repository_ids(&self) -> Vec<String> {
+        match self.repositories().await {
+            Ok(repositories) => {
+                let ids: Vec<String> = repositories.into_iter().map(|repo| repo.id).collect();
+                self.syncs.retain(&ids);
+                ids
+            }
+            Err(error) => {
+                log!("checkout sync: {error:#}");
+                Vec::new()
             }
         }
+    }
+
+    /// A scheduled or requested sync: logged when it fails, and told to the
+    /// user once it has failed long enough.
+    async fn sync_in_background(&self, repository_id: &str) {
+        let _operation = self.gates.operation().await;
+        if let Some(error) = self.sync(repository_id).await.error() {
+            log!("sync of repository {repository_id}: {error:#}");
+        }
+        self.notify_failing_syncs().await;
     }
 
     /// Tell the user about each sync that has failed long enough, once.
@@ -246,32 +264,69 @@ fn failure_message(name: &str, failing_since: Option<u64>, error: &str) -> Strin
 /// requested one as soon as it is asked for.
 pub async fn run(manager: Arc<Manager>) {
     let mut next = Instant::now();
+    let mut syncing = Syncing::default();
     loop {
-        let repository_ids = if Instant::now() >= next {
+        let due = if Instant::now() >= next {
             next = Instant::now() + SYNC_INTERVAL;
             manager.syncs.take_requested();
-            match manager.repositories().await {
-                Ok(repositories) => {
-                    let ids: Vec<String> = repositories.into_iter().map(|repo| repo.id).collect();
-                    manager.syncs.retain(&ids);
-                    ids
-                }
-                Err(error) => {
-                    log!("checkout sync: {error:#}");
-                    Vec::new()
-                }
-            }
+            manager.registered_repository_ids().await
         } else {
             manager.syncs.take_requested()
         };
-        {
-            let _operation = manager.gates.operation().await;
-            manager.sync_all(&repository_ids).await;
-            manager.notify_failing_syncs().await;
-        }
+        syncing.start(&manager, due);
         tokio::select! {
             _ = sleep_until(next) => {}
             _ = manager.syncs.wake.notified() => {}
+            Some(finished) = syncing.tasks.join_next_with_id(), if !syncing.tasks.is_empty() => {
+                syncing.finished(&manager, finished);
+            }
+        }
+    }
+}
+
+/// The repositories syncing now, each in a task of its own so one whose fetch
+/// hangs or whose Git gate is held delays no other, and those due again
+/// while they sync, which sync once more when they finish.
+#[derive(Default)]
+struct Syncing {
+    tasks: JoinSet<()>,
+    running: HashMap<task::Id, String>,
+    again: HashSet<String>,
+}
+
+impl Syncing {
+    fn start(&mut self, manager: &Arc<Manager>, repository_ids: Vec<String>) {
+        for repository_id in repository_ids {
+            if self
+                .running
+                .values()
+                .any(|running| running == &repository_id)
+            {
+                self.again.insert(repository_id);
+                continue;
+            }
+            let manager = manager.clone();
+            let id = repository_id.clone();
+            let handle = self
+                .tasks
+                .spawn(async move { manager.sync_in_background(&id).await });
+            self.running.insert(handle.id(), repository_id);
+        }
+    }
+
+    fn finished(&mut self, manager: &Arc<Manager>, finished: Result<(task::Id, ()), JoinError>) {
+        let id = match finished {
+            Ok((id, ())) => id,
+            Err(error) => {
+                log!("checkout sync task failed: {error}");
+                error.id()
+            }
+        };
+        let Some(repository_id) = self.running.remove(&id) else {
+            return;
+        };
+        if self.again.remove(&repository_id) {
+            self.start(manager, vec![repository_id]);
         }
     }
 }

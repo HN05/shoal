@@ -1,4 +1,9 @@
-use std::{fs, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use futures_util::FutureExt as _;
 
@@ -17,26 +22,38 @@ struct Fixture {
     author: PathBuf,
 }
 
+/// Register a checkout named `name` under `root` whose `main` tracks its
+/// own `origin`; returns it, its ID and a clone that pushes to the origin.
+async fn checkout(root: &Path, manager: &Manager, name: &str) -> (PathBuf, String, PathBuf) {
+    let repo = repository(root, name);
+    let origin = root.join(format!("{name}-origin.git"));
+    let origin = origin.to_str().unwrap();
+    git(root, &["clone", "--bare", repo.to_str().unwrap(), origin]);
+    git(&repo, &["remote", "add", "origin", origin]);
+    git(&repo, &["fetch", "origin"]);
+    git(&repo, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let author = root.join(format!("{name}-author"));
+    git(root, &["clone", origin, author.to_str().unwrap()]);
+    let repo_id = manager
+        .register_repository(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap()
+        .id;
+    (repo, repo_id, author)
+}
+
+/// Push a new commit to the origin `author` cloned; returns it.
+fn push(author: &Path, contents: &str) -> String {
+    fs::write(author.join("upstream"), contents).unwrap();
+    commit(author, "upstream");
+    git(author, &["push", "origin", "main"]);
+    git(author, &["rev-parse", "HEAD"])
+}
+
 impl Fixture {
     async fn new() -> Self {
         let (root, manager) = manager().await;
-        let repo = repository(root.path(), "repo");
-        let origin = root.path().join("origin.git");
-        let origin = origin.to_str().unwrap();
-        git(
-            root.path(),
-            &["clone", "--bare", repo.to_str().unwrap(), origin],
-        );
-        git(&repo, &["remote", "add", "origin", origin]);
-        git(&repo, &["fetch", "origin"]);
-        git(&repo, &["branch", "--set-upstream-to=origin/main", "main"]);
-        let author = root.path().join("author");
-        git(root.path(), &["clone", origin, author.to_str().unwrap()]);
-        let repo_id = manager
-            .register_repository(repo.to_str().unwrap().into(), None, None)
-            .await
-            .unwrap()
-            .id;
+        let (repo, repo_id, author) = checkout(root.path(), &manager, "repo").await;
         Self {
             root,
             manager,
@@ -48,10 +65,7 @@ impl Fixture {
 
     /// Push a new commit to `origin/main`; returns it.
     fn push(&self, contents: &str) -> String {
-        fs::write(self.author.join("upstream"), contents).unwrap();
-        commit(&self.author, "upstream");
-        git(&self.author, &["push", "origin", "main"]);
-        git(&self.author, &["rev-parse", "HEAD"])
+        push(&self.author, contents)
     }
 
     fn break_remote(&self) {
@@ -147,4 +161,25 @@ async fn a_lasting_failure_shows_in_status_then_the_inbox_and_one_notification()
         .collect();
     assert_eq!(told.len(), 1, "{notifications:?}");
     assert!(told[0].message.contains("retry with shoal repo sync"));
+}
+
+#[tokio::test]
+async fn a_repository_syncs_while_another_ones_git_gate_is_held() {
+    let f = Fixture::new().await;
+    let (other, other_id, other_author) = checkout(f.root.path(), &f.manager, "other").await;
+    let pushed = push(&other_author, "remote\n");
+    let _held = f.manager.gates.lock_git(&f.repo_id).await;
+    let syncing = tokio::spawn(super::run(f.manager.clone()));
+    // A hang guard only: the other repository's sync never needs the held gate.
+    tokio::time::timeout(Duration::from_secs(120), async {
+        while f.manager.checkout_sync(&other_id).is_none() {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .expect("the other repository never synced");
+    syncing.abort();
+    let sync = f.manager.checkout_sync(&other_id);
+    assert_eq!(git(&other, &["rev-parse", "main"]), pushed, "{sync:?}");
+    assert_eq!(f.manager.checkout_sync(&f.repo_id), None);
 }

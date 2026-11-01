@@ -54,13 +54,14 @@ impl Health {
         failure.error = format!("{error:#}");
     }
 
-    pub(super) fn view(&self, repository_id: &str) -> CheckoutSync {
-        CheckoutSync {
+    /// What the finished syncs found; none before the first one finishes.
+    pub(super) fn view(&self, repository_id: &str) -> Option<CheckoutSync> {
+        (self.synced_at.is_some() || self.failure.is_some()).then(|| CheckoutSync {
             repository_id: repository_id.to_owned(),
             synced_at: self.synced_at,
             failing_since: self.failure.as_ref().map(|failure| failure.since_unix),
             error: self.failure.as_ref().map(|failure| failure.error.clone()),
-        }
+        })
     }
 
     pub(super) fn needs_user(&self, now: Instant) -> bool {
