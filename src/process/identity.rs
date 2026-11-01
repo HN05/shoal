@@ -1394,21 +1394,13 @@ pub async fn group_exited(group: u32) -> Result<()> {
     Ok(())
 }
 
-/// The live processes `identity` started, directly or through others,
-/// followed by the unique IDs of their lineage, so a reused PID never counts
-/// and they count after it exits; none when its lineage is unknown. A
-/// workspace's process among them, as [`owned_by_workspace`] tells with
-/// `wrappers`, is left out with what it started.
-pub async fn started_by(identity: &Identity, wrappers: &[Identity]) -> Result<Vec<Identity>> {
-    started_by_any(std::slice::from_ref(identity), wrappers).await
-}
-
-/// [`started_by`] for every process of `identities`, which may have exited:
-/// a process one of them started counts after the one between them exits.
-pub async fn started_by_any(
-    identities: &[Identity],
-    wrappers: &[Identity],
-) -> Result<Vec<Identity>> {
+/// The live processes those of `identities` started, directly or through
+/// others, followed by the unique IDs of their lineage, so a reused PID
+/// never counts and they count after it and those between them exit; none
+/// from one whose lineage is unknown. A workspace's process among them, as
+/// [`owned_by_workspace`] tells with `wrappers`, is left out with what it
+/// started.
+pub async fn started_by(identities: &[Identity], wrappers: &[Identity]) -> Result<Vec<Identity>> {
     let roots: HashSet<u64> = identities
         .iter()
         .filter_map(Identity::lineage_root)

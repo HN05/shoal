@@ -56,7 +56,7 @@ pub(super) async fn owned(
         .filter(|process| !wrappers.contains(process))
         .collect();
     let ancestors = [std::slice::from_ref(recorded), stopped].concat();
-    for started in identity::started_by_any(&ancestors, wrappers).await? {
+    for started in identity::started_by(&ancestors, wrappers).await? {
         if !owned.contains(&started) {
             owned.push(started);
         }
@@ -158,21 +158,23 @@ impl<'a> ChatProcesses<'a> {
     /// Stop every process the chat owns, again while stopping them starts
     /// others, refusing with those still running after the last round.
     pub(super) async fn stop(&self) -> Result<()> {
-        stop_in_rounds(|_| self.owned()).await
+        stop_in_rounds(|stopped| async move { self.owned(&stopped).await }).await
     }
 
-    /// The live processes the chat owns now. Each is verified as its own:
-    /// carrying the chat's identity, descended from its process by unique
-    /// IDs, or still in its group once captured, which a process that took
-    /// a reused PID cannot join; none is a workspace's.
-    async fn owned(&self) -> Result<Vec<Identity>> {
+    /// The live processes the chat owns now, given those a stop of it
+    /// already ended. Each is verified as its own: carrying the chat's
+    /// identity, descended by unique IDs from its process or one of
+    /// `stopped`, or still in its group once captured, which a process that
+    /// took a reused PID cannot join; none is a workspace's.
+    async fn owned(&self, stopped: &[Identity]) -> Result<Vec<Identity>> {
         // A wrapper started in the chat carries its marker, not its workspace's.
         let mut owned: Vec<Identity> = identity::scan_chat(self.chat)
             .await?
             .into_iter()
             .filter(|process| !self.wrappers.contains(process))
             .collect();
-        let started = identity::started_by(&self.process, &self.wrappers).await?;
+        let ancestors = [std::slice::from_ref(&self.process), stopped].concat();
+        let started = identity::started_by(&ancestors, &self.wrappers).await?;
         let grouped = self.grouped().await?;
         let live = identity::alive(&self.process)?.then(|| self.process.clone());
         for process in started.into_iter().chain(grouped).chain(live) {
