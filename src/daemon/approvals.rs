@@ -702,10 +702,10 @@ impl Manager {
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
         })?;
-        ensure!(
+        crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            "approval request {id} changed since it was shown; choose again"
-        );
+            format_args!("approval request {id}"),
+        )?;
         if request.target.is_proposal() {
             return self.decide_proposal(request, approve, details).await;
         }
@@ -734,10 +734,10 @@ impl Manager {
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
         })?;
-        ensure!(
+        crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            "approval request {id} changed since it was shown; choose again"
-        );
+            format_args!("approval request {id}"),
+        )?;
         let decided = self
             .record_routed_decision(coordinator, &request, approve)
             .await?;
@@ -777,10 +777,10 @@ impl Manager {
                     stored.decider.as_deref() == Some(coordinator.as_str()),
                     "approval request {id} is not routed to this workspace"
                 );
-                ensure!(
+                crate::daemon::refusal::ensure_unchanged(
                     stored.is_same(&request),
-                    "approval request {id} changed since it was shown; choose again"
-                );
+                    format_args!("approval request {id}"),
+                )?;
                 if !may_decide(&tx, &coordinator, &stored)? {
                     return Ok(None);
                 }
@@ -890,10 +890,10 @@ impl Manager {
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
         })?;
-        ensure!(
+        crate::daemon::refusal::ensure_unchanged(
             shown.is_none_or(|shown| request.is_same(&shown)),
-            "approval request {id} changed since it was shown; choose again"
-        );
+            format_args!("approval request {id}"),
+        )?;
         ensure!(
             request.decider.as_deref() == Some(workspace.id.as_str()),
             "approval request {id} is not {}'s to decide",

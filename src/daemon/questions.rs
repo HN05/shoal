@@ -338,10 +338,10 @@ fn record_answer(
     shown: Option<&Question>,
 ) -> Result<Question> {
     let mut question = open_question(tx, id)?;
-    ensure!(
+    crate::daemon::refusal::ensure_unchanged(
         shown.is_none_or(|shown| question.is_same(shown)),
-        "question {id} changed since it was shown; choose again"
-    );
+        format_args!("question {id}"),
+    )?;
     let answer = answer.resolve(&question.ask)?;
     let message = question.answer_message(&answer);
     let message_id = agent_messages::insert(tx, &question.workspace_id, &message, &[])?;
@@ -381,10 +381,10 @@ fn withdraw(
             )
         })?;
     question.ensure_open()?;
-    ensure!(
+    crate::daemon::refusal::ensure_unchanged(
         shown.is_none_or(|shown| question.id == shown.id && question.is_same(shown)),
-        "question {id} changed since it was shown; choose again"
-    );
+        format_args!("question {id}"),
+    )?;
     let closed_at = i64::try_from(crate::time::unix_seconds())?;
     tx.execute(
         "UPDATE questions SET closed_at=?2,withdrawn=1 WHERE number=?1",

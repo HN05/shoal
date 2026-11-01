@@ -46,6 +46,16 @@ impl fmt::Display for Refusal {
 
 impl std::error::Error for Refusal {}
 
+/// Refuse a decision on `record`, which changed since its decider was shown
+/// it, as gone: a later record reusing its number is another one.
+pub(crate) fn ensure_unchanged(same: bool, record: impl fmt::Display) -> anyhow::Result<()> {
+    if same {
+        return Ok(());
+    }
+    let message = format!("{record} changed since it was shown; choose again");
+    Err(Refusal::new(Reason::NotFound, message).into())
+}
+
 impl Reason {
     /// The code the daemon answers a refusal for this reason with.
     pub(crate) fn code(self) -> crate::protocol::ErrorCode {
