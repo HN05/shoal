@@ -24,10 +24,14 @@ use crate::{
 /// restore fails waits for `shoal resume`, and the user learns why.
 /// Returns the restores, which run on their own.
 pub(super) async fn restore_automatic(manager: &Arc<Manager>) -> Result<Vec<JoinHandle<()>>> {
+    // A shutdown holds the queue before it saves chats, so a claim after
+    // its save, which would find their agents running, sees the hold.
+    let saving = manager.chat_saves.lock().await;
     if manager.agent_queue.suspended() {
         return Ok(Vec::new());
     }
     let claimed = manager.store.run(claim_automatic).await?;
+    drop(saving);
     Ok(claimed
         .into_iter()
         .map(|chat| {

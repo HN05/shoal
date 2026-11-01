@@ -103,3 +103,30 @@ async fn a_saved_chat_whose_process_runs_on_is_running() {
     assert!(manager.running_chat(&chat.id).await.unwrap().is_some());
     assert_eq!(resumed(&chat), 0);
 }
+
+#[tokio::test]
+async fn a_restore_sweep_during_a_save_waits_and_sees_the_shutdown() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    // A shutdown's save under way: its agent still runs.
+    let saving = manager.chat_saves.lock().await;
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE chats SET restore='automatic'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let sweep = tokio::spawn({
+        let manager = manager.clone();
+        async move { restore_automatic(&manager).await.unwrap().len() }
+    });
+    tokio::task::yield_now().await;
+    manager.agent_queue.suspend(true).await;
+    drop(saving);
+
+    assert_eq!(sweep.await.unwrap(), 0);
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Automatic));
+}
