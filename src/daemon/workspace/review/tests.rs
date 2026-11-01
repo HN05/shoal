@@ -560,3 +560,35 @@ async fn ready_takes_marked_prs_out_of_draft_and_unready_can_return_them() {
     assert!(draft());
     assert_eq!(marks().await, 0);
 }
+
+#[tokio::test]
+async fn listings_leave_staleness_unknown_on_a_volume_whose_access_stalls() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "ready".into(), None, None, None)
+        .await
+        .unwrap();
+    manager
+        .mark_ready(&workspace.id, Selection::default(), false)
+        .await
+        .unwrap();
+    let listed = manager.visible_workspaces(None).await.unwrap();
+    assert_eq!(listed[0].review[0].stale, Some(false));
+
+    tokio::time::pause();
+    let stalled = manager
+        .check_volume(&workspace.path, std::future::pending::<Result<()>>())
+        .await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+
+    let listed = manager.visible_workspaces(None).await.unwrap();
+    assert_eq!(listed[0].review[0].stale, None);
+    let inspection = manager.inspect_workspace(&workspace.id).await.unwrap();
+    assert_eq!(inspection.workspace.review[0].stale, None);
+}

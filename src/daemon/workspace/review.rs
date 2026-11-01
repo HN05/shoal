@@ -1,7 +1,7 @@
 //! Ready-for-review marks: an agent's statement that linked work is ready at a
 //! commit. Integrations read them from the event journal; they neither notify
 //! the user nor affect completion or cleanup.
-use std::path::Path;
+use std::{path::Path, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, params};
@@ -18,6 +18,16 @@ use crate::{
     hooks::{self, Hook, HookKind},
     model::{ReviewMark, Workspace},
 };
+
+/// How long a listing waits for its review checks before it leaves their
+/// staleness unknown, so a volume whose access stalls cannot hold up the
+/// reply.
+const CHECK_LIMIT: Duration = Duration::from_secs(3);
+
+/// When the review checks of a listing that starts now give up.
+pub(super) fn check_deadline() -> tokio::time::Instant {
+    tokio::time::Instant::now() + CHECK_LIMIT
+}
 
 pub(crate) fn list(db: &Connection, id: &str) -> Result<Vec<ReviewMark>> {
     Ok(db
@@ -282,15 +292,30 @@ impl Manager {
     }
 
     /// Say whether each mark still describes HEAD. HEAD that cannot be read
-    /// leaves staleness unknown rather than failing a listing.
-    pub async fn annotate_review(&self, workspace: &mut Workspace) {
+    /// by `deadline`, or is on a volume whose access stalls, leaves staleness
+    /// unknown rather than failing or holding up a listing.
+    pub async fn annotate_review(&self, workspace: &mut Workspace, deadline: tokio::time::Instant) {
         if workspace.review.is_empty() {
             return;
         }
-        let head = current_head(workspace).await.ok();
+        let head = self.listed_head(workspace, deadline).await;
         for mark in &mut workspace.review {
             mark.stale = head.as_ref().map(|head| head != &mark.head);
         }
+    }
+
+    async fn listed_head(
+        &self,
+        workspace: &Workspace,
+        deadline: tokio::time::Instant,
+    ) -> Option<String> {
+        if self.volume_access.stalled(&workspace.path).is_some() {
+            return None;
+        }
+        tokio::time::timeout_at(deadline, current_head(workspace))
+            .await
+            .ok()?
+            .ok()
     }
 }
 

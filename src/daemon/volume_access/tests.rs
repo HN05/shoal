@@ -39,6 +39,7 @@ async fn a_check_that_runs_out_stalls_its_volume_once_until_a_recheck_finishes()
         .await;
     assert!(result.is_err());
     assert_eq!(again, None);
+    assert_eq!(access.stalled(other), Some(stall.clone()));
 
     tokio::time::advance(RECHECK_AFTER).await;
     let (result, again) = access.check(other, never()).await;
@@ -50,6 +51,7 @@ async fn a_check_that_runs_out_stalls_its_volume_once_until_a_recheck_finishes()
     let (result, _) = access.check(other, async { Ok(7) }).await;
     assert_eq!(result.unwrap(), 7);
     assert_eq!(access.stalls(), []);
+    assert_eq!(access.stalled(Path::new(WORKSPACE)), None);
 }
 
 #[tokio::test(start_paused = true)]

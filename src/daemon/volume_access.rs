@@ -75,6 +75,13 @@ impl VolumeAccess {
         (Err(error), new.then_some(stall))
     }
 
+    /// The stall of `path`'s volume, however long ago it was checked.
+    pub(crate) fn stalled(&self, path: &Path) -> Option<VolumeStall> {
+        lock(&self.stalls)
+            .get(&volume(path))
+            .map(|stalled| stalled.report.clone())
+    }
+
     /// Every stalled volume.
     pub(crate) fn stalls(&self) -> Vec<VolumeStall> {
         lock(&self.stalls)

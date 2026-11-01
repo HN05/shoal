@@ -264,9 +264,10 @@ impl Manager {
             workspaces.retain(|w| subtree.contains(&w.id));
             workspaces.sort_by_key(|w| w.id != owner);
         }
+        let deadline = review::check_deadline();
         futures_util::stream::iter(&mut workspaces)
             .for_each_concurrent(REVIEW_CHECK_CONCURRENCY, |workspace| {
-                self.annotate_review(workspace)
+                self.annotate_review(workspace, deadline)
             })
             .await;
         for workspace in &mut workspaces {
@@ -353,7 +354,8 @@ impl Manager {
 
     pub async fn inspect_workspace(&self, selector: &str) -> Result<Inspection> {
         let mut workspace = self.workspace(selector).await?;
-        self.annotate_review(&mut workspace).await;
+        self.annotate_review(&mut workspace, review::check_deadline())
+            .await;
         let simulators = self.list_simulators(Some(&workspace.id)).await?;
         let issue = self.issue_registration(&workspace.id).await?;
         let pr_cleanup = self.pr_registration(&workspace.id).await?;

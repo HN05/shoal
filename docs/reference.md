@@ -3693,7 +3693,9 @@ marking linked items replaces a mark made while nothing was linked.
 Marks never notify, record completion, or affect cleanup; use `shoal alerts send` to
 ask for attention. New commits make a mark outdated: `work` shows
 `ready (outdated)`, and `status`, `inspect` and `work --json` list
-`review` marks with `kind`, `url`, `head`, `created_at` and `stale`.
+`review` marks with `kind`, `url`, `head`, `created_at` and `stale`, which
+is absent when HEAD cannot be read within three seconds or is on a stalled
+volume.
 `shoal inbox` lists every current mark across repositories. `unready` fails when
 it selects no mark. Unlinking an item withdraws its mark, and removal deletes
 all marks. Each mark and withdrawal
