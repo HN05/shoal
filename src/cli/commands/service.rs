@@ -189,6 +189,25 @@ pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Resul
     Ok(0)
 }
 
+/// The running daemon and each volume whose file access stalls.
+fn status_message(status: &crate::protocol::DaemonStatus) -> String {
+    let mut message = format!(
+        "Daemon running (PID {}, version {}{})",
+        status.pid,
+        status.version,
+        match status.unread_notifications {
+            0 => String::new(),
+            n => format!(", {n} new notifications"),
+        }
+    );
+    let now = crate::time::unix_seconds() as i64;
+    for stall in &status.volume_stalls {
+        let since = crate::time::local_ago(stall.since as i64, now);
+        message.push_str(&format!("\n{} (since {since})", stall.message()));
+    }
+    message
+}
+
 pub(super) async fn run(
     ctx: Context,
     command: DaemonCommand,
@@ -205,20 +224,11 @@ pub(super) async fn run(
             let running = status.is_some();
             let message = status
                 .as_ref()
-                .map(|s| {
-                    format!(
-                        "Daemon running (PID {}, version {}{})",
-                        s.pid,
-                        s.version,
-                        match s.unread_notifications {
-                            0 => String::new(),
-                            n => format!(", {n} new notifications"),
-                        }
-                    )
-                })
+                .map(status_message)
                 .unwrap_or_else(|| "Daemon is not running".into());
+            let healthy = status.as_ref().is_some_and(|s| s.volume_stalls.is_empty());
             ctx.emit_styled(
-                if running {
+                if healthy {
                     Style::Success
                 } else {
                     Style::Warning
