@@ -447,3 +447,33 @@ fn stream_payloads_and_acknowledgements_preserve_remote_errors() {
 }
 
 mod requests;
+
+#[tokio::test]
+async fn a_list_too_large_for_a_frame_arrives_in_pages_that_join() {
+    let entries: Vec<String> = (0..4000).map(|n| format!("{n:>40}")).collect();
+    let response = Response::new(7, Body::ApiResponse(entries.clone()));
+    let frames = response.frames().unwrap();
+    assert!(frames.len() > 1);
+    let mut wire = Vec::new();
+    for (index, frame) in frames.iter().enumerate() {
+        assert_eq!(frame.more, index + 1 < frames.len());
+        write(&mut wire, frame).await.unwrap();
+    }
+    let mut reader = tokio::io::BufReader::new(wire.as_slice());
+    let joined = read_response(&mut reader).await.unwrap();
+    assert!(!joined.more);
+    assert_eq!(joined.id, 7);
+    assert_eq!(Vec::<String>::try_from(joined.body).unwrap(), entries);
+
+    // A response that fits is one frame, without the continuation flag.
+    let small = Response::new(8, Body::ApiResponse(vec!["one".into()]));
+    let frames = small.frames().unwrap();
+    assert_eq!(frames.len(), 1);
+    assert!(
+        !serde_json::to_value(&frames[0])
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("more")
+    );
+}

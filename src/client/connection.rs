@@ -261,7 +261,7 @@ async fn connect(paths: &Paths) -> Result<UnixStream> {
 }
 
 async fn reply(stream: &mut (impl AsyncBufRead + Unpin), request: &Request) -> Result<Body> {
-    let reply: Response = protocol::read_buffered(stream).await?;
+    let reply = protocol::read_response(stream).await?;
     if reply.protocol != protocol::VERSION {
         return Err(ProtocolMismatch {
             daemon: reply.protocol,
@@ -311,7 +311,7 @@ where
     let (mut reader, body) = open_buffered(daemon, method).await?;
     let mut items = Vec::<T>::try_from(body)?;
     loop {
-        let response: Response = protocol::read_buffered(&mut reader).await?;
+        let response = protocol::read_response(&mut reader).await?;
         match response.body {
             Body::Ok => return Ok(items),
             body => items.extend(Vec::<T>::try_from(body)?),

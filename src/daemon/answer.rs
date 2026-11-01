@@ -107,10 +107,11 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
     }
 }
 
-/// Write the reply to `request_id`, or an error saying it does not fit in a
-/// frame; the oversized reply still fails the connection, for the log.
+/// Write the reply to `request_id`, a list in pages when it takes more than
+/// one frame, or an error saying another reply does not fit in a frame; the
+/// oversized reply still fails the connection, for the log.
 async fn reply(stream: &mut (impl AsyncWrite + Unpin), request_id: u64, body: Body) -> Result<()> {
-    let Err(error) = protocol::write(stream, &Response::new(request_id, body)).await else {
+    let Err(error) = write_frames(stream, Response::new(request_id, body)).await else {
         return Ok(());
     };
     if let Some(too_large) = error.downcast_ref::<protocol::FrameTooLarge>() {
@@ -119,6 +120,17 @@ async fn reply(stream: &mut (impl AsyncWrite + Unpin), request_id: u64, body: Bo
         protocol::write(stream, &Response::new(request_id, body)).await?;
     }
     Err(error)
+}
+
+/// Write `response` in the frames it takes.
+pub(super) async fn write_frames(
+    stream: &mut (impl AsyncWrite + Unpin),
+    response: Response,
+) -> Result<()> {
+    for frame in response.frames()? {
+        protocol::write(stream, &frame).await?;
+    }
+    Ok(())
 }
 
 /// Send each page, then `ok`.

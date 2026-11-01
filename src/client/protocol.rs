@@ -402,6 +402,10 @@ pub enum Lifetime {
 pub struct Response {
     pub protocol: u32,
     pub id: u64,
+    /// More frames of this response follow, each continuing its list: a
+    /// list too large for one frame arrives in pages.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
     #[serde(flatten)]
     pub body: Body,
 }
@@ -411,8 +415,30 @@ impl Response {
         Self {
             protocol: VERSION,
             id,
+            more: false,
             body,
         }
+    }
+
+    /// The frames that send this response: itself, or the pages of a list
+    /// too large for one frame, each but the last marked [`Self::more`].
+    pub fn frames(self) -> Result<Vec<Self>> {
+        if serde_json::to_vec(&self)?.len() < MAX_FRAME {
+            return Ok(vec![self]);
+        }
+        let mut frames: Vec<_> = self
+            .body
+            .pages()?
+            .into_iter()
+            .map(|body| Self {
+                more: true,
+                ..Self::new(self.id, body)
+            })
+            .collect();
+        if let Some(last) = frames.last_mut() {
+            last.more = false;
+        }
+        Ok(frames)
     }
 }
 
@@ -610,6 +636,69 @@ response_bodies! {
     OperationEvent(operations::OperationEvent),
     OperationEnded(operations::Ended),
 }
+
+// The lists a response sends in pages when they do not fit in one frame.
+macro_rules! paged_bodies {
+    ($($variant:ident),* $(,)?) => {
+        impl Body {
+            /// This body in pages that each fit in a frame: a list's items,
+            /// in order; any other body whole.
+            pub fn pages(self) -> Result<Vec<Self>> {
+                Ok(match self {
+                    $(Self::$variant(items) => frame_pages(items)?
+                        .into_iter()
+                        .map(Self::$variant)
+                        .collect(),)*
+                    body => vec![body],
+                })
+            }
+
+            /// Append `page`, the next page of this list.
+            pub fn extend(&mut self, page: Self) -> Result<()> {
+                match (self, page) {
+                    $((Self::$variant(items), Self::$variant(more)) => items.extend(more),)*
+                    (body, page) => anyhow::bail!(
+                        "a {} response cannot continue with {}",
+                        body.variant_name(),
+                        page.variant_name()
+                    ),
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+paged_bodies!(
+    Repositories,
+    MovedRepositories,
+    QueueEntries,
+    RunningAgents,
+    OwnedPlaces,
+    Holds,
+    AttachedFiles,
+    Demos,
+    Workspaces,
+    Chats,
+    Branches,
+    Items,
+    ApiResponse,
+    Downloaded,
+    ReviewMarks,
+    CiRunJobs,
+    CiRuns,
+    RemovedWorkspaces,
+    AgentEnvironments,
+    KeptBranches,
+    UntrackedWorktrees,
+    Reconciled,
+    Notifications,
+    AgentMessages,
+    ReviewPieces,
+    ApprovalRequests,
+    Simulators,
+    SimHistory,
+);
 
 impl TryFrom<Body> for () {
     type Error = anyhow::Error;
@@ -847,6 +936,23 @@ pub async fn read_buffered<T: DeserializeOwned>(
         .into());
     }
     serde_json::from_slice(&bytes).context("invalid protocol message")
+}
+
+/// A response, joining the pages of one sent in several frames.
+pub async fn read_response(
+    stream: &mut (impl tokio::io::AsyncBufRead + Unpin),
+) -> Result<Response> {
+    let mut response: Response = read_buffered(stream).await?;
+    while response.more {
+        let page: Response = read_buffered(stream).await?;
+        ensure!(
+            page.id == response.id,
+            "a response page answers another request"
+        );
+        response.body.extend(page.body)?;
+        response.more = page.more;
+    }
+    Ok(response)
 }
 
 /// `items` in pages that each fit in a frame with room for the envelope,
