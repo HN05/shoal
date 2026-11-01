@@ -20,7 +20,7 @@ pub(in crate::cli::commands) async fn link_pull(
     let linked = request::<()>(
         &ctx.paths,
         ItemMethod::SetPr {
-            workspace: workspace.id.clone(),
+            space: workspace.id.clone(),
             action: crate::daemon::links::pr::Action::Watch { url: url.clone() },
         },
     )

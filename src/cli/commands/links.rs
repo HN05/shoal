@@ -8,7 +8,7 @@ use crate::client::output::workspaces::Registered;
 use crate::{
     agent::Agent,
     cli::{
-        args::items::{ItemArgs, RelationArgs},
+        args::items::{ItemArgs, RelationArgs, WorkspaceItems},
         client,
         context::Context,
         ui,
@@ -19,13 +19,21 @@ use crate::{
         items::link::{ItemKind, Link, LinkKind, LinkTarget, Selection},
     },
     git,
-    model::{Relation, Repository, ReviewMark, Selected, SelectedItem, Workspace},
+    model::{PresentSpace, Relation, Repository, ReviewMark, Selected, SelectedItem},
     protocol::{AssignmentMethod, ItemContext, ItemMethod},
 };
 
-/// The workspace and the items selected in it, with the kind of a bare number
+/// The space and the items selected in it, with the kind of a bare number
 /// resolved.
 pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Selection)> {
+    let selection = Selection::parse(items.kind_or_url, items.item)?;
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let selection = resolve_kind(ctx, &space, selection).await?;
+    Ok((space, selection))
+}
+
+/// [`select`] for the commands that still name a workspace.
+async fn select_in_workspace(ctx: &Context, items: WorkspaceItems) -> Result<(String, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let workspace =
         ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
@@ -33,10 +41,10 @@ pub(super) async fn select(ctx: &Context, items: ItemArgs) -> Result<(String, Se
     Ok((workspace, selection))
 }
 
-/// The items selected in the named or current workspace, with the kind of a
-/// bare number resolved, or in the checkout of the registered repository
-/// `repo` names or the current directory or a URL is in, where only a number
-/// or URL selects one.
+/// The items selected in the named or current space, with the kind of a bare
+/// number resolved, or in the checkout of the registered repository `repo`
+/// names or the current directory or a URL is in, where only a number or URL
+/// selects one.
 pub(super) async fn select_in_context(
     ctx: &Context,
     items: ItemArgs,
@@ -44,10 +52,11 @@ pub(super) async fn select_in_context(
 ) -> Result<(ItemContext, Selection)> {
     let selection = Selection::parse(items.kind_or_url, items.item)?;
     let input = selection.input.as_deref();
-    match super::items::select_item_context(ctx, items.workspace, repo, input).await? {
-        ItemContext::Workspace(workspace) => {
-            let selection = resolve_kind(ctx, &workspace, selection).await?;
-            Ok((ItemContext::Workspace(workspace), selection))
+    match super::items::select_space_item_context(ctx, items.space, repo, input).await? {
+        ItemContext::Workspace(space) | ItemContext::Chat(space) => {
+            let resolved = resolve_kind(ctx, &space, selection).await?;
+            let context = super::items::space_context(ctx, space).await?;
+            Ok((context, resolved))
         }
         checkout => Ok((checkout, selection)),
     }
@@ -63,10 +72,9 @@ pub(super) async fn select_items(
     elsewhere: bool,
 ) -> Result<Selected> {
     match context {
-        ItemContext::Workspace(workspace) => {
-            let workspace = workspace.clone();
+        ItemContext::Workspace(space) | ItemContext::Chat(space) => {
             let method = ItemMethod::SelectItems {
-                workspace,
+                space: space.clone(),
                 selection,
                 elsewhere,
             };
@@ -137,15 +145,15 @@ async fn item_url_forge(
 
 /// Give a number selected without a kind the kind of the linked item with
 /// that number, otherwise the kind the forge reports for it.
-async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> Result<Selection> {
+async fn resolve_kind(ctx: &Context, space: &str, selection: Selection) -> Result<Selection> {
     let (None, Some(input)) = (selection.kind, &selection.input) else {
         return Ok(selection);
     };
     let number = input.parse::<u64>()?;
-    let kind = match linked_kind(ctx, workspace, number).await? {
+    let kind = match linked_kind(ctx, space, number).await? {
         Some(kind) => kind,
         None => {
-            let repo = workspace_repository(ctx, workspace).await?;
+            let repo = space_repository(ctx, space).await?;
             super::issues::origin_forge(ctx, &repo)
                 .await?
                 .item_kind(&ctx.forge_account()?, number)
@@ -159,23 +167,28 @@ async fn resolve_kind(ctx: &Context, workspace: &str, selection: Selection) -> R
     })
 }
 
-/// The kind of the workspace's item numbered `number` under any relation.
-async fn linked_kind(ctx: &Context, workspace: &str, number: u64) -> Result<Option<LinkKind>> {
+/// The kind of the space's item numbered `number`: one assigned or a linked
+/// run, or for a workspace one under any relation.
+async fn linked_kind(ctx: &Context, space: &str, number: u64) -> Result<Option<LinkKind>> {
     let mut linked: Selected = client::request(
         &ctx.paths,
         ItemMethod::SelectItems {
-            workspace: workspace.to_owned(),
+            space: space.to_owned(),
             selection: Selection::default(),
             elsewhere: false,
         },
     )
     .await?;
-    let links = workspace_record(ctx, workspace).await?.links;
-    let recorded = links.opened.into_iter().chain(links.related);
-    linked.items.extend(recorded.map(|item| SelectedItem {
-        url: item.url,
-        kind: item.kind,
-    }));
+    if let Some(PresentSpace::Workspace(workspace)) =
+        client::present_space(&ctx.paths, space).await?
+    {
+        let links = workspace.links;
+        let recorded = links.opened.into_iter().chain(links.related);
+        linked.items.extend(recorded.map(|item| SelectedItem {
+            url: item.url,
+            kind: item.kind,
+        }));
+    }
     // A number names an item of the workspace's repository; issues opened
     // in another one share its numbers.
     let remote = crate::repository::remote_url_from_path(&linked.path)
@@ -191,24 +204,23 @@ pub(super) async fn link(ctx: &Context, items: RelationArgs) -> Result<i32> {
         selected.input.is_some() || ctx.interactive(),
         "link needs an issue or PR number, or an issue, PR or CI run URL"
     );
-    let workspace =
-        ui::select_workspace(ctx, items.workspace, ui::Fallback::CurrentDirectory).await?;
-    let selected = resolve_kind(ctx, &workspace, selected).await?;
+    let space = ui::select_space(ctx, items.space, ui::Fallback::CurrentDirectory).await?;
+    let selected = resolve_kind(ctx, &space, selected).await?;
     let (kind, input) = match selected {
         Selection {
             kind: Some(kind),
             input: Some(input),
         } => (kind, input),
-        Selection { kind, .. } => pick_open_item(ctx, &workspace, kind).await?,
+        Selection { kind, .. } => pick_open_item(ctx, &space, kind).await?,
     };
     let title = match kind {
-        LinkKind::Issue => issue_title(ctx, &workspace, &input).await,
+        LinkKind::Issue => issue_title(ctx, &space, &input).await,
         LinkKind::Pr | LinkKind::Ci => None,
     };
     client::request::<()>(
         &ctx.paths,
         ItemMethod::LinkItem {
-            workspace,
+            space,
             kind,
             url: input,
             relation,
@@ -244,11 +256,11 @@ fn link_outcome(kind: LinkKind, relation: Relation) -> String {
     }
 }
 
-/// The title lists show for the workspace; linking proceeds without one when
+/// The title lists show for the space; linking proceeds without one when
 /// the forge cannot be read.
-async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<String> {
+async fn issue_title(ctx: &Context, space: &str, input: &str) -> Option<String> {
     let title = async {
-        let repo = workspace_repository(ctx, workspace).await?;
+        let repo = space_repository(ctx, space).await?;
         anyhow::Ok(super::issues::load(ctx, &repo, input).await?.title)
     };
     match title.await {
@@ -260,30 +272,28 @@ async fn issue_title(ctx: &Context, workspace: &str, input: &str) -> Option<Stri
     }
 }
 
-async fn workspace_record(ctx: &Context, workspace: &str) -> Result<Workspace> {
-    client::workspaces(&ctx.paths)
-        .await?
-        .into_iter()
-        .find(|w| w.id == workspace || w.name == workspace)
-        .ok_or_else(|| {
-            Refusal::new(Reason::NotFound, format!("unknown workspace: {workspace}")).into()
-        })
-}
-
-async fn workspace_repository(ctx: &Context, workspace: &str) -> Result<Repository> {
-    let repository = workspace_record(ctx, workspace).await?.repository_id;
+/// The registered repository of the workspace or running chat `space` names.
+async fn space_repository(ctx: &Context, space: &str) -> Result<Repository> {
+    let repository = match client::present_space(&ctx.paths, space).await? {
+        Some(PresentSpace::Workspace(workspace)) => workspace.repository_id,
+        Some(PresentSpace::Chat(chat)) => chat.repository_id,
+        None => {
+            let unknown = format!("no workspace or running chat {space}");
+            return Err(Refusal::new(Reason::NotFound, unknown).into());
+        }
+    };
     client::repositories(&ctx.paths)
         .await?
         .into_iter()
         .find(|repo| repo.id == repository)
-        .context("workspace repository is missing")
+        .context("the space's repository is missing")
 }
 
-/// Choose an open issue or PR of the workspace's repository, asking for the
+/// Choose an open issue or PR of the space's repository, asking for the
 /// kind when it is not given; runs have no list to choose from.
 async fn pick_open_item(
     ctx: &Context,
-    workspace: &str,
+    space: &str,
     kind: Option<LinkKind>,
 ) -> Result<(LinkKind, String)> {
     let kind = match kind {
@@ -298,7 +308,7 @@ async fn pick_open_item(
             &[(ItemKind::Issue, "Issue"), (ItemKind::Pr, "Pull request")],
         )?,
     };
-    let repo = workspace_repository(ctx, workspace).await?;
+    let repo = space_repository(ctx, space).await?;
     let forge = super::issues::origin_forge(ctx, &repo).await?;
     let number = match kind {
         ItemKind::Issue => {
@@ -315,11 +325,11 @@ async fn pick_open_item(
 
 pub(super) async fn unlink(ctx: &Context, items: RelationArgs) -> Result<i32> {
     let (items, relation) = items.split()?;
-    let (workspace, selected) = select(ctx, items).await?;
+    let (space, selected) = select(ctx, items).await?;
     client::request::<()>(
         &ctx.paths,
         ItemMethod::UnlinkItems {
-            workspace,
+            space,
             relation,
             kind: selected.kind,
             url: selected.input,
@@ -340,12 +350,12 @@ pub(super) async fn watch(
     timeout: Option<u64>,
     resumed: bool,
 ) -> Result<i32> {
-    let (workspace, selected) = select(ctx, items).await?;
-    workspaces::watch_items(ctx, workspace, selected, timeout, resumed).await
+    let (space, selected) = select(ctx, items).await?;
+    workspaces::watch_items(ctx, space, selected, timeout, resumed).await
 }
 
-pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
-    let (workspace, selection) = select(ctx, items).await?;
+pub(super) async fn ready(ctx: &Context, items: WorkspaceItems) -> Result<i32> {
+    let (workspace, selection) = select_in_workspace(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
         AssignmentMethod::MarkReady {
@@ -365,8 +375,12 @@ pub(super) async fn ready(ctx: &Context, items: ItemArgs) -> Result<i32> {
 }
 
 /// `draft` overrides `[pr] draft_on_unready` when given.
-pub(super) async fn unready(ctx: &Context, items: ItemArgs, draft: Option<bool>) -> Result<i32> {
-    let (workspace, selection) = select(ctx, items).await?;
+pub(super) async fn unready(
+    ctx: &Context,
+    items: WorkspaceItems,
+    draft: Option<bool>,
+) -> Result<i32> {
+    let (workspace, selection) = select_in_workspace(ctx, items).await?;
     let marks: Vec<ReviewMark> = client::request(
         &ctx.paths,
         AssignmentMethod::ClearReady {

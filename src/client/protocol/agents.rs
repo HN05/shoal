@@ -130,7 +130,7 @@ pub enum AgentMethod {
         workspace: String,
     },
     AcknowledgePrUpdates {
-        workspace: String,
+        space: String,
         deliveries: Vec<String>,
         /// Agent messages the watch printed.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -134,8 +134,8 @@ impl Manager {
     }
 
     /// Refuse a workspace process the explicitly selected run of another
-    /// repository than its workspace's, which a watch would read with the
-    /// user's own logins.
+    /// repository than its space's, which a watch would read with the user's
+    /// own logins.
     pub(in crate::daemon) async fn ensure_own_repository_run(
         &self,
         selector: &str,
@@ -147,8 +147,8 @@ impl Manager {
         let Some(named) = self.named_run_forge(input).await? else {
             return Ok(());
         };
-        let workspace = self.workspace(selector).await?;
-        ensure!(named == self.workspace_forge(&workspace).await?, ELSEWHERE);
+        let space = self.link_space(selector).await?;
+        ensure!(named == self.space_forge(&space).await?, ELSEWHERE);
         Ok(())
     }
 }

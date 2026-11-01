@@ -54,7 +54,7 @@ pub(in crate::cli::commands) async fn watch_items(
     request::<()>(
         &ctx.paths,
         AgentMethod::AcknowledgePrUpdates {
-            workspace,
+            space: workspace,
             deliveries: updates
                 .updates
                 .iter()
@@ -80,7 +80,7 @@ pub(in crate::cli::commands) async fn wait_for_items(
     restarted: bool,
 ) -> Result<Body> {
     let method = || ItemMethod::WatchItems {
-        workspace: workspace.to_owned(),
+        space: workspace.to_owned(),
         selection: selection.clone(),
         timeout_secs: seconds_left(deadline),
     };
@@ -106,11 +106,14 @@ fn seconds_left(deadline: Option<Instant>) -> Option<u64> {
     Some((left.as_secs() + u64::from(left.subsec_nanos() > 0)).max(1))
 }
 
-/// This watch's arguments continuing its wait in `workspace` until `deadline`,
-/// as the installed release does after an upgrade restarted the daemon.
-fn resume_watch_arguments(workspace: &str, deadline: Option<Instant>) -> Vec<OsString> {
-    use crate::cli::installed::{arguments, replace_option, with_flag};
-    let mut resumed = replace_option(arguments(), "--workspace", workspace);
+/// This watch's arguments continuing its wait in `space` until `deadline`, as
+/// the installed release does after an upgrade restarted the daemon. A wait
+/// an earlier release handed over names its workspace the earlier way, which
+/// the space replaces.
+fn resume_watch_arguments(space: &str, deadline: Option<Instant>) -> Vec<OsString> {
+    use crate::cli::installed::{arguments, replace_option, with_flag, without_option};
+    let resumed = without_option(arguments(), "--workspace");
+    let mut resumed = replace_option(resumed, "--space", space);
     if let Some(seconds) = seconds_left(deadline) {
         resumed = replace_option(resumed, "--timeout", &seconds.to_string());
     }

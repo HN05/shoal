@@ -46,8 +46,8 @@ impl Manager {
                 }
                 Ok((self.workspace_forge(&workspace).await?, self.user_account()))
             }
-            ItemContext::Checkout(selector) => {
-                let checkout = self.repository(selector).await?;
+            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
+                let checkout = self.context_checkout(context).await?;
                 Ok((self.checkout_forge(&checkout).await?, self.user_account()))
             }
         }

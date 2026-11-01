@@ -1,5 +1,5 @@
-//! Arguments of commands for the issues, PRs and CI runs linked to a
-//! workspace.
+//! Arguments of commands for the issues, PRs and CI runs linked to a space,
+//! a workspace or chat.
 use clap::{Args, Subcommand, ValueEnum};
 
 use crate::{cli::args::item_reference, model::Relation};
@@ -23,15 +23,25 @@ pub enum ItemsCommand {
         items: RelationArgs,
     },
     /// Wait for activity on linked items, one kind, or an explicit item; `watch review` waits for a local review to end.
+    #[command(group(clap::ArgGroup::new("watching_space").args(["space", "handed_over"])))]
     Watch {
         #[command(flatten)]
         items: ItemArgs,
         /// Return no updates when the wait expires (1–3600 seconds); omitted means unbounded.
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..=3600))]
         timeout: Option<u64>,
+        /// The workspace the wait of an earlier release names when an upgrade
+        /// hands it over to this one.
+        #[arg(
+            long = "workspace",
+            hide = true,
+            conflicts_with = "space",
+            requires = "resume"
+        )]
+        handed_over: Option<String>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.
-        #[arg(long, hide = true, requires = "workspace")]
+        #[arg(long, hide = true, requires = "watching_space")]
         resume: bool,
     },
     /// Show linked items, one kind, or a selected issue, PR, CI run or review: `view ci 2765`.
@@ -42,7 +52,7 @@ pub enum ItemsCommand {
     /// Mark linked items, or the workspace when none are linked, ready for review at HEAD.
     Ready {
         #[command(flatten)]
-        items: ItemArgs,
+        items: WorkspaceItems,
         /// Withdraw ready-for-review marks from the selected items.
         #[arg(long)]
         undo: bool,
@@ -57,6 +67,7 @@ pub enum ItemsCommand {
 
 // What `shoal view` shows and how.
 #[derive(Debug, Args)]
+#[command(group(clap::ArgGroup::new("viewed_in").args(["space", "repo"])))]
 pub struct ViewArgs {
     #[command(flatten)]
     pub items: ItemArgs,
@@ -85,9 +96,10 @@ pub struct RelationArgs {
     /// pr/issue/ci, a number or URL, then assigned, opened or related.
     #[arg(required = true, num_args = 1..=3, value_name = "[ITEM] RELATION")]
     pub args: Vec<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
     #[arg(long)]
-    pub workspace: Option<String>,
+    pub space: Option<String>,
 }
 
 impl RelationArgs {
@@ -104,7 +116,7 @@ impl RelationArgs {
         let items = ItemArgs {
             kind_or_url: items.next(),
             item: items.next(),
-            workspace: self.workspace,
+            space: self.space,
         };
         Ok((items, relation))
     }
@@ -114,6 +126,22 @@ impl RelationArgs {
 pub struct ItemArgs {
     /// pr/issue/ci/review to select a kind, an issue or PR number, or an
     /// issue, PR or CI run URL.
+    #[arg(value_parser = item_reference)]
+    pub kind_or_url: Option<String>,
+    /// Number or URL when a kind is supplied.
+    #[arg(requires = "kind_or_url", value_parser = item_reference)]
+    pub item: Option<String>,
+    /// Space, a workspace or chat, to use; defaults to the current chat or
+    /// workspace, or a picker.
+    #[arg(long)]
+    pub space: Option<String>,
+}
+
+// [`ItemArgs`] for a command that acts on a workspace.
+#[derive(Debug, Args)]
+pub struct WorkspaceItems {
+    /// pr/issue/ci to select a kind, an issue or PR number, or an issue, PR
+    /// or CI run URL.
     #[arg(value_parser = item_reference)]
     pub kind_or_url: Option<String>,
     /// Number or URL when a kind is supplied.

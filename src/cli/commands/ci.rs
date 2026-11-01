@@ -10,8 +10,9 @@ pub(super) use self::read::{read_view, render_run, view};
 use crate::{
     cli::{
         args::ci::CiCommand,
-        commands::items::{current_context, select_item_context},
+        commands::items::{current_context, select_space_item_context},
         context::Context,
+        ui,
     },
     forge::{
         ForgeRepo, IssueInput,
@@ -45,15 +46,17 @@ pub(super) async fn run(ctx: &Context, command: CiCommand) -> Result<i32> {
 /// fall back to the picker; a URL names its repository and needs neither.
 async fn input_context(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     repo: Option<String>,
     input: Option<&str>,
 ) -> Result<Option<ItemContext>> {
     let url = input.is_some_and(|input| IssueInput::parse(input) == IssueInput::Url);
-    if workspace.is_none() && repo.is_none() && url {
+    if space.is_none() && repo.is_none() && url && ui::current_chat(&space).is_none() {
         return current_context(ctx).await;
     }
-    Ok(Some(select_item_context(ctx, workspace, repo, None).await?))
+    Ok(Some(
+        select_space_item_context(ctx, space, repo, None).await?,
+    ))
 }
 
 /// What `view` and `status` say of the `waiting` runs on the head of the PR

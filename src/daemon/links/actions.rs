@@ -43,9 +43,10 @@ impl Manager {
                 self.workspace_item_action(selector, kind, input, action)
                     .await
             }
-            ItemContext::Checkout(selector) => {
+            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
                 let input = input.context(NOTHING_LINKED)?;
-                self.checkout_item_action(selector, kind, &input, action)
+                let checkout = self.context_checkout(context).await?;
+                self.checkout_item_action(&checkout.id, kind, &input, action)
                     .await
             }
         }

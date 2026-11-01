@@ -87,10 +87,7 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "DELETE FROM space_item_activity WHERE space_id=?1",
-                [id],
-            )?;
+            db.execute("DELETE FROM space_item_activity WHERE space_id=?1", [id])?;
             Ok(())
         })
         .await

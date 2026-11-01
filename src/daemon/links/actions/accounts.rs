@@ -124,7 +124,9 @@ impl Manager {
                 self.verify_worktree(&workspace).await?;
                 Place::Workspace(Box::new(workspace))
             }
-            ItemContext::Checkout(selector) => Place::Checkout(self.repository(selector).await?),
+            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
+                Place::Checkout(self.context_checkout(context).await?)
+            }
         })
     }
 

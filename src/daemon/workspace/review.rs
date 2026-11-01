@@ -92,7 +92,7 @@ impl Manager {
             self.require_review(&workspace, Gate::Ready, &head).await?;
         }
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(&workspace, &selection).await?);
+        let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
         let mut marks = self
             .record_marks(&workspace.id, kind, explicit, head)
             .await?;
@@ -217,7 +217,7 @@ impl Manager {
     ) -> Result<Vec<ReviewMark>> {
         let (workspace, _guard) = self.lock_pr_gate(selector).await?;
         let kind = marked_kind(&selection)?;
-        let explicit = marked_item(self.explicit_item(&workspace, &selection).await?);
+        let explicit = marked_item(self.explicit_item(&workspace.path, &selection).await?);
         let selected = self.selected_marks(&workspace.id, kind, explicit).await?;
         let draft = match draft {
             Some(draft) => draft,

@@ -170,17 +170,34 @@ fn watch_waits_without_a_default_timeout() {
 }
 
 #[test]
-fn a_resumed_watch_names_its_workspace() {
+fn a_resumed_watch_names_its_space_or_an_earlier_releases_workspace() {
     let parse = |arguments: &[&str]| {
-        <Cli as clap::Parser>::try_parse_from(["shoal", "watch", "pr"].iter().chain(arguments))
+        let cli = <Cli as clap::Parser>::try_parse_from(
+            ["shoal", "watch", "pr"].iter().chain(arguments),
+        )?;
+        let Command::Items(ItemsCommand::Watch {
+            resume,
+            items,
+            handed_over,
+            ..
+        }) = cli.command.unwrap()
+        else {
+            panic!("expected watch command");
+        };
+        assert!(resume);
+        Ok::<_, clap::Error>((items.space, handed_over))
     };
     assert!(parse(&["--resume"]).is_err());
-    let cli = parse(&["--resume", "--workspace", "work"]).unwrap();
-    let Command::Items(ItemsCommand::Watch { resume, items, .. }) = cli.command.unwrap() else {
-        panic!("expected watch command");
-    };
-    assert!(resume);
-    assert_eq!(items.workspace.as_deref(), Some("work"));
+    assert_eq!(
+        parse(&["--resume", "--space", "work"]).unwrap(),
+        (Some("work".to_owned()), None)
+    );
+    // The wait of an earlier release hands itself over this way.
+    assert_eq!(
+        parse(&["--resume", "--workspace", "work"]).unwrap(),
+        (None, Some("work".to_owned()))
+    );
+    assert!(parse(&["--workspace", "work"]).is_err());
 }
 
 #[test]

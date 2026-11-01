@@ -46,9 +46,11 @@ impl Manager {
                 self.open_workspace_issue(selector, issue, repository, link, caller)
                     .await
             }
-            ItemContext::Checkout(selector) => {
+            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
                 anyhow::ensure!(!link, "{LINK_NEEDS_WORKSPACE}");
-                self.open_checkout_issue(selector, issue, repository).await
+                let checkout = self.context_checkout(context).await?;
+                self.open_checkout_issue(&checkout.id, issue, repository)
+                    .await
             }
         }
     }

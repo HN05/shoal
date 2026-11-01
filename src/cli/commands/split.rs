@@ -146,7 +146,7 @@ pub(super) async fn create_child(
         request::<()>(
             &ctx.paths,
             ItemMethod::SetIssue {
-                workspace: child.id.clone(),
+                space: child.id.clone(),
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),
             },

@@ -128,29 +128,29 @@ impl Manager {
         selection: &link::Selection,
         elsewhere: bool,
     ) -> Result<Selected> {
-        let workspace = self.workspace(selector).await?;
+        let space = self.link_space(selector).await?;
         let other = match elsewhere {
-            true => self.item_elsewhere(&workspace, selection).await?,
+            true => self.item_elsewhere(space.origin_path(), selection).await?,
             false => None,
         };
         let items = match other {
             Some(item) => vec![item],
-            None => (self.selected_items(&workspace, selection).await?)
+            None => (self.selected_items(&space, selection).await?)
                 .into_iter()
                 .map(|(url, kind)| SelectedItem { url, kind })
                 .collect(),
         };
         Ok(Selected {
-            path: workspace.path,
+            path: space.origin_path().to_owned(),
             items,
         })
     }
 
     /// The issue, PR or CI run whose URL `selection` names, when it is of
-    /// another repository than the workspace's.
+    /// another repository than the one whose origin `checkout` has.
     async fn item_elsewhere(
         &self,
-        workspace: &Workspace,
+        checkout: &std::path::Path,
         selection: &link::Selection,
     ) -> Result<Option<SelectedItem>> {
         let (Some(kind), Some(input)) = (selection.kind, selection.input.as_deref()) else {
@@ -176,7 +176,7 @@ impl Manager {
                 (forge, url)
             }
         };
-        let remote = repository::remote_url_from_path(&workspace.path)
+        let remote = repository::remote_url_from_path(checkout)
             .await?
             .context("item lookup needs an origin remote")?;
         if forge == self.forge(&remote).await? {

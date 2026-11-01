@@ -98,7 +98,8 @@ impl Manager {
             kind: Some(LinkKind::Pr),
             input: selection.input.clone(),
         };
-        match self.selected_items(workspace, &selection).await?.as_slice() {
+        let space = workspace.clone().into();
+        match self.selected_items(&space, &selection).await?.as_slice() {
             [(url, LinkKind::Pr)] => Ok(url.clone()),
             _ => bail!(ONE_PR),
         }

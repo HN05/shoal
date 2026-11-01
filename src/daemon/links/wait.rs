@@ -11,10 +11,14 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Notify;
 
 use self::held::HeldPasses;
-use super::pr::RegistrationKind;
+use super::{
+    pr::RegistrationKind,
+    space::{LinkSpace, require_watchable},
+};
 use crate::{
     daemon::{
-        agent_messages::AgentMessage, notifications::NotificationKind, store, workspace::Manager,
+        agent_messages::AgentMessage, chat_messages, notifications::NotificationKind,
+        workspace::Manager,
     },
     forge::{
         items::{
@@ -170,7 +174,12 @@ impl Manager {
             "explicit items need a kind"
         );
         let deadline = watch_deadline(seconds);
-        let workspace = self.workspace(selector).await?;
+        let workspace = match self.link_space(selector).await? {
+            LinkSpace::Workspace(workspace) => *workspace,
+            LinkSpace::Chat { chat, .. } => {
+                return self.wait_chat_items(&chat.id, selection, deadline).await;
+            }
+        };
         let wait = self.item_waits.start(&workspace.id);
         // Subscribe before reading, so a message queued in between still wakes.
         let mut queued = self.signals.watch_agent_messages();
@@ -456,6 +465,55 @@ impl Manager {
     }
 
     /// The unread messages once one that wakes an idle agent is queued.
+    /// [`Self::wait_items`] for the chat `id`: the activity of its items, or
+    /// its next messages, which arrive as the user's messages to a chat do,
+    /// without settling.
+    async fn wait_chat_items(
+        &self,
+        id: &str,
+        selection: &Selection,
+        deadline: Option<tokio::time::Instant>,
+    ) -> Result<Updates> {
+        let wait = self.item_waits.start(id);
+        // Subscribe before reading, so a message queued in between still wakes.
+        let mut queued = self.signals.watch_chat_messages();
+        let mut background = self.signals.watch_item_updates();
+        let messages = self.chat_messages(id).await?;
+        if !messages.is_empty() {
+            return Ok(Updates::messages(messages));
+        }
+        tokio::select! {
+            updates = wait_for_updates(deadline, &mut background, || {
+                self.poll_item_activity(id, selection)
+            }) => {
+                let updates = updates?;
+                if !wait.is_current() {
+                    return Ok(Updates::superseded());
+                }
+                Ok(updates)
+            }
+            messages = self.next_chat_messages(id, &mut queued) => {
+                Ok(Updates::messages(messages?))
+            }
+            () = wait.superseded.notified() => Ok(Updates::superseded()),
+        }
+    }
+
+    /// The chat's messages once it has any.
+    async fn next_chat_messages(
+        &self,
+        id: &str,
+        queued: &mut tokio::sync::watch::Receiver<u64>,
+    ) -> Result<Vec<AgentMessage>> {
+        loop {
+            queued.changed().await?;
+            let messages = self.chat_messages(id).await?;
+            if !messages.is_empty() {
+                return Ok(messages);
+            }
+        }
+    }
+
     async fn next_agent_messages(
         &self,
         id: &str,
@@ -477,9 +535,10 @@ impl Manager {
             None => self.delegated_workspaces(id).await?,
         };
         let guard = self.gates.lock_prs(receiving(id, &children)).await;
-        let workspace = self.workspace(id).await?;
-        let items = self.watched_items(&workspace, selection).await?;
-        let branch = watches_branch(selection, &items).then(|| workspace.branch.clone());
+        let space = self.link_space(id).await?;
+        let items = self.watched_items(&space, selection).await?;
+        let branch = watches_branch(selection, &items).then(|| space.branch().map(str::to_owned));
+        let branch = branch.flatten();
         let mut keys = items.iter().map(|(url, _)| url.clone()).collect::<Vec<_>>();
         keys.extend(branch.clone());
         let mut batch = own_batch(id, self.pending_activity(id, &keys).await?);
@@ -493,8 +552,8 @@ impl Manager {
         }
         drop(guard);
         let observed_at = crate::time::unix_seconds();
-        let items = self.items_to_look_up(&workspace, items).await?;
-        let items = self.item_activity(&workspace, items, selection).await;
+        let items = self.items_to_look_up(&space, items).await?;
+        let items = self.item_activity(&space, items, selection).await;
         let mut observations = Vec::new();
         if let Some(branch) = branch {
             let check = self.watched_conflicts(id).await;
@@ -539,14 +598,14 @@ impl Manager {
     }
 
     /// The `items` whose activity is still to come: a merged PR has none,
-    /// and once the workspace's assignment is done neither has an item seen
+    /// and once the space's assignment is done neither has an item seen
     /// closed, so a forge that cannot be reached fails no poll for them.
     async fn items_to_look_up(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         items: Vec<(String, LinkKind)>,
     ) -> Result<Vec<(String, LinkKind)>> {
-        let (id, done) = (workspace.id.clone(), workspace.done);
+        let (id, done) = (space.id().to_owned(), space.done());
         self.store
             .run(move |db| {
                 let mut open = Vec::new();
@@ -564,7 +623,7 @@ impl Manager {
     /// a worktree Git cannot read holds none of it back.
     async fn item_activity(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         items: Vec<(String, LinkKind)>,
         selection: &Selection,
     ) -> Result<Vec<(String, Snapshot)>> {
@@ -580,10 +639,8 @@ impl Manager {
                 LinkKind::Pr => {
                     let forge = self.pull_forge(&url).await?;
                     let (number, _) = forge.pull(&url)?;
-                    let branch = selection
-                        .input
-                        .is_none()
-                        .then_some(workspace.branch.as_str());
+                    let branch = selection.input.is_none().then(|| space.branch());
+                    let branch = branch.flatten();
                     forge.activity(&account, number, branch).await?
                 }
                 LinkKind::Ci => {
@@ -597,30 +654,26 @@ impl Manager {
     }
 
     /// Poll linked items for integrations, with their own baseline, and queue
-    /// the changes on each workspace's cursor.
+    /// the changes on each ready workspace's cursor, or hand them to each
+    /// running chat's inbox.
     pub(crate) async fn poll_linked_item_activity(&self) -> Result<()> {
         let mut failure = None;
-        for workspace in self.list_workspaces().await? {
-            if workspace.state != crate::state::WorkspaceState::Ready {
-                continue;
-            }
-            let id = workspace.id.clone();
+        for space in self.polled_spaces().await? {
+            let id = space.id().to_owned();
             let items = self.store.run(move |db| polled_items(db, &id)).await?;
             if items.is_empty() {
                 continue;
             }
-            let Err(error) = self.poll_workspace_item_activity(&workspace, items).await else {
+            let Err(error) = self.poll_space_item_activity(&space, items).await else {
                 continue;
             };
-            // The limit is the forge's, not the workspace's; a later poll retries.
+            // The limit is the forge's, not the space's; a later poll retries.
             if self.notify_rate_limit(&error).await {
                 continue;
             }
             if failure.is_none() {
-                failure = Some(error.context(format!(
-                    "background item activity for workspace {}",
-                    workspace.name
-                )));
+                failure =
+                    Some(error.context(format!("background item activity for {}", space.name())));
             }
         }
         if let Some(error) = failure {
@@ -646,25 +699,75 @@ impl Manager {
         true
     }
 
-    async fn poll_workspace_item_activity(
+    /// The spaces whose linked items the background poll reads: ready
+    /// workspaces and running chats.
+    async fn polled_spaces(&self) -> Result<Vec<LinkSpace>> {
+        let workspaces = self.list_workspaces().await?.into_iter();
+        let ready = workspaces.filter(|w| w.state == crate::state::WorkspaceState::Ready);
+        let mut spaces: Vec<LinkSpace> = ready.map(LinkSpace::from).collect();
+        let chats = self.chats().await?.into_iter();
+        for chat in chats.filter(|chat| chat.restore.is_none()) {
+            let checkout = self.repository(&chat.repository_id).await?;
+            spaces.push(LinkSpace::Chat { chat, checkout });
+        }
+        Ok(spaces)
+    }
+
+    async fn poll_space_item_activity(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         items: Vec<(String, LinkKind)>,
     ) -> Result<()> {
         let observed_at = crate::time::unix_seconds();
-        let items = self.items_to_look_up(workspace, items).await?;
+        let items = self.items_to_look_up(space, items).await?;
         let observations = self
-            .item_activity(workspace, items, &Selection::default())
+            .item_activity(space, items, &Selection::default())
             .await?;
         let merged = self
-            .record_background_activity(&workspace.id, observations.clone())
+            .record_background_activity(space.id(), observations.clone())
             .await?;
         // Other workspaces' conflict checks read the default branch the merge changed.
         if merged {
-            self.syncs.request(&workspace.repository_id);
+            self.syncs.request(space.repository_id());
         }
-        self.queue_background_updates(&workspace.id, observations, observed_at)
-            .await
+        self.queue_background_updates(space.id(), observations, observed_at)
+            .await?;
+        if let LinkSpace::Chat { chat, .. } = space {
+            self.hand_updates_to_chat(&chat.id).await?;
+        }
+        Ok(())
+    }
+
+    /// Hand the updates queued on the chat's cursor to its inbox, as the
+    /// messages its hooks deliver and that wake its agent, taking them off
+    /// the cursor in the same transaction.
+    async fn hand_updates_to_chat(&self, chat: &str) -> Result<()> {
+        let _gate = self.gates.lock_prs([chat]).await;
+        let id = chat.to_owned();
+        let queued = self
+            .store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                let keys: Vec<String> = (followed_items(&tx, &id, None)?.into_iter())
+                    .map(|(url, _)| url)
+                    .collect();
+                let pending = pending_on_cursor(&tx, &id, &keys)?;
+                let mut queued = false;
+                for update in &pending {
+                    let message = update.to_string();
+                    queued |= chat_messages::insert_from_user(&tx, &id, &message)?.is_some();
+                }
+                let deliveries: Vec<String> =
+                    pending.into_iter().map(|update| update.delivery).collect();
+                acknowledge_deliveries(&tx, std::slice::from_ref(&id), &deliveries)?;
+                tx.commit()?;
+                Ok(queued)
+            })
+            .await?;
+        if queued {
+            self.signals.chat_message_queued();
+        }
+        Ok(())
     }
 
     /// Queue `observations` on the workspace's cursor, so its agent receives
@@ -694,17 +797,17 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                store::require_ready(&tx, &id)?;
+                require_watchable(&tx, &id)?;
                 let linked = polled_items(&tx, &id)?;
                 let mut merged = false;
-                for (url, kind, mut snapshot) in observations.into_iter().filter_map(
-                    |(url, snapshot)| {
+                for (url, kind, mut snapshot) in
+                    observations.into_iter().filter_map(|(url, snapshot)| {
                         linked
                             .iter()
                             .find(|(linked_url, _)| linked_url == &url)
                             .map(|(_, kind)| (url, *kind, snapshot))
-                    },
-                ) {
+                    })
+                {
                     let previous: Option<String> = tx
                         .query_row(
                             "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
@@ -740,16 +843,17 @@ impl Manager {
             .await
     }
 
-    /// The canonical URL of an explicitly selected item, linked or not.
+    /// The canonical URL of an explicitly selected item, linked or not, of
+    /// the repository whose origin `checkout` has, or of a CI run of any.
     pub(crate) async fn explicit_item(
         &self,
-        workspace: &Workspace,
+        checkout: &std::path::Path,
         selection: &Selection,
     ) -> Result<Option<(String, LinkKind)>> {
         let Some(input) = &selection.input else {
             return Ok(None);
         };
-        let remote = repository::remote_url_from_path(&workspace.path)
+        let remote = repository::remote_url_from_path(checkout)
             .await?
             .context("item lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
@@ -765,16 +869,14 @@ impl Manager {
         Ok(Some((url, kind)))
     }
 
-    /// The explicitly selected item, or the workspace's linked items of the
+    /// The explicitly selected item, or the space's linked items of the
     /// selected kind, with every linked run.
     pub(crate) async fn selected_items(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         selection: &Selection,
     ) -> Result<Vec<(String, LinkKind)>> {
-        let items = self
-            .selection_items(workspace, selection, shown_items)
-            .await?;
+        let items = self.selection_items(space, selection, shown_items).await?;
         ensure!(
             !items.is_empty() || selection.kind.is_none(),
             "{NO_LINKED_ITEMS}"
@@ -782,19 +884,19 @@ impl Manager {
         Ok(items)
     }
 
-    /// The workspace's own items a watch selects. A kind it links none of is
+    /// The space's own items a watch selects. A kind it links none of is
     /// still watched when a child workspace whose activity its agent receives
     /// links one.
     async fn watched_items(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         selection: &Selection,
     ) -> Result<Vec<(String, LinkKind)>> {
         let items = self
-            .selection_items(workspace, selection, followed_items)
+            .selection_items(space, selection, followed_items)
             .await?;
         if items.is_empty() && selection.input.is_none() {
-            let (id, kind) = (workspace.id.clone(), selection.kind);
+            let (id, kind) = (space.id().to_owned(), selection.kind);
             let agents = self.tracked_agents().await;
             ensure!(
                 self.store
@@ -806,18 +908,18 @@ impl Manager {
         Ok(items)
     }
 
-    /// The explicitly selected item, or the workspace's linked items of the
+    /// The explicitly selected item, or the space's linked items of the
     /// selected kind that `linked` lists.
     async fn selection_items(
         &self,
-        workspace: &Workspace,
+        space: &LinkSpace,
         selection: &Selection,
         linked: LinkedItems,
     ) -> Result<Vec<(String, LinkKind)>> {
-        if let Some(item) = self.explicit_item(workspace, selection).await? {
+        if let Some(item) = self.explicit_item(space.origin_path(), selection).await? {
             return Ok(vec![item]);
         }
-        let id = workspace.id.clone();
+        let id = space.id().to_owned();
         let kind = selection.kind;
         self.store.run(move |db| linked(db, &id, kind)).await
     }
@@ -864,14 +966,15 @@ impl Manager {
         let agents = self.tracked_agents().await;
         self.store.run(move |db| {
             let tx = db.transaction()?;
-            store::require_ready(&tx, &id)?;
+            require_watchable(&tx, &id)?;
             let items = followed_items(&tx, &id, selection.kind)?;
             if selection.input.is_none() && items.is_empty() {
                 ensure!(links_kind(&tx, &id, selection.kind, &agents)?, "{NO_LINKED_ITEMS}");
             }
-            // A PR linked since the poll takes over conflict reports from the branch.
+            // A PR linked since the poll takes over conflict reports from the
+            // branch; a chat works on none.
             let branch = if watches_branch(&selection, &items) {
-                Some(tx.query_row("SELECT branch FROM workspaces WHERE id=?1", [&id], |row| row.get::<_, String>(0))?)
+                tx.query_row("SELECT branch FROM workspaces WHERE id=?1", [&id], |row| row.get::<_, String>(0)).optional()?
             } else {
                 None
             };
@@ -932,23 +1035,7 @@ impl Manager {
         let urls = urls.to_vec();
         let id = id.to_owned();
         self.store
-            .run(move |db| {
-                let mut statement =
-                    db.prepare("SELECT url,record FROM pr_activity WHERE space_id=?1")?;
-                let records = statement.query_map([id], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })?;
-                let mut updates = Vec::new();
-                for record in records {
-                    let (url, record) = record?;
-                    if !urls.contains(&url) {
-                        continue;
-                    }
-                    let record: ActivityRecord = serde_json::from_str(&record)?;
-                    updates.extend(record.pending);
-                }
-                Ok(updates)
-            })
+            .run(move |db| pending_on_cursor(db, &id, &urls))
             .await
     }
 
@@ -957,7 +1044,7 @@ impl Manager {
         selector: &str,
         deliveries: Vec<String>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
+        let id = self.link_space(selector).await?.id().to_owned();
         // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
         // whatever a poll or a split queues meanwhile stays pending.
@@ -966,11 +1053,10 @@ impl Manager {
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                store::require_ready(&tx, &workspace.id)?;
+                require_watchable(&tx, &id)?;
                 // The agent also received the updates of the child workspaces
                 // it works on.
-                let delivered =
-                    crate::daemon::workspace::receiving_paths(&tx, &workspace.id, &agents)?;
+                let delivered = crate::daemon::workspace::receiving_paths(&tx, &id, &agents)?;
                 // A delivering wait has ended, so a wait running in one of
                 // these workspaces, or in one receiving their activity above
                 // them, started after it and must report their updates as well.
@@ -1081,6 +1167,25 @@ fn acknowledge_deliveries(
         }
     }
     Ok(())
+}
+
+/// The updates pending on the cursor of the space `id` for the items at
+/// `urls`.
+fn pending_on_cursor(db: &rusqlite::Connection, id: &str, urls: &[String]) -> Result<Vec<Update>> {
+    let mut statement = db.prepare("SELECT url,record FROM pr_activity WHERE space_id=?1")?;
+    let records = statement.query_map([id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut updates = Vec::new();
+    for record in records {
+        let (url, record) = record?;
+        if !urls.contains(&url) {
+            continue;
+        }
+        let record: ActivityRecord = serde_json::from_str(&record)?;
+        updates.extend(record.pending);
+    }
+    Ok(updates)
 }
 
 /// Pending updates for one response, each with the workspace whose cursor
@@ -1224,8 +1329,7 @@ fn activity_records(
     db: &rusqlite::Connection,
     ids: &[String],
 ) -> Result<Vec<(String, String, String)>> {
-    let mut statement =
-        db.prepare("SELECT ?1, url, record FROM pr_activity WHERE space_id=?1")?;
+    let mut statement = db.prepare("SELECT ?1, url, record FROM pr_activity WHERE space_id=?1")?;
     let mut records = Vec::new();
     for id in ids {
         records.extend(

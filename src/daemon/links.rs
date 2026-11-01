@@ -1,5 +1,6 @@
-//! Link issues, PRs and CI runs to workspaces by relation. Assigned items
-//! keep the issue and PR watch rules; opened and related items are only
+//! Link issues, PRs and CI runs to spaces, workspaces and chats, by
+//! relation. Assigned items keep the issue and PR watch rules, which drive a
+//! workspace's completion and cleanup; opened and related items are only
 //! recorded, and watches follow linked runs until they finish.
 mod actions;
 mod checks;
@@ -13,6 +14,7 @@ mod raw;
 mod revert;
 mod run_approval;
 mod runs;
+pub(crate) mod space;
 mod stack;
 pub mod wait;
 
@@ -25,12 +27,11 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::{
     daemon::{
         events::{self, EventKind},
-        links::pr::Action,
+        links::{pr::Action, space::LinkSpace},
         workspace::{Manager, review},
     },
     forge::items::link::{ItemKind, LinkKind},
     model::{LinkedItem, Relation},
-    protocol::ItemContext,
     state::WorkspaceState,
 };
 
@@ -96,7 +97,8 @@ impl Manager {
         input: &str,
         scoped: bool,
     ) -> Result<()> {
-        let context = ItemContext::Workspace(selector.into());
+        let space = self.link_space(selector).await?;
+        let context = space.item_context();
         let place = (self.run_input_place(Some(&context), input, scoped)).await?;
         let (_, url) = place.forge.run(input)?;
         let run = (place.forge.view_run(&place.account, &url).await)
@@ -106,11 +108,7 @@ impl Manager {
             url,
             title: run.workflow,
         };
-        let workspace = place
-            .workspace
-            .context("a CI run is linked to a workspace")?;
-        self.record_items(&workspace.id, vec![(relation, item)])
-            .await
+        self.record_items(space.id(), vec![(relation, item)]).await
     }
 
     /// Record an opened or related item named by number or URL.
@@ -122,12 +120,11 @@ impl Manager {
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let url = self.item_url(&workspace, kind, input).await?;
+        let space = self.link_space(selector).await?;
+        self.verify_space(&space).await?;
+        let url = self.item_url(&space, kind, input).await?;
         let item = LinkedItem { kind, url, title };
-        self.record_items(&workspace.id, vec![(relation, item)])
-            .await
+        self.record_items(space.id(), vec![(relation, item)]).await
     }
 
     /// Forget a relation's recorded items of `kind`, or the one `input` names,
@@ -139,14 +136,14 @@ impl Manager {
         kind: Option<LinkKind>,
         input: Option<&str>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
+        let space = self.link_space(selector).await?;
+        self.verify_space(&space).await?;
         let url = match (kind, input) {
-            (Some(kind), Some(input)) => Some(self.item_url(&workspace, kind, input).await?),
+            (Some(kind), Some(input)) => Some(self.item_url(&space, kind, input).await?),
             _ => None,
         };
         let removed = self
-            .remove_items(&workspace.id, relation, kind, url.clone())
+            .remove_items(space.id(), relation, kind, url.clone())
             .await?;
         match url {
             Some(url) => ensure!(
@@ -231,10 +228,11 @@ impl Manager {
     /// Fail unless an item of `kind` is assigned: the issue, or a PR watch or
     /// acknowledgement, which an unreadable registration counts as.
     async fn require_assigned(&self, selector: &str, kind: Option<ItemKind>) -> Result<()> {
-        let id = self.workspace(selector).await?.id;
-        let issue = kind != Some(ItemKind::Pr) && self.issue_registration(&id).await?.is_some();
+        let space = self.link_space(selector).await?;
+        let id = space.id();
+        let issue = kind != Some(ItemKind::Pr) && self.issue_registration(id).await?.is_some();
         let pr =
-            kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(&id).await, Ok(None));
+            kind != Some(ItemKind::Issue) && !matches!(self.pr_registration(id).await, Ok(None));
         ensure!(
             issue || pr,
             Refusal::new(
@@ -249,21 +247,17 @@ impl Manager {
         Ok(())
     }
 
-    /// The canonical URL of an issue or PR of the workspace's repository, or
-    /// of a CI run of any.
-    async fn item_url(
-        &self,
-        workspace: &crate::model::Workspace,
-        kind: LinkKind,
-        input: &str,
-    ) -> Result<String> {
+    /// The canonical URL of an issue or PR of the space's repository, or of
+    /// a CI run of any.
+    async fn item_url(&self, space: &LinkSpace, kind: LinkKind, input: &str) -> Result<String> {
+        let checkout = space.origin_path();
         Ok(match kind {
-            LinkKind::Issue => self.issue_forge(workspace, input).await?.2,
-            LinkKind::Pr => self.pr_forge(workspace, input).await?.2,
+            LinkKind::Issue => self.issue_forge(checkout, input).await?.2,
+            LinkKind::Pr => self.pr_forge(checkout, input).await?.2,
             LinkKind::Ci => {
                 let forge = match self.named_run_forge(input).await? {
                     Some(forge) => forge,
-                    None => self.workspace_forge(workspace).await?,
+                    None => self.space_forge(space).await?,
                 };
                 forge.run(input)?.1
             }
@@ -385,8 +379,12 @@ fn forget_activity(db: &Connection, id: &str, urls: &[String]) -> Result<()> {
 }
 
 /// Refuse changes while the workspace is removed or otherwise in transition,
-/// so a removal record taken during removal holds its final links.
+/// so a removal record taken during removal holds its final links; a chat
+/// takes them whenever it runs.
 pub(crate) fn ensure_accepts_links(db: &Connection, id: &str) -> Result<()> {
+    if space::is_chat(db, id)? {
+        return Ok(());
+    }
     let state = state(db, id)?;
     ensure!(
         state.accepts_links(),
@@ -395,8 +393,12 @@ pub(crate) fn ensure_accepts_links(db: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-/// Whether the workspace still exists and its state takes link changes now.
+/// Whether the workspace still exists and its state takes link changes now,
+/// or the chat still runs.
 pub(crate) fn accepts_links(db: &Connection, id: &str) -> Result<bool> {
+    if space::is_chat(db, id)? {
+        return Ok(true);
+    }
     let state: Option<WorkspaceState> = db
         .query_row("SELECT state FROM workspaces WHERE id=?1", [id], |row| {
             row.get(0)

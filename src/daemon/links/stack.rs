@@ -60,7 +60,7 @@ impl Manager {
                 "the merged PRs do not contain the base workspace's HEAD"
             )));
         }
-        let (forge, _, _) = self.pr_forge(base, url).await?;
+        let (forge, _, _) = self.pr_forge(&base.path, url).await?;
         let target = forge.pull_request(&self.user_account(), url).await?.base;
         // Reload: they may have moved since. The caller holds the PR gates of
         // those stacked when it read `base`, so one stacked since waits.
@@ -78,7 +78,7 @@ impl Manager {
     }
 
     async fn base_pr_commits(&self, base: &Workspace, url: &str) -> Result<Option<Vec<String>>> {
-        let (forge, number, _) = self.pr_forge(base, url).await?;
+        let (forge, number, _) = self.pr_forge(&base.path, url).await?;
         forge
             .merged_commits(&self.user_account(), number, &base.branch)
             .await
@@ -128,7 +128,7 @@ impl Manager {
         target: &str,
     ) -> Result<Option<String>> {
         let lookup = async {
-            let (forge, number, _) = self.pr_forge(workspace, url).await?;
+            let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
             let current = forge.pull_request(&self.user_account(), url).await?.base;
             Ok::<_, anyhow::Error>((current == base.branch).then_some((forge, number)))
         }

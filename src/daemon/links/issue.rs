@@ -12,7 +12,6 @@ use crate::{
         workspace::Manager,
     },
     forge::{ForgeRepo, items::link::ItemKind},
-    model::Workspace,
 };
 
 /// An open issue a new workspace is assigned.
@@ -51,23 +50,22 @@ impl Manager {
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
-        self.set_issue_gated(&workspace.id, input, title).await
+        let id = self.link_space(selector).await?.id().to_owned();
+        let _guard = self.gates.lock_prs([&id]).await;
+        self.set_issue_gated(&id, input, title).await
     }
 
-    /// [`Self::set_issue`] for a caller already holding the workspace's PR
-    /// gate.
+    /// [`Self::set_issue`] for a caller already holding the space's PR gate.
     pub(crate) async fn set_issue_gated(
         &self,
         selector: &str,
         input: &str,
         title: Option<String>,
     ) -> Result<()> {
-        let workspace = self.workspace(selector).await?;
-        self.verify_worktree(&workspace).await?;
-        let (_, _, url) = self.issue_forge(&workspace, input).await?;
-        self.persist_issue_assignment(&workspace.id, url, title)
-            .await
+        let space = self.link_space(selector).await?;
+        self.verify_space(&space).await?;
+        let (_, _, url) = self.issue_forge(space.origin_path(), input).await?;
+        self.persist_issue_assignment(space.id(), url, title).await
     }
 
     async fn persist_issue_assignment(
@@ -88,15 +86,17 @@ impl Manager {
     }
 
     pub async fn clear_issue(&self, selector: &str, input: Option<&str>) -> Result<()> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        let id = self.link_space(selector).await?.id().to_owned();
+        let _guard = self.gates.lock_prs([&id]).await;
+        let space = self.link_space(&id).await?;
         let selected = match input {
-            Some(input) => Some(self.issue_forge(&workspace, input).await?.2),
+            Some(input) => Some(self.issue_forge(space.origin_path(), input).await?.2),
             None => None,
         };
         self.store
             .run(move |db| {
                 let tx = db.transaction()?;
-                unlink(&tx, &workspace.id, selected.as_deref())?;
+                unlink(&tx, &id, selected.as_deref())?;
                 tx.commit()?;
                 Ok(())
             })
@@ -118,12 +118,14 @@ impl Manager {
         Ok(OpenIssue { url, title })
     }
 
+    /// The forge of the repository whose origin `checkout` has, with the
+    /// number and canonical URL of the issue `input` names there.
     pub(super) async fn issue_forge(
         &self,
-        workspace: &Workspace,
+        checkout: &Path,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
-        let remote = crate::repository::remote_url_from_path(&workspace.path)
+        let remote = crate::repository::remote_url_from_path(checkout)
             .await?
             .context("issue lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
@@ -145,7 +147,7 @@ fn assign(db: &Connection, id: &str, url: &str, title: Option<&str>) -> Result<(
         .optional()?;
     ensure!(
         existing.as_deref().is_none_or(|existing| existing == url),
-        "workspace is already associated with a different issue"
+        "another issue is already assigned"
     );
     db.execute(
         "INSERT INTO space_issue(space_id,url,title) VALUES (?1,?2,?3)

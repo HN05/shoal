@@ -633,7 +633,7 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             items: ItemArgs {
                 kind_or_url: Some(url),
                 item: None,
-                workspace: Some(workspace),
+                space: Some(workspace),
             },
             repo: Default::default(),
             no_comments: false,
@@ -751,7 +751,7 @@ async fn view_command(ctx: &Context, workspace: Option<String>) -> Result<Comman
         items: ItemArgs {
             kind_or_url: Some(url),
             item: None,
-            workspace: Some(workspace),
+            space: Some(workspace),
         },
         repo: Default::default(),
         no_comments: false,

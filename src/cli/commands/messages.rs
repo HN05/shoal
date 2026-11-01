@@ -633,7 +633,7 @@ async fn acknowledge(ctx: &Context, workspace: String, updates: &Updates) -> Res
     request::<()>(
         &ctx.paths,
         AgentMethod::AcknowledgePrUpdates {
-            workspace,
+            space: workspace,
             deliveries: updates
                 .updates
                 .iter()

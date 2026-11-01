@@ -7,7 +7,7 @@ use crate::{
     cli::{client, context::Context, ui},
     env,
     forge::{ForgeRepo, IssueInput},
-    model::Repository,
+    model::{PresentSpace, Repository},
     protocol::ItemContext,
     repository::{self, NotRegistered},
 };
@@ -34,6 +34,50 @@ pub(in crate::cli::commands) async fn select_item_context(
         Some(repo) => Ok(ItemContext::Checkout(named(ctx, &repo).await?.id)),
         None => select_context(ctx, workspace, item).await,
     }
+}
+
+/// [`select_item_context`] for a command that acts on a space, a workspace
+/// or chat: the registered repository `repo` names, else the space `space`
+/// names or the chat this runs in, else the current workspace or checkout,
+/// else the registered repository of the issue or PR URL `item`, else a
+/// space the user picks.
+pub(in crate::cli::commands) async fn select_space_item_context(
+    ctx: &Context,
+    space: Option<String>,
+    repo: Option<String>,
+    item: Option<&str>,
+) -> Result<ItemContext> {
+    if let Some(repo) = repo {
+        return Ok(ItemContext::Checkout(named(ctx, &repo).await?.id));
+    }
+    if space.is_some() || ui::current_chat(&space).is_some() {
+        let space = ui::select_space(ctx, space, ui::Fallback::CurrentDirectory).await?;
+        return space_context(ctx, space).await;
+    }
+    if let Some(context) = current_context(ctx).await? {
+        return Ok(context);
+    }
+    let repos = client::repositories(&ctx.paths).await?;
+    if let Some(url) = item.filter(|item| IssueInput::parse(item) == IssueInput::Url)
+        && let Some(repo) = super::super::issues::registered_for_item(&repos, url).await?
+    {
+        return Ok(ItemContext::Checkout(repo.id.clone()));
+    }
+    ensure!(ctx.interactive(), "{NO_CONTEXT}");
+    let space = ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?;
+    space_context(ctx, space).await
+}
+
+/// The context of the workspace or running chat `space` names.
+pub(in crate::cli::commands) async fn space_context(
+    ctx: &Context,
+    space: String,
+) -> Result<ItemContext> {
+    Ok(match client::present_space(&ctx.paths, &space).await? {
+        Some(PresentSpace::Chat(chat)) => ItemContext::Chat(chat.id),
+        Some(PresentSpace::Workspace(workspace)) => ItemContext::Workspace(workspace.id),
+        None => ItemContext::Workspace(space),
+    })
 }
 
 /// The context of a command whose `--repo` names any repository, and the
@@ -150,6 +194,24 @@ async fn registered(ctx: &Context, repo: &str) -> Result<Option<Repository>> {
         Ok(repo) => Ok(Some(repo)),
         Err(error) if error.is::<NotRegistered>() => Ok(None),
         Err(error) => Err(error),
+    }
+}
+
+/// The registered repository a request from `context` acts in outside a
+/// workspace: the checkout it names, or a running chat's.
+pub(in crate::cli::commands) async fn context_repository(
+    ctx: &Context,
+    context: &ItemContext,
+) -> Result<Repository> {
+    match context {
+        ItemContext::Checkout(repository) => checkout_repository(ctx, repository).await,
+        ItemContext::Chat(chat) => {
+            let chats = client::chats(&ctx.paths).await?;
+            let chat = (chats.iter().find(|recorded| recorded.id == *chat))
+                .with_context(|| format!("no running chat {chat}"))?;
+            checkout_repository(ctx, &chat.repository_id).await
+        }
+        ItemContext::Workspace(_) => anyhow::bail!("a workspace acts in its worktree"),
     }
 }
 

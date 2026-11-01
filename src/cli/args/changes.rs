@@ -437,23 +437,19 @@ pub struct ItemSelector {
     #[arg(value_parser = item_reference)]
     pub item: Option<String>,
     /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "repo")]
     pub workspace: Option<String>,
     #[command(flatten)]
     pub repo: RegisteredRepo,
 }
 
-// A registered repository to act in instead of a workspace.
+// A registered repository to act in instead of a workspace or chat, which
+// conflicts with the flag that names one where it is flattened.
 #[derive(Debug, Default, Args)]
 pub struct RegisteredRepo {
     /// Act in this registered repository without a workspace, named by name,
     /// ID, path or remote URL; workspace processes act only in their own.
-    #[arg(
-        id = "repo",
-        long = "repo",
-        value_name = "REPOSITORY",
-        conflicts_with = "workspace"
-    )]
+    #[arg(id = "repo", long = "repo", value_name = "REPOSITORY")]
     pub name: Option<String>,
 }
 

@@ -145,7 +145,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
         ErrorCode::NameTaken
     );
     let link = ItemMethod::LinkItem {
-        workspace: workspace.id.clone(),
+        space: workspace.id.clone(),
         kind: LinkKind::Issue,
         url: "40".into(),
         relation: Relation::Related,
@@ -153,7 +153,7 @@ async fn done_renames_and_links_go_through_the_protocol() {
     };
     connection::request::<()>(&app, link).await.unwrap();
     let unlink = || ItemMethod::UnlinkItems {
-        workspace: workspace.id.clone(),
+        space: workspace.id.clone(),
         relation: Relation::Related,
         kind: Some(LinkKind::Issue),
         url: Some("40".into()),

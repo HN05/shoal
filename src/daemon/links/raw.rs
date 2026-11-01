@@ -74,8 +74,8 @@ impl Manager {
                 };
                 Ok((forge, account))
             }
-            ItemContext::Checkout(selector) => {
-                let checkout = self.repository(selector).await?;
+            ItemContext::Checkout(_) | ItemContext::Chat(_) => {
+                let checkout = self.context_checkout(context).await?;
                 let own = self.checkout_forge(&checkout).await?;
                 let forge = self.named_forge(own, repository).await?;
                 Ok((forge, self.user_account()))

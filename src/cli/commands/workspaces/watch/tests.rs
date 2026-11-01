@@ -44,7 +44,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
         let (mut stream, _) = listener.accept().await.unwrap();
         let request: Request = protocol::read(&mut stream).await.unwrap();
         let Method::Operation(Operation::Item(ItemMethod::WatchItems {
-            workspace,
+            space: workspace,
             timeout_secs,
             ..
         })) = request.method

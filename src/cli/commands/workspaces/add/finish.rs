@@ -94,7 +94,7 @@ async fn add_planned(
         request::<()>(
             &ctx.paths,
             ItemMethod::SetIssue {
-                workspace: opened.workspace.id.clone(),
+                space: opened.workspace.id.clone(),
                 url: issue.url.clone(),
                 title: Some(issue.title.clone()),
             },

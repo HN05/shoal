@@ -9,7 +9,7 @@ use crate::{
         client,
         commands::{
             issues,
-            items::{checkout_repository, select_repo_context},
+            items::{context_repository, select_repo_context},
         },
         context::Context,
     },
@@ -37,8 +37,8 @@ pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Res
     let (context, named) = select_repo_context(ctx, args.repo).await?;
     let own = match context {
         ItemContext::Workspace(workspace) => workspace_forge(ctx, workspace).await?,
-        ItemContext::Checkout(repository) => {
-            let repository = checkout_repository(ctx, &repository).await?;
+        context => {
+            let repository = context_repository(ctx, &context).await?;
             issues::origin_forge(ctx, &repository).await?
         }
     };

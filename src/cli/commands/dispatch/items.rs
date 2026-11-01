@@ -17,13 +17,17 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: ItemsCommand) -
                 timeout.is_none(),
                 "watch review waits until the review ends; --timeout bounds PR and issue watches"
             );
-            review::show::watch(&ctx, items.review_id()?, items.workspace).await
+            review::show::watch(&ctx, items.review_id()?, items.space).await
         }
         ItemsCommand::Watch {
-            items,
+            mut items,
             timeout,
+            handed_over,
             resume,
-        } => links::watch(&ctx, items, timeout, resume).await,
+        } => {
+            items.space = items.space.or(handed_over);
+            links::watch(&ctx, items, timeout, resume).await
+        }
         ItemsCommand::Ready {
             items,
             undo,
@@ -50,5 +54,5 @@ async fn view_review(ctx: &Context, args: ViewArgs) -> Result<i32> {
             && args.repo.name.is_none(),
         "view review takes a review ID and --workspace only"
     );
-    review::show::view(ctx, args.items.review_id()?, args.items.workspace).await
+    review::show::view(ctx, args.items.review_id()?, args.items.space).await
 }

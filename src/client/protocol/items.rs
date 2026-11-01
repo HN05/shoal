@@ -10,14 +10,14 @@ use crate::forge::download::Download;
 #[serde(rename_all = "snake_case")]
 pub enum ItemMethod {
     SetIssue {
-        workspace: String,
+        space: String,
         url: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         title: Option<String>,
     },
     /// Link an issue or PR by number or URL with a relation.
     LinkItem {
-        workspace: String,
+        space: String,
         kind: crate::forge::items::link::LinkKind,
         url: String,
         relation: crate::model::Relation,
@@ -26,13 +26,13 @@ pub enum ItemMethod {
     },
     /// Unlink the relation's items, optionally only one kind or one item.
     UnlinkItems {
-        workspace: String,
+        space: String,
         relation: crate::model::Relation,
         kind: Option<crate::forge::items::link::LinkKind>,
         url: Option<String>,
     },
     SetPr {
-        workspace: String,
+        space: String,
         #[serde(flatten)]
         action: crate::client::links::pr::Action,
     },
@@ -41,7 +41,7 @@ pub enum ItemMethod {
         timeout_secs: Option<u64>,
     },
     WatchItems {
-        workspace: String,
+        space: String,
         selection: crate::forge::items::link::Selection,
         timeout_secs: Option<u64>,
     },
@@ -112,7 +112,7 @@ pub enum ItemMethod {
     /// `elsewhere`, also an issue, PR or CI run of another repository by its
     /// URL.
     SelectItems {
-        workspace: String,
+        space: String,
         selection: crate::forge::items::link::Selection,
         #[serde(default)]
         elsewhere: bool,
@@ -163,13 +163,15 @@ impl DownloadPiece {
     }
 }
 
-/// Where an item request runs: in a workspace, or in the registered checkout
-/// of a repository, named by its ID, for a request that needs only the
-/// repository.
+/// Where an item request runs: in a workspace, in a running chat, by its ID,
+/// which acts in its repository's registered checkout, or in the registered
+/// checkout of a repository, named by its ID, for a request that needs only
+/// the repository.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemContext {
     Workspace(String),
+    Chat(String),
     Checkout(String),
 }
 

@@ -3639,8 +3639,8 @@ no downloads. The `downloads` capability says whether the forge has them.
 
 ### Linked items and cleanup
 
-`shoal link <number-or-url> <relation>` associates an issue or PR with the
-workspace; `shoal link issue <number-or-url> <relation>` and `shoal link pr
+`shoal link <number-or-url> <relation>` associates an issue or PR with a space,
+the workspace or chat it runs in or the one `--space` names; `shoal link issue <number-or-url> <relation>` and `shoal link pr
 <number-or-url> <relation>` select the kind explicitly, and omitting the item picks
 an open one. `shoal link ci <number-or-url> <relation>`, or a run's URL alone,
 links a CI run; a number alone never names one, since run numbers overlap issue
@@ -3663,13 +3663,18 @@ A PR's runs are not linked; the PR's checks cover them, so link one only to
 follow it past the PR's merge. Commands that select items this way give a number without a
 kind the kind of the linked item with that number, otherwise the kind the forge
 reports; GitLab and Bitbucket number issues and PRs separately, so there such a
-number must be linked. Use `--workspace` to select a workspace instead of the current
-context. Numbers resolve against its origin and URLs must match it. Links are
+number must be linked. Use `--space` to select another space, a workspace or chat,
+than the current one. Numbers resolve against its origin and URLs must match it. Links are
 idempotent; an assigned issue must be unlinked before assigning a different one.
 Linking an issue records its title for workspace lists; when the forge cannot be
 read, the link is recorded without one and a warning names the error.
 Assigned PRs accumulate without duplicates and must name the recorded workspace
 branch. Assigned items suppress idle cleanup.
+A chat links items the same way in its repository's registered checkout. It has
+no completion or cleanup, so its assigned items drive neither, and its assigned PRs
+name no branch; the activity Shoal polls for its items reaches its inbox as
+messages, which wake its agent as other chat messages do. Its links go with it
+when it ends.
 
 `shoal view` shows linked items as the forge reports them now: title, state,
 author, labels, assignees, milestone, description, comments, and reviews with their inline comments,
@@ -3694,9 +3699,9 @@ an outside service's; log downloads are limited to 8 MiB.
 Linked runs show as `shoal view ci` shows a run (see [CI runs](#ci-runs)).
 Kinds and explicit items select as they do for `watch`, except that an issue
 or PR URL may name another repository's item, shown without failed job logs, and
-`--no-comments` leaves out comments and reviews. Outside a workspace, such as in
-a chat, it shows the item a number or URL names in the repository of the
-registered checkout it runs in, or of the one `--repo` or the URL names as for
+`--no-comments` leaves out comments and reviews. Outside a workspace or chat, it
+shows the item a number or URL names in the repository of the registered checkout
+it runs in, or of the one `--repo` or the URL names as for
 [issue and PR actions](#issue-and-pr-actions). Each comment shows its ID; an
 inline comment also shows the ID of the comment that starts its thread when it is
 a reply, and whether the thread is resolved. A failed lookup reports its error on that item, and a

@@ -33,7 +33,7 @@ pub(super) async fn handle(
             )));
         }
         ItemMethod::WatchItems {
-            workspace,
+            space: workspace,
             selection,
             timeout_secs,
         } => {
@@ -115,7 +115,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         ItemMethod::SelectItems {
-            workspace,
+            space: workspace,
             selection,
             elsewhere,
         } => Body::SelectedItems(
@@ -124,7 +124,7 @@ pub(super) async fn handle(
                 .await?,
         ),
         ItemMethod::SetIssue {
-            workspace,
+            space: workspace,
             url,
             title,
         } => {
@@ -132,7 +132,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         ItemMethod::LinkItem {
-            workspace,
+            space: workspace,
             kind,
             url,
             relation,
@@ -144,7 +144,7 @@ pub(super) async fn handle(
             Body::Ok
         }
         ItemMethod::UnlinkItems {
-            workspace,
+            space: workspace,
             relation,
             kind,
             url,
@@ -154,7 +154,10 @@ pub(super) async fn handle(
                 .await?;
             Body::Ok
         }
-        ItemMethod::SetPr { workspace, action } => {
+        ItemMethod::SetPr {
+            space: workspace,
+            action,
+        } => {
             manager.set_pr(&workspace, action).await?;
             Body::Ok
         }
@@ -169,7 +172,7 @@ impl Scoped for ItemMethod {
         Ok(match self {
             ItemMethod::ForgeType { .. } => None,
             ItemMethod::WatchItems {
-                workspace,
+                space: workspace,
                 selection,
                 ..
             } => {
@@ -212,15 +215,25 @@ impl Scoped for ItemMethod {
                     | Action::Update { .. },
                 ..
             } => Some(context_workspace(context)?),
-            ItemMethod::SetIssue { workspace, .. }
-            | ItemMethod::LinkItem { workspace, .. }
-            | ItemMethod::UnlinkItems { workspace, .. }
-            | ItemMethod::SetPr { workspace, .. }
+            ItemMethod::SetIssue {
+                space: workspace, ..
+            }
+            | ItemMethod::LinkItem {
+                space: workspace, ..
+            }
+            | ItemMethod::UnlinkItems {
+                space: workspace, ..
+            }
+            | ItemMethod::SetPr {
+                space: workspace, ..
+            }
             | ItemMethod::PrWait { workspace, .. }
             | ItemMethod::OpenPull { workspace, .. }
             | ItemMethod::RevertPull { workspace, .. }
             | ItemMethod::MergedPull { workspace, .. }
-            | ItemMethod::SelectItems { workspace, .. } => Some(workspace),
+            | ItemMethod::SelectItems {
+                space: workspace, ..
+            } => Some(workspace),
         })
     }
 }
@@ -230,7 +243,7 @@ impl Scoped for ItemMethod {
 pub(super) fn context_workspace(context: &mut ItemContext) -> Result<&mut String> {
     match context {
         ItemContext::Workspace(workspace) => Ok(workspace),
-        ItemContext::Checkout(_) => bail!(
+        ItemContext::Checkout(_) | ItemContext::Chat(_) => bail!(
             "workspace processes act on items from their workspace, not from a registered checkout"
         ),
     }

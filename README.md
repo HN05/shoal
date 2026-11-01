@@ -96,7 +96,7 @@ shoal work rename --request fix-login        # Ask its agent to choose the title
 shoal add https://github.com/owner/repo/issues/68 # Create from an issue
 shoal add https://github.com/owner/repo/issues/34  # Add an issue, PR, or branch link
 shoal contribute https://github.com/owner/repo/issues/68  # Fork when you cannot push; remove the clone afterwards
-shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace
+shoal link https://github.com/owner/repo/issues/34 assigned  # Assign an issue to the current workspace or chat
 shoal unlink issue assigned                # Remove the assigned issue
 shoal watch pr 505                         # Watch an explicit PR
 ```

@@ -40,7 +40,7 @@ pub(super) async fn handle(
             execution,
         } => Body::AgentStatus(manager.interrupt_turn(&workspace, execution).await?),
         AgentMethod::AcknowledgePrUpdates {
-            workspace,
+            space: workspace,
             deliveries,
             messages,
             leftovers,
@@ -188,7 +188,7 @@ impl Scoped for AgentMethod {
                 space: workspace, ..
             }
             | AgentMethod::AgentUpdates { workspace }
-            | AgentMethod::AcknowledgePrUpdates { workspace, .. } => Some(workspace),
+            | AgentMethod::AcknowledgePrUpdates { space: workspace, .. } => Some(workspace),
             AgentMethod::ReportTurnFailure {
                 execution: Some(_), ..
             } => bail!("workspace processes report a failed turn only for their own execution"),

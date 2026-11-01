@@ -2015,7 +2015,12 @@ agent account; every other item action stays within the workspace's repository.
 Item commands that need only a repository also run from a registered checkout,
 where a chat runs with the user's authority: they act as the repository's agent
 account under its settings, open without a proposal, and link or record nothing,
-since only a workspace holds links; workspace processes act from their workspace.
+since a checkout holds no links; workspace processes act from their workspace.
+A chat holds links as a workspace does: the link tables name the space, a
+workspace or chat, with IDs from their shared namespace, and go with it. Its
+assigned items drive no completion or cleanup, which a chat does not have, and
+the activity Shoal polls for them becomes messages in its inbox, so the chat's
+existing hooks deliver them and wake its agent.
 An unscoped client such as Quay names that repository with `--repo` instead of
 picking a workspace, whose worktree Shoal would check first: a registered
 repository's checkout is the place to act in, so it reaches PR, view and CI

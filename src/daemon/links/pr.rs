@@ -1,6 +1,6 @@
 //! Persisted opt-in PR watches and manual merge acknowledgements.
 use crate::daemon::refusal::{Reason, Refusal};
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension};
 
 pub(crate) use crate::client::links::pr::{Action, Registration, RegistrationKind};
@@ -9,6 +9,7 @@ use crate::{
     daemon::{
         events::{self, EventKind},
         forge_hosts::ForgeHosts,
+        links::space::LinkSpace,
         notifications::NotificationKind,
         store,
         workspace::{Manager, PrGuard},
@@ -52,8 +53,47 @@ impl Manager {
     }
 
     pub async fn set_pr(&self, selector: &str, action: Action) -> Result<()> {
-        let (workspace, _guard) = self.lock_pr_gate(selector).await?;
+        let space = self.link_space(selector).await?;
+        if let LinkSpace::Chat { .. } = space {
+            return self.set_chat_pr(&space, action).await;
+        }
+        let (workspace, _guard) = self.lock_pr_gate(space.id()).await?;
         self.set_pr_gated(&workspace.id, action, WatchCheck::Lookup)
+            .await
+    }
+
+    /// [`Self::set_pr`] for a chat, whose PR watches drive no cleanup and
+    /// whose checkout's branch is not its own.
+    async fn set_chat_pr(&self, chat: &LinkSpace, action: Action) -> Result<()> {
+        let id = chat.id().to_owned();
+        let _guard = self.gates.lock_prs([&id]).await;
+        let previous = match self.pr_registration(&id).await {
+            Ok(previous) => previous,
+            Err(_) if matches!(action, Action::Clear) => None,
+            Err(error) => return Err(error),
+        };
+        let kind = match action {
+            Action::Clear => None,
+            Action::Unwatch { url } => {
+                (self.without_pr_watch(chat.origin_path(), &id, &url)).await?
+            }
+            Action::Watch { url } => {
+                let (_, _, url) = self.pr_forge(chat.origin_path(), &url).await?;
+                Some(self.adding_pr_watch(&id, url).await?)
+            }
+            Action::Acknowledge => bail!("a chat has no branch whose merge it acknowledges"),
+        };
+        let change = RegistrationChange::new(
+            previous.as_ref(),
+            kind.map(|kind| Registration { kind, error: None }),
+        );
+        self.store
+            .run(move |db| {
+                let tx = db.transaction()?;
+                change.apply(&tx, &id)?;
+                tx.commit()?;
+                Ok(())
+            })
             .await
     }
 
@@ -86,7 +126,9 @@ impl Manager {
         };
         let kind = match action {
             Action::Clear => None,
-            Action::Unwatch { url } => self.without_pr_watch(&workspace, &url).await?,
+            Action::Unwatch { url } => {
+                (self.without_pr_watch(&workspace.path, &workspace.id, &url)).await?
+            }
             Action::Watch { url } => Some(self.with_pr_watch(&workspace, &url, check).await?),
             Action::Acknowledge => Some(RegistrationKind::Acknowledgement {
                 head: current_head(&workspace).await?,
@@ -117,14 +159,19 @@ impl Manager {
         check: WatchCheck,
     ) -> Result<RegistrationKind> {
         current_head(workspace).await?;
-        let (forge, number, url) = self.pr_forge(workspace, input).await?;
+        let (forge, number, url) = self.pr_forge(&workspace.path, input).await?;
         // Detect missing tools/login, wrong branches and invalid PRs now.
         if check == WatchCheck::Lookup {
             forge
                 .merged_commits(&self.user_account(), number, &workspace.branch)
                 .await?;
         }
-        let (mut urls, mut merged_head) = match self.pr_registration(&workspace.id).await? {
+        self.adding_pr_watch(&workspace.id, url).await
+    }
+
+    /// The PR watches of the space `id` with `url` among them.
+    async fn adding_pr_watch(&self, id: &str, url: String) -> Result<RegistrationKind> {
+        let (mut urls, mut merged_head) = match self.pr_registration(id).await? {
             Some(Registration {
                 kind: RegistrationKind::Watch { urls, merged_head },
                 ..
@@ -138,12 +185,15 @@ impl Manager {
         Ok(RegistrationKind::Watch { urls, merged_head })
     }
 
+    /// The PR watches of the space `id` without the PR `input` names in the
+    /// repository whose origin `checkout` has, which must be watched.
     async fn without_pr_watch(
         &self,
-        workspace: &Workspace,
+        checkout: &std::path::Path,
+        id: &str,
         input: &str,
     ) -> Result<Option<RegistrationKind>> {
-        let (_, _, url) = self.pr_forge(workspace, input).await?;
+        let (_, _, url) = self.pr_forge(checkout, input).await?;
         let Some(Registration {
             kind:
                 RegistrationKind::Watch {
@@ -151,7 +201,7 @@ impl Manager {
                     merged_head,
                 },
             ..
-        }) = self.pr_registration(&workspace.id).await?
+        }) = self.pr_registration(id).await?
         else {
             return Err(Refusal::new(Reason::NotFound, format!("PR is not watched: {url}")).into());
         };
@@ -163,12 +213,14 @@ impl Manager {
         Ok((!urls.is_empty()).then_some(RegistrationKind::Watch { urls, merged_head }))
     }
 
+    /// The forge of the repository whose origin `checkout` has, with the
+    /// number and canonical URL of the PR `input` names there.
     pub(super) async fn pr_forge(
         &self,
-        workspace: &Workspace,
+        checkout: &std::path::Path,
         input: &str,
     ) -> Result<(ForgeRepo, u64, String)> {
-        let remote = repository::remote_url_from_path(&workspace.path)
+        let remote = repository::remote_url_from_path(checkout)
             .await?
             .context("PR lookup needs an origin remote")?;
         let forge = self.forge(&remote).await?;
@@ -379,7 +431,7 @@ impl Manager {
     ) -> Result<bool> {
         let mut contains_head = false;
         for url in urls {
-            let (forge, number, _) = self.pr_forge(workspace, url).await?;
+            let (forge, number, _) = self.pr_forge(&workspace.path, url).await?;
             let Some(commits) = forge
                 .merged_commits(&self.user_account(), number, &workspace.branch)
                 .await?

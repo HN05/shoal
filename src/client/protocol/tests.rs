@@ -158,10 +158,10 @@ fn pr_actions_preserve_existing_wire_fields() {
         (Action::Acknowledge, None, false),
         (Action::Clear, None, true),
     ] {
-        let wire = json!({"set_pr": {"workspace": "worker", "url": url, "clear": clear}});
+        let wire = json!({"set_pr": {"space": "worker", "url": url, "clear": clear}});
         let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
         let ItemMethod::SetPr {
-            workspace,
+            space: workspace,
             action: decoded_action,
         } = &decoded
         else {
@@ -172,7 +172,7 @@ fn pr_actions_preserve_existing_wire_fields() {
         assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     }
     let decoded: ItemMethod =
-        serde_json::from_value(json!({"set_pr": {"workspace": "worker", "clear": false}})).unwrap();
+        serde_json::from_value(json!({"set_pr": {"space": "worker", "clear": false}})).unwrap();
     assert!(matches!(
         decoded,
         ItemMethod::SetPr {
@@ -184,8 +184,7 @@ fn pr_actions_preserve_existing_wire_fields() {
 
 #[test]
 fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
-    let wire =
-        json!({"set_pr": {"workspace": "worker", "url": null, "clear": false, "unwatch": "7"}});
+    let wire = json!({"set_pr": {"space": "worker", "url": null, "clear": false, "unwatch": "7"}});
     let decoded: ItemMethod = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     for action in [
@@ -199,7 +198,7 @@ fn selective_unwatch_round_trips_and_rejects_conflicting_actions() {
 #[test]
 fn pr_actions_reject_conflicting_wire_fields() {
     let error = serde_json::from_value::<ItemMethod>(
-        json!({"set_pr": {"workspace": "worker", "url": "7", "clear": true}}),
+        json!({"set_pr": {"space": "worker", "url": "7", "clear": true}}),
     )
     .unwrap_err();
     assert!(
@@ -207,10 +206,8 @@ fn pr_actions_reject_conflicting_wire_fields() {
         "{error}"
     );
     assert!(
-        serde_json::from_value::<ItemMethod>(
-            json!({"set_pr": {"workspace": "worker", "url": "7"}})
-        )
-        .is_err()
+        serde_json::from_value::<ItemMethod>(json!({"set_pr": {"space": "worker", "url": "7"}}))
+            .is_err()
     );
 }
 

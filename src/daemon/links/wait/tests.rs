@@ -336,6 +336,55 @@ async fn background_activity_queues_for_the_agents_hooks() {
 }
 
 #[tokio::test]
+async fn a_chats_background_activity_reaches_its_inbox_once() {
+    let (root, manager) = manager().await;
+    let repo_path = repository(root.path(), "repo");
+    let repo = manager
+        .register_repository(repo_path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let chat = manager
+        .start_chat(
+            repo.id.clone().into(),
+            "planning".into(),
+            "claude".into(),
+            std::process::id(),
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    register_watch(&manager, &chat.id, "pr").await;
+    let queued = manager.signals.watch_chat_messages();
+    for comment in ["first", "second"] {
+        manager
+            .queue_background_updates(
+                &chat.id,
+                vec![("pr".into(), snapshot(comment))],
+                crate::time::unix_seconds(),
+            )
+            .await
+            .unwrap();
+        manager.hand_updates_to_chat(&chat.id).await.unwrap();
+    }
+    assert!(queued.has_changed().unwrap());
+    // Each change reaches the chat as a message, which leaves the cursor,
+    // so handing over again repeats nothing.
+    manager.hand_updates_to_chat(&chat.id).await.unwrap();
+    let messages = manager.chat_messages(&chat.id).await.unwrap();
+    let texts: Vec<_> = messages.iter().map(|message| &message.message).collect();
+    assert_eq!(
+        texts,
+        [
+            "pr [comment]: 1 new comment; read them with shoal view pr",
+            "pr [comment]: 1 edited comment; read them with shoal view pr"
+        ]
+    );
+    let pending = manager.pending_activity(&chat.id, &["pr".into()]).await;
+    assert!(pending.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn hook_delivery_does_not_wait_for_the_pr_gate() {
     let (root, manager) = manager().await;
     let repo_path = repository(root.path(), "repo");

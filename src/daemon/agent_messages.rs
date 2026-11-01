@@ -407,7 +407,7 @@ impl Manager {
         // Item updates first: a failure then leaves both to be delivered
         // again, while deleted messages could not be.
         self.acknowledge_pr_updates(selector, deliveries).await?;
-        self.mark_agent_messages_delivered(selector, messages).await
+        self.mark_space_messages_delivered(selector, messages).await
     }
 
     /// [`Self::mark_agent_messages_delivered`] for the workspace, or

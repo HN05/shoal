@@ -128,7 +128,7 @@ async fn link_pr(
 ) -> Result<()> {
     reporter.ensure_running()?;
     let method = ItemMethod::LinkItem {
-        workspace: workspace.id.clone(),
+        space: workspace.id.clone(),
         kind: LinkKind::Pr,
         url: pr,
         relation: Relation::Assigned,

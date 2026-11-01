@@ -29,7 +29,7 @@ pub(in crate::cli::commands) async fn view(
 ) -> Result<i32> {
     let run = items.item.context("view ci needs a run's number or URL")?;
     validate_run_reference(&run)?;
-    let context = super::input_context(ctx, items.workspace, repo, Some(&run)).await?;
+    let context = super::input_context(ctx, items.space, repo, Some(&run)).await?;
     if web {
         return open(ctx, context, run).await;
     }
