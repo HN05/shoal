@@ -15,10 +15,9 @@ instead of the PR delivery guidance below.
   backlog and ownership lock across exec; read-only streams reconnect after the
   handoff, preserving event cursors, and continue in the installed release when
   the protocol changes. Only requests a daemon refused unrun are sent again.
-- The client API (`crates/shoal-client`) stays compatible within a major
-  version: never remove or rename a field, method, enum value or error code
-  without a major bump. Its daemon side runs existing operations under their
-  scope checks rather than its own rules.
+- Apps use the protocol through `shoal::client`, which keeps no compatibility
+  promise beyond the exact version match. The CLI and apps share that module's
+  connection and client-side logic; it builds without the `cli` feature.
 - The minimum Rust version follows current stable; keep the manifest and CI
   toolchain aligned and validate with locked dependencies.
 - Treat function abstraction as a blocking correctness check. Require every

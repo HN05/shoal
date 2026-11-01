@@ -14,11 +14,13 @@ app launch opens, gets JSON by default only when its own environment sets it.
 
 A JSON error is `{"error": {"code": ..., "message": ...}}`. Programs tell
 failures apart by `code`, never by the message, which may change. A refusal
-carries the client API's [error code](../crates/shoal-client/README.md#errors)
-for it, such as `not_found`, `name_taken` or `scope_denied`; `command_failed`
-is a failure without a specific code, and any other code is the daemon's, as it
-sent it. A command that waits on an approval it requested is not an error: it
-exits 2 with `code: "approval_pending"` or `"approval_denied"` on stdout.
+carries the protocol's error code for it, such as `not_found`, `name_taken`,
+`scope_denied` or `setup_failed`; `command_failed` is a failure without a
+specific code, and any other code is the daemon's, as it sent it. A command
+that waits on an approval it requested is not an error: it exits 2 with
+`code: "approval_pending"` or `"approval_denied"` on stdout. A Rust program
+reads every command's JSON, the error included, with the types of the
+[library's](#apps) `shoal::client::output`.
 
 Human-readable output uses color when its destination is a terminal. Set a
 nonempty `NO_COLOR` or `TERM=dumb` to disable it. Redirected output and JSON
@@ -529,14 +531,29 @@ assignment is done and whatever `[machine.overload.recovery]` says. Timers the a
 keeps itself, such as Claude Code's `ScheduleWakeup` or `/loop`, end with it,
 which is why `[idle_stop]` is opt-in.
 
-### Client API
+### Apps
 
-Apps other than the CLI, such as Quay, use the client API on the daemon's
-socket: typed requests for a subset of the CLI's operations, error codes, and
-subscriptions to repositories, workspaces and the rest as they change.
-[`crates/shoal-client`](../crates/shoal-client/README.md) is its Rust client and
-describes the protocol. Without a scope token the caller is the user; with one,
-it is that workspace's agent, under the rules of its `shoal` commands.
+Apps other than the CLI, such as Quay, use Shoal's protocol through the `shoal`
+library, a git tag of a Shoal release built without its default features,
+which hold the CLI and the daemon:
+
+```toml
+shoal = { git = "https://git.henriknordvik.com/HN05/shoal", tag = "<release tag>", default-features = false }
+```
+
+`shoal::client` holds every request the CLI makes, with its reply's types;
+`connection` sends them to the daemon a `Connector` names, and `subscriptions`
+follows repositories, workspaces with their agents, linked issues, PRs and CI
+runs, open questions, pending approval requests, messages and notifications as
+they change, subscribing again after a daemon restart. It also holds the logic
+the CLI applies on its side: which workspaces a command would act on, list
+status labels, the AI tools Shoal can launch, and reading and validating
+configuration, and in `output` the types every command prints with `--json`.
+Without a scope token the caller is the user; with one, it is
+that workspace's agent, under the rules of its `shoal` commands. The library
+speaks only its own release's protocol: a daemon of another release refuses
+it with `protocol_mismatch` naming both versions, and the app updates with
+Shoal.
 
 ## Workspaces
 
