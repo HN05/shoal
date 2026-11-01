@@ -7425,8 +7425,14 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
     });
     assert!(fixture.daemon.child.wait().unwrap().success());
     fs::remove_file(home.join("chat-args")).unwrap();
-    // The next daemon opens the chat in a zmx session, which runs it.
-    install_test_script(home.join("daemon-bin").join("zmx"), PASSTHROUGH_ZMX);
+    // The next daemon opens the chat in a zmx session, which runs it on a
+    // terminal of its own, as a chat needs.
+    let zmx = PASSTHROUGH_ZMX.replace(
+        "sys.exit(subprocess.run(['sh', '-c', args[1]]).returncode)",
+        "import pty; sys.exit(os.waitstatus_to_exitcode(pty.spawn(['sh', '-c', args[1]])))",
+    );
+    assert_ne!(zmx, PASSTHROUGH_ZMX);
+    install_test_script(home.join("bin").join("zmx"), &zmx);
     fixture.restart();
 
     // The resumed agent records its arguments, then its chat, then exits.
@@ -7434,6 +7440,9 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
         fs::read_to_string(home.join("chat-args"))
             .is_ok_and(|args| args.contains("--resume\nchat-session\n"))
     });
+    // The fake opened it, not a zmx the runner may have installed.
+    let calls = fs::read_to_string(home.join("zmx-calls")).unwrap();
+    assert!(calls.contains("\"run\""), "{calls}");
     wait_until("chat-id rewritten", || {
         fs::read_to_string(home.join("chat-id"))
             .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
