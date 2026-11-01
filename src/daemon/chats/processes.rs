@@ -51,10 +51,13 @@ pub(super) async fn survivors(
     Ok(survivors)
 }
 
-/// The group the process `recorded` led, when one under its ID can still be
-/// its own: it runs, or no other process has its ID, in the boot it ran in.
+/// The group the process `recorded` led, when it has to be asked: its
+/// recorded never-reused ID, where the platform reports one, finds what it
+/// started through their lineage, which a group under a reused ID cannot
+/// fool. Otherwise when one under its ID can still be its own: it runs, or
+/// no other process has its ID, in the boot it ran in.
 pub(super) fn led_group(recorded: &Identity) -> Result<Option<u32>> {
-    if recorded.of_earlier_boot() {
+    if recorded.unique.is_some() || recorded.of_earlier_boot() {
         return Ok(None);
     }
     let reused = identity::capture(recorded.pid)?.is_some_and(|current| current != *recorded);

@@ -451,8 +451,20 @@ async fn a_chat_that_ended_before_the_save_is_not_saved() {
 fn a_group_under_the_agents_id_is_its_own_only_while_nobody_took_the_id() {
     use crate::daemon::chats::processes::led_group;
     use crate::process::identity::{Identity, capture};
-    let live = capture(std::process::id()).unwrap().unwrap();
+    let live = Identity {
+        unique: None,
+        ..capture(std::process::id()).unwrap().unwrap()
+    };
     assert_eq!(led_group(&live).unwrap(), Some(live.pid));
+    // Its recorded lineage finds what it started instead, whoever took the
+    // group's ID since.
+    if let Some(unique) = capture(std::process::id()).unwrap().unwrap().unique {
+        let traced = Identity {
+            unique: Some(unique),
+            ..live.clone()
+        };
+        assert_eq!(led_group(&traced).unwrap(), None);
+    }
     // Another process now has the ID.
     let reused = Identity {
         birth: "an earlier process".into(),
