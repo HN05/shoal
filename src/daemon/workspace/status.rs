@@ -14,8 +14,8 @@ use crate::{
     },
     git,
     model::{
-        CleanupReason, DiffSummary, Inspection, IssueStatus, Relation, Selected, SelectedItem,
-        Workspace, WorkspaceStatus, WorkspaceTarget,
+        DiffSummary, Inspection, IssueStatus, Relation, Selected, SelectedItem, Workspace,
+        WorkspaceStatus, WorkspaceTarget,
     },
     repository,
 };
@@ -39,7 +39,7 @@ impl Manager {
             issue_status(&hosts, &account, &remote, &inspection)
         );
         let unread_notifications = self.unread_notifications().await?;
-        let cleanup_reason = self.bounded_cleanup_reason(&inspection.workspace).await;
+        let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
         let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();
         let (setup_finished, turn_retry) = self
@@ -83,17 +83,6 @@ impl Manager {
         let base = self.diff_base(&workspace.id).await?;
         let numstat = git::diff::numstat(&workspace.path, &base.commit).await?;
         parse_numstat(&numstat)
-    }
-
-    /// [`Manager::cleanup_reason`] within the time limit of a check of the
-    /// workspace's volume.
-    async fn bounded_cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
-        let reason = async { Ok(self.cleanup_reason(workspace).await) };
-        self.check_volume(&workspace.path, reason)
-            .await
-            .unwrap_or_else(|error| CleanupReason::InspectionFailed {
-                error: format!("{error:#}"),
-            })
     }
 }
 

@@ -563,34 +563,37 @@ impl Manager {
     }
 
     /// Why automatic cleanup keeps the workspace, or its idle delay when
-    /// nothing does; a failed inspection is reported as the reason.
+    /// nothing does, inspected as a check of its volume; a failed inspection
+    /// is reported as the reason.
     pub async fn cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
-        let reason = async {
-            if workspace.state != WorkspaceState::Ready {
-                return Ok(CleanupReason::NotReady {
-                    state: workspace.state,
-                });
-            }
-            if let Err(reason) = self.cleanup_candidate(&workspace.id, &[]).await? {
-                return Ok(reason);
-            }
-            let auto = self
-                .workspace_settings(workspace)
-                .await?
-                .into_settings()
-                .cleanup
-                .auto;
-            Ok(if auto.enabled {
-                CleanupReason::Idle {
-                    minutes: auto.idle_minutes,
-                }
-            } else {
-                CleanupReason::IdleDisabled
+        self.check_volume(&workspace.path, self.inspect_cleanup(workspace))
+            .await
+            .unwrap_or_else(|error| CleanupReason::InspectionFailed {
+                error: format!("{error:#}"),
             })
+    }
+
+    async fn inspect_cleanup(&self, workspace: &Workspace) -> Result<CleanupReason> {
+        if workspace.state != WorkspaceState::Ready {
+            return Ok(CleanupReason::NotReady {
+                state: workspace.state,
+            });
         }
-        .await;
-        reason.unwrap_or_else(|error: anyhow::Error| CleanupReason::InspectionFailed {
-            error: format!("{error:#}"),
+        if let Err(reason) = self.cleanup_candidate(&workspace.id, &[]).await? {
+            return Ok(reason);
+        }
+        let auto = self
+            .workspace_settings(workspace)
+            .await?
+            .into_settings()
+            .cleanup
+            .auto;
+        Ok(if auto.enabled {
+            CleanupReason::Idle {
+                minutes: auto.idle_minutes,
+            }
+        } else {
+            CleanupReason::IdleDisabled
         })
     }
 

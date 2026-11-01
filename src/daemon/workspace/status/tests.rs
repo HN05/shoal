@@ -40,7 +40,7 @@ async fn status_reports_git_checks_on_a_stalled_volume_as_unavailable() {
     let stall = "stalled; a macOS privacy prompt may be waiting for an answer";
     let error = status.diff_error.unwrap();
     assert!(error.contains(stall), "{error}");
-    let CleanupReason::InspectionFailed { error } = status.cleanup_reason else {
+    let crate::model::CleanupReason::InspectionFailed { error } = status.cleanup_reason else {
         panic!("expected a failed inspection: {:?}", status.cleanup_reason);
     };
     assert!(error.contains(stall), "{error}");
