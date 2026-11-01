@@ -61,6 +61,12 @@ impl ListFilter {
         self.keeps_repository(repository_id) && self.statuses.is_empty()
     }
 
+    /// An item of the daemon itself, which belongs to no repository and has
+    /// no workspace status.
+    pub(super) fn keeps_daemon(&self) -> bool {
+        self.repository.is_none() && self.statuses.is_empty()
+    }
+
     fn keeps_repository(&self, repository_id: &str) -> bool {
         self.repository
             .as_deref()

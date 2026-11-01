@@ -33,6 +33,10 @@ pub enum Item {
     Untracked {
         worktree: UntrackedWorktree,
     },
+    /// Automatic cleanup failing other than in a workspace, or stalled.
+    Cleanup {
+        error: String,
+    },
 }
 
 outputs!(Item);

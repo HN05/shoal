@@ -96,7 +96,8 @@ directory whose file access stalls, as while macOS waits for an answer to a
 privacy prompt, whichever process the prompt is for: a worktree check that
 runs 30 seconds or is interrupted reports the directory holding the worktree
 once as an `access_stalled` alert, and it stays listed until a check there
-finishes. While the daemon starts, its answer names the step, a stalled
+finishes. It also says, in `cleanup_error`, when a step of automatic cleanup
+fails other than in a workspace or no pass has finished for 10 minutes. While the daemon starts, its answer names the step, a stalled
 directory, or a path whose check has waited five seconds. A daemon that
 owns the state directory but does not answer is reported with its PID by every
 command. `daemon status`, `stop` and `restart` need no request capacity, and send
@@ -705,18 +706,20 @@ pending approval requests that no coordinating agent decides, including issue
 [proposals](#approval-for-agent-issues-and-prs) whose workspace is gone, workspaces whose
 agent needs input, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
-marked item, running [demos](#demos), and Git worktrees under a repository's
-Shoal directory that no workspace owns. There Enter answers a question, approves or denies a request after
+marked item, running [demos](#demos), Git worktrees under a repository's
+Shoal directory that no workspace owns, and automatic cleanup failing other
+than in a workspace. There Enter answers a question, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
-mark on the workspace itself), opens a demo, and adopts an untracked worktree
-with [`shoal work adopt`](#adopting-a-worktree); Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
+mark on the workspace itself), opens a demo, adopts an untracked worktree
+with [`shoal work adopt`](#adopting-a-worktree), and shows `shoal daemon status`
+for failing cleanup; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
-`kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo` or
-`untracked`) with its `question`, `request`, `workspace`, `demo` or `worktree`
-(`repository_id` and `path`) and a ready item's `mark`. A workspace
-process gets only its own items, never untracked worktrees, printed, and none after clearing its scope
+`kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo`,
+`untracked` or `cleanup`) with its `question`, `request`, `workspace`, `demo`,
+`worktree` (`repository_id` and `path`) or `error`, and a ready item's `mark`. A workspace
+process gets only its own items, never untracked worktrees or failing cleanup, printed, and none after clearing its scope
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A

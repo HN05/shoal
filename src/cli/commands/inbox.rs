@@ -1,7 +1,8 @@
 //! `shoal inbox`: what needs the user now, each with its workspace: open
 //! questions, pending approvals, agents that need input, failed workspaces,
-//! work marked ready at its current commit, running demos, and Git worktrees
-//! under Shoal's directories that no workspace owns.
+//! work marked ready at its current commit, running demos, Git worktrees
+//! under Shoal's directories that no workspace owns, and automatic cleanup
+//! failing other than in a workspace.
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -59,7 +60,8 @@ pub(super) async fn list(ctx: &Context, filter: &ListFilter) -> Result<i32> {
 
 impl Inbox {
     /// Questions, then approvals, agents that need input, failed workspaces,
-    /// ready marks and running demos, for the workspaces `filter` keeps.
+    /// ready marks and running demos, for the workspaces `filter` keeps, then
+    /// untracked worktrees and failing automatic cleanup.
     pub(in crate::cli) async fn request(ctx: &Context, filter: &ListFilter) -> Result<Self> {
         // Without its token, the daemon would answer a workspace process as the user.
         ensure!(
@@ -98,7 +100,8 @@ impl Inbox {
                 .filter(|demo| workspaces.iter().any(|w| w.id == demo.workspace_id))
                 .map(|demo| Item::Demo { demo }),
         );
-        // Workspace processes see their own tree, which no untracked worktree is in.
+        // Workspace processes see their own tree, which no untracked worktree
+        // or daemon-wide failure is in.
         if !crate::env::is_scoped() {
             let untracked =
                 client::pages::<UntrackedWorktree>(&ctx.paths, WorkspaceMethod::UntrackedWorktrees)
@@ -109,6 +112,11 @@ impl Inbox {
                     .filter(|worktree| filter.keeps_detached(&worktree.repository_id))
                     .map(|worktree| Item::Untracked { worktree }),
             );
+            if filter.keeps_daemon() {
+                let status = client::status(&ctx.paths).await?;
+                let error = status.and_then(|status| status.cleanup_error);
+                items.extend(error.map(|error| Item::Cleanup { error }));
+            }
         }
         Ok(Self { items, workspaces })
     }
@@ -219,7 +227,7 @@ impl Item {
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
             Self::Demo { demo } => &demo.workspace_id,
-            Self::Untracked { .. } => "",
+            Self::Untracked { .. } | Self::Cleanup { .. } => "",
         }
     }
 
@@ -247,6 +255,7 @@ impl Item {
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or_default(),
+            Self::Cleanup { .. } => "",
         }
     }
 
@@ -259,6 +268,7 @@ impl Item {
             Self::Ready { .. } => ("ready", Style::Success),
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
+            Self::Cleanup { .. } => ("cleanup", Style::Error),
         };
         (label.into(), Some(style))
     }
@@ -287,6 +297,7 @@ impl Item {
             }
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
+            Self::Cleanup { error } => error.clone(),
         }
     }
 

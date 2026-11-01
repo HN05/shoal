@@ -37,3 +37,20 @@ fn no_installed_host_suggests_installing_the_default() {
     assert!(note.starts_with("No terminal host is installed"), "{note}");
     assert!(note.contains("Install zmx, the default host"), "{note}");
 }
+
+#[test]
+fn status_names_failing_cleanup() {
+    let status = crate::protocol::DaemonStatus {
+        pid: 42,
+        version: "1.0.0".into(),
+        uptime_secs: 1,
+        managed: true,
+        unread_notifications: 0,
+        access_stalls: Vec::new(),
+        cleanup_error: Some("Automatic cleanup failed 2 consecutive passes".into()),
+    };
+    assert_eq!(
+        status_message(&status),
+        "Daemon running (PID 42, version 1.0.0)\nAutomatic cleanup failed 2 consecutive passes"
+    );
+}

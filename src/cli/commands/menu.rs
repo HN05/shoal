@@ -23,6 +23,7 @@ use crate::{
             create::CreateCommand,
             items::{ItemArgs, ItemsCommand, ViewArgs},
             lifecycle::LifecycleCommand,
+            service::{DaemonCommand, ServiceCommand},
             sessions::SessionsCommand,
             workspace::{WorkCommand, WorkspaceCommand},
         },
@@ -227,6 +228,8 @@ enum Row {
     },
     /// A worktree no workspace owns, by its path.
     Untracked(PathBuf),
+    /// Automatic cleanup failing other than in a workspace.
+    Cleanup,
     Workspace(String),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -257,6 +260,7 @@ impl Row {
                 name: demo.launch.name.clone(),
             },
             Item::Untracked { worktree } => Self::Untracked(worktree.path.clone()),
+            Item::Cleanup { .. } => Self::Cleanup,
         }
     }
 
@@ -277,6 +281,7 @@ impl Row {
             }
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
             Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
+            Self::Cleanup => "cleanup:".into(),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -295,6 +300,9 @@ impl Row {
         }
         if kind == "untracked" {
             return Ok(Self::Untracked(decode_path(rest)?));
+        }
+        if kind == "cleanup" {
+            return Ok(Self::Cleanup);
         }
         let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let workspace = workspace.to_owned();
@@ -337,7 +345,7 @@ impl Row {
             | Self::Demo { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
-            Self::Untracked(_) | Self::Add => None,
+            Self::Untracked(_) | Self::Cleanup | Self::Add => None,
         }
     }
 }
@@ -587,7 +595,7 @@ async fn command(ctx: &Context, key: Key, row: Row) -> Result<Choice> {
 
 /// Answer a question, decide an approval as it was listed, attach to an
 /// agent that needs input, show a failure, view ready work, open a demo,
-/// or enter a workspace.
+/// show the daemon's status for failing cleanup, or enter a workspace.
 async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
     Ok(Choice::Run(Box::new(match row {
         Row::Question { id, .. } => Command::Coordination(CoordinationCommand::Questions {
@@ -648,6 +656,9 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
             repository: None,
             status: Vec::new(),
             print: false,
+        }),
+        Row::Cleanup => Command::Service(ServiceCommand::Daemon {
+            command: DaemonCommand::Status,
         }),
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
             workspace: Some(workspace),

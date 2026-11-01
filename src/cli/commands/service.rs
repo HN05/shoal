@@ -189,7 +189,8 @@ pub(super) async fn install_config(ctx: &Context, name: Option<String>) -> Resul
     Ok(0)
 }
 
-/// The running daemon and each directory whose file access stalls.
+/// The running daemon, each directory whose file access stalls, and why
+/// automatic cleanup fails other than in a workspace.
 fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     let mut message = format!(
         "Daemon running (PID {}, version {}{})",
@@ -204,6 +205,9 @@ fn status_message(status: &crate::protocol::DaemonStatus) -> String {
     for stall in &status.access_stalls {
         let since = crate::time::local_ago(stall.since as i64, now);
         message.push_str(&format!("\n{} (since {since})", stall.message()));
+    }
+    if let Some(error) = &status.cleanup_error {
+        message.push_str(&format!("\n{error}"));
     }
     message
 }
@@ -226,7 +230,9 @@ pub(super) async fn run(
                 .as_ref()
                 .map(status_message)
                 .unwrap_or_else(|| "Daemon is not running".into());
-            let healthy = status.as_ref().is_some_and(|s| s.access_stalls.is_empty());
+            let healthy = status
+                .as_ref()
+                .is_some_and(|s| s.access_stalls.is_empty() && s.cleanup_error.is_none());
             ctx.emit_styled(
                 if healthy {
                     Style::Success

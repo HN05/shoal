@@ -2344,8 +2344,9 @@ registered workspaces are excluded from idle cleanup until cleared or removed.
 An invalid record retains its workspace without blocking cleanup of others.
 A failed sweep step does not skip the others.
 Background loops restart after a panic, and a failed daemon log write never stops them.
-Failing or stalled cleanup shows in workspace status and notifies once per run of
-failed passes.
+A step's failure in a workspace shows in that workspace's status, and other
+failures or a stalled loop in daemon status and the inbox; each notifies once per
+run of failed passes, about its workspace where it has one.
 
 There is no diagnostic command: each problem shows where the user looks and names
 the command that resolves it. A failing command's error says what to run, `inbox`

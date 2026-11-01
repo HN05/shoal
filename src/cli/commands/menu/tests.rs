@@ -30,3 +30,10 @@ fn untracked_rows_keep_paths_with_tabs_newlines_and_spaces() {
     }
     assert!(Row::parse("untracked:zz".to_owned()).is_err());
 }
+
+#[test]
+fn cleanup_rows_round_trip_without_a_workspace() {
+    let row = Row::parse(Row::Cleanup.id()).unwrap();
+    assert!(matches!(row, Row::Cleanup));
+    assert_eq!(row.workspace(), None);
+}

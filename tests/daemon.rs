@@ -1072,7 +1072,7 @@ fn event_cli_preserves_adjacent_frames_and_finishes_an_empty_listing() {
 }
 
 #[test]
-fn inbox_reads_untracked_worktrees_over_several_frames() {
+fn inbox_reads_untracked_worktrees_over_several_frames_and_failing_cleanup() {
     let root = tempfile::tempdir_in("/tmp").unwrap();
     let listener = support::fake_daemon::bind_fake_daemon(root.path());
     listener.set_nonblocking(true).unwrap();
@@ -1108,6 +1108,19 @@ fn inbox_reads_untracked_worktrees_over_several_frames() {
                     .map(|reply| support::fake_daemon::frame(&request, reply))
                     .concat();
                     (&stream).write_all(frames.as_bytes()).unwrap();
+                    continue;
+                }
+                "status" => {
+                    let status = json!({
+                        "pid": 1,
+                        "version": "test",
+                        "uptime_secs": 1,
+                        "managed": false,
+                        "unread_notifications": 0,
+                        "cleanup_error": "Automatic cleanup failed",
+                    });
+                    let reply = json!({"type": "status", "data": status});
+                    support::fake_daemon::write_reply(&stream, &request, reply);
                     break;
                 }
                 method => panic!("unexpected request {method}"),
@@ -1122,13 +1135,16 @@ fn inbox_reads_untracked_worktrees_over_several_frames() {
     daemon.join().unwrap();
     assert!(output.status.success(), "{output:?}");
     let items: Value = serde_json::from_slice(&output.stdout).unwrap();
-    let paths: Vec<_> = items
-        .as_array()
-        .unwrap()
+    let (cleanup, worktrees) = items.as_array().unwrap().split_last().unwrap();
+    let paths: Vec<_> = worktrees
         .iter()
         .map(|item| item["worktree"]["path"].as_str().unwrap())
         .collect();
     assert_eq!(paths, ["/repo/stray-0", "/repo/stray-1", "/repo/stray-2"]);
+    assert_eq!(
+        cleanup,
+        &json!({"kind": "cleanup", "error": "Automatic cleanup failed"})
+    );
 }
 
 #[test]
