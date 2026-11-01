@@ -787,6 +787,40 @@ pub struct DaemonStatus {
     pub uptime_secs: u64,
     pub managed: bool,
     pub unread_notifications: u64,
+    /// Volumes whose file access stalls now.
+    #[serde(default)]
+    pub volume_stalls: Vec<VolumeStall>,
+}
+
+/// A volume whose file access stalled, as while macOS waits for an answer to
+/// a privacy prompt for it, until a later check of it finishes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeStall {
+    /// The volume, such as `/Volumes/SSD`, or the checked path itself when it
+    /// is not on a mounted volume.
+    pub volume: std::path::PathBuf,
+    /// The path whose check stalled first.
+    pub path: std::path::PathBuf,
+    /// Unix seconds.
+    pub since: u64,
+    /// How the check stalled, such as `did not finish within 30s`.
+    pub reason: String,
+}
+
+impl VolumeStall {
+    /// What the user reads about the stall.
+    pub fn message(&self) -> String {
+        let of = if self.path == self.volume {
+            String::new()
+        } else {
+            format!(" of {}", self.path.display())
+        };
+        format!(
+            "File access on {} stalled: a check{of} {}. A macOS privacy prompt may be waiting for an answer.",
+            self.volume.display(),
+            self.reason
+        )
+    }
 }
 
 /// A wrapper's request to restore its execution connection after the daemon

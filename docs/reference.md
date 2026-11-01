@@ -91,7 +91,11 @@ run `shoal --state-dir /tmp/shoal-dev daemon run` in the foreground and target
 it with the same `--state-dir` (or `SHOAL_STATE_DIR`). State defaults to
 `~/.local/state/shoal`; runtime state and the Unix socket are private to the
 user. Service commands target the one registered per-user service, whose state
-directory must match. `daemon status` exits 1 when offline. A daemon that
+directory must match. `daemon status` exits 1 when offline, and names each
+volume whose file access stalls, as while macOS waits for an answer to a
+privacy prompt for it, whichever process the prompt is for: a worktree check
+there that runs 30 seconds or is interrupted reports the volume once as a
+`volume_stalled` alert, and it stays listed until a check finishes. A daemon that
 owns the state directory but does not answer is reported with its PID by every
 command. `daemon status`, `stop` and `restart` need no request capacity, and send
 a daemon that does not answer SIGTERM, through the service manager or directly
@@ -3930,7 +3934,8 @@ simulator request that found no capacity (naming the workspaces holding the
 pool), a preferred port in use, a tracked agent
 exiting (with its code, or a note to run `shoal stop` when it left processes
 behind), an agent's failed [turn-state report](#agent-state), [agent queue](#agent-queue) starts and failures, [seed build](#seed-builds) failures, [shared caches](#shared-caches) it emptied, a [sleep inhibitor](#keeping-the-machine-awake) that failed, and workspaces it removed or retained on its own through PR, merge, or
-idle cleanup, automatic cleanup that starts failing, and, when the daemon starts or
+idle cleanup, automatic cleanup that starts failing, a volume whose file access
+stalled, and, when the daemon starts or
 reloads its config, a missing tool on its `PATH`, a `root_dir` it cannot write,
 a checkout with `core.bare` set, or a global worker template repeating Shoal's guidance. `shoal alerts send` adds a one-line message (at most 512 bytes, without
 control characters) for a workspace; agents use it to ask for attention without
@@ -4273,7 +4278,8 @@ Before accepting requests or
 running cleanup, daemon startup atomically marks unfinished simulator cleans
 interrupted, transient lifecycle operations failed, and disconnected executions
 unknown until their wrappers reattach, then audits worktrees without deleting files or releasing leases.
-A workspace the audit failed, such as one on a volume that mounted late, becomes
+A workspace the audit failed, such as one on a volume that mounted late or
+whose access stalled, becomes
 ready again once the cleanup sweep finds its ownership verified; other failures,
 such as a failed setup, wait for you. Repair, as `work adopt` and
 `work setup --skip` request it, restores verified worktrees to ready and clears

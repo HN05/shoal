@@ -353,7 +353,12 @@ async fn observe_branches(manager: &Manager) -> Result<()> {
     for workspace in manager.list_workspaces().await? {
         if workspace.state == WorkspaceState::Ready
             && workspace.path.is_dir()
-            && let Err(error) = manager.observe_workspace_branch(&workspace).await
+            && let Err(error) = manager
+                .check_volume(
+                    &workspace.path,
+                    manager.observe_workspace_branch(&workspace),
+                )
+                .await
         {
             log!("branch observation skipped {}: {error:#}", workspace.name);
         }

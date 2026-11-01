@@ -48,3 +48,47 @@ async fn recheck_readies_only_workspaces_the_audit_failed_once_they_verify() {
     assert_eq!(missing.state, WorkspaceState::Failed);
     assert_eq!(missing.error, Some(failure));
 }
+
+#[tokio::test]
+async fn the_audit_fails_workspaces_on_a_stalled_volume_until_a_recheck_finishes() {
+    let (temp, manager) = manager().await;
+    let checkout = repository(temp.path(), "repo");
+    let repo = manager
+        .register_repository(checkout.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "stalled".into(), None, None, None)
+        .await
+        .unwrap();
+    // Paused only around the stall, since real Git would let the clock
+    // run out its time limit.
+    tokio::time::pause();
+    let stalled = manager
+        .check_volume(&workspace.path, std::future::pending::<Result<()>>())
+        .await;
+    tokio::time::resume();
+    assert!(stalled.is_err());
+
+    manager.audit_worktrees().await.unwrap();
+    let audited = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(audited.state, WorkspaceState::Failed);
+    let error = audited.error.unwrap();
+    assert!(
+        error.starts_with(STARTUP_OWNERSHIP_FAILURE)
+            && error.contains("stalled; a macOS privacy prompt may be waiting"),
+        "{error}"
+    );
+
+    // The recheck skips the volume until it is due to check it again.
+    manager.recheck_startup_failures().await.unwrap();
+    let skipped = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(skipped.state, WorkspaceState::Failed);
+    tokio::time::pause();
+    tokio::time::advance(crate::daemon::volume_access::RECHECK_AFTER).await;
+    tokio::time::resume();
+    manager.recheck_startup_failures().await.unwrap();
+    let ready = manager.workspace(&workspace.id).await.unwrap();
+    assert_eq!(ready.state, WorkspaceState::Ready);
+    assert_eq!(manager.volume_access.stalls(), []);
+}

@@ -65,6 +65,8 @@ states!(NotificationKind {
     /// The daemon's environment or the global config has a problem, such as
     /// a missing tool, found when the daemon starts or reloads its config.
     EnvironmentProblem => "environment_problem",
+    /// File access on a volume stalled, as while a macOS privacy prompt waits.
+    VolumeStalled => "volume_stalled",
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

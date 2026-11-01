@@ -23,7 +23,8 @@ impl Manager {
             if workspace.state != WorkspaceState::Ready {
                 continue;
             }
-            match self.verify_and_record_worktree(&workspace, true).await {
+            let verified = self.verify_and_record_worktree(&workspace, true);
+            match self.check_volume(&workspace.path, verified).await {
                 Err(error) => {
                     self.set_state(
                         &workspace.id,
@@ -65,7 +66,8 @@ impl Manager {
         };
         // Check without reserving first, so a workspace that still fails
         // never leaves the failed state for another operation to trip over.
-        if self.verify_worktree(workspace).await.is_err() {
+        let verified = self.verify_worktree(workspace);
+        if self.check_volume(&workspace.path, verified).await.is_err() {
             return Ok(());
         }
         let previous = self
@@ -77,7 +79,10 @@ impl Manager {
             state: previous,
             ..current.clone()
         }) && self
-            .verify_and_record_worktree(&current, true)
+            .check_volume(
+                &current.path,
+                self.verify_and_record_worktree(&current, true),
+            )
             .await
             .is_ok();
         if verified {

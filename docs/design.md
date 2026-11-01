@@ -440,6 +440,17 @@ Before registration, workspace creation or an export writes a directory, the
 daemon creates a file there itself under a time limit: its file access can
 differ from the terminal's, and on macOS opening a file on a volume it lacks
 access to can wait for a permission prompt no one sees.
+While macOS waits for an answer to a privacy prompt for a volume, whichever
+process it is for, every new process that opens a file there waits until the
+prompt is answered or the kernel interrupts it (`Interrupted system call`), so
+each Git the daemon starts does. Shoal cannot end the wait, only keep it from
+holding up unrelated work. The startup audit, its recheck and the sweep's branch
+observation check a worktree within 30 seconds; one that runs out or is
+interrupted records its volume as stalled, which the daemon reports once as an
+alert and in `daemon status` until a check finishes. The volume is
+`/Volumes/<name>` from the path alone, since reading the filesystem could stall
+too, or else the path itself. Those checks skip a stalled volume until 20 seconds
+after its last check, so each sweep rechecks it once.
 Repository roots and explicit workspace paths resolve existing symlinks and lexical
 `..` before boundary checks and creation, even when trailing components are missing.
 An explicit workspace path overrides the destination for one creation, without

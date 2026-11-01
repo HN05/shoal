@@ -55,6 +55,7 @@ mod subscriptions;
 pub(crate) mod test_daemon;
 mod tmp_dirs;
 mod untracked;
+pub(crate) mod volume_access;
 mod warnings;
 pub mod workspace;
 pub mod workspace_files;
