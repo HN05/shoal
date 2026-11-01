@@ -3903,10 +3903,11 @@ when inapplicable; `error` describes setup or cleanup failures. Branch changes
 are observed during daemon sweeps; detached HEAD has a null branch, and the
 recorded workspace branch remains unchanged.
 
-A `type: "chat"` line records a chat's start, rename or end: its `id`,
-`created_at`, `kind` (`chat_started`, `chat_renamed` or `chat_ended`) and a
-`chat` object with its `id`, `repository_id`, `name` (the new one after a
-rename), `agent`, `pid` and Unix-seconds `started_at`.
+A `type: "chat"` line records a chat's start, rename, save, restore or end:
+its `id`, `created_at`, `kind` (`chat_started`, `chat_renamed`, `chat_saved`,
+`chat_restored` or `chat_ended`) and a `chat` object with its `id`,
+`repository_id`, `name` (the new one after a rename), `agent`, `pid` and
+Unix-seconds `started_at`, and on a save its `restore`: `automatic` or `resume`.
 
 A `type: "file"` line records a file [attached](#attached-files) to a workspace
 or chat by any route (`kind: "file_added"`) or deleted by any route, including

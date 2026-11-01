@@ -237,6 +237,7 @@ fn agents_get_each_configured_directory_as_they_resolve_it() {
         origin: None,
         tmp_dir: Some(cache.join("chat-id")),
         session: None,
+        restore: None,
     };
     assert_eq!(
         chat_dir_args(&defaults, "codex", home.path(), &chat, &[]),

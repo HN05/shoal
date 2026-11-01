@@ -13,6 +13,7 @@ use crate::{
     },
     execution::recovery::{self, Saved},
     model::Workspace,
+    state::ChatRestore,
 };
 
 /// What shuts down, which the stop and the user's notifications name.
@@ -56,11 +57,12 @@ impl Manager {
 
     /// Stop the workspaces `shoal stop --all` stops, each wrapper saving its
     /// agent before the stop and requesting restores that need no user,
-    /// which the stop keeps with those already waiting, and hold the agent
-    /// queue until a system shutdown is cancelled, so nothing starts again
-    /// before it. The user learns what to continue. An update waits for the
-    /// stop. Once a stop before a shutdown finished, later ones wait for it
-    /// and leave the work alone.
+    /// which the stop keeps with those already waiting, and the running
+    /// chats, saved to come back on their own. Hold the agent queue until a
+    /// system shutdown is cancelled, so nothing starts again before it. The
+    /// user learns what to continue. An update waits for the stop. Once a
+    /// stop before a shutdown finished, later ones wait for it and leave the
+    /// work alone.
     pub(crate) async fn stop_for_shutdown_of(&self, shutdown: Shutdown) {
         let mut finished = self.shutdown_stopped.lock().await;
         if *finished {
@@ -72,6 +74,7 @@ impl Manager {
                     .await
             })
             .await;
+        self.save_chats(ChatRestore::Automatic).await;
         self.notify_shutdown_stop(shutdown, &stopped).await;
         *finished = true;
     }

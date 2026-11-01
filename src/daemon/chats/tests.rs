@@ -297,7 +297,11 @@ async fn a_chat_moved_after_its_process_was_found_ended_keeps_running() {
         .await
         .unwrap();
     // A sweep finds the recording process ended...
-    let recorded = manager.store.run(recorded_processes).await.unwrap();
+    let recorded = manager
+        .store
+        .run(|db| recorded_processes(db))
+        .await
+        .unwrap();
     recording.kill();
     let ended = finished(recorded);
     assert_eq!(ended.len(), 1);

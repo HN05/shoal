@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Schema version written by this build; older databases are migrated on open.
-const SCHEMA_VERSION: i64 = 103;
+const SCHEMA_VERSION: i64 = 104;
 
 #[cfg(test)]
 mod benchmark;
@@ -448,6 +448,7 @@ const MIGRATIONS: &[(i64, &str, Option<Prepare>)] = &[
     (101, CHAT_SESSIONS, None),
     (102, include_str!("store/reviews.sql"), None),
     (103, include_str!("store/file_events.sql"), None),
+    (104, include_str!("store/saved_chats.sql"), None),
 ];
 
 /// Whether an agent asked the question in its chat, where the user may

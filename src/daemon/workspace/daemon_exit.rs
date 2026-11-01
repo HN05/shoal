@@ -2,7 +2,7 @@
 //! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does,
 //! and a signal stops it saved first, since it may come from a shutdown.
 use super::{Manager, shutdown_stop::Shutdown};
-use crate::protocol::Exit;
+use crate::{protocol::Exit, state::ChatRestore};
 
 /// What becomes of running work as the daemon exits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,10 +10,10 @@ pub(crate) enum Ending {
     /// Wrappers detach and reattach to the next daemon.
     Detach,
     /// Work stops as `shoal stop --all` stops it and stays down until
-    /// `shoal resume`.
+    /// `shoal resume`, as running chats do.
     Stop,
-    /// Work stops saved first, with restores that need no user queued, as
-    /// before a system shutdown.
+    /// Work stops saved first, with restores that need no user queued and
+    /// running chats saved to come back, as before a system shutdown.
     Save,
 }
 
@@ -46,14 +46,15 @@ impl Manager {
     }
 
     /// Stop what `shoal stop --all` stops, as it does, keeping stopped
-    /// agents down until `shoal resume`, after a stop before a shutdown
-    /// that is under way.
+    /// agents down until `shoal resume`, and the running chats, saved for
+    /// `shoal resume` too, after a stop before a shutdown that is under way.
     async fn stop_all_for_exit(&self) {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
             self.stop_workspace_manually(&workspace, false, None).await
         })
         .await;
+        self.save_chats(ChatRestore::Resume).await;
     }
 }
 

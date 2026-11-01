@@ -318,6 +318,7 @@ fn a_chat_package_names_its_kind_and_continues_its_session() {
         origin: None,
         tmp_dir: None,
         session: Some("s1".into()),
+        restore: None,
     };
     let mut manifest = Manifest {
         remote_url: None,

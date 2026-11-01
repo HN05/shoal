@@ -1723,12 +1723,19 @@ creation does, so the discussion starts from the remote's work; a failed
 refresh only warns, so an offline or diverged checkout still gets its chat. Its
 instructions describe the discussion only, from a chat template that
 repositories can extend like the other prompt templates; the orchestrator skill is available when the user asks for coordination. Belonging
-to no workspace, a chat is not a tracked execution: queuing, overload stops and
-resume serve unattended agents, while the user attends a chat. It is still a
+to no workspace, a chat is not a tracked execution: queuing and overload stops
+serve unattended agents, while the user attends a chat. It is still a
 daemon record, so lists and integrations can follow it: the agent replaces Shoal's
 process, leaving no wrapper to report its exit, so the record lasts while a
 process with the registered identity lives, checked periodically and before
-chats are listed. Starts, renames and ends are journal events. A workspace belongs to the
+chats are listed. With no wrapper to save it, the daemon saves a chat itself
+where it saves workspaces' agents, marking its record before stopping its
+processes so the end of the process does not end the chat: a stop before a
+shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
+for `shoal resume`. A saved chat keeps its record, and with it its name, files,
+messages, workspaces and temporary directory, until a restore runs it again in
+a new process or a discard ends it. Starts, renames, saves, restores and ends
+are journal events. A workspace belongs to the
 chat that last opened it until that chat ends, and opening it outside a chat
 returns it to the user, so Shoal knows which chat coordinates which workers.
 Having no workspace, a chat keeps its messages in its own queue, which the same

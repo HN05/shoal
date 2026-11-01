@@ -1,6 +1,7 @@
 //! Chats: agents the user talks with in a repository's registered checkout.
-//! They are records, not tracked executions, so they never queue, stop under
-//! pressure or resume; a chat lasts while its process lives.
+//! They are records, not tracked executions, so they never queue or stop
+//! under pressure; a chat lasts while its process lives, or once saved, until
+//! it is restored or discarded.
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -70,6 +71,7 @@ impl Manager {
             origin,
             tmp_dir: None,
             session: None,
+            restore: None,
         };
         let birth = process.birth.clone();
         let chat = self
@@ -160,20 +162,29 @@ impl Manager {
             .await
     }
 
-    /// Running chats in start order, after ending those whose process exited.
+    /// Running and saved chats in start order, after ending those whose
+    /// process exited.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         self.end_finished_chats().await?;
-        self.store.run(|db| running(db)).await
+        self.store.run(|db| recorded(db)).await
     }
 
-    /// The agent processes of the recorded chats.
+    /// The agent processes of the running chats.
     pub(crate) async fn chat_processes(&self) -> Result<Vec<Identity>> {
-        let recorded = self.store.run(recorded_processes).await?;
+        let recorded = self.store.run(|db| recorded_processes(db)).await?;
         Ok(recorded.into_iter().map(|(_, process)| process).collect())
     }
 
     /// The running chat `selector` names, by ID or name.
     pub(crate) async fn running_chat(&self, selector: &str) -> Result<Option<Chat>> {
+        Ok(self
+            .recorded_chat(selector)
+            .await?
+            .filter(|chat| chat.restore.is_none()))
+    }
+
+    /// The running or saved chat `selector` names, by ID or name.
+    pub(crate) async fn recorded_chat(&self, selector: &str) -> Result<Option<Chat>> {
         Ok(self
             .chats()
             .await?
@@ -209,17 +220,17 @@ impl Manager {
             .collect())
     }
 
-    /// End chats whose process has exited.
+    /// End running chats whose process has exited.
     pub(crate) async fn end_finished_chats(&self) -> Result<()> {
-        let ended = finished(self.store.run(recorded_processes).await?);
+        let ended = finished(self.store.run(|db| recorded_processes(db)).await?);
         self.end_chats(ended).await
     }
 
-    /// End the chats still recorded with the process found ended: return
-    /// their workspaces to the user along with the messages the chats had not
-    /// received, keep their attached files for the retention period, and
-    /// delete their records and temporary directories. A chat moved to
-    /// another process since keeps running.
+    /// End the running chats still recorded with the process found ended:
+    /// return their workspaces to the user along with the messages the chats
+    /// had not received, keep their attached files for the retention period,
+    /// and delete their records and temporary directories. A chat moved to
+    /// another process or saved since keeps its record.
     async fn end_chats(&self, ended: Vec<(String, Identity)>) -> Result<()> {
         if ended.is_empty() {
             return Ok(());
@@ -359,11 +370,11 @@ pub(crate) fn suffixed(base: &str, suffix: u64) -> String {
     name
 }
 
-/// Rename the running chat `chat`, by ID or name, to `name` unless another
-/// holds it. Returns the chat before and after.
+/// Rename the running or saved chat `chat`, by ID or name, to `name` unless
+/// another holds it. Returns the chat before and after.
 fn rename(db: &mut Connection, chat: &str, name: &str) -> Result<(Chat, Chat)> {
     let tx = db.transaction()?;
-    let old = running(&tx)?
+    let old = recorded(&tx)?
         .into_iter()
         .find(|running| running.id == chat || running.name == chat)
         .with_context(|| format!("no running chat {chat}"))?;
@@ -413,17 +424,19 @@ fn move_to(db: &mut Connection, chat: &str, process: &Identity) -> Result<Chat> 
         params![chat, process.pid, process.birth],
     )?;
     anyhow::ensure!(moved == 1, "unknown chat {chat}");
-    running(db)?
+    recorded(db)?
         .into_iter()
         .find(|running| running.id == chat)
         .context("the chat ended")
 }
 
-fn running(db: &Connection) -> Result<Vec<Chat>> {
+/// The running and saved chats in start order.
+fn recorded(db: &Connection) -> Result<Vec<Chat>> {
     Ok(db
         .prepare(
             "SELECT chats.id,chats.repository_id,chats.name,chats.agent,chats.pid,
-                    chats.started_at,chats.origin,repositories.workspaces_dir,chats.session
+                    chats.started_at,chats.origin,repositories.workspaces_dir,chats.session,
+                    chats.restore
              FROM chats JOIN repositories ON repositories.id=chats.repository_id
              ORDER BY chats.started_at, chats.rowid",
         )?
@@ -443,27 +456,33 @@ fn running(db: &Connection) -> Result<Vec<Chat>> {
                 origin: store::json_column(row, "origin")?,
                 tmp_dir,
                 session: row.get(8)?,
+                restore: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The process the chat `id` lasts while, unless it has ended.
+/// The process the chat `id` lasts while, unless it has ended or was saved.
 fn recorded_process(db: &mut Connection, id: &str) -> Result<Option<Identity>> {
     Ok(db
-        .query_row("SELECT pid,birth FROM chats WHERE id=?1", [id], |row| {
-            Ok(Identity {
-                pid: row.get(0)?,
-                birth: row.get(1)?,
-                unique: None,
-            })
-        })
+        .query_row(
+            "SELECT pid,birth FROM chats WHERE id=?1 AND restore IS NULL",
+            [id],
+            |row| {
+                Ok(Identity {
+                    pid: row.get(0)?,
+                    birth: row.get(1)?,
+                    unique: None,
+                })
+            },
+        )
         .optional()?)
 }
 
-fn recorded_processes(db: &mut Connection) -> Result<Vec<(String, Identity)>> {
+/// The process each running chat lasts while.
+fn recorded_processes(db: &Connection) -> Result<Vec<(String, Identity)>> {
     Ok(db
-        .prepare("SELECT id,pid,birth FROM chats")?
+        .prepare("SELECT id,pid,birth FROM chats WHERE restore IS NULL")?
         .query_map([], |row| {
             Ok((
                 row.get(0)?,
@@ -512,9 +531,9 @@ fn repositories(db: &mut Connection, ids: &[String]) -> Result<Vec<(String, Stri
     Ok(repositories)
 }
 
-/// Delete the records of the chats still recorded with the process found
-/// ended, giving the user their unread messages and keeping their attached
-/// files until `expiries` says, by chat.
+/// Delete the records of the running chats still recorded with the process
+/// found ended, giving the user their unread messages and keeping their
+/// attached files until `expiries` says, by chat.
 fn delete(
     db: &mut Connection,
     ended: &[(String, Identity)],
@@ -526,7 +545,8 @@ fn delete(
     for (id, process) in ended {
         let repository_id: Option<String> = tx
             .query_row(
-                "SELECT repository_id FROM chats WHERE id=?1 AND pid=?2 AND birth=?3",
+                "SELECT repository_id FROM chats
+                 WHERE id=?1 AND pid=?2 AND birth=?3 AND restore IS NULL",
                 params![id, process.pid, process.birth],
                 |row| row.get(0),
             )
@@ -557,6 +577,7 @@ fn assign(db: &mut Connection, workspace: &str, chat: Option<&str>) -> Result<()
 }
 
 mod processes;
+mod saved;
 
 #[cfg(test)]
 mod tests;

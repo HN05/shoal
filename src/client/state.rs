@@ -194,6 +194,16 @@ states!(QueueKind {
     /// A protection-stopped agent's automatic restore in its own workspace.
     Restore => "restore",
 });
+states!(
+    /// How a chat Shoal stopped with its session saved comes back.
+    ChatRestore {
+        /// The daemon restores it once it starts agents again, as after a
+        /// shutdown or a logout.
+        Automatic => "automatic",
+        /// It waits for `shoal resume`, as after `shoal daemon stop`.
+        Resume => "resume",
+    }
+);
 states!(DependencyKind {
     /// A workspace, by ID.
     Workspace => "workspace",

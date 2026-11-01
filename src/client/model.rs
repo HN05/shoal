@@ -803,7 +803,7 @@ pub struct LandPlan {
 pub struct Chat {
     pub id: String,
     pub repository_id: String,
-    /// Unique among workspace names and the names of running chats.
+    /// Unique among workspace names and the names of other chats.
     pub name: String,
     pub agent: String,
     pub pid: u32,
@@ -818,6 +818,10 @@ pub struct Chat {
     /// The agent session its hooks reported last, which an export continues.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
+    /// How the chat comes back once Shoal stopped it with its session saved;
+    /// none while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restore: Option<crate::state::ChatRestore>,
 }
 
 /// A space as it exists: a workspace or a running chat, which share one

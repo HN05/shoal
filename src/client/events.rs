@@ -55,6 +55,11 @@ states!(
         Ended => "chat_ended",
         /// The chat took a new name, which its `chat` carries.
         Renamed => "chat_renamed",
+        /// Shoal stopped the chat with its session saved, to restore as
+        /// its `chat`'s `restore` says.
+        Saved => "chat_saved",
+        /// A saved chat runs again.
+        Restored => "chat_restored",
     }
 );
 
