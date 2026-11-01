@@ -7334,19 +7334,14 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         fs::read_to_string(home.join("chat-tmpdir")).unwrap().trim(),
         tmp_dir.to_str().unwrap()
     );
-    let kinds: Vec<Value> = journal(&fixture)
-        .into_iter()
-        .filter(|event| event["type"] == "chat")
-        .map(|event| event["kind"].clone())
-        .collect();
-    assert_eq!(
-        kinds,
-        ["chat_started", "chat_saved", "chat_restored"],
-        "{kinds:?}"
-    );
-    // The resumed agent exited, which ends the chat at last.
+    // The resumed agent exited, which ends the chat at last; listing chats
+    // finds that.
     assert_eq!(fixture.ok(&["work", "--chats"]), Value::Array(vec![]));
     assert!(!tmp_dir.exists());
+    assert_eq!(
+        chat_kinds(&fixture),
+        ["chat_started", "chat_saved", "chat_restored", "chat_ended"]
+    );
 }
 
 #[test]
@@ -7366,23 +7361,31 @@ fn a_chat_a_signal_saved_comes_back_on_its_own() {
     install_test_script(home.join("daemon-bin").join("zmx"), PASSTHROUGH_ZMX);
     fixture.restart();
 
-    wait_until("chat restored", || home.join("chat-args").exists());
-    let args = fs::read_to_string(home.join("chat-args")).unwrap();
-    assert!(args.contains("--resume\nchat-session\n"), "{args}");
+    // The resumed agent records its arguments, then its chat, then exits.
+    wait_until("chat restored", || {
+        fs::read_to_string(home.join("chat-args"))
+            .is_ok_and(|args| args.contains("--resume\nchat-session\n"))
+    });
     wait_until("chat-id rewritten", || {
         fs::read_to_string(home.join("chat-id"))
             .is_ok_and(|id| id.trim() == chat["id"].as_str().unwrap())
     });
-    let kinds: Vec<Value> = journal(&fixture)
+    wait_until("restored chat ended", || {
+        fixture.ok(&["work", "--chats"]) == Value::Array(vec![])
+    });
+    assert_eq!(
+        chat_kinds(&fixture),
+        ["chat_started", "chat_saved", "chat_restored", "chat_ended"]
+    );
+}
+
+/// The kinds of the journal's chat events, in order.
+fn chat_kinds(fixture: &Fixture) -> Vec<String> {
+    journal(fixture)
         .into_iter()
         .filter(|event| event["type"] == "chat")
-        .map(|event| event["kind"].clone())
-        .collect();
-    assert_eq!(
-        kinds[..3],
-        ["chat_started", "chat_saved", "chat_restored"],
-        "{kinds:?}"
-    );
+        .map(|event| event["kind"].as_str().unwrap().to_owned())
+        .collect()
 }
 
 #[test]
