@@ -1,6 +1,6 @@
 use super::*;
 
-const TEMPLATE: &str = include_str!("../../configs/default.toml");
+const TEMPLATE: &str = include_str!("../../../configs/default.toml");
 
 impl Config {
     /// The settings for a repository whose only layer is `repo`.

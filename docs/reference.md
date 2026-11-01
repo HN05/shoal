@@ -101,7 +101,7 @@ current `PATH` for the service, so install runtime dependencies and any hook
 tools first. It also creates `~/.config/shoal/config.toml` (or
 `$XDG_CONFIG_HOME/shoal/config.toml`) from
 [configs/default.toml](../configs/default.toml), which states every default,
-and installs the [bundled chat template](../src/config/templates/chat.md) beside
+and installs the [bundled chat template](../src/client/config/templates/chat.md) beside
 it, never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
@@ -1873,7 +1873,7 @@ value suppresses local additions while preserving global guidance; an empty
 global value suppresses its base text. Without a global chat or review template,
 Shoal uses its bundled default as the base. A [local review](#local-reviews)'s
 instructions start with the fixed part of the
-[review template](../src/config/templates/review.md), its task, read-only rules,
+[review template](../src/client/config/templates/review.md), its task, read-only rules,
 output contract and treatment of history, which no layer replaces; the review
 style after it is the base. `{workspace}`, `{branch}`, `{path}`, the review's
 checkout, and `{base}`, the commit it compares against, expand in them. `config show` reports the combined text and the highest
@@ -1883,7 +1883,7 @@ read at launch without a daemon restart. The issue prompt is built in.
 Shoal's guidance, as a copy of an earlier default does; the daemon alerts about
 it in the global config when it starts or reloads its config.
 
-Every agent launch receives Shoal's [agent guidance](../src/config/templates/agent.md),
+Every agent launch receives Shoal's [agent guidance](../src/client/config/templates/agent.md),
 followed by the worker template, which holds only your additions and cannot
 replace or suppress the guidance. Both may use `{workspace}`, `{branch}` and
 `{path}` from the target worktree, and `{updates}` saying how the launch

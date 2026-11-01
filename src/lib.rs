@@ -3,55 +3,83 @@
 
 // First, so that every module below sees its print macros.
 #[macro_use]
+#[cfg(feature = "cli")]
 mod stdout;
 
+pub mod client;
+
+#[cfg(feature = "cli")]
 mod agent;
+#[cfg(feature = "cli")]
 mod agent_git;
-mod ai;
+#[cfg(feature = "cli")]
 mod build;
+#[cfg(feature = "cli")]
 mod caches;
+#[cfg(feature = "cli")]
 mod cli;
-mod config;
+#[cfg(feature = "cli")]
 mod daemon;
+#[cfg(feature = "cli")]
 mod demos;
+#[cfg(feature = "cli")]
 mod env;
+#[cfg(feature = "cli")]
 mod execution;
+#[cfg(feature = "cli")]
 mod fsutil;
+#[cfg(feature = "cli")]
 mod git;
+#[cfg(feature = "cli")]
 mod git_profile;
 #[cfg(feature = "happy")]
 mod happy;
+#[cfg(feature = "cli")]
 mod hooks;
-mod model;
+#[cfg(feature = "cli")]
 mod paths;
+#[cfg(feature = "cli")]
 mod presets;
+#[cfg(feature = "cli")]
 mod process;
+#[cfg(feature = "cli")]
 mod profile;
-mod protocol;
+#[cfg(feature = "cli")]
 mod proxy;
+#[cfg(feature = "cli")]
 mod removal;
-mod repository;
+#[cfg(feature = "cli")]
 mod reviews;
+#[cfg(feature = "cli")]
 mod secrets;
+#[cfg(feature = "cli")]
 mod seed;
+#[cfg(feature = "cli")]
 mod service;
+#[cfg(feature = "cli")]
 mod sessions;
+#[cfg(feature = "cli")]
 mod shell;
+#[cfg(feature = "cli")]
 mod sim;
-mod state;
-#[cfg(test)]
+#[cfg(all(test, feature = "cli"))]
 mod test_support;
-mod time;
+#[cfg(feature = "cli")]
 mod tmp_dirs;
+#[cfg(feature = "cli")]
 mod tools;
+#[cfg(feature = "cli")]
 mod transfer;
-mod validate;
 
+#[cfg(feature = "cli")]
 use cli::Cli;
+use client::{ai, config, model, protocol, repository, state, time, validate};
 use shoal_forge as forge;
+#[cfg(feature = "cli")]
 use shoal_subprocess as subprocess;
 
 /// The `shoal` command.
+#[cfg(feature = "cli")]
 #[doc(hidden)]
 pub fn main() {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
@@ -98,8 +126,10 @@ pub fn main() {
 /// Tokio worker threads get more stack than its 2 MiB default: the daemon
 /// polls deep async paths, such as manual cleanup's removal, whose debug
 /// builds overflow that on Linux. Unused stack is reserved, not committed.
+#[cfg(feature = "cli")]
 pub(crate) const WORKER_STACK: usize = 8 << 20;
 
+#[cfg(feature = "cli")]
 fn run_cli(cli: Cli) {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -109,6 +139,7 @@ fn run_cli(cli: Cli) {
         .block_on(run_commands(cli));
 }
 
+#[cfg(feature = "cli")]
 async fn run_commands(cli: Cli) {
     let json_output = cli.json;
     // Output without a final newline is still buffered, and the flush on exit

@@ -32,10 +32,10 @@ and `scripts`. Do not narrow the audit to a subset. Partition it among workers
 by these areas, giving any path not listed to the closest one:
 
 - Workspaces, ownership and removal: `src/daemon/workspace`, `src/daemon/cleanup`,
-  `src/removal`, `src/git`, `src/repository.rs`
+  `src/removal`, `src/git`, `src/client/repository.rs`
 - Daemon lifecycle, persisted state and recovery: `src/daemon.rs`,
   `src/daemon/store`, `src/daemon/recovery`, `src/daemon/handoff.rs`,
-  `src/daemon/auto_update.rs`, `src/state.rs`, `src/protocol.rs`
+  `src/daemon/auto_update.rs`, `src/client/state.rs`, `src/client/protocol.rs`
 - Execution wrapper, tracked processes and agents: `src/execution`,
   `src/process`, `src/daemon/execution_*`, `src/daemon/agent_*`, `src/agent`,
   `src/happy`
@@ -44,7 +44,7 @@ by these areas, giving any path not listed to the closest one:
 - Forge integration, links, events and messages: `crates/shoal-forge`,
   `src/daemon/links`, `src/daemon/events`, `src/daemon/questions`,
   `src/daemon/chats`
-- CLI and configuration: `src/cli`, `src/config`, `src/presets`, `src/seed`,
+- CLI and configuration: `src/cli`, `src/client/config`, `src/presets`, `src/seed`,
   `src/transfer`
 - Tests, CI and release tooling: `tests`, `crates/shoal-subprocess`,
   `.forgejo`, `scripts`

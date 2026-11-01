@@ -12,6 +12,7 @@ macro_rules! states {
         $crate::state::states!($(#[$enum_meta])* $name: Variants {
             $($(#[$meta])* $variant => $wire),+
         });
+        #[cfg(feature = "cli")]
         impl ::clap::ValueEnum for $name {
             fn value_variants<'a>() -> &'a [Self] {
                 Self::ALL
@@ -47,11 +48,13 @@ macro_rules! states {
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(self.as_str()) }
         }
+        #[cfg(feature = "cli")]
         impl ::rusqlite::types::ToSql for $name {
             fn to_sql(&self) -> ::rusqlite::Result<::rusqlite::types::ToSqlOutput<'_>> {
                 Ok(::rusqlite::types::ToSqlOutput::Borrowed(::rusqlite::types::ValueRef::Text(self.as_str().as_bytes())))
             }
         }
+        #[cfg(feature = "cli")]
         impl ::rusqlite::types::FromSql for $name {
             fn column_result(value: ::rusqlite::types::ValueRef<'_>) -> ::rusqlite::types::FromSqlResult<Self> {
                 match value.as_str()? {
@@ -121,11 +124,13 @@ macro_rules! text_key {
                     .map_err(::serde::de::Error::custom)
             }
         }
+        #[cfg(feature = "cli")]
         impl ::rusqlite::types::ToSql for $name {
             fn to_sql(&self) -> ::rusqlite::Result<::rusqlite::types::ToSqlOutput<'_>> {
                 Ok(::rusqlite::types::ToSqlOutput::from(self.to_string()))
             }
         }
+        #[cfg(feature = "cli")]
         impl ::rusqlite::types::FromSql for $name {
             fn column_result(
                 value: ::rusqlite::types::ValueRef<'_>,

@@ -21230,7 +21230,7 @@ fn strip_guidance(text: &str, separator: char) -> String {
 
 #[test]
 fn guidance_markers_match_the_bundled_guidance() {
-    let guidance = include_str!("../src/config/templates/agent.md").trim_end();
+    let guidance = include_str!("../src/client/config/templates/agent.md").trim_end();
     assert!(guidance.starts_with(GUIDANCE_START));
     assert!(guidance.ends_with(GUIDANCE_END));
 }

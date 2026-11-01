@@ -34,45 +34,73 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
-default = ["happy", "proxy"]
+default = ["cli", "happy", "proxy"]
+# The `shoal` command, which runs the CLI and the daemon. Without it the crate
+# builds only `shoal::client`.
+cli = [
+    "dep:clap",
+    "dep:clap_complete",
+    "dep:fs2",
+    "dep:plist",
+    "dep:rusqlite",
+    "dep:sha2",
+    "dep:shoal-client",
+    "dep:shoal-subprocess",
+    "dep:socket2",
+    "dep:tempfile",
+    "dep:toml_edit",
+    "dep:rustix",
+    "dep:zbus",
+    "shoal-forge/clap",
+    "shoal-forge/rusqlite",
+    "tokio/rt-multi-thread",
+    "tokio/signal",
+    "tokio/process",
+    "uuid/v4",
+]
 # Detached Happy sessions, which seed prompts through Happy's encrypted server.
-happy = ["dep:aes-gcm", "dep:crypto_box", "dep:crypto_secretbox"]
+happy = ["cli", "dep:aes-gcm", "dep:crypto_box", "dep:crypto_secretbox"]
 # A retrying proxy between agents and their API upstream, with its HTTP and
 # TLS dependencies.
-proxy = ["dep:shoal-proxy"]
+proxy = ["cli", "dep:shoal-proxy"]
+
+[[bin]]
+name = "shoal"
+path = "src/main.rs"
+required-features = ["cli"]
 
 [dependencies]
 aes-gcm = { version = "0.11", optional = true }
 anyhow.workspace = true
 base64.workspace = true
-clap = { workspace = true, features = ["derive", "env", "string"] }
-clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"] }
+clap = { workspace = true, features = ["derive", "env", "string"], optional = true }
+clap_complete = { version = "=4.6.11", features = ["unstable-dynamic"], optional = true }
 crypto_box = { version = "0.9", features = ["std"], optional = true }
 crypto_secretbox = { version = "0.1", features = ["std"], optional = true }
-fs2 = "0.4"
+fs2 = { version = "0.4", optional = true }
 futures-util.workspace = true
 libc.workspace = true
-plist = "1"
-rusqlite = { workspace = true, features = ["bundled"] }
+plist = { version = "1", optional = true }
+rusqlite = { workspace = true, features = ["bundled"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
-sha2 = "0.11"
-shoal-client.workspace = true
+sha2 = { version = "0.11", optional = true }
+shoal-client = { workspace = true, optional = true }
 shoal-config-derive.workspace = true
-shoal-forge = { workspace = true, features = ["clap", "rusqlite"] }
+shoal-forge.workspace = true
 shoal-proxy = { workspace = true, optional = true }
-shoal-subprocess.workspace = true
-socket2 = "0.6"
-tempfile.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "signal", "sync", "time", "process"] }
+shoal-subprocess = { workspace = true, optional = true }
+socket2 = { version = "0.6", optional = true }
+tempfile = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["macros", "net", "io-util", "sync", "time"] }
 toml = "1.1.6"
-toml_edit = "0.25"
-uuid = { workspace = true, features = ["v4", "serde"] }
+toml_edit = { version = "0.25", optional = true }
+uuid = { workspace = true, features = ["serde"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-rustix = { version = "1", features = ["fs"] }
+rustix = { version = "1", features = ["fs"], optional = true }
 # systemd-logind's shutdown delay lock and announcements, over the system bus.
-zbus = { version = "5", default-features = false, features = ["tokio"] }
+zbus = { version = "5", default-features = false, features = ["tokio"], optional = true }
 
 [dev-dependencies]
 shoal-forge = { workspace = true, features = ["test-support"] }

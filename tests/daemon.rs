@@ -770,7 +770,7 @@ fn install_is_repeatable_and_service_controls_work_with_an_isolated_manager() {
     let template = config.with_file_name("chat-template.md");
     assert_eq!(
         fs::read_to_string(&template).unwrap(),
-        include_str!("../src/config/templates/chat.md")
+        include_str!("../src/client/config/templates/chat.md")
     );
     fs::write(&template, "custom chat template").unwrap();
     // Shoal's agent guidance is built in; the file holds only additions.
