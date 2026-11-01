@@ -40,6 +40,10 @@ pub(super) async fn handle(
             origin,
             hands_over,
         } => Body::Chat(manager.restore_chat(&chat, pid, origin, hands_over).await?),
+        ChatMethod::SaveChat { chat, pid } => {
+            manager.return_to_saved(&chat, pid).await?;
+            Body::Ok
+        }
         ChatMethod::DiscardChat { chat } => Body::Chat(manager.discard_saved_chat(&chat).await?),
         ChatMethod::MoveChat { chat, pid } => Body::Chat(manager.move_chat(&chat, pid).await?),
         ChatMethod::ListChats => Body::Chats(manager.visible_chats(caller).await?),
@@ -73,6 +77,7 @@ impl Scoped for ChatMethod {
             ChatMethod::StartChat { .. }
             | ChatMethod::MoveChat { .. }
             | ChatMethod::RestoreChat { .. }
+            | ChatMethod::SaveChat { .. }
             | ChatMethod::DiscardChat { .. }
             | ChatMethod::RenameChat { .. }
             | ChatMethod::SendChatMessage { .. }

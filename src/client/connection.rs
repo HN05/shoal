@@ -496,6 +496,35 @@ pub async fn restore_chat(
     .await
 }
 
+/// Return the chat `chat`, which this process restored, to waiting for
+/// `shoal resume`, as when its agent could not start.
+pub async fn save_chat(daemon: &impl Daemon, chat: &str) -> Result<()> {
+    request::<()>(
+        daemon,
+        ChatMethod::SaveChat {
+            chat: chat.to_owned(),
+            pid: std::process::id(),
+        },
+    )
+    .await
+}
+
+/// `ran`, the start of a chat this process recorded, after returning the
+/// chat to waiting for `shoal resume` when the start `restores` it and
+/// failed before its agent took over.
+pub async fn keep_failed_restore<T>(
+    daemon: &impl Daemon,
+    restores: Option<&str>,
+    ran: Result<T>,
+) -> Result<T> {
+    if let (Err(_), Some(chat)) = (&ran, restores)
+        && let Err(error) = save_chat(daemon, chat).await
+    {
+        eprintln!("warning: the chat could not wait for shoal resume again: {error:#}");
+    }
+    ran
+}
+
 /// End the saved chat `chat`, by ID or name, without restoring it.
 pub async fn discard_chat(daemon: &impl Daemon, chat: &str) -> Result<Chat> {
     request(

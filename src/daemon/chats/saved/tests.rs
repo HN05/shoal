@@ -164,3 +164,59 @@ async fn a_detaching_daemon_leaves_chats_running() {
 
     assert!(manager.running_chat(&chat.id).await.unwrap().is_some());
 }
+
+#[tokio::test]
+async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, _process) = running_chat(root.path(), &manager).await;
+    // As a save whose stop never ended the agent left it.
+    manager
+        .store
+        .run(|db| {
+            db.execute("UPDATE chats SET restore='resume'", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let error = manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("still runs"), "{error:#}");
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.pid, chat.pid);
+}
+
+#[tokio::test]
+async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    manager.save_chats(ChatRestore::Automatic).await;
+    process.wait().unwrap();
+    let restoring = ProcessGroup::spawn(std::process::Command::new("sleep").arg("600"));
+    let restoring_pid = restoring.id();
+    manager
+        .restore_chat(&chat.id, restoring_pid, None, false)
+        .await
+        .unwrap();
+
+    manager
+        .return_to_saved(&chat.id, restoring_pid)
+        .await
+        .unwrap();
+    restoring.kill();
+
+    let saved = manager.chats().await.unwrap();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].restore, Some(ChatRestore::Resume));
+    assert!(chat.tmp_dir.unwrap().exists());
+    // Another process cannot return it.
+    manager
+        .restore_chat(&chat.id, std::process::id(), None, false)
+        .await
+        .unwrap();
+    let error = manager.return_to_saved(&chat.id, 1).await.unwrap_err();
+    assert!(error.to_string().contains("does not run"), "{error:#}");
+}

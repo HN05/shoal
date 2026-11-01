@@ -1734,7 +1734,9 @@ processes so the end of the process does not end the chat: a stop before a
 shutdown or a signal's saves it to come back on its own, and `shoal daemon stop`
 for `shoal resume`. A saved chat keeps its record, and with it its name, files,
 messages, workspaces and temporary directory, until a restore runs it again in
-a new process or a discard ends it. Starts, renames, saves, restores and ends
+a new process or a discard ends it. A restore refuses a chat whose saved
+process still runs, since two agents would write one session, and a restore
+whose agent does not start leaves the chat saved. Starts, renames, saves, restores and ends
 are journal events. A workspace belongs to the
 chat that last opened it until that chat ends, and opening it outside a chat
 returns it to the user, so Shoal knows which chat coordinates which workers.

@@ -30,6 +30,12 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
+    /// Return the chat `chat`, restored as process `pid`, to waiting for
+    /// `shoal resume`, as when its restore failed before its agent ran.
+    SaveChat {
+        chat: String,
+        pid: u32,
+    },
     /// Record that `chat`'s agent now runs as process `pid`, for an agent
     /// started detached instead of in place of the recording process.
     MoveChat {

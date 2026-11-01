@@ -7,7 +7,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, params};
 use tokio::task::JoinHandle;
 
-use super::recorded;
+use super::{recorded, saved::still_runs};
 use crate::{
     daemon::{
         log,
@@ -15,7 +15,6 @@ use crate::{
         workspace::Manager,
     },
     model::Chat,
-    process::identity::{self, Identity},
     state::ChatRestore,
 };
 
@@ -81,19 +80,6 @@ fn claim_automatic(db: &mut Connection) -> Result<Vec<Chat>> {
     }
     tx.commit()?;
     Ok(claimed)
-}
-
-/// Whether the process the saved `chat` ran as still runs, as one a stop
-/// left running.
-fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
-    let birth: String = db.query_row("SELECT birth FROM chats WHERE id=?1", [&chat.id], |row| {
-        row.get(0)
-    })?;
-    identity::alive(&Identity {
-        pid: chat.pid,
-        birth,
-        unique: None,
-    })
 }
 
 /// Run `shoal resume` for `chat` detached from the daemon, as it would run

@@ -263,34 +263,39 @@ pub(super) async fn launch(
         restore.as_deref(),
     )
     .await?;
-    let command = command(
-        &settings,
-        [
-            model_args,
-            agents::chat_dir_args(
-                &settings,
-                agent.name(),
-                &ctx.paths.home,
-                &chat,
-                &directories,
-            ),
-        ]
-        .concat(),
-        &repo,
-        &agent,
-        instructions,
-        opening,
-        [resumed, args].concat(),
-    )?;
-    terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
-    run_here(
-        ctx,
-        &repo,
-        &chat,
-        &command,
-        &settings.launch(agent.name()).environment_with(&resolved),
-    )
-    .map(Started::Exited)
+    let ran = async {
+        let command = command(
+            &settings,
+            [
+                model_args,
+                agents::chat_dir_args(
+                    &settings,
+                    agent.name(),
+                    &ctx.paths.home,
+                    &chat,
+                    &directories,
+                ),
+            ]
+            .concat(),
+            &repo,
+            &agent,
+            instructions,
+            opening,
+            [resumed, args].concat(),
+        )?;
+        terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
+        run_here(
+            ctx,
+            &repo,
+            &chat,
+            &command,
+            &settings.launch(agent.name()).environment_with(&resolved),
+        )
+    }
+    .await;
+    client::keep_failed_restore(&ctx.paths, restore.as_deref(), ran)
+        .await
+        .map(Started::Exited)
 }
 
 /// The arguments with which `agent` continues `session`, unless the chat

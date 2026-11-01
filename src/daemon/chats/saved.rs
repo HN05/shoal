@@ -13,6 +13,7 @@ use crate::{
     process::identity::{self, Identity},
     sessions::Origin,
     state::ChatRestore,
+    tmp_dirs,
 };
 
 impl Manager {
@@ -82,8 +83,25 @@ impl Manager {
             origin,
             hands_over,
         };
-        let chat = self.store.run(move |db| restore(db, &restored)).await?;
-        self.give_tmp_dir(chat, &repository, process).await
+        let mut chat = self.store.run(move |db| restore(db, &restored)).await?;
+        match tmp_dirs::directory(&repository, &chat.id) {
+            Ok(tmp_dir) => {
+                chat.tmp_dir = tmp_dir;
+                Ok(chat)
+            }
+            Err(error) => {
+                self.return_to_saved(&chat.id, pid).await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Return the chat `id`, restored as process `pid`, to waiting for
+    /// `shoal resume`, as when its restore failed before its agent ran, so
+    /// the end of that process does not end it.
+    pub async fn return_to_saved(&self, id: &str, pid: u32) -> Result<()> {
+        let id = id.to_owned();
+        self.store.run(move |db| resave(db, &id, pid)).await
     }
 
     /// End the saved chat `selector` names, by ID or name, without
@@ -113,6 +131,16 @@ fn save(db: &mut Connection, restore: ChatRestore) -> Result<Vec<(String, Identi
     Ok(running)
 }
 
+/// Mark the running chat `id` of process `pid` saved for `shoal resume`.
+fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<()> {
+    let saved = db.execute(
+        "UPDATE chats SET restore=?3 WHERE id=?1 AND pid=?2 AND restore IS NULL",
+        params![id, pid, ChatRestore::Resume],
+    )?;
+    ensure!(saved == 1, "chat {id} does not run as process {pid}");
+    Ok(())
+}
+
 /// Return the chat `id`, saved while it ran as `process`, to running.
 fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
     db.execute(
@@ -120,6 +148,19 @@ fn unsave(db: &mut Connection, id: &str, process: &Identity) -> Result<()> {
         params![id, process.pid, process.birth],
     )?;
     Ok(())
+}
+
+/// Whether the process the saved `chat` ran as still runs, as one a stop
+/// left running.
+pub(super) fn still_runs(db: &Connection, chat: &Chat) -> Result<bool> {
+    let birth: String = db.query_row("SELECT birth FROM chats WHERE id=?1", [&chat.id], |row| {
+        row.get(0)
+    })?;
+    identity::alive(&Identity {
+        pid: chat.pid,
+        birth,
+        unique: None,
+    })
 }
 
 /// A saved chat that runs again.
@@ -137,6 +178,18 @@ struct Restored {
 fn restore(db: &mut Connection, restored: &Restored) -> Result<Chat> {
     let tx = db.transaction()?;
     ensure_checkout_free(&tx, &restored.repository)?;
+    if let Some(saved) = recorded(&tx)?
+        .into_iter()
+        .find(|chat| chat.id == restored.id)
+    {
+        // A save whose stop never ended the agent leaves it writing its session.
+        ensure!(
+            !still_runs(&tx, &saved)?,
+            "chat {} still runs as process {}; end it before restoring it",
+            saved.name,
+            saved.pid
+        );
+    }
     let updated = tx.execute(
         "UPDATE chats SET pid=?2,birth=?3,origin=?4,starting=?5,restore=NULL
          WHERE id=?1 AND restore IS NOT NULL",
