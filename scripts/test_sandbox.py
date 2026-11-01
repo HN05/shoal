@@ -12,6 +12,7 @@ class EnvironmentTests(unittest.TestCase):
                      "SHOAL_SCOPE_TOKEN": "token", "ZMX_SESSION": "agent",
                      "HERDR_ENV": "1", "REX_SESSION": "session",
                      "TMUX": "/tmp/tmux-501/default,1,0", "TMUX_PANE": "%0",
+                     "ZELLIJ": "0", "ZELLIJ_SESSION_NAME": "work", "ZELLIJ_PANE_ID": "0",
                      "CODEX_HOME": "/real/codex", "GIT_DIR": "/repo/.git",
                      "TERM": "xterm-256color"}
         with patch.dict("os.environ", inherited, clear=True):
@@ -19,11 +20,13 @@ class EnvironmentTests(unittest.TestCase):
         self.assertEqual(env["SHOAL_STATE_DIR"], "/sandbox/state")
         self.assertEqual(env["ZMX_DIR"], "/sandbox/zmx")
         self.assertEqual(env["TMUX_TMPDIR"], "/sandbox/tmux")
+        self.assertEqual(env["ZELLIJ_SOCKET_DIR"], "/sandbox/z")
         self.assertEqual(env["HOME"], "/sandbox/home")
         self.assertEqual(env["PATH"], "/sandbox/bin:/usr/bin")
         self.assertEqual(env["TERM"], "xterm-256color")
         for name in ("SHOAL_SCOPE_TOKEN", "ZMX_SESSION", "HERDR_ENV", "REX_SESSION", "TMUX",
-                     "TMUX_PANE", "CODEX_HOME", "GIT_DIR"):
+                     "TMUX_PANE", "ZELLIJ", "ZELLIJ_SESSION_NAME", "ZELLIJ_PANE_ID", "CODEX_HOME",
+                     "GIT_DIR"):
             self.assertNotIn(name, env)
 
 

@@ -1,7 +1,7 @@
 """A development build of Shoal in a sandbox directory: its own home, state
-directory, zmx and tmux directories and Git config, without the caller's Shoal,
-Git, host or agent settings, so nothing reaches the user's own daemon or
-sessions."""
+directory, zmx, tmux and Zellij directories and Git config, without the
+caller's Shoal, Git, host or agent settings, so nothing reaches the user's own
+daemon or sessions."""
 import json
 import os
 import shutil
@@ -17,7 +17,7 @@ IDENTITY = {f"GIT_{role}_{field}": value for role in ("AUTHOR", "COMMITTER")
             for field, value in (("NAME", "Shoal Demo"), ("EMAIL", "demo@example.invalid"))}
 # Variables that would reach the user's agents, terminal hosts or daemon.
 LEAKING = ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "SHOAL_", "HERDR_", "ZMX_", "HAPPY_", "REX_",
-           "TMUX")
+           "TMUX", "ZELLIJ")
 DAEMON_START_SECONDS = 60
 
 
@@ -35,12 +35,14 @@ def build():
 
 def environment(sandbox, bin_dir):
     """The caller's environment without its Git, Shoal, host or agent settings,
-    with the sandbox's home, state, zmx and tmux directories and `bin_dir` first
-    on PATH."""
+    with the sandbox's home, state, zmx, tmux and Zellij directories and `bin_dir`
+    first on PATH."""
     env = isolated_git.environment(sandbox / "home", **IDENTITY)
     env = {name: value for name, value in env.items() if not name.startswith(LEAKING)}
     env.update(SHOAL_STATE_DIR=str(sandbox / "state"), ZMX_DIR=str(sandbox / "zmx"),
                TMUX_TMPDIR=str(sandbox / "tmux"),
+               # Short, since Zellij's socket paths are.
+               ZELLIJ_SOCKET_DIR=str(sandbox / "z"),
                PATH=os.pathsep.join([str(bin_dir), env.get("PATH", "")]))
     return env
 
@@ -84,6 +86,10 @@ class Sandbox:
         # An empty home would start zsh's first-run wizard instead of a prompt.
         (home / ".zshrc").write_text(f"PROMPT='{prompt} %1~ %# '\n")
         (home / ".bashrc").write_text(f"PS1='{prompt} \\W \\$ '\n")
+        # Nor Zellij's first-run tips over the recording.
+        zellij = home / ".config" / "zellij"
+        zellij.mkdir(parents=True)
+        (zellij / "config.kdl").write_text("show_startup_tips false\nshow_release_notes false\n")
         (self.bin_dir / "shoal").symlink_to(shoal)
         prepare_zmx_lock(self.path)
 
