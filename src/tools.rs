@@ -36,6 +36,7 @@ tools! {
     Zmx => ("zmx", None),
     Xcrun => ("xcrun", None),
     Tmux => ("tmux", None),
+    Zellij => ("zellij", None),
     Curl => (programs::CURL, None),
     Tar => ("tar", None),
     Diff => ("diff", None),

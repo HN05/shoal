@@ -22,6 +22,7 @@ mod rex;
 mod sessions;
 mod tmux;
 mod typed;
+mod zellij;
 mod zmx;
 
 use crate::sessions::Origin;

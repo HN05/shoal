@@ -64,7 +64,7 @@ pub struct Untracked {
 /// Programs serving terminal sessions, whose servers launchd adopts by
 /// design: the sessions they serve, such as a shell Shoal opened for a
 /// workspace, are the user's, not leftovers.
-const TERMINAL_SERVERS: [&str; 4] = ["zmx", "tmux", "screen", "herdr"];
+const TERMINAL_SERVERS: [&str; 5] = ["zmx", "tmux", "zellij", "screen", "herdr"];
 
 /// The untracked processes of each of `spaces`, by space ID: none of them is
 /// one of `tracked`, such as an execution's wrapper or a chat's agent, a

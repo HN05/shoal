@@ -4,6 +4,7 @@ pub(crate) mod herdr;
 mod locking;
 pub(crate) mod rex;
 pub(crate) mod tmux;
+pub(crate) mod zellij;
 pub(crate) mod zmx;
 
 pub(crate) use crate::client::sessions::{HostName, Origin, PlaceClose, PlaceOwnership};
@@ -85,6 +86,7 @@ fn host(name: HostName) -> Option<Arc<dyn Host>> {
         HostName::Rex => Some(Arc::new(rex::Cleanup)),
         HostName::Zmx => Some(Arc::new(zmx::Zmx)),
         HostName::Tmux => Some(Arc::new(tmux::Cleanup)),
+        HostName::Zellij => Some(Arc::new(zellij::Cleanup)),
         HostName::Terminal => None,
     }
 }

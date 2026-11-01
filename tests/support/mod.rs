@@ -62,7 +62,7 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
     for (name, _) in std::env::vars_os() {
         if name.to_str().is_some_and(|name| {
             [
-                "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TMUX",
+                "SHOAL_", "XDG_", "HAPPY_", "GIT_", "HERDR_", "ZMX_", "REX_", "TMUX", "ZELLIJ",
             ]
             .iter()
             .any(|prefix| name.starts_with(prefix))
@@ -88,6 +88,8 @@ pub fn isolated(root: &Path, program: impl AsRef<OsStr>) -> Command {
         // Nor a tmux one the user's server; the directory name stays short,
         // since a socket path is.
         .env("TMUX_TMPDIR", root.join("t"))
+        // Nor a Zellij one the user's sessions.
+        .env("ZELLIJ_SOCKET_DIR", root.join("z"))
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("PATH", path);

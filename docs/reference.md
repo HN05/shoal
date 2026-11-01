@@ -444,8 +444,8 @@ agent restores only when its workspace is named.
 in one workspace, use `--execution` or pick the agent by name, stop time, reason
 and whether it was interrupted mid-turn or idle on a terminal; an agent without
 turn reports counts as interrupted. In an
-interactive Herdr pane with `terminal.herdr.enabled`, Rex block with `terminal.rex.enabled` or
-tmux pane with `terminal.tmux.enabled`, it restores each agent in the pane or block it
+interactive pane or block of an enabled host other than zmx, such as a Herdr pane with
+`terminal.herdr.enabled`, it restores each agent in the pane or block it
 stopped in once that is back at its prompt. Otherwise it starts each in the background, as `shoal add` does: a tab
 per agent where `terminal.herdr.new_tab` allows, labelled as `shoal add` labels it, or a
 detached zmx session per agent on a terminal outside Herdr. Where nothing can
@@ -496,7 +496,7 @@ descend from such a process, working in the worktree or the space's temporary
 directory, running a program inside the worktree, or carrying its identity,
 with every process they started wherever it runs. Never among them are the
 processes of tracked executions and chat agents, the processes that started
-those, terminal session servers such as zmx or tmux, and the process that asks.
+those, terminal session servers such as zmx, tmux or Zellij, and the process that asks.
 A process whose parent still runs elsewhere, such as a shell the user opened in
 the worktree, is not a leftover. Each process is checked against its PID and
 start time before every signal and gets SIGTERM, then SIGKILL after a grace
@@ -1036,12 +1036,11 @@ again. The tracked wrapper runs inside the session, so stop, resume, scope and
 cleanup treat the agent as before. When the session returns control, Shoal resets
 emulator input modes on the caller's terminal. zmx reports no exit status: these launches
 exit 0 once the agent exits or you detach. A launch without a terminal, inside a
-zmx session (`ZMX_SESSION` is set), in a Herdr pane with `terminal.herdr.enabled`, in a
-Rex block with `terminal.rex.enabled` or in a tmux pane with `terminal.tmux.enabled` runs
-in place. A launch that would start a zmx session refuses the agent when zmx is missing,
+zmx session (`ZMX_SESSION` is set), or in a pane or block of another enabled host, such
+as a Herdr pane with `terminal.herdr.enabled`, runs in place. A launch that would start a zmx session refuses the agent when zmx is missing,
 as a missing agent executable does.
 `terminal.default_host` (`"zmx"` by default) sends these launches to [Herdr](#herdr),
-[Rex](#rex) or [tmux](#tmux) instead. With that host turned off they run in place, a queued
+[Rex](#rex), [tmux](#tmux) or [Zellij](#zellij) instead. With that host turned off they run in place, a queued
 start that no other host takes fails, and a demo runs as a background process.
 `--here` on `shoal add`, `contribute`, `chat`, `plan` and `repo setup --local`
 runs the launch in this terminal instead of a new tab or detached session,
@@ -1259,6 +1258,65 @@ a program that wraps them for tmux, and an image does not survive a redraw or a
 reattach; OSC 52 clipboard writes from agents need `set -s set-clipboard on`,
 since the default `external` forwards only tmux's own copies. Attaching redraws tmux's
 own screen rather than replaying the output.
+
+#### Zellij
+
+[Zellij](https://zellij.dev) is opt-in. With `terminal.zellij.enabled`, inside a
+Zellij pane (`ZELLIJ_SESSION_NAME` and `ZELLIJ_PANE_ID` are set) `shoal add`,
+chats, background resumes and demos open a new tab in your session, placed and
+labelled as a Herdr tab would be, and agents run in place in their pane;
+`placement = "split"` splits your pane instead. Each session's server keeps its
+panes running without a client, so detaching (`Ctrl o d`) or closing the
+terminal leaves the agent running. The new tab runs the agent directly, with
+nothing typed on screen, then your login shell, which stays after the worker
+exits and enters the workspace as a Herdr tab's shell does. A zmx session,
+Herdr pane, Rex block or tmux pane inside Zellij keeps its own behavior, since
+those hosts claim a terminal first.
+
+```toml
+[terminal.zellij]
+# enabled = true        # Unset: only when default_host = "zellij"
+new_tab = true          # Open tabs beside the caller
+placement = "tab"       # "split" opens beside the caller's pane instead
+# tab_name = "{repo}: {branch}" # Customize the tab name
+# close_when_done = true # Close after done keeps the workspace
+```
+
+Zellij 0.45 drops a tab opened in a session no client shows, so a place for
+such a session opens as the first pane of a background session of its own,
+named after the place, up to 20 characters and suffixed with `-2`, `-3` while
+another session, exited ones included, has the name, and its tab shows the
+whole name. With `[terminal] default_host = "zellij"`, which also turns
+`enabled` on, launches from a terminal no host serves open such sessions; a
+focused start, a chat or an agent launch then attaches the terminal to its
+session until you detach. A start queued from Zellij opens a background tab in
+the session it was queued from while a client shows it, otherwise a session of
+its own. `ZELLIJ_SOCKET_DIR` chooses the sessions Shoal reaches, as it does
+for `zellij`. Shoal needs Zellij 0.45 or later.
+
+`shoal attach` and `shoal status` find a workspace's or chat's pane by the place
+its agent was recorded in, named after its tab: attach selects the tab and pane
+and switches your Zellij client to its session, or attaches a client from
+outside Zellij. A tab is renamed only while the pane Shoal opened is alone in
+it. Shoal closes only the panes it created, as it closes Rex blocks, and never
+their tab's other panes, other tabs or sessions; it ends a session it created
+for a place once no other pane is left there. A pane is recorded with its
+session and its server's process and start time, so a pane under the same ID
+after the session restarts is never Shoal's. Zellij takes no condition with a
+command, so Shoal checks the server just before each command on a recorded
+pane. Zellij reports neither agent turn state nor the process in a pane's
+foreground, so an agent without turn hooks closes its pane once its execution
+ends, and a resume runs in a pane only while Zellij names your login shell
+(`SHELL`) as what runs there.
+
+Zellij draws panes through its own terminal emulator rather than passing output
+through as zmx does, and handles terminal protocols itself: it forwards Kitty
+graphics and Sixel images where your terminal supports them, OSC 9, 99 and 777
+notifications as `host_notification_protocol` sets, and OSC 52 clipboard
+writes; programs read no clipboard unless
+`dangerously_enable_paste_buffer_read` is set. Other image protocols do not
+reach your terminal, and attaching redraws Zellij's own screen rather than
+replaying the output.
 
 Besides Claude and Codex, Shoal includes [opencode](https://opencode.ai)
 (`opencode --prompt {prompt} {args}`), [pi](https://github.com/badlogic/pi-mono)
@@ -1598,7 +1656,7 @@ of the current workspace, or of every workspace outside one, or the demo `NAME`.
 Opening runs the demo's `open` command in the workspace with the demo's
 variables, otherwise shows it where it runs: Herdr focuses its tab, attaching its Herdr session
 outside Herdr, Rex its
-window (or selects it in the Mac app), tmux its window, attaching outside tmux, zmx attaches (Ctrl-\ detaches), and the
+window (or selects it in the Mac app), tmux its window and Zellij its tab, attaching outside them, zmx attaches (Ctrl-\ detaches), and the
 background follows its log. `shoal demo ls` lists the configured and
 running demos, with a running web demo's `url` in its JSON, `shoal demo screen NAME [--lines N]` prints the end of what it
 shows, and `shoal demo send NAME KEYS` types into it, so an agent sees and drives
@@ -1765,8 +1823,8 @@ branch and agent. When none is free it prints the entry's place and returns
 (`--json` emits the entry); the workspace is created only when the entry
 starts, from the then-current default branch. The daemon starts waiting entries
 in order as slots free, passing over an entry whose repository is full, and
-records a `queue_started` notification. An entry queued from Herdr, Rex or tmux
-opens a background tab or window where it was queued; otherwise it runs where
+records a `queue_started` notification. An entry queued from another host's pane, block
+or tab opens a background tab or window where it was queued; otherwise it runs where
 `terminal.default_host` puts it, by default a detached zmx session that `shoal attach`
 reaches. A start keeps its slot through setup until
 its agent registers; a start that fails, or whose launch ends without opening the

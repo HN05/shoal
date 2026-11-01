@@ -17,6 +17,7 @@ states!(
         Rex => "rex",
         Zmx => "zmx",
         Tmux => "tmux",
+        Zellij => "zellij",
         Terminal => "terminal",
     }
 );

@@ -7,6 +7,9 @@ mod rex;
 #[path = "workspaces/tmux.rs"]
 mod tmux;
 
+#[path = "workspaces/zellij.rs"]
+mod zellij;
+
 #[path = "workspaces/herdr_default.rs"]
 mod herdr_default;
 

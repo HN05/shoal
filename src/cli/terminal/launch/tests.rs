@@ -20,6 +20,7 @@ fn a_queued_start_keeps_every_server_variable_set_or_not() {
     assert_eq!(selection["REX_SERVER"], "");
     assert_eq!(selection["TMUX"], "");
     assert_eq!(selection["TMUX_TMPDIR"], "");
+    assert_eq!(selection["ZELLIJ_SOCKET_DIR"], "");
 }
 
 #[test]

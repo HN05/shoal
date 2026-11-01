@@ -32,6 +32,19 @@ RUN rustup component add rustfmt clippy \
       libssl-dev \
  && rm -rf /var/lib/apt/lists/*
 
+# Zellij serves the Zellij host's tests against isolated sessions. Debian does
+# not package it, so the static release binary for this host's architecture is
+# pinned, as the host's oldest supported version, and verified against the
+# checksum the release publishes for it.
+ARG ZELLIJ=0.45.1
+RUN set -eu \
+ && base="https://github.com/zellij-org/zellij/releases/download/v$ZELLIJ/zellij-$(uname -m)-unknown-linux-musl" \
+ && curl -fsSL "$base.tar.gz" -o /tmp/zellij.tar.gz \
+ && sum="$(curl -fsSL "$base.sha256sum" | cut -d ' ' -f 1)" \
+ && tar -xzf /tmp/zellij.tar.gz -C /usr/local/bin zellij \
+ && echo "$sum  /usr/local/bin/zellij" | sha256sum -c - \
+ && rm -f /tmp/zellij.tar.gz
+
 # Worktrunk is pinned because Shoal drives its CLI. --locked builds it against
 # its own lockfile, so an upstream release cannot break this image. Every layer
 # drops the registry it downloaded: layers are additive, so sources left here
@@ -82,5 +95,6 @@ RUN cargo install --locked apple-codesign --version 0.29.0 \
 # Sanity: the versions the jobs will run with, visible in `podman build` output.
 RUN rustc --version && cargo clippy --version && cargo fmt --version \
  && wt --version && git --version && lsof -v 2>&1 | head -1 && zsh --version && python3 --version && jq --version \
+ && tmux -V && zellij --version \
  && zig version && cargo-zigbuild --version && rcodesign --version \
  && cargo audit --version && cargo outdated --version

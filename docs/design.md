@@ -1001,12 +1001,31 @@ and a recorded pane is Shoal's only on that instance. Panes carry no ownership
 marks, so the daemon's records prove ownership as for Rex blocks, and a close
 kills only that pane, leaving the user's other panes, windows and sessions.
 
+Zellij is an opt-in host on the same terms as tmux, enabled the same way and
+claiming a terminal after it: a Zellij session is a group and a pane a place, a
+new place opens as a tab in the caller's session or splits the caller's pane,
+and agents run in place. Zellij also redraws panes through its own emulator,
+but handles images, notifications and clipboard writes itself, as its
+documentation describes, so Shoal documents its limits as for tmux and keeps zmx
+the default. Zellij 0.45 drops tabs opened in a session no client shows, which
+a background start would otherwise lose, so a place for a session without a
+client, or for a terminal outside Zellij, opens as the first pane of a session
+of its own. Zellij keeps no configured group: generic code then hands the
+host no origin, and the host decides between the origin's session and a new
+one, since only it can tell whether a client shows a session. Zellij runs a
+server per session and numbers panes per server, so a place's ID names its
+session and pane, it records the socket directory, and its instance is the
+server's process and birth; Zellij takes no condition with a command, so the
+host checks the instance just before each command on a recorded pane. A close
+of a pane in a session Shoal created for it alone ends that session once no
+other pane is left, so no empty session outlives its place.
+
 Terminal agent launches run in zmx sessions so agents outlive the terminal:
 detaching or closing it leaves the agent running, and `attach` reattaches. zmx
 passes output through unchanged while attached and restores the screen from its
 own terminal state on attach, so terminal protocols such as images keep working,
 which multiplexers that re-render output through their own emulator, like tmux,
-break; zmx therefore stays the default host. The daemon requires whichever host
+break or support only in part; zmx therefore stays the default host. The daemon requires whichever host
 `terminal.default_host` names, so a user who sets another one need not install
 zmx. The tracked wrapper
 runs inside the session's pty, so tracking, scope, stop and recovery are
@@ -1388,7 +1407,7 @@ creation, setup, and the post-setup hook
 succeed, or after an explicitly ignored setup failure, and retains the
 workspace whatever the agent does. Desktop handoffs (Claude and Codex apps, T3) provide no
 tracking or scope. A host runs Shoal's tracked agents, chats and demos and shows
-them, as zmx, Herdr, Rex and tmux do; an external app, such as Quay, is a UI that is
+them, as zmx, Herdr, Rex, tmux and Zellij do; an external app, such as Quay, is a UI that is
 not a host and reads and acts on Shoal's state through `shoal::client`. It holds
 a workspace while it shows it and queues agents, which the daemon starts
 detached in `terminal.default_host`, which never names an external app.
