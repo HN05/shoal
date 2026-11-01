@@ -190,6 +190,15 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     );
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.pid, chat.pid);
+    // A restore in a background place has nobody watching it.
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == crate::daemon::notifications::NotificationKind::ChatRestoreFailed
+                && notification.message.contains("still has processes running")
+        }),
+        "{notifications:?}"
+    );
     // Nor is it discarded, which would delete the files its agent uses.
     let error = manager.discard_saved_chat("talk").await.unwrap_err();
     assert!(

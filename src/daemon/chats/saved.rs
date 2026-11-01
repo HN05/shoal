@@ -89,10 +89,28 @@ impl Manager {
         origin: Option<Origin>,
         hands_over: bool,
     ) -> Result<Chat> {
-        let process = identity::capture(pid)?.context("the chat process is not running")?;
         let _saving = self.chat_saves.lock().await;
         let saved = self.saved_chat(id).await?;
-        self.ensure_ended(&saved, pid).await?;
+        let restored = self.run_again(&saved, pid, origin, hands_over).await;
+        // A restore in a background place has nobody watching it.
+        if let Err(error) = &restored {
+            self.notify_restore_failed(&saved, &format!("{error:#}"))
+                .await;
+        }
+        restored
+    }
+
+    /// [`Self::restore_chat`] for the `saved` chat, once a save under way
+    /// finished.
+    async fn run_again(
+        &self,
+        saved: &Chat,
+        pid: u32,
+        origin: Option<Origin>,
+        hands_over: bool,
+    ) -> Result<Chat> {
+        let process = identity::capture(pid)?.context("the chat process is not running")?;
+        self.ensure_ended(saved, pid).await?;
         let repository = self
             .reserve_repository_directory(&saved.repository_id)
             .await?;
@@ -100,9 +118,9 @@ impl Manager {
             self.release_place(origin).await?;
         }
         let restored = Restored {
-            id: saved.id,
-            repository: saved.repository_id,
-            process: process.clone(),
+            id: saved.id.clone(),
+            repository: saved.repository_id.clone(),
+            process,
             origin,
             hands_over,
         };
@@ -113,8 +131,8 @@ impl Manager {
                 Ok(chat)
             }
             Err(error) => {
-                self.return_to_saved(&chat.id, pid, &format!("{error:#}"))
-                    .await?;
+                let id = chat.id.clone();
+                self.store.run(move |db| resave(db, &id, pid)).await?;
                 Err(error)
             }
         }
