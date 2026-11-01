@@ -19,7 +19,7 @@ use crate::{
         workspace::Manager,
     },
     forge::{items::link::LinkKind, updates::Snapshot},
-    model::{Relation, Workspace},
+    model::{Chat, Relation, Workspace},
 };
 
 /// Records by key, each with its JSON, which tells a changed one apart.
@@ -64,7 +64,8 @@ pub(super) async fn take(
         found.extend(links(manager, &workspaces).await?);
     }
     if topics.has(Topic::Questions) {
-        found.extend(questions(manager, &workspaces).await?);
+        let chats = manager.visible_chats(caller).await?;
+        found.extend(questions(manager, &workspaces, &chats).await?);
     }
     if topics.has(Topic::Approvals) {
         found.extend(approvals(manager, caller, &workspaces).await?);
@@ -183,8 +184,14 @@ fn lookup_errors(observed: &Snapshot) -> Vec<LookupError> {
         .collect()
 }
 
-async fn questions(manager: &Manager, workspaces: &[Workspace]) -> Result<Vec<Record>> {
-    let visible = ids(workspaces);
+/// The open questions of the visible workspaces and chats.
+async fn questions(
+    manager: &Manager,
+    workspaces: &[Workspace],
+    chats: &[Chat],
+) -> Result<Vec<Record>> {
+    let mut visible = ids(workspaces);
+    visible.extend(chats.iter().map(|chat| chat.id.as_str()));
     Ok(manager
         .open_questions()
         .await?

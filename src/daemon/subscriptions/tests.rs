@@ -275,6 +275,30 @@ mod streams {
     }
 
     #[tokio::test]
+    async fn the_user_sees_the_questions_of_a_chat() {
+        let daemon = TestDaemon::start().await;
+        let chat = daemon
+            .manager
+            .start_chat(
+                daemon.repository.id.clone().into(),
+                "planning".into(),
+                "claude".into(),
+                std::process::id(),
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+        let question = daemon.manager.ask_question(&chat.id, ask()).await.unwrap();
+        let mut subscription = subscribe(daemon.connector(), &[Topic::Questions]).await;
+        let records = snapshot(&mut subscription).await;
+        let [Record::Question(shown)] = records.as_slice() else {
+            panic!("expected the chat's question: {records:?}");
+        };
+        assert_eq!((shown.id, &*shown.space), (question.id, "planning"));
+    }
+
+    #[tokio::test]
     async fn a_scoped_subscription_covers_its_tree_without_notifications() {
         let daemon = TestDaemon::start().await;
         let own = daemon.workspace("own").await;
