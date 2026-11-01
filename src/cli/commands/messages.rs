@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 
 use crate::client::output::messages::Reached;
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
     },
     daemon::{agent_messages::AgentMessage, links::wait::Updates, workspace_files::NewFile},
     forge::items::attach::Attachment,
-    model::Workspace,
+    model::{PresentSpace, Workspace},
     protocol::{AgentMethod, ChatMethod, Method, QuestionMethod},
     repository::Selector,
 };
@@ -275,16 +275,17 @@ async fn hook_updates(ctx: &Context) -> Result<(Inbox, Updates)> {
 /// item activity of the agent's workspace or chat, then exit 2, which starts
 /// the idle agent's next turn with them. A failed wait is tried again, since
 /// without one the agent stays idle; a newer delivery or the exit of `agent`,
-/// the agent's process, ends it with 0 and leaves the agent idle. `workspace`
+/// the agent's process, ends it with 0 and leaves the agent idle. `space`
 /// and `resumed` continue the wait of the hook an upgrade replaced.
 pub(super) async fn wake(
     ctx: &Context,
     agent: u32,
-    workspace: Option<String>,
+    space: Option<String>,
     resumed: bool,
 ) -> Result<i32> {
     let wait = WakeWait {
-        inbox: workspace.map(Inbox::Workspace),
+        space,
+        inbox: None,
         restarted: resumed,
     };
     let next = tokio::select! {
@@ -310,13 +311,10 @@ pub(super) async fn wake(
 /// show idle until its first tool call, and an idle stop could end the turn
 /// that consumed the update meant to restore it. Whether to deliver them:
 /// not when a stop of the agent came first, which leaves them unread for its
-/// restore. A chat's agent reports no turn state, and a failed report still
-/// delivers, since without the turn the agent would stay idle.
+/// restore. A failed report still delivers, since without the turn the agent
+/// would stay idle.
 async fn woken_turn_starts(ctx: &Context, inbox: &Inbox) -> bool {
-    let Inbox::Workspace(workspace) = inbox else {
-        return true;
-    };
-    super::agent_state::start_woken_turn(ctx, workspace.clone())
+    super::agent_state::start_woken_turn(ctx, inbox.space().to_owned())
         .await
         .unwrap_or_else(|error| {
             eprintln!("shoal: the woken turn was not reported: {error:#}");
@@ -373,10 +371,11 @@ async fn retry_next_updates(ctx: &Context, mut wait: WakeWait) -> Option<(Inbox,
     }
 }
 
-/// The wake hook's wait: its inbox once found, and whether the daemon
-/// restarted before the next wait began, so it does not know the agent's
-/// scope until the agent's wrapper reattaches.
+/// The wake hook's wait: the space it was named, its inbox once found, and
+/// whether the daemon restarted before the next wait began, so it does not
+/// know the agent's scope until the agent's wrapper reattaches.
 struct WakeWait {
+    space: Option<String>,
     inbox: Option<Inbox>,
     restarted: bool,
 }
@@ -387,9 +386,11 @@ impl WakeWait {
     async fn next(&mut self, ctx: &Context) -> Result<Option<(Inbox, Updates)>> {
         let inbox = match &self.inbox {
             Some(inbox) => inbox,
-            None => self
-                .inbox
-                .insert(Inbox::current(ctx, Fallback::OwnWorkspace).await?),
+            None => {
+                let space = self.space.clone();
+                let inbox = Inbox::select(ctx, space, Fallback::OwnWorkspace).await?;
+                self.inbox.insert(inbox)
+            }
         };
         let updates = inbox.next(ctx, std::mem::take(&mut self.restarted)).await?;
         if updates.updates.is_empty() && updates.messages.is_empty() {
@@ -399,13 +400,11 @@ impl WakeWait {
     }
 
     /// The hook's `arguments` continuing this wait after an upgrade restarted
-    /// the daemon: a chat's inbox comes from the environment again.
+    /// the daemon, in the inbox it found.
     fn resume_arguments(&self, arguments: Vec<OsString>) -> Vec<OsString> {
         let arguments = match &self.inbox {
-            Some(Inbox::Workspace(workspace)) => {
-                replace_option(arguments, "--workspace", workspace)
-            }
-            Some(Inbox::Chat(_)) | None => arguments,
+            Some(inbox) => replace_option(arguments, "--space", inbox.space()),
+            None => arguments,
         };
         with_flag(arguments, "--resume")
     }
@@ -420,6 +419,18 @@ enum Inbox {
 }
 
 impl Inbox {
+    /// The inbox of the space `explicit` names, else [`Self::current`].
+    async fn select(ctx: &Context, explicit: Option<String>, fallback: Fallback) -> Result<Self> {
+        let Some(space) = explicit else {
+            return Self::current(ctx, fallback).await;
+        };
+        match client::present_space(&ctx.paths, &space).await? {
+            Some(PresentSpace::Workspace(workspace)) => Ok(Self::Workspace(workspace.id)),
+            Some(PresentSpace::Chat(chat)) => Ok(Self::Chat(chat.id)),
+            None => bail!("no workspace or running chat {space}"),
+        }
+    }
+
     async fn current(ctx: &Context, fallback: Fallback) -> Result<Self> {
         if !crate::env::is_scoped()
             && let Some(chat) = crate::env::chat()
@@ -429,6 +440,13 @@ impl Inbox {
         Ok(Self::Workspace(
             ui::select_workspace(ctx, None, fallback).await?,
         ))
+    }
+
+    /// The ID of the workspace or chat whose inbox this is.
+    fn space(&self) -> &str {
+        match self {
+            Self::Workspace(space) | Self::Chat(space) => space,
+        }
     }
 
     async fn messages(&self, ctx: &Context) -> Result<Vec<AgentMessage>> {

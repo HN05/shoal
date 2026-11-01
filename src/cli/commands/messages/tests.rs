@@ -115,6 +115,7 @@ fn hook_output_names_the_event_it_answers() {
 fn a_resumed_wake_continues_in_the_inbox_it_found() {
     let resumed = |inbox: Option<Inbox>| {
         let wait = WakeWait {
+            space: None,
             inbox,
             restarted: false,
         };
@@ -124,22 +125,20 @@ fn a_resumed_wake_continues_in_the_inbox_it_found() {
     assert_eq!(
         resumed(Some(Inbox::Workspace("worker".into()))),
         [
-            "internal",
-            "wake",
-            "--agent",
-            "7",
-            "--workspace",
-            "worker",
-            "--resume"
+            "internal", "wake", "--agent", "7", "--space", "worker", "--resume"
         ]
     );
-    // A chat's inbox and one not found yet come from the environment.
-    for inbox in [Some(Inbox::Chat("chat".into())), None] {
-        assert_eq!(
-            resumed(inbox),
-            ["internal", "wake", "--agent", "7", "--resume"]
-        );
-    }
+    assert_eq!(
+        resumed(Some(Inbox::Chat("chat".into()))),
+        [
+            "internal", "wake", "--agent", "7", "--space", "chat", "--resume"
+        ]
+    );
+    // One not found yet comes from the environment again.
+    assert_eq!(
+        resumed(None),
+        ["internal", "wake", "--agent", "7", "--resume"]
+    );
 }
 
 #[test]

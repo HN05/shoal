@@ -58,9 +58,10 @@ pub enum InternalCommand {
         /// The integration whose hook event stdin carries.
         #[arg(long)]
         integration: crate::ai::IntegrationKind,
-        /// Workspace to use; defaults to the current workspace or picker.
+        /// Workspace or chat to report for; defaults to the chat this runs
+        /// in, else the caller's own or the current workspace.
         #[arg(long)]
-        workspace: Option<String>,
+        space: Option<String>,
     },
     /// Wait for the next agent messages or item activity of the workspace or
     /// chat, print them and exit 2; Shoal's Claude Code `Stop` and `StopFailure`
@@ -70,9 +71,10 @@ pub enum InternalCommand {
         /// The agent's process ID; the hook ends when that process exits.
         #[arg(long)]
         agent: u32,
-        /// Workspace whose updates to wait for; defaults to the agent's own.
+        /// Workspace or chat whose updates to wait for; defaults to the
+        /// agent's own.
         #[arg(long, hide = true)]
-        workspace: Option<String>,
+        space: Option<String>,
         /// Continue a wait across a daemon restart, as the installed release
         /// does after an upgrade restarted the daemon.
         #[arg(long, hide = true)]

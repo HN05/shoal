@@ -1780,10 +1780,10 @@ A Happy chat has no terminal to focus: like a workspace Happy session it starts
 detached, as Happy's daemon would start it, so the user continues it in the
 Happy app, and the process that recorded the chat hands the record to the
 session's process.
-A chat's agent reports its session through the session-start hook and
-`agent-state` command a workspace's agent uses, which act on the space they run
-in, and the record keeps the session so the chat can move; it records no turn
-state.
+A chat's agent reports its session through the session-start hook and the
+`agent-state` and `turn-failed` commands a workspace's agent uses, which act on
+the space they run in, and the record keeps the session so the chat can move; it
+records no turn state.
 
 Issues split by whether their plan is settled: `[issue] plan_label` marks one
 that needs the owner's choices and `planned_label` one whose body holds a plan

@@ -31,15 +31,14 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             ends_turn,
             space,
         } => agent_state::run(&ctx, space, state, ends_turn).await,
-        InternalCommand::TurnFailed {
-            integration,
-            workspace,
-        } => agent_state::turn_failed(&ctx, workspace, integration).await,
+        InternalCommand::TurnFailed { integration, space } => {
+            agent_state::turn_failed(&ctx, space, integration).await
+        }
         InternalCommand::Wake {
             agent,
-            workspace,
+            space,
             resume,
-        } => messages::wake(&ctx, agent, workspace, resume).await,
+        } => messages::wake(&ctx, agent, space, resume).await,
         InternalCommand::SubagentStart => subagents::start(&ctx).await,
         InternalCommand::WorktreeCreate => worktree_hooks::create(&ctx).await,
         InternalCommand::WorktreeRemove => worktree_hooks::remove(&ctx).await,

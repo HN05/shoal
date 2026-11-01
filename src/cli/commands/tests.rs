@@ -180,23 +180,16 @@ fn a_resumed_watch_names_its_workspace() {
 }
 
 #[test]
-fn a_resumed_wake_names_its_workspace() {
+fn a_resumed_wake_names_its_space() {
     let arguments = [
-        "shoal",
-        "internal",
-        "wake",
-        "--agent",
-        "7",
-        "--workspace",
-        "work",
-        "--resume",
+        "shoal", "internal", "wake", "--agent", "7", "--space", "work", "--resume",
     ];
     let cli = <Cli as clap::Parser>::try_parse_from(arguments).unwrap();
     let Some(Command::Internal {
         command:
             InternalCommand::Wake {
                 agent,
-                workspace,
+                space,
                 resume,
             },
     }) = cli.command
@@ -204,6 +197,6 @@ fn a_resumed_wake_names_its_workspace() {
         panic!("expected the wake hook");
     };
     assert_eq!(agent, 7);
-    assert_eq!(workspace.as_deref(), Some("work"));
+    assert_eq!(space.as_deref(), Some("work"));
     assert!(resume);
 }

@@ -59,11 +59,12 @@ async fn report_state(
     emit(ctx, status)
 }
 
-/// Report the agent of `workspace` working on the turn a wake starts, which
-/// no hook of its own reports starting. Whether the turn starts: a stop of
-/// the agent that came first leaves the update for its restore.
-pub(super) async fn start_woken_turn(ctx: &Context, workspace: String) -> Result<bool> {
-    let turn: WokenTurn = request(&ctx.paths, AgentMethod::StartWokenTurn { workspace }).await?;
+/// Report the agent of `space` working on the turn a wake starts, which no
+/// hook of its own reports starting. Whether the turn starts: a stop of the
+/// agent that came first leaves the update for its restore.
+pub(super) async fn start_woken_turn(ctx: &Context, space: String) -> Result<bool> {
+    let method = AgentMethod::StartWokenTurn { workspace: space };
+    let turn: WokenTurn = request(&ctx.paths, method).await?;
     Ok(turn.starts)
 }
 
@@ -72,27 +73,27 @@ pub(super) async fn start_woken_turn(ctx: &Context, workspace: String) -> Result
 /// integration cannot read reports an unknown failure.
 pub(super) async fn turn_failed(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let reported = report_turn_failure(ctx, workspace, integration).await;
+    let reported = report_turn_failure(ctx, space, integration).await;
     tell_failure(ctx, &reported).await;
     reported
 }
 
 async fn report_turn_failure(
     ctx: &Context,
-    workspace: Option<String>,
+    space: Option<String>,
     integration: IntegrationKind,
 ) -> Result<i32> {
-    let workspace = ui::select_workspace(ctx, workspace, Fallback::OwnWorkspace).await?;
+    let space = ui::select_space(ctx, space, Fallback::OwnWorkspace).await?;
     let event = hook_event().unwrap_or_default();
     let failure =
         crate::cli::agents::turn_failure(integration, &event).unwrap_or(TurnFailure::Other);
     let status: AgentStatus = request(
         &ctx.paths,
         AgentMethod::ReportTurnFailure {
-            workspace,
+            workspace: space,
             failure,
             session: session_of(&event),
             execution: None,

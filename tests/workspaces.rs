@@ -20653,6 +20653,75 @@ fn the_wake_hook_exits_with_its_agent() {
 }
 
 #[test]
+fn a_chats_hooks_report_its_failed_turn_and_wake_it_for_its_messages() {
+    let fixture = Fixture::new();
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "planning", "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+
+    // A failed turn reports for the chat, which keeps the session it names.
+    let mut report = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args([
+            "--json",
+            "internal",
+            "turn-failed",
+            "--integration",
+            "claude",
+        ])
+        .args(["--space", "planning"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let event = r#"{"hook_event_name":"StopFailure","session_id":"failed-turn"}"#;
+    let mut stdin = report.stdin.take().unwrap();
+    stdin.write_all(event.as_bytes()).unwrap();
+    drop(stdin);
+    let output = report.wait_with_output().unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let status: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(status["state"], "idle", "{status}");
+    let chats = fixture.request(serde_json::json!("list_chats"));
+    assert_eq!(chats["data"][0]["session"], "failed-turn", "{chats}");
+
+    // The wake hook named the chat waits for its messages.
+    let mut hook = fixture
+        .command()
+        .current_dir(&fixture.repo)
+        .args(["internal", "wake", "--agent", &agent.id().to_string()])
+        .args(["--space", "planning"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let sent = fixture.request(serde_json::json!({"send_chat_message":{
+        "chat": "planning", "message": "Plan the next step"
+    }}));
+    assert_eq!(sent["type"], "ok", "{sent}");
+    // A hang guard only: the message ends the wait.
+    wait_until("the wake hook to exit", || {
+        hook.try_wait().unwrap().is_some()
+    });
+    let output = hook.wait_with_output().unwrap();
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let woken = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        woken.contains("New Shoal messages for this chat:\n- Plan the next step"),
+        "{woken}"
+    );
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
+#[test]
 fn a_title_request_reaches_only_a_running_agent() {
     let fixture = Fixture::new();
     fixture.add("titled");
@@ -21225,13 +21294,13 @@ fn a_failed_turn_state_report_alerts_the_user() {
     fixture.add("reporter");
     fixture.add("other");
     for report in [
-        &["internal", "agent-state", "waiting", "--workspace", "other"][..],
+        &["internal", "agent-state", "waiting", "--space", "other"][..],
         &[
             "internal",
             "turn-failed",
             "--integration",
             "claude",
-            "--workspace",
+            "--space",
             "other",
         ],
     ] {
