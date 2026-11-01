@@ -16,7 +16,7 @@ async fn chat_events(manager: &Manager) -> Vec<String> {
             EventItem::Event(event) if event.details.kind == EventKind::ChatChanged => Some(
                 format!("{} {:?}", event.details.name, event.details.chat.flatten()),
             ),
-            EventItem::Event(_) | EventItem::Gap { .. } => None,
+            EventItem::Event(_) | EventItem::File(_) | EventItem::Gap { .. } => None,
         })
         .collect()
 }

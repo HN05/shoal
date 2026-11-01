@@ -61,6 +61,15 @@ states!(
     }
 );
 
+states!(
+    /// What happened to a file attached to a workspace or chat.
+    FileEventKind {
+        Added => "file_added",
+        /// Its record and Shoal's copy went, by whatever deleted them.
+        Removed => "file_removed",
+    }
+);
+
 states!(EventCause {
     Manual => "manual",
     Idle => "idle",
@@ -233,7 +242,30 @@ pub struct ChatEvent {
     pub chat: crate::model::Chat,
 }
 
-/// A journal row as stored: chat events carry the chat in place of a workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEvent {
+    pub id: i64,
+    pub created_at: i64,
+    #[serde(flatten)]
+    pub details: FileEventDetails,
+}
+
+/// A file event as stored: the space is a workspace or a chat, which may be
+/// gone, so it carries the space's identity in place of its record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileEventDetails {
+    pub kind: FileEventKind,
+    /// Null for a chat's file.
+    pub workspace_id: Option<String>,
+    /// Null for a workspace's file.
+    pub chat_id: Option<String>,
+    pub repository_id: String,
+    /// The record as `shoal files` lists it.
+    pub file: crate::daemon::workspace_files::AttachedFile,
+}
+
+/// A journal row as stored: chat events carry the chat in place of a
+/// workspace, and file events the space's identity.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum Record {
@@ -241,6 +273,7 @@ enum Record {
         kind: ChatEventKind,
         chat: Box<crate::model::Chat>,
     },
+    File(Box<FileEventDetails>),
     Workspace(Box<EventDetails>),
 }
 
@@ -249,6 +282,7 @@ enum Record {
 pub enum EventItem {
     Event(Box<WorkspaceEvent>),
     Chat(Box<ChatEvent>),
+    File(Box<FileEvent>),
     Gap {
         since: i64,
         oldest_id: i64,
@@ -262,6 +296,7 @@ impl EventItem {
         match self {
             Self::Event(event) => Some(event.id),
             Self::Chat(event) => Some(event.id),
+            Self::File(event) => Some(event.id),
             Self::Gap { .. } => None,
         }
     }
@@ -272,6 +307,7 @@ impl EventItem {
         match self {
             Self::Event(event) => event.id,
             Self::Chat(event) => event.id,
+            Self::File(event) => event.id,
             Self::Gap { oldest_id, .. } => oldest_id - 1,
         }
     }
@@ -425,6 +461,7 @@ impl Manager {
                 items.push(match serde_json::from_str(&record)? {
                     Record::Workspace(details) => EventItem::Event(Box::new(WorkspaceEvent { id,created_at,details: *details })),
                     Record::Chat { kind, chat } => EventItem::Chat(Box::new(ChatEvent { id,created_at,kind,chat: *chat })),
+                    Record::File(details) => EventItem::File(Box::new(FileEvent { id,created_at,details: *details })),
                 });
             }
             Ok(items)

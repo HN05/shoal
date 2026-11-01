@@ -198,6 +198,8 @@ pub(super) fn remove_schema(db: &Connection) -> Result<()> {
         "simulator_acquired",
         "simulator_released",
         "simulator_deleted",
+        "file_added",
+        "file_removed",
     ] {
         db.execute_batch(&format!("DROP TRIGGER {trigger};"))?;
     }

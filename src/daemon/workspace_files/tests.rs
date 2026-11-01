@@ -1276,3 +1276,5 @@ async fn a_chats_agent_attaches_as_its_chat_outside_any_workspace() {
     process.kill();
     assert_eq!(manager.attacher(None, Some(&chat.id)).await, Attacher::User);
 }
+
+mod events;

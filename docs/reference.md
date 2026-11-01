@@ -3826,6 +3826,14 @@ A `type: "chat"` line records a chat's start, rename or end: its `id`,
 `chat` object with its `id`, `repository_id`, `name` (the new one after a
 rename), `agent`, `pid` and Unix-seconds `started_at`.
 
+A `type: "file"` line records a file [attached](#attached-files) to a workspace
+or chat by any route (`kind: "file_added"`) or deleted by any route, including
+`shoal files rm`, workspace removal, the retention sweep and disk space cleanup
+(`kind: "file_removed"`): its `id`, `created_at`, `workspace_id` or `chat_id`
+(the other null), `repository_id`, and `file`, the record as
+`shoal files --json` lists it, with its own `id`. Attaching a file that is
+already attached adds nothing.
+
 A `type: "gap"` line gives `since`, `oldest_id`, and `latest_id` when a cursor
 falls outside retained history, then replay continues with retained events.
 Resync with `shoal work --json` after a gap or on first connection: the journal

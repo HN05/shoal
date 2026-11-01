@@ -48,6 +48,14 @@ pub(super) async fn run(ctx: &Context, follow: bool, since: Option<i64>) -> Resu
                 outln!("{} {} {}", event.id, event.details.kind, event.details.name)
             }
             EventItem::Chat(event) => outln!("{} {} {}", event.id, event.kind, event.chat.id),
+            EventItem::File(event) => {
+                outln!(
+                    "{} {} {}",
+                    event.id,
+                    event.details.kind,
+                    event.details.file.name
+                )
+            }
             EventItem::Gap {
                 since,
                 oldest_id,

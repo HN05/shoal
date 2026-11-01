@@ -1983,7 +1983,11 @@ agent whose process tree sent the request, by both its execution, which pins
 the run, and the session it reported, which outlives a restart or resume and
 names the conversation a client shows the file in. A chat's agent runs
 outside any execution, so its requests name the chat they come from, and its
-files record the chat as who attached them; like scope, this is cooperative. A file's optional title
+files record the chat as who attached them; like scope, this is cooperative.
+The journal records each file's record as it is added and deleted, by store
+triggers so no route of attaching or deleting is missed, and carries the
+owner's ID from the record because a removed workspace or ended chat has no row
+left to supply it; clients showing files follow them without polling. A file's optional title
 rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
 text, because attach flags repeat and a separate title flag could not say which
 file it names. Own-workspace withdrawal removes a
