@@ -56,6 +56,38 @@ fn check_reopen_options(workspace: &Workspace, options: NewWorktreeOptions<'_>) 
     Ok(())
 }
 
+/// What refreshing a branch does.
+enum Refresh {
+    /// Nothing: the branch has no upstream to follow.
+    Unchanged(PulledBranch),
+    Follow(Following),
+}
+
+/// A local branch about to follow its upstream.
+struct Following {
+    branch: String,
+    local_ref: String,
+    previous_commit: String,
+    remote: String,
+    /// The upstream branch's ref on `remote`.
+    reference: String,
+    /// The worktree that has the branch checked out, if any.
+    checkout: Option<std::path::PathBuf>,
+}
+
+impl Following {
+    fn pulled(self, repo: &Repository, commit: String) -> PulledBranch {
+        PulledBranch {
+            branch: self.branch,
+            repository_id: repo.id.clone(),
+            updated: commit != self.previous_commit,
+            previous_commit: self.previous_commit,
+            commit,
+            skipped: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) enum UpstreamPolicy {
     Required,
@@ -82,7 +114,7 @@ impl Manager {
     /// Fetch every remote that holds a default-branch ref merge checks read:
     /// the local default branch's upstream and the default remote, so they
     /// see what the forge merged; local branches stay unchanged. Returns the
-    /// default branch. The caller holds the repository's Git gate.
+    /// default branch. The caller holds the repository's fetch gate.
     pub(crate) async fn fetch_default_remotes(&self, repo: &Repository) -> Result<String> {
         let default =
             crate::git::default_branch::resolve(&repo.path, DefaultBranchLookup::Discover).await?;
@@ -106,8 +138,9 @@ impl Manager {
         Ok(default)
     }
 
-    /// Fast-forward the local default branch from its upstream as workspace
-    /// creation does. The caller holds the repository's Git gate.
+    /// Fast-forward the local default branch to its upstream as
+    /// [`Self::fetch_default_remotes`] fetched it. The caller holds the
+    /// repository's Git gate.
     pub(crate) async fn fast_forward_default(
         &self,
         repo: &Repository,
@@ -117,7 +150,7 @@ impl Manager {
             .await?
             .map(|(remote, _)| remote);
         let default_branch = self
-            .refresh_branch(repo, default, UpstreamPolicy::AllowLocalOnly)
+            .follow_fetched_upstream(repo, default)
             .await
             .with_context(|| format!("could not refresh {default}"))?;
         Ok(SyncedRepository {
@@ -160,14 +193,67 @@ impl Manager {
             .map(|w| w.name))
     }
 
-    /// Fast-forward a local branch from its upstream. The caller holds the
-    /// repository's Git gate through any subsequent creation.
+    /// Fetch a local branch's upstream and fast-forward the branch to it. The
+    /// caller holds the repository's Git gate through any subsequent creation.
     pub(super) async fn refresh_branch(
         &self,
         repo: &Repository,
         branch: &str,
         policy: UpstreamPolicy,
     ) -> Result<PulledBranch> {
+        let following = match self.prepare_refresh(repo, branch, policy).await? {
+            Refresh::Unchanged(pulled) => return Ok(pulled),
+            Refresh::Follow(following) => following,
+        };
+        let (remote, reference) = (following.remote.as_str(), following.reference.as_str());
+        let commit = fetch::with_temporary_ref(&repo.path, "pull", git_run, async |fetched| {
+            let commit =
+                fetch::fetch_commit(&repo.path, remote, reference, fetched, git_run).await?;
+            self.advance(repo, &following, &commit).await
+        })
+        .await?;
+        Ok(following.pulled(repo, commit))
+    }
+
+    /// Fast-forward a local branch to its remote-tracking branch as the last
+    /// fetch left it, without asking the remote, so the caller holds the
+    /// repository's Git gate only for local work.
+    async fn follow_fetched_upstream(
+        &self,
+        repo: &Repository,
+        branch: &str,
+    ) -> Result<PulledBranch> {
+        let following = match self
+            .prepare_refresh(repo, branch, UpstreamPolicy::AllowLocalOnly)
+            .await?
+        {
+            Refresh::Unchanged(pulled) => return Ok(pulled),
+            Refresh::Follow(following) => following,
+        };
+        let tracking = git::existing_branch::upstream_ref(&repo.path, branch).await?;
+        let tracking = tracking.trim();
+        ensure!(
+            !tracking.is_empty(),
+            "{branch} has no remote-tracking branch; check the fetch refspec of {}",
+            following.remote
+        );
+        let commit = git::resolve_commit(&repo.path, tracking, git_run)
+            .await
+            .with_context(|| {
+                format!("{branch}'s remote-tracking branch {tracking} was never fetched")
+            })?;
+        let commit = self.advance(repo, &following, &commit).await?;
+        Ok(following.pulled(repo, commit))
+    }
+
+    /// The branch's upstream and checkout, refusing a checkout a refresh
+    /// cannot advance, or the unchanged branch when there is nothing to follow.
+    async fn prepare_refresh(
+        &self,
+        repo: &Repository,
+        branch: &str,
+        policy: UpstreamPolicy,
+    ) -> Result<Refresh> {
         let local_ref = git::local_ref(branch);
         let previous_commit = git::verify_revision(&repo.path, &local_ref, git_run)
             .await
@@ -179,21 +265,20 @@ impl Manager {
             && upstream.is_none()
             && git::remotes(&repo.path, git_run).await?.trim().is_empty()
         {
-            return Ok(PulledBranch::unchanged(
+            return Ok(Refresh::Unchanged(PulledBranch::unchanged(
                 repo,
                 branch,
                 previous_commit,
                 format!(
                     "{branch} has no upstream and the repository has no remotes; nothing to refresh"
                 ),
-            ));
+            )));
         }
         let (remote, reference) = upstream.with_context(|| {
             format!(
                 "{branch} has no branch upstream; configure it with git branch --set-upstream-to=<remote>/{branch} {branch}"
             )
         })?;
-        let (remote, reference) = (remote.as_str(), reference.as_str());
         let checkout = git::checkout_of(&repo.path, branch, git::run)
             .await?
             .map(|tree| tree.path);
@@ -205,42 +290,50 @@ impl Manager {
             );
             clean_branch(checkout, branch).await?;
         }
-
-        let commit = fetch::with_temporary_ref(&repo.path, "pull", git_run, async |fetched| {
-            let commit =
-                fetch::fetch_commit(&repo.path, remote, reference, fetched, git_run).await?;
-            let commit = commit.as_str();
-            ensure!(
-                git::revision(&repo.path, &local_ref, git_run).await?.trim() == previous_commit,
-                "{branch} changed during fetch; retry"
-            );
-            // Like pull --ff-only, an already-ahead default branch stays untouched.
-            if git::is_ancestor(&repo.path, commit, &previous_commit, git::isolated_command).await?
-            {
-                return Ok(previous_commit.clone());
-            }
-            ensure!(
-                git::is_ancestor(&repo.path, &previous_commit, commit, git::isolated_command)
-                    .await?,
-                "{branch} and its upstream have diverged; resolve this manually before refreshing"
-            );
-            if let Some(checkout) = &checkout {
-                clean_branch(checkout, branch).await?;
-                git::branch::fast_forward(checkout, commit).await?;
-            } else {
-                git::fast_forward_local(&repo.path, commit, &local_ref).await?;
-            }
-            Ok(commit.to_owned())
-        })
-        .await?;
-        Ok(PulledBranch {
-            branch: branch.into(),
-            repository_id: repo.id.clone(),
-            updated: commit != previous_commit,
+        Ok(Refresh::Follow(Following {
+            branch: branch.to_owned(),
+            local_ref,
             previous_commit,
-            commit,
-            skipped: None,
-        })
+            remote,
+            reference,
+            checkout,
+        }))
+    }
+
+    /// Fast-forward the branch to `commit`, which its upstream has, like
+    /// pull --ff-only; returns where the branch ends up.
+    async fn advance(
+        &self,
+        repo: &Repository,
+        following: &Following,
+        commit: &str,
+    ) -> Result<String> {
+        let Following {
+            branch,
+            local_ref,
+            previous_commit,
+            checkout,
+            ..
+        } = following;
+        ensure!(
+            git::revision(&repo.path, local_ref, git_run).await?.trim() == previous_commit,
+            "{branch} changed during fetch; retry"
+        );
+        // An already-ahead branch stays untouched.
+        if git::is_ancestor(&repo.path, commit, previous_commit, git::isolated_command).await? {
+            return Ok(previous_commit.clone());
+        }
+        ensure!(
+            git::is_ancestor(&repo.path, previous_commit, commit, git::isolated_command).await?,
+            "{branch} and its upstream have diverged; resolve this manually before refreshing"
+        );
+        if let Some(checkout) = checkout {
+            clean_branch(checkout, branch).await?;
+            git::branch::fast_forward(checkout, commit).await?;
+        } else {
+            git::fast_forward_local(&repo.path, commit, local_ref).await?;
+        }
+        Ok(commit.to_owned())
     }
 
     /// Query advertised remote heads, including branches never fetched locally.
