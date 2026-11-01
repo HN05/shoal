@@ -145,7 +145,7 @@ fn a_missing_session_lists_nothing() {
 struct Isolated {
     dir: tempfile::TempDir,
     zellij: Zellij,
-    session: &'static str,
+    session: String,
     client: std::process::Child,
 }
 
@@ -170,13 +170,14 @@ impl Isolated {
             "show_startup_tips false\nshow_release_notes false\nsession_serialization false\n",
         )
         .unwrap();
-        let session = "repo";
+        // Named after its directory, so no other server shares the name.
+        let session = dir.path().file_name().unwrap().to_str().unwrap().to_owned();
         let started = Self::zellij_in(dir.path())
-            .args(["attach", "--create-background", session])
+            .args(["attach", "--create-background", &session])
             .output()
             .unwrap();
         assert!(started.status.success(), "{started:?}");
-        let client = Self::client(dir.path(), session);
+        let client = Self::client(dir.path(), &session);
         let zellij = Zellij {
             socket_dir: Some(dir.path().join("s")),
         };
@@ -265,7 +266,7 @@ impl Isolated {
     /// Wait until the client shows the session, which Zellij's tabs need.
     async fn shown(&self) {
         for _ in 0..600 {
-            if !self.zellij.clients(self.session).await.unwrap().is_empty() {
+            if !self.zellij.clients(&self.session).await.unwrap().is_empty() {
                 return;
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -294,7 +295,7 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
     zellij.ensure_supported().await.unwrap();
     let command = ["sleep".to_owned(), "600".into()];
     let opened = zellij
-        .open_tab(server.session, &server.shell(&command))
+        .open_tab(&server.session, &server.shell(&command))
         .await
         .unwrap();
     assert_eq!(Some(opened.socket_dir.as_path()), zellij.socket_dir());
@@ -313,7 +314,7 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         .unwrap();
     assert_eq!(pane.tab_name, "placed");
     assert_eq!(
-        zellij.panes(server.session).await.unwrap().len(),
+        zellij.panes(&server.session).await.unwrap().len(),
         3,
         "the user's pane, the tab's and its split"
     );
@@ -329,7 +330,7 @@ async fn closing_a_pane_leaves_the_others_and_stale_instances_close_nothing() {
         pane: &split.pane,
     };
     assert!(zellij.pane(split, None).await.unwrap().is_some());
-    assert_eq!(zellij.panes(server.session).await.unwrap().len(), 2);
+    assert_eq!(zellij.panes(&server.session).await.unwrap().len(), 2);
     zellij.close(place, Some(&opened.instance)).await.unwrap();
 }
 
@@ -341,7 +342,7 @@ async fn typed_text_reaches_the_shell_as_it_is() {
     server.shown().await;
     let zellij = &server.zellij;
     let opened = zellij
-        .open_tab(server.session, &server.shell(&[]))
+        .open_tab(&server.session, &server.shell(&[]))
         .await
         .unwrap();
     let place = PaneRef {
@@ -362,6 +363,48 @@ async fn typed_text_reaches_the_shell_as_it_is() {
     let screen = zellij.capture(place, instance, 50).await.unwrap();
     assert!(screen.contains("-as typed"), "{screen}");
     assert!(zellij.capture(place, "1:1", 50).await.is_err());
+}
+
+#[tokio::test]
+async fn a_place_recorded_without_its_directory_reaches_its_server() {
+    let Some(server) = Isolated::start() else {
+        return;
+    };
+    let recorded = Zellij::recorded(&BTreeMap::new());
+    assert_eq!(recorded.socket_dir(), None);
+    let reached = recorded.reaching(&server.session).await.unwrap();
+    let dir = reached.socket_dir().unwrap();
+    assert!(
+        same_dir(dir, server.dir.path().join("s").as_path()),
+        "{dir:?}"
+    );
+    let users = PaneRef {
+        session: &server.session,
+        pane: "terminal_0",
+    };
+    assert!(reached.pane(users, None).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn a_session_left_with_no_pane_ends() {
+    let Some(server) = Isolated::start() else {
+        return;
+    };
+    server.shown().await;
+    let zellij = &server.zellij;
+    let (instance, _) = zellij.instance(&server.session).await.unwrap().unwrap();
+    let only = PaneRef {
+        session: &server.session,
+        pane: "terminal_0",
+    };
+    zellij.close(only, Some(&instance)).await.unwrap();
+    for _ in 0..600 {
+        if zellij.instance(&server.session).await.unwrap().is_none() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("{} never ended", server.session);
 }
 
 /// Wait until `place` is gone; the limit is only a hang guard.

@@ -135,14 +135,12 @@ impl Pane {
 }
 
 impl Zellij {
-    /// The sessions of the socket directory `data` records, otherwise the
-    /// ones this process reaches.
+    /// The sessions of the socket directory `data` records; without one,
+    /// [`Zellij::reaching`] finds it from the session's server, whatever
+    /// this process's own directory.
     pub fn recorded(data: &BTreeMap<String, String>) -> Self {
-        match data.get(SOCKET_DIR) {
-            Some(dir) => Self {
-                socket_dir: Some(PathBuf::from(dir)),
-            },
-            None => Self::here(),
+        Self {
+            socket_dir: data.get(SOCKET_DIR).map(PathBuf::from),
         }
     }
 
@@ -532,10 +530,21 @@ impl Zellij {
         if let Some(pane) = panes.iter().find(|pane| pane.id == place.pane) {
             self.close_pane(place.session, pane, &panes).await?;
         }
-        if panes.iter().all(|pane| pane.id == place.pane) {
+        if self.left_empty(place, instance).await? {
             self.end_session(place.session).await?;
         }
         Ok(())
+    }
+
+    /// Whether the session of `place`, read again after closing it, is
+    /// still the instance `instance` and holds no pane but `place`, which
+    /// Zellij may list until it has closed.
+    async fn left_empty(&self, place: PaneRef<'_>, instance: &str) -> Result<bool> {
+        if !self.on_instance(place.session, instance).await? {
+            return Ok(false);
+        }
+        let panes = self.panes(place.session).await?;
+        Ok(panes.iter().all(|pane| pane.id == place.pane))
     }
 
     /// Close `pane` of `session`, whose panes are `panes`, with its tab
