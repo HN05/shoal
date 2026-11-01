@@ -27,7 +27,7 @@ use crate::{
     },
     daemon::{approvals::ApprovalRequest, questions::Listing, resources::Overview},
     env,
-    model::{PortCatalog, PortOverview, Workspace},
+    model::{Chat, PortCatalog, PortOverview, Workspace},
     paths::Paths,
     protocol::{
         ApprovalMethod, ConfigTarget, PortMethod, QuestionMethod, RemovalMethod, ResourceMethod,
@@ -61,7 +61,7 @@ struct Settings {
 }
 
 /// Live values an argument can be completed with.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Target {
     Commands,
     Repositories,
@@ -70,8 +70,9 @@ enum Target {
     /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
     /// running chats.
     Spaces(Need),
-    /// Workspaces described by what `shoal resume` restores in them.
-    ResumeWorkspaces,
+    /// Workspaces described by what `shoal resume` restores in them, then
+    /// the chats Shoal saved.
+    ResumeSpaces,
     /// Removed workspaces `shoal work restore` can open again, then existing
     /// ones it can return to a checkpoint.
     RestorableWorkspaces,
@@ -208,35 +209,14 @@ fn decorate(command: Command, path: &[String], typed: Arc<Typed>) -> Command {
             if offer_all && arg.get_id() == "all" {
                 return arg.hide(true);
             }
-            let target = match (arg.get_id().as_str(), parent, name.as_str()) {
-                ("id", _, "approvals") | ("id", "approvals", "withdraw") => {
-                    Some(Target::ApprovalRequests)
-                }
-                ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
-                ("name", _, "run") => Some(Target::Commands),
-                ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
-                ("workspace", _, "resume") => Some(Target::ResumeWorkspaces),
-                ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
-                ("workspace", _, _) => Some(Target::Workspaces(need)),
-                // Only stopping untracked processes takes chats.
-                ("space", _, "stop") if need != Need::Untracked => Some(Target::Workspaces(need)),
-                ("space", _, _) => Some(Target::Spaces(need)),
-                ("name", "acquire", "port") => Some(Target::Ports),
-                ("pool", "acquire" | "release", "resource" | "repo")
-                | ("resource", "acquire", "repo") => Some(Target::Pools),
-                ("member", "acquire", "resource") => Some(Target::Members),
-                ("name", "release", "port") => Some(Target::ReservedPorts),
-                ("name", "release", "sim") => Some(Target::SimNames),
-                ("lease", "release", _) => Some(Target::ResourceNames),
-                _ => None,
-            };
+            let target = target_of(arg.get_id().as_str(), parent, name.as_str(), need);
             if let Some(target) = target {
                 let typed = typed.clone();
                 let offer_all = offer_all
                     && !typed.all
                     && matches!(
                         target,
-                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeWorkspaces
+                        Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
                     );
                 arg.add(ArgValueCompleter::new(move |current: &OsStr| {
                     let mut values = typed.complete(target, current);
@@ -420,7 +400,7 @@ impl Typed {
         };
         let workspaces = matches!(
             target,
-            Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeWorkspaces
+            Target::Workspaces(_) | Target::Spaces(_) | Target::ResumeSpaces
         );
         values.retain(|value| {
             value.get_value().to_str().is_some_and(|s| {
@@ -508,15 +488,17 @@ impl Typed {
             }
             return Ok(candidates);
         }
-        if matches!(target, Target::ResumeWorkspaces) {
-            return Ok(workspaces
+        if matches!(target, Target::ResumeSpaces) {
+            let mut candidates: Vec<_> = workspaces
                 .into_iter()
                 .map(|w| {
                     let status = ui::resumable(&paths, &w.id)
                         .map_or_else(|| ui::NOTHING_TO_RESUME.into(), |(text, _)| text);
                     CompletionCandidate::new(&w.name).help(Some(status.into()))
                 })
-                .collect());
+                .collect();
+            candidates.extend(saved_chat_candidates(client::recorded_chats(&paths).await?));
+            return Ok(candidates);
         }
         let workspace = self
             .workspace(&workspaces)
@@ -573,7 +555,7 @@ impl Typed {
             | Target::Repositories
             | Target::Workspaces(_)
             | Target::Spaces(_)
-            | Target::ResumeWorkspaces
+            | Target::ResumeSpaces
             | Target::RestorableWorkspaces
             | Target::ApprovalRequests
             | Target::Questions => unreachable!(),
@@ -608,6 +590,45 @@ async fn chat_candidates(paths: &Paths) -> Result<Vec<CompletionCandidate>> {
         .into_iter()
         .map(|chat| CompletionCandidate::new(chat.name).help(Some("chat".into())))
         .collect())
+}
+
+/// The chats among `chats` Shoal saved, which `shoal resume` restores, by
+/// name.
+fn saved_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
+    chats
+        .into_iter()
+        .filter(|chat| chat.restore.is_some())
+        .map(|chat| CompletionCandidate::new(chat.name).help(Some(SAVED_CHAT.into())))
+        .collect()
+}
+
+/// How completion describes a chat Shoal saved.
+const SAVED_CHAT: &str = "saved chat";
+
+/// What the argument `id` of the command `name`, under `parent`, completes,
+/// given what the command needs of a workspace.
+fn target_of(id: &str, parent: &str, name: &str, need: Need) -> Option<Target> {
+    match (id, parent, name) {
+        ("id", _, "approvals") | ("id", "approvals", "withdraw") => Some(Target::ApprovalRequests),
+        ("id", _, "questions") | ("id", "questions", "withdraw") => Some(Target::Questions),
+        ("name", _, "run") => Some(Target::Commands),
+        ("repository" | "repository_override" | "repo", _, _) => Some(Target::Repositories),
+        ("workspace" | "space", _, "resume") => Some(Target::ResumeSpaces),
+        ("workspace", _, "restore") => Some(Target::RestorableWorkspaces),
+        ("workspace", _, _) => Some(Target::Workspaces(need)),
+        // Only stopping untracked processes takes chats.
+        ("space", _, "stop") if need != Need::Untracked => Some(Target::Workspaces(need)),
+        ("space", _, _) => Some(Target::Spaces(need)),
+        ("name", "acquire", "port") => Some(Target::Ports),
+        ("pool", "acquire" | "release", "resource" | "repo") | ("resource", "acquire", "repo") => {
+            Some(Target::Pools)
+        }
+        ("member", "acquire", "resource") => Some(Target::Members),
+        ("name", "release", "port") => Some(Target::ReservedPorts),
+        ("name", "release", "sim") => Some(Target::SimNames),
+        ("lease", "release", _) => Some(Target::ResourceNames),
+        _ => None,
+    }
 }
 
 /// The running chats with an agent session, by name.

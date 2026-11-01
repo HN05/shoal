@@ -239,3 +239,37 @@ fn a_repositorys_own_agents_complete_as_agents() {
     let global = layered_settings(&Config::default(), &ConfigLayers::default());
     assert!(!global.providers.contains("repo-only"));
 }
+
+#[test]
+fn resume_completes_resumable_spaces() {
+    assert_eq!(
+        target_of("space", "", "resume", Need::Any),
+        Some(Target::ResumeSpaces)
+    );
+    let chat = |name: &str, restore| Chat {
+        id: name.into(),
+        repository_id: "repo".into(),
+        name: name.into(),
+        agent: "claude".into(),
+        pid: 1,
+        started_at: 0,
+        origin: None,
+        tmp_dir: None,
+        session: None,
+        restore,
+    };
+    let candidates = saved_chat_candidates(vec![
+        chat("talk", Some(crate::state::ChatRestore::Resume)),
+        chat("running", None),
+    ]);
+    let offered: Vec<_> = candidates
+        .iter()
+        .map(|candidate| {
+            (
+                candidate.get_value().to_owned(),
+                candidate.get_help().map(ToString::to_string),
+            )
+        })
+        .collect();
+    assert_eq!(offered, [("talk".into(), Some(SAVED_CHAT.to_owned()))]);
+}
