@@ -173,18 +173,31 @@ impl Session {
                     .to_owned(),
             ),
         };
+        // A forced push or deletion replaces only what the remote had; an
+        // empty expectation keeps a missing ref missing.
         let replaces = match self.leases.get(destination) {
-            Some(expected) => Some(expected.clone()).filter(|expected| !expected.is_empty()),
-            None if forced || commit.is_none() => self.listed.get(destination).cloned(),
+            Some(expected) => Some(expected.clone()),
+            None if forced || commit.is_none() => {
+                Some(self.listed.get(destination).cloned().unwrap_or_default())
+            }
             None => None,
         };
         Ok(PushSpecification {
             remote: self.remote.clone(),
+            url: self.one_of_several_urls().await,
             destination: destination.to_owned(),
             commit,
             replaces,
             agent: None,
         })
+    }
+
+    /// The URL this push goes to, when the remote has several push URLs:
+    /// Git runs the helper for each, so approval must push to this one
+    /// only. A remote given by URL, or one Git cannot read, has its own.
+    async fn one_of_several_urls(&self) -> Option<String> {
+        let urls = git_output(&git::push_urls_args(&self.remote)).await.ok()?;
+        (urls.lines().count() > 1).then(|| self.url.clone())
     }
 
     /// Push `refspecs` to the real URL with Git, without the rewrites and

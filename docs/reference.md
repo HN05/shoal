@@ -3460,18 +3460,21 @@ push = "propose" # Default: "direct"
 `shoal pr open` from a workspace process then pushes nothing while the remote
 lacks the branch's commit. Without an open PR it records the PR it would open as
 a proposal that pushes the branch first, whatever `pr_open` says, so one approval
-pushes the branch and opens the PR. With the branch's PR already open, it records
-a push request for the branch at its current commit.
+pushes the branch and opens the PR. With the branch's PR already open, it links
+that PR and records a push request for the branch at its current commit.
 
 A tracked agent's own `git push` is covered too. Shoal adds Git settings to the
 agent's environment that rewrite the push URLs of the repository's remotes to
 Shoal's remote helper, `git-remote-shoal`, which Shoal puts first on the agent's
-`PATH`; fetches keep their URLs. Git runs its usual checks and pre-push hook,
+`PATH`; fetches keep their URLs. A remote whose explicit push URL is also
+fetched from cannot be held, so the agent does not start until that push URL
+changes or the setting is `"direct"`. Git runs its usual checks and pre-push hook,
 then hands the push to the helper, which asks the daemon about each ref. A push
 that may go ahead goes to the real URL with Git as the agent; any other is
-recorded as an approval request bound to the remote, the ref, the commit and,
-for a forced push or a deletion, the remote commit it replaces, and Git reports
-it as rejected:
+recorded as an approval request bound to the remote, the push URL when the
+remote has several, the ref, the commit and, for a forced push or a deletion,
+the remote commit it replaces or that the ref must not exist yet, and Git
+reports it as rejected:
 
 ```text
  ! [remote rejected] HEAD -> topic (waits for approval 12)
@@ -3483,9 +3486,7 @@ the ref replaces it, keeping the old one `outdated`. A pending push keeps the
 workspace from automatic cleanup. The setting reaches agents started after it
 changed. The helper keeps agents from pushing by accident, not on purpose: an
 agent that clears its Git settings, or pushes to a URL spelled differently,
-reaches the remote. To make that impossible, give agents a
-[Git profile](#agent-accounts) whose credentials cannot push, such as a
-read-only key in `core.sshCommand`, since an approved push uses yours.
+reaches the remote.
 
 ```sh
 shoal approvals                     # pushes show the ref, commit and remote
@@ -3495,7 +3496,8 @@ shoal approvals --deny 12 --reason "Squash the fixups first"
 
 Approving runs the push in an operation the daemon starts, as a tracked command
 in the workspace with your environment when you approve from a terminal, the
-daemon's otherwise, and the agent's Git profile. It pushes the commit you
+daemon's otherwise, and the agent's [Git profile](#agent-accounts), whose
+credentials it pushes with as `pr open` does. It pushes the commit you
 approved, not whatever the branch has by then; a push of the workspace branch
 whose local branch moved since is refused and marked `outdated`, and the agent is
 told to push again. `approvals --approve` follows the push and returns once it

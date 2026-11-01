@@ -315,14 +315,19 @@ pub struct PullSpecification {
 pub struct PushSpecification {
     /// The remote the push goes to, by name or URL.
     pub remote: String,
+    /// The one push URL of `remote` the push goes to, when the remote has
+    /// several and Git pushed to each on its own; none pushes wherever the
+    /// remote does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     /// The ref it updates there, such as `refs/heads/topic`.
     pub destination: String,
     /// The object it pushes; none deletes the ref.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<String>,
     /// For a forced push or a deletion, the commit the remote ref had when
-    /// it was requested, which it must still have; a push without one only
-    /// fast-forwards.
+    /// it was requested, which it must still have, or empty when the ref
+    /// must not exist; a push without one only fast-forwards.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaces: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -333,17 +338,25 @@ impl PushSpecification {
     /// Whether `other` makes the same change to the same remote ref,
     /// whichever agent asked for it.
     pub fn is_same_push(&self, other: &Self) -> bool {
-        (
-            &self.remote,
-            &self.destination,
-            &self.commit,
-            &self.replaces,
-        ) == (
-            &other.remote,
-            &other.destination,
-            &other.commit,
-            &other.replaces,
-        )
+        self.remote == other.remote
+            && self.url == other.url
+            && self.destination == other.destination
+            && self.commit == other.commit
+            && self.replaces == other.replaces
+    }
+
+    /// Where the push goes: its one push URL, else the remote.
+    pub fn target(&self) -> &str {
+        self.url.as_deref().unwrap_or(&self.remote)
+    }
+
+    /// The name of its request, one per workspace: the ref, and the push
+    /// URL when the push goes to only one of the remote's.
+    pub fn request_name(&self) -> String {
+        match &self.url {
+            Some(url) => format!("{} {url}", self.destination),
+            None => self.destination.clone(),
+        }
     }
 
     /// The ref's short name, such as `topic` for `refs/heads/topic`.
@@ -355,10 +368,12 @@ impl PushSpecification {
 
     /// What the push does, as the user is asked to approve it.
     pub fn subject(&self) -> String {
-        let (destination, remote) = (self.short_destination(), &self.remote);
-        match (&self.commit, &self.replaces) {
+        let (destination, remote) = (self.short_destination(), self.target());
+        match (&self.commit, self.replaces.as_deref()) {
             (None, _) => format!("delete {destination} on {remote}"),
-            (Some(commit), None) => format!("push {destination} at {commit} to {remote}"),
+            (Some(commit), None | Some("")) => {
+                format!("push {destination} at {commit} to {remote}")
+            }
             (Some(commit), Some(_)) => {
                 format!("force-push {destination} at {commit} to {remote}")
             }

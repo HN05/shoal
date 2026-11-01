@@ -103,7 +103,7 @@ impl Manager {
         workspace: &Workspace,
         push: PushSpecification,
     ) -> Result<Proposed> {
-        let name = push.destination.clone();
+        let name = push.request_name();
         let request = proposal(workspace, Target::Push, &name, Specification::Push(push));
         let files = self.gates.lock_proposal_files().await;
         self.record_proposal(workspace, request, proposals::propose_push, files)
@@ -251,6 +251,7 @@ impl Manager {
 async fn branch_push(workspace: &Workspace, agent: Option<String>) -> Result<PushSpecification> {
     Ok(PushSpecification {
         remote: git::push_remote(&workspace.path, &workspace.branch).await?,
+        url: None,
         destination: git::local_ref(&workspace.branch),
         commit: Some(super::pr::current_head(workspace).await?),
         replaces: None,

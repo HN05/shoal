@@ -303,3 +303,40 @@ async fn branch_names_follow_git_syntax() {
         );
     }
 }
+
+#[test]
+fn an_approved_push_replays_its_url_and_keeps_a_missing_ref_missing() {
+    use crate::client::approvals::PushSpecification;
+    let push = PushSpecification {
+        remote: "origin".into(),
+        url: Some("git@mirror:o/r.git".into()),
+        destination: "refs/heads/topic".into(),
+        commit: Some("abc".into()),
+        replaces: Some(String::new()),
+        agent: None,
+    };
+    assert_eq!(
+        approved_push_command(&push),
+        [
+            "git",
+            "push",
+            "--force-with-lease=refs/heads/topic:",
+            "--",
+            "git@mirror:o/r.git",
+            "abc:refs/heads/topic",
+        ]
+        .map(std::ffi::OsString::from)
+    );
+    assert_eq!(push.subject(), "push topic at abc to git@mirror:o/r.git");
+    assert_eq!(push.request_name(), "refs/heads/topic git@mirror:o/r.git");
+    let forced = PushSpecification {
+        url: None,
+        replaces: Some("old".into()),
+        ..push
+    };
+    assert_eq!(forced.subject(), "force-push topic at abc to origin");
+    assert_eq!(
+        approved_push_command(&forced)[4],
+        std::ffi::OsString::from("origin")
+    );
+}

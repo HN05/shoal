@@ -3,13 +3,13 @@ use std::ffi::OsStr;
 use super::*;
 
 #[test]
-fn rewrites_send_pushes_through_the_helper_and_leave_fetched_push_urls() {
+fn rewrites_send_pushes_through_the_helper() {
     let urls = git::RemoteUrls {
         fetch: vec!["git@forge:o/r.git".into(), "https://forge/o/fork".into()],
-        push: vec!["ssh://forge/o/r".into(), "https://forge/o/fork".into()],
+        push: vec!["ssh://forge/o/r".into()],
     };
     assert_eq!(
-        rewrites(&urls),
+        rewrites(&urls).unwrap(),
         [
             (
                 "url.shoal::git@forge:o/r.git.pushInsteadOf".to_owned(),
@@ -24,6 +24,19 @@ fn rewrites_send_pushes_through_the_helper_and_leave_fetched_push_urls() {
                 "ssh://forge/o/r".to_owned()
             ),
         ]
+    );
+}
+
+#[test]
+fn a_push_url_that_is_also_fetched_from_cannot_be_held() {
+    let urls = git::RemoteUrls {
+        fetch: vec!["git@forge:o/r.git".into()],
+        push: vec!["git@forge:o/r.git".into()],
+    };
+    let error = rewrites(&urls).unwrap_err();
+    assert!(
+        format!("{error:#}").contains("also fetched from"),
+        "{error:#}"
     );
 }
 

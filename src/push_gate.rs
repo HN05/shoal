@@ -33,7 +33,7 @@ impl Launch {
     /// The rewrites for the remotes of the repository at `worktree`, and
     /// the helper they reach.
     pub async fn prepare(paths: &Paths, worktree: &Path) -> Result<Self> {
-        let settings = rewrites(&git::remote_urls(worktree).await?);
+        let settings = rewrites(&git::remote_urls(worktree).await?)?;
         if settings.is_empty() {
             return Ok(Self::default());
         }
@@ -58,9 +58,14 @@ impl Launch {
 
 /// Settings that send pushes to `urls` through the helper. A remote's URL
 /// is rewritten for pushes only. An explicit push URL ignores push
-/// rewrites, so one that nothing fetches from is rewritten for every use;
-/// one that is also fetched from cannot be, since the helper only pushes.
-fn rewrites(urls: &git::RemoteUrls) -> Vec<(String, String)> {
+/// rewrites, so it is rewritten for every use, which fails for one that is
+/// also fetched from: the helper only pushes, so the agent does not start.
+fn rewrites(urls: &git::RemoteUrls) -> Result<Vec<(String, String)>> {
+    if let Some(url) = urls.push.iter().find(|url| urls.fetch.contains(url)) {
+        anyhow::bail!(
+            "the push URL {url} is also fetched from, so Shoal cannot hold pushes to it for approval; change or remove that pushurl, or set [permissions] push = \"direct\""
+        );
+    }
     let fetched = urls
         .fetch
         .iter()
@@ -68,9 +73,8 @@ fn rewrites(urls: &git::RemoteUrls) -> Vec<(String, String)> {
     let pushed = urls
         .push
         .iter()
-        .filter(|url| !urls.fetch.contains(url))
         .map(|url| (format!("{PREFIX}{url}.insteadOf"), url.clone()));
-    fetched.chain(pushed).collect()
+    Ok(fetched.chain(pushed).collect())
 }
 
 /// The helper: a launcher that hands Git's arguments to this binary.

@@ -160,8 +160,12 @@ pub fn propose_pull(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Re
     // Approving the PR pushes the branch, so a separate request to push it
     // is no longer needed.
     if let Some(push) = request.pending_push()
-        && let Some(separate) =
-            current(tx, &request.workspace_id, &Target::Push, &push.destination)?
+        && let Some(separate) = current(
+            tx,
+            &request.workspace_id,
+            &Target::Push,
+            &push.request_name(),
+        )?
     {
         retire(tx, &separate)?;
     }

@@ -361,7 +361,12 @@ impl Manager {
             .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
             .await?;
         let (item, body, unfinished) = match existing {
-            Some(_) if let Some(push) = push => {
+            Some(number) if let Some(push) = push => {
+                let url = forge.read(&account, ItemKind::Pr, number).await?.item.url;
+                let watch = super::pr::Action::Watch { url: url.clone() };
+                self.set_pr_gated(&workspace.id, watch, super::pr::WatchCheck::Known)
+                    .await
+                    .with_context(|| format!("{url} is open, but linking it failed"))?;
                 let proposed = self.propose_push(&workspace, push).await?;
                 return Ok(OpenOutcome::Proposed(proposed));
             }

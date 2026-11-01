@@ -307,7 +307,7 @@ pub fn approved_push_command(push: &crate::client::approvals::PushSpecification)
     let source = push.commit.as_deref().unwrap_or_default();
     command.extend([
         "--".into(),
-        OsString::from(&push.remote),
+        OsString::from(push.target()),
         format!("{source}:{}", push.destination).into(),
     ]);
     command
@@ -316,6 +316,13 @@ pub fn approved_push_command(push: &crate::client::approvals::PushSpecification)
 /// The arguments that list the refs at `url`, for a push to it.
 pub fn list_remote_args(url: &str) -> Vec<String> {
     ["ls-remote", "--", url].map(String::from).to_vec()
+}
+
+/// The arguments that list the push URLs of the configured remote `remote`.
+pub fn push_urls_args(remote: &str) -> Vec<String> {
+    ["remote", "get-url", "--push", "--all", remote]
+        .map(String::from)
+        .to_vec()
 }
 
 /// The arguments that resolve `revision` to its object name.

@@ -2032,20 +2032,24 @@ A proposed PR still publishes its branch, and agents push with plain Git too, so
 repository's remotes for the user's approval (`"direct"` is the default; unscoped
 callers always push). A push request is a proposal, decided only by the user,
 bound to the remote, the ref, the object and, for a forced push or a deletion,
-the remote commit it replaces, so approval pushes exactly that with
-`--force-with-lease`; one active request per workspace and ref, which a newer
-push to the ref outdates. `pr open` asks the daemon first and pushes only when
+the remote commit it replaces or that the ref must not exist, so approval pushes
+exactly that with `--force-with-lease`. Git runs the helper once per push URL,
+so a remote with several records the URL and approval pushes to it alone. One
+active request per workspace, ref and recorded URL, which a newer push there
+outdates. `pr open` asks the daemon first and pushes only when
 the setting allows or the remote has the commit; otherwise a new PR becomes a PR
 proposal carrying the push, whatever `pr_open` says, since it cannot open before
-the push, and the push to an open PR becomes a push request. One approval then
+the push, and the push to an open PR links it and becomes a push request. One approval then
 pushes and opens. Plain `git push` is covered through the tracked agent's
 environment: alongside its Git profile, Shoal adds `url.shoal::<url>.pushInsteadOf`
-for each remote URL, or `insteadOf` for an explicit push URL nothing fetches from,
-and a launcher directory first on the PATH with `git-remote-shoal`, a remote
+for each remote URL, or `insteadOf` for an explicit push URL, and a launcher directory first on the PATH with `git-remote-shoal`, a remote
 helper that hands Git's helper protocol to this binary. Git keeps its own checks
 and pre-push hook and gives the helper the refs; the helper asks the daemon per
 ref, pushes what it allows to the real URL with Git without the rewrites and
-hooks, and rejects the rest naming the request. The rewrite is chosen over a
+hooks, and rejects the rest naming the request. An explicit push URL that is
+also fetched from cannot be rewritten without sending fetches to the helper, so
+the agent launch refuses it rather than leaving those pushes unheld. The
+rewrite is chosen over a
 pre-push hook because `--no-verify` skips hooks and a Shoal hook would replace
 the repository's own; it is cooperative like scope, stopping accidents rather
 than a process that clears its Git settings. Approval runs the push without the
