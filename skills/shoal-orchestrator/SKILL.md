@@ -120,6 +120,13 @@ files a finished workspace handed back. Answer what you can decide with
 `shoal questions`, write to an agent with `shoal messages send --space <name>`
 (`--attach FILE` hands it a file), and ask the user about the rest.
 
+To ask the user something in a chat, run `shoal questions ask --in-chat`, then
+write the question as your final message and end your turn: it also reaches
+the user's questions, so they can answer while away from the chat, and a reply
+in the chat closes it. When you must block on the answer, put the decision on
+the command line with `shoal questions ask "<decision>" --recommend <answer>
+--wait`. Either way an answer from their questions arrives as a Shoal message.
+
 ## Finish and clean up
 
 Agents run `shoal done` themselves when their assignment is finished. For a
