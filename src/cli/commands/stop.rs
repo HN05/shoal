@@ -79,12 +79,15 @@ pub(super) async fn processes(
     selectors: Vec<String>,
     selection: Selection,
 ) -> Result<i32> {
-    let selectors = if selectors.is_empty() {
-        vec![ui::select_space(ctx, None, ui::Fallback::CurrentDirectory).await?]
-    } else {
-        ensure_spaces(ctx, &selectors).await?;
-        selectors
+    // Unlike what ends a space, a stop of its processes starts from the chat
+    // it runs in.
+    let selectors = match ui::current_chat(&None) {
+        Some(chat) if selectors.is_empty() => vec![chat],
+        _ => ui::select_spaces(ctx, selectors).await?,
     };
+    if selectors.len() > 1 {
+        ensure_spaces(ctx, &selectors).await?;
+    }
     let mut report = ui::Report::new("stopped", "stop processes of");
     for selector in selectors {
         match stop_untracked(ctx, &selector, selection).await {

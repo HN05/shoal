@@ -20,7 +20,8 @@
 //! - [`workspaces`]: the workspace a command acts on, named, current or
 //!   picked ([`select_workspace`]), listed by what the command needs of it,
 //!   or picked among running chats as well as a space ([`select_space`],
-//!   [`pick_space`]) or alone ([`pick_chat`]).
+//!   [`pick_space`]), several spaces at once ([`select_spaces`]), or alone
+//!   ([`pick_chat`]).
 //! - [`rows`]: the aligned labels pickers and lists show ([`workspace_rows`],
 //!   [`aligned`]).
 //!

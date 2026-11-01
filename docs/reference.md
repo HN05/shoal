@@ -457,7 +457,8 @@ task prompt is never replayed.
 Once its agents and commands have stopped, `shoal stop` stops the workspace's
 untracked processes too, which nothing saves, and counts them as other
 processes. `shoal stop --processes [space...]` stops only the untracked
-processes of workspaces or chats, by default the current one, and
+processes of workspaces or chats, by default the current one, else those
+picked several at once, and
 `shoal stop --leftovers [space...]` only their leftovers; neither takes the
 workspaces below. The daemon looks for every space's leftovers in each cleanup sweep, from one
 listing of the machine's processes, and keeps them in memory until the next

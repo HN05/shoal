@@ -5818,6 +5818,34 @@ fn completion_offers_chats_only_to_the_stop_levels() {
     agent.wait().unwrap();
 }
 
+/// Outside any space, the stop levels pick several spaces at once, chats
+/// among them.
+#[test]
+fn the_stop_levels_pick_several_spaces() {
+    let fixture = Fixture::new();
+    let workspace = fixture.add("planned");
+    let repository = fixture.ok(&["repo", "ls"])[0].clone();
+    // The sleep stands in for the chat's agent.
+    let mut agent = Command::new("sleep").arg("600").spawn().unwrap();
+    let response = fixture.request(serde_json::json!({"start_chat":{
+        "repository": repository["id"], "name": "planning", "agent": "claude",
+        "pid": agent.id()
+    }}));
+    assert_eq!(response["type"], "chat", "{response}");
+    let chat = response["data"]["id"].as_str().unwrap();
+    let choice = format!("{} {chat}", workspace["id"].as_str().unwrap());
+
+    let (output, rows) = fixture.pick(&["stop", "--leftovers"], &choice, "");
+
+    assert!(output.status.success(), "{output:?}");
+    assert!(rows.lines().any(|row| row.starts_with(chat)), "{rows}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("No leftovers in planned"), "{stdout}");
+    assert!(stdout.contains("No leftovers in planning"), "{stdout}");
+    agent.kill().unwrap();
+    agent.wait().unwrap();
+}
+
 /// `stop --leftovers` takes only processes left behind, `stop --processes`
 /// every process carrying the workspace's identity too, and plain `stop`
 /// both after its agents and commands. None takes the workspace's own
