@@ -51,6 +51,14 @@ pub(super) fn hosts() -> impl Iterator<Item = &'static dyn Host> {
     registered().map(|registered| registered.host)
 }
 
+/// The hosts whose programs this process finds.
+pub(in crate::cli) fn installed_hosts() -> Vec<HostName> {
+    hosts()
+        .filter(|host| host.ensure_installed().is_ok())
+        .map(Host::name)
+        .collect()
+}
+
 /// What config sets for a host, from the section of its own it may have.
 pub(in crate::cli) struct Options {
     /// Whether the host serves the terminals it runs in.

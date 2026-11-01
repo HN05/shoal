@@ -105,7 +105,9 @@ and installs the [bundled chat template](../src/config/templates/chat.md) beside
 it, never touching an existing file; `--dry-run` writes
 nothing. Installation prints
 the shell initialization hint only when neither `.bashrc` nor `.zshrc` (under
-`ZDOTDIR` when set) contains an active initialization command. `shoal config
+`ZDOTDIR` when set) contains an active initialization command, and names the
+default terminal host when it is not installed, suggesting one to install or an
+installed host to set as `terminal.default_host`. `shoal config
 install <name>` replaces the entire global file with a packaged template;
 `shoal config reset` installs `default`. Both move the current file to
 `config.toml.backup` (replacing an older backup) without asking. Templates are

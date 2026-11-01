@@ -5,11 +5,13 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::json;
 
 use crate::{
-    cli::{args::service::DaemonCommand, client, context::Context, output::Style, ui},
+    cli::{args::service::DaemonCommand, client, context::Context, output::Style, terminal, ui},
+    config::repo::ConfigLayers,
     daemon,
     paths::Paths,
     protocol::Exit,
     service::{self, Platform},
+    sessions::HostName,
     shell,
 };
 
@@ -67,6 +69,7 @@ pub(super) async fn install(
     .await?;
     ctx.progress("Waiting for daemon", client::wait(&ctx.paths, true))
         .await?;
+    let hosts = TerminalHosts::find(&ctx.paths);
     ctx.emit_styled(
         Style::Success,
         "Daemon service installed and running",
@@ -76,11 +79,15 @@ pub(super) async fn install(
             "config": config,
             "config_created": config_created,
             "shell_init": shell::INIT_COMMAND,
+            "installed_terminal_hosts": hosts.installed,
         }),
     )?;
     if !ctx.json {
         if config_created {
             outln!("Wrote the defaults to {}", config.display());
+        }
+        if let Some(note) = hosts.missing_default(&config) {
+            outln!("\n{note}");
         }
         let zsh_directory = std::env::var_os("ZDOTDIR").map(PathBuf::from);
         if !shell::init_configured(&ctx.paths.home, zsh_directory.as_deref()) {
@@ -91,6 +98,44 @@ pub(super) async fn install(
         }
     }
     Ok(0)
+}
+
+/// The terminal hosts this machine has, against the default host the
+/// global config names.
+struct TerminalHosts {
+    installed: Vec<HostName>,
+    /// The global `terminal.default_host`, unknown while the config does not
+    /// load.
+    default: Option<HostName>,
+}
+
+impl TerminalHosts {
+    fn find(paths: &Paths) -> Self {
+        let default = crate::config::Config::load(paths)
+            .and_then(|config| config.resolve(&ConfigLayers::default()))
+            .ok()
+            .map(|settings| settings.terminal.default_host);
+        Self {
+            installed: terminal::installed_hosts(),
+            default,
+        }
+    }
+
+    /// What to install, or which default host to set in `config`, when the
+    /// default host is not installed.
+    fn missing_default(&self, config: &std::path::Path) -> Option<String> {
+        let default = self.default.filter(|host| !self.installed.contains(host))?;
+        Some(match self.installed.first() {
+            Some(installed) => format!(
+                "{default}, the default terminal host, is not installed. Install it, or set terminal.default_host = \"{installed}\" in {}.",
+                config.display()
+            ),
+            None => format!(
+                "No terminal host is installed, so agents cannot start from a terminal. Install {default}, the default host, or install another host and set terminal.default_host in {}.",
+                config.display()
+            ),
+        })
+    }
 }
 
 /// The named packaged config, else one chosen from the packaged configs.
@@ -287,3 +332,6 @@ fn signal_owner(paths: &Paths, missing: anyhow::Error) -> Result<()> {
     let owner = crate::daemon::ownership::owner(paths).ok_or(missing)?;
     crate::process::identity::signal(&owner, libc::SIGTERM)
 }
+
+#[cfg(test)]
+mod tests;
