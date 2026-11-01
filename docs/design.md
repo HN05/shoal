@@ -35,7 +35,8 @@ makes for a workspace act as the agent too, with the host's configured
 `agent_token`. An agent Git profile
 selected the same way reaches tracked agents as Git's environment-level config,
 so the agent's commands use it in any repository while the worktree's config and
-other executions keep theirs. Desktop handoffs have no authentication override
+other executions keep theirs; the push rewrites of `[permissions] push` travel
+the same way. Desktop handoffs have no authentication override
 because they may reuse an existing process.
 The generic repository `[env]` table is available to tracked executions and hooks:
 it renders workspace identity and reserved ports into user-selected variables
@@ -811,7 +812,7 @@ Creation other than splitting a child, removal other than of a descendant the us
 reconciliation, other workspaces, repository administration, and service control need an
 unscoped caller. A scoped `land` is an
 approval request bound to the branch and its HEAD unless `[permissions] land`
-is `"direct"`; approval lets the agent's retry land that commit through the normal checks,
+and `push` are `"direct"`; approval lets the agent's retry land that commit through the normal checks,
 so it replaces only the user typing the command. PR registration,
 manual merge acknowledgement, assignment completion and its withdrawal, and syncing the
 caller's own repository are own-workspace exceptions.
@@ -2019,11 +2020,47 @@ A decided proposal is deleted, since the message carries the outcome. An issue
 proposal belongs to the repository rather than the workspace, because agents file
 follow-ups just before `done`; it opens through the repository's checkout and agent
 account once the workspace is gone. A PR proposal is bound to the branch and its
-commit like a land request: the push still happens, and a renamed branch or another
+commit like a land request: the push still happens unless `[permissions] push`
+holds it back, and a renamed branch or another
 commit, locally or where the push went, outdates it at approval or when the agent
 proposes again, and a pending one keeps the workspace
-from unattended removal. Holding the push back too is #922; other agent writes,
-such as comments, edits and closing, stay direct. Approving a land
+from unattended removal. Other agent writes, such as comments, edits and closing,
+stay direct.
+
+A proposed PR still publishes its branch, and agents push with plain Git too, so
+`[permissions] push = "propose"` keeps a scoped caller's pushes to the workspace
+repository's remotes for the user's approval (`"direct"` is the default; unscoped
+callers always push). A push request is a proposal, decided only by the user,
+bound to the remote, the ref, the object and, for a forced push or a deletion,
+the remote commit it replaces, so approval pushes exactly that with
+`--force-with-lease`; one active request per workspace and ref, which a newer
+push to the ref outdates. `pr open` asks the daemon first and pushes only when
+the setting allows or the remote has the commit; otherwise a new PR becomes a PR
+proposal carrying the push, whatever `pr_open` says, since it cannot open before
+the push, and the push to an open PR becomes a push request. One approval then
+pushes and opens. Plain `git push` is covered through the tracked agent's
+environment: alongside its Git profile, Shoal adds `url.shoal::<url>.pushInsteadOf`
+for each remote URL, or `insteadOf` for an explicit push URL nothing fetches from,
+and a launcher directory first on the PATH with `git-remote-shoal`, a remote
+helper that hands Git's helper protocol to this binary. Git keeps its own checks
+and pre-push hook and gives the helper the refs; the helper asks the daemon per
+ref, pushes what it allows to the real URL with Git without the rewrites and
+hooks, and rejects the rest naming the request. The rewrite is chosen over a
+pre-push hook because `--no-verify` skips hooks and a Shoal hook would replace
+the repository's own; it is cooperative like scope, stopping accidents rather
+than a process that clears its Git settings. Approval runs the push without the
+agent: the decision starts an operation, in the approving client's environment
+when it sends one and otherwise the daemon's, whose worker pushes as a tracked
+command with the agent's Git profile, as `pr open` does, and then reports to the
+daemon, which decides the request, opening a carried PR through the proposal path;
+the request stays pending until then, a failed push notifies the user and waits
+for another approval, and a second approval while the push runs is refused. A
+push of the workspace branch whose local branch moved since is outdated at
+approval. Pushes Shoal authorized itself, `pr open`'s and `land`'s, run without
+the rewrites; with `push = "propose"` a scoped `land` needs approval whatever
+`[permissions] land` says, since it may push the default branch, and a forge's
+`pr revert`, which pushes at once, is refused for scoped callers. A pending push
+request keeps the workspace from unattended removal. Approving a land
 request whose branch moved since it was requested is refused as stale and marks it outdated.
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the
@@ -2135,7 +2172,7 @@ rides on its argument as `PATH#TITLE`, the form forge attachments use for alt
 text, because attach flags repeat and a separate title flag could not say which
 file it names. Own-workspace withdrawal removes a
 recorded completion and preserves associations and merge requirements, but never
-defers cleanup: only holds, open questions, a pending PR proposal and queued
+defers cleanup: only holds, open questions, a pending PR proposal or push request and queued
 agent launches keep a workspace.
 The daemon runs `hooks.post_done`
 after persisting completion and before cleanup, using normal

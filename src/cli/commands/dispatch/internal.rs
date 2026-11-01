@@ -89,6 +89,9 @@ pub(in crate::cli::commands) async fn run(ctx: Context, command: InternalCommand
             tool,
             args,
         } => crate::secrets::run_tool(&ctx.paths, &launchers, &tool, args).await,
+        InternalCommand::PushGate { remote, url } => {
+            crate::push_gate::helper::run(&ctx, remote, url).await
+        }
         InternalCommand::QueueStart { entry } => agent_queue::start(&ctx, entry).await,
         InternalCommand::Operation => operations::worker(&ctx).await,
         InternalCommand::Launch { file } => terminal::run_launch(&file),

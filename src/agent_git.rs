@@ -1,4 +1,5 @@
-//! The Git profile selected only for agent launches.
+//! The Git settings of agent launches only: the selected Git profile, and
+//! the push rewrites of [`crate::push_gate`].
 use anyhow::{Context, Result};
 
 pub struct Launch {
@@ -17,6 +18,11 @@ impl Launch {
             None => Vec::new(),
         };
         Ok(Self { git })
+    }
+
+    /// Add `settings` after the profile's.
+    pub fn add(&mut self, settings: &[(String, String)]) {
+        self.git.extend_from_slice(settings);
     }
 
     /// Profile settings follow inherited `GIT_CONFIG_*` entries and take

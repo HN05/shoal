@@ -3,8 +3,10 @@ use anyhow::{Context as _, Result, ensure};
 use serde_json::Value;
 
 mod picker;
+mod push;
 
 pub(super) use picker::{decide_row, print_rows};
+pub(super) use push::push_approved;
 
 use super::EXIT_BUSY;
 use crate::client::output::acquisition::NotAcquired;
@@ -259,8 +261,13 @@ pub(super) async fn submit(
         approve,
         shown,
         details,
+        env: Some(crate::env::without_secrets()),
     };
-    let request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    let mut request = request::<Box<ApprovalRequest>>(&ctx.paths, method).await?;
+    // An approved push runs in an operation whose end decides the request.
+    if let Some(operation) = request.operation.clone() {
+        request = super::operations::follow_started(ctx, operation).await?;
+    }
     for warning in &request.warnings {
         eprintln!("{warning}");
     }

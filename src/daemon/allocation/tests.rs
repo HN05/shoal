@@ -37,7 +37,7 @@ async fn notifications_preserve_busy_wording_and_only_announce_pending_approvals
     for (name, approve) in [("api", true), ("docs", false)] {
         let request = manager.request_approval(port(name)).await.unwrap().unwrap();
         let decided = manager
-            .decide_approval(request.id, approve, None, Default::default())
+            .decide_approval(request.id, approve, None, Default::default(), None)
             .await
             .unwrap();
         assert_ne!(decided.status, DecisionStatus::Pending);

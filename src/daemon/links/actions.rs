@@ -325,11 +325,15 @@ impl Manager {
     /// Link the open PR of the workspace's branch, or open one as its agent
     /// account and link it; only a removal that starts meanwhile leaves it
     /// unlinked. A workspace process's new PR is recorded for the user's
-    /// approval instead when `[permissions] pr_open` says so.
+    /// approval instead when `[permissions] pr_open` says so, or when
+    /// `push_held` says `[permissions] push` held back the branch's push,
+    /// which approving it runs first; a held push to an open PR is recorded
+    /// on its own.
     pub async fn open_pull(
         &self,
         selector: &str,
         options: PullOptions,
+        push_held: bool,
         caller: Option<&Caller>,
     ) -> Result<OpenOutcome> {
         let proposer = self.proposer(caller).await;
@@ -338,6 +342,13 @@ impl Manager {
         let (workspace, _gate) = self.lock_pr_gate(selector).await?;
         self.verify_worktree(&workspace).await?;
         let head = super::pr::current_head(&workspace).await?;
+        let push = match push_held {
+            true => Some(
+                self.held_push(&workspace, proposer.as_ref(), caller)
+                    .await?,
+            ),
+            false => None,
+        };
         anyhow::ensure!(
             workspace.state.accepts_links(),
             "workspace cannot accept a PR in its current state"
@@ -350,6 +361,10 @@ impl Manager {
             .open_pull_for(&account, &workspace.branch, head_repository.as_deref())
             .await?;
         let (item, body, unfinished) = match existing {
+            Some(_) if let Some(push) = push => {
+                let proposed = self.propose_push(&workspace, push).await?;
+                return Ok(OpenOutcome::Proposed(proposed));
+            }
             Some(number) => {
                 let item = forge.read(&account, ItemKind::Pr, number).await?.item;
                 (item, None, None)
@@ -364,11 +379,15 @@ impl Manager {
                     head_repository,
                     ..new_pull(&workspace, &forge, &account, options, settings.pr.draft).await?
                 };
-                if let Some(proposer) =
-                    proposer.filter(|_| settings.permissions.pr_open == Opening::Propose)
+                // A PR whose branch is not pushed cannot open before the
+                // user approves the push, which then opens it too.
+                if let Some(proposer) = proposer
+                    .filter(|_| push.is_some() || settings.permissions.pr_open == Opening::Propose)
                 {
                     forge.check_uploads(&account, &pull.attachments).await?;
-                    let proposed = self.propose_pull(&workspace, pull, head, proposer).await?;
+                    let proposed = self
+                        .propose_pull(&workspace, pull, head, push, proposer)
+                        .await?;
                     return Ok(OpenOutcome::Proposed(proposed));
                 }
                 let created = forge.create_pull(&account, &pull).await?;

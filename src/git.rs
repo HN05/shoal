@@ -13,9 +13,9 @@ mod predicates;
 pub use predicates::{has_commit, is_ancestor, ref_exists};
 mod queries;
 pub use queries::{
-    current_branch, git_dir, head_and_branch, is_bare_with_work_tree, latest_subject,
-    metadata_path, push_remote, remote_url, remotes, revision, symbolic_revision, verify_revision,
-    worktree_root,
+    RemoteUrls, current_branch, git_dir, head_and_branch, is_bare_with_work_tree, latest_subject,
+    metadata_path, push_remote, remote_url, remote_urls, remotes, revision, symbolic_revision,
+    verify_revision, worktree_root,
 };
 pub mod checkpoint;
 pub mod repo;
@@ -294,6 +294,71 @@ pub fn push_command(remote: &str, branch: &str) -> Vec<OsString> {
     .into_iter()
     .map(OsString::from)
     .collect()
+}
+
+/// Build the tracked command that runs a push the user approved: the
+/// approved object to the approved ref, replacing only the commit the remote
+/// had when it was requested.
+pub fn approved_push_command(push: &crate::client::approvals::PushSpecification) -> Vec<OsString> {
+    let mut command = vec![OsString::from(Tool::Git.program()), "push".into()];
+    if let Some(replaces) = &push.replaces {
+        command.push(format!("--force-with-lease={}:{replaces}", push.destination).into());
+    }
+    let source = push.commit.as_deref().unwrap_or_default();
+    command.extend([
+        "--".into(),
+        OsString::from(&push.remote),
+        format!("{source}:{}", push.destination).into(),
+    ]);
+    command
+}
+
+/// The arguments that list the refs at `url`, for a push to it.
+pub fn list_remote_args(url: &str) -> Vec<String> {
+    ["ls-remote", "--", url].map(String::from).to_vec()
+}
+
+/// The arguments that resolve `revision` to its object name.
+pub fn resolve_args(revision: &str) -> Vec<String> {
+    ["rev-parse", "--verify", "--end-of-options", revision]
+        .map(String::from)
+        .to_vec()
+}
+
+/// The arguments that push `refspecs` to `url` without running hooks,
+/// reporting each ref in porcelain form, with `leases` as the objects
+/// `--force-with-lease` expects of the refs that have one.
+pub fn porcelain_push_args(url: &str, refspecs: &[String], leases: &[(&str, &str)]) -> Vec<String> {
+    let mut args = vec![
+        "push".to_owned(),
+        "--porcelain".into(),
+        "--no-verify".into(),
+    ];
+    for (destination, expected) in leases {
+        args.push(format!("--force-with-lease={destination}:{expected}"));
+    }
+    args.extend(["--".to_owned(), url.to_owned()]);
+    args.extend(refspecs.iter().cloned());
+    args
+}
+
+/// Make `remote`'s `branch` the upstream of the local `branch` once a push
+/// created it there, as `git push --set-upstream` does, unless the branch
+/// has one or the push went to a URL rather than a configured remote.
+pub async fn track_pushed_branch(repo: &Path, branch: &str, remote: &str) -> Result<()> {
+    let remotes = remotes(repo, run_isolated).await?;
+    if !remotes.lines().any(|name| name.trim() == remote) {
+        return Ok(());
+    }
+    let key = format!("branch.{branch}.remote");
+    let current = run_isolated(repo, &["config", "--default", "", "--get", &key]).await?;
+    if !current.trim().is_empty() {
+        return Ok(());
+    }
+    run_isolated(repo, &["config", &key, remote]).await?;
+    let merge = format!("branch.{branch}.merge");
+    run_isolated(repo, &["config", &merge, &local_ref(branch)]).await?;
+    Ok(())
 }
 
 /// The remote a contribution clone pushes its branches to.

@@ -151,6 +151,12 @@ impl Entry {
         });
     }
 
+    /// Whether its worker has yet to end it.
+    pub(crate) fn running(&self) -> bool {
+        let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        state.ended.is_none()
+    }
+
     fn expired(&self) -> bool {
         let state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         state
@@ -182,7 +188,7 @@ impl Manager {
     /// when given, returning the operation's ID. The scope check already
     /// narrowed a scoped caller's workspace to an ID.
     pub(crate) async fn start_operation(
-        self: &Arc<Self>,
+        &self,
         mut spec: OperationSpec,
         env: Option<BTreeMap<String, String>>,
         caller: Option<&Caller>,
@@ -210,14 +216,19 @@ impl Manager {
         // An update waits for the operation, which its worker cannot report
         // to the replacement.
         let operation = self.gates.owned_operation().await;
-        let manager = self.clone();
+        let operations = self.operations.clone();
         let released = async move {
             if let Some(token) = token {
-                manager.operations.revoke(&token);
+                operations.revoke(&token);
             }
         };
         tokio::spawn(worker::supervise(entry, worker, operation, released));
         Ok(id)
+    }
+
+    /// Whether operation `id` still runs.
+    pub(crate) fn operation_running(&self, id: &str) -> bool {
+        self.operations.get(id).is_some_and(|entry| entry.running())
     }
 
     /// Operation `id`, refusing a scoped caller one outside its tree.

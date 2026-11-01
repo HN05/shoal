@@ -1,7 +1,7 @@
 //! Issues and PRs a scoped caller proposed instead of opening them. The user
 //! approves a proposal, with any edits, and the daemon opens it; a decided
 //! proposal is no longer stored.
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction, params};
 
 use super::{
@@ -9,6 +9,7 @@ use super::{
 };
 pub(crate) use crate::client::approvals::{
     Duplicate, Finding, ISSUE, IssueSpecification, PR, ProposalDecision, PullSpecification,
+    PushSpecification,
 };
 use crate::{
     daemon::store,
@@ -28,6 +29,16 @@ impl ApprovalRequest {
     pub fn proposed_pull(&self) -> Option<&PullSpecification> {
         match &self.specification {
             Specification::Pull(pull) => Some(pull),
+            _ => None,
+        }
+    }
+
+    /// The push approval runs: a push request's, or a PR proposal's that
+    /// pushes the branch first.
+    pub fn pending_push(&self) -> Option<&PushSpecification> {
+        match &self.specification {
+            Specification::Push(push) => Some(push),
+            Specification::Pull(pull) => pull.push.as_ref(),
             _ => None,
         }
     }
@@ -137,10 +148,44 @@ pub fn propose_pull(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Re
                     pull.head.clone(),
                     pull.head_repository.clone(),
                     p.commit.clone(),
+                    p.push.is_some(),
                 )
             })
         };
         if existing.status == DecisionStatus::Pending && source(&existing) == source(&request) {
+            return Ok((existing, false));
+        }
+        retire(tx, &existing)?;
+    }
+    // Approving the PR pushes the branch, so a separate request to push it
+    // is no longer needed.
+    if let Some(push) = request.pending_push()
+        && let Some(separate) =
+            current(tx, &request.workspace_id, &Target::Push, &push.destination)?
+    {
+        retire(tx, &separate)?;
+    }
+    Ok((insert(tx, request)?, true))
+}
+
+/// Record the workspace's push of one ref. A pending request for the same
+/// push is returned, as is a pending PR proposal that pushes it; any other
+/// request for the ref is outdated.
+pub fn propose_push(tx: &Transaction<'_>, request: ApprovalRequest) -> Result<Recorded> {
+    store::require_ready(tx, &request.workspace_id)?;
+    let push = request
+        .pending_push()
+        .context("the push request has no push")?;
+    let same = |r: &ApprovalRequest| {
+        r.status == DecisionStatus::Pending
+            && r.pending_push()
+                .is_some_and(|other| other.is_same_push(push))
+    };
+    if let Some(pull) = current(tx, &request.workspace_id, &Target::PrOpen, PR)?.filter(same) {
+        return Ok((pull, false));
+    }
+    if let Some(existing) = current(tx, &request.workspace_id, &Target::Push, &request.name)? {
+        if same(&existing) {
             return Ok((existing, false));
         }
         retire(tx, &existing)?;
@@ -209,6 +254,14 @@ pub fn save(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
 pub fn remove(tx: &Transaction<'_>, key: &str) -> Result<()> {
     tx.execute("DELETE FROM access_requests WHERE id=?1", [key])?;
     Ok(())
+}
+
+/// Whether a push request of the workspace waits for the user, which keeps
+/// the workspace from unattended removal.
+pub fn push_pending(db: &Connection, workspace: &str) -> Result<bool> {
+    Ok(super::list(db, Some(workspace))?
+        .iter()
+        .any(|r| r.target == Target::Push && r.active && r.status == DecisionStatus::Pending))
 }
 
 /// Whether the workspace's PR proposal waits for the user, which keeps the

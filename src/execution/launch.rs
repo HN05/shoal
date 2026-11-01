@@ -24,6 +24,7 @@ use crate::{
         client,
         internal::{Worker, internal_command},
     },
+    config::repo::Opening,
     daemon::approvals::Undecided,
     env,
     model::ExecutionPlan,
@@ -545,11 +546,18 @@ async fn prepare_agent_launch(
         None => None,
     };
     let fetched_key = super::spawn::fetch_command_key(routed.as_ref()).await?;
+    let push_gate = match has_agent && settings.permissions.push == Opening::Propose {
+        true => prepare_push_gate(paths, workspace).await?,
+        false => Default::default(),
+    };
+    let mut git = crate::agent_git::Launch::prepare(
+        settings.agent.git_profile.as_deref(),
+        &config.machine.git_profiles,
+    )?;
+    git.add(push_gate.settings());
     Ok(Some(AgentLaunch {
-        git: crate::agent_git::Launch::prepare(
-            settings.agent.git_profile.as_deref(),
-            &config.machine.git_profiles,
-        )?,
+        git,
+        push_gate,
         secrets,
         output: has_agent.then(env::agent_output).flatten(),
         integration: agent.map(|agent| settings.integration(&agent.name)),
@@ -564,6 +572,19 @@ async fn prepare_agent_launch(
             .then(|| attachment::Shown::of(&settings, place))
             .flatten(),
     }))
+}
+
+/// The helper that holds back the agent's pushes to the remotes of
+/// `workspace`'s repository for the user's approval.
+async fn prepare_push_gate(paths: &Paths, workspace: &str) -> Result<crate::push_gate::Launch> {
+    let method = crate::protocol::WorkspaceMethod::VerifyWorkspace {
+        workspace: workspace.to_owned(),
+        on_branch: false,
+    };
+    let workspace: crate::model::Workspace = client::request(paths, method).await?;
+    crate::push_gate::Launch::prepare(paths, &workspace.path)
+        .await
+        .context("[permissions] push")
 }
 
 fn execution_command(

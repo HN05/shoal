@@ -7,6 +7,8 @@ states!(NotificationKind {
     ApprovalRequested => "approval_requested",
     /// A workspace's agent withdrew an approval request the user had been shown.
     ApprovalWithdrawn => "approval_withdrawn",
+    /// A push the user approved failed; approving it again retries.
+    PushFailed => "push_failed",
     /// A workspace's agent asked the user a question.
     QuestionAsked => "question_asked",
     /// A workspace's agent withdrew a question the user had been shown.

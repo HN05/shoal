@@ -89,9 +89,15 @@ pub(super) async fn handle(
             item,
             action,
         } => Body::Item(manager.item_action(&context, kind, item, action).await?),
-        ItemMethod::OpenPull { workspace, options } => {
-            Body::Opened(manager.open_pull(&workspace, options, caller).await?)
-        }
+        ItemMethod::OpenPull {
+            workspace,
+            options,
+            push_held,
+        } => Body::Opened(
+            manager
+                .open_pull(&workspace, options, push_held, caller)
+                .await?,
+        ),
         ItemMethod::RevertPull {
             space: workspace,
             item,

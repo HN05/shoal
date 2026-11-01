@@ -93,7 +93,8 @@ revert merges.
 
 A repository can require the user's approval for issues and PRs you open
 (`[permissions]`). Then `issue open` and `pr open` exit 0 with `proposed`, an
-approval request, instead of the item; `pr open` still pushes. Only the user decides
+approval request, instead of the item; `pr open` still pushes unless pushes need
+approval too. Only the user decides
 proposals, never a coordinating agent. Continue your work and do not open the
 item another way. The user may edit the title and
 description, and the decision arrives as a message: approval names the opened
@@ -102,6 +103,17 @@ issue it duplicates. A proposed issue stays when your workspace is removed, so
 proposing follow-ups before `shoal done` is fine. A pending PR proposal keeps
 your workspace; new commits outdate it, so run `pr open` again after pushing
 more work, and when the message says so.
+
+A repository can also keep your pushes off the forge until the user approves
+them (`[permissions] push`). Then `pr open` pushes nothing: it proposes the PR
+together with the push of your branch, or, when the PR is open already,
+proposes only the push. Plain `git push` reports the push as rejected and
+`waits for approval <number>`; `--force-with-lease` works as usual. Push and
+commit as you normally would, and do not push another way. On approval Shoal
+pushes the commit the user approved, without you, and opens the PR that waited
+for it; the message says so. A new commit outdates the request, so push again,
+or run `pr open` again for a proposed PR, to request the current commit. A
+pending push keeps your workspace.
 
 Every link names its relation last: `assigned` for the work you are doing,
 `opened` for an item you created another way, `related` for one the work relates to.

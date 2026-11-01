@@ -1937,7 +1937,9 @@ the agent and its nested commands in any repository; the worktree's config and
 ordinary executions keep their settings. When the profile sets `user.name` or
 `user.email`, inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables for that
 field are dropped. Push credentials follow profile settings such as
-`core.sshCommand`. An undefined profile fails before the agent starts.
+`core.sshCommand`. An undefined profile fails before the agent starts. Where
+[`[permissions] push`](#approval-for-agent-pushes) is `"propose"`, the same
+variables carry the rewrites that hold the agent's pushes for your approval.
 
 ### Agent secrets
 
@@ -2494,7 +2496,8 @@ is aborted: run `shoal merge <default>` in the workspace, resolve there, and lan
 again. Landed commits count as pushed for `rm` and automatic cleanup.
 
 An agent's scoped `shoal land` needs the user's approval for the branch at its
-current commit unless `[permissions] land = "direct"`. The first run records a
+current commit unless `[permissions] land = "direct"` and
+[`[permissions] push`](#approval-for-agent-pushes) is `"direct"` too. The first run records a
 `land` request in `shoal approvals` and exits 2 with `code: "approval_pending"`;
 after approval, running it again lands that commit with every check above. A new
 commit replaces the request with one for the new commit, approving a request
@@ -3397,7 +3400,8 @@ pr_open = "propose" # Default: "direct"
 A proposed `issue open` records every option it was given, with the workspace,
 branch, commit and agent; running it again unchanged returns the same request.
 The request belongs to the repository, so it stays when the workspace is removed.
-A proposed `pr open` pushes the branch as usual, links the branch's open PR if
+A proposed `pr open` pushes the branch as usual, unless
+[`[permissions] push`](#approval-for-agent-pushes) holds the push back, links the branch's open PR if
 there is one, and otherwise records the PR it would open, with its defaults
 filled in, at the branch's current commit. Running it again at the same commit
 returns that request; at a newer commit it replaces it, and the old one stays
@@ -3439,6 +3443,70 @@ finishes and reports the failure in `warnings`. Approving also returns the
 labels were checked when the item was proposed. A decided proposal is no longer listed, and the decision
 reaches the workspace's agent as an [agent message](#agent-messages) naming
 the opened item.
+
+#### Approval for agent pushes
+
+A proposed PR still shows its branch and commits on the forge before you
+decide, and an agent can push with plain `git push` at any time. `[permissions]
+push = "propose"` keeps an agent's pushes to the workspace repository's remotes
+off the forge until you approve them; `"direct"`, the default, pushes at once.
+Unscoped callers always push directly.
+
+```toml
+[permissions]
+push = "propose" # Default: "direct"
+```
+
+`shoal pr open` from a workspace process then pushes nothing while the remote
+lacks the branch's commit. Without an open PR it records the PR it would open as
+a proposal that pushes the branch first, whatever `pr_open` says, so one approval
+pushes the branch and opens the PR. With the branch's PR already open, it records
+a push request for the branch at its current commit.
+
+A tracked agent's own `git push` is covered too. Shoal adds Git settings to the
+agent's environment that rewrite the push URLs of the repository's remotes to
+Shoal's remote helper, `git-remote-shoal`, which Shoal puts first on the agent's
+`PATH`; fetches keep their URLs. Git runs its usual checks and pre-push hook,
+then hands the push to the helper, which asks the daemon about each ref. A push
+that may go ahead goes to the real URL with Git as the agent; any other is
+recorded as an approval request bound to the remote, the ref, the commit and,
+for a forced push or a deletion, the remote commit it replaces, and Git reports
+it as rejected:
+
+```text
+ ! [remote rejected] HEAD -> topic (waits for approval 12)
+```
+
+`--force-with-lease` works as usual; `--dry-run` and push options are refused.
+Pushing the same again names the same request, and pushing another commit to
+the ref replaces it, keeping the old one `outdated`. A pending push keeps the
+workspace from automatic cleanup. The setting reaches agents started after it
+changed. The helper keeps agents from pushing by accident, not on purpose: an
+agent that clears its Git settings, or pushes to a URL spelled differently,
+reaches the remote. To make that impossible, give agents a
+[Git profile](#agent-accounts) whose credentials cannot push, such as a
+read-only key in `core.sshCommand`, since an approved push uses yours.
+
+```sh
+shoal approvals                     # pushes show the ref, commit and remote
+shoal approvals --approve 12        # pushes it, then opens a PR that waited for it
+shoal approvals --deny 12 --reason "Squash the fixups first"
+```
+
+Approving runs the push in an operation the daemon starts, as a tracked command
+in the workspace with your environment when you approve from a terminal, the
+daemon's otherwise, and the agent's Git profile. It pushes the commit you
+approved, not whatever the branch has by then; a push of the workspace branch
+whose local branch moved since is refused and marked `outdated`, and the agent is
+told to push again. `approvals --approve` follows the push and returns once it
+has decided the request. When it pushed the workspace branch to a configured
+remote, the branch gets that upstream unless it has one. A PR proposal then opens
+its PR as when approving any proposal. A failed push leaves the request pending
+and notifies you; approve it again to retry. The agent hears the outcome as an
+[agent message](#agent-messages). With `push = "propose"`, a scoped
+`shoal land` also needs your approval, since it may push the default branch, and
+`shoal pr revert` through the forge is refused, since the forge pushes its
+branch at once.
 
 #### Repository conventions
 

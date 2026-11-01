@@ -333,7 +333,7 @@ async fn an_agent_places_its_own_hold_only_while_approved() {
         "{error:#}"
     );
     manager
-        .decide_approval(requested.id, true, None, Default::default())
+        .decide_approval(requested.id, true, None, Default::default(), None)
         .await
         .unwrap();
     place().await.unwrap();

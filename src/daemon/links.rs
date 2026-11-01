@@ -10,6 +10,7 @@ mod listing;
 mod memories;
 pub mod pr;
 pub mod proposals;
+mod pushes;
 mod raw;
 mod revert;
 mod run_approval;

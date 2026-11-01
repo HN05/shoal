@@ -39,7 +39,7 @@ states!(DecisionStatus {
 
 /// What a decision authorizes; one active request per workspace, target and
 /// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `land`, `issue_open` or `pr_open`.
+/// `secret/<name>`, `hold/<name>`, `land`, `issue_open`, `pr_open` or `push`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -57,6 +57,8 @@ pub enum Target {
     IssueOpen,
     /// Opening a PR for the workspace branch at one commit.
     PrOpen,
+    /// Pushing one ref to a remote at one commit, named by the ref.
+    Push,
     /// A hold an agent asks to place on its own workspace, which approval
     /// places.
     Hold(String),
@@ -75,6 +77,7 @@ impl fmt::Display for Target {
             Self::Land => f.write_str("land"),
             Self::IssueOpen => f.write_str("issue_open"),
             Self::PrOpen => f.write_str("pr_open"),
+            Self::Push => f.write_str("push"),
             Self::Hold(name) => write!(f, "hold/{name}"),
         }
     }
@@ -89,6 +92,7 @@ impl FromStr for Target {
             "land" => return Ok(Self::Land),
             "issue_open" => return Ok(Self::IssueOpen),
             "pr_open" => return Ok(Self::PrOpen),
+            "push" => return Ok(Self::Push),
             _ => {}
         }
         if let Some(name) = text.strip_prefix("port/")
@@ -136,6 +140,7 @@ pub enum Specification {
     Land(LandSpecification),
     Issue(IssueSpecification),
     Pull(PullSpecification),
+    Push(PushSpecification),
     Hold(HoldSpecification),
 }
 
@@ -237,6 +242,10 @@ pub struct ApprovalRequest {
     /// files of a duplicate's comment that was posted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+    /// The operation pushing what the user approved, which decides the
+    /// request once the push is done; approving again waits until it ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
 }
 
 /// The name of a workspace's single PR proposal.
@@ -293,6 +302,68 @@ pub struct PullSpecification {
     /// labels and reviewers, until it is done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub follow_up: Option<Edit>,
+    /// The push of the branch that approval runs before opening the PR,
+    /// when `[permissions] push` held it back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<PushSpecification>,
+}
+
+/// A push of one ref that `[permissions] push` held back, which approval
+/// runs as recorded: the commit, not whatever the branch has by then.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PushSpecification {
+    /// The remote the push goes to, by name or URL.
+    pub remote: String,
+    /// The ref it updates there, such as `refs/heads/topic`.
+    pub destination: String,
+    /// The object it pushes; none deletes the ref.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// For a forced push or a deletion, the commit the remote ref had when
+    /// it was requested, which it must still have; a push without one only
+    /// fast-forwards.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replaces: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+}
+
+impl PushSpecification {
+    /// Whether `other` makes the same change to the same remote ref,
+    /// whichever agent asked for it.
+    pub fn is_same_push(&self, other: &Self) -> bool {
+        (
+            &self.remote,
+            &self.destination,
+            &self.commit,
+            &self.replaces,
+        ) == (
+            &other.remote,
+            &other.destination,
+            &other.commit,
+            &other.replaces,
+        )
+    }
+
+    /// The ref's short name, such as `topic` for `refs/heads/topic`.
+    pub fn short_destination(&self) -> &str {
+        self.destination
+            .strip_prefix("refs/heads/")
+            .unwrap_or(&self.destination)
+    }
+
+    /// What the push does, as the user is asked to approve it.
+    pub fn subject(&self) -> String {
+        let (destination, remote) = (self.short_destination(), &self.remote);
+        match (&self.commit, &self.replaces) {
+            (None, _) => format!("delete {destination} on {remote}"),
+            (Some(commit), None) => format!("push {destination} at {commit} to {remote}"),
+            (Some(commit), Some(_)) => {
+                format!("force-push {destination} at {commit} to {remote}")
+            }
+        }
+    }
 }
 
 /// What the user decides about a proposal besides yes or no.
@@ -330,6 +401,10 @@ impl ProposalDecision {
         ensure!(
             self.duplicate_of.is_none() || *target == Target::IssueOpen,
             "only an issue proposal can be a duplicate"
+        );
+        ensure!(
+            *target != Target::Push || (self.title.is_none() && self.body.is_none()),
+            "a push has no title or body to edit"
         );
         Ok(())
     }
@@ -375,10 +450,17 @@ impl ApprovalRequest {
                 }
             }
             (Target::Hold(name), _) => format!("hold the workspace as {name}"),
-            (Target::PrOpen, Specification::Pull(pull)) => format!(
-                "open PR \"{}\" from {} at {}",
-                pull.pull.title, pull.pull.head, pull.commit
-            ),
+            (Target::PrOpen, Specification::Pull(pull)) => {
+                let push = match &pull.push {
+                    Some(_) => format!("push {} and ", pull.pull.head),
+                    None => String::new(),
+                };
+                format!(
+                    "{push}open PR \"{}\" from {} at {}",
+                    pull.pull.title, pull.pull.head, pull.commit
+                )
+            }
+            (Target::Push, Specification::Push(push)) => push.subject(),
             _ => format!("{} ({})", self.access(), self.lifetime),
         }
     }

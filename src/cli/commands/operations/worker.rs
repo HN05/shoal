@@ -14,7 +14,7 @@ use super::failure;
 use crate::{
     cli::{
         client,
-        commands::{items, workspaces},
+        commands::{approvals, items, workspaces},
         context::Context,
     },
     protocol::{
@@ -116,5 +116,12 @@ async fn work(ctx: &Context, spec: OperationSpec, reporter: &Reporter<'_>) -> Re
                 .await
                 .map(Outcome::Landed)
         }
+        OperationSpec::Push {
+            workspace,
+            approval,
+            push,
+        } => approvals::push_approved(ctx, workspace, approval, push, reporter)
+            .await
+            .map(Outcome::Decided),
     }
 }

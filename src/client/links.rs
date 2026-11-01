@@ -20,6 +20,22 @@ pub enum OpenOutcome {
     Opened(Box<Opened>),
 }
 
+/// Whether a push may go ahead, or waits for the user's approval of the
+/// request recorded for it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PushOutcome {
+    Direct,
+    Proposed(Proposed),
+}
+
+/// Whether `[permissions] push` holds back the push of the workspace's
+/// branch that `shoal pr open` would run.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct BranchPush {
+    pub held: bool,
+}
+
 /// An issue or PR waiting for the user's approval before Shoal opens it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Proposed {

@@ -55,6 +55,15 @@ where
         env: Some(crate::env::without_secrets()),
     };
     let Started { id } = client::request(&ctx.paths, method).await?;
+    follow_started(ctx, id).await
+}
+
+/// Follow operation `id`, which the daemon started for a request of this
+/// command, to its end, returning what it did.
+pub(super) async fn follow_started<T>(ctx: &Context, id: String) -> Result<T>
+where
+    T: TryFrom<Outcome, Error = anyhow::Error>,
+{
     T::try_from(follow(ctx, id).await?)
 }
 

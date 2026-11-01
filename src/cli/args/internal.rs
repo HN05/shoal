@@ -146,6 +146,10 @@ pub enum InternalCommand {
         #[arg(last = true)]
         args: Vec<OsString>,
     },
+    /// Git's remote helper for an agent's pushes, which asks the daemon
+    /// before pushing; the agent's push helper launcher calls it.
+    #[command(name = internal::PUSH_GATE)]
+    PushGate { remote: String, url: String },
     /// Run an operation the daemon started, reading its order on stdin.
     #[command(name = internal::OPERATION)]
     Operation,

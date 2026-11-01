@@ -19,15 +19,15 @@ pub mod proposals;
 
 pub(crate) use crate::client::approvals::{
     ApprovalRequest, DecisionStatus, HoldSpecification, LAND, LandSpecification, Lifetime,
-    PortSpecification, ResourceSpecification, SecretSpecification, SimulatorSpecification,
-    Specification, Target,
+    PortSpecification, PushSpecification, ResourceSpecification, SecretSpecification,
+    SimulatorSpecification, Specification, Target,
 };
 
 impl Target {
     /// Whether the request proposes a forge write the user may edit before
     /// approving, rather than granting access.
     pub fn is_proposal(&self) -> bool {
-        matches!(self, Self::IssueOpen | Self::PrOpen)
+        matches!(self, Self::IssueOpen | Self::PrOpen | Self::Push)
     }
 
     /// Whether a coordinator decides the request only while it holds a grant
@@ -193,6 +193,7 @@ impl ApprovalRequest {
             decider: None,
             url: None,
             warnings: Vec::new(),
+            operation: None,
         }
     }
 
@@ -529,6 +530,14 @@ impl Manager {
             .await
     }
 
+    /// Whether a push request of the workspace waits for the user's decision.
+    pub async fn has_pending_push(&self, workspace_id: &str) -> Result<bool> {
+        let id = workspace_id.to_owned();
+        self.store
+            .run(move |db| proposals::push_pending(db, &id))
+            .await
+    }
+
     /// [`release`] in its own transaction, once the workspace is ready.
     pub async fn release_approval(
         &self,
@@ -679,25 +688,28 @@ impl Manager {
         approve: bool,
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
+        env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
         match caller {
             Some(caller) => {
                 self.decide_routed_approval(&caller.workspace_id, id, approve, shown)
                     .await
             }
-            None => self.decide_approval(id, approve, shown, details).await,
+            None => self.decide_approval(id, approve, shown, details, env).await,
         }
     }
 
     /// Record the decision and tell the requesting workspace's agents about a
     /// new one. With `shown`, the request the user was shown, a later request
-    /// reusing its number is refused. Only proposals take `details`.
+    /// reusing its number is refused. Only proposals take `details`; an
+    /// approved push runs in `env`.
     pub async fn decide_approval(
         &self,
         id: i64,
         approve: bool,
         shown: Option<ApprovalRequest>,
         details: proposals::ProposalDecision,
+        env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
         let request = self.approval_request(id).await?.ok_or_else(|| {
             Refusal::new(Reason::NotFound, format!("unknown approval request {id}"))
@@ -707,7 +719,7 @@ impl Manager {
             format_args!("approval request {id}"),
         )?;
         if request.target.is_proposal() {
-            return self.decide_proposal(request, approve, details).await;
+            return self.decide_proposal(request, approve, details, env).await;
         }
         ensure!(
             details == proposals::ProposalDecision::default(),
@@ -824,6 +836,12 @@ impl Manager {
         if let Err(error) = self.queue_agent_message(workspace_id, message).await {
             log!("approval decision message not queued: {error:#}");
         }
+    }
+
+    /// The request stored under `key`, whatever number it has.
+    pub(crate) async fn approval_by_key(&self, key: &str) -> Result<Option<ApprovalRequest>> {
+        let key = key.to_owned();
+        self.store.run(move |db| by_key(db, &key)).await
     }
 
     pub async fn show_approval(&self, id: i64) -> Result<ApprovalRequest> {

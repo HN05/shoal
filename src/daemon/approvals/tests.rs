@@ -135,7 +135,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         (2, false, DecisionStatus::Denied),
     ] {
         let decision = manager
-            .decide_approval(id, approve, None, Default::default())
+            .decide_approval(id, approve, None, Default::default(), None)
             .await?;
         assert_eq!(decision.status, status);
         let messages = manager.agent_messages("worker").await?;
@@ -146,7 +146,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         );
         manager.mark_agent_messages_delivered("worker", ids).await?;
         let retry = manager
-            .decide_approval(id, approve, None, Default::default())
+            .decide_approval(id, approve, None, Default::default(), None)
             .await?;
         assert_eq!(
             serde_json::to_value(retry)?,
@@ -156,7 +156,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         assert!(manager.agent_messages("worker").await?.is_empty());
         assert!(
             manager
-                .decide_approval(id, !approve, None, Default::default())
+                .decide_approval(id, !approve, None, Default::default(), None)
                 .await
                 .is_err()
         );
@@ -165,7 +165,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     // request holding its number.
     let shown = manager.approval_requests(Some("worker")).await?;
     let error = manager
-        .decide_approval(1, true, Some(shown[1].clone()), Default::default())
+        .decide_approval(1, true, Some(shown[1].clone()), Default::default(), None)
         .await
         .unwrap_err();
     assert!(
@@ -177,12 +177,12 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     let mut replaced = snapshot.clone();
     replaced.key = "a different request with the same visible details".into();
     let error = manager
-        .decide_approval(1, true, Some(replaced), Default::default())
+        .decide_approval(1, true, Some(replaced), Default::default(), None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("changed since it was shown"));
     manager
-        .decide_approval(1, true, Some(snapshot), Default::default())
+        .decide_approval(1, true, Some(snapshot), Default::default(), None)
         .await?;
     for (id, message) in [
         (4, "unknown approval request 4"),
@@ -190,7 +190,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
     ] {
         assert!(
             manager
-                .decide_approval(id, true, None, Default::default())
+                .decide_approval(id, true, None, Default::default(), None)
                 .await
                 .unwrap_err()
                 .to_string()
@@ -206,7 +206,7 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
         .await?;
     assert!(
         manager
-            .decide_approval(1, true, None, Default::default())
+            .decide_approval(1, true, None, Default::default(), None)
             .await
             .is_err()
     );
@@ -296,7 +296,7 @@ async fn withdrawn_requests_keep_their_numbers_and_take_back_their_notifications
     let default = proposals::ProposalDecision::default;
     for error in [
         manager
-            .decide_approval(unseen.id, true, None, default())
+            .decide_approval(unseen.id, true, None, default(), None)
             .await
             .unwrap_err(),
         manager

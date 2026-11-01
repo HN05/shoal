@@ -123,7 +123,7 @@ pub struct Manager {
     pub(crate) executions: executions::Executions,
     pub(crate) overload_recovery: overload_recovery::OverloadRecovery,
     pub(crate) agent_queue: agent_queue::AgentQueue,
-    pub(crate) operations: crate::daemon::operations::Operations,
+    pub(crate) operations: Arc<crate::daemon::operations::Operations>,
     /// Held through a stop before a shutdown; true once one finished, until
     /// a system shutdown is cancelled, so later ones leave the work alone.
     pub(crate) shutdown_stopped: tokio::sync::Mutex<bool>,

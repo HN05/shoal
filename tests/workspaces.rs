@@ -29162,3 +29162,80 @@ fn exporting_a_parent_needs_its_children_exported_with_it() {
     }
     assert!(!parent.exists() && !child.exists());
 }
+
+#[test]
+fn an_agent_push_waits_for_approval_and_approving_runs_it() {
+    let fixture = Fixture::with_config(Some("permissions.push = \"propose\"\n"));
+    let remote = fixture.root.path().join("remote.git");
+    git(
+        fixture.root.path(),
+        &["init", "-q", "--bare", remote.to_str().unwrap()],
+    );
+    let remote = remote.to_str().unwrap();
+    git(&fixture.repo, &["remote", "add", "origin", remote]);
+    git(&fixture.repo, &["push", "-q", "origin", "main"]);
+    git(&fixture.repo, &["remote", "set-head", "origin", "main"]);
+    let workspace = fixture.add("pusher");
+    let path = Path::new(workspace["path"].as_str().unwrap());
+    let head = git(path, &["rev-parse", "HEAD"]);
+    // What an agent launch adds: the helper on the PATH, and the rewrite
+    // that sends pushes to the remote through it.
+    let helper = fixture.root.path().join("push-gate");
+    fs::create_dir_all(&helper).unwrap();
+    install_test_script(
+        helper.join("git-remote-shoal"),
+        format!(
+            "#!/bin/sh\nexec '{}' internal push-gate \"$@\"\n",
+            env!("CARGO_BIN_EXE_shoal")
+        ),
+    );
+    let path_with_helper = std::env::join_paths(std::iter::once(helper.clone()).chain(
+        std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()),
+    ))
+    .unwrap();
+    let pushed = || {
+        let refs = git(fixture.root.path(), &["--git-dir", remote, "for-each-ref"]);
+        refs.contains("refs/heads/pusher")
+    };
+
+    let push = fixture
+        .command()
+        .current_dir(path)
+        .env("PATH", &path_with_helper)
+        .env("GIT_CONFIG_COUNT", "1")
+        .env(
+            "GIT_CONFIG_KEY_0",
+            format!("url.shoal::{remote}.pushInsteadOf"),
+        )
+        .env("GIT_CONFIG_VALUE_0", remote)
+        .args(["run", "--workspace", "pusher", "--"])
+        .args([
+            "git",
+            "push",
+            "--no-verify",
+            "origin",
+            "HEAD:refs/heads/pusher",
+        ])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&push.stderr);
+    assert!(!push.status.success(), "{stderr}");
+    assert!(stderr.contains("waits for approval"), "{stderr}");
+    assert!(!pushed());
+
+    let requests = fixture.ok(&["approvals"]);
+    let request = &requests[0];
+    assert_eq!(request["target"], "push", "{requests}");
+    assert_eq!(request["specification"]["commit"], head.trim());
+    let approved = fixture.ok(&["approvals", "--approve", &request["id"].to_string()]);
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert!(pushed());
+    assert_eq!(
+        git(
+            fixture.root.path(),
+            &["--git-dir", remote, "rev-parse", "pusher"]
+        )
+        .trim(),
+        head.trim()
+    );
+}

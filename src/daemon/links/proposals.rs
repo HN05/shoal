@@ -17,7 +17,7 @@ use crate::{
             ApprovalRequest, DecisionStatus, Lifetime, Specification, Target,
             proposals::{
                 self, Duplicate, Finding, IssueSpecification, ProposalDecision, PullSpecification,
-                Recorded,
+                PushSpecification, Recorded,
             },
         },
         file_copies::keep_copies,
@@ -53,7 +53,7 @@ pub struct Proposer {
 /// The workspace branch was renamed or moved past the commit a PR proposal
 /// was made for, or its pushed commit differs.
 #[derive(Debug)]
-struct Moved(Box<ApprovalRequest>);
+pub(super) struct Moved(Box<ApprovalRequest>);
 
 impl std::fmt::Display for Moved {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -103,12 +103,14 @@ impl Manager {
     }
 
     /// Record `pull` at the branch's `commit` for the user's approval instead
-    /// of opening it.
+    /// of opening it, with the `push` of the branch that approval runs first
+    /// when one is held back.
     pub(super) async fn propose_pull(
         &self,
         workspace: &Workspace,
         mut pull: NewPull,
         commit: String,
+        push: Option<PushSpecification>,
         proposer: Proposer,
     ) -> Result<Proposed> {
         let files = self.gates.lock_proposal_files().await;
@@ -119,6 +121,7 @@ impl Manager {
             commit,
             agent: proposer.agent,
             follow_up: None,
+            push,
         });
         let request = proposal(workspace, Target::PrOpen, proposals::PR, specification);
         self.record_proposal(workspace, request, proposals::propose_pull, files)
@@ -188,7 +191,7 @@ impl Manager {
     /// Store the proposal with `record` and tell the user about a new one.
     /// `files`, held since its files were copied, is released once it is
     /// stored.
-    async fn record_proposal(
+    pub(super) async fn record_proposal(
         &self,
         workspace: &Workspace,
         request: ApprovalRequest,
@@ -207,12 +210,14 @@ impl Manager {
     }
 
     /// Open, deny or merge as a duplicate the proposal the user chose, then
-    /// forget it and tell the proposing workspace's agents.
+    /// forget it and tell the proposing workspace's agents. Approving a push
+    /// starts it in `env` instead, and its end decides the request.
     pub(crate) async fn decide_proposal(
         &self,
         request: ApprovalRequest,
         approve: bool,
         decision: ProposalDecision,
+        env: Option<std::collections::BTreeMap<String, String>>,
     ) -> Result<ApprovalRequest> {
         decision.validate(&request.target, approve)?;
         // Cleanup holds the workspace's gate, so it cannot remove the
@@ -228,6 +233,12 @@ impl Manager {
             .await;
         let request = self.pending_proposal(request).await?;
         let workspace = self.find_workspace(&request.workspace_id).await?;
+        // A PR an earlier approval posted was pushed already.
+        if approve && request.pending_push().is_some() && request.url.is_none() {
+            return self
+                .start_approved_push(request, workspace.as_ref(), &decision, env)
+                .await;
+        }
         let (request, message) = if approve {
             self.approve_proposal(request, workspace.as_ref(), &decision)
                 .await?
@@ -235,12 +246,25 @@ impl Manager {
             self.deny_proposal(request, workspace.as_ref(), &decision, duplicated.as_ref())
                 .await?
         };
+        self.conclude_proposal(&request, workspace.as_ref(), message)
+            .await?;
+        Ok(request)
+    }
+
+    /// Forget the decided proposal and tell the proposing workspace's agents
+    /// `message`, while the workspace exists.
+    pub(super) async fn conclude_proposal(
+        &self,
+        request: &ApprovalRequest,
+        workspace: Option<&Workspace>,
+        message: String,
+    ) -> Result<()> {
         self.forget_proposal(request.key.clone()).await?;
         self.prune_proposal_files().await;
         if let Some(workspace) = workspace {
             self.tell_workspace(&workspace.id, message).await;
         }
-        Ok(request)
+        Ok(())
     }
 
     /// The proposal `decision` names as the one it duplicates, as stored
@@ -279,7 +303,7 @@ impl Manager {
     }
 
     /// Open the proposal with the user's edits, which are kept when opening fails.
-    async fn approve_proposal(
+    pub(super) async fn approve_proposal(
         &self,
         mut request: ApprovalRequest,
         workspace: Option<&Workspace>,
@@ -583,7 +607,7 @@ impl Manager {
     }
 
     /// Keep the request as outdated and tell the agent to propose again.
-    async fn outdate_pull(&self, request: &ApprovalRequest) -> Result<Moved> {
+    pub(super) async fn outdate_pull(&self, request: &ApprovalRequest) -> Result<Moved> {
         self.retire_approval(request.clone()).await?;
         let message = format!(
             "Approval {} to {} is outdated: the branch or its pushed commit changed. Run shoal pr open again to propose the PR at the current commit.",
@@ -624,8 +648,12 @@ impl Manager {
             Some(reason) => format!(" Reason: {reason}"),
             None => String::new(),
         };
+        let verb = match request.target {
+            Target::Push => "push",
+            _ => "open",
+        };
         let message = format!(
-            "Approval {} to {} was denied{outcome}. Do not open it another way.{reason}",
+            "Approval {} to {} was denied{outcome}. Do not {verb} it another way.{reason}",
             request.id,
             request.subject(),
         );
@@ -852,7 +880,7 @@ fn remove_unattached(root: &Path, kept: &BTreeSet<OsString>) -> Result<()> {
 }
 
 /// A pending request for `workspace` to open what `specification` describes.
-fn proposal(
+pub(super) fn proposal(
     workspace: &Workspace,
     target: Target,
     name: &str,

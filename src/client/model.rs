@@ -587,6 +587,8 @@ pub enum CleanupReason {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
+    /// A push waits for the user's approval.
+    PushRequest,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
     PrWatch,
@@ -629,6 +631,7 @@ impl std::fmt::Display for CleanupReason {
             Self::Held => f.write_str("Kept by holds"),
             Self::Question => f.write_str("Open question"),
             Self::PrProposal => f.write_str("PR proposal waiting for approval"),
+            Self::PushRequest => f.write_str("Push waiting for approval"),
             Self::QueuedAgent => f.write_str("Queued agent"),
             Self::PrWatch => f.write_str("Waiting for watched PRs to merge"),
             Self::AncestorCompleted { workspace } => {

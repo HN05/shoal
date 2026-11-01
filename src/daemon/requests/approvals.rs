@@ -6,10 +6,13 @@ use anyhow::Result;
 use super::super::{
     answer::Answer,
     approvals::ApprovalRequest,
-    scope::{Caller, Scoped, inspect_owner},
+    scope::{Caller, Scoped, denied, inspect_owner},
     workspace::Manager,
 };
-use crate::protocol::{ApprovalMethod, Body};
+use crate::{
+    client::links::BranchPush,
+    protocol::{ApprovalMethod, Body},
+};
 
 pub(super) async fn handle(
     manager: &Arc<Manager>,
@@ -31,11 +34,21 @@ pub(super) async fn handle(
             approve,
             shown,
             details,
+            env,
         } => Body::ApprovalRequest(Box::new(
             manager
-                .decide_approval_as(caller, id, approve, shown.map(|shown| *shown), details)
+                .decide_approval_as(caller, id, approve, shown.map(|shown| *shown), details, env)
                 .await?,
         )),
+        ApprovalMethod::BranchPush { workspace } => Body::BranchPush(BranchPush {
+            held: manager.branch_push_held(&workspace, caller).await?,
+        }),
+        ApprovalMethod::RequestPush { workspace, push } => {
+            Body::Push(manager.request_push(&workspace, push, caller).await?)
+        }
+        ApprovalMethod::FinishPush { key, failure } => {
+            Body::ApprovalRequest(Box::new(manager.finish_approved_push(&key, failure).await?))
+        }
         ApprovalMethod::EscalateApproval {
             workspace,
             id,
@@ -71,7 +84,11 @@ impl Scoped for ApprovalMethod {
                     )
                     .await?,
             ),
-            ApprovalMethod::WithdrawApproval { workspace, .. } => Some(workspace),
+            ApprovalMethod::WithdrawApproval { workspace, .. }
+            | ApprovalMethod::BranchPush { workspace }
+            | ApprovalMethod::RequestPush { workspace, .. } => Some(workspace),
+            // Only the push the user approved, which runs unscoped, ends it.
+            ApprovalMethod::FinishPush { .. } => return Err(denied()),
         })
     }
 }

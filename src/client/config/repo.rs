@@ -704,6 +704,10 @@ pub struct PermissionsConfig {
     /// Landing a branch with `shoal land`.
     #[option(default = Opening::Propose)]
     pub land: Option<Opening>,
+    /// Pushing to the workspace repository's remotes, with `shoal pr open`
+    /// or plain `git push`.
+    #[option(default = Opening::Direct)]
+    pub push: Option<Opening>,
     /// Forge API requests through `shoal forge api` that are not reads.
     #[option(default = ApiWrites::Deny)]
     pub api_writes: Option<ApiWrites>,

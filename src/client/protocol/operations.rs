@@ -115,6 +115,13 @@ pub enum OperationSpec {
         workspace: String,
         push: Option<bool>,
     },
+    /// Run the push the user approved in request `approval`, then let the
+    /// daemon decide the request, opening the PR it proposed.
+    Push {
+        workspace: String,
+        approval: String,
+        push: crate::client::approvals::PushSpecification,
+    },
 }
 
 /// What preparing a workspace runs: its setup when `setup`, then its
@@ -142,7 +149,8 @@ impl OperationSpec {
         match self {
             Self::Prepare { workspace, .. }
             | Self::OpenPull { workspace, .. }
-            | Self::Land { workspace, .. } => workspace,
+            | Self::Land { workspace, .. }
+            | Self::Push { workspace, .. } => workspace,
         }
     }
 }
@@ -208,6 +216,7 @@ pub enum Outcome {
     Prepared(Prepared),
     Opened(OpenOutcome),
     Landed(LandedBranch),
+    Decided(Box<crate::client::approvals::ApprovalRequest>),
 }
 
 /// A prepared workspace, ready, and the agent queued in it.
@@ -236,7 +245,8 @@ macro_rules! outcomes {
 outcomes!(
     Prepared(Prepared),
     Opened(OpenOutcome),
-    Landed(LandedBranch)
+    Landed(LandedBranch),
+    Decided(Box<crate::client::approvals::ApprovalRequest>)
 );
 
 /// Why an operation failed, as typed as its caller acts on it.

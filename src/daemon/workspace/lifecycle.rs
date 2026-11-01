@@ -39,6 +39,8 @@ pub(crate) enum Retention {
     Question,
     /// A PR proposal waits for the user's approval.
     PrProposal,
+    /// A push waits for the user's approval.
+    PushRequest,
     /// An agent launch in the workspace waits in the agent queue or is starting.
     QueuedAgent,
 }
@@ -49,6 +51,7 @@ impl From<Retention> for CleanupReason {
             Retention::Held => Self::Held,
             Retention::Question => Self::Question,
             Retention::PrProposal => Self::PrProposal,
+            Retention::PushRequest => Self::PushRequest,
             Retention::QueuedAgent => Self::QueuedAgent,
         }
     }
@@ -61,6 +64,7 @@ impl std::fmt::Display for Retention {
             Self::Held => "workspace is held",
             Self::Question => "a question waits for the user",
             Self::PrProposal => "a PR proposal waits for approval",
+            Self::PushRequest => "a push waits for approval",
             Self::QueuedAgent => "an agent launch in it waits in the agent queue",
         })
     }
@@ -792,6 +796,9 @@ impl Manager {
         }
         if self.has_pending_pull_proposal(id).await? {
             return Ok(Some(Retention::PrProposal));
+        }
+        if self.has_pending_push(id).await? {
+            return Ok(Some(Retention::PushRequest));
         }
         Ok(self
             .has_queued_launch(id)

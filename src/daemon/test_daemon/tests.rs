@@ -226,6 +226,7 @@ async fn answers_and_decisions_bind_to_the_record_the_app_showed() {
         approve: true,
         shown: shown.map(Box::new),
         details: Default::default(),
+        env: None,
     };
     let agent = daemon.scoped(&workspace).await;
     assert_eq!(

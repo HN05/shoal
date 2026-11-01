@@ -1537,7 +1537,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
 
     // Approval lets the agent's retry land the approved commit.
     f.manager
-        .decide_approval(pending.id, true, None, Default::default())
+        .decide_approval(pending.id, true, None, Default::default(), None)
         .await
         .unwrap();
     let started = land_as_agent(&f, &workspace).await.unwrap();
@@ -1574,7 +1574,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
     commit(&workspace.path, "feature");
     let error = f
         .manager
-        .decide_approval(next.id, true, None, Default::default())
+        .decide_approval(next.id, true, None, Default::default(), None)
         .await
         .unwrap_err();
     assert!(error.to_string().contains("is stale"), "{error:#}");
@@ -1605,7 +1605,7 @@ async fn scoped_land_waits_for_approval_of_its_commit() {
         git(&workspace.path, &["rev-parse", "HEAD"]).trim()
     );
     f.manager
-        .decide_approval(denied.id, false, None, Default::default())
+        .decide_approval(denied.id, false, None, Default::default(), None)
         .await
         .unwrap();
     let refused = undecided_land(&f, &workspace).await;
@@ -1626,7 +1626,7 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
     fs::write(&reference, "not a commit\n").unwrap();
     let error = f
         .manager
-        .decide_approval(pending.id, true, None, Default::default())
+        .decide_approval(pending.id, true, None, Default::default(), None)
         .await
         .unwrap_err();
     fs::write(&reference, saved).unwrap();
@@ -1639,7 +1639,7 @@ async fn approving_a_land_request_keeps_it_when_the_branch_cannot_be_read() {
     );
     assert!(f.manager.agent_messages("worker").await.unwrap().is_empty());
     f.manager
-        .decide_approval(pending.id, true, None, Default::default())
+        .decide_approval(pending.id, true, None, Default::default(), None)
         .await
         .unwrap();
 }
@@ -1663,6 +1663,20 @@ async fn scoped_land_skips_approval_when_configured() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[tokio::test]
+async fn scoped_land_needs_approval_while_pushes_do() {
+    let f = Fixture::new().await;
+    let workspace = f.add("worker").await;
+    fs::write(
+        workspace.path.join(".shoal.toml"),
+        "[permissions]\nland = 'direct'\npush = 'propose'\n",
+    )
+    .unwrap();
+    commit(&workspace.path, ".shoal.toml");
+    let pending = undecided_land(&f, &workspace).await;
+    assert_eq!(pending.target, crate::daemon::approvals::Target::Land);
 }
 
 #[tokio::test]

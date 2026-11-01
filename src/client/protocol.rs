@@ -584,6 +584,8 @@ response_bodies! {
     ApiResponse(Vec<String>),
     Downloaded(Vec<DownloadPiece>),
     Opened(crate::client::links::OpenOutcome),
+    Push(crate::client::links::PushOutcome),
+    BranchPush(crate::client::links::BranchPush),
     Completion(crate::model::Completion),
     Discarded(crate::client::executions::Discarded),
     ReviewMarks(Vec<crate::model::ReviewMark>),

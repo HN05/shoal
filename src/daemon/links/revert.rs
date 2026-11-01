@@ -50,11 +50,17 @@ impl Manager {
             }
             LinkSpace::Chat { checkout, .. } => self.repository_settings(&checkout.id).await?,
         };
-        if self.proposer(caller).await.is_some() && settings.permissions.pr_open == Opening::Propose
-        {
-            bail!(
-                "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
-            );
+        if self.proposer(caller).await.is_some() {
+            if settings.permissions.pr_open == Opening::Propose {
+                bail!(
+                    "[permissions] pr_open needs the user's approval for new PRs, and a forge's revert cannot wait for it; ask the user to run shoal pr revert"
+                );
+            }
+            if settings.permissions.push == Opening::Propose {
+                bail!(
+                    "[permissions] push needs the user's approval for pushes, and a forge's revert pushes its branch at once; ask the user to run shoal pr revert"
+                );
+            }
         }
         let (forge, account) = (self.space_forge(&space).await?, self.agent_account());
         let input = match input {

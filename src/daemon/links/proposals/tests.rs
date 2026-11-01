@@ -33,6 +33,7 @@ async fn the_sweep_keeps_only_files_pending_proposals_attach() {
         commit: "head".into(),
         agent: None,
         follow_up: None,
+        push: None,
     });
     let request = proposal(&workspace, Target::PrOpen, PR, specification);
     manager

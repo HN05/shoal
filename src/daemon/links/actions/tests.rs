@@ -108,7 +108,7 @@ async fn a_workspace_being_removed_opens_nothing_and_keeps_late_items_unlinked()
         "{error:#}"
     );
     let error = manager
-        .open_pull(&workspace.id, PullOptions::default(), None)
+        .open_pull(&workspace.id, PullOptions::default(), false, None)
         .await
         .unwrap_err();
     assert!(

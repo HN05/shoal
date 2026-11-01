@@ -27,6 +27,13 @@ impl Paths {
         Ok(state)
     }
 
+    /// The push helper's launcher, held for one tracked agent launch.
+    pub fn push_gate_directory(&self) -> std::io::Result<tempfile::TempDir> {
+        tempfile::Builder::new()
+            .prefix("push-gate-")
+            .tempdir_in(&self.state)
+    }
+
     /// Secret tool launchers, held for one tracked agent launch.
     pub fn secret_tools_directory(&self) -> std::io::Result<tempfile::TempDir> {
         tempfile::Builder::new()

@@ -102,7 +102,7 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
         request.id
     );
     manager
-        .decide_approval(request.id, true, None, Default::default())
+        .decide_approval(request.id, true, None, Default::default(), None)
         .await?;
     assert_eq!(
         granted(acquire(&manager, scoped, "GATED", None).await?),
@@ -138,7 +138,7 @@ async fn gated_secrets_need_a_decision_bound_to_their_source() -> Result<()> {
 
     let denied = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
     manager
-        .decide_approval(denied.id, false, None, Default::default())
+        .decide_approval(denied.id, false, None, Default::default(), None)
         .await?;
     let retry = pending(acquire(&manager, scoped, "GATED", None).await?);
     assert_eq!(
@@ -155,7 +155,7 @@ async fn workspace_grants_outlast_release() -> Result<()> {
     let scoped = Some(&caller);
     let request = pending(acquire(&manager, scoped, "GATED", Some("sign in")).await?);
     manager
-        .decide_approval(request.id, true, None, Default::default())
+        .decide_approval(request.id, true, None, Default::default(), None)
         .await?;
     manager.release_secret("worker", "GATED".into()).await?;
     assert_eq!(

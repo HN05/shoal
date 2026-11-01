@@ -11,6 +11,7 @@ fn proxy(upstream: &str, key: Option<&str>) -> crate::proxy::Proxy {
 fn launch(home: &std::path::Path) -> AgentLaunch {
     AgentLaunch {
         git: crate::agent_git::Launch::prepare(None, &Default::default()).unwrap(),
+        push_gate: Default::default(),
         secrets: Default::default(),
         output: None,
         integration: Some(crate::ai::IntegrationKind::Claude),

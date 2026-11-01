@@ -13,6 +13,9 @@ use crate::{config::value::Value, env, model::ExecutionPlan, paths::Paths};
 /// and the output default.
 pub(super) struct AgentLaunch {
     pub(super) git: crate::agent_git::Launch,
+    /// The helper that holds back an agent's pushes where `[permissions]
+    /// push` asks, whose rewrites `git` carries.
+    pub(super) push_gate: crate::push_gate::Launch,
     pub(super) secrets: crate::secrets::Launch,
     pub(super) output: Option<(&'static str, &'static str)>,
     /// The agent's integration, which launch profiles share with their base.
@@ -184,6 +187,7 @@ impl AgentLaunch {
     /// defaults.
     fn apply(&self, command: &mut Command, environment: &BTreeMap<String, OsString>) {
         self.git.apply(command);
+        self.push_gate.apply(command);
         self.secrets.apply(command);
         command.envs(self.output);
         if self.proxy.is_some() {
@@ -236,6 +240,11 @@ pub(super) fn spawn(
     configure_environment(&mut process, paths, plan);
     if let Some(auth) = auth {
         auth.apply(&mut process, &plan.environment);
+    }
+    // Shoal authorized these pushes itself, so an enclosing agent's push
+    // rewrites would only ask again.
+    if matches!(mode, Mode::Publish | Mode::Land { .. }) {
+        crate::push_gate::strip(&mut process);
     }
     export_execution(&mut process, paths, plan);
     // A demo is the user's, so the agent's output setting stays behind, and

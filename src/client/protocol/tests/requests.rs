@@ -190,6 +190,9 @@ const REQUESTS: &[&str] = &[
     r#"{"decide_approval":{"id":7,"approve":true,"details":{"reason":"later"}}}"#,
     r#"{"escalate_approval":{"workspace":"fix","id":7}}"#,
     r#"{"withdraw_approval":{"workspace":"fix","id":7}}"#,
+    r#"{"branch_push":{"workspace":"fix"}}"#,
+    r#"{"request_push":{"workspace":"fix","push":{"remote":"origin","destination":"refs/heads/fix","commit":"abc"}}}"#,
+    r#"{"finish_push":{"key":"key","failure":"rejected"}}"#,
     // Ports.
     r#"{"port_acquire":{"workspace":"fix","name":"web","request":{"port":8080,"env_var":null,"reason":null,"on_conflict":null}}}"#,
     r#"{"port_release":{"workspace":"fix","name":"web"}}"#,

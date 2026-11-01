@@ -19,6 +19,7 @@ pub const DETACHED: &str = "detached";
 pub const SESSION: &str = "session";
 pub const DEMO: &str = "demo";
 pub const SECRET_TOOL: &str = "secret-tool";
+pub const PUSH_GATE: &str = "push-gate";
 pub const QUEUE_START: &str = "queue-start";
 pub const OPERATION: &str = "operation";
 pub const ADD: &str = "add";
@@ -56,6 +57,9 @@ pub enum Worker<'a> {
     /// A tool run through its secret launcher in `launchers`; the launcher
     /// appends the tool's arguments.
     SecretTool { launchers: &'a Path, tool: &'a str },
+    /// Git's remote helper for an agent's pushes; the launcher appends the
+    /// remote and URL Git gives it.
+    PushGate,
     /// A tracked agent inside a new place a host opened; `records` are
     /// recovery records the launch consumes once it starts. With `close_in`,
     /// the place of that host closes once the workspace is done.
@@ -221,6 +225,7 @@ pub fn internal_command_for(state: &Path, json: bool, worker: Worker<'_>) -> Res
                 "--".into(),
             ]);
         }
+        Worker::PushGate => args.push(PUSH_GATE.into()),
         Worker::Session {
             workspace,
             agent,

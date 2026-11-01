@@ -94,6 +94,42 @@ pub async fn remotes(
     run(repo, &["remote"]).await
 }
 
+/// The URLs the repository's remotes name, as configured, before any
+/// rewriting.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct RemoteUrls {
+    /// Each `remote.<name>.url`, which pushes use unless a push URL is set.
+    pub fetch: Vec<String>,
+    /// Each `remote.<name>.pushurl`.
+    pub push: Vec<String>,
+}
+
+pub async fn remote_urls(repo: &Path) -> Result<RemoteUrls> {
+    let listed = run(repo, &["config", "--null", "--list"]).await?;
+    let mut urls = RemoteUrls::default();
+    for entry in listed.split('\0') {
+        let Some((key, value)) = entry.split_once('\n') else {
+            continue;
+        };
+        let Some(variable) = key
+            .strip_prefix("remote.")
+            .and_then(|rest| rest.rsplit_once('.'))
+            .map(|(_, variable)| variable.to_ascii_lowercase())
+        else {
+            continue;
+        };
+        let list = match variable.as_str() {
+            "url" => &mut urls.fetch,
+            "pushurl" => &mut urls.push,
+            _ => continue,
+        };
+        if !value.is_empty() && !list.iter().any(|url| url == value) {
+            list.push(value.to_owned());
+        }
+    }
+    Ok(urls)
+}
+
 pub async fn remote_url(repo: &Path, remote: &str) -> Result<String> {
     run(repo, &["remote", "get-url", remote]).await
 }

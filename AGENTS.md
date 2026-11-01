@@ -119,7 +119,7 @@ when behavior changes, distinguishing decisions from proposals.
   10), resolved per workspace on each sweep. `[cleanup.merged]` (default true,
   240 idle minutes, persisted across restarts) removes merged, unused workspaces
   whatever their assignment state, archiving unsaved files left over on a branch
-  with commits; only holds, open questions and pending PR proposals keep them. Automatic removal is only for idle,
+  with commits; only holds, open questions and pending PR proposals and push requests keep them. Automatic removal is only for idle,
   clean worktrees with all commits pushed, merged into the default branch (including
   squash and rebase merges) or with their changes on the branch the workspace builds
   on, or deleted worktrees. Unattended removals except for disk

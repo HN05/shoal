@@ -11,7 +11,11 @@ use crate::{
         context::Context,
         ui,
     },
-    daemon::links::proposals::{OpenOutcome, Proposed},
+    client::links::BranchPush,
+    daemon::{
+        approvals::Target,
+        links::proposals::{OpenOutcome, Proposed},
+    },
     forge::items::{
         create::{NewIssue, PullOptions},
         item::Opened,
@@ -19,7 +23,7 @@ use crate::{
     git,
     model::Workspace,
     protocol::{
-        ItemMethod, ReviewMethod, WorkspaceMethod,
+        ApprovalMethod, ItemMethod, ReviewMethod, WorkspaceMethod,
         operations::{Failure, OperationSpec, Step},
     },
 };
@@ -63,7 +67,9 @@ pub(super) async fn publish(
 }
 
 /// In an operation's worker: verify the worktree before anything leaves it,
-/// push without forcing, then let the daemon find or open the PR and link it.
+/// push without forcing unless `[permissions] push` holds the push back for
+/// the user, then let the daemon find or open the PR and link it, or record
+/// what waits for the user.
 pub(in crate::cli::commands) async fn push_and_open(
     ctx: &Context,
     workspace: String,
@@ -82,14 +88,21 @@ pub(in crate::cli::commands) async fn push_and_open(
         workspace: workspace.id.clone(),
     };
     client::request::<()>(&ctx.paths, gate).await?;
-    reporter.step(Step::PushStarted).await?;
-    push(ctx, &workspace).await?;
-    reporter.step(Step::Pushed).await?;
+    let held = ApprovalMethod::BranchPush {
+        workspace: workspace.id.clone(),
+    };
+    let BranchPush { held } = client::request(&ctx.paths, held).await?;
+    if !held {
+        reporter.step(Step::PushStarted).await?;
+        push(ctx, &workspace).await?;
+        reporter.step(Step::Pushed).await?;
+    }
     client::request(
         &ctx.paths,
         ItemMethod::OpenPull {
             workspace: workspace.id,
             options,
+            push_held: held,
         },
     )
     .await
@@ -146,13 +159,19 @@ pub(super) async fn open_issue(
     Ok(0)
 }
 
-/// The repository requires approval: the agent continues its work and
-/// hears the decision as a message.
-pub(super) fn report_proposed(ctx: &Context, kind: &str, proposed: &Proposed) -> Result<i32> {
+/// The repository requires approval of the `item` or of its push: the
+/// agent continues its work and hears the decision as a message.
+pub(super) fn report_proposed(ctx: &Context, item: &str, proposed: &Proposed) -> Result<i32> {
+    let request = &proposed.proposed;
+    let (kind, decides) = match (&request.target, request.pending_push()) {
+        (Target::Push, _) => ("Push", "pushes it"),
+        (_, Some(_)) => (item, "pushes the branch and opens it"),
+        (_, None) => (item, "opens it"),
+    };
     ctx.emit(
         &format!(
-            "{kind} proposed for approval {}: the user decides whether Shoal opens it, and the decision arrives as a message.",
-            proposed.proposed.id
+            "{kind} proposed for approval {}: the user decides whether Shoal {decides}, and the decision arrives as a message.",
+            request.id
         ),
         proposed,
     )?;

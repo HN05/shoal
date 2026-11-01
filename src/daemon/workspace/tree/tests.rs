@@ -1081,7 +1081,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(granted.id, true, None, Default::default())
+        .decide_approval(granted.id, true, None, Default::default(), None)
         .await
         .unwrap();
     let requested = manager
@@ -1148,6 +1148,7 @@ async fn approval_requests_go_to_the_nearest_coordinator_holding_a_grant() {
             id: requested.id,
             approve: true,
             shown: Some(Box::new(forged)),
+            env: None,
         };
         let authorized = crate::daemon::scope::authorize(
             &manager,
@@ -1251,7 +1252,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
             .unwrap()
             .unwrap();
         manager
-            .decide_approval(grant.id, true, None, Default::default())
+            .decide_approval(grant.id, true, None, Default::default(), None)
             .await
             .unwrap();
     }
@@ -1300,7 +1301,7 @@ async fn a_coordinator_decides_while_its_grant_lasts_and_full_inboxes_reach_the_
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(lease.id, true, None, Default::default())
+        .decide_approval(lease.id, true, None, Default::default(), None)
         .await
         .unwrap();
     let longer = manager
@@ -1385,7 +1386,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
         .unwrap()
         .unwrap();
     manager
-        .decide_approval(grant.id, true, None, Default::default())
+        .decide_approval(grant.id, true, None, Default::default(), None)
         .await
         .unwrap();
     let caller = Caller {
@@ -1413,6 +1414,7 @@ async fn routed_decisions_preserve_the_displayed_and_authorized_request() {
             approve: true,
             shown: displayed.then(|| Box::new(shown.clone())),
             details: Default::default(),
+            env: None,
         };
         if !displayed {
             crate::daemon::scope::authorize(&manager, Some("scope"), &mut method)
@@ -1733,7 +1735,7 @@ async fn an_agent_holding_its_own_workspace_asks_its_coordinator_which_needs_no_
         .unwrap();
     assert_eq!(routed.decider, None);
     manager
-        .decide_approval(requested.id, true, None, Default::default())
+        .decide_approval(requested.id, true, None, Default::default(), None)
         .await
         .unwrap();
     assert_eq!(manager.workspace(&parent.id).await.unwrap().holds.len(), 1);
