@@ -29198,6 +29198,29 @@ fn an_agent_push_waits_for_approval_and_approving_runs_it() {
         refs.contains("refs/heads/pusher")
     };
 
+    // Your own push from the worktree carries no workspace scope, so the
+    // helper pushes it at once.
+    let own = support::isolated(fixture.root.path(), "git")
+        .current_dir(path)
+        .env("PATH", &path_with_helper)
+        .env("GIT_CONFIG_COUNT", "1")
+        .env(
+            "GIT_CONFIG_KEY_0",
+            format!("url.shoal::{remote}.pushInsteadOf"),
+        )
+        .env("GIT_CONFIG_VALUE_0", remote)
+        .args(["push", "origin", "HEAD:refs/heads/yours"])
+        .output()
+        .unwrap();
+    assert!(
+        own.status.success(),
+        "{}",
+        String::from_utf8_lossy(&own.stderr)
+    );
+    let refs = git(fixture.root.path(), &["--git-dir", remote, "for-each-ref"]);
+    assert!(refs.contains("refs/heads/yours"), "{refs}");
+
+    // The agent's push carries the workspace's scope, as `shoal run` gives it.
     let push = fixture
         .command()
         .current_dir(path)
