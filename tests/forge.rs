@@ -5239,7 +5239,7 @@ fn issues_open_from_a_registered_checkout_under_its_settings() {
     // Outside a workspace and a checkout, nothing names the repository.
     let (_, stderr) = open_in(fixture.root.path(), &["--label", "type/bug"]);
     assert!(
-        stderr.contains("no current workspace or registered checkout"),
+        stderr.contains("no current workspace, chat or registered checkout"),
         "{stderr}"
     );
     // The repository's required labels apply as in a workspace.
