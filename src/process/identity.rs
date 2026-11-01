@@ -1400,9 +1400,22 @@ pub async fn group_exited(group: u32) -> Result<()> {
 /// workspace's process among them, as [`owned_by_workspace`] tells with
 /// `wrappers`, is left out with what it started.
 pub async fn started_by(identity: &Identity, wrappers: &[Identity]) -> Result<Vec<Identity>> {
-    let Some(root) = identity.lineage_root() else {
+    started_by_any(std::slice::from_ref(identity), wrappers).await
+}
+
+/// [`started_by`] for every process of `identities`, which may have exited:
+/// a process one of them started counts after the one between them exits.
+pub async fn started_by_any(
+    identities: &[Identity],
+    wrappers: &[Identity],
+) -> Result<Vec<Identity>> {
+    let roots: HashSet<u64> = identities
+        .iter()
+        .filter_map(Identity::lineage_root)
+        .collect();
+    if roots.is_empty() {
         return Ok(Vec::new());
-    };
+    }
     let rows = same_user_processes().await?;
     let wrappers = wrappers.to_vec();
     tokio::task::spawn_blocking(move || {
@@ -1410,7 +1423,7 @@ pub async fn started_by(identity: &Identity, wrappers: &[Identity]) -> Result<Ve
         for (pid, _, _) in &rows {
             lineages.extend(lineage(*pid)?);
         }
-        lineage_descendants(root, lineages, |process| {
+        descendants_of(roots, lineages, |process| {
             owned_by_workspace(process, &wrappers)
         })
     })
@@ -1566,11 +1579,20 @@ fn left_execution(
 /// A descendant that `left` names is left out with its own descendants.
 fn lineage_descendants(
     root: u64,
+    lineages: Vec<Lineage>,
+    left: impl FnMut(&Identity) -> Result<bool>,
+) -> Result<Vec<Identity>> {
+    descendants_of(HashSet::from([root]), lineages, left)
+}
+
+/// [`lineage_descendants`] of every one of `roots`.
+fn descendants_of(
+    roots: HashSet<u64>,
     mut lineages: Vec<Lineage>,
     mut left: impl FnMut(&Identity) -> Result<bool>,
 ) -> Result<Vec<Identity>> {
     lineages.sort_by_key(|lineage| lineage.unique);
-    let mut ancestors = HashSet::from([root]);
+    let mut ancestors = roots;
     let mut found = Vec::new();
     for lineage in lineages {
         let (Some(unique), Some(parent)) = (lineage.unique, lineage.parent) else {

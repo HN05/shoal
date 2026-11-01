@@ -81,8 +81,7 @@ impl Manager {
         }
         let chat = id.to_owned();
         let recorded = self.store.run(move |db| saved_process(db, &chat)).await?;
-        let owned = processes::owned(id, &recorded, &wrappers).await?;
-        identity::stop_verified(&owned).await
+        processes::stop_owned(id, &recorded, &wrappers).await
     }
 
     /// Run the saved chat `id` again as process `pid`, at `origin` in a

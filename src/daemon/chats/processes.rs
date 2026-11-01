@@ -23,7 +23,7 @@ pub(super) async fn survivors(
     recorded: &Identity,
     wrappers: &[Identity],
 ) -> Result<Vec<Identity>> {
-    let mut survivors = owned(chat, recorded, wrappers).await?;
+    let mut survivors = owned(chat, recorded, &[], wrappers).await?;
     let (_, members) = match led_group(recorded)? {
         Some(group) => identity::related(None, Some(group), None).await?,
         None => Default::default(),
@@ -42,11 +42,12 @@ pub(super) async fn survivors(
 /// The processes the chat `chat`, saved while it ran as `recorded`, is
 /// proven to own, other than the execution `wrappers`, which a stop may
 /// signal: that process while it lives, those carrying the chat's identity,
-/// and those it started, by the lineage of its never-reused ID when
-/// recorded.
+/// and those it or the processes of `stopped`, which it owned, started, by
+/// the lineage of their never-reused IDs where recorded.
 pub(super) async fn owned(
     chat: &str,
     recorded: &Identity,
+    stopped: &[Identity],
     wrappers: &[Identity],
 ) -> Result<Vec<Identity>> {
     let mut owned: Vec<Identity> = identity::scan_chat(chat)
@@ -54,7 +55,8 @@ pub(super) async fn owned(
         .into_iter()
         .filter(|process| !wrappers.contains(process))
         .collect();
-    for started in identity::started_by(recorded, wrappers).await? {
+    let ancestors = [std::slice::from_ref(recorded), stopped].concat();
+    for started in identity::started_by_any(&ancestors, wrappers).await? {
         if !owned.contains(&started) {
             owned.push(started);
         }
@@ -63,6 +65,45 @@ pub(super) async fn owned(
         owned.push(recorded.clone());
     }
     Ok(owned)
+}
+
+/// Stop what the saved chat `chat`, whose process `recorded` ended, is
+/// proven to own, other than the execution `wrappers`, again while stopping
+/// it starts others, which descend from what each round stopped.
+pub(super) async fn stop_owned(
+    chat: &str,
+    recorded: &Identity,
+    wrappers: &[Identity],
+) -> Result<()> {
+    stop_in_rounds(|stopped| async move { owned(chat, recorded, &stopped, wrappers).await }).await
+}
+
+/// Stop the processes `owned`, given those stopped before, finds, again
+/// while stopping them starts others, refusing with those still running
+/// after the last round.
+async fn stop_in_rounds<F, Fut>(owned: F) -> Result<()>
+where
+    F: Fn(Vec<Identity>) -> Fut,
+    Fut: Future<Output = Result<Vec<Identity>>>,
+{
+    let mut stopped = Vec::new();
+    for _ in 0..ROUNDS {
+        let found = owned(stopped.clone()).await?;
+        if found.is_empty() {
+            return Ok(());
+        }
+        identity::stop_verified(&found).await?;
+        stopped.extend(found);
+    }
+    let pids: Vec<String> = owned(stopped)
+        .await?
+        .iter()
+        .map(|process| process.pid.to_string())
+        .collect();
+    bail!(
+        "the chat's processes keep starting others; end them with kill {}",
+        pids.join(" ")
+    )
 }
 
 /// The group the process `recorded` led, when it has to be asked: its
@@ -117,23 +158,7 @@ impl<'a> ChatProcesses<'a> {
     /// Stop every process the chat owns, again while stopping them starts
     /// others, refusing with those still running after the last round.
     pub(super) async fn stop(&self) -> Result<()> {
-        for _ in 0..ROUNDS {
-            let owned = self.owned().await?;
-            if owned.is_empty() {
-                return Ok(());
-            }
-            identity::stop_verified(&owned).await?;
-        }
-        let pids: Vec<String> = self
-            .owned()
-            .await?
-            .iter()
-            .map(|process| process.pid.to_string())
-            .collect();
-        bail!(
-            "the chat's processes keep starting others; end them with kill {}",
-            pids.join(" ")
-        )
+        stop_in_rounds(|_| self.owned()).await
     }
 
     /// The live processes the chat owns now. Each is verified as its own:
@@ -173,3 +198,6 @@ impl<'a> ChatProcesses<'a> {
         Ok(grouped)
     }
 }
+
+#[cfg(test)]
+mod tests;

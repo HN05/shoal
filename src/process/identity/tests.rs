@@ -48,6 +48,30 @@ fn lineage_follows_unique_ids_through_exited_parents_only_to_the_root() {
 }
 
 #[test]
+fn lineage_follows_every_root_through_exited_parents() {
+    let process = |pid, unique, parent| Lineage {
+        identity: Identity {
+            pid,
+            birth: pid.to_string(),
+            unique: None,
+        },
+        unique: Some(unique),
+        parent: Some(parent),
+        parent_pid: 1,
+        adopted: false,
+    };
+    // 10 and 20 have exited; 21 descends from 20 alone, and 9 from neither.
+    let found = descendants_of(
+        HashSet::from([10, 20]),
+        vec![process(11, 11, 10), process(21, 21, 20), process(9, 9, 8)],
+        |_| Ok(false),
+    )
+    .unwrap();
+    let pids: Vec<_> = found.iter().map(|identity| identity.pid).collect();
+    assert_eq!(pids, [11, 21]);
+}
+
+#[test]
 fn a_unique_id_recorded_in_another_boot_roots_no_lineage() -> Result<()> {
     let this = capture(std::process::id())?.context("identify this process")?;
     assert_eq!(

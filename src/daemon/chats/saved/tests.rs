@@ -661,7 +661,7 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
     let id_file = root.path().join("chat-id");
     let started = root.path().join("child");
     let mut leader = ProcessGroup::spawn(
-        std::process::Command::new("sh")
+        unmarked("sh")
             .arg("-c")
             .arg(
                 "while [ ! -s \"$0\" ]; do sleep 0.1; done; \
@@ -700,4 +700,14 @@ async fn a_stop_after_the_agent_exited_ends_what_carries_the_chat() {
 
     assert!(!crate::process::identity::alive(&child).unwrap());
     drop(group);
+}
+
+/// `program` without the identity of a workspace the runner may run in,
+/// which would make what it starts the workspace's rather than a chat's.
+fn unmarked(program: &str) -> std::process::Command {
+    let mut command = std::process::Command::new(program);
+    command
+        .env_remove(crate::env::WORKSPACE_ID)
+        .env_remove(crate::env::EXECUTION_ID);
+    command
 }
