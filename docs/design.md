@@ -2302,8 +2302,8 @@ removal's checkpoint keeps (the branch has commits of its own), no Git operation
 way, no open question, nothing running, no leases, permits, directory users,
 stacked workspaces or holds, and no recorded activity, file change or per-worktree Git
 change for the idle period. Idle time is persisted, so restarts do not reset it;
-it decides only after fetching the default branch's remote, at most every ten
-minutes and never moving local branches, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
+it decides only from a default branch fetched in the last ten minutes, by the
+background sync or by a sync it runs itself, so a failed fetch keeps the workspace. A link, a watch or a recorded `done` does not keep the
 workspace. Idle cleanup retains saved agents and stopped commands; merged cleanup
 drops queued restores and keeps the agents in removal's record for restore.
 `shoal cleanup` is the one command for what Shoal left behind: the
