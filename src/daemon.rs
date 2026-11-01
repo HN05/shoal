@@ -488,7 +488,10 @@ async fn accept(
     if protocol != protocol::VERSION {
         let body = Body::error(
             ErrorCode::ProtocolMismatch,
-            "restart the daemon with the installed version",
+            format!(
+                "the daemon speaks protocol {}, the request {protocol}; restart the daemon with the installed version",
+                protocol::VERSION
+            ),
         );
         protocol::write(stream, &Response::new(request_id, body)).await?;
         return Ok(None);
