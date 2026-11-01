@@ -253,7 +253,7 @@ pub(crate) fn start_environment() -> BTreeMap<String, String> {
 }
 
 /// The variables of a start that comes from no terminal, such as one an
-/// app queues through the client API or the daemon queues for a stopped
+/// app queues through the protocol or the daemon queues for a stopped
 /// agent: `origin`, where that agent ran, and every host's server unset, so
 /// it opens there or, without one, in `terminal.default_host` whatever the
 /// daemon's own environment names.

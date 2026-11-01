@@ -1,5 +1,4 @@
-//! Refusals with a typed reason, which the daemon and the client API report
-//! as error codes.
+//! Refusals with a typed reason, which the daemon reports as error codes.
 //! A refusal displays as its message alone, so the CLI shows what it showed
 //! before the reason existed.
 use std::fmt;

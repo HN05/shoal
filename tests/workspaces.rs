@@ -23654,14 +23654,27 @@ fn already_closed_issues_are_rejected_before_creating_workspaces() {
 }
 
 #[test]
-fn client_api_creation_rejects_a_closed_issue_before_creating_a_workspace() {
+fn an_apps_creation_rejects_a_closed_issue_before_creating_a_workspace() {
+    use shoal::client::{
+        connection::{self, Connector},
+        paths::Paths,
+        protocol::{OperationMethod, operations::StartedWorkspace},
+    };
     let runtime = tokio::runtime::Runtime::new().unwrap();
     for host in ["github.com", "forge.example"] {
         let fixture = issue_fixture(host);
         write_issue_state(&fixture, "Closed");
         let before = fixture.ok(&["work"]);
-        let socket = fixture.root.path().join("state/daemon.sock");
-        let create = shoal_client::CreateWorkspace {
+        let state = fixture.root.path().join("state");
+        let app = Connector {
+            paths: Paths {
+                home: fixture.root.path().into(),
+                socket: state.join("daemon.sock"),
+                state,
+            },
+            scope: None,
+        };
+        let create = OperationMethod::StartWorkspace {
             repository: fixture.repo.to_str().unwrap().into(),
             name: "closed-work".into(),
             base: Some("HEAD".into()),
@@ -23669,19 +23682,13 @@ fn client_api_creation_rejects_a_closed_issue_before_creating_a_workspace() {
             pr: None,
             agent: None,
         };
-        let refused = runtime.block_on(async {
-            let client = shoal_client::Connector::new(socket)
-                .connect()
-                .await
-                .unwrap();
-            client.call(create).await
-        });
-        let Err(shoal_client::Error::Api(error)) = refused else {
+        let refused = runtime.block_on(connection::request::<StartedWorkspace>(&app, create));
+        let Err(error) = refused else {
             panic!("{host}: expected a refusal: {refused:?}");
         };
         assert!(
-            error.message.contains("issue is already closed"),
-            "{host}: {error}"
+            format!("{error:#}").contains("issue is already closed"),
+            "{host}: {error:#}"
         );
         assert_eq!(fixture.ok(&["work"]), before);
     }

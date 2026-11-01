@@ -11,7 +11,6 @@ pub(crate) mod caches;
 pub mod chat_messages;
 mod chats;
 pub mod cleanup;
-mod client_api;
 mod connections;
 pub(crate) mod cpu_usage;
 mod disk;
@@ -321,29 +320,14 @@ async fn poll_item_activity(manager: Arc<Manager>) {
     }
 }
 
-/// The protocol a connection's first frame chooses.
-enum Opening {
-    /// Shoal's internal protocol: one request on the connection.
-    Internal(Box<Request>),
-    /// The client API, with the handshake its `client_api` field holds.
-    ClientApi(serde_json::Value),
-}
-
-/// Answer one connection, in the protocol its first frame speaks.
+/// Answer one connection's request.
 async fn serve(
     mut stream: UnixStream,
     server: Server,
     operation_guard: OperationGuard,
 ) -> Result<()> {
-    match read_opening(&mut stream).await? {
-        Some(Opening::Internal(request)) => {
-            serve_request(stream, server, *request, operation_guard).await
-        }
-        // Each API request takes its own operation guard.
-        Some(Opening::ClientApi(hello)) => {
-            drop(operation_guard);
-            client_api::serve(stream, server, hello).await
-        }
+    match read_request(&mut stream).await? {
+        Some(request) => serve_request(stream, server, request, operation_guard).await,
         None => Ok(()),
     }
 }
@@ -434,15 +418,11 @@ async fn unless_abandoned(
     }
 }
 
-/// The client's first frame, or `None` once an unreadable one was refused.
-async fn read_opening(stream: &mut UnixStream) -> Result<Option<Opening>> {
-    let frame = timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(stream)).await?;
-    let opening = frame.and_then(|frame: serde_json::Value| match frame.get("client_api") {
-        Some(hello) => Ok(Opening::ClientApi(hello.clone())),
-        None => Ok(Opening::Internal(Box::new(serde_json::from_value(frame)?))),
-    });
-    match opening {
-        Ok(opening) => Ok(Some(opening)),
+/// The client's request, or `None` once an unreadable one was refused.
+async fn read_request(stream: &mut UnixStream) -> Result<Option<Request>> {
+    let request = timeout(timing::REQUEST_READ_TIMEOUT, protocol::read(stream)).await?;
+    match request {
+        Ok(request) => Ok(Some(request)),
         Err(error) => {
             let response = Response::new(0, Body::error(ErrorCode::InvalidRequest, error));
             protocol::write(stream, &response).await?;

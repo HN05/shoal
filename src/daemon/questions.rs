@@ -575,7 +575,7 @@ impl Manager {
         newest_that_fit(questions)
     }
 
-    /// Every open question, oldest first, which client API snapshots page.
+    /// Every open question, oldest first, which subscription snapshots page.
     pub(crate) async fn open_questions(&self) -> Result<Vec<Question>> {
         self.store
             .run(|db| query(db, "WHERE q.answer IS NULL AND q.closed_at IS NULL", []))
