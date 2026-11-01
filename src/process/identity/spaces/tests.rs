@@ -1,6 +1,6 @@
 use super::*;
 use crate::test_support::{
-    Adopted, Detached, copy_test_binary, isolated_command, runs_until_stopped,
+    Adopted, Detached, copy_test_binary, isolated_command, run_until_stopped_in, runs_until_stopped,
 };
 
 /// This test binary, which runs until stopped as [`runs_until_stopped`]
@@ -103,12 +103,8 @@ async fn the_identity_marker_finds_attached_processes_and_ties_detached_ones() {
         &root.path().join("pid"),
     )
     .await;
-    let attached = isolated_command("sh", &elsewhere)
+    let attached = run_until_stopped_in(&elsewhere)
         .envs(marker)
-        .args([
-            "-c",
-            &format!("exec {}", runs_until_stopped(&this_binary())),
-        ])
         .spawn()
         .unwrap();
     let attached = super::super::capture(attached.id().unwrap())
@@ -198,11 +194,8 @@ async fn hooks_the_surveying_process_runs_are_not_found() {
     let root = tempfile::tempdir().unwrap();
     let space = workspace(root.path());
     let start = |hook: bool| {
-        let mut command = isolated_command("sh", root.path());
-        command.env(crate::env::WORKSPACE_ID, &space.id).args([
-            "-c",
-            &format!("exec {}", runs_until_stopped(&this_binary())),
-        ]);
+        let mut command = run_until_stopped_in(root.path());
+        command.env(crate::env::WORKSPACE_ID, &space.id);
         if hook {
             command.env(crate::env::HOOK, "post_setup");
         }

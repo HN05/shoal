@@ -308,11 +308,21 @@ pub async fn copy_test_binary(path: &Path) {
 /// Its environment stays readable once launchd adopts it, which a platform
 /// binary such as `sleep` hides on macOS.
 pub fn runs_until_stopped(program: &Path) -> String {
-    format!(
-        "'{}' --exact test_support::run_until_stopped --ignored",
-        program.display()
-    )
+    format!("'{}' {}", program.display(), RUN_UNTIL_STOPPED.join(" "))
 }
+
+/// This test binary running until stopped in `dir`, started without a shell,
+/// so a survey never finds the shell, whose environment macOS hides, in its
+/// place.
+pub fn run_until_stopped_in(dir: &Path) -> tokio::process::Command {
+    let program = std::env::current_exe().unwrap();
+    let mut command = isolated_command(program.to_str().unwrap(), dir);
+    command.args(RUN_UNTIL_STOPPED);
+    command
+}
+
+/// The arguments that make this test binary, or a copy, run until stopped.
+const RUN_UNTIL_STOPPED: [&str; 3] = ["--exact", "test_support::run_until_stopped", "--ignored"];
 
 #[test]
 #[ignore = "helper process tests start"]
