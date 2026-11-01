@@ -479,24 +479,24 @@ impl Manager {
         let mut queued = self.signals.watch_chat_messages();
         let mut background = self.signals.watch_item_updates();
         let messages = self.chat_messages(id).await?;
-        if !messages.is_empty() {
-            return Ok(Updates::messages(messages));
-        }
-        tokio::select! {
-            updates = wait_for_updates(deadline, &mut background, || {
-                self.poll_item_activity(id, selection)
-            }) => {
-                let updates = updates?;
-                if !wait.is_current() {
-                    return Ok(Updates::superseded());
+        let updates = if messages.is_empty() {
+            tokio::select! {
+                updates = wait_for_updates(deadline, &mut background, || {
+                    self.poll_item_activity(id, selection)
+                }) => updates?,
+                messages = self.next_chat_messages(id, &mut queued) => {
+                    Updates::messages(messages?)
                 }
-                Ok(updates)
+                () = wait.superseded.notified() => return Ok(Updates::superseded()),
             }
-            messages = self.next_chat_messages(id, &mut queued) => {
-                Ok(Updates::messages(messages?))
-            }
-            () = wait.superseded.notified() => Ok(Updates::superseded()),
+        } else {
+            Updates::messages(messages)
+        };
+        // A newer wait or hook delivery reads the same unacknowledged items.
+        if !wait.is_current() {
+            return Ok(Updates::superseded());
         }
+        Ok(updates)
     }
 
     /// The chat's messages once it has any.
@@ -1029,11 +1029,16 @@ impl Manager {
         selector: &str,
         deliveries: Vec<String>,
     ) -> Result<()> {
-        let id = self.link_space(selector).await?.id().to_owned();
+        let space = self.link_space(selector).await?;
+        let id = space.id().to_owned();
         // Without the PR gate: an agent's hook acknowledges within its timeout.
         // One transaction removes exactly the acknowledged deliveries, so
-        // whatever a poll or a split queues meanwhile stays pending.
-        let waits = self.item_waits.clone();
+        // whatever a poll or a split queues meanwhile stays pending. A chat's
+        // watch shares its delivery with the chat's hooks.
+        let waits = match space {
+            LinkSpace::Workspace(_) => self.item_waits.clone(),
+            LinkSpace::Chat { .. } => self.chat_waits.clone(),
+        };
         let agents = self.tracked_agents().await;
         self.store
             .run(move |db| {

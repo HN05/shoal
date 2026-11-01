@@ -373,9 +373,23 @@ async fn a_chats_hooks_receive_the_activity_on_its_items() {
     assert_eq!(woken.updates[0].kind, UpdateKind::Comment);
     // A watch in the chat yields to its hook's delivery, which hands over
     // the same update once acknowledged.
-    let watch = manager.chat_waits.start(&chat.id);
+    let watching = tokio::spawn({
+        let (manager, chat) = (manager.clone(), chat.id.clone());
+        async move {
+            let selection = Selection {
+                kind: Some(LinkKind::Pr),
+                input: None,
+            };
+            manager.wait_items(&chat, &selection, Some(600)).await
+        }
+    });
+    // A hang guard only: the watch registers before it polls.
+    while !manager.chat_waits.is_waiting(&chat.id) {
+        tokio::task::yield_now().await;
+    }
     let delivered = manager.chat_updates(&chat.id).await.unwrap();
-    watch.superseded.notified().await;
+    let watched = watching.await.unwrap().unwrap();
+    assert!(watched.superseded, "{watched:?}");
     assert_eq!(delivered.updates, woken.updates);
     manager
         .acknowledge_pr_updates(&chat.id, vec![delivered.updates[0].delivery.clone()])

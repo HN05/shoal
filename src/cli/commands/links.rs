@@ -167,8 +167,7 @@ async fn resolve_kind(ctx: &Context, space: &str, selection: Selection) -> Resul
     })
 }
 
-/// The kind of the space's item numbered `number`: one assigned or a linked
-/// run, or for a workspace one under any relation.
+/// The kind of the space's item numbered `number` under any relation.
 async fn linked_kind(ctx: &Context, space: &str, number: u64) -> Result<Option<LinkKind>> {
     let mut linked: Selected = client::request(
         &ctx.paths,
@@ -179,16 +178,16 @@ async fn linked_kind(ctx: &Context, space: &str, number: u64) -> Result<Option<L
         },
     )
     .await?;
-    if let Some(PresentSpace::Workspace(workspace)) =
-        client::present_space(&ctx.paths, space).await?
-    {
-        let links = workspace.links;
-        let recorded = links.opened.into_iter().chain(links.related);
-        linked.items.extend(recorded.map(|item| SelectedItem {
-            url: item.url,
-            kind: item.kind,
-        }));
-    }
+    let links = match client::present_space(&ctx.paths, space).await? {
+        Some(PresentSpace::Workspace(workspace)) => workspace.links,
+        Some(PresentSpace::Chat(chat)) => chat.links,
+        None => Default::default(),
+    };
+    let recorded = links.opened.into_iter().chain(links.related);
+    linked.items.extend(recorded.map(|item| SelectedItem {
+        url: item.url,
+        kind: item.kind,
+    }));
     // A number names an item of the workspace's repository; issues opened
     // in another one share its numbers.
     let remote = crate::repository::remote_url_from_path(&linked.path)

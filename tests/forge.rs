@@ -4047,6 +4047,12 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
     assert_eq!(finished["updates"][0]["kind"], "ci_completed", "{finished}");
     fixture.ok(&["unlink", "pr", "9", "assigned", "--space", "planning"]);
     fixture.ok(&["unlink", "ci", "2765", "related", "--space", "planning"]);
+    // A bare number names the kind of the chat's item under any relation,
+    // without asking the forge.
+    fixture.ok(&["link", "pr", "11", "related", "--space", "planning"]);
+    fixture.requests();
+    fixture.ok(&["unlink", "11", "related", "--space", "planning"]);
+    assert_eq!(fixture.requests(), Vec::<Value>::new());
     let selected = fixture.request(json!({"select_items": {"space": "planning",
         "selection": {"kind": null, "input": null}}}));
     assert_eq!(selected["data"]["items"], json!([]), "{selected}");
