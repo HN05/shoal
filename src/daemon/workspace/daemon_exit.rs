@@ -1,8 +1,12 @@
 //! What becomes of tracked work as the daemon exits: a restart or an update
-//! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does,
-//! and a signal stops it saved first, since it may come from a shutdown.
+//! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
+//! but leaves the agent queue to the next daemon, and a signal stops it saved
+//! first, since it may come from a shutdown.
 use super::{Manager, shutdown_stop::Shutdown};
-use crate::{protocol::Exit, state::ChatRestore};
+use crate::{
+    protocol::{Exit, QueuedLaunches},
+    state::ChatRestore,
+};
 
 /// What becomes of running work as the daemon exits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,7 +56,9 @@ impl Manager {
         let _shutdown_stop = self.shutdown_stopped.lock().await;
         tokio::join!(
             self.stop_every_target("before the Shoal daemon stopped", |workspace| async move {
-                self.stop_workspace_manually(&workspace, false, None).await
+                self.stop_workspace_manually(&workspace, false, None, QueuedLaunches::Keep)
+                    .await?;
+                Ok(())
             }),
             self.save_chats(ChatRestore::Resume)
         );

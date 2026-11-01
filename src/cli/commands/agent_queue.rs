@@ -269,10 +269,28 @@ pub(super) async fn rows(ctx: &Context, entries: &[QueueEntry]) -> Result<Vec<St
 /// leaves it to workspace removal, which a starting entry belongs to. A name
 /// shared with a workspace is refused rather than guessed.
 pub(super) async fn remove(ctx: &Context, selector: &str) -> Result<Option<i32>> {
+    remove_waiting(ctx, selector, |_| true).await
+}
+
+/// Remove `selector` from the queue as [`remove`] does when it names a
+/// waiting launch of a new workspace; `None` leaves it to `shoal stop` of a
+/// workspace, which cancels the launches waiting to open it.
+pub(super) async fn remove_new(ctx: &Context, selector: &str) -> Result<Option<i32>> {
+    remove_waiting(ctx, selector, |entry| entry.opens.is_none()).await
+}
+
+/// Remove `selector` from the queue as [`remove`] does when it names a
+/// waiting launch that `takes` accepts.
+async fn remove_waiting(
+    ctx: &Context,
+    selector: &str,
+    takes: impl Fn(&QueueEntry) -> bool,
+) -> Result<Option<i32>> {
     let Some(entry) = entries(ctx).await?.into_iter().find(|entry| {
         entry.kind == QueueKind::Launch
             && entry.state == QueueState::Queued
             && (entry.id == selector || entry.name == selector)
+            && takes(entry)
     }) else {
         return Ok(None);
     };

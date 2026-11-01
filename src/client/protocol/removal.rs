@@ -1,6 +1,19 @@
 use crate::client::removal::UnsavedWork;
 use serde::{Deserialize, Serialize};
 
+/// What a stop at the user's request does with the agent launches waiting
+/// to start in the workspace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueuedLaunches {
+    /// Cancel them, as `shoal stop` does, so no agent starts in a workspace
+    /// the user stopped.
+    Cancel,
+    /// Leave them queued, as `shoal daemon stop` and `shoal move root` do,
+    /// which start the stopped work again later.
+    Keep,
+}
+
 /// Requests that stop, remove, clean up, export and restore workspaces.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -12,6 +25,9 @@ pub enum RemovalMethod {
         /// The user checked that executions Shoal cannot prove ended did.
         #[serde(default)]
         acknowledge_unproven: bool,
+        /// What becomes of the agent launches waiting to start in it, which
+        /// the answer lists when the stop cancels them.
+        launches: QueuedLaunches,
     },
     /// Refuse now what stopping `workspace` would refuse, so a batch checks
     /// every target before stopping any.

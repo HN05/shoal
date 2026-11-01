@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::client::{
+    model::QueueEntry,
     output::{batch::Failure, outputs},
     processes::Stopped,
 };
@@ -23,6 +24,10 @@ pub struct WorkspaceStopped {
     pub saved: bool,
     /// How many processes Shoal does not track it stopped too.
     pub other_processes: usize,
+    /// The agent launches waiting to start in it that the stop removed from
+    /// the agent queue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cancelled: Vec<QueueEntry>,
 }
 
 /// The workspaces whose agents and commands a stop stopped, by name.
@@ -30,6 +35,10 @@ pub struct WorkspaceStopped {
 pub struct StoppedWorkspaces {
     pub stopped: Vec<String>,
     pub failed: Vec<Failure>,
+    /// The agent launches waiting to start in them that the stop removed
+    /// from the agent queue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cancelled: Vec<QueueEntry>,
 }
 
 /// The processes Shoal does not track that a stop stopped, by space.

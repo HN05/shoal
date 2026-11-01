@@ -1286,6 +1286,7 @@ async fn execution_scope_preserves_role_authorization_and_expires() {
                 RemovalMethod::StopWorkspace {
                     workspace: workspace.id.clone(),
                     acknowledge_unproven: false,
+                    launches: crate::protocol::QueuedLaunches::Cancel,
                 }
                 .into(),
                 false,

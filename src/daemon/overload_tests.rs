@@ -728,11 +728,12 @@ async fn stop_child() {
     let root = std::env::var_os("SHOAL_TEST_ROOT").unwrap();
     let paths = crate::paths::Paths::for_test(root);
     let id = std::env::var("SHOAL_TEST_WORKSPACE").unwrap();
-    crate::cli::client::request::<()>(
+    crate::cli::client::request::<Vec<crate::model::QueueEntry>>(
         &paths,
         RemovalMethod::StopWorkspace {
             workspace: id,
             acknowledge_unproven: false,
+            launches: crate::protocol::QueuedLaunches::Cancel,
         },
     )
     .await

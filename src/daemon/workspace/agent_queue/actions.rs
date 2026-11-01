@@ -1,12 +1,16 @@
 //! What `shoal queue` does to a waiting entry: start it now, cancel it, or
-//! move it to another place. Each holds the queue gate, so dispatch cannot
-//! start the entry meanwhile.
-use std::collections::HashMap;
+//! move it to another place, and the cancelling of the launches a stopped
+//! workspace waits for. Each holds the queue gate, so dispatch cannot start
+//! the entry meanwhile.
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::params;
 
-use super::{Grant, WaitingRestore, dependencies::Readiness, order, record_waiting_restore};
+use super::{
+    ENTRY_COLUMNS, Grant, WaitingRestore, dependencies::Readiness, entry as queue_entry, order,
+    record_waiting_restore,
+};
 use crate::{
     daemon::{
         scope::Caller,
@@ -149,6 +153,39 @@ impl Manager {
         Ok(entry)
     }
 
+    /// Cancel the launches waiting to open `workspace_id`, returning them.
+    /// One already starting belongs to its agent.
+    pub(crate) async fn cancel_waiting_launches(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<QueueEntry>> {
+        let _gate = self.agent_queue.lock_admission().await;
+        let workspace_id = workspace_id.to_owned();
+        self.store
+            .run(move |db| delete_waiting_launches(db, &workspace_id))
+            .await
+    }
+
+    /// The workspaces a waiting launch opens. Requires the queue gate, which
+    /// keeps them waiting until it is released.
+    pub(in crate::daemon::workspace) async fn waiting_launch_workspaces(
+        &self,
+    ) -> Result<HashSet<String>> {
+        self.store
+            .run(|db| {
+                Ok(db
+                    .prepare(
+                        "SELECT DISTINCT opens_workspace_id FROM agent_queue
+                         WHERE opens_workspace_id IS NOT NULL AND kind=?1 AND state=?2",
+                    )?
+                    .query_map(params![QueueKind::Launch, QueueState::Queued], |row| {
+                        row.get(0)
+                    })?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+    }
+
     /// Stop the wrapper of `execution` waiting for the restore `entry`, as
     /// `shoal stop` stops it, leaving its recovery record. A disconnected
     /// wrapper would queue the restore again once it reattaches, so it is
@@ -276,6 +313,24 @@ fn delete_waiting(db: &rusqlite::Connection, id: &str) -> Result<bool> {
         params![id, QueueState::Queued],
     )?;
     Ok(deleted == 1)
+}
+
+/// Delete the launches waiting to open `workspace_id`, returning them in
+/// queue order.
+fn delete_waiting_launches(
+    db: &mut rusqlite::Connection,
+    workspace_id: &str,
+) -> Result<Vec<QueueEntry>> {
+    const WAITING: &str = "FROM agent_queue WHERE opens_workspace_id=?1 AND kind=?2 AND state=?3";
+    let selection = params![workspace_id, QueueKind::Launch, QueueState::Queued];
+    let tx = db.transaction()?;
+    let launches = tx
+        .prepare(&format!("SELECT {ENTRY_COLUMNS} {WAITING} ORDER BY seq"))?
+        .query_map(selection, queue_entry)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    tx.execute(&format!("DELETE {WAITING}"), selection)?;
+    tx.commit()?;
+    Ok(launches)
 }
 
 /// Record `restore` at `place` in one transaction, refusing an agent whose

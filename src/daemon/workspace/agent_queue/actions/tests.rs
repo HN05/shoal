@@ -5,6 +5,7 @@ use crate::{
         started, stopped_agents,
     },
     model::{Dependency, QueueRequest},
+    protocol::QueuedLaunches,
     test_support::manager,
 };
 
@@ -18,6 +19,61 @@ async fn waiting(manager: &Manager) -> Vec<String> {
         .filter(|entry| entry.state == QueueState::Queued)
         .map(|entry| entry.name)
         .collect()
+}
+
+#[tokio::test]
+async fn a_stop_cancels_the_launches_waiting_to_open_its_workspace() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    add(&manager, &repo, "first").await;
+    let parent = manager
+        .create_workspace(&repo.id, "parent".into(), None, None, None)
+        .await
+        .unwrap();
+    let child = manager
+        .split_workspace(&parent.id, "child".into(), None)
+        .await
+        .unwrap();
+    let launch = manager
+        .queue_add(QueueRequest {
+            workspace: Some(child.name.clone()),
+            ..request(&repo, "child", false)
+        })
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
+    add(&manager, &repo, "later").await;
+    assert_eq!(waiting(&manager).await, ["child", "later"]);
+
+    // `shoal stop --all` stops the workspace; `shoal daemon stop` leaves it.
+    let targets = async |launches| {
+        manager
+            .stop_targets(launches)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|workspace| workspace.id)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(targets(QueuedLaunches::Cancel).await, std::slice::from_ref(&child.id));
+    assert!(targets(QueuedLaunches::Keep).await.is_empty());
+
+    let kept = manager
+        .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Keep)
+        .await
+        .unwrap();
+    assert!(kept.is_empty());
+    assert_eq!(waiting(&manager).await, ["child", "later"]);
+    let cancelled = manager
+        .stop_workspace_manually(&child.id, false, None, QueuedLaunches::Cancel)
+        .await
+        .unwrap();
+    let cancelled: Vec<_> = cancelled.into_iter().map(|entry| entry.id).collect();
+    assert_eq!(cancelled, [launch.id]);
+    // A launch of a new workspace stays queued.
+    assert_eq!(waiting(&manager).await, ["later"]);
 }
 
 #[tokio::test]

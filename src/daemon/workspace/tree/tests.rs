@@ -378,6 +378,7 @@ async fn workspace_processes_stop_and_resume_the_workspaces_below_theirs() {
         Operation::from(RemovalMethod::StopWorkspace {
             workspace: workspace.into(),
             acknowledge_unproven,
+            launches: crate::protocol::QueuedLaunches::Cancel,
         })
     };
     let restore = |workspace: &str, execution: &str| {

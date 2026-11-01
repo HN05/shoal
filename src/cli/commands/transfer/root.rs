@@ -19,7 +19,7 @@ use crate::{
     config::{Config, edit::Change},
     execution::recovery::Saved,
     model::{Execution, MovedRepository, Repository, RepositoryMoves, Workspace},
-    protocol::RepositoryMethod,
+    protocol::{QueuedLaunches, RepositoryMethod},
     repository,
 };
 
@@ -92,7 +92,7 @@ async fn stop_running(
         let result = ctx
             .progress(
                 "Stopping commands and agents",
-                super::super::stop::stop(ctx, workspace, confirmed),
+                super::super::stop::stop(ctx, workspace, confirmed, QueuedLaunches::Keep),
             )
             .await;
         let saved = saved_executions(ctx, workspace)?;

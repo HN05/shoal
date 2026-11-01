@@ -9,6 +9,9 @@ pub enum LifecycleCommand {
     /// Stop tracked agents and commands, saving them for `shoal resume`, and the other processes of
     /// the workspaces; keep the workspaces.
     ///
+    /// Agents waiting in the agent queue to start in the workspaces leave the queue, as does a queued
+    /// agent named instead of a workspace.
+    ///
     /// With `--processes` or `--leftovers`, stop only processes Shoal does not track, of workspaces or
     /// chats, the current one by default. Untracked processes carry the space's identity or are its
     /// leftovers: processes still running after what started them exited, tied to the space by

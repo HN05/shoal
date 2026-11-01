@@ -1,6 +1,8 @@
 //! Stopping keeps agent sessions and commands for `shoal resume`; agents
 //! stay down until it continues them. The other processes of a workspace,
-//! and with `--processes` or `--leftovers` those of a chat, stop for good.
+//! and with `--processes` or `--leftovers` those of a chat, stop for good,
+//! and the agent launches waiting in the queue leave it, having nothing to
+//! save.
 use anyhow::{Context as _, Result, ensure};
 use futures_util::future::join_all;
 
@@ -9,14 +11,15 @@ use crate::{
     cli::{
         args::SpaceTargets,
         client::{self, request},
+        commands::agent_queue,
         context::Context,
         output::Style,
         ui,
     },
     daemon::space_processes::{Selection, Stopped},
     execution::recovery,
-    model::Workspace,
-    protocol::{ErrorCode, RemoteError, RemovalMethod},
+    model::{QueueEntry, Workspace},
+    protocol::{ErrorCode, QueuedLaunches, RemoteError, RemovalMethod},
 };
 
 pub(super) async fn run(
@@ -27,6 +30,11 @@ pub(super) async fn run(
 ) -> Result<i32> {
     if targets.all {
         return stop_all(ctx).await;
+    }
+    if let [selector] = targets.space.as_slice()
+        && let Some(code) = agent_queue::remove_new(ctx, selector).await?
+    {
+        return Ok(code);
     }
     let mut selected = ui::select_workspaces(ctx, targets.space).await?;
     if !skip_children {
@@ -45,13 +53,16 @@ pub(super) async fn run(
 }
 
 async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
-    stop(ctx, &workspace, yes).await?;
+    let cancelled = stop(ctx, &workspace, yes, QueuedLaunches::Cancel).await?;
     let other = stop_untracked(ctx, &workspace, Selection::Processes).await?;
     let workspace = client::inspect(&ctx.paths, workspace).await?.workspace;
     let saved = !recovery::Saved::load(&ctx.paths, &workspace.id)?.is_empty();
     let mut message = "Workspace processes stopped".to_owned();
     if other.processes > 0 {
         message = format!("{message}. Stopped {}", other_processes(other.processes));
+    }
+    if !cancelled.is_empty() {
+        message = format!("{message}. {}", removed_launches(cancelled.len()));
     }
     if saved {
         message = format!("{message}. {}", continue_hint(&workspace.name));
@@ -63,6 +74,7 @@ async fn stop_one(ctx: &Context, workspace: String, yes: bool) -> Result<i32> {
             stopped: true,
             saved,
             other_processes: other.processes,
+            cancelled,
         },
     )?;
     Ok(0)
@@ -145,6 +157,15 @@ fn stopped_message(stopped: &Stopped, selection: Selection) -> String {
     }
 }
 
+/// How `shoal stop` names the `count` agent launches it removed from the
+/// agent queue.
+fn removed_launches(count: usize) -> String {
+    match count {
+        1 => "Removed 1 queued agent from the agent queue".to_owned(),
+        n => format!("Removed {n} queued agents from the agent queue"),
+    }
+}
+
 /// How plain `shoal stop` names the untracked processes it stopped besides
 /// the saved agents and commands.
 fn other_processes(count: usize) -> String {
@@ -154,20 +175,29 @@ fn other_processes(count: usize) -> String {
     }
 }
 
-/// Stop `workspace`. An execution Shoal cannot prove ended stops only once
-/// the user confirms it did, or with `yes`.
-pub(super) async fn stop(ctx: &Context, workspace: &str, yes: bool) -> Result<()> {
+/// Stop `workspace`, doing with the agent launches waiting to start in it
+/// what `launches` says, and return those the stop removed from the queue.
+/// An execution Shoal cannot prove ended stops only once the user confirms
+/// it did, or with `yes`.
+pub(super) async fn stop(
+    ctx: &Context,
+    workspace: &str,
+    yes: bool,
+    launches: QueuedLaunches,
+) -> Result<Vec<QueueEntry>> {
     let request_stop = |acknowledge_unproven| {
-        request::<()>(
+        request::<Vec<QueueEntry>>(
             &ctx.paths,
             RemovalMethod::StopWorkspace {
                 workspace: workspace.to_owned(),
                 acknowledge_unproven,
+                launches,
             },
         )
     };
-    let Err(error) = request_stop(yes).await else {
-        return Ok(());
+    let error = match request_stop(yes).await {
+        Ok(cancelled) => return Ok(cancelled),
+        Err(error) => error,
     };
     let Some(unproven) = error
         .downcast_ref::<RemoteError>()
@@ -267,9 +297,10 @@ async fn inspect_each(ctx: &Context, selectors: &[String]) -> Result<Vec<Workspa
     Ok(workspaces)
 }
 
-/// Stop every settled workspace with a running execution or an agent whose
-/// restore is queued or requested, which stopping cancels; the daemon selects
-/// them while no restore can move between the queue and its agent.
+/// Stop every settled workspace with a running execution, an agent whose
+/// restore is queued or requested, or an agent launch waiting to start in
+/// it, which stopping cancels; the daemon selects them while no restore or
+/// launch can move between the queue and its agent.
 async fn stop_all(ctx: &Context) -> Result<i32> {
     let report = ui::Report::new("stop");
     let running = request::<Vec<Workspace>>(&ctx.paths, RemovalMethod::StopTargets).await?;
@@ -279,6 +310,7 @@ async fn stop_all(ctx: &Context) -> Result<i32> {
             StoppedWorkspaces {
                 stopped: Vec::new(),
                 failed: Vec::new(),
+                cancelled: Vec::new(),
             },
         )?;
         return Ok(0);
@@ -298,26 +330,33 @@ async fn stop_each(
     acknowledge_unproven: bool,
 ) -> Result<i32> {
     let results = join_all(workspaces.iter().map(|workspace| async {
-        request::<()>(
+        let cancelled = request::<Vec<QueueEntry>>(
             &ctx.paths,
             RemovalMethod::StopWorkspace {
                 workspace: workspace.id.clone(),
                 acknowledge_unproven,
+                launches: QueuedLaunches::Cancel,
             },
         )
         .await?;
-        stop_untracked(ctx, &workspace.id, Selection::Processes).await
+        let other = stop_untracked(ctx, &workspace.id, Selection::Processes).await?;
+        anyhow::Ok((other, cancelled))
     }))
     .await;
     let mut resumable = Vec::new();
+    let mut removed = Vec::new();
     for (workspace, result) in workspaces.iter().zip(results) {
         let name = workspace.name.as_str();
         match result {
-            Ok(other) => {
-                let message = match other.processes {
+            Ok((other, cancelled)) => {
+                let mut message = match other.processes {
                     0 => format!("Stopped {name}"),
                     n => format!("Stopped {name} and {}", other_processes(n)),
                 };
+                if !cancelled.is_empty() {
+                    message = format!("{message}. {}", removed_launches(cancelled.len()));
+                }
+                removed.extend(cancelled);
                 report.done(ctx, &message, name.to_owned());
                 if has_saved_work(ctx, workspace) {
                     resumable.push(name);
@@ -334,6 +373,7 @@ async fn stop_each(
     report.finish(ctx, &summary, |stopped, failed| StoppedWorkspaces {
         stopped,
         failed,
+        cancelled: removed,
     })
 }
 

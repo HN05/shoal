@@ -11,7 +11,7 @@ use super::super::{
 };
 use crate::{
     process::identity,
-    protocol::{Body, RemovalMethod},
+    protocol::{Body, QueuedLaunches, RemovalMethod},
     removal::InspectionPolicy,
 };
 
@@ -25,16 +25,20 @@ pub(super) async fn handle(
             let listed = manager.removed_workspaces().await;
             return Ok(Answer::pages(listed, Body::RemovedWorkspaces));
         }
-        RemovalMethod::StopTargets => Body::Workspaces(manager.stop_targets().await?),
+        RemovalMethod::StopTargets => {
+            Body::Workspaces(manager.stop_targets(QueuedLaunches::Cancel).await?)
+        }
         RemovalMethod::StopWorkspace {
             workspace,
             acknowledge_unproven,
+            launches,
         } => {
             let stopped_by = caller.map(|caller| caller.workspace_id.as_str());
-            manager
-                .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by)
-                .await?;
-            Body::Ok
+            Body::QueueEntries(
+                manager
+                    .stop_workspace_manually(&workspace, acknowledge_unproven, stopped_by, launches)
+                    .await?,
+            )
         }
         RemovalMethod::CheckStop { workspace } => {
             let id = manager.workspace(&workspace).await?.id;
@@ -121,6 +125,7 @@ impl Scoped for RemovalMethod {
             RemovalMethod::StopWorkspace {
                 workspace,
                 acknowledge_unproven,
+                ..
             } => {
                 ensure!(
                     !*acknowledge_unproven,

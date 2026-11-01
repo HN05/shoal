@@ -66,7 +66,7 @@ pub use ports::PortMethod;
 pub use questions::QuestionMethod;
 pub use queue::QueueMethod;
 pub use recovery::RecoveryMethod;
-pub use removal::RemovalMethod;
+pub use removal::{QueuedLaunches, RemovalMethod};
 pub use repositories::RepositoryMethod;
 pub use resources::ResourceMethod;
 pub use reviews::{ReviewMethod, ReviewPiece};

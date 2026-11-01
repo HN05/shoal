@@ -13,6 +13,7 @@ use crate::{
     },
     execution::recovery::{self, Saved},
     model::Workspace,
+    protocol::QueuedLaunches,
     state::ChatRestore,
 };
 
@@ -101,7 +102,7 @@ impl Manager {
     {
         let _operation = self.gates.operation().await;
         self.agent_queue.suspend(true).await;
-        let targets = match self.stop_targets().await {
+        let targets = match self.stop_targets(QueuedLaunches::Keep).await {
             Ok(targets) => targets,
             Err(error) => {
                 log!("stop {moment}: running workspaces unavailable: {error:#}");

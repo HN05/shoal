@@ -27868,6 +27868,11 @@ fn add_queues_agents_past_max_agents_until_removed() {
     let cancelled = fixture.ok(&["queue", "cancel", "third"]);
     assert_eq!(cancelled["name"], "third", "{cancelled}");
     assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
+    // So does one stopped, having nothing to save.
+    fixture.ok(&["add", repo, "fourth", "--agent", "waiter"]);
+    let stopped = fixture.ok(&["stop", "fourth"]);
+    assert_eq!(stopped["name"], "fourth", "{stopped}");
+    assert_eq!(names(fixture.ok(&["queue"])), ["second"]);
 
     let removed = fixture.ok(&["rm", "second"]);
     assert_eq!(removed["name"], "second", "{removed}");

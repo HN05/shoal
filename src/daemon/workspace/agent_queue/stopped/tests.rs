@@ -6,6 +6,7 @@ use crate::{
     daemon::workspace_files::Attacher,
     execution::recovery::record_path,
     model::Workspace,
+    protocol::QueuedLaunches,
     state::QueueKind::Restore,
     state::QueueState::{Queued, Starting},
     test_support::{global_config, manager},
@@ -372,7 +373,7 @@ async fn a_manual_stop_keeps_stopped_agents_as_last_sessions() {
     assert_eq!(queue(&manager).await.len(), 1);
     let parent = create(&manager, &repo, "parent").await;
     manager
-        .stop_workspace_manually("work", false, Some(&parent.id))
+        .stop_workspace_manually("work", false, Some(&parent.id), QueuedLaunches::Cancel)
         .await
         .unwrap();
     // Nothing restores it, and it holds no slot or cleanup back.
@@ -548,7 +549,7 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
     stop(&manager, &idle, "manual", STOPPED);
 
     let mut targets: Vec<String> = manager
-        .stop_targets()
+        .stop_targets(QueuedLaunches::Cancel)
         .await
         .unwrap()
         .into_iter()

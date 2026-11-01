@@ -14,12 +14,14 @@ use crate::{
     },
     demos::Launch,
     hooks::HookKind,
-    model::{Execution, ExecutionPlan, LandPlan, PortReservation, Repository, Workspace},
+    model::{
+        Execution, ExecutionPlan, LandPlan, PortReservation, QueueEntry, Repository, Workspace,
+    },
     process::{
         execution::Processes,
         identity::{self as process, Identity},
     },
-    protocol::{Reattach, timing},
+    protocol::{QueuedLaunches, Reattach, timing},
     state::{ExecutionState, WorkspaceState},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -226,7 +228,10 @@ enum Keep<'a> {
     Records,
     /// Last sessions, which stay down until `shoal resume`, recording the
     /// workspace whose process stopped them when given.
-    LastSessions { stopped_by: Option<&'a str> },
+    LastSessions {
+        stopped_by: Option<&'a str>,
+        launches: QueuedLaunches,
+    },
 }
 
 /// The record a new execution persists at registration.
@@ -907,14 +912,19 @@ impl Manager {
     }
 
     /// The settled workspaces `shoal stop --all` stops: those with a running
-    /// execution or a stopped agent whose restore is requested or queued. The
-    /// queue gate keeps restores from moving between the queue and their
-    /// agents meanwhile, and executions are read before requests, which an
-    /// agent a signal stops saves before its execution ends.
-    pub async fn stop_targets(&self) -> Result<Vec<Workspace>> {
+    /// execution or a stopped agent whose restore is requested or queued,
+    /// and those a waiting launch opens when the stop cancels `launches`.
+    /// The queue gate keeps restores and launches from moving between the
+    /// queue and their agents meanwhile, and executions are read before
+    /// requests, which an agent a signal stops saves before its execution
+    /// ends.
+    pub async fn stop_targets(&self, launches: QueuedLaunches) -> Result<Vec<Workspace>> {
         let _gate = self.agent_queue.lock_admission().await;
         let mut targets = self.store.run(|db| running_workspaces(db)).await?;
         targets.extend(self.pending_restore_workspaces().await?);
+        if launches == QueuedLaunches::Cancel {
+            targets.extend(self.waiting_launch_workspaces().await?);
+        }
         Ok(self
             .list_workspaces()
             .await?
@@ -937,7 +947,8 @@ impl Manager {
             StopPolicy::RequireCompleteProof,
             Keep::Records,
         )
-        .await
+        .await?;
+        Ok(())
     }
 
     /// Stop as [`Manager::stop_workspace`] does at the user's request, then
@@ -945,19 +956,24 @@ impl Manager {
     /// user resumes them, or the process of workspace `stopped_by` that
     /// stopped them. With `acknowledge_unproven`, executions whose launch
     /// identity was never recorded count as ended once nothing of them is
-    /// visible, because the user checked.
+    /// visible, because the user checked. Returns the waiting launches it
+    /// cancelled as `launches` says.
     pub async fn stop_workspace_manually(
         &self,
         selector: &str,
         acknowledge_unproven: bool,
         stopped_by: Option<&str>,
-    ) -> Result<()> {
+        launches: QueuedLaunches,
+    ) -> Result<Vec<QueueEntry>> {
         let policy = if acknowledge_unproven {
             StopPolicy::Acknowledged
         } else {
             StopPolicy::RequireCompleteProof
         };
-        let keep = Keep::LastSessions { stopped_by };
+        let keep = Keep::LastSessions {
+            stopped_by,
+            launches,
+        };
         self.stop_workspace_executions(
             selector,
             StopRequest::manual(),
@@ -993,12 +1009,14 @@ impl Manager {
             StopPolicy::RequireCompleteProof,
             Keep::Records,
         )
-        .await
+        .await?;
+        Ok(())
     }
 
     /// Stop the executions of the workspace `selector` names and `keep` what
     /// they saved, all under one reservation: no execution registers
-    /// meanwhile, and no other stop keeps the saved agents first.
+    /// meanwhile, and no other stop keeps the saved agents first. Returns
+    /// the waiting launches `keep` cancels.
     async fn stop_workspace_executions(
         &self,
         selector: &str,
@@ -1006,13 +1024,21 @@ impl Manager {
         protected: Protected,
         policy: StopPolicy,
         keep: Keep<'_>,
-    ) -> Result<()> {
+    ) -> Result<Vec<QueueEntry>> {
         let workspace = self.workspace(selector).await?;
         let reserved_state = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Stopping)
             .await?;
         let result = async {
             let stopping = self.unstopped_executions(&workspace.id).await?;
+            // Before stopping, so an admission cannot start one after.
+            let cancelled = match keep {
+                Keep::LastSessions {
+                    launches: QueuedLaunches::Cancel,
+                    ..
+                } => self.cancel_waiting_launches(&workspace.id).await?,
+                Keep::LastSessions { .. } | Keep::Records => Vec::new(),
+            };
             // Before stopping, so a restore admitted meanwhile cannot start
             // after, and again once stopped, for the request of an agent a
             // signal was ending meanwhile.
@@ -1024,7 +1050,7 @@ impl Manager {
             if protected == Protected::Stop {
                 self.cancel_stopped_restores(&workspace.id).await?;
             }
-            if let Keep::LastSessions { stopped_by } = keep {
+            if let Keep::LastSessions { stopped_by, .. } = keep {
                 let stopper = stopped_by.map(|workspace| Stopper {
                     workspace,
                     executions: stopping,
@@ -1032,7 +1058,7 @@ impl Manager {
                 self.keep_stopped_as_last_sessions(&workspace.id, stopper.as_ref())
                     .await?;
             }
-            anyhow::Ok(())
+            anyhow::Ok(cancelled)
         }
         .await;
         // A stop waiting for the user's confirmation has not failed.

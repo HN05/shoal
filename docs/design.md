@@ -143,7 +143,8 @@ all work with the save-first shutdown stop below, and the service commands
 instead ask the daemon over its socket how to exit: `shoal daemon restart` and
 an install that replaces an incompatible daemon ask it to detach its wrappers,
 and `shoal daemon stop` to stop work as `shoal stop --all` does, so agents stay
-down until `shoal resume`. The request is permanent like reattachment and
+down until `shoal resume`, except that the agent queue stays for the next
+daemon, launches in existing workspaces included. The request is permanent like reattachment and
 answered before the protocol check, since restarting is how an upgrade reaches
 a daemon of another release; a daemon that does not answer gets SIGTERM.
 
@@ -290,7 +291,14 @@ them: each stopped agent of the workspace whose execution ended, including one
 a signal or protection stopped before, becomes a last session, as an agent that
 exits on its own leaves one. The wrapper saves its recovery record as for any
 stop and the daemon converts it once the stop finishes, so wrappers of earlier
-releases stop the same way. Taking agents down briefly is `shoal restart`. User commands
+releases stop the same way. Taking agents down briefly is `shoal restart`.
+A launch waiting in the agent queue to start in the workspace has no session
+to save, so a manual stop cancels it before stopping anything, under the queue
+gate so admission cannot start it after, and reports it; one already starting
+belongs to its agent. `shoal stop` of a waiting launch of a new workspace
+cancels it as `shoal rm` does, and `--all` also selects the workspaces such a
+launch waits to start in. `shoal move root`, which starts the stopped work
+again after the move, keeps them. User commands
 save their arguments, which resume reports once, as the restored agent's first
 prompt or else to the user, and never reruns, because replaying an arbitrary
 command is not known to be safe. Scoped callers stop only the executions of the
