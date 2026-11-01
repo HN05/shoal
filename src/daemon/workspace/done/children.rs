@@ -29,7 +29,12 @@ impl Manager {
     }
 
     /// Whether `workspace` is marked done with cleanup at its current HEAD.
-    /// A HEAD that cannot be read, as off its branch, is not that HEAD.
+    /// A HEAD that cannot be read, as off its branch or in a directory whose
+    /// file access stalled, is not that HEAD. Only a recorded stall counts:
+    /// the candidate checks of a workspace below run this under
+    /// [`Manager::check_access`] already, which a second limit would cut
+    /// short, and branch observation, earlier in each sweep, records a stall
+    /// of `workspace`'s directory.
     pub(in crate::daemon::workspace) async fn completion_stands(
         &self,
         workspace: &Workspace,
@@ -37,6 +42,9 @@ impl Manager {
         let Some(completion) = self.completion(&workspace.id).await? else {
             return Ok(false);
         };
+        if self.file_access.stalled(&workspace.path).is_some() {
+            return Ok(false);
+        }
         Ok(completion.cleanup
             && crate::daemon::links::pr::current_head(workspace)
                 .await

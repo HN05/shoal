@@ -996,3 +996,19 @@ async fn pr_cleanup_skips_a_base_whose_stacked_workspace_elsewhere_stalled() {
     let registration = manager.pr_registration(&base.id).await.unwrap().unwrap();
     assert_eq!(registration.error, None);
 }
+
+#[tokio::test]
+async fn a_child_keeps_while_its_completed_parent_elsewhere_stalled() {
+    let (_temp, manager, parent, child) = split_across_directories(false).await;
+    manager
+        .mark_done(&parent.id, true, false, vec![], &Attacher::User)
+        .await
+        .unwrap();
+    manager.file_access.stall_rechecking(&parent.path);
+
+    sweep(&manager, &mut Timers::default()).await.unwrap();
+
+    // The parent's completion cannot be read, so it takes neither.
+    assert!(parent.path.exists());
+    assert!(child.path.exists());
+}
