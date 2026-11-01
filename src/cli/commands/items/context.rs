@@ -16,6 +16,11 @@ use crate::{
 const NO_CONTEXT: &str =
     "no current workspace or registered checkout; run this in one, or pass --workspace or --repo";
 
+/// What is missing when nothing gives a non-interactive command that takes
+/// only `--repo` its repository.
+const NO_REPOSITORY: &str =
+    "no current workspace or registered checkout; run this in one, or pass --repo";
+
 /// The checkout of the registered repository `repo` names, else the context
 /// [`select_context`] selects, except that outside a workspace or checkout
 /// an issue or PR URL `item` of a registered repository selects that one's.
@@ -34,19 +39,44 @@ pub(in crate::cli::commands) async fn select_item_context(
 /// The context of a command whose `--repo` names any repository, and the
 /// repository it then names there. The user's command runs in a registered
 /// repository's checkout, without a workspace; any other repository is
-/// reached through the context [`select_context`] selects.
+/// reached through the current context, else a repository the user picks.
 pub(in crate::cli::commands) async fn select_repo_context(
     ctx: &Context,
-    workspace: Option<String>,
     repo: Option<String>,
 ) -> Result<(ItemContext, Option<String>)> {
-    if let (None, Some(named)) = (&workspace, &repo)
+    if let Some(named) = &repo
         && !env::inherits_scope(&ctx.paths.state)
         && let Some(checkout) = registered(ctx, named).await?
     {
         return Ok((ItemContext::Checkout(checkout.id), None));
     }
-    // Refuse a bad repository before the workspace picker asks for anything.
+    // Refuse a bad repository before the picker asks for anything.
+    repo.as_deref().map(ForgeRepo::check_named).transpose()?;
+    Ok((current_or_picked_repository(ctx).await?, repo))
+}
+
+/// The current workspace or registered checkout, else the checkout of a
+/// registered repository the user picks.
+async fn current_or_picked_repository(ctx: &Context) -> Result<ItemContext> {
+    if let Some(context) = current_context(ctx).await? {
+        return Ok(context);
+    }
+    ensure!(ctx.interactive(), "{NO_REPOSITORY}");
+    let repos = client::repositories(&ctx.paths).await?;
+    let picked = ui::pick(ctx, "Repository> ", ui::repository_choices(repos).await?)?;
+    Ok(ItemContext::Checkout(picked))
+}
+
+/// [`select_repo_context`] for `issue open`, which also takes the workspace
+/// to open the issue from.
+pub(in crate::cli::commands) async fn select_open_context(
+    ctx: &Context,
+    workspace: Option<String>,
+    repo: Option<String>,
+) -> Result<(ItemContext, Option<String>)> {
+    if workspace.is_none() {
+        return select_repo_context(ctx, repo).await;
+    }
     repo.as_deref().map(ForgeRepo::check_named).transpose()?;
     Ok((select_context(ctx, workspace, None).await?, repo))
 }

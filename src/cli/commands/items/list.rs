@@ -23,9 +23,9 @@ pub(super) async fn list(ctx: &Context, kind: ItemKind, args: ListArgs) -> Resul
         text: (!query.is_empty()).then_some(query),
         limit: args.limit.into(),
     };
-    // Refuse a bad filter before the workspace picker asks for anything.
+    // Refuse a bad filter before the picker asks for anything.
     search.check()?;
-    let (context, repository) = select_repo_context(ctx, args.workspace, args.repo).await?;
+    let (context, repository) = select_repo_context(ctx, args.repo).await?;
     let method = ItemMethod::ListItems {
         context,
         kind,

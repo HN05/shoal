@@ -410,11 +410,9 @@ pub struct ListArgs {
     /// Text the forge searches for in titles and descriptions.
     #[arg(value_name = "TEXT")]
     pub query: Vec<String>,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
-    /// Search another repository: OWNER/NAME on the workspace's forge, or a
-    /// repository URL on any forge.
+    /// Search another repository: a registered repository's name, OWNER/NAME
+    /// on the current repository's forge, or a repository URL on any forge;
+    /// defaults to the current workspace's or checkout's repository.
     #[arg(long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
     /// Which items to list; closed includes merged PRs.

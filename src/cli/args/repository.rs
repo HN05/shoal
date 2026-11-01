@@ -27,11 +27,9 @@ pub enum RepositoryCommand {
 // `shoal forge reactions`.
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
-    /// Read another repository: OWNER/NAME on the workspace's forge, or a
-    /// repository URL on any forge.
+    /// Read another repository: a registered repository's name, OWNER/NAME
+    /// on the current repository's forge, or a repository URL on any forge;
+    /// defaults to the current workspace's or checkout's repository.
     #[arg(long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }
@@ -48,12 +46,10 @@ pub struct ApiArgs {
     /// JSON request body from a file, or `-` for standard input.
     #[arg(long, value_name = "FILE")]
     pub input: Option<PathBuf>,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
     /// Send it for another repository, which `{owner}` and `{repo}` then
-    /// name: OWNER/NAME on the workspace's forge, or a repository URL on any
-    /// forge.
+    /// name: a registered repository's name, OWNER/NAME on the current
+    /// repository's forge, or a repository URL on any forge; defaults to the
+    /// current workspace's or checkout's repository.
     #[arg(long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }
@@ -67,11 +63,10 @@ pub struct DownloadArgs {
     /// File to write, or `-` for standard output.
     #[arg(short, long, value_name = "FILE")]
     pub output: PathBuf,
-    /// Workspace to use; defaults to the current workspace or picker.
-    #[arg(long)]
-    pub workspace: Option<String>,
-    /// Download from another repository's forge: OWNER/NAME on the
-    /// workspace's forge, or a repository URL on any forge.
+    /// Download from another repository's forge: a registered repository's
+    /// name, OWNER/NAME on the current repository's forge, or a repository
+    /// URL on any forge; defaults to the current workspace's or checkout's
+    /// repository.
     #[arg(long, value_name = "REPOSITORY")]
     pub repo: Option<String>,
 }

@@ -26,9 +26,9 @@ pub(super) async fn api(ctx: &Context, args: ApiArgs) -> Result<i32> {
         path: args.path,
         body,
     };
-    // Refuse a bad path before the workspace picker asks for anything.
+    // Refuse a bad path before the picker asks for anything.
     request.check()?;
-    let (context, repository) = select_repo_context(ctx, args.workspace, args.repo).await?;
+    let (context, repository) = select_repo_context(ctx, args.repo).await?;
     let response = ctx
         .progress(
             "Requesting",

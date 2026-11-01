@@ -66,6 +66,17 @@ fn serve(root: &Path) -> (Child, String) {
     (child, format!("127.0.0.1:{port}"))
 }
 
+/// The JSON `command` prints with `args`, which must succeed.
+fn json_output(mut command: Command, args: &[&str]) -> Value {
+    let output = command.arg("--json").args(args).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
 impl Fixture {
     /// `config` names the forge's host as `{forge}` and its type as `{type}`;
     /// unless `config` sets the host's table, its type is pinned and the user
@@ -169,13 +180,28 @@ impl Fixture {
     }
 
     fn ok(&self, args: &[&str]) -> Value {
-        let output = self.command().arg("--json").args(args).output().unwrap();
-        assert!(
-            output.status.success(),
-            "{args:?}: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        serde_json::from_slice(&output.stdout).unwrap()
+        json_output(self.command(), args)
+    }
+
+    /// [`Self::ok`] in the `topic` workspace's directory.
+    fn ok_in_topic(&self, args: &[&str]) -> Value {
+        let mut command = self.command();
+        command.current_dir(self.topic());
+        json_output(command, args)
+    }
+
+    /// [`Self::run`] in the `topic` workspace's directory.
+    fn run_in_topic(&self, args: &[&str]) -> Output {
+        (self.command().current_dir(self.topic()))
+            .args(args)
+            .output()
+            .unwrap()
+    }
+
+    /// The `topic` workspace's directory.
+    fn topic(&self) -> PathBuf {
+        let status = self.ok(&["status", "topic"]);
+        PathBuf::from(status["workspace"]["path"].as_str().unwrap())
     }
 
     fn request(&self, method: Value) -> Value {
@@ -377,7 +403,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
         "GET repos/team/project/pulls/8": {"body": pr},
     });
     fixture.respond(responses.clone());
-    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    let labels = fixture.ok_in_topic(&["repo", "labels"]);
     assert_eq!(
         labels,
         json!([
@@ -399,7 +425,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     responses[organization] = json!({"status": 404, "body": {"message": "GetOrgByName"}});
     responses[teams] = json!({"status": 401, "body": {"message": "token is required"}});
     fixture.respond(responses.clone());
-    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    let labels = fixture.ok_in_topic(&["repo", "labels"]);
     assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
 
     // A token without the read:organization scope learns that a user owns the
@@ -407,7 +433,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
     responses[organization] = json!({"status": 403, "body": {"message": "token scope"}});
     responses[teams] = user_owned();
     fixture.respond(responses);
-    let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+    let labels = fixture.ok_in_topic(&["repo", "labels"]);
     assert_eq!(labels.as_array().map(Vec::len), Some(1), "{labels}");
     let reviewers = fixture.ok(&["pr", "reviewers", "8", "--workspace", "topic"]);
     assert_eq!(
@@ -420,14 +446,7 @@ fn forgejo_lists_organization_labels_and_reviewers_except_the_author() {
         "GET repos/ann/tool/labels?limit=50&page=1": {"body": [{"name": "type/bug"}]},
         "GET orgs/ann": {"status": 404, "body": {"message": "GetOrgByName"}},
     }));
-    let labels = fixture.ok(&[
-        "repo",
-        "labels",
-        "--repo",
-        "ann/tool",
-        "--workspace",
-        "topic",
-    ]);
+    let labels = fixture.ok_in_topic(&["repo", "labels", "--repo", "ann/tool"]);
     assert_eq!(
         labels,
         json!([{"name": "type/bug", "description": "", "exclusive": false}])
@@ -495,7 +514,7 @@ fn unknown_hosts_are_asked_once_which_forge_they_serve() {
     };
     // The CLI asks the daemon, which asks the host and records its answer.
     for _ in 0..2 {
-        let labels = fixture.ok(&["repo", "labels", "--workspace", "topic"]);
+        let labels = fixture.ok_in_topic(&["repo", "labels"]);
         assert_eq!(labels[0]["name"], "bug");
     }
     let label_list = "GET repos/team/project/labels?per_page=100&page=1";
@@ -1003,7 +1022,7 @@ fn forgejo_threads_take_replies_but_cannot_be_resolved() {
             .iter()
             .all(|request| request[0].as_str().unwrap().starts_with("GET")),
     );
-    let reported = fixture.ok(&["forge", "capabilities", "--workspace", "topic"]);
+    let reported = fixture.ok_in_topic(&["forge", "capabilities"]);
     assert_eq!(reported["forge"], "Forgejo or Gitea", "{reported}");
     let capabilities = reported["capabilities"].as_array().unwrap();
     assert!(
@@ -1296,16 +1315,16 @@ fn github_reactions_find_inline_comments_and_remove_by_id() {
 fn forge_reactions_list_what_the_instance_allows_or_githubs() {
     let fixture = Fixture::new(Forge::Forgejo, "");
     fixture.respond(json!({"GET settings/ui": {"body": {"allowed_reactions": ["+1", "heart"]}}}));
-    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    let reactions = fixture.ok_in_topic(&["forge", "reactions"]);
     assert_eq!(
         reactions,
         json!({"names": ["+1", "heart"], "accepts_other_names": false})
     );
-    let text = fixture.run(&["forge", "reactions", "--workspace", "topic"]);
+    let text = fixture.run_in_topic(&["forge", "reactions"]);
     assert_eq!(String::from_utf8_lossy(&text.stdout), "+1\nheart\n");
 
     let fixture = Fixture::new(Forge::GitHub, "");
-    let reactions = fixture.ok(&["forge", "reactions", "--workspace", "topic"]);
+    let reactions = fixture.ok_in_topic(&["forge", "reactions"]);
     assert_eq!(
         reactions["names"].as_array().map(Vec::len),
         Some(8),
@@ -2713,19 +2732,19 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
             {"body": {"items": [{"number": 40, "title": "Flaky watch", "state": "open",
                 "labels": [{"name": "bug"}]}]}},
     }));
-    let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
+    let listed = fixture.ok_in_topic(&["issue", "list", "flaky", "watch"]);
     assert_eq!(
         listed,
         json!([{"kind": "issue", "number": 40, "url": format!("{}/issues/40", fixture.web),
             "title": "Flaky watch", "state": "open", "labels": ["bug"], "assignees": [],
             "milestone": null}])
     );
-    let output = fixture.run(&["issue", "list", "--workspace", "topic", "flaky", "watch"]);
+    let output = fixture.run_in_topic(&["issue", "list", "flaky", "watch"]);
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "#40  open    Flaky watch  [bug]\n"
     );
-    // Outside a workspace, a bad filter fails before a workspace is chosen.
+    // Outside a workspace, a bad filter fails before a repository is chosen.
     for filter in [&["--label", ""][..], &["--author", " "], &[" "]] {
         let output = fixture
             .command()
@@ -2757,6 +2776,28 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(stderr.contains("names no repository"), "{args:?}: {stderr}");
     }
+    // Without a repository there, a command that needs only one asks for
+    // --repo, and a registered repository's name selects its checkout.
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args(["issue", "list"])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.ends_with("run this in one, or pass --repo\n"),
+        "{stderr}"
+    );
+    let output = fixture
+        .command()
+        .current_dir(fixture.root.path())
+        .args([
+            "--json", "issue", "list", "--repo", "repo", "flaky", "watch",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
     // A listing longer than one protocol frame arrives in several.
     let pages: serde_json::Map<String, Value> = (0..4)
         .map(|page| {
@@ -2771,7 +2812,7 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         })
         .collect();
     fixture.respond(Value::Object(pages));
-    let listed = fixture.ok(&["issue", "list", "--workspace", "topic", "--limit", "400"]);
+    let listed = fixture.ok_in_topic(&["issue", "list", "--limit", "400"]);
     let numbers: Vec<u64> = listed
         .as_array()
         .unwrap()
@@ -2788,19 +2829,8 @@ fn lists_search_through_the_forge_as_the_user_or_the_scoped_agent() {
         "GET repos/team/project/pulls/8": {"body": pull(8, "merged", "Fix crash", &["bug"])},
         "GET repos/team/project/pulls/9": {"body": pull(9, "closed", "Crash", &["bug"])},
     }));
-    let listed = fixture.ok(&[
-        "pr",
-        "list",
-        "--workspace",
-        "topic",
-        "--state",
-        "closed",
-        "--label",
-        "bug",
-        "--author",
-        "dev",
-        "--limit",
-        "1",
+    let listed = fixture.ok_in_topic(&[
+        "pr", "list", "--state", "closed", "--label", "bug", "--author", "dev", "--limit", "1",
         "crash",
     ]);
     assert_eq!(listed.as_array().unwrap().len(), 1, "{listed}");
@@ -2856,7 +2886,7 @@ fn lists_search_another_repository_with_the_same_filters() {
         "bug",
         "crash",
     ];
-    let listed = fixture.ok(&[&list[..], &["--workspace", "topic"]].concat());
+    let listed = fixture.ok_in_topic(&list);
     let url = fixture.web.replace("team/project", "team/tool") + "/issues/5";
     assert_eq!(listed[0]["url"], url, "{listed}");
     // A workspace process searches it as the agent account.
@@ -5557,15 +5587,15 @@ fn api_requests_reach_any_path_and_agents_only_read() {
     // Forgejo applies `limit` only with `page`, so a read that sets only a
     // limit asks for the first page.
     let path = "/repos/{owner}/{repo}/branches?limit=400";
-    let listed = fixture.ok(&["forge", "api", path, "--workspace", "topic"]);
+    let listed = fixture.ok_in_topic(&["forge", "api", path]);
     assert_eq!(listed, json!(branches));
-    let output = fixture.run(&["forge", "api", path, "--workspace", "topic"]);
+    let output = fixture.run_in_topic(&["forge", "api", path]);
     let printed = String::from_utf8_lossy(&output.stdout);
     assert!(printed.starts_with("[\n  {\n    \"commit\""), "{printed}");
     let body = fixture.root.path().join("body.json");
     fs::write(&body, r#"{"description": "new"}"#).unwrap();
     let body = body.to_str().unwrap();
-    let edited = fixture.ok(&[
+    let edited = fixture.ok_in_topic(&[
         "forge",
         "api",
         "repos/{owner}/{repo}",
@@ -5573,8 +5603,6 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "patch",
         "--input",
         body,
-        "--workspace",
-        "topic",
     ]);
     assert_eq!(edited, json!({"description": "new"}));
     let read = "GET repos/team/project/branches?limit=400&page=1";
@@ -5587,7 +5615,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         ]
     );
 
-    // Outside a workspace, a bad path fails before a workspace is chosen.
+    // Outside a workspace, a bad path fails before a repository is chosen.
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
@@ -5606,10 +5634,8 @@ fn api_requests_reach_any_path_and_agents_only_read() {
         "repos/{owner}/{repo}",
         "--repo",
         "team/tool",
-        "--workspace",
-        "topic",
     ];
-    assert_eq!(fixture.ok(&other), json!({"name": "tool"}));
+    assert_eq!(fixture.ok_in_topic(&other), json!({"name": "tool"}));
     assert_eq!(
         fixture.requests(),
         [json!(["GET repos/team/tool", null, "token usertoken"])]
@@ -5617,13 +5643,7 @@ fn api_requests_reach_any_path_and_agents_only_read() {
 
     // curl sends braces and brackets as given instead of expanding them.
     fixture.respond(json!({"GET repos/team/project/{a,b}[1-2]": {"body": {"one": true}}}));
-    let globbed = fixture.ok(&[
-        "forge",
-        "api",
-        "repos/{owner}/{repo}/{a,b}[1-2]",
-        "--workspace",
-        "topic",
-    ]);
+    let globbed = fixture.ok_in_topic(&["forge", "api", "repos/{owner}/{repo}/{a,b}[1-2]"]);
     assert_eq!(globbed, json!({"one": true}));
     assert_eq!(
         fixture.requests(),
@@ -5675,21 +5695,13 @@ fn downloads_read_files_on_the_forge_with_its_login() {
     let url = format!("{origin}/attachments/a1");
     let saved = fixture.root.path().join("shot.png");
     let saved_arg = saved.to_str().unwrap();
-    let written = fixture.ok(&[
-        "forge",
-        "download",
-        &url,
-        "--output",
-        saved_arg,
-        "--workspace",
-        "topic",
-    ]);
+    let written = fixture.ok_in_topic(&["forge", "download", &url, "--output", saved_arg]);
     assert_eq!(
         written,
         json!({"path": saved, "bytes": 3, "content_type": "image/png"})
     );
     assert_eq!(fs::read(&saved).unwrap(), b"PNG");
-    let output = fixture.run(&["forge", "download", &url, "-o", "-", "--workspace", "topic"]);
+    let output = fixture.run_in_topic(&["forge", "download", &url, "-o", "-"]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"PNG");
     // A workspace process downloads as its agent account, and a chat in the
@@ -5712,7 +5724,7 @@ fn downloads_read_files_on_the_forge_with_its_login() {
         ]
     );
 
-    // A malformed URL fails before a workspace is chosen.
+    // A malformed URL fails before a repository is chosen.
     let output = fixture
         .command()
         .current_dir(fixture.root.path())
@@ -5724,14 +5736,12 @@ fn downloads_read_files_on_the_forge_with_its_login() {
     assert!(stderr.contains("not an HTTP or HTTPS URL"), "{stderr}");
 
     // The login goes to no other host.
-    let output = fixture.run(&[
+    let output = fixture.run_in_topic(&[
         "forge",
         "download",
         "https://example.com/shot.png",
         "-o",
         saved_arg,
-        "--workspace",
-        "topic",
     ]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);

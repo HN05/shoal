@@ -2,7 +2,7 @@
 //! an issue, and report what the repository's approval rules made of it.
 use anyhow::Result;
 
-use super::{content::read_content, context::select_repo_context};
+use super::{content::read_content, context::select_open_context};
 use crate::{
     cli::{
         args::changes::OpenPullArgs,
@@ -122,7 +122,7 @@ pub(super) async fn open_issue(
     repository: Option<String>,
     link: bool,
 ) -> Result<i32> {
-    let (context, repository) = select_repo_context(ctx, workspace, repository).await?;
+    let (context, repository) = select_open_context(ctx, workspace, repository).await?;
     let outcome: OpenOutcome = client::request(
         &ctx.paths,
         ItemMethod::OpenIssue {

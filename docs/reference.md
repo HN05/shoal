@@ -3016,9 +3016,10 @@ threads, rerunning CI jobs, labels or a merge method, and whether the forge has
 it, asking the server where releases differ, with what to do instead when it
 does not; `--json` returns `forge` and `capabilities`, each with `capability`,
 `supported` and an optional `hint`.
-Outside a workspace, such as in a chat, this command, `shoal forge reactions`
-and `shoal repo labels` read the repository of the registered checkout they run
-in, and with `--repo`, named as for `issue open --repo`, another repository. A
+A command that needs only a repository, such as this one, reads the repository
+of the workspace or registered checkout it runs in, such as a chat's, else a
+registered repository the user picks, and with `--repo`, named as for
+`issue open --repo`, another repository. A
 command that needs a capability the forge lacks fails before changing anything,
 naming the forge and the capability.
 

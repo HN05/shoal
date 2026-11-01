@@ -34,7 +34,7 @@ pub(super) async fn capabilities(ctx: &Context, repository: RepositoryArgs) -> R
 /// The repository `--repo` names, or the one of the selected workspace or
 /// registered checkout.
 pub(super) async fn repository_forge(ctx: &Context, args: RepositoryArgs) -> Result<ForgeRepo> {
-    let (context, named) = select_repo_context(ctx, args.workspace, args.repo).await?;
+    let (context, named) = select_repo_context(ctx, args.repo).await?;
     let own = match context {
         ItemContext::Workspace(workspace) => workspace_forge(ctx, workspace).await?,
         ItemContext::Checkout(repository) => {
