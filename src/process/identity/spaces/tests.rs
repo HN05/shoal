@@ -1,3 +1,4 @@
+use super::super::{Evidence, Observed, owners::Owners};
 use super::*;
 use crate::test_support::{
     Adopted, Detached, copy_test_binary, isolated_command, run_until_stopped_in, runs_until_stopped,
@@ -216,28 +217,52 @@ async fn hooks_the_surveying_process_runs_are_not_found() {
     assert_eq!(listed(&found, &other.0), Some(false), "{found:?}");
 }
 
+/// A process the inventory lists with `evidence`, started by `parent`.
+fn listed_process(pid: u32, parent: u32, evidence: Evidence) -> (u32, Observed) {
+    let lineage = Lineage {
+        identity: Identity {
+            pid,
+            birth: format!("1:{pid}"),
+            unique: None,
+        },
+        unique: None,
+        parent: None,
+        parent_pid: parent,
+        adopted: false,
+    };
+    (pid, Observed { lineage, evidence })
+}
+
+/// The evidence of an environment carrying `marks`.
+fn carrying(marks: Marks) -> Evidence {
+    Evidence::Marked(marks)
+}
+
+/// A space tied to its processes by its identity alone.
+fn identified(id: &str) -> Space {
+    Space {
+        id: id.into(),
+        directories: Vec::new(),
+        programs: None,
+    }
+}
+
+/// The PIDs a survey of `inventory` with `tracked` finds for `space`.
+fn found_in(inventory: &Inventory, tracked: &[Identity], space: &Space) -> Vec<u32> {
+    Survey::of(inventory, tracked)
+        .untracked(space)
+        .iter()
+        .map(|process| process.identity.pid)
+        .collect()
+}
+
 /// A setuid program, such as an agent's `sudo -u`, runs as another user, so
 /// it is never found itself, but what it starts as this user still descends
 /// from the agent that started it.
 #[test]
 fn ancestry_passes_through_setuid_programs() {
-    use super::super::{Evidence, Inventory, Lineage, Marks, Observed, owners::Owners};
-    let process = |pid: u32, parent: u32, evidence| {
-        let lineage = Lineage {
-            identity: Identity {
-                pid,
-                birth: format!("1:{pid}"),
-                unique: None,
-            },
-            unique: None,
-            parent: None,
-            parent_pid: parent,
-            adopted: false,
-        };
-        (pid, Observed { lineage, evidence })
-    };
     let marked = || {
-        Evidence::Marked(Marks {
+        carrying(Marks {
             workspace: Some("workspace-id".into()),
             ..Marks::default()
         })
@@ -246,28 +271,43 @@ fn ancestry_passes_through_setuid_programs() {
     let owners = Owners::default();
     let inventory = Inventory {
         observed: HashMap::from([
-            process(agent, 1, marked()),
-            process(sudo, agent, Evidence::Elevated),
-            process(child, sudo, marked()),
+            listed_process(agent, 1, marked()),
+            listed_process(sudo, agent, Evidence::Elevated),
+            listed_process(child, sudo, marked()),
         ]),
         ..Inventory::new(&owners)
     };
-    let space = Space {
-        id: "workspace-id".into(),
-        directories: Vec::new(),
-        programs: None,
-    };
+    let space = identified("workspace-id");
     let tracked = inventory.observed[&agent].lineage.identity.clone();
 
-    let survey = Survey::of(&inventory, &[tracked]);
-    assert!(survey.untracked(&space).is_empty());
-
-    let survey = Survey::of(&inventory, &[]);
-    let found: Vec<u32> = survey
-        .untracked(&space)
-        .iter()
-        .map(|process| process.identity.pid)
-        .collect();
+    assert!(found_in(&inventory, &[tracked], &space).is_empty());
+    let found = found_in(&inventory, &[], &space);
     assert!(found.contains(&child), "{found:?}");
     assert!(!found.contains(&sudo), "{found:?}");
+}
+
+/// A process a chat started with a workspace's exported environment carries
+/// both identities, and belongs to the workspace alone.
+#[test]
+fn a_workspace_marker_outranks_the_chat_marker_it_was_started_under() {
+    let both = 1_000_000;
+    let owners = Owners::default();
+    let inventory = Inventory {
+        observed: HashMap::from([listed_process(
+            both,
+            1,
+            carrying(Marks {
+                workspace: Some("workspace-id".into()),
+                chat: Some("chat-id".into()),
+                ..Marks::default()
+            }),
+        )]),
+        ..Inventory::new(&owners)
+    };
+
+    assert_eq!(
+        found_in(&inventory, &[], &identified("workspace-id")),
+        [both]
+    );
+    assert!(found_in(&inventory, &[], &identified("chat-id")).is_empty());
 }

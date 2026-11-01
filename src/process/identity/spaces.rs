@@ -3,7 +3,7 @@
 //! tied to it with every process they started. A process a tracked one
 //! started, or one that started a tracked one, belongs to that one instead.
 use super::{
-    Identity, Inventory, Lineage, MAX_ANCESTRY, Marks, descends_from_detached, executable,
+    Identity, Inventory, Lineage, MAX_ANCESTRY, Marker, Marks, descends_from_detached, executable,
     inventory, owners, working_directory,
 };
 use anyhow::Result;
@@ -207,10 +207,11 @@ impl<'a> Survey<'a> {
         };
         let marked: HashSet<u32> = candidates()
             .filter(|pid| {
+                // A workspace's process a chat started is the workspace's alone.
                 self.marks.get(pid).is_some_and(|marks| {
-                    [&marks.workspace, &marks.chat]
+                    [Marker::Workspace, Marker::Chat]
                         .into_iter()
-                        .any(|id| id.as_deref() == Some(space.id.as_str()))
+                        .any(|marker| marks.get(marker) == Some(space.id.as_str()))
                 })
             })
             .collect();
