@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     client::{approvals::ApprovalRequest, demos::Running, output::outputs, questions::Question},
-    model::{ReviewMark, UntrackedWorktree, Workspace},
+    model::{CheckoutSync, ReviewMark, UntrackedWorktree, Workspace},
 };
 
 /// Something that needs the user.
@@ -36,6 +36,10 @@ pub enum Item {
     /// Automatic cleanup failing other than in a workspace, or stalled.
     Cleanup {
         error: String,
+    },
+    /// A repository whose default branch has not synced for a while.
+    SyncFailed {
+        sync: CheckoutSync,
     },
 }
 

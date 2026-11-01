@@ -13,6 +13,15 @@ fn demo_rows_round_trip_their_workspace_and_name() {
 }
 
 #[test]
+fn sync_failure_rows_round_trip_their_repository() {
+    let Row::SyncFailed(repository) = Row::parse(Row::SyncFailed("repo-id".into()).id()).unwrap()
+    else {
+        panic!("expected a sync failure row");
+    };
+    assert_eq!(repository, "repo-id");
+}
+
+#[test]
 fn untracked_rows_keep_paths_with_tabs_newlines_and_spaces() {
     for path in [
         "/repo/plain",

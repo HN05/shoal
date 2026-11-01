@@ -23,6 +23,7 @@ use crate::{
             create::CreateCommand,
             items::{ItemArgs, ItemsCommand, ViewArgs},
             lifecycle::LifecycleCommand,
+            repository::{RepoCommand, RepositoryCommand},
             service::{DaemonCommand, ServiceCommand},
             sessions::SessionsCommand,
             workspace::{WorkCommand, WorkspaceCommand},
@@ -230,6 +231,8 @@ enum Row {
     Untracked(PathBuf),
     /// Automatic cleanup failing other than in a workspace.
     Cleanup,
+    /// A repository whose default branch stopped syncing, by its ID.
+    SyncFailed(String),
     Workspace(String),
     /// A notification, by the name its workspace had, if any.
     Notification(String),
@@ -261,6 +264,7 @@ impl Row {
             },
             Item::Untracked { worktree } => Self::Untracked(worktree.path.clone()),
             Item::Cleanup { .. } => Self::Cleanup,
+            Item::SyncFailed { sync } => Self::SyncFailed(sync.repository_id.clone()),
         }
     }
 
@@ -282,6 +286,7 @@ impl Row {
             Self::Demo { workspace, name } => format!("demo:{workspace}:{name}"),
             Self::Untracked(path) => format!("untracked:{}", encode_path(path)),
             Self::Cleanup => "cleanup:".into(),
+            Self::SyncFailed(repository) => format!("sync-failed:{repository}"),
             Self::Workspace(workspace) => workspace.clone(),
             Self::Notification(name) => format!("notification:{name}"),
             Self::Add => ADD_ENTRY.into(),
@@ -303,6 +308,9 @@ impl Row {
         }
         if kind == "cleanup" {
             return Ok(Self::Cleanup);
+        }
+        if kind == "sync-failed" {
+            return Ok(Self::SyncFailed(rest.to_owned()));
         }
         let (workspace, detail) = rest.split_once(':').unwrap_or((rest, ""));
         let workspace = workspace.to_owned();
@@ -345,7 +353,7 @@ impl Row {
             | Self::Demo { workspace, .. }
             | Self::Workspace(workspace) => Some(workspace),
             Self::Notification(name) => (!name.is_empty()).then_some(name.as_str()),
-            Self::Untracked(_) | Self::Cleanup | Self::Add => None,
+            Self::Untracked(_) | Self::Cleanup | Self::SyncFailed(_) | Self::Add => None,
         }
     }
 }
@@ -659,6 +667,11 @@ async fn enter(ctx: &Context, row: Row) -> Result<Choice> {
         }),
         Row::Cleanup => Command::Service(ServiceCommand::Daemon {
             command: DaemonCommand::Status,
+        }),
+        Row::SyncFailed(repository) => Command::Repository(RepositoryCommand::Repo {
+            command: Some(RepoCommand::Sync {
+                repository: Some(repository),
+            }),
         }),
         Row::Workspace(workspace) => Command::Workspace(WorkspaceCommand::Cd {
             workspace: Some(workspace),

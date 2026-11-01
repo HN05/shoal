@@ -1,8 +1,9 @@
 //! `shoal inbox`: what needs the user now, each with its workspace: open
 //! questions, pending approvals, agents that need input, failed workspaces,
 //! work marked ready at its current commit, running demos, Git worktrees
-//! under Shoal's directories that no workspace owns, and automatic cleanup
-//! failing other than in a workspace.
+//! under Shoal's directories that no workspace owns, automatic cleanup
+//! failing other than in a workspace, and repositories whose default branch
+//! has stopped syncing.
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
@@ -22,8 +23,8 @@ use crate::{
         questions::{Listing, Question},
     },
     demos::Running,
-    model::{UntrackedWorktree, Workspace},
-    protocol::{ApprovalMethod, DemoMethod, QuestionMethod, WorkspaceMethod},
+    model::{CheckoutSync, UntrackedWorktree, Workspace},
+    protocol::{ApprovalMethod, DemoMethod, QuestionMethod, RepositoryMethod, WorkspaceMethod},
     state::WorkspaceState,
 };
 
@@ -117,6 +118,14 @@ impl Inbox {
                 let error = status.and_then(|status| status.cleanup_error);
                 items.extend(error.map(|error| Item::Cleanup { error }));
             }
+            let failing =
+                request::<Vec<CheckoutSync>>(&ctx.paths, RepositoryMethod::FailingSyncs).await?;
+            items.extend(
+                failing
+                    .into_iter()
+                    .filter(|sync| filter.keeps_detached(&sync.repository_id))
+                    .map(|sync| Item::SyncFailed { sync }),
+            );
         }
         Ok(Self { items, workspaces })
     }
@@ -227,7 +236,7 @@ impl Item {
             | Self::Failed { workspace }
             | Self::Ready { workspace, .. } => &workspace.id,
             Self::Demo { demo } => &demo.workspace_id,
-            Self::Untracked { .. } | Self::Cleanup { .. } => "",
+            Self::Untracked { .. } | Self::Cleanup { .. } | Self::SyncFailed { .. } => "",
         }
     }
 
@@ -237,6 +246,7 @@ impl Item {
         match self {
             Self::Approval { request } => request.repository_id.as_deref(),
             Self::Untracked { worktree } => Some(&worktree.repository_id),
+            Self::SyncFailed { sync } => Some(&sync.repository_id),
             _ => None,
         }
     }
@@ -256,6 +266,7 @@ impl Item {
                 .and_then(|name| name.to_str())
                 .unwrap_or_default(),
             Self::Cleanup { .. } => "",
+            Self::SyncFailed { .. } => "",
         }
     }
 
@@ -269,6 +280,7 @@ impl Item {
             Self::Demo { .. } => ("demo", Style::Success),
             Self::Untracked { .. } => ("untracked", Style::Warning),
             Self::Cleanup { .. } => ("cleanup", Style::Error),
+            Self::SyncFailed { .. } => ("sync failed", Style::Warning),
         };
         (label.into(), Some(style))
     }
@@ -298,6 +310,12 @@ impl Item {
             Self::Demo { demo } => demo.launch.name.clone(),
             Self::Untracked { worktree } => home_relative(&worktree.path),
             Self::Cleanup { error } => error.clone(),
+            Self::SyncFailed { sync } => sync
+                .error
+                .as_deref()
+                .and_then(|error| error.lines().next())
+                .unwrap_or_default()
+                .to_owned(),
         }
     }
 
@@ -308,6 +326,7 @@ impl Item {
                 .map(|recommendation| format!("recommends {recommendation}"))
                 .unwrap_or_default(),
             Self::Untracked { .. } => "adopt it with shoal work adopt".to_owned(),
+            Self::SyncFailed { .. } => "retry with shoal repo sync".to_owned(),
             _ => String::new(),
         }
     }

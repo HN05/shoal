@@ -706,19 +706,20 @@ pending approval requests that no coordinating agent decides, including issue
 agent needs input, failed
 workspaces, [ready marks](#ready-for-review) at the current HEAD, one row per
 marked item, running [demos](#demos), Git worktrees under a repository's
-Shoal directory that no workspace owns, and automatic cleanup failing other
-than in a workspace. There Enter answers a question, approves or denies a request after
+Shoal directory that no workspace owns, automatic cleanup failing other than in
+a workspace, and repositories whose default branch has failed to
+[sync](#repositories) for 30 minutes. There Enter answers a question, approves or denies a request after
 asking which, refusing one that replaced the request listed, attaches to the agent that needs input, shows the status of a failed
 workspace, and shows a ready PR or issue with `shoal view` (`shoal status` for a
 mark on the workspace itself), opens a demo, adopts an untracked worktree
-with [`shoal work adopt`](#adopting-a-worktree), and shows `shoal daemon status`
-for failing cleanup; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
+with [`shoal work adopt`](#adopting-a-worktree), shows `shoal daemon status`
+for failing cleanup, and retries a failed sync with `shoal repo sync`; Ctrl-T, Ctrl-O, Ctrl-F and Ctrl-V act on the row's
 workspace and Ctrl-A adds one. `shoal inbox --print`, like `--repo <repository>`,
 `--json` or output that is not a terminal, prints it; `--json` gives each item's
 `kind` (`question`, `approval`, `needs_input`, `failed`, `ready`, `demo`,
-`untracked` or `cleanup`) with its `question`, `request`, `workspace`, `demo`,
-`worktree` (`repository_id` and `path`) or `error`, and a ready item's `mark`. A workspace
-process gets only its own items, never untracked worktrees or failing cleanup, printed, and none after clearing its scope
+`untracked`, `cleanup` or `sync_failed`) with its `question`, `request`, `workspace`, `demo`,
+`worktree` (`repository_id` and `path`), `error` or `sync`, and a ready item's `mark`. A workspace
+process gets only its own items, never untracked worktrees, failing cleanup or failing syncs, printed, and none after clearing its scope
 token.
 Bare `shoal repo` opens the same kind of list over registered repositories
 (without a terminal it prints `repo` help): Enter adds a workspace, Ctrl-A
@@ -768,7 +769,9 @@ conflicts, each CI check's result, the CI runs on an open PR's head that
 reviewer's latest approval or change request. A failed lookup reports its error
 on that item without failing the command. When a step
 of the daemon's automatic cleanup fails in the workspace, status says so in
-`cleanup_error`. Status also
+`cleanup_error`. `Last sync` shows when the repository's
+default branch last [synced](#repositories) and why the syncs since then failed,
+in `sync` (`synced_at`, `failing_since` and `error`). Status also
 names the first condition that keeps the workspace from automatic cleanup, holds,
 open questions, a pending PR proposal, queued agent launches and assignment state before commands, leases and Git state, or the idle delay
 when nothing does, in `cleanup_reason`. `--json`
@@ -2250,7 +2253,9 @@ remote: when it starts, every minute, and right after `shoal pr merge` or a
 watch sees a linked PR merge, it fetches the default branch's upstream and default remotes and fast-forwards the local default branch, moving
 only the ref when the checkout is on another branch. An ahead branch stays as it
 is; a missing upstream, failed fetch, divergence, or a dirty or managed checkout
-of the default branch leaves it unchanged until fixed. `shoal repo sync [repository]` syncs at once and
+of the default branch leaves it unchanged until fixed. Workspace status shows the
+last sync and its error; once syncs have failed for 30 minutes of the machine
+being awake, the repository joins the inbox and one `sync_failed` alert tells you. `shoal repo sync [repository]` syncs at once and
 reports the result or the error. Syncing never pushes or moves workspace branches.
 
 `repo setup [repository] [--local [--here] [--name NAME]] [--agent NAME] [-- ARGS]`

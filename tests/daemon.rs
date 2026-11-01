@@ -1121,6 +1121,11 @@ fn inbox_reads_untracked_worktrees_over_several_frames_and_failing_cleanup() {
                     });
                     let reply = json!({"type": "status", "data": status});
                     support::fake_daemon::write_reply(&stream, &request, reply);
+                    continue;
+                }
+                "failing_syncs" => {
+                    let reply = json!({"type": "failing_syncs", "data": []});
+                    support::fake_daemon::write_reply(&stream, &request, reply);
                     break;
                 }
                 method => panic!("unexpected request {method}"),

@@ -58,6 +58,7 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
             }
         }
     }
+    render_sync(status, palette);
     if let Some(error) = &workspace.error {
         outln!("Error:         {}", palette.paint(Style::Error, error));
     }
@@ -70,6 +71,25 @@ fn render_workspace(status: &WorkspaceStatus, palette: Palette) {
                 .as_deref()
                 .map_or(String::new(), |r| format!(" ({r})"))
         );
+    }
+}
+
+/// When the repository's default branch last synced with its remote, and
+/// why the syncs since then failed.
+fn render_sync(status: &WorkspaceStatus, palette: Palette) {
+    let Some(sync) = &status.sync else {
+        return;
+    };
+    let now = crate::time::unix_seconds() as i64;
+    let at = |unix: u64| crate::time::local_ago(unix as i64, now);
+    outln!(
+        "Last sync:     {}",
+        sync.synced_at.map_or_else(|| "none".to_owned(), at)
+    );
+    if let (Some(error), Some(since)) = (&sync.error, sync.failing_since) {
+        let error = error.lines().next().unwrap_or_default();
+        let failing = format!("failing since {}: {error}", at(since));
+        outln!("  {}", palette.paint(Style::Warning, &failing));
     }
 }
 
