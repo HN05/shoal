@@ -524,34 +524,46 @@ async fn repository_entries(
 ) -> Entries {
     let shared = shared_names(&repos);
     let sources = distinguishing_sources(&repos, &shared, read).await;
+    let labels = distinct_labels(&repos, &sources, &shared);
+    repos.into_iter().map(|repo| repo.id).zip(labels).collect()
+}
+
+/// Each repository's [`name_label`], followed by its source when that still
+/// leaves two alike, as for checkouts from the same host.
+fn distinct_labels(
+    repos: &[Repository],
+    sources: &[String],
+    shared: &HashSet<&str>,
+) -> Vec<String> {
     let labels: Vec<_> = repos
         .iter()
-        .zip(&sources)
-        .map(|(repo, source)| {
-            let name = crate::repository::name(repo);
-            if !shared.contains(name) {
-                return name.to_owned();
-            }
-            match crate::repository::host(source) {
-                Some(host) => format!("{name} ({host})"),
-                None => format!("{name} (local)"),
-            }
-        })
-        .collect();
-    repos
-        .into_iter()
         .zip(sources)
-        .zip(&labels)
-        .map(|((repo, source), label)| {
-            // Same host or multiple local checkouts can still share a name.
-            let label = if labels.iter().filter(|other| *other == label).count() > 1 {
+        .map(|(repo, source)| name_label(repo, source, shared))
+        .collect();
+    labels
+        .iter()
+        .zip(sources)
+        .map(|(label, source)| {
+            if labels.iter().filter(|other| *other == label).count() > 1 {
                 format!("{label}  {source}")
             } else {
                 label.clone()
-            };
-            (repo.id, label)
+            }
         })
         .collect()
+}
+
+/// The repository's name, with the host of `source`, or `local`, when its
+/// name is `shared`.
+fn name_label(repo: &Repository, source: &str, shared: &HashSet<&str>) -> String {
+    let name = crate::repository::name(repo);
+    if !shared.contains(name) {
+        return name.to_owned();
+    }
+    match crate::repository::host(source) {
+        Some(host) => format!("{name} ({host})"),
+        None => format!("{name} (local)"),
+    }
 }
 
 /// The names more than one of `repos` has.
