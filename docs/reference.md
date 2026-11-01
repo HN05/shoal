@@ -1483,7 +1483,7 @@ T3's app must already be running.
 
 Happy sessions are an optional integration: off until `terminal.happy.enabled = true` in
 global or repository config, and absent from builds without the default `happy`
-Cargo feature (`cargo build --no-default-features`), which also drops its
+Cargo feature (`cargo build --no-default-features --features cli`), which also drops its
 encryption dependencies. While off, pickers and completion leave Happy out and
 launches are refused before any work starts.
 
