@@ -1108,6 +1108,7 @@ async fn an_unreadable_owner_marker_keeps_the_upgrade_mark() {
 /// attached files, undoing the later migrations that cannot run twice.
 const BEFORE_ATTACHED_FILES: &str = "DROP TABLE workspace_files;
     DROP TABLE ended_chats;
+    ALTER TABLE chat_messages DROP COLUMN attachments;
     ALTER TABLE workspace_holds DROP COLUMN placed_by;
     ALTER TABLE executions DROP COLUMN agent_execution;
     ALTER TABLE executions DROP COLUMN asks_in_chat;
