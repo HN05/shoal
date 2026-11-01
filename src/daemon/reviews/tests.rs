@@ -915,6 +915,13 @@ async fn a_run_that_cannot_be_removed_fails_its_review_instead_of_starting_over(
     // Without write access to the run, its checkout cannot go.
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o500)).unwrap();
     manager.recover_reviews().await.unwrap();
+    let workspace = &fixture.workspace.id;
+    let delivered = manager.agent_messages(workspace).await.unwrap().len();
+    assert_eq!(delivered, 1);
+    // A later start that still cannot remove it delivers the review once.
+    manager.recover_reviews().await.unwrap();
+    let messages = manager.agent_messages(workspace).await.unwrap();
+    assert_eq!(messages.len(), delivered);
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700)).unwrap();
     let review = manager.review(stuck).await.unwrap();
     assert_eq!(review.state, ReviewState::Failed, "{review:?}");

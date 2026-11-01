@@ -63,7 +63,7 @@ impl Target {
                     LinkTarget::Pr => input,
                     LinkTarget::Issue => {
                         bail!(
-                            "shoal review takes a workspace or a PR; settle an issue's plan with shoal plan {input}"
+                            "shoal review run takes a workspace or a PR; settle an issue's plan with shoal plan {input}"
                         )
                     }
                     LinkTarget::Run | LinkTarget::Branch(_) => bail!("expected a PR URL"),
@@ -126,7 +126,7 @@ pub(super) async fn start(
                 ItemKind::Pr,
                 Some(&input),
                 repository,
-                "shoal review <url> --repo <repository>",
+                "shoal review run <url> --repo <repository>",
             )
             .await?;
             check_reviewer(ctx, &repo, &reviewer, post, &model).await?;

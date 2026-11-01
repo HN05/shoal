@@ -430,21 +430,24 @@ impl Manager {
         for id in &kept {
             self.hold_unreconciled_run(*id).await;
         }
-        let failed = kept.clone();
         let now = now();
-        let requeued = self
+        let (failed, requeued) = self
             .store
             .run(move |db| {
-                for id in &failed {
-                    store::fail(db, *id, None, FailureReason::ExecutionFailed, now)?;
+                let mut failed = Vec::new();
+                for id in &kept {
+                    if store::fail(db, *id, None, FailureReason::ExecutionFailed, now)? {
+                        failed.push(*id);
+                    }
                 }
-                store::requeue_running(db, &failed)
+                Ok((failed, store::requeue_running(db, &kept)?))
             })
             .await?;
         if requeued > 0 {
             log!("queued {requeued} interrupted reviews again");
         }
-        for id in kept {
+        // A review that had ended was delivered then.
+        for id in failed {
             self.deliver_review(id).await;
         }
         unreconciled.map(drop)
