@@ -3,7 +3,7 @@
 //! queue starts agents again.
 use std::sync::Arc;
 
-use anyhow::{Result, ensure};
+use anyhow::Result;
 use rusqlite::{Connection, params};
 use tokio::task::JoinHandle;
 
@@ -91,7 +91,8 @@ fn claim_automatic(db: &mut Connection) -> Result<Vec<Chat>> {
 }
 
 /// Run `shoal resume` for `chat` detached from the daemon, as it would run
-/// from where the chat ran, and wait for it to open the chat's place.
+/// from where the chat ran, and wait for it to open the chat's place. Its
+/// own failures reach the user from it, so only one to run it is returned.
 #[cfg(not(test))]
 async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
     use anyhow::Context as _;
@@ -118,17 +119,13 @@ async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
         });
     }
     let output = command.output().await.context("run shoal resume")?;
-    // Its error is the last line it writes, after any warnings.
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    ensure!(
-        output.status.success(),
-        "{}",
-        stderr
-            .trim()
-            .lines()
-            .last()
-            .unwrap_or("shoal resume failed")
-    );
+    if !output.status.success() {
+        log!(
+            "chat {}: shoal resume failed: {}",
+            chat.id,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
     Ok(())
 }
 
@@ -136,7 +133,7 @@ async fn resume(paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
 #[cfg(test)]
 async fn resume(_paths: &crate::paths::Paths, chat: &Chat) -> Result<()> {
     tests::RESUMED.lock().unwrap().push(chat.id.clone());
-    ensure!(
+    anyhow::ensure!(
         !tests::UNRESUMABLE.lock().unwrap().contains(&chat.name),
         "no terminal host"
     );

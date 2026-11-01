@@ -71,8 +71,7 @@ pub async fn resume(
         let [chat] = chats.as_slice() else {
             anyhow::bail!("--focus restores one chat");
         };
-        let restored = restore(ctx, chat, ChatPlace::Here).await;
-        return match client::keep_failed_restore(&ctx.paths, Some(&chat.id), restored).await? {
+        return match restore(ctx, chat, ChatPlace::Here).await? {
             Started::Exited(code) => Ok(code),
             Started::Background(_) => Ok(0),
         };
@@ -143,8 +142,16 @@ fn restored(chat: &Chat, started: Started) -> RestoredChat {
 }
 
 /// Start the saved `chat` again at `place`, in its repository's checkout,
-/// under its own name and agent, continuing the session it reported.
+/// under its own name and agent, continuing the session it reported. A
+/// failure here, such as a session this process starts for an app, reaches
+/// the user through the daemon, as one in the place it opens does.
 async fn restore(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
+    let started = start_saved(ctx, chat, place).await;
+    client::keep_failed_restore(&ctx.paths, Some(&chat.id), started).await
+}
+
+/// [`restore`] without the report of its failure.
+async fn start_saved(ctx: &Context, chat: &Chat, place: ChatPlace) -> Result<Started> {
     let repo = client::repositories(&ctx.paths)
         .await?
         .into_iter()

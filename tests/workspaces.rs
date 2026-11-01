@@ -7359,6 +7359,31 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         "{listed:?}"
     );
 
+    // A restore whose agent cannot run once it took the chat over leaves the
+    // chat saved, with its files, and tells the user.
+    fs::write(fixture.repo.join("agent.txt"), "not a program\n").unwrap();
+    fs::write(
+        fixture.repo.join(".shoal.toml"),
+        "[agents.claude]\ncommand = ['./agent.txt']\n",
+    )
+    .unwrap();
+    let (output, transcript) =
+        fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
+    assert!(!output.status.success(), "{output:?}\n{transcript}");
+    let saved = fixture.ok(&["work", "--chats"]);
+    assert_eq!(saved[0]["restore"], "resume", "{saved}");
+    assert!(tmp_dir.join("notes").exists());
+    let failures = fixture
+        .ok(&["alerts", "--all"])
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|alert| alert["kind"] == "chat_restore_failed")
+        .count();
+    assert_eq!(failures, 2);
+    fs::remove_file(fixture.repo.join(".shoal.toml")).unwrap();
+    fs::remove_file(fixture.repo.join("agent.txt")).unwrap();
+
     let (output, transcript) =
         fixture.interactive_command(fixture.command().args(["resume", "talk", "--focus"]), "");
     assert!(output.status.success(), "{output:?}\n{transcript}");
@@ -7375,7 +7400,15 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
     assert!(!tmp_dir.exists());
     assert_eq!(
         chat_kinds(&fixture),
-        ["chat_started", "chat_saved", "chat_restored", "chat_ended"]
+        [
+            "chat_started",
+            "chat_saved",
+            // The restore whose agent could not run.
+            "chat_restored",
+            "chat_saved",
+            "chat_restored",
+            "chat_ended"
+        ]
     );
 }
 
