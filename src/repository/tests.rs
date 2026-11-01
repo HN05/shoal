@@ -240,6 +240,17 @@ async fn an_item_url_is_refused_as_no_repository_and_names_its_repository() {
     // Registration offers neither, though both are remote URLs.
     assert!(!registrable("https://example.test/team/other/pulls/3"));
     assert!(registrable("https://example.test/team/other"));
+    // A repository nested below a group that shares a branch route's name
+    // is still a repository.
+    let nested = "https://gitlab.com/team/subgroup/tree/project.git";
+    assert!(registrable(nested));
+    assert!(item_repository("/work/issues/3").is_none());
+    assert!(
+        refusal(nested)
+            .await
+            .to_string()
+            .starts_with("repository is not registered:")
+    );
     // Anything else is still an unregistered repository.
     assert_eq!(
         refusal("missing").await.to_string(),

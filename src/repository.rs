@@ -6,7 +6,8 @@ use std::path::Path;
 use crate::{git, model::Repository};
 
 use crate::forge::{
-    items::link::{Link, LinkTarget},
+    ForgeRepo, IssueInput,
+    items::link::{self, LinkKind},
     repo::remote_url::{RemoteUrl, source_name},
 };
 
@@ -254,8 +255,8 @@ impl std::fmt::Display for NotRegistered {
     }
 }
 
-/// The repository of an issue, PR, CI run or branch URL given where a
-/// repository was expected.
+/// The repository of an issue, PR or CI run URL given where a repository was
+/// expected.
 #[derive(Debug)]
 struct ItemOf {
     /// What the URL names, as in `an issue URL`.
@@ -269,16 +270,15 @@ struct ItemOf {
 impl ItemOf {
     /// The repository of the item `value` is the URL of, if it is one.
     async fn find(repositories: &[Repository], value: &str) -> Result<Option<Self>> {
-        let Ok(link) = Link::parse(value) else {
+        let Some((kind, repository)) = item_repository(value) else {
             return Ok(None);
         };
-        let kind = match link.target {
-            LinkTarget::Issue => "an issue URL",
-            LinkTarget::Pr => "a PR URL",
-            LinkTarget::Run => "a CI run URL",
-            LinkTarget::Branch(_) => "a branch URL",
+        let kind = match kind {
+            LinkKind::Issue => "an issue URL",
+            LinkKind::Pr => "a PR URL",
+            LinkKind::Ci => "a CI run URL",
         };
-        let repository = link.repository.repository_url();
+        let repository = repository.repository_url();
         let registered = find_by_identity(repositories, &repository).await?;
         Ok(Some(Self {
             kind,
@@ -307,7 +307,19 @@ impl std::error::Error for NotRegistered {}
 /// item's URL is not.
 pub fn registrable(selector: &str) -> bool {
     Path::new(selector).exists()
-        || RemoteUrl::parse(selector).is_some() && Link::parse(selector).is_err()
+        || RemoteUrl::parse(selector).is_some() && item_repository(selector).is_none()
+}
+
+/// The kind and repository of the issue, PR or CI run `url` names, if it
+/// names one. Each ends in a number, so no repository URL is taken for one,
+/// as a GitLab group named `tree` would be taken for a branch.
+fn item_repository(url: &str) -> Option<(LinkKind, ForgeRepo)> {
+    if IssueInput::parse(url) != IssueInput::Url {
+        return None;
+    }
+    [LinkKind::Issue, LinkKind::Pr, LinkKind::Ci]
+        .into_iter()
+        .find_map(|kind| Some((kind, link::item(kind, url).ok()?.0)))
 }
 
 pub async fn find_by_identity<'a>(
