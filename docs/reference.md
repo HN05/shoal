@@ -144,7 +144,9 @@ How the daemon exits decides what becomes of tracked agents and commands:
   incompatible daemon, an update, and a crash leave them running.
 - `shoal daemon stop` stops them as `shoal stop --all` does, so agents stay down
   until `shoal resume`, saves and stops running [chats](#chats) for
-  `shoal resume` too, then stops the daemon.
+  `shoal resume` too, then stops the daemon. It leaves the
+  [agent queue](#agent-queue) as it is, launches in existing workspaces
+  included, for the next daemon to start.
 - SIGTERM or SIGINT, as a shutdown, a logout or a service manager's stop sends,
   stops them as the daemon does before a system shutdown: each wrapper saves its
   agent first, and restores that need no user wait in the agent queue; running
@@ -325,8 +327,13 @@ no agent slot, keeps nothing from cleanup and nothing restores on its own. To
 take agents down briefly, use `shoal restart` instead. Commands started
 with `run` save their arguments, which `shoal resume` reports and never
 reruns; arguments that are not UTF-8 are not saved. Setup, landing and other internal commands save nothing.
+Agents waiting in the [agent queue](#agent-queue) to start in a stopped workspace, such as
+a `split --agent` launch waiting for a slot, have no session to save, so the stop removes them
+from the queue and reports them in `cancelled`; `shoal resume` does not bring them back. One
+already starting is left to its agent. Naming a queued agent of a new workspace instead of a
+workspace removes it from the queue, as `shoal rm` does.
 Several workspaces, or `--all` for every ready or failed workspace with a running
-execution or a pending restore, stop in parallel, reporting each failure without keeping the others running.
+execution, a pending restore or a queued agent waiting to start in it, stop in parallel, reporting each failure without keeping the others running.
 A stop whose wrappers do not finish in time fails naming each execution it
 waited on and its step: not started, still running, or verifying after exit.
 An agent whose wrapper or agent process receives a hangup or terminate signal, as
