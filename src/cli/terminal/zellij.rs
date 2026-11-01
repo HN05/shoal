@@ -9,7 +9,7 @@
 //! output reaches the user as Zellij redraws it.
 use std::{ffi::OsString, path::Path};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, ensure};
 use futures_util::future::BoxFuture;
 
 use super::{
@@ -455,19 +455,28 @@ async fn await_prompt(server: &Server, pane: PaneRef<'_>, instance: &str) {
 /// Bring the pane at `place` before the user: current in its tab and
 /// session, then shown by this terminal's Zellij client, switching it to
 /// the pane's session, or by a client this terminal attaches from outside
-/// Zellij.
+/// Zellij. A client switches only between sessions of one socket
+/// directory, so a pane in another is refused inside Zellij.
 async fn reveal(place: &Origin) -> Result<()> {
     let (server, pane) = reach(place).await?;
     let open = server
         .pane(pane, Some(instance_of(place)?))
         .await?
         .context("the Zellij pane is gone")?;
+    let Some(here) = var(SESSION_VAR) else {
+        server.select(pane.session, &open).await?;
+        return server.attach(pane.session).await;
+    };
+    let caller = Server::here().reaching(&here).await?;
+    ensure!(
+        caller.same_sessions(&server),
+        "the Zellij pane runs in another socket directory; attach from outside Zellij"
+    );
     server.select(pane.session, &open).await?;
-    match var(SESSION_VAR) {
-        None => server.attach(pane.session).await,
-        Some(here) if here == pane.session => Ok(()),
-        Some(here) => server.switch_client(&here, pane.session, &open.id).await,
+    if here == pane.session {
+        return Ok(());
     }
+    caller.switch_client(&here, pane.session, &open.id).await
 }
 
 /// How many clients attached to `session` show its tab `tab`.

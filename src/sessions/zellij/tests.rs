@@ -113,6 +113,17 @@ fn session_names_leave_room_for_the_socket_path() {
 }
 
 #[test]
+fn sessions_are_the_same_only_in_one_socket_directory() {
+    let at = |dir: Option<&str>| Zellij {
+        socket_dir: dir.map(PathBuf::from),
+    };
+    assert!(at(Some("/tmp/a")).same_sessions(&at(Some("/tmp/a"))));
+    assert!(!at(Some("/tmp/a")).same_sessions(&at(Some("/tmp/b"))));
+    assert!(!at(Some("/tmp/a")).same_sessions(&at(None)));
+    assert!(at(None).same_sessions(&at(None)));
+}
+
+#[test]
 fn screens_keep_their_last_lines() {
     assert_eq!(last_lines("one\ntwo\nthree\n\n\n", 2), "two\nthree\n");
     assert_eq!(last_lines("one\n", 5), "one\n");

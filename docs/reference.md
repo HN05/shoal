@@ -1297,7 +1297,7 @@ for `zellij`. Shoal needs Zellij 0.45 or later.
 `shoal attach` and `shoal status` find a workspace's or chat's pane by the place
 its agent was recorded in, named after its tab: attach selects the tab and pane
 and switches your Zellij client to its session, or attaches a client from
-outside Zellij. A tab is renamed only while the pane Shoal opened is alone in
+outside Zellij; a pane in another socket directory is refused inside Zellij. A tab is renamed only while the pane Shoal opened is alone in
 it. Shoal closes only the panes it created, as it closes Rex blocks, and never
 their tab's other panes or plugins, other tabs or sessions; it closes a tab
 with the last pane there, and ends a session with the last pane there, as

@@ -180,6 +180,15 @@ impl Zellij {
         self.socket_dir.as_deref()
     }
 
+    /// Whether `other` names the sessions of this socket directory, as
+    /// [`Zellij::reaching`] resolves both.
+    pub fn same_sessions(&self, other: &Self) -> bool {
+        match (&self.socket_dir, &other.socket_dir) {
+            (Some(mine), Some(theirs)) => same_dir(mine, theirs),
+            (mine, theirs) => mine == theirs,
+        }
+    }
+
     /// A `zellij` command for these sessions, without the variables that
     /// name the caller's own pane. An empty socket directory, as a start
     /// queued from no terminal carries, is unset.
