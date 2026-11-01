@@ -111,7 +111,7 @@ impl Manager {
     }
 
     async fn workspace_layers(&self, workspace: &Workspace) -> Result<ConfigLayers> {
-        let file = config::repo::load(&workspace.path)?;
+        let file = load_worktree_file(&workspace.path).await?;
         self.config_layers(&workspace.repository_id, file).await
     }
 
@@ -121,12 +121,12 @@ impl Manager {
         let (repository_id, worktree_file) = match target {
             ConfigTarget::Workspace(selector) => {
                 let workspace = self.workspace(&selector).await?;
-                let file = config::repo::load(&workspace.path)?;
+                let file = load_worktree_file(&workspace.path).await?;
                 (workspace.repository_id, file)
             }
             ConfigTarget::Repository(selector) => {
                 let repo = self.repository(&selector).await?;
-                let file = config::repo::load(&repo.path)?;
+                let file = load_worktree_file(&repo.path).await?;
                 (repo.id, file)
             }
         };
@@ -150,7 +150,8 @@ impl Manager {
     /// files are never local settings.
     async fn local_config_occupant(&self, directory: &std::path::Path) -> Result<Option<PathBuf>> {
         let local = directory.join(config::repo::LOCAL_DIR);
-        if std::fs::symlink_metadata(local.join(".git")).is_ok() {
+        let git = local.join(".git");
+        if off_runtime(move || Ok(std::fs::symlink_metadata(git).is_ok())).await? {
             return Ok(Some(local));
         }
         self.store
@@ -169,7 +170,8 @@ impl Manager {
         // which therefore has nothing to hold, and edits refuse.
         let (local_config, local_template_files) = match &repository.workspaces_dir {
             Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
-                config::repo::load_local(directory)?
+                let directory = directory.clone();
+                off_runtime(move || config::repo::load_local(&directory)).await?
             }
             _ => Default::default(),
         };
@@ -281,6 +283,22 @@ impl Manager {
             tmp_dir.as_deref(),
         ))
     }
+}
+
+/// The config file and template files of the checkout or worktree at `path`.
+async fn load_worktree_file(
+    path: &std::path::Path,
+) -> Result<(RepoConfig, config::templates::Files)> {
+    let path = path.to_owned();
+    off_runtime(move || config::repo::load(&path)).await
+}
+
+/// Run the blocking file `read` on the blocking pool, so a volume whose
+/// access stalls holds no runtime thread and a caller's time limit applies.
+async fn off_runtime<T: Send + 'static>(
+    read: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
+    tokio::task::spawn_blocking(read).await?
 }
 
 #[cfg(test)]
