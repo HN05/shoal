@@ -71,7 +71,8 @@ pub async fn resume(
         let [chat] = chats.as_slice() else {
             anyhow::bail!("--focus restores one chat");
         };
-        return match restore(ctx, chat, ChatPlace::Here).await? {
+        let restored = restore(ctx, chat, ChatPlace::Here).await;
+        return match client::keep_failed_restore(&ctx.paths, Some(&chat.id), restored).await? {
             Started::Exited(code) => Ok(code),
             Started::Background(_) => Ok(0),
         };

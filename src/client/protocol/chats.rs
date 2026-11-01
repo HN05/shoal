@@ -30,9 +30,9 @@ pub enum ChatMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         hands_over: bool,
     },
-    /// Return the chat `chat`, restored as process `pid`, to waiting for
-    /// `shoal resume`, as when its restore failed with `error` before its
-    /// agent ran.
+    /// Process `pid` could not restore the saved chat `chat`, failing with
+    /// `error`; the chat waits for `shoal resume` again if `pid` had taken
+    /// it over.
     SaveChat {
         chat: String,
         pid: u32,

@@ -91,13 +91,7 @@ impl Manager {
     ) -> Result<Chat> {
         let _saving = self.chat_saves.lock().await;
         let saved = self.saved_chat(id).await?;
-        let restored = self.run_again(&saved, pid, origin, hands_over).await;
-        // A restore in a background place has nobody watching it.
-        if let Err(error) = &restored {
-            self.notify_restore_failed(&saved, &format!("{error:#}"))
-                .await;
-        }
-        restored
+        self.run_again(&saved, pid, origin, hands_over).await
     }
 
     /// [`Self::restore_chat`] for the `saved` chat, once a save under way
@@ -156,10 +150,10 @@ impl Manager {
         }
     }
 
-    /// Return the chat `id`, restored as process `pid`, to waiting for
-    /// `shoal resume`, as when its restore failed with `error` before its
-    /// agent ran, so the end of that process does not end it, and tell the
-    /// user, who may not see where it ran.
+    /// Record that process `pid` could not restore the chat `id`, failing
+    /// with `error`: the chat waits for `shoal resume` again, if that
+    /// process had taken it over, so the end of the process does not end
+    /// it, and the user, who may not see where it ran, learns why.
     pub async fn return_to_saved(&self, id: &str, pid: u32, error: &str) -> Result<()> {
         let chat = id.to_owned();
         let saved = self.store.run(move |db| resave(db, &chat, pid)).await?;
@@ -249,19 +243,23 @@ fn unique_id(process: &Identity) -> Result<Option<String>> {
         .transpose()?)
 }
 
-/// Mark the running chat `id` of process `pid` saved for `shoal resume`,
-/// returning it.
+/// Mark the chat `id` saved for `shoal resume` while it runs as process
+/// `pid`, and refuse it once it runs as another, returning it.
 fn resave(db: &mut Connection, id: &str, pid: u32) -> Result<Chat> {
     let tx = db.transaction()?;
-    let saved = tx.execute(
+    tx.execute(
         "UPDATE chats SET restore=?3 WHERE id=?1 AND pid=?2 AND restore IS NULL",
         params![id, pid, ChatRestore::Resume],
     )?;
-    ensure!(saved == 1, "chat {id} does not run as process {pid}");
     let chat = recorded(&tx)?
         .into_iter()
         .find(|chat| chat.id == id)
         .context("the chat ended")?;
+    ensure!(
+        chat.restore.is_some(),
+        "chat {id} runs as process {}",
+        chat.pid
+    );
     tx.commit()?;
     Ok(chat)
 }

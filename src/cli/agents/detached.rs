@@ -409,22 +409,17 @@ pub(super) async fn start_chat(
     let (prompt, args) = chat_input(app, &ctx.paths.home, &record, chat);
     let args = [model_args, args].concat();
     let files = ctx.paths.chat_files(&record);
+    let session = Session {
+        paths: &ctx.paths,
+        directory: &repository.path,
+        branch: None,
+        files: &files,
+        prompt,
+        args,
+    };
+    let prepared = with_effort(app.prepare(session).await?, app, settings, model);
     let log = files.with_extension(crate::paths::SESSION_LOG);
-    let handed_over = async {
-        let session = Session {
-            paths: &ctx.paths,
-            directory: &repository.path,
-            branch: None,
-            files: &files,
-            prompt,
-            args,
-        };
-        let prepared = with_effort(app.prepare(session).await?, app, settings, model);
-        hand_to_session(ctx, app, repository, &record, &log, prepared).await
-    }
-    .await;
-    let (record, prepared) =
-        client::keep_failed_restore(&ctx.paths, restores.as_deref(), handed_over).await?;
+    let (record, prepared) = hand_to_session(ctx, app, repository, &record, &log, prepared).await?;
     let delivered = prepared.deliver().await;
     report_chat(ctx, app, repository, &record, &log, delivered)?;
     Ok(0)

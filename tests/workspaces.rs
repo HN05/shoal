@@ -7324,6 +7324,29 @@ fn a_chat_daemon_stop_saved_resumes_under_its_name_and_session() {
         .output()
         .unwrap();
     assert!(!output.status.success(), "{output:?}");
+    // A restore that fails where nobody watches, before it takes the chat
+    // over, tells the user.
+    let output = fixture.run(&[
+        "chat",
+        "no-such-repository",
+        "--here",
+        "--name",
+        "talk",
+        "--agent",
+        "claude",
+        "--restore",
+        id,
+    ]);
+    assert!(!output.status.success(), "{output:?}");
+    let alerts = fixture.ok(&["alerts", "--all"]);
+    assert!(
+        alerts
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|alert| alert["kind"] == "chat_restore_failed"),
+        "{alerts}"
+    );
 
     let saved = fixture.ok(&["work", "--chats"]);
     assert_eq!(saved[0]["id"], id, "{saved}");

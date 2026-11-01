@@ -190,15 +190,6 @@ async fn a_saved_chat_whose_process_runs_on_is_not_restored() {
     );
     let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
     assert_eq!(saved.pid, chat.pid);
-    // A restore in a background place has nobody watching it.
-    let notifications = manager.notifications(true, 10).await.unwrap();
-    assert!(
-        notifications.iter().any(|notification| {
-            notification.kind == crate::daemon::notifications::NotificationKind::ChatRestoreFailed
-                && notification.message.contains("still has processes running")
-        }),
-        "{notifications:?}"
-    );
     // Nor is it discarded, which would delete the files its agent uses.
     let error = manager.discard_saved_chat("talk").await.unwrap_err();
     assert!(
@@ -248,7 +239,31 @@ async fn a_restore_whose_agent_did_not_start_waits_for_resume_again() {
         .return_to_saved(&chat.id, 1, "unused")
         .await
         .unwrap_err();
-    assert!(error.to_string().contains("does not run"), "{error:#}");
+    assert!(error.to_string().contains("runs as process"), "{error:#}");
+}
+
+#[tokio::test]
+async fn a_restore_that_failed_before_taking_the_chat_tells_the_user() {
+    let (root, manager) = manager().await;
+    let (_repo, chat, mut process) = running_chat(root.path(), &manager).await;
+    manager.save_chats(ChatRestore::Resume).await;
+    process.wait().unwrap();
+
+    manager
+        .return_to_saved(&chat.id, std::process::id(), "no such repository")
+        .await
+        .unwrap();
+
+    let saved = manager.recorded_chat(&chat.id).await.unwrap().unwrap();
+    assert_eq!(saved.restore, Some(ChatRestore::Resume));
+    let notifications = manager.notifications(true, 10).await.unwrap();
+    assert!(
+        notifications.iter().any(|notification| {
+            notification.kind == crate::daemon::notifications::NotificationKind::ChatRestoreFailed
+                && notification.message.contains("no such repository")
+        }),
+        "{notifications:?}"
+    );
 }
 
 #[tokio::test]

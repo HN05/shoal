@@ -37,11 +37,18 @@ pub(super) async fn start(
     options: Options,
 ) -> Result<i32> {
     ensure_unscoped(ctx)?;
-    options.check_name(ctx).await?;
-    let repo = chosen(ctx, repository).await?;
-    let settings = settings(ctx, &repo).await?;
-    let topic = Topic::repository(&repo);
-    begin(ctx, repo, settings, topic, options).await
+    // A restore runs where nobody may watch it, so any failure reaches the
+    // user through the daemon.
+    let restores = options.restore.clone();
+    let started = async {
+        options.check_name(ctx).await?;
+        let repo = chosen(ctx, repository).await?;
+        let settings = settings(ctx, &repo).await?;
+        let topic = Topic::repository(&repo);
+        begin(ctx, repo, settings, topic, options).await
+    }
+    .await;
+    client::keep_failed_restore(&ctx.paths, restores.as_deref(), started).await
 }
 
 /// How the command line starts a chat.
@@ -263,39 +270,34 @@ pub(super) async fn launch(
         restore.as_deref(),
     )
     .await?;
-    let ran = async {
-        let command = command(
-            &settings,
-            [
-                model_args,
-                agents::chat_dir_args(
-                    &settings,
-                    agent.name(),
-                    &ctx.paths.home,
-                    &chat,
-                    &directories,
-                ),
-            ]
-            .concat(),
-            &repo,
-            &agent,
-            instructions,
-            opening,
-            [resumed, args].concat(),
-        )?;
-        terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
-        run_here(
-            ctx,
-            &repo,
-            &chat,
-            &command,
-            &settings.launch(agent.name()).environment_with(&resolved),
-        )
-    }
-    .await;
-    client::keep_failed_restore(&ctx.paths, restore.as_deref(), ran)
-        .await
-        .map(Started::Exited)
+    let command = command(
+        &settings,
+        [
+            model_args,
+            agents::chat_dir_args(
+                &settings,
+                agent.name(),
+                &ctx.paths.home,
+                &chat,
+                &directories,
+            ),
+        ]
+        .concat(),
+        &repo,
+        &agent,
+        instructions,
+        opening,
+        [resumed, args].concat(),
+    )?;
+    terminal::label_current(&ctx.paths, terminal::Owner::Chat(&chat.id)).await?;
+    run_here(
+        ctx,
+        &repo,
+        &chat,
+        &command,
+        &settings.launch(agent.name()).environment_with(&resolved),
+    )
+    .map(Started::Exited)
 }
 
 /// The arguments with which `agent` continues `session`, unless the chat
