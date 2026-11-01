@@ -1,7 +1,7 @@
 //! A repository's false positives: claims its reviews raised that were
 //! resolved as wrong, kept in a file beside its local config so that every
 //! later review of the repository receives them and the user can edit them.
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
@@ -59,24 +59,48 @@ impl Manager {
     }
 
     /// Keep `finding` of `review` in its repository's false positives while
-    /// `outcome` is one, or drop it from them. The caller holds the registry
-    /// gate, which moves and removal take, so the file stays where it was
-    /// found.
+    /// `outcome` is one, or drop it from them, and return the file as it
+    /// was when that changed it. The caller holds the registry gate, which
+    /// moves and removal take, so the file stays where it was found.
     pub(super) async fn keep_false_positive(
         &self,
         review: &Review,
         finding: FindingId,
         outcome: Option<&Outcome>,
-    ) -> Result<()> {
+    ) -> Result<Option<Previous>> {
         let entry = match outcome {
             Some(Outcome::FalsePositive { reason }) => Some(entry(review, finding, reason)?),
             _ => None,
         };
         let repository_id = self.workspace(&review.workspace_id).await?.repository_id;
-        let Some(path) = self.false_positives_path(&repository_id).await? else {
-            return Ok(());
+        let path = match entry {
+            Some(_) => Some(self.false_positives_path_reserved(&repository_id).await?),
+            None => self.false_positives_path(&repository_id).await?,
+        };
+        let Some(path) = path else {
+            return Ok(None);
         };
         tokio::task::spawn_blocking(move || record(&path, finding, entry)).await?
+    }
+}
+
+/// A false positives file as it was before an edit, which [`Previous::restore`]
+/// puts back.
+#[derive(Debug)]
+pub(super) struct Previous {
+    path: PathBuf,
+    /// None when the edit created the file.
+    text: Option<String>,
+}
+
+impl Previous {
+    pub(super) async fn restore(self) -> Result<()> {
+        tokio::task::spawn_blocking(move || match &self.text {
+            Some(text) => store(&self.path, text, true),
+            None => std::fs::remove_file(&self.path)
+                .with_context(|| format!("delete {}", self.path.display())),
+        })
+        .await?
     }
 }
 
@@ -107,15 +131,24 @@ fn read(path: &Path) -> Result<Vec<FalsePositive>> {
 }
 
 /// Replace the entry of `finding` in the file at `path` with `entry`, or
-/// drop it without one. A missing file is created only for an entry.
-fn record(path: &Path, finding: FindingId, entry: Option<FalsePositive>) -> Result<()> {
+/// drop it without one, and return the file as it was when that changed it.
+/// A missing file is created only for an entry.
+fn record(
+    path: &Path,
+    finding: FindingId,
+    entry: Option<FalsePositive>,
+) -> Result<Option<Previous>> {
     let text = load(path)?;
     let edited = with_entry(text.as_deref(), finding, entry.as_ref())
         .with_context(|| format!("edit {}", path.display()))?;
-    match edited {
-        Some(edited) => store(path, &edited, text.is_some()),
-        None => Ok(()),
-    }
+    let Some(edited) = edited else {
+        return Ok(None);
+    };
+    store(path, &edited, text.is_some())?;
+    Ok(Some(Previous {
+        path: path.to_owned(),
+        text,
+    }))
 }
 
 /// `text`, or a new file without it, with the entry of `finding` replaced

@@ -162,6 +162,24 @@ impl Manager {
         })
     }
 
+    /// [`Self::false_positives_path`] for an entry to add: the repository's
+    /// directory is reserved when it has none, and a checkout where the local
+    /// config belongs is refused. The caller holds the registry gate, as
+    /// local config edits do.
+    pub(crate) async fn false_positives_path_reserved(
+        &self,
+        repository_id: &str,
+    ) -> Result<PathBuf> {
+        let repository = self.repository(repository_id).await?;
+        self.ensure_repository_available(&repository.id).await?;
+        let directory = {
+            let _git = self.gates.lock_git(&repository.id).await;
+            self.workspaces_dir(&repository).await?
+        };
+        self.local_config_outside_checkouts(&directory).await?;
+        Ok(config::repo::false_positives_path(&directory))
+    }
+
     /// A checkout or worktree, recorded or not, that lies where the local
     /// config of the repository directory `directory` belongs: its tracked
     /// files are never local settings.

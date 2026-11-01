@@ -245,8 +245,9 @@ impl Manager {
     }
 
     /// Resolve `finding` with `outcome`, or reopen it, and keep it among its
-    /// repository's false positives only while it is resolved as one. When
-    /// the false positives cannot be kept, the finding keeps its outcome.
+    /// repository's false positives only while it is resolved as one. The
+    /// file changes first and goes back when the outcome cannot be stored,
+    /// so an interrupted resolve leaves the file with the newer intent.
     pub async fn resolve_finding(
         &self,
         finding: FindingId,
@@ -256,17 +257,13 @@ impl Manager {
         // keeps concurrent resolves in one order in the outcome and the file.
         let registry = self.gates.lock_registry().await;
         let resolved = self.stored_review(finding.review).await?;
-        let previous = resolved
-            .findings
-            .iter()
-            .find(|listed| listed.id == finding)
-            .and_then(|listed| listed.outcome.clone());
-        self.record_outcome(finding, outcome.clone()).await?;
-        if let Err(error) = self
+        let previous = self
             .keep_false_positive(&resolved, finding, outcome.as_ref())
-            .await
-        {
-            self.record_outcome(finding, previous).await?;
+            .await?;
+        if let Err(error) = self.record_outcome(finding, outcome).await {
+            if let Some(previous) = previous {
+                previous.restore().await?;
+            }
             return Err(error);
         }
         drop(registry);

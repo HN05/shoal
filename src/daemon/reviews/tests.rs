@@ -550,6 +550,78 @@ async fn a_finding_keeps_its_outcome_when_its_false_positive_cannot_be_kept() {
 }
 
 #[tokio::test]
+async fn the_false_positives_go_back_when_the_outcome_cannot_be_stored() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let finding = fixture.review().await.findings[0].id;
+    let reason = "The field's type names it.".to_owned();
+    fixture
+        .manager
+        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
+        .await
+        .unwrap();
+    let repository = &fixture.workspace.repository_id;
+    let path = fixture
+        .manager
+        .false_positives_path(repository)
+        .await
+        .unwrap()
+        .unwrap();
+    let kept = std::fs::read_to_string(&path).unwrap();
+    let missing = FindingId {
+        review: 999,
+        number: 1,
+    };
+    fixture
+        .manager
+        .resolve_finding(finding, Some(Outcome::Duplicate { of: missing }))
+        .await
+        .unwrap_err();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), kept);
+}
+
+#[tokio::test]
+async fn a_false_positive_reserves_the_directory_of_an_older_registration() {
+    let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
+    let finding = fixture.review().await.findings[0].id;
+    let repository = fixture.workspace.repository_id.clone();
+    let id = repository.clone();
+    fixture
+        .manager
+        .store
+        .run(move |db| {
+            db.execute(
+                "UPDATE repositories SET workspaces_dir=NULL WHERE id=?1",
+                [&id],
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        fixture
+            .manager
+            .false_positives_path(&repository)
+            .await
+            .unwrap(),
+        None
+    );
+    let reason = "The field's type names it.".to_owned();
+    fixture
+        .manager
+        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
+        .await
+        .unwrap();
+    let path = fixture
+        .manager
+        .false_positives_path(&repository)
+        .await
+        .unwrap()
+        .unwrap();
+    let kept = std::fs::read_to_string(path).unwrap();
+    assert!(kept.contains("The field's type names it."), "{kept}");
+}
+
+#[tokio::test]
 async fn an_invalid_false_positives_file_fails_reviews_of_the_repository() {
     let fixture = fixture(&[("fake", "cat '{review}'")], "agent = 'fake'").await;
     let repository = &fixture.workspace.repository_id;
