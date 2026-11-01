@@ -1,6 +1,7 @@
 use clap::CommandFactory;
 
 use super::*;
+use crate::state::WorkspaceState;
 
 /// Every built-in command path whose arguments name a workspace.
 fn workspace_commands(

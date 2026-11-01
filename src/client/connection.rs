@@ -402,7 +402,7 @@ pub async fn start_chat(
     repository: &Repository,
     name: &str,
     agent: &str,
-    origin: Option<crate::sessions::Origin>,
+    origin: Option<crate::client::sessions::Origin>,
     hands_over: bool,
 ) -> Result<Chat> {
     request(
@@ -461,8 +461,8 @@ pub async fn repositories(daemon: &impl Daemon) -> Result<Vec<Repository>> {
 pub async fn close_owned_place(
     daemon: &impl Daemon,
     workspace: &str,
-    place: &crate::sessions::Origin,
-) -> Result<crate::sessions::PlaceClose> {
+    place: &crate::client::sessions::Origin,
+) -> Result<crate::client::sessions::PlaceClose> {
     request(
         daemon,
         WorkspaceMethod::CloseOwnedPlace {
@@ -478,8 +478,8 @@ pub async fn close_owned_place(
 pub async fn place_ownership(
     daemon: &impl Daemon,
     workspace: &str,
-    place: &crate::sessions::Origin,
-) -> Result<crate::sessions::PlaceOwnership> {
+    place: &crate::client::sessions::Origin,
+) -> Result<crate::client::sessions::PlaceOwnership> {
     request(
         daemon,
         WorkspaceMethod::PlaceOwnership {
@@ -495,7 +495,7 @@ pub async fn place_ownership(
 pub async fn record_owned_place(
     daemon: &impl Daemon,
     workspace: &str,
-    origin: crate::sessions::Origin,
+    origin: crate::client::sessions::Origin,
 ) -> Result<()> {
     call(
         daemon,
@@ -593,7 +593,7 @@ fn not_running(error: &anyhow::Error) -> bool {
 }
 
 /// No daemon listens on the socket, though one may own the state directory.
-pub(crate) fn is_unreachable(error: &anyhow::Error) -> bool {
+pub fn is_unreachable(error: &anyhow::Error) -> bool {
     error
         .chain()
         .filter_map(|e| e.downcast_ref::<io::Error>())
@@ -605,7 +605,8 @@ pub(crate) fn is_unreachable(error: &anyhow::Error) -> bool {
         })
 }
 
-pub(crate) fn stream_closed(error: &anyhow::Error) -> bool {
+/// The daemon closed the connection, as it does across a restart.
+pub fn stream_closed(error: &anyhow::Error) -> bool {
     error
         .chain()
         .filter_map(|e| e.downcast_ref::<io::Error>())
@@ -622,7 +623,7 @@ pub(crate) fn stream_closed(error: &anyhow::Error) -> bool {
 /// Only read-only followers reconnect; ordinary requests must never replay an
 /// operation whose response was lost. The normal daemon wait budget bounds a
 /// manually stopped or failed daemon while a managed update keeps its socket.
-pub(crate) async fn reconnect<M: Into<Method>>(
+pub async fn reconnect<M: Into<Method>>(
     daemon: &impl Daemon,
     method: impl Fn() -> M,
 ) -> Result<(BufReader<UnixStream>, Body)> {
@@ -648,7 +649,7 @@ pub(crate) async fn reconnect<M: Into<Method>>(
 /// the restart budget too, since a restarted daemon knows an execution's scope
 /// only once its wrapper reattaches; `restarted` says the daemon restarted
 /// before this wait began. Only for requests that are safe to repeat.
-pub(crate) async fn await_reply<M: Into<Method>>(
+pub async fn await_reply<M: Into<Method>>(
     daemon: &impl Daemon,
     method: impl Fn() -> M,
     restarted: bool,

@@ -9,7 +9,9 @@ use std::{
 
 pub fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os(crate::env::PROFILE).is_some_and(|value| value == "1"))
+    *ENABLED.get_or_init(|| {
+        std::env::var_os(crate::client::env::PROFILE).is_some_and(|value| value == "1")
+    })
 }
 
 /// Time every subprocess run from now on, when profiling.

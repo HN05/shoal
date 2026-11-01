@@ -11,7 +11,7 @@ use super::{
 use crate::{
     cli::{
         args::WorkspaceScope,
-        availability::{Availability, Fit},
+        availability::{self, Availability, Fit},
         client,
         context::Context,
         list_status::ListStatus,
@@ -482,7 +482,7 @@ async fn pick_workspaces(ctx: &Context, workspaces: Vec<Workspace>) -> Result<Ve
 /// The picker entries for `workspaces`, judged against what the command
 /// needs, starting with their state markers when `markers` says.
 async fn workspace_entries(ctx: &Context, workspaces: Vec<Workspace>, markers: bool) -> Entries {
-    let availability = Availability::load(ctx.need, &ctx.paths, &workspaces).await;
+    let availability = availability::load(ctx.need, &ctx.paths, &workspaces).await;
     let stopped = stopped_workspaces(&ctx.paths, &workspaces);
     availability_entries(
         workspaces,

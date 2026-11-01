@@ -15,7 +15,7 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 use crate::{
     cli::{
         agents,
-        availability::{Availability, Fit, Need},
+        availability::{self, Fit, Need},
         client, terminal, ui,
         workspace_context::{ScopeOrder, WorkspaceContext},
     },
@@ -488,7 +488,7 @@ impl Typed {
         }
         let workspaces = client::workspaces(&paths).await?;
         if let Target::Workspaces(need) | Target::Spaces(need) = target {
-            let availability = Availability::load(need, &paths, &workspaces).await;
+            let availability = availability::load(need, &paths, &workspaces).await;
             let mut candidates: Vec<_> = workspaces
                 .iter()
                 .filter_map(|w| {
