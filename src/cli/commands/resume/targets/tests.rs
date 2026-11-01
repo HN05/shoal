@@ -22,6 +22,7 @@ fn spaces() -> Spaces {
         tmp_dir: None,
         session: None,
         restore,
+        links: Default::default(),
     };
     Spaces {
         workspaces: vec![workspace],

@@ -94,7 +94,7 @@ pub struct Workspace {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_state: Option<AgentStatus>,
     #[serde(default)]
-    pub links: WorkspaceLinks,
+    pub links: SpaceLinks,
     /// Whether an agent or command started through Shoal is running here.
     #[serde(default)]
     pub running: bool,
@@ -141,9 +141,10 @@ pub struct WorkspaceRef {
     pub branch: String,
 }
 
-/// Canonical issue and pull-request links associated with a workspace.
+/// Canonical issue and pull-request links associated with a space, a
+/// workspace or chat.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct WorkspaceLinks {
+pub struct SpaceLinks {
     /// The assigned issue.
     pub issue: Option<String>,
     /// The linked issue's title when the linking caller knew it.
@@ -151,7 +152,7 @@ pub struct WorkspaceLinks {
     pub issue_title: Option<String>,
     /// The assigned PRs.
     pub prs: Vec<String>,
-    /// Issues and PRs the workspace created through Shoal, oldest first.
+    /// Issues and PRs the space created through Shoal, oldest first.
     #[serde(default)]
     pub opened: Vec<LinkedItem>,
     /// Issues and PRs linked as related to the work, oldest first.
@@ -159,7 +160,7 @@ pub struct WorkspaceLinks {
     pub related: Vec<LinkedItem>,
 }
 
-impl WorkspaceLinks {
+impl SpaceLinks {
     /// Every linked item once: the assigned issue and PRs, then those opened
     /// and related.
     pub fn items(&self) -> Vec<LinkedItem> {
@@ -308,7 +309,7 @@ pub struct RemovedWorkspace {
     pub checkpoint: Checkpoint,
     pub base_ref: Option<String>,
     pub base_commit: Option<String>,
-    pub links: WorkspaceLinks,
+    pub links: SpaceLinks,
     /// Agents stopped by the removal or before it, which `shoal resume`
     /// continues once the workspace is restored.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -419,7 +420,7 @@ impl Workspace {
             parent_workspace: None,
             child_workspaces: Vec::new(),
             chat: None,
-            links: WorkspaceLinks::default(),
+            links: SpaceLinks::default(),
             running: false,
             done: false,
             usage: None,
@@ -841,6 +842,9 @@ pub struct Chat {
     /// none while it runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restore: Option<crate::state::ChatRestore>,
+    /// The issues, PRs and CI runs it links.
+    #[serde(default)]
+    pub links: SpaceLinks,
 }
 
 /// A space as it exists: a workspace or a chat, running or saved, which

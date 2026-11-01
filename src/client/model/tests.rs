@@ -41,7 +41,7 @@ fn linked_items_list_each_url_once_with_its_title() {
         url: url.into(),
         title: title.map(Into::into),
     };
-    let links = WorkspaceLinks {
+    let links = SpaceLinks {
         issue: Some("https://forge/o/r/issues/1".into()),
         issue_title: None,
         prs: vec!["https://forge/o/r/pulls/2".into()],
@@ -106,6 +106,7 @@ fn spaces_find_a_workspace_or_a_running_or_saved_chat_by_id_or_name() {
         tmp_dir: None,
         session: None,
         restore,
+        links: Default::default(),
     };
     let spaces = Spaces {
         workspaces: vec![workspace],

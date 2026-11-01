@@ -11,8 +11,8 @@ use crate::{
     daemon::events::EventCause,
     git,
     model::{
-        CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, Workspace,
-        WorkspaceLinks,
+        CheckpointCause, Relation, RemovedWorkspace, Repository, RestoredWorkspace, SpaceLinks,
+        Workspace,
     },
     time::unix_seconds,
 };
@@ -247,7 +247,7 @@ impl Manager {
 
     /// Link the restored workspace's issue and recorded items again; the
     /// caller links its PRs. Each failure becomes a warning.
-    async fn relink(&self, workspace_id: &str, links: &WorkspaceLinks) -> Vec<String> {
+    async fn relink(&self, workspace_id: &str, links: &SpaceLinks) -> Vec<String> {
         let mut warnings = Vec::new();
         if let Some(url) = &links.issue
             && let Err(error) = self

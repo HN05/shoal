@@ -99,7 +99,7 @@ async fn marks_bind_to_head_follow_links_and_record_events() {
     let listed = manager.list_workspaces().await.unwrap();
     assert_eq!(
         listed[0].links,
-        crate::model::WorkspaceLinks {
+        crate::model::SpaceLinks {
             issue: Some(issue.clone()),
             issue_title: None,
             prs: vec![pr.clone()],

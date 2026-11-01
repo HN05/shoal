@@ -12,7 +12,7 @@ fn workspace(name: &str, path: &Path) -> Workspace {
         parent_workspace: None,
         child_workspaces: Vec::new(),
         chat: None,
-        links: crate::model::WorkspaceLinks::default(),
+        links: crate::model::SpaceLinks::default(),
         running: false,
         done: false,
         usage: None,

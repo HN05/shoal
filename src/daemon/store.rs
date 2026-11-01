@@ -7,9 +7,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use crate::{
-    model::{
-        Execution, LinkedItem, PortReservation, Relation, Repository, Workspace, WorkspaceLinks,
-    },
+    model::{Execution, LinkedItem, PortReservation, Relation, Repository, SpaceLinks, Workspace},
     sim::audit::CleanRequestStatus,
     state::{ExecutionState, WorkspaceState},
 };
@@ -1033,7 +1031,7 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
         parent_workspace: None,
         child_workspaces: Vec::new(),
         chat: None,
-        links: WorkspaceLinks::default(),
+        links: SpaceLinks::default(),
         running: false,
         done: false,
         usage: None,
@@ -1053,11 +1051,11 @@ pub fn workspace(row: &Row<'_>) -> rusqlite::Result<Workspace> {
 }
 
 /// Read canonical links while keeping malformed legacy PR records out of list output.
-pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<WorkspaceLinks> {
+pub fn space_links(db: &Connection, space_id: &str) -> rusqlite::Result<SpaceLinks> {
     let (issue, issue_title) = db
         .query_row(
             "SELECT url,title FROM space_issue WHERE space_id=?1",
-            [workspace_id],
+            [space_id],
             |row| Ok((Some(row.get(0)?), row.get(1)?)),
         )
         .optional()?
@@ -1065,7 +1063,7 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
     let prs = db
         .query_row(
             "SELECT record FROM pr_cleanup WHERE space_id=?1",
-            [workspace_id],
+            [space_id],
             |row| row.get::<_, String>(0),
         )
         .optional()?
@@ -1078,12 +1076,12 @@ pub fn workspace_links(db: &Connection, workspace_id: &str) -> rusqlite::Result<
                 })
         })
         .unwrap_or_default();
-    Ok(WorkspaceLinks {
+    Ok(SpaceLinks {
         issue,
         issue_title,
         prs,
-        opened: recorded_items(db, workspace_id, Relation::Opened)?,
-        related: recorded_items(db, workspace_id, Relation::Related)?,
+        opened: recorded_items(db, space_id, Relation::Opened)?,
+        related: recorded_items(db, space_id, Relation::Related)?,
     })
 }
 

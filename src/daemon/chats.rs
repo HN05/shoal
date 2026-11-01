@@ -19,7 +19,7 @@ use crate::{
         workspace::{Manager, derive_workspace_name},
         workspace_files,
     },
-    model::{Chat, OpenedWorkspace, Repository, Workspace},
+    model::{Chat, OpenedWorkspace, Repository, SpaceLinks, Workspace},
     process::identity::{self, Identity},
     tmp_dirs,
 };
@@ -82,6 +82,7 @@ impl Manager {
             tmp_dir: None,
             session: None,
             restore: None,
+            links: SpaceLinks::default(),
         };
         let birth = process.birth.clone();
         let chat = self
@@ -502,8 +503,15 @@ fn recorded(db: &Connection) -> Result<Vec<Chat>> {
                 tmp_dir,
                 session: row.get(8)?,
                 restore: row.get(9)?,
+                links: SpaceLinks::default(),
             })
         })?
+        .collect::<rusqlite::Result<Vec<Chat>>>()?
+        .into_iter()
+        .map(|mut chat| {
+            chat.links = store::space_links(db, &chat.id)?;
+            Ok(chat)
+        })
         .collect::<rusqlite::Result<_>>()?)
 }
 

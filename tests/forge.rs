@@ -3995,6 +3995,11 @@ fn a_chat_links_views_and_watches_items_as_a_workspace_does() {
         .map(|item| &item["url"])
         .collect();
     assert_eq!(urls, [&json!(pr), &json!(run)], "{selected}");
+    // The chat's record lists its links as a workspace's does.
+    let chats = fixture.request(json!("list_chats"));
+    let links = &chats["data"][0]["links"];
+    assert_eq!(links["prs"], json!([pr]), "{chats}");
+    assert_eq!(links["related"][0]["url"], json!(run), "{chats}");
     let viewed = fixture.ok(&["view", "ci", "--space", "planning"]);
     assert_eq!(viewed[0]["state"], "running", "{viewed}");
 

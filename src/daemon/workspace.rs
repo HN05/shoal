@@ -1038,7 +1038,7 @@ fn load_details(db: &rusqlite::Connection, workspace: &mut Workspace) -> Result<
     workspace.agent_state = agent_state::current(db, &workspace.id)?;
     stack::load(db, workspace)?;
     tree::load(db, workspace)?;
-    workspace.links = store::workspace_links(db, &workspace.id)?;
+    workspace.links = store::space_links(db, &workspace.id)?;
     workspace.chat = db.query_row(
         "SELECT chat_id FROM workspaces WHERE id=?1",
         [&workspace.id],
