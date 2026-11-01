@@ -214,6 +214,27 @@ impl Manager {
         }
         result
     }
+
+    /// Whether file access in `path`'s directory stalled and no check there
+    /// has finished since. The cleanup sweep's phases skip a workspace there,
+    /// leaving the recheck to branch observation and the startup audit's
+    /// recheck, which run before them.
+    pub(crate) fn access_stalled(&self, path: &Path) -> bool {
+        self.file_access.stalled(path).is_some()
+    }
+}
+
+#[cfg(test)]
+impl FileAccess {
+    /// Record `path`'s directory as stalled with a recheck still waiting, so
+    /// every check there skips it however long the test runs.
+    pub(crate) fn stall_rechecking(&self, path: &Path) {
+        let directory = directory(path);
+        self.record(directory.clone(), path, "did not finish".to_owned());
+        if let Some(stalled) = lock(&self.stalls).get_mut(&directory) {
+            stalled.rechecking = true;
+        }
+    }
 }
 
 /// The directory holding `path`, such as a repository's directory of

@@ -1,6 +1,9 @@
 //! Deletion of branches that removal kept once a remote or the default branch
 //! has their commits too. Nothing is lost, so nobody is told.
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use anyhow::{Result, ensure};
 use tokio::time::Instant;
@@ -56,7 +59,11 @@ impl State {
 /// not skip the others.
 pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
     let mut failed = Vec::new();
+    let stalled = stalled_checkouts(manager).await?;
     for repository_id in manager.kept_branch_repositories().await? {
+        if stalled.contains(&repository_id) {
+            continue;
+        }
         // Squash and rebase merges show only on the fetched default branch;
         // any other evidence comes from what the remotes advertise now, never
         // from remote-tracking refs, which may be stale or unmapped.
@@ -75,4 +82,16 @@ pub async fn sweep(manager: &Manager, state: &mut State) -> Result<()> {
     }
     ensure!(failed.is_empty(), "{}", failed.join("; "));
     Ok(())
+}
+
+/// The repositories whose checkout, where their kept branches' Git runs, is
+/// in a directory whose file access stalled.
+async fn stalled_checkouts(manager: &Manager) -> Result<HashSet<String>> {
+    Ok(manager
+        .repositories()
+        .await?
+        .into_iter()
+        .filter(|repo| manager.access_stalled(&repo.path))
+        .map(|repo| repo.id)
+        .collect())
 }

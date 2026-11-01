@@ -466,7 +466,9 @@ in `daemon status` until a check there finishes. The directory comes from the
 path alone, since reading the filesystem could stall too, and groups a
 repository's workspaces, which a prompt for their location holds together.
 Those checks skip a stalled directory until 20 seconds after its last check, and
-while another check rechecks it, so each sweep rechecks it once. Listings read
+while another check rechecks it, so each sweep rechecks it once; the sweep's
+cleanup phases skip a workspace or checkout in a stalled directory until a check
+there finishes. Listings read
 HEAD for review marks within three seconds in all and skip stalled directories,
 leaving staleness unknown, so `shoal attach` and `shoal work` answer from the
 daemon's state. Repository pickers start Git only to tell apart repositories

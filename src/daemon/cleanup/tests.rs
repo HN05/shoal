@@ -743,3 +743,86 @@ async fn ignored_changes_during_idle_delay_restart_timer_at_expiry() {
     sweep(&manager, &mut timers).await.unwrap();
     assert!(!workspace.path.exists());
 }
+
+#[tokio::test]
+async fn a_sweep_skips_workspaces_where_file_access_stalled_and_cleans_up_the_others() {
+    use crate::{
+        daemon::links::pr::Action,
+        test_support::{manager, repository},
+    };
+    let (temp, manager) = manager().await;
+    let mut timers = Timers::default();
+    let mut created = HashMap::new();
+    // Each repository's workspaces share a directory, as on one volume.
+    for name in ["answers", "stalled"] {
+        let checkout = repository(temp.path(), name);
+        let repo = manager
+            .register_repository(checkout.to_str().unwrap().into(), None, None)
+            .await
+            .unwrap();
+        let create = |kind: &str| {
+            manager.create_workspace(&repo.id, format!("{name}-{kind}"), None, None, None)
+        };
+        let done = create("done").await.unwrap();
+        manager
+            .mark_done(&done.id, true, false, vec![], &Attacher::User)
+            .await
+            .unwrap();
+        let merged = create("merged").await.unwrap();
+        manager
+            .set_pr(&merged.id, Action::Acknowledge)
+            .await
+            .unwrap();
+        let idle = create("idle").await.unwrap();
+        timers.idle.insert(
+            idle.id.clone(),
+            Idle {
+                snapshot: manager.cleanup_snapshot(&idle.id).await.unwrap().unwrap(),
+                since: Instant::now() - Duration::from_secs(3600),
+            },
+        );
+        created.insert(name, [done, merged, idle]);
+    }
+    manager
+        .file_access
+        .stall_rechecking(&created["stalled"][0].path);
+
+    sweep(&manager, &mut timers).await.unwrap();
+
+    for workspace in &created["answers"] {
+        assert!(
+            !workspace.path.exists(),
+            "the sweep removes {}",
+            workspace.name
+        );
+    }
+    for workspace in &created["stalled"] {
+        assert!(
+            workspace.path.exists(),
+            "the sweep keeps {}",
+            workspace.name
+        );
+    }
+    let mut remaining: Vec<_> = manager
+        .list_workspaces()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|workspace| workspace.name)
+        .collect();
+    remaining.sort();
+    assert_eq!(
+        remaining,
+        ["stalled-done", "stalled-idle", "stalled-merged"]
+    );
+    // Skipped rather than failed, so no cleanup failure is reported.
+    let failures: Vec<_> = manager
+        .notifications(true, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|notification| notification.kind == NotificationKind::CleanupFailed)
+        .map(|notification| notification.message)
+        .collect();
+    assert_eq!(failures, Vec::<String>::new());
+}

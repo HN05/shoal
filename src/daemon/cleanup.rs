@@ -244,6 +244,10 @@ async fn sweep_workspace(
     timers: &mut Timers,
     workspace: &Workspace,
 ) -> Result<()> {
+    // Its idle timer stays for the pass after a check there finishes.
+    if manager.access_stalled(&workspace.path) {
+        return Ok(());
+    }
     // Only a worktree that existed (identity recorded) can have been deleted;
     // a failed creation keeps its error until removed explicitly.
     if matches!(

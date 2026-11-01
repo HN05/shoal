@@ -54,7 +54,7 @@ async fn sweep_at(manager: &Manager, state: &mut State, now: u64) -> Result<()> 
         .retain(|id, _| workspaces.iter().any(|workspace| &workspace.id == id));
     let mut failed = super::WorkspaceFailures::default();
     for workspace in workspaces {
-        if workspace.state != WorkspaceState::Ready {
+        if workspace.state != WorkspaceState::Ready || manager.access_stalled(&workspace.path) {
             continue;
         }
         if let Err(error) = sweep_workspace(manager, state, &workspace, now).await {
