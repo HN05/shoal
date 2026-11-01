@@ -437,7 +437,9 @@ fn pick_agent(ctx: &Context, settings: &Effective) -> Result<Agent> {
         .iter()
         .map(|name| (name.clone(), name.as_str()))
         .collect();
-    ui::pick_choice(ctx, "Agent> ", &choices)?.parse()
+    let agent: Agent = ui::pick_choice(ctx, "Agent> ", &choices)?.parse()?;
+    agents::ensure_available(agent.name(), settings)?;
+    Ok(agent)
 }
 
 /// A chat to start in a new place: its topic, name, agent, requested model,

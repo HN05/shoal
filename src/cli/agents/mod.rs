@@ -686,7 +686,13 @@ fn pick_agent(
         .iter()
         .map(|(agent, label)| (agent.clone(), label.as_str()))
         .collect();
-    ui::pick_choice(ctx, "Agent> ", &choices)
+    let picked: Option<Agent> = ui::pick_choice(ctx, "Agent> ", &choices)?;
+    // The picker offers agents by their own programs; the launch may need
+    // a session host too, refused before anything is created.
+    if let Some(agent) = &picked {
+        ensure_available(agent.name(), settings)?;
+    }
+    Ok(picked)
 }
 
 /// The agents pickers and completion offer under `settings`, built-in

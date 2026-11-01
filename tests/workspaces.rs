@@ -15320,6 +15320,40 @@ awk -F '\t' -v choice="$choice" '$2 == choice {print}' "$HOME/picker-input"
 }
 
 #[test]
+fn a_picked_agent_without_its_session_host_creates_no_workspace() {
+    let fixture = Fixture::new();
+    install_fake_agents(&fixture, &["claude"]);
+    install_test_script(
+        fixture.root.path().join("bin/fzf"),
+        "#!/bin/sh\ntee \"$HOME/picker-input\" | head -n 1\n",
+    );
+    // zmx stays the default host but is missing from the terminal's PATH.
+    fixture.interactive_path();
+    fs::remove_file(fixture.root.path().join("runner-bin/zmx")).unwrap();
+    let (output, transcript) = fixture.terminal_command(
+        fixture.command().args([
+            "add",
+            fixture.repo.to_str().unwrap(),
+            "picked",
+            "--base",
+            "HEAD",
+        ]),
+        "",
+        true,
+    );
+    let offered = fs::read_to_string(fixture.root.path().join("picker-input")).unwrap_or_default();
+    assert!(
+        !output.status.success(),
+        "{output:?}\n{transcript}\n{offered}"
+    );
+    assert!(
+        transcript.contains("zmx is not installed or not on PATH"),
+        "{transcript}"
+    );
+    assert_eq!(fixture.ok(&["work"]), serde_json::json!([]));
+}
+
+#[test]
 fn issue_number_picks_a_repository_before_lookup_interactively() {
     let fixture = Fixture::with_config(Some("agent.default = 'claude'\n"));
     fixture.add_github_origin();
