@@ -72,8 +72,17 @@ fn legacy_identity_matches_the_current_birth_identity() -> Result<()> {
 }
 
 #[tokio::test]
-async fn a_marker_read_that_waits_in_open_leaves_the_runtime_to_a_time_limit() -> Result<()> {
-    use std::{ffi::CString, os::unix::ffi::OsStrExt, time::Duration};
+async fn a_marker_read_that_waits_in_open_leaves_the_runtime_thread_free() -> Result<()> {
+    use std::{
+        ffi::CString,
+        io::Write,
+        os::unix::ffi::OsStrExt,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
 
     let (temp, manager) = manager().await;
     let checkout = repository(temp.path(), "repo");
@@ -83,38 +92,58 @@ async fn a_marker_read_that_waits_in_open_leaves_the_runtime_to_a_time_limit() -
     let workspace = manager
         .create_workspace(&repo.id, "stalled".into(), None, None, None)
         .await?;
-    // Opening a FIFO waits for a writer, as opening a file waits on a volume
-    // whose file access stalls.
+    // Opening a FIFO for reading waits for a writer, as opening a file waits
+    // on a volume whose file access stalls.
     let marker = git::git_dir(&workspace.path).await?.join(OWNER_MARKER);
     fs::remove_file(&marker)?;
     let fifo = CString::new(marker.as_os_str().as_bytes())?;
     // SAFETY: the path is NUL-terminated and outlives the call.
     ensure!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) } == 0);
-    // A read on the test's one runtime thread would keep the time limit from
-    // ever ending the wait; ending it later makes that fail instead of hang.
-    let stuck = marker.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(60));
-        let _ = release_fifo(&stuck);
+    // A read on the test's one runtime thread would keep this task from ever
+    // writing the marker; the hang guard ends that read so the test fails.
+    let guarded = Arc::new(AtomicBool::new(false));
+    std::thread::spawn({
+        let (guarded, marker) = (guarded.clone(), marker.clone());
+        move || {
+            std::thread::sleep(Duration::from_secs(60));
+            guarded.store(true, Ordering::SeqCst);
+            let _ = open_writer(&marker);
+        }
     });
 
-    let verified =
-        tokio::time::timeout(Duration::from_secs(5), manager.verify_worktree(&workspace)).await;
-    assert!(verified.is_err(), "the time limit ends the wait");
+    let verified = tokio::spawn({
+        let (manager, workspace) = (manager.clone(), workspace.clone());
+        async move { manager.verify_worktree(&workspace).await }
+    });
+    // Opening the writer succeeds only once the read waits in open, so this
+    // runs on the runtime thread while the read waits.
+    let mut writer = loop {
+        ensure!(
+            !guarded.load(Ordering::SeqCst),
+            "the marker read held the runtime thread"
+        );
+        match open_writer(&marker) {
+            Ok(writer) => break writer,
+            Err(error) if error.raw_os_error() == Some(libc::ENXIO) => {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            Err(error) => return Err(error.into()),
+        }
+    };
+    writeln!(writer, "{}", workspace.id)?;
+    drop(writer);
 
-    // Let the waiting read finish, so the runtime can shut down.
-    release_fifo(&marker)?;
+    verified.await??;
     Ok(())
 }
 
-/// Open and close the FIFO at `path` for writing, which ends a wait to open
-/// it for reading, without waiting for a reader when none waits.
-fn release_fifo(path: &Path) -> std::io::Result<()> {
+/// Open the FIFO at `path` for writing, which ends a wait to open it for
+/// reading; fails with `ENXIO` instead of waiting when no reader waits.
+fn open_writer(path: &Path) -> std::io::Result<fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
 
     fs::OpenOptions::new()
         .write(true)
         .custom_flags(libc::O_NONBLOCK)
         .open(path)
-        .map(drop)
 }
