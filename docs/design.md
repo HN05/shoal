@@ -2018,10 +2018,13 @@ request whose branch moved since it was requested is refused as stale and marks 
 Agents also find problems that belong to another repository, such as a tool the
 project uses, so `issue open --repo` files an issue there, on any forge, as the
 agent account; every other item action stays within the workspace's repository.
-Item commands that need only a repository also run from a registered checkout,
-where a chat runs with the user's authority: they act as the repository's agent
-account under its settings, open without a proposal, and link or record nothing,
-since a checkout holds no links; workspace processes act from their workspace.
+Item commands that need only a repository also run from a registered checkout
+outside any space: they act as the repository's agent account under its
+settings, open without a proposal, and link or record nothing, since a checkout
+holds no links; workspace processes act from their workspace. A chat acts the
+same way from its repository's checkout, with the user's authority, but records
+what it opens as a workspace does: a new issue is linked as opened, or assigned
+with `--link`, and its item actions default to its linked items.
 A chat holds links as a workspace does: the link tables name the space, a
 workspace or chat, with IDs from their shared namespace, and go with it. Its
 assigned items drive no completion or cleanup, which a chat does not have, and
