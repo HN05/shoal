@@ -827,7 +827,7 @@ shell integration under `shell`. `run` lists configured commands, runs one by
 name, or executes an arbitrary command after `--`; `--workspace` selects the
 workspace in either form. `done --undo` withdraws completion and `ready --undo`
 withdraws review marks. Creating a question uses `questions ask`; notifications use `alerts`, with
-`alerts send` to send one. Notification rows, in `alerts` and the picker, show
+`alerts send` to send one for a space, which the notification names. Notification rows, in `alerts` and the picker, show
 the time for today's and otherwise how long ago they came in whole days, weeks,
 months or years, such as `1 day ago` or `2 weeks ago`.
 Approval snapshots carry their stable request key through the CLI so reused
@@ -1525,10 +1525,13 @@ until the workspace is removed, and is named by the message and the files'
 contents, so an identical message with the same files still collapses.
 A workspace being removed takes no message, since removal decides from the
 messages it has and deletes them with the workspace.
-`messages` reads new messages while `messages send` sends them, to one
-workspace or, with `--all`, to every workspace of a repository with a running
-agent, such as to have them all rebase onto a fix: a workspace without one
-would hold the message until removal. Scoped
+`messages` reads new messages while `messages send` sends them, to one space,
+a workspace or running chat, or, with `--all`, to every workspace of a
+repository with a running agent, such as to have them all rebase onto a fix: a
+workspace without one would hold the message until removal. `--all` leaves out
+chats, since such messages are about the branches workspaces work on. A message
+to a chat goes the way the user's own messages to it go, with its files kept
+among the chat's. Scoped
 processes may read their own workspace's messages and send messages
 only to the agents of the workspaces below their own, which they coordinate.
 
