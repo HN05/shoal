@@ -1237,7 +1237,13 @@ the agent committed and never sees or changes its uncommitted work; Worktrunk on
 creates worktrees on branches, so the checkout is a plain Git worktree. The
 reviewer returns findings in a fixed schema, which the daemon stores, so the agent
 answers each with a typed outcome carrying its reason, issue or original finding,
-and the next review checks every `fixed` one instead of rereading free text. The
+and the next review checks every `fixed` one instead of rereading free text. A finding
+resolved `false-positive` outlives its workspace as a claim of its repository, which
+every later review receives, so a wrong claim the reviewer would raise in every change
+touching the same code is answered once. It is kept in a file beside the
+repository's local config rather than a tracked one: the outcome records it, with no
+command or commit of its own, reopening the finding withdraws it, and the user edits
+the file to drop or add a claim. The
 history a review receives is context, not instructions, and the verdict is shown
 but decides nothing. Failures are typed reasons classified like the bot's, so
 backend output never reaches a message. The 30-minute limit is fixed: a review that

@@ -14,6 +14,7 @@ use crate::{
 };
 
 mod delivery;
+mod false_positives;
 pub(crate) mod gate;
 mod history;
 mod post;
@@ -243,16 +244,23 @@ impl Manager {
         self.review(finding.review).await
     }
 
-    /// Resolve `finding` with `outcome`, or reopen it.
+    /// Resolve `finding` with `outcome`, or reopen it, and keep it among its
+    /// repository's false positives only while it is resolved as one.
     pub async fn resolve_finding(
         &self,
         finding: FindingId,
         outcome: Option<Outcome>,
     ) -> Result<Review> {
+        let reason = match &outcome {
+            Some(Outcome::FalsePositive { reason }) => Some(reason.clone()),
+            _ => None,
+        };
         self.store
             .run(move |db| store::resolve(db, finding, outcome.as_ref()))
             .await?;
-        self.review(finding.review).await
+        let review = self.review(finding.review).await?;
+        self.keep_false_positive(&review, finding, reason).await?;
+        Ok(review)
     }
 
     /// The workspace review `id` is of.

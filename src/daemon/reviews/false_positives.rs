@@ -1,0 +1,224 @@
+//! A repository's false positives: claims its reviews raised that were
+//! resolved as wrong, kept in a file beside its local config so that every
+//! later review of the repository receives them and the user can edit them.
+use std::path::Path;
+
+use anyhow::{Context, Result, bail};
+use serde::{Deserialize, Serialize};
+use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, value};
+
+use super::super::workspace::Manager;
+use crate::{
+    fsutil::{self, Permissions, ReplaceOptions},
+    reviews::{FindingId, Review},
+};
+
+/// What a new file starts with.
+const HEADER: &str = "# Claims that Shoal's reviews of this repository raised and that were\n\
+                      # resolved as wrong. Later reviews receive them; delete an entry to stop that.\n";
+
+/// One claim resolved as wrong.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FalsePositive {
+    /// The finding it was resolved from; none for one the user added.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) finding: Option<FindingId>,
+    pub(crate) claim: String,
+    pub(crate) path: String,
+    pub(crate) reason: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Entries {
+    #[serde(default)]
+    false_positive: Vec<FalsePositive>,
+}
+
+impl Manager {
+    /// The false positives of the repository `repository_id`, newest first.
+    pub(super) async fn false_positives(&self, repository_id: &str) -> Result<Vec<FalsePositive>> {
+        let Some(path) = self.false_positives_path(repository_id).await? else {
+            return Ok(Vec::new());
+        };
+        tokio::task::spawn_blocking(move || read(&path)).await?
+    }
+
+    /// Keep `finding` of `review` in its repository's false positives with
+    /// `reason`, or drop it from them without one.
+    pub(super) async fn keep_false_positive(
+        &self,
+        review: &Review,
+        finding: FindingId,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let entry = reason
+            .map(|reason| entry(review, finding, reason))
+            .transpose()?;
+        let repository_id = self.workspace(&review.workspace_id).await?.repository_id;
+        // Moves and removal take this gate, so the file stays where it was found.
+        let _registry = self.gates.lock_registry().await;
+        let Some(path) = self.false_positives_path(&repository_id).await? else {
+            return Ok(());
+        };
+        tokio::task::spawn_blocking(move || record(&path, finding, entry)).await?
+    }
+}
+
+/// `finding` of `review` as a false positive for `reason`.
+fn entry(review: &Review, finding: FindingId, reason: String) -> Result<FalsePositive> {
+    let resolved = review
+        .findings
+        .iter()
+        .find(|listed| listed.id == finding)
+        .with_context(|| format!("finding {finding} does not exist"))?;
+    Ok(FalsePositive {
+        finding: Some(finding),
+        claim: resolved.title.clone(),
+        path: resolved.path.clone(),
+        reason,
+    })
+}
+
+/// The false positives in the file at `path`, newest first; none without
+/// the file.
+fn read(path: &Path) -> Result<Vec<FalsePositive>> {
+    let Some(text) = load(path)? else {
+        return Ok(Vec::new());
+    };
+    let mut entries = parse(&text).with_context(|| format!("parse {}", path.display()))?;
+    entries.reverse();
+    Ok(entries)
+}
+
+/// Replace the entry of `finding` in the file at `path` with `entry`, or
+/// drop it without one, keeping the file's comments and layout. A missing
+/// file is created only for an entry.
+fn record(path: &Path, finding: FindingId, entry: Option<FalsePositive>) -> Result<()> {
+    let text = load(path)?;
+    let mut document: DocumentMut = text
+        .as_deref()
+        .unwrap_or(HEADER)
+        .parse()
+        .with_context(|| format!("parse {}", path.display()))?;
+    let removed = without_finding(&mut document, finding)
+        .with_context(|| format!("edit {}", path.display()))?;
+    if let Some(entry) = &entry {
+        append(&mut document, entry);
+    }
+    if !removed && entry.is_none() {
+        return Ok(());
+    }
+    let edited = document.to_string();
+    parse(&edited).with_context(|| format!("parse {}", path.display()))?;
+    store(path, &edited, text.is_some())
+}
+
+/// Remove the entries of `finding` from `document`, saying whether there
+/// were any. Comments above a removed entry stay.
+fn without_finding(document: &mut DocumentMut, finding: FindingId) -> Result<bool> {
+    let entries = match document.get_mut("false_positive") {
+        None => return Ok(false),
+        Some(Item::ArrayOfTables(entries)) => entries,
+        Some(_) => bail!("`false_positive` is not a list of [[false_positive]] tables"),
+    };
+    let (mut index, mut removed, mut orphaned) = (0, false, String::new());
+    while let Some(table) = entries.get(index) {
+        let id = table.get("finding").and_then(Item::as_str);
+        if id.and_then(|id| id.parse::<FindingId>().ok()) != Some(finding) {
+            index += 1;
+            continue;
+        }
+        let comments = prefix(table.decor()).to_owned();
+        entries.remove(index);
+        removed = true;
+        if !comments.contains('#') {
+            continue;
+        }
+        match entries.get_mut(index) {
+            Some(next) => {
+                let kept = comments + prefix(next.decor());
+                next.decor_mut().set_prefix(kept);
+            }
+            None => orphaned.push_str(&comments),
+        }
+    }
+    if !orphaned.is_empty() {
+        let trailing = orphaned + document.trailing().as_str().unwrap_or_default();
+        document.set_trailing(trailing);
+    }
+    Ok(removed)
+}
+
+fn prefix(decor: &toml_edit::Decor) -> &str {
+    decor
+        .prefix()
+        .and_then(|prefix| prefix.as_str())
+        .unwrap_or_default()
+}
+
+/// Add `entry` after the entries of `document`.
+fn append(document: &mut DocumentMut, entry: &FalsePositive) {
+    let mut table = Table::new();
+    if let Some(finding) = entry.finding {
+        table.insert("finding", value(finding.to_string()));
+    }
+    table.insert("claim", value(&entry.claim));
+    table.insert("path", value(&entry.path));
+    table.insert("reason", value(&entry.reason));
+    match document.get_mut("false_positive") {
+        Some(Item::ArrayOfTables(entries)) => {
+            table.decor_mut().set_prefix("\n");
+            entries.push(table);
+        }
+        _ => {
+            // Comments alone trail the document; keep them above the entry.
+            let mut comments = document.trailing().as_str().unwrap_or_default().to_owned();
+            if !comments.trim().is_empty() {
+                comments.push('\n');
+            }
+            document.set_trailing("");
+            table.decor_mut().set_prefix(comments);
+            document.insert(
+                "false_positive",
+                Item::ArrayOfTables(ArrayOfTables::from_iter([table])),
+            );
+        }
+    }
+}
+
+fn parse(text: &str) -> Result<Vec<FalsePositive>> {
+    Ok(toml::from_str::<Entries>(text)?.false_positive)
+}
+
+/// The file's text, none without the file.
+fn load(path: &Path) -> Result<Option<String>> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("read {}", path.display())),
+    }
+}
+
+/// Replace the file at `path` with `text`, creating its directory. A failed
+/// write leaves the file as it was.
+fn store(path: &Path, text: &str, exists: bool) -> Result<()> {
+    if let Some(directory) = path.parent() {
+        std::fs::create_dir_all(directory)
+            .with_context(|| format!("create {}", directory.display()))?;
+    }
+    let permissions = match exists {
+        true => Permissions::Preserve,
+        false => Permissions::Mode(0o644),
+    };
+    let options = ReplaceOptions {
+        permissions,
+        sync: true,
+    };
+    fsutil::replace_atomically(path, text.as_bytes(), options)
+        .with_context(|| format!("write {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests;

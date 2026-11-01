@@ -145,6 +145,23 @@ impl Manager {
         Ok(config::repo::local_config_path(directory))
     }
 
+    /// The file beside the repository's local config that keeps the claims
+    /// its reviews raised and that were resolved as wrong; none before the
+    /// repository has a directory or while a checkout lies where the local
+    /// config belongs.
+    pub(crate) async fn false_positives_path(
+        &self,
+        repository_id: &str,
+    ) -> Result<Option<PathBuf>> {
+        let repository = self.repository(repository_id).await?;
+        Ok(match &repository.workspaces_dir {
+            Some(directory) if self.local_config_occupant(directory).await?.is_none() => {
+                Some(config::repo::false_positives_path(directory))
+            }
+            _ => None,
+        })
+    }
+
     /// A checkout or worktree, recorded or not, that lies where the local
     /// config of the repository directory `directory` belongs: its tracked
     /// files are never local settings.

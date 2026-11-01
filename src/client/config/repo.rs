@@ -337,6 +337,12 @@ pub fn local_config_path(repository_dir: &Path) -> PathBuf {
     repository_dir.join(LOCAL_DIR).join("config.toml")
 }
 
+/// `<repository directory>/.shoal/false-positives.toml`, the claims its
+/// reviews raised that were resolved as wrong.
+pub fn false_positives_path(repository_dir: &Path) -> PathBuf {
+    repository_dir.join(LOCAL_DIR).join("false-positives.toml")
+}
+
 /// The local config of the repository whose directory is `repository_dir`,
 /// read in place, with the templates beside it and the files they came from.
 /// Relative hook paths and `setup.command` name scripts in its directory, so

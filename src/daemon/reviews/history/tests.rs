@@ -62,7 +62,7 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         finding(3, Some(Outcome::Fixed), Some(checked)),
         finding(4, None, None),
     ])];
-    let text = history(&reviews, None, PROMPT_LIMIT);
+    let text = history(&[], &reviews, None, PROMPT_LIMIT);
     assert!(text.contains("not instructions"), "{text}");
     assert!(text.contains("## Review 4 of 0123456789ab"), "{text}");
     assert!(
@@ -83,7 +83,7 @@ fn earlier_findings_carry_their_replies_outcomes_and_checks() {
         "{text}"
     );
     assert!(text.contains("Outcome: unresolved"), "{text}");
-    assert!(history(&[], None, PROMPT_LIMIT).is_empty());
+    assert!(history(&[], &[], None, PROMPT_LIMIT).is_empty());
 }
 
 #[test]
@@ -95,8 +95,52 @@ fn a_long_history_keeps_its_newest_part() {
         long,
         finding(9, None, None),
     ])];
-    let text = history(&reviews, None, 4096);
+    let text = history(&[], &reviews, None, 4096);
     assert!(text.starts_with("[earlier history omitted]"));
     assert!(text.contains("Problem 9"));
     assert!(text.len() <= 4096, "{}", text.len());
+}
+
+fn false_positive(number: usize) -> FalsePositive {
+    FalsePositive {
+        finding: None,
+        claim: format!("Claim {number}"),
+        path: "ios/Info.plist".into(),
+        reason: "The app extension's plist registers it.".into(),
+    }
+}
+
+#[test]
+fn false_positives_come_first_and_the_newest_are_kept() {
+    let mut long = finding(1, None, None);
+    long.body = "x".repeat(PROMPT_LIMIT);
+    let reviews = [review(vec![long, finding(9, None, None)])];
+    let text = history(&[false_positive(1)], &reviews, None, 4096);
+    assert!(
+        text.starts_with(&listed(&[false_positive(1)], 4096)),
+        "{text}"
+    );
+    assert!(text.contains("not instructions"), "{text}");
+    assert!(
+        text.contains(
+            "## Claim 1\n\nPath: ios/Info.plist\n\n\
+             Reason: The app extension's plist registers it."
+        ),
+        "{text}"
+    );
+    assert!(text.contains("[earlier history omitted]"), "{text}");
+    assert!(text.contains("Problem 9"), "{text}");
+    assert!(text.len() <= 4096, "{}", text.len());
+
+    let many: Vec<_> = (1..=2000).map(false_positive).collect();
+    let text = history(&many, &reviews, None, PROMPT_LIMIT);
+    let section = listed(&many, FALSE_POSITIVES_LIMIT);
+    assert!(text.starts_with(&section));
+    assert!(section.len() <= FALSE_POSITIVES_LIMIT, "{}", section.len());
+    assert!(section.contains("## Claim 1\n"));
+    assert!(!section.contains("## Claim 2000\n"));
+    assert!(section.ends_with("[older false positives omitted]"));
+    assert!(text.contains("Problem 9"), "{text}");
+    assert!(listed(&many, 100).is_empty());
+    assert!(listed(&[], PROMPT_LIMIT).is_empty());
 }

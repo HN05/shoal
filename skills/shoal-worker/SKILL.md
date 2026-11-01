@@ -217,7 +217,9 @@ shoal review resolve 17.5 duplicate --of 17.2
 shoal review reply 17.6 "Only on empty input?"     # Discuss without resolving
 ```
 
-Use `false-positive` only when the claim is wrong. Leave a finding that needs the
+Use `false-positive` only when the claim is wrong: later reviews of the repository
+receive the finding's title, path and reason and skip that claim while the reason
+holds, so the reason says why the claim is wrong. Leave a finding that needs the
 user's decision unresolved and ask with `shoal questions ask`. The next review
 checks each `fixed` finding. When the repository requires a review, `shoal pr
 open` of a new PR and `shoal ready` are refused until a finished review covers

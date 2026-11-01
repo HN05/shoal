@@ -494,6 +494,35 @@ async fn the_next_review_receives_the_history_and_checks_fixes() {
 }
 
 #[tokio::test]
+async fn later_reviews_receive_a_false_positive_until_it_is_reopened() {
+    let script = "printf '%s' \"$1\" > \"$(dirname '{review}')/prompt\"\ncat '{review}'";
+    let fixture = fixture(&[("fake", script)], "agent = 'fake'").await;
+    let prompt = || std::fs::read_to_string(fixture._root.path().join("prompt")).unwrap();
+    let finding = fixture.review().await.findings[0].id;
+    let reason = "The field's type names it.".to_owned();
+    fixture
+        .manager
+        .resolve_finding(finding, Some(Outcome::FalsePositive { reason }))
+        .await
+        .unwrap();
+    fixture.review().await;
+    let listed = prompt();
+    assert!(listed.contains("# False positives"), "{listed}");
+    assert!(
+        listed.contains("## Unclear\n\nPath: tracked\n\nReason: The field's type names it."),
+        "{listed}"
+    );
+    fixture
+        .manager
+        .resolve_finding(finding, None)
+        .await
+        .unwrap();
+    fixture.review().await;
+    let reopened = prompt();
+    assert!(!reopened.contains("# False positives"), "{reopened}");
+}
+
+#[tokio::test]
 async fn the_workspace_hears_its_reviews_except_its_own_cancels() {
     let slow = until_tests_end();
     let fixture = fixture(

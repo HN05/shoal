@@ -913,6 +913,23 @@ It checks every finding resolved `fixed` and reports it `confirmed` or
 `still-present`, and does not raise a settled claim again unless its reason no
 longer holds.
 
+A finding resolved `false-positive` is added to `.shoal/false-positives.toml` in the
+repository's own directory, beside its [local config](#store-repository-config-outside-git)
+and outside every Git tree (`~/shoal/my-project/.shoal/false-positives.toml`). Every
+later review of any of the repository's workspaces receives its entries, up to 32 KiB
+of them, the newest first. The reviewer skips a claim while its reason holds and
+reports it when the change invalidates the reason. Reopening the finding or resolving
+it another way removes its entry; removing its workspace does not. Edit the file to
+remove an entry or add one:
+
+```toml
+[[false_positive]]
+finding = "17.2"            # Omit for an entry you add
+claim = "The length is unchecked"
+path = "src/parse.rs"
+reason = "The caller checks the length"
+```
+
 When a review ends, the workspace's agents receive it as a message, waking an idle
 agent: a finished review's summary and findings, ending with a note that the
 reviewer is automated and can be wrong, or why it failed or that it was cancelled.

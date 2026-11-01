@@ -352,6 +352,7 @@ impl Manager {
             },
         );
         let (id, workspace_id) = (review.id, workspace.id.clone());
+        let false_positives = self.false_positives(&workspace.repository_id).await?;
         let earlier = self
             .store
             .run(move |db| store::earlier(db, &workspace_id, id))
@@ -362,7 +363,7 @@ impl Manager {
         };
         // The history fills what the instructions leave of the prompt.
         let room = history::PROMPT_LIMIT.saturating_sub(instructions.len() + 2);
-        let history = history::history(&earlier, pull.as_ref(), room);
+        let history = history::history(&false_positives, &earlier, pull.as_ref(), room);
         Ok(match history.is_empty() {
             true => instructions,
             false => format!("{instructions}\n\n{history}"),
