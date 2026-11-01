@@ -444,8 +444,9 @@ While macOS waits for an answer to a privacy prompt for a volume, whichever
 process it is for, every new process that opens a file there waits until the
 prompt is answered or the kernel interrupts it (`Interrupted system call`), so
 each Git the daemon starts does. Shoal cannot end the wait, only keep it from
-holding up unrelated work. The startup audit, its recheck and the sweep's branch
-observation check a worktree within 30 seconds; one that runs out or is
+holding up unrelated work. The startup audit, its recheck, the sweep's branch
+observation and the Git reads of `shoal status` check a worktree within 30
+seconds, a status reporting what it could not read; one that runs out or is
 interrupted records its volume as stalled, which the daemon reports once as an
 alert and in `daemon status` until a check finishes. The volume is
 `/Volumes/<name>` from the path alone, since reading the filesystem could stall

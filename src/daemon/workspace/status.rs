@@ -14,8 +14,8 @@ use crate::{
     },
     git,
     model::{
-        DiffSummary, Inspection, IssueStatus, Relation, Selected, SelectedItem, Workspace,
-        WorkspaceStatus, WorkspaceTarget,
+        CleanupReason, DiffSummary, Inspection, IssueStatus, Relation, Selected, SelectedItem,
+        Workspace, WorkspaceStatus, WorkspaceTarget,
     },
     repository,
 };
@@ -23,30 +23,23 @@ use crate::{
 impl Manager {
     pub async fn workspace_status(&self, selector: &str) -> Result<WorkspaceStatus> {
         let mut inspection = self.inspect_workspace(selector).await?;
-        let diff = async {
-            self.verify_worktree(&inspection.workspace).await?;
-            let base = self.diff_base(&inspection.workspace.id).await?;
-            let numstat = git::diff::numstat(&inspection.workspace.path, &base.commit).await?;
-            parse_numstat(&numstat)
-        }
-        .await;
-        let (diff, diff_error) = match diff {
+        let path = inspection.workspace.path.clone();
+        let diff = self.check_volume(&path, self.diff_summary(&inspection.workspace));
+        let (diff, diff_error) = match diff.await {
             Ok(diff) => (Some(diff), None),
             Err(error) => (None, Some(format!("{error:#}"))),
         };
+        let remote = self
+            .check_volume(&path, repository::remote_url_from_path(&path))
+            .await;
         let account = self.user_account();
         let hosts = self.forge_hosts();
         let (prs, issue_status) = tokio::join!(
-            pr::watched(
-                &hosts,
-                &account,
-                &inspection.workspace,
-                inspection.pr_cleanup.as_ref()
-            ),
-            issue_status(&hosts, &account, &inspection)
+            pr::watched(&hosts, &account, &remote, inspection.pr_cleanup.as_ref()),
+            issue_status(&hosts, &account, &remote, &inspection)
         );
         let unread_notifications = self.unread_notifications().await?;
-        let cleanup_reason = self.cleanup_reason(&inspection.workspace).await;
+        let cleanup_reason = self.bounded_cleanup_reason(&inspection.workspace).await;
         let cleanup_at = self.cleanup_at(&inspection.workspace.id).await?;
         let workspace_id = inspection.workspace.id.clone();
         let (setup_finished, turn_retry) = self
@@ -83,18 +76,38 @@ impl Manager {
     }
 }
 
+impl Manager {
+    /// What the workspace changed since its base.
+    async fn diff_summary(&self, workspace: &Workspace) -> Result<DiffSummary> {
+        self.verify_worktree(workspace).await?;
+        let base = self.diff_base(&workspace.id).await?;
+        let numstat = git::diff::numstat(&workspace.path, &base.commit).await?;
+        parse_numstat(&numstat)
+    }
+
+    /// [`Manager::cleanup_reason`] within the time limit of a check of the
+    /// workspace's volume.
+    async fn bounded_cleanup_reason(&self, workspace: &Workspace) -> CleanupReason {
+        let reason = async { Ok(self.cleanup_reason(workspace).await) };
+        self.check_volume(&workspace.path, reason)
+            .await
+            .unwrap_or_else(|error| CleanupReason::InspectionFailed {
+                error: format!("{error:#}"),
+            })
+    }
+}
+
+/// `remote` is the workspace's origin remote, as read from its worktree.
 async fn issue_status(
     hosts: &ForgeHosts<'_>,
     account: &Account,
+    remote: &Result<Option<String>>,
     inspection: &Inspection,
 ) -> Option<IssueStatus> {
     let url = &inspection.issue.as_ref()?.url;
-    let path = &inspection.workspace.path;
     let closed = async {
-        let remote = repository::remote_url_from_path(path)
-            .await?
-            .context("issue lookup needs an origin remote")?;
-        let forge = ForgeRepo::resolve(&remote, hosts).await?;
+        let remote = pr::origin(remote, "issue lookup needs an origin remote")?;
+        let forge = ForgeRepo::resolve(remote, hosts).await?;
         let (number, _) = forge.issue(url)?;
         forge.issue_closed(account, number).await
     }

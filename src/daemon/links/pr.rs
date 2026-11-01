@@ -480,11 +480,12 @@ pub(crate) async fn current_head(workspace: &Workspace) -> Result<String> {
     Ok(head)
 }
 
-/// Look up each watched PR concurrently; a failure stays on its PR.
+/// Look up each watched PR concurrently from the workspace's origin
+/// `remote`, as read from its worktree; a failure stays on its PR.
 pub(crate) async fn watched(
     hosts: &ForgeHosts<'_>,
     account: &Account,
-    workspace: &Workspace,
+    remote: &Result<Option<String>>,
     registration: Option<&Registration>,
 ) -> Vec<PrStatus> {
     let Some(Registration {
@@ -495,10 +496,8 @@ pub(crate) async fn watched(
         return Vec::new();
     };
     let forge = async {
-        let remote = repository::remote_url_from_path(&workspace.path)
-            .await?
-            .context("PR lookup needs an origin remote")?;
-        ForgeRepo::resolve(&remote, hosts).await
+        let remote = origin(remote, "PR lookup needs an origin remote")?;
+        ForgeRepo::resolve(remote, hosts).await
     }
     .await;
     match forge {
@@ -510,6 +509,18 @@ pub(crate) async fn watched(
             .iter()
             .map(|url| PrStatus::failed(url.clone(), &error))
             .collect(),
+    }
+}
+
+/// The origin `remote` a worktree read gave, or why a lookup that needs it
+/// fails, saying `missing` when the worktree has none.
+pub(crate) fn origin<'a>(
+    remote: &'a Result<Option<String>>,
+    missing: &'static str,
+) -> Result<&'a str> {
+    match remote {
+        Ok(remote) => remote.as_deref().context(missing),
+        Err(error) => Err(anyhow::anyhow!("{error:#}")),
     }
 }
 
